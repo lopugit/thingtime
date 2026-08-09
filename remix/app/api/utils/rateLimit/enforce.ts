@@ -19,7 +19,9 @@ export type RateLimitOutcome = {
 
 const firstHeaderIp = (value: string | null) => value?.split(',')[0]?.trim() || '';
 
-const getRequestIp = (request: Request): string => {
+// Exported: the canonical request-IP reader (views.ts keys anonymous view
+// dedup off it too — do not add more per-module copies).
+export const getRequestIp = (request: Request): string => {
   const h = request.headers;
   return (
     firstHeaderIp(h.get('x-vercel-forwarded-for')) ||
@@ -112,6 +114,27 @@ export const enforceRateLimit = async (
     // app; especially expensive/admin-sensitive routes can opt into failClosed.
     return { allowed: true, limit: rule.limit, remaining: rule.limit, resetAt: now };
   }
+};
+
+// Non-configurable ceiling for credential-confirmation surfaces. Unlike the
+// admin-editable endpoint limits, a browser session that can reach admin tools
+// cannot disable this bucket before attempting password guesses. These callers
+// are security-sensitive enough to fail closed on any limiter outage.
+export const enforceFixedRateLimit = async (
+	request: Request,
+	name: string,
+	identity: string | null,
+	rule: { limit: number; windowMs: number }
+): Promise<RateLimitOutcome> => {
+	const limit = Math.max(1, Math.min(100, Math.floor(rule.limit)));
+	const windowMs = Math.max(1_000, Math.min(24 * 60 * 60 * 1000, Math.floor(rule.windowMs)));
+	const who = identity || `ip:${getRequestIp(request)}`;
+	try {
+		return await consume(hash(`fixed:${name}:${who}`), limit, windowMs);
+	} catch (error: any) {
+		console.error(`[rate-limit] fixed enforcement unavailable for ${name} — failing closed:`, error?.message || error);
+		return { allowed: false, limit, remaining: 0, resetAt: new Date().toISOString(), unavailable: true };
+	}
 };
 
 // Convenience: a 429 JSON body + headers for a blocked outcome.

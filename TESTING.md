@@ -117,7 +117,7 @@ is fixed, and cite the checklist you ran in the PR description.
       `props:{position:'fixed',inset:0,zIndex:99999,…}` renders as a data
       tree, NOT a viewport overlay; image/audio/cover URLs with unsafe schemes
       fall back to the emoji placeholder. Verify via DOM: no `a[href^=
-      "javascript:"]`, no fixed/absolute high-z overlay from post content.
+  "javascript:"]`, no fixed/absolute high-z overlay from post content.
 - [ ] Editing a feed thing (context menu → Toggle Edit Mode) and pressing
       Cmd/Ctrl+Z does NOT undo the viewer's own persisted tree — the keydown
       is contained to the sandbox (native field undo still works).
@@ -177,6 +177,17 @@ is fixed, and cite the checklist you ran in the PR description.
       with the fetch START time; every local mutation notes itself there.
       Regression class: background refetches snapshotted pre-tap clobbered
       optimistic (even acked) reactions wholesale on ingest.
+- [ ] ERROR CONTEXT (devtools: fail `/api/v1/things/react` once with a Nitro
+      `{error:true,status:500,unhandled:true}` response): Lopu shows a readable
+      “couldn’t confirm” title plus server/refresh guidance — never a lone 🌧️.
+      The client refetches that thing before deciding whether the optimistic
+      reaction stuck; if the truth fetch also fails, it keeps the optimistic
+      copy and warns the viewer to refresh before retrying instead of blindly
+      toggling the reaction back. An authored 4xx/503 message remains visible
+      verbatim and safely reverts a server-marked rejection. A malformed or
+      truncated 2xx mutation response is commit-unknown and follows the same
+      truth-reconciliation path. Login `reason` and account-switcher `accounts`
+      fields still survive the shared error normalization.
 - [ ] Comment rows: reply is an icon-only toggle under the bubble with the
       merged react control right beside it — a SINGLE tap hearts the comment
       (❤️, optimistic, tap again to unheart) while hover / touch-and-hold
@@ -219,6 +230,147 @@ is fixed, and cite the checklist you ran in the PR description.
       show the user's avatar IMAGE when one is set — the rainbow initial
       circle is only the no-avatar fallback (regression: UserAvatarCircle
       ignored avatarUrl entirely).
+
+## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
+
+- [ ] Create standalone same-repository merge-conflicting PRs targeting
+      `main` and a non-default base. Confirm both are detected and updated,
+      while a clean PR, a fork PR, a protected head, and the default branch
+      are never resolver push targets.
+- [ ] Exercise a base-branch push, a head-branch push, PR opened/reopened, the
+      scheduled repository scan, a blank manual scan, and exact PR/base/head
+      manual selectors. Push detection must find PRs both targeting and
+      originating from the pushed branch. A global scan spanning three
+      conflicted PRs must dispatch exactly three trusted per-PR workers to the
+      fixed `develop` workflow revision. Human/manual and legacy
+      `repository_dispatch` runs must stay detector-only; only a bot-authored
+      internal handoff on `develop` with a positive PR, blank branch, and valid
+      depth may load the model or resolve.
+- [ ] Give a manual exact-PR/base/head selector that matches no open PR and
+      confirm the detector fails with actionable log and step-summary output.
+      Give one that matches only clean, UNKNOWN, fork, protected/default-head,
+      paused, or rebase-owned PRs and confirm it succeeds with a visible
+      no-worker warning/summary rather than silently skipping downstream jobs.
+- [ ] Create a normal two-PR stack and confirm its members are excluded before
+      either ownership label exists. Add `no-ai-rebase` and confirm that member
+      becomes merge-owned. Add a fresh `ai-rebase-in-progress` mutex and confirm
+      the merge resolver abstains. Confirm a pause label alone never determines
+      ownership: if topology/verdicts transition the PR to merge ownership, the
+      merge resolver verifies and clears stale `ai-rebase-paused` before work.
+- [ ] Force an unchanged eligible merge-resolution failure and confirm it adds
+      `ai-merge-paused`; scheduled, push, PR-target, and blank-manual scans must
+      abstain afterward. An exact PR/base/head manual run must carry internal
+      retry intent, clear the hold, and retry. A failure after the
+      head/base/topology/ownership changes must not leave a stale pause label on
+      the newly owned state. Verify the hidden pause marker is accepted only
+      from `github-actions[bot]`, requires the complete strict schema, and
+      round-trips the exact refs, SHAs, owner, and topology.
+- [ ] Feed a mocked global scan more than 1,000 open PRs across GraphQL pages.
+      Confirm every page is combined exactly once and conflicting PRs on every
+      base remain eligible for their unique per-PR handoff. Give one resolved
+      head more than 30 direct child PRs and confirm the cascade's explicit high
+      limit dispatches every child number to `develop` without truncation.
+- [ ] Move the head, move the base, change stack topology or ownership labels,
+      close the PR, or protect the head while a run is resolving. Every case
+      must refuse publication. An exact-head lease must preserve concurrent
+      work; if `git push` reports a transport error after the exact commit
+      lands, the live-ref check must classify it as published rather than
+      retrying it.
+
+## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
+
+- [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
+      returns the public key, ordered waterfall, and curated model catalog;
+      `POST` returns 401. A signed-in non-admin `POST` returns 403, while an
+      admin can save a valid reordered waterfall.
+- [ ] Settings → Admin paints the last-known waterfall immediately, then
+      reconciles in the background. Add Fable 5 and Opus 5, drag a row by its
+      dedicated handle, use the Up/Down controls, remove a non-default row,
+      save, reload, and confirm the exact order persists. `default` stays
+      present and cannot be removed.
+- [ ] Exercise the editor at desktop and mobile widths from the top to the
+      bottom of `/settings`: model names, Max-effort badges, handles, fallback
+      copy, and save/add/remove controls never clip, overlap, or create
+      horizontal scrolling.
+- [ ] Resolver workflow config parsing accepts only `default`,
+      `claude-fable-5`, and `claude-opus-5`, preserves their public order, and
+      appends `default` defensively. An unavailable endpoint, malformed JSON,
+      duplicate/unknown model, wrong key, or empty array emits a warning and
+      selects only `--model default`; no stored value can inject another CLI
+      flag.
+- [ ] With an availability failure on the first configured model, Claude
+      Code tries the ordered native fallback chain. A completed run that still
+      leaves conflict markers stops for manual review; it does not silently
+      spend another model attempt.
+
+## AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`)
+
+- [ ] Create standalone same-repo PRs against `main` and against a non-default
+      branch whose heads are `mergeable: true` but `rebaseable: false`.
+      Confirm **Rebase PRs and stacks (AI)** detects both while the merge-based
+      resolver correctly no-ops, and that replaying more than one conflicting
+      commit can advance through multiple bounded Claude/verify/continue
+      rounds. Then make a standalone PR genuinely merge-conflicting and
+      confirm only **Resolve PR conflicts (AI)** owns it.
+- [ ] Create a two-PR stack (child PR based on the root PR's head). After the
+      root is rebased, confirm the child dispatch receives the old and new
+      parent SHAs, replays with onto semantics, and completes root-to-leaf
+      without duplicating the parent's commits.
+- [ ] Exercise detection from a branch push, PR opened/reopened event, the
+      scheduled scan, and a manual PR-number dispatch. Automatic scans select
+      every same-repo PR regardless of base branch, route standalone merge
+      conflicts to the merge workflow, do not race a blocked child ahead of
+      its parent, and terminate after resolution instead of looping on the
+      workflow's own push. A blank manual dispatch must perform the same
+      repository-wide scan.
+- [ ] Return unknown merge/rebaseability for several PRs at once and confirm
+      polling proceeds round-robin, giving every candidate an API check in each
+      bounded round. Exercise a stack deeper than eight PRs and confirm it is
+      still ordered and cascaded root-to-leaf (the hard loop guard is 64).
+- [ ] Add `no-ai-rebase` before detection and confirm the PR is skipped. Force
+      a resolver failure, confirm `ai-rebase-paused` is added and automatic
+      scans leave the exact failed snapshot alone, then change a ref or topology
+      and confirm the stale hold is cleared and re-detected. Review an unchanged
+      run and confirm a deliberate manual retry is available. Transition a PR
+      from merge-owned/`ai-merge-paused` to rebase-owned and vice versa; the new
+      owner must clear only the opposing pause after proving ownership, while a
+      fresh `ai-rebase-in-progress` mutex always blocks publication. Queue a
+      retry, then add a fresh same-snapshot pause or change its resolver owner;
+      the queued run must not erase that newer hold. Publication must require
+      pauses to be absent, and post-push cleanup must preserve any pause created
+      for the newly published snapshot. While a parent is
+      paused, actively owned, protected,
+      or still has unknown rebaseability, confirm an automatically detected
+      conflicting child is held back; once that same parent is confirmed
+      rebaseable, the child may become the next root. Confirm stack members are
+      excluded from the merge-based resolver before ownership labels exist;
+      `no-ai-rebase` deliberately routes a merge-conflicting member back to it.
+- [ ] Leave an `ai-rebase-in-progress` label behind for more than 90 minutes.
+      Confirm a still-conflicting PR is recovered into a new exact dispatch,
+      while a now-clean PR has the orphaned lock removed without a rewrite. A
+      manual clean retry should also clear a stale `ai-rebase-paused` label.
+- [ ] While a run is resolving, push another commit to the PR head. The exact
+      force-with-lease must reject the stale rewrite; no partial rebase may
+      reach the remote branch and the concurrent commit must remain intact.
+- [ ] Present a fork PR, the default branch, and a protected branch. Each is
+      refused before Claude or a force push runs. A conflict file that attempts
+      prompt injection cannot make Claude edit outside the recomputed conflict
+      set or invoke Git/shell; trusted verification rejects unresolved markers,
+      unmerged index entries, and out-of-scope changes before any push.
+- [ ] Resolve a PR whose final diff touches `remix/` using only `GITHUB_TOKEN`.
+      Confirm the rewritten SHA receives an explicit **Web CI** workflow run;
+      a non-web diff should not spend a redundant CI dispatch.
+- [ ] Add a non-conflicted tracked symlink targeting `.git/config`, plus a
+      conflict prompt that asks Claude to read/write through it. Confirm the AI
+      workspace contains only regular copies of the exact conflict files and no
+      repository, symlink, trusted action, or Git metadata. Add an external or
+      `.git`-targeting tracked symlink and confirm graphify validation refuses it
+      before semantic extraction or publication.
+- [ ] Change the repository default branch while a resolver fixture is paused,
+      and simulate a push whose server-side ref update succeeds but whose client
+      exits nonzero. The adjacent pre-push default-branch check must prevent a
+      default ref rewrite, while post-push ref inspection must report the actual
+      published state rather than claiming the remote stayed unchanged.
 
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 
@@ -288,6 +440,70 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] `merge-legacy-collections` dry-run reports per-collection copy counts and
       writes nothing; the real run copies only docs missing at the destination
       (re-run reports 0) and never deletes a legacy collection.
+- [ ] Against a disposable replica-set database, the first registered and
+      sandbox app-storage counter can be created without MongoDB code 224:
+      the ensure upsert uses only the deterministic `shareId`, while the
+      returned document must still pass the complete protected-envelope check.
+      A malformed Thing occupying that id remains untouched and returns the
+      authored storage-invariant error.
+- [ ] Remove `storageClass` from existing reserved, system-owned `schema-*`
+      builtin schema Things. `seed-builtin-schemas` reports each as pending and
+      restores `storageClass: "control"`; running
+      `backfill-user-storage-accounting` directly invokes that repair first.
+      A community/user-owned `thingtime: ["schema"]` Thing remains billable.
+- [ ] Force a migration runner exception once: the public error field remains
+      a safe exception class/code (never a raw Mongo message, query, document
+      id, host, or credential), and Lopu renders contextual text beneath the
+      migration id — never a title-only/decoration-only toast. A failed real
+      run refreshes pending counts because an idempotent subset may have landed;
+      a failed dry run does not claim that a write outcome is ambiguous.
+- [ ] On a failed real migration, the private response carries a validated
+      `migration-diagnostic-*` id and Lopu shows “View full migration
+      diagnostic”. The link opens `/thing/:id` at the top of the page, reloads
+      successfully, shows the bounded redacted stack/detail as plain text, and
+      identifies its capture/expiry time. A different admin, a signed-in
+      non-admin, and an anonymous caller cannot read it; missing, expired, and
+      inaccessible ids share the same 404 shape.
+- [ ] Force the `orphan_billable_thing` error with a Mongo ObjectId. The normal
+      diagnostic GET and `/thing/:id` detail contain only a numbered
+      `[redacted MongoDB ObjectId #…]` placeholder plus a value-free reveal
+      descriptor; the raw id is absent from `crystal`, normal GET JSON, generic
+      Thing get/list/search, and the redacted detail. A legacy v1 diagnostic
+      remains readable and shows no Reveal controls.
+- [ ] On `/thing/:diagnostic-id`, click Reveal, enter the current owning admin's
+      correct password, and confirm exactly the selected ObjectId appears. Hide
+      it, switch account, navigate away, and background the tab; each clears the
+      transient value. Every later Reveal prompts for and verifies the password
+      again. A wrong/old password returns the same generic failure, another
+      admin or non-admin receives no value, and five confirmation requests
+      (including successes) in 15 minutes hit the fixed fail-closed ceiling.
+      Success and every error carry `private, no-store` and `Pragma: no-cache`.
+- [ ] Throw diagnostics containing a 24-hex password/token/authorization value,
+      structured password/token values, a multi-value Cookie header, a
+      connection-string credential, a sensitive URL query value, and an
+      unlabelled 24-hex string. Each is irreversibly redacted and none appears
+      in the private reveal table. No reveal request accepts a caller-selected
+      owner, kind, field name, JSON path, or raw `secure` blob selector.
+- [ ] On a failed migration dry run, no diagnostic Thing is written and the
+      complete bounded redacted detail appears in a long-lived, scrollable
+      Lopu toast. Force diagnostic persistence to fail on a real run and verify
+      the same inline fallback appears without replacing the original migration
+      status, summary, or mutation outcome.
+- [ ] Confirm migration diagnostics use `storageClass: "control"`, owner-only
+      ACL, an opaque binary `secure` detail, a root `expiresAt`, the home data
+      plane, a 30-day home-only TTL index, and best-effort newest-25 per-admin
+      retention.
+      Generic Thing get/list/search/create/update/delete must neither expose nor
+      forge them; custom Mongo endpoints must never receive the diagnostic TTL.
+- [ ] Force each typed migration operator failure once: the response uses the
+      closed lease/concurrency/prerequisite/repair/invariant message catalogue,
+      includes only registered migration ids and aggregate counts, and keeps
+      Mongo `_id`, ownerId, appId, shareId, query text, hosts, and stacks out of
+      the public response. Only ObjectIds supplied through an explicitly
+      authored server-side context may enter the protected diagnostic reveal
+      table; all other private context stays in server logs. Recoverable
+      conflicts return 409 while still marking a real
+      run commit-unknown so the panel refreshes potentially changed counts.
 - [ ] `drop-stale-collection-generations` shows the red destructive badge;
       dry-run lists exactly what would drop with doc counts; a non-dry run
       without `confirm: true` is rejected by the API (the panel sends it after
@@ -393,7 +609,7 @@ is fixed, and cite the checklist you ran in the PR description.
       the entry's acl becomes `["tt:user", "tt:app/<clientId>"]`.
 - [ ] A plain `{ key, value }` rewrite of an existing shared entry keeps it
       shared (audience only changes when the write names one); `visibility:
-      'private'` flips the acl back to `["tt:user"]`.
+  'private'` flips the acl back to `["tt:user"]`.
 - [ ] GET /api/v1/app-data/shared returns other users' `visibility: 'app'`
       entries for the SAME app only — never private entries, never another
       app's entries — newest first, and `key=post:*` prefix-filters.
@@ -408,6 +624,77 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] GET /api/docs returns the whole API reference as text/markdown, and
       /api/docs-docs + every `<endpoint>-docs` route (including
       /api/v1/app-data/shared-docs) return their JSON doc payloads.
+- [ ] App-token things CRUD stays inside the namespace: POST/PUT/PATCH/DELETE
+      /api/v1/things (and /things/search, /things/update, /things/delete)
+      with an app token only ever touch docs carrying the app's root `appId`
+      stamp; reads, updates, and deletes aimed at a first-party thing's id
+      (or another app's doc) all 404.
+- [ ] App writes are acl-clamped: an acl beyond `tt:user` / `tt:app/<own
+  clientId>` (tt:all, other apps, other users, exclusions) 400s; an
+      insert that omits visibility/acl lands PRIVATE (never the generic
+      route's public default); `save`/`share` thingtimes 403 as first-party
+      surfaces; protected kinds stay refused.
+- [ ] Byte allowances replace key counts: keys keep writing past 200 until
+      either the effective (user, app) allowance (50 MiB app default, or its
+      custom sub-tier) or the app's aggregate plan (5 GiB Free by default) is
+      spent. The corresponding over-limit
+      write 507s and writes nothing; concurrent users never overshoot either
+      guarded counter. GET /api/v1/app-data/usage returns userStorage and
+      appStorage with exact used/allowance/remaining arithmetic while keeping
+      usedBytes/budgetBytes as user-ledger aliases. A write raises both by its
+      serialized size, an update charges only the delta, and a delete refunds
+      both.
+- [ ] App allowance ownership + migration: POST /api/v1/apps stores the Free
+      tier, storageAllowanceBytes=5 GiB, storageUsedBytes=0, and the 50 MiB
+      default user cap; /apps/update cannot change them. Tier + runtime
+      aggregate allowance live on that same app Thing. A legacy app fails
+      writes closed until backfill-app-storage-allowances reconciles
+      per-user sums and initializes aggregate last; two migration runners
+      cannot overwrite a now-live aggregate.
+- [ ] Canonical account storage: create, grow, shrink, and delete first-party
+      Things, comments/reactions, themes, algorithms, and registered app data.
+      Each mutation changes the protected subscription ledger by exactly the
+      UTF-8 byte delta of `JSON.stringify({ crystal, extended, tags })` in the
+      same transaction. App data changes the account, whole-app, and app-user
+      counters by the same delta while appearing only once in the account
+      total. Stale/malformed stamps and ledgers fail growth closed; deletes
+      fence for repair instead of guessing. Settings/admin/app surfaces show
+      the same canonical value and exact bytes, with `reconciling` or
+      `unavailable` never rendered as zero. Rerun the interrupted global
+      migration and confirm it converges without double charging.
+- [ ] Registered app lifecycle stays on its dedicated surface: generic
+      /api/v1/things POST/PUT/PATCH/DELETE cannot create, replace, edit, or
+      remove an `app` control Thing. /api/v1/apps/delete atomically removes
+      exactly that control row and revokes all live app sessions; retrying an
+      already-completed delete succeeds, while users' namespace data and
+      protected app-storage counters remain browseable/reconcilable.
+- [ ] Run `node scripts/verify-app-storage.mjs <local base URL>` against a
+      disposable local database: all 30 app-manager + registered-ledger checks
+      pass for two users, including owner plan/default/single/bulk/reset flows,
+      authorization, same-key CAS races, and first-party owner updates/deletes.
+      The script refuses non-local URLs so it cannot seed verification accounts
+      into production by accident.
+- [ ] KV listing grammar: GET /api/v1/app-data with key=post:\* or prefix=
+      filters, limit=/cursor= page, and nextCursor walks the whole set; KV
+      entries also appear via GET /api/v1/things?thingtime=app-data with the
+      same token (one namespace).
+- [ ] Cross-user comment/reaction via the inherit chain: with
+      app-data.shared, user B's app token can comment/react on user A's
+      app-audience doc; the child is auto-stamped into the namespace and its
+      visibility resolves through tt:inherit to the shared ancestor; without
+      the scope (or after A revokes) the target 404s.
+- [ ] Revoking the author's grant removes their shared entries from EVERY
+      app read on the next request — the KV shared feed and the app-token
+      things reads alike — while the docs stay owned and browsable
+      first-party.
+- [ ] Session browse: GET /api/v1/apps/data-summary lists the namespace
+      (appName null after the app is deleted, data still counted);
+      GET /api/v1/things?appId=<clientId> narrows the own-things list to one
+      namespace; POST /api/v1/apps/data/delete-all wipes the namespace +
+      cascaded children and zeroes usage (works with no live grant);
+      GET /api/v1/apps/data/shared?appId= mirrors the app's own view
+      (sharedRead reflects the grant) and 403s with the plain no-live-grant
+      explanation after disconnect.
 
 ## Sandbox tokens (`/api/v1/oauth/sandbox`, `api/utils/apps/sandbox.ts`)
 
@@ -431,8 +718,23 @@ is fixed, and cite the checklist you ran in the PR description.
       clientId can write shared entries, but that real app's
       /app-data/shared feed never scans them (`sandboxExpiresAt` excluded)
       — real pages stay full-size even with fresh sandbox junk on top.
-- [ ] Sandbox storage budget: the 51st key for one sandbox token 400s
-      (SANDBOX_MAX_KEYS), while real grants keep the 200-key cap.
+- [ ] Sandbox storage budget: writes 507 once the sandbox namespace's 5 MiB
+      byte budget is spent (no key-count cap remains); deleting entries
+      refunds bytes and unblocks; real grants get the 50 MiB budget.
+- [ ] Explicit sandbox KV/things deletes refund only the ephemeral sandbox
+      ledger. Even when a sandbox uses a real clientId, its delete never
+      decrements that registered app's standing aggregate or a real user's
+      ledger.
+- [ ] Global sandbox byte brake: the `sandbox.storage.global` rule (limit is
+      MEGABYTES per window, default 512MB/hour, fail-closed) burns on every
+      sandbox write app-wide and 507s all sandbox writes once spent; a
+      write refused by the per-namespace budget refunds its global charge;
+      an unavailable ledger 503s instead of waving writes through.
+- [ ] Sandbox tokens exercise the full things surface identically (CRUD,
+      search, react, comment); every doc written through one carries
+      `sandboxExpiresAt` (+ `sandboxSpace` in a space) whatever its kind,
+      real app-token reads never see sandbox docs, and the TTL reap removes
+      them with the token.
 - [ ] Sandbox spaces: tokens minted with the same `space` see each other's
       visibility-'app' entries in /app-data/shared, each authored by its own
       `sandbox-<username>` pretend user; PRIVATE entries stay per-token even
@@ -441,6 +743,203 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Space validation: space shorter than 8 chars 400s; usernames are
       always 'sandbox-' prefixed so pooled feeds can't impersonate real
       accounts.
+
+## Token minter — personal access tokens (`remix/app/components/Settings/TokenMinter.tsx`, `api/utils/auth/patTokens.ts`)
+
+- [ ] Settings → Token minter (auth only): mint with default "Full things
+      access" — the returned token appears ONCE in the reveal card (token +
+      curl example + copy buttons); after reload the reveal is gone and the
+      token is unrecoverable, but the row lists in "Your tokens" (painted
+      instantly from the `tt-pat-tokens-<userId>` local cache, server
+      reconciles behind).
+- [ ] Permissions selector: with Full things access on, unticking one leaf
+      (e.g. Delete) converts the selection to "every leaf except that one"
+      and the hint lists exactly the granted scopes; minting with zero
+      scopes is blocked with a toast.
+- [ ] Expiry dials stay in sync: preset chips (1h…1y, Never ∞), the
+      log-scale slider (1ms → 10y, far right = never), and the value+unit
+      inputs all drive the same expiresInMs; the human date preview updates.
+- [ ] Uses dials: Unlimited / 1 / 10 / 1000 / custom; a use-limited token
+      consumes exactly one use per authenticated call — the (maxUses+1)-th
+      call 401s "no uses remaining", and a 403 (missing scope) consumes
+      NOTHING. Two racing final calls can never both spend the last use
+      (atomic usesRemaining > 0 decrement).
+- [ ] A PAT works ONLY where wired: things CRUD/search/feed/user/save/
+      comment/react/share by scope (PUT upsert needs create+update), plus
+      free introspection at /api/v1/tokens/self. It must 401 on
+      /api/v1/tokens (list/mint), /tokens/revoke, /auth/me, themes,
+      algorithms, oauth — and be rejected when smuggled via the auth
+      COOKIE (Bearer-only).
+- [ ] Sub-second expiry is real: a 1500ms token works immediately and 401s
+      after 2s (session expiresAt is the authoritative ms check; the JWT
+      exp is ceiled to seconds).
+- [ ] Revoke (session-only) kills the token immediately, is idempotent,
+      flips the row optimistically (reverts on failure), and gives a
+      never-expiring token a reap date so the TTL index eventually clears
+      it. Expired tokens vanish from the list once Mongo's TTL sweep runs.
+- [ ] Permissions selector "Select all ✅ / Unselect all 🧹" buttons: all →
+      the single Full-access chip state; none → zero chips + mint blocked.
+- [ ] Sandbox ("Only its own things 🧸", onlyCreatedThings) — the tt:token
+      grant system: every PAT-created thing carries the creator's
+      tt:token/<id> entry in tokenAcl; a sandboxed token CAN patch/PUT-
+      replace/delete/comment/react/save/share things carrying its entry and
+      gets 403 "sandboxed … tt:token grant" on everything else (the 403 is a
+      post-auth target check, so it DOES consume a use — only missing-scope
+      403s are free) — including reaction/save REMOVAL on ungranted things
+      and re-sharing a token-created share of a foreign root. Delete stays
+      one atomic filter op on success (tokenAcl OR legacy createdByTokenId)
+      and returns the sandbox 403, not a phantom 404, when the thing exists
+      but carries no grant.
+- [ ] Grant layering: owner PATCHes a thing's tokenAcl to [A, B] → BOTH
+      sandboxed tokens mutate it; removing A's entry cuts A off immediately
+      while B keeps working; owner can CREATE a thing pre-granted to a
+      token that never touched it; a sandboxed token can re-grant (add
+      peers to) things it holds a grant on, and can lock itself out by
+      dropping its own entry (session always recovers it). tokenAcl
+      replaces WHOLE (null clears), max 32 entries, entries must match
+      tt:token/<id> (400 otherwise), and a tokenAcl replacement also clears
+      the legacy createdByTokenId stamp so removed grants can't resurrect
+      through the back-compat read.
+- [ ] tokenAcl is owner-only in projections: the owner (and their tokens)
+      see it on GET /things?id=; anonymous viewers and other users never
+      receive the field. Legacy round-2 docs (createdByTokenId, no
+      tokenAcl) still honor their creator via the read shim.
+- [ ] Non-sandboxed tokens and full sessions ignore tokenAcl entirely; the
+      settings list row shows "🧸 its own things only" + a "Grant 🆔"
+      copy button (copies tt:token/<id>).
+- [ ] PAT × app-token coexistence on the shared things routes (one resolver,
+      three credential kinds): a PAT ignores Origin (no app binding), the
+      OPTIONS preflight for app SDKs still serves with Authorization allowed,
+      a PAT with things.read can browse `GET /things?appId=` (first-party
+      read), a PAT 401s on the app-token-only app-data surface, an app token
+      401s on /api/v1/tokens, and the oversized-payload 413 fires BEFORE
+      actor resolution so it never consumes a PAT use. One command re-checks
+      all of this: `node scripts/verify-pat-tokens.mjs <nitro base url>`
+      (companion to `scripts/verify-app-namespaces.mjs`).
+
+## Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`)
+
+Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
+restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
+name already on the allowlist is refused, so register FIRST). One command
+re-checks the whole management plane end-to-end:
+`TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
+
+- [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
+      the dashboard (Users / Apps / Tiers / System tabs) for admins; the drawer's
+      Account section shows the 🛠️ Admin item only for admins.
+- [ ] Users tab: free-text query searches every safe projected field; typed
+      filters cover created-day ranges, tier id/name/version, booleans, quotas,
+      storage, and every count; multiple filters combine with AND and sorting
+      is deterministic. Each row shows created time, tier badge (+ `custom`
+      badge when overrides exist), storage used/allowance, app-namespace bytes,
+      and app/PAT/connected counts. With more than 400 mixed Things/legacy
+      users, confirm the UI drains every 200-row cursor page without gaps or
+      duplicates and a field/tier match found only on page 3 is still returned.
+      Confirm numeric `is any of` / `is none of` filters accept comma-separated
+      values. Exact-email matches and all backing stores stay globally newest
+      first across page boundaries.
+      If a continuation request fails, the last complete snapshot stays visible;
+      a cold failure shows an error with an in-place Retry action instead of an
+      authoritative empty table.
+- [ ] Apps tab query covers identity, origins, created/suspended time, status,
+      owners/managers, users, storage, and every subscription field. A no-match
+      query keeps the controls visible; Clear filters restores the rows; tier
+      or link changes refresh rows without clearing the active query. Seed more
+      than 200 apps and confirm a manager/tier match beyond page 1 is queryable.
+- [ ] Tiers tab query covers every descriptor field: lifecycle/version,
+      identity text, display price amounts, computed/custom discounts,
+      Editor.js inclusion text, quotas, and all timestamps. Filtered cards stay
+      in Live / Draft / Archived groups with correct per-group empty states.
+- [ ] System has independent queries for rate-limit rules and current admins.
+      Filtering rate limits never discards hidden unsaved edits, and the
+      separate Promote a user lookup keeps its existing username/email flow.
+- [ ] Subscription editor: assigning a live tier's exact `tierVersionId` +
+      per-field override (number in MB for byte fields, or Unlimited) persists
+      and the row updates on save; Reset to default pins the current live
+      default revision. If the current revision was archived, its card remains
+      visible as current/non-selectable and note/override-only edits preserve
+      that exact historical revision.
+- [ ] Tiers tab lifecycle: create a new draft, edit its name/tagline/banner,
+      currency, all four renewal prices, quota defaults, and Editor.js
+      inclusions; reload and confirm every field persists. The draft appears
+      only in Draft / not live and never in public `GET /api/v1/tiers`.
+- [ ] Pricing discounts: each daily→weekly/monthly/yearly,
+      weekly→monthly/yearly, and monthly→yearly percentage is computed from
+      annualized prices. Enter a custom saved percentage, confirm it overrides
+      just that comparison, then clear it and confirm the computed value
+      returns. Check a zero-decimal currency (JPY) and a three-decimal currency
+      (KWD) render their minor-unit prices correctly.
+- [ ] Publish requires confirmation, makes the immutable revision live/public,
+      and hides the mutable editor. Create a new draft version, publish it, and
+      confirm the former live revision moves to Archived while an existing
+      user's pinned `tierVersionId`, title, and quota snapshot stay unchanged.
+- [ ] Archive requires confirmation and never deletes history. The default
+      Free revision cannot be archived without publishing its replacement;
+      draft and archived revisions are rejected for new assignments. A tier
+      already holding a draft disables duplicate draft creation.
+- [ ] Tier cards render the optional banner (with graceful broken-image
+      fallback), tagline, four prices, savings, quotas, and rich inclusions.
+      Desktop and 375px layouts have no clipping/overlap; open each lifecycle
+      confirmation and the Editor.js content editor while testing.
+- [ ] Tier quotas actually enforce: with `maxApps: 1` override the second
+      `POST /api/v1/apps` is refused 400; a `null` override (or payg) lifts
+      the cap. App subjects accept only `appStorageBytes`; tier/override and the
+      runtime aggregate move atomically on the app Thing, `null` meters without
+      blocking, and administrator-custom app plans lock owner tier changes.
+- [ ] `subscription-tier`, `subscription`, and `account-link` kinds are
+      PROTECTED: generic `POST /api/v1/things` refuses them, and generic
+      creation also rejects the deterministic `subscription-*` shareId
+      namespace (published tiers, self-assigned plans, or links would be
+      privilege escalation).
+- [ ] Apps tab: every app across all users with owner, co-managers, live-grant
+      user count, storage rollup, and status. Suspend uses an inline
+      Confirm/Cancel, flips the row to SUSPENDED + Restore, and: existing app
+      tokens die immediately (401), the consent screen and /oauth/authorize
+      refuse 403, restore allows re-authorization but does NOT resurrect swept
+      sessions.
+- [ ] Ownership links (many-to-many both ways): admin assigns an account link
+      → target appears under the owner's "Owned accounts" in the switcher
+      (`GET /api/v1/auth/accounts/owned`), "Sign in →" assumes it without
+      credentials (fresh per-browser session folded into the roster; other
+      browsers/owners are never signed out), non-linked users get 403. App
+      links put the app in the co-manager's `/apps` list and update/delete
+      accept them; removing the link removes access (404).
+- [ ] Mobile (375px): the admin tables scroll inside their own container —
+      the page body itself never scrolls horizontally; modals fit with no
+      clipped controls.
+
+## App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`)
+
+- [ ] Logged-out visitors get the sign-in card. An owner sees every registered
+      app; an administrator-linked co-manager sees the linked app; ordinary app
+      users and removed co-managers get the same 404-shaped denial as an unknown
+      app and cannot inspect aggregate usage or the user roster.
+- [ ] Selecting any current live card sends its stable tier id plus exact
+      `tierVersionId`, updates the whole-app allowance while preserving exact
+      usage, and rejects a downgrade below current usage atomically. The
+      bootstrapped Free → Plus → Pro → PAYG path yields 5/25/100 GiB/null. An
+      administrator-custom plan shows `custom` and disables self-service tier
+      buttons until the admin resets it; an archived current revision remains
+      visible but cannot be newly selected.
+- [ ] Default cap starts at 50 MiB, accepts 0 and finite MiB values no larger
+      than the current aggregate, and is re-checked atomically against a racing
+      plan change. Existing users without overrides immediately inherit it.
+- [ ] Select one user or many (up to all 200 shown) and apply a custom cap;
+      each protected `app-storage` ledger records its own override, `Use app
+  default` unsets it, and runtime usage reports the effective cap. A custom
+      value above the aggregate is refused; a later aggregate downgrade clamps
+      enforcement even if a historical override was larger.
+- [ ] The roster includes users with current or past grants/ledgers, but a
+      username appears only while a live unexpired grant covers
+      `profile.username`. App-user IDs/usernames are never written to the
+      browser localStorage cache, and a failed manager re-authorization clears
+      the cached storage view.
+- [ ] Desktop and 375px mobile: switch apps; inspect banner/price/savings/rich
+      inclusions on tier cards; choose a plan; edit the default;
+      search, select-all, single-select, bulk apply/reset; horizontally scroll
+      the user table; and scroll the full page top-to-bottom. No page-level
+      horizontal overflow, clipping, sticky overlap, or console errors.
 
 ## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
 
@@ -510,3 +1009,156 @@ is fixed, and cite the checklist you ran in the PR description.
       cost, so a burst past the limit 429s with the hashing message. The
       intent stays ANONYMOUS on purpose — being locked out is the reason to
       reach for it — and never reads or writes the database.
+
+## Social graph — follows + friends (`api/utils/users/social.ts`, `/api/v1/users/{follow,friend,relationships,connections}`)
+
+- [ ] Follow is ONE-WAY and instant: user B POSTs `/users/follow { username: A }`
+      → `{ following: true, followerCount }`; A's profile shows the count and B
+      sees "Following ✓" immediately (optimistic, reverts on failure). Repeat
+      with `follow: true` is idempotent; `follow: false` (or toggle) unfollows.
+- [ ] Friendship needs APPROVAL: B `intent: request` → `pending-outgoing`; A's
+      own profile shows the "Friend requests 🤝" inbox with Accept/Decline; A
+      accepts → both sides read `friendState: friends` and friend counts bump.
+      Requesting someone who already requested YOU accepts instead of duping
+      (one doc per pair — `crystal.friendKey`, unique index).
+- [ ] Self-actions rejected: following or friending yourself 400s.
+- [ ] `tt:userFriends` acl is REAL now: a friends-visibility post is readable
+      by an accepted friend (permalink AND feed AND the owner's profile as
+      seen by the friend), 404s for strangers/anonymous, and stops resolving
+      the moment either side unfriends.
+- [ ] Relationship reads are public: `/users/relationships?username=` returns
+      counts logged out (`viewer: null`); logged in it adds following /
+      followedBy / friendState, and `incomingRequests` on your own profile.
+      `/users/connections` lists followers/following/friends publicly;
+      `type=requests` is your-own-account-only (403 otherwise).
+- [ ] Forged edges impossible: `follow`/`friend`/`notification` are PROTECTED
+      kinds — generic `POST /api/v1/things` refuses them (a forged accepted
+      `friend` doc would fake acl visibility).
+
+## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
+
+- [ ] Emission: new follower, friend request, friend accepted, comment on your
+      post, reply to your comment, reaction (preview = the token), repost, and
+      capped fan-out (≤200 newest connections) of new posts to followers
+      (`post-from-followed`) and friends (`post-from-friend`). Own actions
+      never notify yourself; a failed emit never fails the triggering action.
+- [ ] Fan-out respects the post's audience: public posts notify followers +
+      friends, friends-only posts notify friends only, private posts fan out
+      to nobody.
+- [ ] The bell 🔔 (auth only) shows the unread badge (seeded from localCache —
+      no flash), reconciles on mount/focus/slow poll, opens a popover of the
+      latest 20 (unread rows tinted, actor avatar + type emoji, preview,
+      time-ago), zeroes the badge on open (mark-all-read), and click-through
+      goes to `/post/<id>` or the actor's profile. Works within a 375px
+      viewport with no overflow.
+- [ ] Settings → Notifications: a per-type × per-channel matrix — Push and
+      Email switches per row plus a master switch per channel (top row).
+      Defaults ON except email for `post-from-followed`/`post-from-friend`
+      (opt-in) — and `weekly-summary` is email-only (push cell shows —).
+      Optimistic flip + revert on failure, per-user localCache seed
+      (`tt-notif-prefs-v2-*`), merge-patch POST in the channel shape
+      (`{ prefs: { push/email/masters } }`) with the flat legacy body still
+      patching push; unknown keys 400. Disabling a push type hides even
+      ALREADY-WRITTEN notifications of that type (read-time filtering) and
+      single-recipient emits skip writing it; push master OFF empties the bell
+      entirely. Master OFF dims + disables that channel's column. No overflow
+      or column misalignment at 375px.
+- [ ] Notification emails (SES `notification` stream): each single-recipient
+      emit also emails the recipient when their email master + per-type switch
+      are on AND their address is verified — check the `email_messages` outbox
+      row (`templateKey notification.<type>`, `metadata.notificationType`,
+      manage + unsubscribe links in both html and text). Fan-out post emails
+      only reach explicit opt-ins. Throttle: >10 notification emails to one
+      recipient within an hour are silently skipped (digest excluded). A
+      failed/slow send never fails or delays the triggering action.
+- [ ] One-click unsubscribe: the footer link (`/api/v1/notifications/email/
+      unsubscribe?uid&token`) flips ONLY the email master off, renders the
+      confirmation page (mobile viewport included), is idempotent, and rejects
+      a tampered token with the 400 page. Bell/push switches are untouched;
+      re-enabling from Settings works.
+- [ ] Weekly summary digest: admin `GET …/weekly-summary?dryRun=1` previews
+      counts without sending; a real run emails only opted-in verified users
+      with ≥1 nonzero stat, records `notification.weekly_summary` outbox rows,
+      and a second run within 6 days skips everyone (`alreadySent`). Anonymous
+      and non-admin callers get 401/403 (CRON_SECRET bearer also accepted).
+- [ ] Mobile nav overlap regression: the centered commander pill must NOT
+      cover the bell / username (they sit above it via `.nav-right-section`
+      z-index, and the pill reserves 148px on the right). Regression class:
+      nav-right controls rendered under the absolutely-positioned commander
+      host and were untappable on mobile (2026-08).
+
+## Post views (`api/utils/things/views.ts`, `/api/v1/things/views`, `useViewTracking`)
+
+- [ ] Public stats on every post payload: `viewCount` (unique viewer
+      identities) + `viewStats { impressions, avgDwellMs }`; the card's action
+      row shows 👁 + compact count with the full stats in the tooltip, for
+      everyone (logged out included).
+- [ ] Counting is honest: a card must be ≥50% visible for ≥1s to count; one
+      event per post per pageview; batches flush every 10s and on page hide
+      via sendBeacon. Dwell (time on screen), max visible ratio, and viewport
+      position (0..1) ride along.
+- [ ] Manipulation resistance (all server-side, client untrusted): one
+      postViews doc per (postId, viewerKey) — replays bump impressions only,
+      never uniques; owner self-views dropped entirely; anonymous identities
+      dedup on salted sha256(ip|UA) with NO raw IP at rest; UA-less requests
+      dropped; dwell clamped (≤120s/event); batch ≤50; unknown or
+      not-viewable posts dropped (a view write only lands where a read would
+      succeed); rate limited `things.views` per user-or-IP; headless
+      (`navigator.webdriver`) browsers skip client-side too.
+- [ ] Views are tracked on every post surface: feed, profiles (both wired via
+      PostList) and the `/post/:id` permalink page.
+
+## Messenger (chats, communities, custom emojis) (`remix/app/components/Messenger/`, `/api/v1/chats*`, `api/utils/messenger/`)
+
+Automated first: `node scripts/verify-messenger.mjs` from `remix/` against the
+running dev stack (86 live-API checks: permissions, requests, receipts,
+reactions, custom emojis, generic-things escape hatches). Then in a browser:
+
+- [ ] `/messages` requires login (guests bounce to `/login`) and the page owns
+      the viewport: no body scroll, no footer under the composer, nav
+      clearance intact at desktop and mobile widths.
+- [ ] Mode toggle (🏛️ Spaces / 💬 Chats) swaps the SAME conversations between
+      Slack-style rows and Messenger bubbles; the choice survives reload
+      (per-account localStorage key `tt-messenger-mode:<uid>`).
+- [ ] DM flow: search someone → chat opens instantly (optimistic), Enter
+      sends, bubble shows yours right/theirs left, conversation pins to the
+      BOTTOM of the pane even when short.
+- [ ] Requests: a DM from a stranger lands in Message requests (follower vs
+      unknown buckets), stays OUT of the main list and unread totals until
+      accepted; replying accepts implicitly; declining hides the chat and
+      the sender is not told. SECURITY: the decliner can no longer read it.
+- [ ] Slack mode: create community → channel (name slugs to lowercase),
+      topic inline-edit (admins only), sections group channels, right-click
+      renames a channel, public channels joinable via Browse channels while
+      private ones stay invisible to non-members (check the directory).
+- [ ] Threads: Reply in thread opens the side panel, replies stay OUT of the
+      main list, the root shows a 🧵 count chip. One level deep only —
+      replying to a reply files under the same root.
+- [ ] Reactions: hover/long-press → quick row + full picker; same token
+      toggles off; custom tab lists community + personal emojis; a custom
+      reaction renders its image chip for OTHER members too (resolved by id,
+      `custom:<emoji id>`); custom tokens are REJECTED by the post react
+      endpoint (namespace isolation both ways).
+- [ ] Custom emojis: upload ≤512KB gif/webp/png/jpeg → renders inline via
+      `:name:` in messages, animated gifs animate; duplicate name in scope
+      409s; another user's PERSONAL emoji is refused in your chat.
+- [ ] Read receipts: opening a chat advances your receipt (forward-only —
+      REGRESSION: reading an old message must never rewind it); seen-by
+      avatars appear under the last-read message in Messenger mode; the
+      settings toggle (details drawer) is PARITY: off = stop sharing AND
+      stop seeing, while unread counts keep working.
+- [ ] Unread + notifications: sidebar badges + bold rows; system messages
+      (joins/renames) never count as unread; muted chats keep their count
+      but leave the total; a fresh incoming message pops ONE Lopu toast per
+      chat per 30s with an Open chat link (none while that chat is open and
+      visible); polling PAUSES when the tab is hidden and fires immediately
+      on return.
+- [ ] Member control: group rename by ANY member (Messenger rule) vs channel
+      rename by admins only; nicknames settable by anyone for anyone and
+      shown everywhere names render; promote/demote/remove for admins with
+      the owner untouchable; owner leaving hands the chat to the earliest
+      admin, else earliest member.
+- [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
+      kind 403s ("managed by their own endpoints"); chats/messages are 404
+      through `GET /api/v1/things?id=` for non-owners; `POST
+      /api/v1/things/react` cannot reach another member's chat message.

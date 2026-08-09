@@ -4,9 +4,11 @@ import { ObjectId } from 'mongodb';
 import { resolveTheme, THINGTIME_THEME, TtTheme } from '../../../theme/tokens';
 // theme is a PROTECTED system kind: theme things stay on the home deployment
 // DB even while a data-plane endpoint override is active (see endpoint.ts).
-import { getHomeThingsCollection as getThingsCollection, getThemesCollection } from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getThemesCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { ACL_ALL, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { clearUserActiveTheme } from '../auth/users';
+import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
+import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
 
 // Themes are THINGS now (thingtime ["theme"], see claude-todo/12): the resolved,
 // sanitized token document (see app/theme/tokens.ts) lives in crystal as
@@ -59,8 +61,7 @@ const MAX_THEMES_PER_USER = 100;
 // legacy visibility → theme-thing acl. Themes only ever use the two-value
 // subset: public is world-readable, everything else is owner-only. Exported so
 // the themes-to-things admin migration maps visibility identically.
-export const themeAcl = (visibility: 'private' | 'public'): string[] =>
-  visibility === 'public' ? [ACL_ALL] : [ACL_OWNER];
+export const themeAcl = (visibility: 'private' | 'public'): string[] => (visibility === 'public' ? [ACL_ALL] : [ACL_OWNER]);
 
 // thing → legacy ThemeDoc view. Visibility is DERIVED from the acl (tt:all
 // grants everyone → public; anything narrower is private — the same coercion
@@ -77,8 +78,7 @@ const themeThingToDoc = (thing: any): any => ({
   updatedAt: thing.updatedAt
 });
 
-const findThemeThing = async (filter: Record<string, unknown>) =>
-  (await getThingsCollection()).findOne({ thingtime: 'theme', ...filter } as any);
+const findThemeThing = async (filter: Record<string, unknown>) => (await getThingsCollection()).findOne({ thingtime: 'theme', ...filter } as any);
 
 type SaveThemeInput = {
   id?: unknown;
@@ -87,9 +87,34 @@ type SaveThemeInput = {
   visibility?: unknown;
 };
 
-type SaveResult =
-  | { ok: false; status: number; error: string }
-  | { ok: true; theme: PublicTheme };
+type SaveResult = { ok: false; status: number; error: string } | { ok: true; theme: PublicTheme };
+
+type ThemeFail = Extract<SaveResult, { ok: false }>;
+
+const storageFail = (error: unknown): ThemeFail | null =>
+	error instanceof StorageMutationError ? { ok: false, status: error.status, error: error.message } : null;
+
+const storedThemeSizeBytes = (thing: any): number => {
+	const canonical = currentContentStorageSizeBytes(thing || {});
+	if (canonical === null) {
+		throw new StorageMutationError(409, 'storage_conflict', 'This theme requires the current storage migration before it can be changed');
+	}
+	return canonical;
+};
+
+const themeStorageCas = (thing: any): Record<string, unknown> => ({
+	updatedAt: thing.updatedAt,
+	storageClass: 'content',
+	storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+	sizeBytes: thing.sizeBytes
+});
+
+const assertLegacyThemeMutationAllowed = async (ownerId: string, things: any, session: any): Promise<void> => {
+	const ready = await things.findOne(readyUserStorageMatch(ownerId), { projection: { _id: 1 }, session });
+	if (ready) {
+		throw new StorageMutationError(409, 'storage_conflict', 'This theme is still in legacy storage and must be migrated before it can be changed');
+	}
+};
 
 // Create or update (when `id` is an owned theme's shareId) a saved theme.
 export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise<SaveResult> => {
@@ -106,8 +131,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
   const theme = resolveTheme(THINGTIME_THEME, { ...(input.theme as object), name });
   // Only an explicit 'public' publishes; anything else stays/becomes private
   // (and updates that omit the field keep the existing visibility).
-  const explicitVisibility =
-    input.visibility === 'public' ? 'public' : input.visibility === 'private' ? 'private' : null;
+	const explicitVisibility = input.visibility === 'public' ? 'public' : input.visibility === 'private' ? 'private' : null;
 
   const things = await getThingsCollection();
   const themes = await getThemesCollection();
@@ -121,21 +145,60 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
       if (String(existingThing.ownerId) !== ownerId) {
         return { ok: false, status: 404, error: 'Theme not found' };
       }
-      const existing = themeThingToDoc(existingThing);
-      const visibility = explicitVisibility ?? (existing.visibility === 'public' ? 'public' : 'private');
-      await things.updateOne(
-        { _id: existingThing._id },
+			let updatedThing: any;
+			try {
+				await withHomeMongoTransaction(async (session) => {
+					const before = await things.findOne({ _id: existingThing._id, ownerId, thingtime: 'theme' } as any, { session });
+					if (!before) {
+						throw new StorageMutationError(409, 'storage_conflict', 'Theme changed while it was being updated — try again');
+					}
+					const visibility = explicitVisibility ?? (Array.isArray(before.acl) && before.acl.includes(ACL_ALL) ? 'public' : 'private');
+					const crystal = { ...(before.crystal || {}), name, theme };
+					const extended = before.extended ?? null;
+					const tags = Array.isArray(before.tags) ? before.tags : [];
+					const sizeBytes = thingStorageSizeBytes({ crystal, extended, tags });
+					const deltaBytes = sizeBytes - storedThemeSizeBytes(before);
+					if (deltaBytes !== 0) await applyUserStorageDelta(ownerId, deltaBytes, session);
+
+					const write = await things.updateOne(
+						{ _id: before._id, ownerId, thingtime: 'theme', ...themeStorageCas(before) } as any,
         {
           $set: {
-            'crystal.name': name,
-            'crystal.theme': theme,
+								crystal,
+								extended,
+								tags,
             acl: themeAcl(visibility),
             schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+								storageClass: 'content',
+								sizeBytes,
+								storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
             updatedAt: now
           }
-        }
+						},
+						{ session }
       );
-      return { ok: true, theme: toPublicTheme({ ...existing, name, theme, visibility, updatedAt: now }) };
+					if (write.matchedCount === 0) {
+						throw new StorageMutationError(409, 'storage_conflict', 'Theme changed while it was being updated — try again');
+					}
+					updatedThing = {
+						...before,
+						crystal,
+						extended,
+						tags,
+						acl: themeAcl(visibility),
+						schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+						storageClass: 'content',
+						sizeBytes,
+						storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+						updatedAt: now
+					};
+				});
+			} catch (error) {
+				const projected = storageFail(error);
+				if (projected) return projected;
+				throw error;
+			}
+			return { ok: true, theme: toPublicTheme(themeThingToDoc(updatedThing)) };
     }
 
     const existing = await themes.findOne({ shareId: input.id });
@@ -145,10 +208,23 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
     // Legacy docs stay legacy-shaped: updates never migrate in place, so the
     // admin themes-to-things migration remains the ONE conversion path.
     const visibility = explicitVisibility ?? (existing.visibility === 'public' ? 'public' : 'private');
-    await themes.updateOne(
-      { _id: new ObjectId(existing._id) },
-      { $set: { name, theme, visibility, schemaVersion: COLLECTION_SCHEMA_VERSIONS.themes, updatedAt: now } }
+		try {
+			await withHomeMongoTransaction(async (session) => {
+				await assertLegacyThemeMutationAllowed(ownerId, things, session);
+				const write = await themes.updateOne(
+					{ _id: new ObjectId(existing._id), ownerId, updatedAt: existing.updatedAt },
+					{ $set: { name, theme, visibility, schemaVersion: COLLECTION_SCHEMA_VERSIONS.themes, updatedAt: now } },
+					{ session }
     );
+				if (write.matchedCount === 0) {
+					throw new StorageMutationError(409, 'storage_conflict', 'Theme changed while it was being updated — try again');
+				}
+			});
+		} catch (error) {
+			const projected = storageFail(error);
+			if (projected) return projected;
+			throw error;
+		}
     return { ok: true, theme: toPublicTheme({ ...existing, name, theme, visibility, updatedAt: now }) };
   }
 
@@ -173,6 +249,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
     thingtime: ['theme'],
     crystal: { name, theme },
+		extended: null,
     ownerId,
     acl: themeAcl(visibility),
     targetId: null,
@@ -180,7 +257,22 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
     createdAt: now,
     updatedAt: now
   };
-  await things.insertOne(thing as any);
+	const sizeBytes = thingStorageSizeBytes(thing);
+	Object.assign(thing, {
+		storageClass: 'content',
+		sizeBytes,
+		storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
+	});
+	try {
+		await withHomeMongoTransaction(async (session) => {
+			await applyUserStorageDelta(ownerId, sizeBytes, session);
+			await things.insertOne(thing as any, { session });
+		});
+	} catch (error) {
+		const projected = storageFail(error);
+		if (projected) return projected;
+		throw error;
+	}
   return { ok: true, theme: toPublicTheme(themeThingToDoc(thing)) };
 };
 
@@ -196,9 +288,7 @@ const mergeThemeDocs = (thingDocs: any[], legacyDocs: any[]): any[] => {
     seen.add(id);
     merged.push(doc);
   }
-  return merged
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, MAX_THEMES_PER_USER);
+	return merged.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, MAX_THEMES_PER_USER);
 };
 
 export const listThemesForUser = async (ownerId: string): Promise<PublicTheme[]> => {
@@ -239,24 +329,40 @@ export const getOwnedTheme = async (ownerId: string, shareId: string): Promise<P
   return doc ? toPublicTheme(doc) : null;
 };
 
-export const deleteTheme = async (
-  ownerId: string,
-  shareId: unknown
-): Promise<{ ok: false; status: number; error: string } | { ok: true }> => {
+export const deleteTheme = async (ownerId: string, shareId: unknown): Promise<{ ok: false; status: number; error: string } | { ok: true }> => {
   if (typeof shareId !== 'string' || !shareId.trim()) {
     return { ok: false, status: 400, error: 'Theme id is required' };
   }
   const id = shareId.trim();
   // Delete from BOTH stores (owner-scoped, so someone else's shareId 404s like
-  // an unknown one). A migration that crashed between thing-upsert and
-  // legacy-delete leaves a twin; removing only one store would let the dual-era
-  // read resurrect the deleted theme and the next migration re-create it.
+	// an unknown one). A Thing deletion refunds its exact before-image in the
+	// same transaction. A ready account is never allowed to mutate a leftover
+	// legacy twin: that would bypass the canonical ledger and must be repaired by
+	// the migration instead.
   const things = await getThingsCollection();
-  const [thingRes, legacyRes] = await Promise.all([
-    things.deleteOne({ thingtime: 'theme', shareId: id, ownerId } as any),
-    (await getThemesCollection()).deleteOne({ shareId: id, ownerId })
-  ]);
-  if (!thingRes.deletedCount && !legacyRes.deletedCount) {
+	const themes = await getThemesCollection();
+	let deletedThing = false;
+	let deletedLegacy = false;
+	try {
+		await withHomeMongoTransaction(async (session) => {
+			const legacy = await themes.findOne({ shareId: id, ownerId }, { projection: { _id: 1 }, session });
+			if (legacy) await assertLegacyThemeMutationAllowed(ownerId, things, session);
+			const before = await things.findOneAndDelete({ thingtime: 'theme', shareId: id, ownerId } as any, { session });
+			const legacyRes = await themes.deleteOne({ shareId: id, ownerId }, { session });
+			if (before) {
+				const exactBytes = currentContentStorageSizeBytes(before);
+				if (exactBytes === null) await markUserStorageNeedsReconcile(ownerId, session);
+				else await applyUserStorageDelta(ownerId, -exactBytes, session);
+			}
+			deletedThing = !!before;
+			deletedLegacy = legacyRes.deletedCount > 0;
+		});
+	} catch (error) {
+		const projected = storageFail(error);
+		if (projected) return projected;
+		throw error;
+	}
+	if (!deletedThing && !deletedLegacy) {
     return { ok: false, status: 404, error: 'Theme not found' };
   }
   // Don't leave the owner's active theme dangling at a deleted shareId. The

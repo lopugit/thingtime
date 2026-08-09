@@ -3,5 +3,12 @@
   "framework": null,
   "installCommand": "corepack pnpm install --frozen-lockfile",
   "buildCommand": "corepack pnpm run build",
-  "regions": ["syd1"]
+  "regions": ["syd1"],
+  "fluid": true,
+  "crons": [
+    {
+      "path": "/api/v1/notifications/email/weekly-summary",
+      "schedule": "37 21 * * 0"
+    }
+  ]
 }

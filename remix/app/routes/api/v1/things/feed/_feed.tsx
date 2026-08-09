@@ -1,6 +1,6 @@
 import { json } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { getOwnedAlgorithmWeights } from '~/api/utils/algorithms/algorithms';
 import { getFeed, type PostType, type PostVisibility } from '~/api/utils/things/things';
 
@@ -32,7 +32,18 @@ export const loader = async ({ request }: { request: Request }) => {
   const url = new URL(request.url);
   const params = url.searchParams;
   const anonCacheable = params.get('anon') === '1';
-  const user = anonCacheable ? null : await getCurrentUser(request);
+  // `anon=1` forces the logged-out, edge-cacheable view. Otherwise resolve the
+  // things actor (cookie/Bearer session or a scoped PAT) — unknown/stale
+  // credentials degrade to an anonymous null user, so logged-out browsers keep
+  // the public feed; only PAT-specific failures (missing scope, exhausted) 4xx.
+  let user = null;
+  if (!anonCacheable) {
+    const auth = await resolveThingsActor(request, 'things.read');
+    if (auth.ok === false) {
+      return json({ ok: false, error: auth.error }, { status: auth.status });
+    }
+    user = auth.actor.user;
+  }
 
   const algorithmParam = (params.get('algorithm') || '').trim();
   let weights = null;
