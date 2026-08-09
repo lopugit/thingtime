@@ -302,6 +302,38 @@ is fixed, and cite the checklist you ran in the PR description.
       lands, the live-ref check must classify it as published rather than
       retrying it.
 
+## Per-feature develop → main promoter (`.github/scripts/promote-features-to-main.mjs`)
+
+- [ ] Merge a feature PR into `develop`, record its two-parent merge SHA, then
+      force-rewrite `develop` to an equivalent cherry-pick so that merge object
+      is no longer advertised by any ref. From a fresh full clone, confirm the
+      promoter's self-test first proves the object is absent, fetches it by
+      exact SHA with both parents, proves a stable patch-equivalent commit is
+      still effective at the current `develop` tip, performs the mainline
+      cherry-pick, and gets the expected tree. Repeat after a later revert and
+      with a multi-commit rebase range: the revert must fail closed, while the
+      full aggregate range (not only its last commit) must be verified.
+- [ ] Give one standalone source PR an invalid or unavailable historical merge
+      object between two valid standalone PRs. A dry run must report that PR as
+      blocked, continue to plan the later independent PR, and publish both the
+      block and partial plan in the step summary without exiting early.
+- [ ] Repeat with the unavailable PR in the middle of a named promotion stack.
+      The failed member and only its later dependent stack members must be
+      deferred while the next unrelated group continues. Force an unexpected
+      group-local Git error as well and confirm later groups still run.
+- [ ] Re-run after a partial batch has already created promotion PRs. Existing
+      `promotion-of` markers and branches must prevent duplicates, including
+      records older than the first 200 repository PRs, while `MAX_NEW_PRS`
+      counts reused branches as newly opened PRs too. Force-update an open
+      promotion branch between runs and confirm the promoter fetches its live
+      OID before stacking the next member rather than using a stale local ref;
+      a repurposed branch, same-path/whitespace drift, duplicate provenance,
+      or an OPEN promotion targeting the wrong stack base must be blocked. For
+      an external stack, validate every OPEN link back to `main` and every
+      CLOSED source merged before the current group; any unshipped earlier
+      CLOSED member must stop dependents, while a later successor must not be
+      misclassified as their prerequisite.
+
 ## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
 
 - [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
