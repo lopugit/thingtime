@@ -1,7 +1,7 @@
-# Graph Report - worktree  (2026-08-09)
+# Graph Report - worktree  (2026-08-10)
 
 ## Corpus Check
-- 863 files · ~6,050,571 words
+- 863 files · ~6,050,578 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `32c8a9ca`
+- Built from commit: `dc42cb48`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -3567,7 +3567,7 @@ Nodes (6): MongoQuerySuccess, Props, csvCell(), displayMongoResultValue(), seria
   docs/design/claude-design-mockup-v1/index.html · relation: semantically_similar_to
 
 ## Knowledge Gaps
-- **2315 isolated node(s):** `WORKFLOW_URL`, `here`, `githubRoot`, `workflows`, `IMPLEMENTATIONS` (+2310 more)
+- **2315 isolated node(s):** `extends`, `CFG`, `EXEC_OPTS`, `CFG`, `EXEC_OPTS` (+2310 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **397 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -3586,5 +3586,5 @@ _Questions this graph is uniquely positioned to answer:_
   _`error()` has 21 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 21 inferred relationships involving `error()` (e.g. with `act()` and `commitBeforeMutationEffects_complete()`) actually correct?**
   _`error()` has 21 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `WORKFLOW_URL`, `here`, `githubRoot` to the rest of the system?**
+- **What connects `extends`, `CFG`, `EXEC_OPTS` to the rest of the system?**
   _2315 weakly-connected nodes found - possible documentation gaps or missing edges._
