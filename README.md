@@ -517,6 +517,12 @@ THINGTIME_PRIVATE_S3_REGION="<aws-region>"
 CRON_SECRET="<long-random-vercel-cron-secret>"
 ```
 
+The bucket name must be DNS-compatible **without dots**; dotted names are
+rejected so every signed URL uses the unambiguous virtual-hosted S3 form. The
+bucket must also belong to the same 12-digit AWS account named by the role ARN.
+The runtime derives `ExpectedBucketOwner` from that ARN and fails closed when
+the bucket owner differs.
+
 In Vercel, mark all four values **Sensitive** and scope them to **Production**
 only. `CRON_SECRET` authenticates only the hourly
 `/api/v1/attachments/cleanup` Vercel Cron request; it is not a Thingtime user,
@@ -527,7 +533,57 @@ The role must use Vercel OIDC temporary credentials and an exact production
 subject for this project. Do not create an S3 IAM user, reuse the SES IAM user,
 or set generic `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_REGION`
 variables for attachments. Restrict its object policy to the app's `objects/*`
-prefix. The runtime role needs only these object actions:
+prefix. With Vercel's recommended team issuer mode, use this placeholder-only
+trust policy (replace every angle-bracket value):
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Principal": {
+				"Federated": "arn:aws:iam::<12-digit-account-id>:oidc-provider/oidc.vercel.com/<vercel-team-slug>"
+			},
+			"Action": "sts:AssumeRoleWithWebIdentity",
+			"Condition": {
+				"StringEquals": {
+					"oidc.vercel.com/<vercel-team-slug>:aud": "https://vercel.com/<vercel-team-slug>",
+					"oidc.vercel.com/<vercel-team-slug>:sub": "owner:<vercel-team-slug>:project:<vercel-project-name>:environment:production"
+				}
+			}
+		}
+	]
+}
+```
+
+Attach this placeholder-only permissions policy to the role. Keep generic
+`s3:DeleteObject` out: in a versioned bucket it can create a delete marker
+without permanently removing the billed object version.
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "ThingtimePrivatePostAttachments",
+			"Effect": "Allow",
+			"Action": [
+				"s3:AbortMultipartUpload",
+				"s3:DeleteObjectVersion",
+				"s3:GetObject",
+				"s3:GetObjectVersion",
+				"s3:ListMultipartUploadParts",
+				"s3:PutObject",
+				"s3:PutObjectVersionTagging"
+			],
+			"Resource": "arn:aws:s3:::<private-bucket-name>/objects/*"
+		}
+	]
+}
+```
+
+The runtime role needs only those object actions:
 
 - `s3:PutObject`
 - `s3:GetObject` and `s3:GetObjectVersion`
@@ -544,11 +600,83 @@ noncurrent bytes.
 
 Keep both account- and bucket-level S3 Block Public Access enabled, Bucket Owner
 Enforced object ownership on, and bucket versioning enabled. Bucket policy
-should explicitly deny non-TLS requests and TLS below 1.2. Configure CORS with
-only the production Thingtime origin, `PUT`, the checksum/content-type headers,
-and the ETag/checksum response headers. Lifecycle must abort incomplete
-multipart uploads after seven days and remove noncurrent versions after 30
-days. Presigned URLs work with a private bucket; public access must stay off.
+should explicitly deny non-TLS requests and TLS below 1.2. The
+`aws:PrincipalIsAWSService` condition avoids accidentally blocking AWS service
+principals whose network context AWS redacts:
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "DenyInsecureTransport",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"Bool": {
+					"aws:SecureTransport": "false",
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		},
+		{
+			"Sid": "DenyTLSBelow12",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"NumericLessThan": {
+					"s3:TlsVersion": "1.2"
+				},
+				"Bool": {
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		}
+	]
+}
+```
+
+Configure CORS with only the production Thingtime origin, `PUT`, and the one
+application-authored request header. The uploader deliberately sends a Blob
+with no `Content-Type`, and completion obtains ETags/checksums server-side with
+ListParts, so no S3 response headers need to be exposed:
+
+```json
+[
+	{
+		"AllowedHeaders": ["x-amz-checksum-sha256"],
+		"AllowedMethods": ["PUT"],
+		"AllowedOrigins": ["https://<production-origin>"],
+		"ExposeHeaders": [],
+		"MaxAgeSeconds": 300
+	}
+]
+```
+
+Lifecycle must abort incomplete multipart uploads after seven days and remove
+noncurrent versions after 30 days. This AWS CLI/API-shaped placeholder applies
+both actions only to Thingtime's object prefix (the S3 console asks for the same
+rule fields):
+
+```json
+{
+	"Rules": [
+		{
+			"ID": "thingtime-private-attachment-cleanup",
+			"Status": "Enabled",
+			"Filter": { "Prefix": "objects/" },
+			"NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
+			"AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+		}
+	]
+}
+```
+
+Presigned URLs work with a private bucket; public access must stay off.
 The app's hourly Vercel cron (minute 17, at most 1,000 rows and a 25-second
 wall-clock budget per pass) is the durable cleanup path. Pending cancellations
 that issued a presigned part URL stay conservatively billed through an eight-day,
