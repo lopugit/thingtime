@@ -16,6 +16,10 @@ clean-replay branch validator could reject that manually resolved branch too.
   empty reservation on the exact promotion base, records the immutable
   source/base plan, and dispatches one bot-only worker at the fixed protected
   `github-actions` resolver revision.
+- The protected integration keeps the secret-bearing provider router on
+  GitHub-hosted compute and accepts only authenticated, validated downstream
+  runner metadata. Promotion-plan handoffs bypass external provider routing
+  until that boundary can carry and verify the same immutable plan envelope.
 - The worker independently re-derives the merged source PR and plan, replays
   its non-Graphify patch, and gives the existing repo-less model round only the
   mechanically derived conflict files. It has no repository, Git, shell, or

@@ -42,10 +42,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and hands the immutable source/base plan to a bot-only worker on the fixed
   `github-actions` control plane. The thin `develop` listener grants the
   Actions permission needed for that dispatch without restoring executable
-  workflow behavior to product branches. The worker re-derives live authority,
-  resolves only mechanically proven conflict paths, treats `graphify-out/**`
-  as derived target-side output, publishes with an exact lease, opens the
-  promotion PR, and resumes dependent stack members automatically. The result
+  workflow behavior to product branches. The secret-bearing provider router
+  stays on GitHub-hosted compute and accepts only authenticated, validated
+  downstream runner metadata; promotion-plan handoffs bypass external provider
+  routing until that boundary supports the same immutable plan envelope. The
+  worker re-derives live authority, resolves only mechanically proven conflict
+  paths, treats `graphify-out/**` as derived target-side output, publishes with
+  an exact lease, opens the promotion PR, and resumes dependent stack members
+  automatically. The result
   is labelled for review and receives evidence naming the resolver run,
   immutable SHAs, and AI-edited paths; unchanged failed snapshots pause
   visibly instead of requiring undocumented manual cherry-picks or repeatedly
