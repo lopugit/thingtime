@@ -157,7 +157,7 @@ export function normalizeSubject(subject) {
 export function escapeCell(text, max = 100) {
   let out = String(text ?? "").replace(/\s+/g, " ").trim();
   if (out.length > max) out = `${out.slice(0, max - 1)}…`;
-  return out.replace(/\|/g, "\\|");
+  return out.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 const fmtDate = (iso) => (iso ? String(iso).slice(0, 10) : "");
@@ -512,6 +512,7 @@ function selfTest() {
   assert(parsePrNumberFromSubject("Merge main into develop (AI-resolved conflicts)") === null, "sync merge subject");
   assert(normalizeSubject("  feat:   thing \n") === "feat: thing", "subject normalization");
   assert(escapeCell("a|b") === "a\\|b", "cell pipe escape");
+  assert(escapeCell("a\\b") === "a\\\\b", "cell backslash escape");
   assert(escapeCell("x".repeat(200)).length <= 101, "cell truncation");
 
   const section = buildSection({
