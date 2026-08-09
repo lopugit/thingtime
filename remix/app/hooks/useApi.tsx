@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 
 import { useAsyncFetcher } from './useAsyncFetcher';
+import { createApiFailure, readApiResponsePayload } from './apiFailure';
 
 const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -9,9 +10,23 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
-  const response = await fetch(url, { credentials: 'include', signal: options?.signal });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw data;
+  let response: Response;
+  try {
+    response = await fetch(url, { credentials: 'include', signal: options?.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    throw createApiFailure({ cause: error, action: 'load Thingtime data', method: 'GET' });
+  }
+  const data = await readApiResponsePayload(response, { action: 'load Thingtime data', method: 'GET' });
+  if (!response.ok) {
+    throw createApiFailure({
+      payload: data,
+      status: response.status,
+      retryAfter: response.headers.get('Retry-After'),
+      action: 'load Thingtime data',
+      method: 'GET'
+    });
+  }
   return data;
 };
 
@@ -118,18 +133,11 @@ export function useApi() {
     settings: {
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
-      prConflictResolverModelWaterfall: useCallback(
-        async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'),
-        []
-      )
+			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), [])
     },
     admin: {
       setPrConflictResolverModelWaterfall: useCallback(
-        async (waterfall) =>
-          asyncFetcher.submit(
-            { waterfall },
-            { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }
-          ),
+				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
         [asyncFetcher]
       ),
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
@@ -140,11 +148,18 @@ export function useApi() {
         [asyncFetcher]
       ),
       migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
+			migrationDiagnostic: useCallback(
+				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),
+				[]
+			),
       migrationsRun: useCallback(
         async (args) =>
           asyncFetcher.submit(
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
-            { action: '/api/v1/admin/migrations/run' }
+            {
+              action: '/api/v1/admin/migrations/run',
+              errorContext: args?.dryRun ? `preview migration ${args?.migration}` : `run migration ${args?.migration}`
+            }
           ),
         [asyncFetcher]
       ),
@@ -242,6 +257,17 @@ export function useApi() {
     },
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
+			reveal: useCallback(
+				async (
+					args: { thingId: string; reference: string; password: string },
+					options?: { signal?: AbortSignal }
+				) =>
+					asyncFetcher.submit(
+						{ thingId: args?.thingId, reference: args?.reference, password: args?.password },
+						{ action: '/api/v1/things/reveal', signal: options?.signal, errorContext: 'reveal a protected value' }
+					),
+				[asyncFetcher]
+			),
       // structured search — POST carries the condition tree (read-only despite
       // the verb); see /docs/api things-search. Anonymous simple searches
       // (anon flag set, no condition tree) go over the GET form instead so
@@ -259,7 +285,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
-      get: useCallback(async (args) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`), []),
+			get: useCallback(async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`, options), []),
       list: useCallback(
         async (args) =>
           getJson(
@@ -319,7 +345,8 @@ export function useApi() {
         [asyncFetcher]
       ),
       react: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react' }),
+        async (args) =>
+					asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' }),
         [asyncFetcher]
       ),
       // toggle a private "add to my library" save on any visible thing
@@ -436,6 +463,48 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ algorithmId: args?.algorithmId, events: args?.events }, { action: '/api/v1/algorithms/track' }),
         [asyncFetcher]
       )
+    },
+    social: {
+      // counts + viewer relationship state for a profile ({ username | userId })
+      relationships: useCallback(async (args) => getJson(`/api/v1/users/relationships${toQuery(args)}`), []),
+      // paged lists: { username | userId, type: followers|following|friends|requests, limit, before }
+      connections: useCallback(async (args) => getJson(`/api/v1/users/connections${toQuery(args)}`), []),
+      // toggle (or explicitly set with follow: boolean) a one-way follow
+      follow: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, username: args?.username, follow: args?.follow },
+            { action: '/api/v1/users/follow' }
+          ),
+        [asyncFetcher]
+      ),
+      // friendship state machine: intent request|cancel|accept|decline|unfriend
+      friend: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, username: args?.username, intent: args?.intent },
+            { action: '/api/v1/users/friend' }
+          ),
+        [asyncFetcher]
+      )
+    },
+    notifications: {
+      list: useCallback(async (args?: Record<string, unknown>) => getJson(`/api/v1/notifications${toQuery(args)}`), []),
+      markRead: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            args?.all ? { all: true } : { ids: args?.ids },
+            { action: '/api/v1/notifications/read' }
+          ),
+        [asyncFetcher]
+      ),
+      settings: {
+        get: useCallback(async () => getJson('/api/v1/notifications/settings'), []),
+        set: useCallback(
+          async (args) => asyncFetcher.submit({ prefs: args?.prefs }, { action: '/api/v1/notifications/settings' }),
+          [asyncFetcher]
+        )
+      }
     },
     profile: {
       get: useCallback(async (args) => getJson(`/api/v1/users/profile${toQuery(args)}`), []),

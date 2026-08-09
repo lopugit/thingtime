@@ -12,6 +12,15 @@
 #   warnings, plus direct commits without a PR;
 # - posts a short delta comment when PRs enter or leave the promotion window,
 #   so watchers get a notification without re-reading the description;
+# - creates the promotion PR with, and keeps re-applying, the no-ai-rebase
+#   label (PROMOTION_PR_LABELS). The AI rebase workflow honors it and never
+#   rewrites the PR head, so develop — an integration branch whose history IS
+#   its "Merge pull request #N" commits — is never flattened into plain
+#   commits again (a develop rebase on 2026-08-08 destroyed merge subjects
+#   and SHA↔PR association, the changelog's primary attribution signals).
+#   The merge-based conflict resolver explicitly keeps ownership of
+#   no-ai-rebase PRs, resolving develop↔main divergence with history-
+#   preserving merge commits, which is also the repo's house style;
 # - does nothing when develop and main are level. That is the normal state
 #   right after a promotion merges and "Sync main into develop" levels the
 #   branches again, so this pair of workflows never ping-pongs.
@@ -52,4 +61,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_TOKEN_CREATE: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          PROMOTION_PR_LABELS: no-ai-rebase
         run: node .github/scripts/promotion-pr-changelog.mjs

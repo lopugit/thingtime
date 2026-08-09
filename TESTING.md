@@ -177,6 +177,17 @@ is fixed, and cite the checklist you ran in the PR description.
       with the fetch START time; every local mutation notes itself there.
       Regression class: background refetches snapshotted pre-tap clobbered
       optimistic (even acked) reactions wholesale on ingest.
+- [ ] ERROR CONTEXT (devtools: fail `/api/v1/things/react` once with a Nitro
+      `{error:true,status:500,unhandled:true}` response): Lopu shows a readable
+      “couldn’t confirm” title plus server/refresh guidance — never a lone 🌧️.
+      The client refetches that thing before deciding whether the optimistic
+      reaction stuck; if the truth fetch also fails, it keeps the optimistic
+      copy and warns the viewer to refresh before retrying instead of blindly
+      toggling the reaction back. An authored 4xx/503 message remains visible
+      verbatim and safely reverts a server-marked rejection. A malformed or
+      truncated 2xx mutation response is commit-unknown and follows the same
+      truth-reconciliation path. Login `reason` and account-switcher `accounts`
+      fields still survive the shared error normalization.
 - [ ] Comment rows: reply is an icon-only toggle under the bubble with the
       merged react control right beside it — a SINGLE tap hearts the comment
       (❤️, optimistic, tap again to unheart) while hover / touch-and-hold
@@ -417,6 +428,70 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] `merge-legacy-collections` dry-run reports per-collection copy counts and
       writes nothing; the real run copies only docs missing at the destination
       (re-run reports 0) and never deletes a legacy collection.
+- [ ] Against a disposable replica-set database, the first registered and
+      sandbox app-storage counter can be created without MongoDB code 224:
+      the ensure upsert uses only the deterministic `shareId`, while the
+      returned document must still pass the complete protected-envelope check.
+      A malformed Thing occupying that id remains untouched and returns the
+      authored storage-invariant error.
+- [ ] Remove `storageClass` from existing reserved, system-owned `schema-*`
+      builtin schema Things. `seed-builtin-schemas` reports each as pending and
+      restores `storageClass: "control"`; running
+      `backfill-user-storage-accounting` directly invokes that repair first.
+      A community/user-owned `thingtime: ["schema"]` Thing remains billable.
+- [ ] Force a migration runner exception once: the public error field remains
+      a safe exception class/code (never a raw Mongo message, query, document
+      id, host, or credential), and Lopu renders contextual text beneath the
+      migration id — never a title-only/decoration-only toast. A failed real
+      run refreshes pending counts because an idempotent subset may have landed;
+      a failed dry run does not claim that a write outcome is ambiguous.
+- [ ] On a failed real migration, the private response carries a validated
+      `migration-diagnostic-*` id and Lopu shows “View full migration
+      diagnostic”. The link opens `/thing/:id` at the top of the page, reloads
+      successfully, shows the bounded redacted stack/detail as plain text, and
+      identifies its capture/expiry time. A different admin, a signed-in
+      non-admin, and an anonymous caller cannot read it; missing, expired, and
+      inaccessible ids share the same 404 shape.
+- [ ] Force the `orphan_billable_thing` error with a Mongo ObjectId. The normal
+      diagnostic GET and `/thing/:id` detail contain only a numbered
+      `[redacted MongoDB ObjectId #…]` placeholder plus a value-free reveal
+      descriptor; the raw id is absent from `crystal`, normal GET JSON, generic
+      Thing get/list/search, and the redacted detail. A legacy v1 diagnostic
+      remains readable and shows no Reveal controls.
+- [ ] On `/thing/:diagnostic-id`, click Reveal, enter the current owning admin's
+      correct password, and confirm exactly the selected ObjectId appears. Hide
+      it, switch account, navigate away, and background the tab; each clears the
+      transient value. Every later Reveal prompts for and verifies the password
+      again. A wrong/old password returns the same generic failure, another
+      admin or non-admin receives no value, and five confirmation requests
+      (including successes) in 15 minutes hit the fixed fail-closed ceiling.
+      Success and every error carry `private, no-store` and `Pragma: no-cache`.
+- [ ] Throw diagnostics containing a 24-hex password/token/authorization value,
+      structured password/token values, a multi-value Cookie header, a
+      connection-string credential, a sensitive URL query value, and an
+      unlabelled 24-hex string. Each is irreversibly redacted and none appears
+      in the private reveal table. No reveal request accepts a caller-selected
+      owner, kind, field name, JSON path, or raw `secure` blob selector.
+- [ ] On a failed migration dry run, no diagnostic Thing is written and the
+      complete bounded redacted detail appears in a long-lived, scrollable
+      Lopu toast. Force diagnostic persistence to fail on a real run and verify
+      the same inline fallback appears without replacing the original migration
+      status, summary, or mutation outcome.
+- [ ] Confirm migration diagnostics use `storageClass: "control"`, owner-only
+      ACL, an opaque binary `secure` detail, a root `expiresAt`, the home data
+      plane, a 30-day home-only TTL index, and best-effort newest-25 per-admin
+      retention.
+      Generic Thing get/list/search/create/update/delete must neither expose nor
+      forge them; custom Mongo endpoints must never receive the diagnostic TTL.
+- [ ] Force each typed migration operator failure once: the response uses the
+      closed lease/concurrency/prerequisite/repair/invariant message catalogue,
+      includes only registered migration ids and aggregate counts, and keeps
+      Mongo `_id`, ownerId, appId, shareId, query text, hosts, and stacks out of
+      the public response. Only ObjectIds supplied through an explicitly
+      authored server-side context may enter the protected diagnostic reveal
+      table; all other private context stays in server logs. Recoverable
+      conflicts return 409 while still marking a real
+      run commit-unknown so the panel refreshes potentially changed counts.
 - [ ] `drop-stale-collection-generations` shows the red destructive badge;
       dry-run lists exactly what would drop with doc counts; a non-dry run
       without `confirm: true` is rejected by the API (the panel sends it after
@@ -922,3 +997,156 @@ re-checks the whole management plane end-to-end:
       cost, so a burst past the limit 429s with the hashing message. The
       intent stays ANONYMOUS on purpose — being locked out is the reason to
       reach for it — and never reads or writes the database.
+
+## Social graph — follows + friends (`api/utils/users/social.ts`, `/api/v1/users/{follow,friend,relationships,connections}`)
+
+- [ ] Follow is ONE-WAY and instant: user B POSTs `/users/follow { username: A }`
+      → `{ following: true, followerCount }`; A's profile shows the count and B
+      sees "Following ✓" immediately (optimistic, reverts on failure). Repeat
+      with `follow: true` is idempotent; `follow: false` (or toggle) unfollows.
+- [ ] Friendship needs APPROVAL: B `intent: request` → `pending-outgoing`; A's
+      own profile shows the "Friend requests 🤝" inbox with Accept/Decline; A
+      accepts → both sides read `friendState: friends` and friend counts bump.
+      Requesting someone who already requested YOU accepts instead of duping
+      (one doc per pair — `crystal.friendKey`, unique index).
+- [ ] Self-actions rejected: following or friending yourself 400s.
+- [ ] `tt:userFriends` acl is REAL now: a friends-visibility post is readable
+      by an accepted friend (permalink AND feed AND the owner's profile as
+      seen by the friend), 404s for strangers/anonymous, and stops resolving
+      the moment either side unfriends.
+- [ ] Relationship reads are public: `/users/relationships?username=` returns
+      counts logged out (`viewer: null`); logged in it adds following /
+      followedBy / friendState, and `incomingRequests` on your own profile.
+      `/users/connections` lists followers/following/friends publicly;
+      `type=requests` is your-own-account-only (403 otherwise).
+- [ ] Forged edges impossible: `follow`/`friend`/`notification` are PROTECTED
+      kinds — generic `POST /api/v1/things` refuses them (a forged accepted
+      `friend` doc would fake acl visibility).
+
+## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
+
+- [ ] Emission: new follower, friend request, friend accepted, comment on your
+      post, reply to your comment, reaction (preview = the token), repost, and
+      capped fan-out (≤200 newest connections) of new posts to followers
+      (`post-from-followed`) and friends (`post-from-friend`). Own actions
+      never notify yourself; a failed emit never fails the triggering action.
+- [ ] Fan-out respects the post's audience: public posts notify followers +
+      friends, friends-only posts notify friends only, private posts fan out
+      to nobody.
+- [ ] The bell 🔔 (auth only) shows the unread badge (seeded from localCache —
+      no flash), reconciles on mount/focus/slow poll, opens a popover of the
+      latest 20 (unread rows tinted, actor avatar + type emoji, preview,
+      time-ago), zeroes the badge on open (mark-all-read), and click-through
+      goes to `/post/<id>` or the actor's profile. Works within a 375px
+      viewport with no overflow.
+- [ ] Settings → Notifications: a per-type × per-channel matrix — Push and
+      Email switches per row plus a master switch per channel (top row).
+      Defaults ON except email for `post-from-followed`/`post-from-friend`
+      (opt-in) — and `weekly-summary` is email-only (push cell shows —).
+      Optimistic flip + revert on failure, per-user localCache seed
+      (`tt-notif-prefs-v2-*`), merge-patch POST in the channel shape
+      (`{ prefs: { push/email/masters } }`) with the flat legacy body still
+      patching push; unknown keys 400. Disabling a push type hides even
+      ALREADY-WRITTEN notifications of that type (read-time filtering) and
+      single-recipient emits skip writing it; push master OFF empties the bell
+      entirely. Master OFF dims + disables that channel's column. No overflow
+      or column misalignment at 375px.
+- [ ] Notification emails (SES `notification` stream): each single-recipient
+      emit also emails the recipient when their email master + per-type switch
+      are on AND their address is verified — check the `email_messages` outbox
+      row (`templateKey notification.<type>`, `metadata.notificationType`,
+      manage + unsubscribe links in both html and text). Fan-out post emails
+      only reach explicit opt-ins. Throttle: >10 notification emails to one
+      recipient within an hour are silently skipped (digest excluded). A
+      failed/slow send never fails or delays the triggering action.
+- [ ] One-click unsubscribe: the footer link (`/api/v1/notifications/email/
+      unsubscribe?uid&token`) flips ONLY the email master off, renders the
+      confirmation page (mobile viewport included), is idempotent, and rejects
+      a tampered token with the 400 page. Bell/push switches are untouched;
+      re-enabling from Settings works.
+- [ ] Weekly summary digest: admin `GET …/weekly-summary?dryRun=1` previews
+      counts without sending; a real run emails only opted-in verified users
+      with ≥1 nonzero stat, records `notification.weekly_summary` outbox rows,
+      and a second run within 6 days skips everyone (`alreadySent`). Anonymous
+      and non-admin callers get 401/403 (CRON_SECRET bearer also accepted).
+- [ ] Mobile nav overlap regression: the centered commander pill must NOT
+      cover the bell / username (they sit above it via `.nav-right-section`
+      z-index, and the pill reserves 148px on the right). Regression class:
+      nav-right controls rendered under the absolutely-positioned commander
+      host and were untappable on mobile (2026-08).
+
+## Post views (`api/utils/things/views.ts`, `/api/v1/things/views`, `useViewTracking`)
+
+- [ ] Public stats on every post payload: `viewCount` (unique viewer
+      identities) + `viewStats { impressions, avgDwellMs }`; the card's action
+      row shows 👁 + compact count with the full stats in the tooltip, for
+      everyone (logged out included).
+- [ ] Counting is honest: a card must be ≥50% visible for ≥1s to count; one
+      event per post per pageview; batches flush every 10s and on page hide
+      via sendBeacon. Dwell (time on screen), max visible ratio, and viewport
+      position (0..1) ride along.
+- [ ] Manipulation resistance (all server-side, client untrusted): one
+      postViews doc per (postId, viewerKey) — replays bump impressions only,
+      never uniques; owner self-views dropped entirely; anonymous identities
+      dedup on salted sha256(ip|UA) with NO raw IP at rest; UA-less requests
+      dropped; dwell clamped (≤120s/event); batch ≤50; unknown or
+      not-viewable posts dropped (a view write only lands where a read would
+      succeed); rate limited `things.views` per user-or-IP; headless
+      (`navigator.webdriver`) browsers skip client-side too.
+- [ ] Views are tracked on every post surface: feed, profiles (both wired via
+      PostList) and the `/post/:id` permalink page.
+
+## Messenger (chats, communities, custom emojis) (`remix/app/components/Messenger/`, `/api/v1/chats*`, `api/utils/messenger/`)
+
+Automated first: `node scripts/verify-messenger.mjs` from `remix/` against the
+running dev stack (86 live-API checks: permissions, requests, receipts,
+reactions, custom emojis, generic-things escape hatches). Then in a browser:
+
+- [ ] `/messages` requires login (guests bounce to `/login`) and the page owns
+      the viewport: no body scroll, no footer under the composer, nav
+      clearance intact at desktop and mobile widths.
+- [ ] Mode toggle (🏛️ Spaces / 💬 Chats) swaps the SAME conversations between
+      Slack-style rows and Messenger bubbles; the choice survives reload
+      (per-account localStorage key `tt-messenger-mode:<uid>`).
+- [ ] DM flow: search someone → chat opens instantly (optimistic), Enter
+      sends, bubble shows yours right/theirs left, conversation pins to the
+      BOTTOM of the pane even when short.
+- [ ] Requests: a DM from a stranger lands in Message requests (follower vs
+      unknown buckets), stays OUT of the main list and unread totals until
+      accepted; replying accepts implicitly; declining hides the chat and
+      the sender is not told. SECURITY: the decliner can no longer read it.
+- [ ] Slack mode: create community → channel (name slugs to lowercase),
+      topic inline-edit (admins only), sections group channels, right-click
+      renames a channel, public channels joinable via Browse channels while
+      private ones stay invisible to non-members (check the directory).
+- [ ] Threads: Reply in thread opens the side panel, replies stay OUT of the
+      main list, the root shows a 🧵 count chip. One level deep only —
+      replying to a reply files under the same root.
+- [ ] Reactions: hover/long-press → quick row + full picker; same token
+      toggles off; custom tab lists community + personal emojis; a custom
+      reaction renders its image chip for OTHER members too (resolved by id,
+      `custom:<emoji id>`); custom tokens are REJECTED by the post react
+      endpoint (namespace isolation both ways).
+- [ ] Custom emojis: upload ≤512KB gif/webp/png/jpeg → renders inline via
+      `:name:` in messages, animated gifs animate; duplicate name in scope
+      409s; another user's PERSONAL emoji is refused in your chat.
+- [ ] Read receipts: opening a chat advances your receipt (forward-only —
+      REGRESSION: reading an old message must never rewind it); seen-by
+      avatars appear under the last-read message in Messenger mode; the
+      settings toggle (details drawer) is PARITY: off = stop sharing AND
+      stop seeing, while unread counts keep working.
+- [ ] Unread + notifications: sidebar badges + bold rows; system messages
+      (joins/renames) never count as unread; muted chats keep their count
+      but leave the total; a fresh incoming message pops ONE Lopu toast per
+      chat per 30s with an Open chat link (none while that chat is open and
+      visible); polling PAUSES when the tab is hidden and fires immediately
+      on return.
+- [ ] Member control: group rename by ANY member (Messenger rule) vs channel
+      rename by admins only; nicknames settable by anyone for anyone and
+      shown everywhere names render; promote/demote/remove for admins with
+      the owner untouchable; owner leaving hands the chat to the earliest
+      admin, else earliest member.
+- [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
+      kind 403s ("managed by their own endpoints"); chats/messages are 404
+      through `GET /api/v1/things?id=` for non-owners; `POST
+      /api/v1/things/react` cannot reach another member's chat message.

@@ -406,6 +406,70 @@ export const findLegacyUserStorageFieldsByIds = async (ids: readonly string[]): 
 	return fields;
 };
 
+// Batch userId → email-send candidate (address, verified flag, display name,
+// raw notificationPrefs) for notification emails: one query per store for a
+// whole fan-out instead of N findUserById round trips. Only returns users
+// that actually have an email address; things win over legacy on id collision.
+export type EmailNotificationTarget = {
+  id: string;
+  email: string;
+  emailVerified: boolean;
+  username: string | null;
+  displayName: string | null;
+  notificationPrefs: Record<string, any>;
+};
+
+export const getEmailNotificationTargets = async (userIds: string[]): Promise<EmailNotificationTarget[]> => {
+  const ids = [...new Set(userIds.map(String))].filter(Boolean);
+  if (!ids.length) return [];
+  const objectIds = ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+  const [things, legacy] = await Promise.all([
+    getThingsCollection().then((c) =>
+      c
+        .find({ thingtime: 'user', shareId: { $in: ids } } as any)
+        .project({ shareId: 1, crystal: 1, secure: 1 })
+        .toArray()
+    ),
+    objectIds.length
+      ? getUsersCollection().then((c) =>
+          c
+            .find({ _id: { $in: objectIds } })
+            .project({ email: 1, emailVerified: 1, username: 1, displayName: 1, 'meta.notificationPrefs': 1 })
+            .toArray()
+        )
+      : Promise.resolve([])
+  ]);
+  const map = new Map<string, EmailNotificationTarget>();
+  for (const doc of legacy as any[]) {
+    if (typeof doc.email !== 'string' || !doc.email) continue;
+    map.set(String(doc._id), {
+      id: String(doc._id),
+      email: doc.email,
+      emailVerified: !!doc.emailVerified,
+      username: doc.username || null,
+      displayName: doc.displayName || null,
+      notificationPrefs:
+        doc.meta?.notificationPrefs && typeof doc.meta.notificationPrefs === 'object'
+          ? doc.meta.notificationPrefs
+          : {}
+    });
+  }
+  for (const doc of things as any[]) {
+    const secure = unpackSecure(doc.secure);
+    if (!secure.email) continue;
+    const prefs = secure.meta?.notificationPrefs;
+    map.set(String(doc.shareId), {
+      id: String(doc.shareId),
+      email: secure.email,
+      emailVerified: !!secure.emailVerified,
+      username: doc.crystal?.username || null,
+      displayName: doc.crystal?.displayName ?? null,
+      notificationPrefs: prefs && typeof prefs === 'object' ? prefs : {}
+    });
+  }
+  return ids.map((id) => map.get(id)).filter((t): t is EmailNotificationTarget => !!t);
+};
+
 // New accounts are user things. The id is minted ObjectId-shaped so every
 // String(user._id) / ObjectId.isValid assumption in the auth web holds for
 // both eras; users own themselves (ownerId = shareId) and the crystal profile
@@ -609,6 +673,149 @@ export const setUserTwoFactorEmailEnabled = async (userId: string, enabled: bool
     await getUsersCollection()
   ).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.twoFactorEmailEnabled': enabled, updatedAt: new Date() } });
   return res.matchedCount > 0;
+};
+
+// Notification prefs (meta.notificationPrefs: { [type]: boolean }) — absent
+// key = enabled (defaults ON). Dual-era accessors mirroring the 2FA flag
+// above; cold-written, so the secure blob is the right home (never crystal —
+// string-free booleans, but the blob keeps ALL private account state in one
+// place). Merged as a patch so two devices flipping different switches don't
+// clobber each other.
+export const getUserNotificationPrefs = async (userId: string): Promise<Record<string, boolean>> => {
+  const things = await getThingsCollection();
+  const thing = await things.findOne(
+    { shareId: String(userId), thingtime: 'user' } as any,
+    { projection: { secure: 1 } }
+  );
+  if (thing) {
+    const prefs = unpackSecure((thing as any).secure).meta?.notificationPrefs;
+    return prefs && typeof prefs === 'object' ? { ...prefs } : {};
+  }
+  if (!ObjectId.isValid(userId)) return {};
+  const doc = await (await getUsersCollection()).findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { 'meta.notificationPrefs': 1 } }
+  );
+  const prefs = doc?.meta?.notificationPrefs;
+  return prefs && typeof prefs === 'object' ? { ...prefs } : {};
+};
+
+// Returns whether a store matched the user. Contended writes throw — a false
+// success would leave a switch the user flipped silently unapplied.
+// Flat boolean keys are the push/in-app channel; the 'email' and 'masters'
+// keys hold nested channel objects and merge one level deep so flipping one
+// email switch never clobbers the others.
+export const setUserNotificationPrefs = async (
+  userId: string,
+  patch: Record<string, boolean | Record<string, boolean>>
+): Promise<boolean> => {
+  const result = await mutateUserThingSecure(userId, (s) => {
+    const current = s.meta!.notificationPrefs;
+    const base = { ...(current && typeof current === 'object' ? current : {}) } as Record<string, any>;
+    for (const [key, value] of Object.entries(patch)) {
+      if (value && typeof value === 'object') {
+        const nested = base[key] && typeof base[key] === 'object' ? base[key] : {};
+        base[key] = { ...nested, ...value };
+      } else {
+        base[key] = value;
+      }
+    }
+    s.meta!.notificationPrefs = base;
+  });
+  if (result === 'mutated') return true;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return false;
+  const sets: Record<string, any> = { updatedAt: new Date() };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value && typeof value === 'object') {
+      for (const [subKey, subValue] of Object.entries(value)) {
+        sets[`meta.notificationPrefs.${key}.${subKey}`] = subValue;
+      }
+    } else {
+      sets[`meta.notificationPrefs.${key}`] = value;
+    }
+  }
+  const res = await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set: sets });
+  return res.matchedCount > 0;
+};
+
+// Messenger read-receipts privacy flag (meta.readReceiptsEnabled) — mirrors the
+// 2FA accessors above. DEFAULT ON: absent means enabled, so only an explicit
+// false hides receipts. Turning it off is parity-based (you stop sharing AND
+// stop seeing others' receipts — enforced in api/utils/messenger).
+export const getUserReadReceiptsEnabled = async (userId: string): Promise<boolean> => {
+  const things = await getThingsCollection();
+  const thing = await things.findOne(
+    { shareId: String(userId), thingtime: 'user' } as any,
+    { projection: { secure: 1 } }
+  );
+  if (thing) return unpackSecure((thing as any).secure).meta?.readReceiptsEnabled !== false;
+  if (!ObjectId.isValid(userId)) return true;
+  const doc = await (await getUsersCollection()).findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { 'meta.readReceiptsEnabled': 1 } }
+  );
+  return doc?.meta?.readReceiptsEnabled !== false;
+};
+
+export const setUserReadReceiptsEnabled = async (userId: string, enabled: boolean): Promise<boolean> => {
+  const result = await mutateUserThingSecure(userId, (s) => { s.meta!.readReceiptsEnabled = enabled; });
+  readReceiptsCache.delete(String(userId));
+  if (result === 'mutated') return true;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return false;
+  const res = await (await getUsersCollection()).updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.readReceiptsEnabled': enabled, updatedAt: new Date() } }
+  );
+  return res.matchedCount > 0;
+};
+
+// Reading the flag means fetching + unpacking each member's whole secure
+// blob, and chat pages poll every few seconds — so values sit in a short
+// per-process TTL cache. Writes above invalidate their own entry; other
+// instances converge within the TTL (receipts privacy is not revocation).
+const READ_RECEIPTS_CACHE_TTL_MS = 60_000;
+const READ_RECEIPTS_CACHE_MAX = 5000;
+const readReceiptsCache = new Map<string, { value: boolean; at: number }>();
+
+// Batch flavour for chat member lists: ONE $in query over user things (plus a
+// legacy fallback for ids the things pass missed), never a per-member round
+// trip. Missing users default to enabled like the single accessor.
+export const getUsersReadReceiptsMap = async (userIds: string[]): Promise<Record<string, boolean>> => {
+  const now = Date.now();
+  const map: Record<string, boolean> = {};
+  const ids = Array.from(new Set(userIds.map(String).filter(Boolean))).filter((id) => {
+    const cached = readReceiptsCache.get(id);
+    if (cached && now - cached.at < READ_RECEIPTS_CACHE_TTL_MS) {
+      map[id] = cached.value;
+      return false;
+    }
+    return true;
+  });
+  if (!ids.length) return map;
+  for (const id of ids) map[id] = true;
+  const things = await getThingsCollection();
+  const found = new Set<string>();
+  const docs = await things
+    .find({ shareId: { $in: ids }, thingtime: 'user' } as any, { projection: { shareId: 1, secure: 1 } })
+    .toArray();
+  for (const doc of docs) {
+    found.add(String((doc as any).shareId));
+    map[String((doc as any).shareId)] = unpackSecure((doc as any).secure).meta?.readReceiptsEnabled !== false;
+  }
+  const legacyIds = ids.filter((id) => !found.has(id) && ObjectId.isValid(id));
+  if (legacyIds.length) {
+    const legacy = await (await getUsersCollection())
+      .find({ _id: { $in: legacyIds.map((id) => new ObjectId(id)) } }, { projection: { 'meta.readReceiptsEnabled': 1 } })
+      .toArray();
+    for (const doc of legacy) {
+      map[String((doc as any)._id)] = (doc as any)?.meta?.readReceiptsEnabled !== false;
+    }
+  }
+  if (readReceiptsCache.size > READ_RECEIPTS_CACHE_MAX) readReceiptsCache.clear();
+  for (const id of ids) readReceiptsCache.set(id, { value: map[id], at: now });
+  return map;
 };
 
 // ── Saved MongoDB endpoints (thin-frontend mode — see mongodb/endpoint.ts) ──
