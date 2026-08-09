@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Button, Center, Flex, Skeleton, SkeletonCircle, SkeletonText, Text } from '@chakra-ui/react';
 
 import { PostCard } from './PostCard';
+import { useViewTracking } from './useViewTracking';
 import type { EngagementEvent, PostChange, PublicPost } from './feedTypes';
 
 // The feed column: PostCards + an IntersectionObserver sentinel for infinite
@@ -42,6 +43,9 @@ export const PostList = (props: PostListProps) => {
   const { posts, loading, hasMore, onLoadMore, onPostChanged, onEngagement, emptyLabel } = props;
 
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
+  // public view-count telemetry — wired here so every PostList surface (feed,
+  // profile) reports views without per-page plumbing
+  const { observeView } = useViewTracking();
 
   // refs so the observer callback always sees fresh state without re-wiring
   const loadMoreRef = React.useRef(onLoadMore);
@@ -72,7 +76,7 @@ export const PostList = (props: PostListProps) => {
   return (
     <Flex flexDirection="column" rowGap={4} width="100%">
       {posts.map((post) => (
-        <Box key={post.id} data-thing-id={post.id}>
+        <Box key={post.id} data-thing-id={post.id} ref={(element: HTMLDivElement | null) => observeView(element, post.id)}>
           <PostCard
             post={post}
             onChanged={(next) => onPostChanged(post.id, next)}

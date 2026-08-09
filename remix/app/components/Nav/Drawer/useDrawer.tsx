@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { useThingtime } from '../../Thingtime/useThingtime';
+import { drawerItemClosesOnClick } from './drawerMenu';
 
 // z-index ladder for the app chrome, above the fixed nav (9999) and below
 // DevKit (99999+). Floating editor windows layer AROUND the drawer (bands
@@ -251,7 +252,7 @@ export const useDrawer = () => {
 
 	const closesOnClick = React.useCallback(
 		(itemId: string) => {
-			return closeOnClick?.[itemId] !== false;
+			return drawerItemClosesOnClick(closeOnClick, itemId);
 		},
 		[closeOnClick]
 	);

@@ -14,6 +14,10 @@
 #   honoured as a fallback since it already carries the right scopes.
 # - Pushes made with GITHUB_TOKEN do not retrigger workflows; with a PAT the
 #   merge commit runs CI on develop as usual.
+# - The fallback sync PR is opened with the same PAT chain, never GITHUB_TOKEN:
+#   PRs created by GITHUB_TOKEN cannot trigger workflows either, so they would
+#   sit open with no CI checks. The step fails loudly when neither PAT secret
+#   exists rather than degrading to a checkless PR.
 
 name: Sync main into develop
 
@@ -86,8 +90,12 @@ jobs:
       - name: Open (or reuse) the sync PR
         if: steps.merge.outputs.result == 'conflict' || steps.push.outputs.result == 'blocked'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT }}
         run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Opening the sync PR needs SYNC_BRANCHES_PAT or CONFLICT_RESOLVER_PAT — a PR created by GITHUB_TOKEN would run no CI."
+            exit 1
+          fi
           existing=$(gh pr list --repo "${{ github.repository }}" --base develop --head main --state open --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
             echo "Sync PR #$existing is already open and tracks main automatically." >> "$GITHUB_STEP_SUMMARY"
