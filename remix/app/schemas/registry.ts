@@ -66,6 +66,11 @@ export type ThingtimeSchema = {
 export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'inherit'] as const;
 export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
+// Protected operational Things created when an admin migration throws. The
+// prefix is reserved so generic callers cannot squat a future diagnostic URL.
+export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
+export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
+
 // ---------------------------------------------------------------------------
 // ACL permissions. A thing's audience is an array of tt: entries — grants,
 // plus '-'-prefixed exclusions:
@@ -371,6 +376,13 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			system: true,
 			description: 'Version of the logical byte projection used for sizeBytes.'
+		},
+		{
+			name: 'expiresAt',
+			type: 'date',
+			required: false,
+			system: true,
+			description: 'Optional server-owned retention deadline for protected operational Things.'
 		},
     { name: 'createdAt', type: 'date', required: true, system: true, description: 'Creation time.' },
     { name: 'updatedAt', type: 'date', required: true, system: true, description: 'Last mutation time.' }
@@ -944,6 +956,44 @@ const serviceQuotaSchema: ThingtimeSchema = {
 	}
 };
 
+const migrationDiagnosticSchema: ThingtimeSchema = {
+	id: MIGRATION_DIAGNOSTIC_THINGTIME,
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Migration diagnostic',
+	summary: 'A short-lived, admin-owned report captured when a database migration throws.',
+	detail:
+		'Protected control-plane Thing written only by the admin migration runner after its lease is released. ' +
+		'The crystal contains bounded run metadata; the full redacted error is an opaque binary root field, read ' +
+		'only through the current-admin diagnostic endpoint. Version 2 may retain a bounded map of explicitly contextual MongoDB ObjectIds behind value-free references; each raw value requires fresh current-password confirmation through the closed reveal endpoint. Credentials and ambiguous values remain irreversible. It expires automatically and never enters storage billing.',
+	createdVia: 'POST /api/v1/admin/migrations/run (failure path)',
+	fields: [
+		{ name: 'diagnosticVersion', type: 'number', required: true, description: 'Diagnostic envelope version.' },
+		{ name: 'migrationId', type: 'string', required: true, max: 128, description: 'Registered migration id.' },
+		{
+			name: 'mode',
+			type: 'enum',
+			required: true,
+			values: ['run'],
+			description: 'Only real runs persist diagnostics; failed dry runs never create a diagnostic Thing.'
+		},
+		{ name: 'status', type: 'number', required: true, description: 'HTTP status returned by the migration endpoint.' },
+		{ name: 'outcome', type: 'enum', required: true, values: ['rejected', 'unknown'], description: 'Whether mutation outcome is known.' },
+		{ name: 'summary', type: 'string', required: true, max: 2048, description: 'Safe operator-facing failure summary.' },
+		{ name: 'capturedAt', type: 'date', required: true, description: 'Diagnostic capture time.' }
+	],
+	example: {
+		diagnosticVersion: 2,
+		migrationId: 'backfill-user-storage-accounting',
+		mode: 'run',
+		status: 500,
+		outcome: 'unknown',
+		summary: 'Migration stopped before completion.',
+		capturedAt: '2026-08-08T00:00:00.000Z'
+	}
+};
+
 const accountLinkSchema: ThingtimeSchema = {
   id: 'account-link',
   version: 1,
@@ -1282,7 +1332,8 @@ export const PROTECTED_THINGTIME = [
   'subscription',
   'account-link',
 	'app-storage',
-	'service-quota'
+	'service-quota',
+	MIGRATION_DIAGNOSTIC_THINGTIME
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -1400,6 +1451,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   accountLinkSchema,
   appStorageLedgerSchema,
 	serviceQuotaSchema,
+	migrationDiagnosticSchema,
   // system kinds (collections collapsing into things — dual-era)
   userThingSchema,
   themeThingSchema,

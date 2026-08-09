@@ -13,6 +13,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/apps/revoke': () => import('../../../app/routes/api/v1/admin/apps/revoke/_revoke'),
   'v1/admin/links': () => import('../../../app/routes/api/v1/admin/links/_links'),
   'v1/admin/migrations': () => import('../../../app/routes/api/v1/admin/migrations/_migrations'),
+	'v1/admin/migrations/diagnostic': () => import('../../../app/routes/api/v1/admin/migrations/diagnostic/_diagnostic'),
   'v1/admin/migrations/run': () => import('../../../app/routes/api/v1/admin/migrations/run/_run'),
   'v1/admin/rate-limits': () => import('../../../app/routes/api/v1/admin/rate-limits/_rate-limits'),
   'v1/admin/set-admin': () => import('../../../app/routes/api/v1/admin/set-admin/_set-admin'),
@@ -78,9 +79,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
-    import(
-      '../../../app/routes/api/v1/settings/pr-conflict-auto-resolver-model-waterfall/_pr-conflict-auto-resolver-model-waterfall'
-    ),
+		import('../../../app/routes/api/v1/settings/pr-conflict-auto-resolver-model-waterfall/_pr-conflict-auto-resolver-model-waterfall'),
   'v1/teapot': () => import('../../../app/routes/api/v1/teapot/_teapot'),
   'v1/template': () => import('../../../app/routes/api/v1/template/_template'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
@@ -98,6 +97,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/things/react': () => import('../../../app/routes/api/v1/things/react/_react'),
   'v1/things/reactions-recent': () => import('../../../app/routes/api/v1/things/reactions-recent/_reactions-recent'),
   'v1/things/quota': () => import('../../../app/routes/api/v1/things/quota/_quota'),
+	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
   'v1/things/save': () => import('../../../app/routes/api/v1/things/save/_save'),
   'v1/things/search': () => import('../../../app/routes/api/v1/things/search/_search'),
   'v1/things/share': () => import('../../../app/routes/api/v1/things/share/_share'),
@@ -226,9 +226,7 @@ export default defineHandler(async (event) => {
   const mongoEndpoint = path.startsWith('v1/admin/') ? null : await getRequestMongoEndpoint(event.req);
 
   try {
-    return await runWithMongoEndpoint(mongoEndpoint, async () =>
-      normalizeResponse(await handler({ request: event.req }))
-    );
+		return await runWithMongoEndpoint(mongoEndpoint, async () => normalizeResponse(await handler({ request: event.req })));
   } catch (err) {
     if (err instanceof Response) {
       return err;

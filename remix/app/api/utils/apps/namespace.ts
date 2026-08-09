@@ -679,50 +679,73 @@ export const convertHistoricalAppStorageCounter = async (
 	return withMongoTransaction((session) => convertHistoricalAppStorageCounterInSession(ownerId, appId, session, options.trustedAllowanceBytes));
 };
 
+// MongoDB forbids `$expr` inside an upsert predicate. Keep the rich
+// appStorageCounterMatch() for ordinary reads/updates, but create the reserved
+// row through its deterministic shareId and validate the returned full
+// envelope before trusting it. A foreign occupant therefore remains untouched
+// and fails closed instead of being promoted into an accounting authority.
+export const appStorageCounterUpsertPlan = (scope: AppNamespaceScope, now = new Date()) => ({
+	match: { shareId: storageShareId(scope.ownerId, scope.appId) },
+	setOnInsert: {
+		shareId: storageShareId(scope.ownerId, scope.appId),
+		schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+		thingtime: [APP_STORAGE_KIND],
+		storageLedgerEnvelopeVersion: APP_STORAGE_LEDGER_ENVELOPE_VERSION,
+		crystal: {
+			quotaKind: APP_STORAGE_KIND,
+			appId: scope.appId,
+			usedBytes: 0,
+			storageAccountingVersion: APP_STORAGE_ACCOUNTING_VERSION,
+			// A registered-app counter can be missing while legacy namespace
+			// content already exists. Never certify a guessed zero merely
+			// because an app manager edited this user's allowance first.
+			// The first registered write/recovery reconciles the whole app;
+			// isolated sandbox counters have no legacy corpus to migrate.
+			storageLedgerStatus: scope.sandbox ? USER_STORAGE_STATUS.ready : USER_STORAGE_STATUS.needsReconcile,
+			...(scope.sandbox ? { storageReconciledAt: now } : {}),
+			storageUpdatedAt: now
+		},
+		ownerId: scope.ownerId,
+		acl: [ACL_OWNER],
+		targetId: null,
+		tags: [],
+		createdAt: now,
+		updatedAt: now,
+		// a sandbox namespace's ledger dies with its namespace
+		...(scope.sandbox ? { sandboxExpiresAt: new Date(now.getTime() + SANDBOX_TOKEN_TTL_MS) } : {})
+	}
+});
+
 export const ensureAppStorageCounter = async (scope: AppNamespaceScope, session?: any): Promise<boolean> => {
   const things = await getThingsCollection();
-  const now = new Date();
+	const plan = appStorageCounterUpsertPlan(scope);
   try {
-		const result = await things.updateOne(
-      storageMatch(scope),
-      {
-				$setOnInsert: {
-          schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-					thingtime: [APP_STORAGE_KIND],
-					storageLedgerEnvelopeVersion: APP_STORAGE_LEDGER_ENVELOPE_VERSION,
-					crystal: {
-						quotaKind: APP_STORAGE_KIND,
-						appId: scope.appId,
-						usedBytes: 0,
-						storageAccountingVersion: APP_STORAGE_ACCOUNTING_VERSION,
-						// A registered-app counter can be missing while legacy namespace
-						// content already exists. Never certify a guessed zero merely
-						// because an app manager edited this user's allowance first.
-						// The first registered write/recovery reconciles the whole app;
-						// isolated sandbox counters have no legacy corpus to migrate.
-						storageLedgerStatus: scope.sandbox ? USER_STORAGE_STATUS.ready : USER_STORAGE_STATUS.needsReconcile,
-						...(scope.sandbox ? { storageReconciledAt: now } : {}),
-						storageUpdatedAt: now
-        },
-          acl: [ACL_OWNER],
-          targetId: null,
-          tags: [],
-          createdAt: now,
-          updatedAt: now,
-          // a sandbox namespace's ledger dies with its namespace
-          ...(scope.sandbox ? { sandboxExpiresAt: new Date(now.getTime() + SANDBOX_TOKEN_TTL_MS) } : {})
-        }
-      },
-			{ upsert: true, ...(session ? { session } : {}) }
-    );
-		return result.upsertedCount > 0;
+		const result = await things.findOneAndUpdate(
+			plan.match,
+			{ $setOnInsert: plan.setOnInsert },
+			{
+				upsert: true,
+				returnDocument: 'after',
+				includeResultMetadata: true,
+				...(session ? { session } : {})
+			}
+		);
+		const existing = result?.value;
+		if (!appStorageCounterEnvelopeIsTrusted(existing, scope)) {
+			throw new StorageMutationError(
+				503,
+				'storage_invariant',
+				'The reserved app-storage ledger id is occupied by an untrusted Thing and requires admin migration'
+			);
+		}
+		return result?.lastErrorObject?.updatedExisting === false;
   } catch (err: any) {
 		// Outside a transaction, a duplicate means another writer won the
 		// deterministic upsert. Inside one, let the driver abort/retry the whole
 		// transaction: continuing after a duplicate-key abort would make later
 		// ledger writes look successful even though the session cannot commit.
 		if (session || err?.code !== 11000) throw err;
-		const existing = await things.findOne({ shareId: storageShareId(scope.ownerId, scope.appId) });
+		const existing = await things.findOne(plan.match);
 		if (appStorageCounterEnvelopeIsTrusted(existing, scope)) return false;
 		throw new StorageMutationError(
 			503,

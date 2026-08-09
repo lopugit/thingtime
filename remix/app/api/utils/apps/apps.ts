@@ -4,7 +4,7 @@ import { listLinkedAppClientIds, userCanManageApp } from '../accounts/accountLin
 // Embed apps are auth-plane ("Login with Thingtime" clientId → allowlist
 // lookups): app things stay on the home deployment DB even while a data-plane
 // endpoint override is active, so an override can never answer origin checks.
-import { getHomeThingsCollection as getThingsCollection, getSessionsCollection, withMongoTransaction } from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getSessionsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { getSubscription } from '../subscriptions/subscriptions';
 import { DEFAULT_SUBSCRIPTION_TIER, subscriptionTierById, type SubscriptionTierId } from '../subscriptions/tierCatalog';
 import { getLiveSubscriptionTier, tierAssignmentSnapshot } from '../subscriptions/tierCatalogStore';
@@ -301,7 +301,7 @@ export const deleteApp = async (ownerId: string, clientId: unknown): Promise<{ o
   const things = await getThingsCollection();
 	const sessions = await getSessionsCollection();
 	const revokedAt = new Date();
-	const result = await withMongoTransaction((session) =>
+	const result = await withHomeMongoTransaction((session) =>
 		deleteAppLifecycleInSession({
 			things,
 			sessions,
