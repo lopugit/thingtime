@@ -548,6 +548,127 @@ Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 `VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_GIT_COMMIT_REF`, and
 `VERCEL_GIT_COMMIT_SHA` during deployments.
 
+### Trusted `develop`-target PR deployments
+
+A pull request's base branch does not select its Vercel environment. A feature
+branch targeting `develop` is therefore still an ordinary Preview unless the
+trusted controller in `.github/workflows/develop-pr-preview.yml` explicitly
+deploys its exact head SHA to the `develop` Custom Environment.
+
+The workflow deliberately uses two stages. Its `pull_request_target` job has no
+environment or Vercel secret, checks out no code, and emits only a bounded
+`repository_dispatch` payload. The privileged dispatch job runs the controller
+from `main` behind the `vercel-develop-pr-control` environment. It proves the
+source workflow path/run, repository, same-repository PR, head SHA, action, and
+triggering actor through GitHub's API, then re-reads the live PR. Both the PR
+author and triggering actor must be explicitly allowlisted, currently hold
+write/admin permission, and the non-draft PR must still target `develop`.
+Neither GitHub job checks out or executes PR-head code; Vercel performs the
+remote build only after those gates pass.
+
+The workflow and its controller script must first be merged to the repository's
+default `main` branch. `pull_request_target` loads trusted workflow code from
+the default branch, so merely adding the files to a feature branch does not
+activate the controller. Before installing either controller secret, enforce
+required CODEOWNER approval for both files with a `main` branch ruleset (or
+require a trusted reviewer on the controller Environment). A tracked CODEOWNERS
+file requests review but does not enforce it by itself.
+
+Create the protected GitHub Environment `vercel-develop-pr-control`, allow
+only the `main` deployment branch, and put the privileged controller's dedicated
+secret and variables there. The secret-free `pull_request_target` stage hands
+off to a `repository_dispatch` run in the default-branch context; scheduled
+runs also use the default branch, and the workflow refuses a manual dispatch
+from any other ref. Use values from your own Vercel project; the examples are
+placeholders and must not be committed with live credentials or identifiers:
+
+```sh
+# Actions secrets
+VERCEL_DEVELOP_DEPLOY_TOKEN="<dedicated-Vercel-deployment-token>"
+THINGTIME_DEVELOP_S3_CORS_PROBE_URL="https://<exact-develop-bucket>.s3.<region>.amazonaws.com/<probe-object>"
+
+# Actions variables
+VERCEL_PROJECT_ID="<Vercel-project-id>"
+VERCEL_PROJECT_NAME="<Vercel-project-name>"
+VERCEL_TEAM_ID="<Vercel-team-id>"
+VERCEL_TEAM_SLUG="<Vercel-team-slug>"
+VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
+VERCEL_CUSTOM_ENVIRONMENT_ID="<Vercel-develop-custom-environment-id>"
+DEVELOP_PREVIEW_TRUSTED_ACTORS="<trusted-GitHub-login>[,<trusted-GitHub-login>]"
+PREVIEW_ALIAS_SUFFIX="<preview-alias-suffix>"
+STABLE_DEVELOP_DOMAIN="<stable-develop-domain>"
+```
+
+`VERCEL_CUSTOM_ENVIRONMENT_ID` must contain the exact immutable ID returned for
+the `develop` Custom Environment, not the display slug `develop`. The author and
+triggering actor must both appear in `DEVELOP_PREVIEW_TRUSTED_ACTORS` and
+still hold current write/admin repository permission. Keep the Vercel
+environment's branch matcher on the literal `develop` branch. Bind
+`dev.thingtime.com` to that Git branch (`gitBranch: develop` and no
+`customEnvironmentId` on the domain), not to the entire Custom Environment,
+and keep the Custom Environment's own domain list empty. The controller assigns
+only the verified PR wildcard alias explicitly. This leaves the stable
+development hostname on the real `develop` branch while PRs receive only
+`https://pr-<number>.previews.thingtime.com`.
+
+For Thingtime, set `PREVIEW_ALIAS_SUFFIX=previews.thingtime.com` and
+`STABLE_DEVELOP_DOMAIN=dev.thingtime.com`. Forks should replace both with
+domains they control. The masked Environment secret
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` is required and must be a credential-free
+HTTPS object URL on the exact develop bucket, with no query string or presigned
+parameters. The controller sends only an unauthenticated CORS `OPTIONS` probe
+and fail-closes alias publication if it is not accepted.
+
+`*.previews.thingtime.com` is already registered, verified, and detached from
+both Git branches and Custom Environments in Vercel. Its remaining Thingtime
+DNS step is a **DNS only** (grey-cloud) Cloudflare CNAME from `*.previews` to
+`cname.vercel-dns.com`. Forks should first add their own wildcard to Vercel and
+copy every CNAME or verification record Vercel currently displays for that
+domain; do not copy another project's account-specific targets.
+
+The develop S3 bucket needs only browser upload CORS for the two controlled
+origin classes. Downloads remain same-origin through Thingtime and the bucket
+stays private:
+
+```json
+[
+	{
+		"AllowedHeaders": ["x-amz-checksum-sha256"],
+		"AllowedMethods": ["PUT"],
+		"AllowedOrigins": ["https://dev.thingtime.com", "https://*.previews.thingtime.com"],
+		"ExposeHeaders": [],
+		"MaxAgeSeconds": 300
+	}
+]
+```
+
+The wildcard DNS, bucket CORS update, masked probe secret, fresh dedicated
+Vercel token, and enforced controller review boundary are activation
+prerequisites and remain pending until their respective administrators complete
+and verify them. Do not describe a PR alias as ready before those checks pass.
+
+CORS is not authorization. Keep the bucket private and scope the AWS OIDC trust
+and server-only S3 variables to the `develop` Custom Environment. Do not copy
+MongoDB, JWT, email, S3, AI, or other private runtime variables into Vercel's
+generic Preview environment, and do not trust the broad
+`environment:preview` OIDC subject. Ordinary Vercel previews cover arbitrary
+feature/fork code and must remain free of the develop role and private runtime
+configuration.
+
+Every eligible PR deployment intentionally shares the same development MongoDB,
+S3 bucket, quotas, and other Custom Environment state as `dev.thingtime.com`.
+It is a trusted integration surface, not an isolated sandbox: use disposable
+test accounts/data and never deploy an untrusted or fork PR into it. The
+controller updates one marker comment with deploying/ready/failure state, moves
+the PR alias only after the exact SHA is ready and revalidated, and deletes only
+its marker-tagged superseded resources. Close/retarget/draft handling removes
+the alias, inactivates the transient GitHub Deployment, and deletes its tagged
+Vercel deployments. A six-hour scheduled reconciliation repeats marker-scoped
+cleanup after an interrupted or missed event without touching the stable
+`develop` deployment; manual dispatch safely revalidates one supplied PR.
+See `VERCEL_DEPLOYMENTS.md` and the Develop-target checklist in `TESTING.md` for
+the operator runbook.
+
 The footer environment selector can compare public origins for this tab, local,
 development, staging, and production. These values are browser-visible
 `THINGTIME_` values, so use public origins only and never include tokens,

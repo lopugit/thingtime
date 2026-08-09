@@ -108,6 +108,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Trusted `develop`-target PR deployment controller**: same-repository,
+  trusted-author PRs targeting `develop` can now be deployed through a
+  secret-free `pull_request_target` dispatcher and provenance-checked
+  default-branch `repository_dispatch` controller to the exact Vercel `develop`
+  Custom Environment. Neither GitHub job executes PR-head code, the detector
+  never receives the Vercel token, and generic Preview access is not broadened;
+  the approved Vercel build intentionally receives the shared develop runtime
+  configuration. An explicit trusted-actor plus live write/admin permission
+  gate protects the dedicated GitHub Environment secret. Each PR gets a
+  marker-updated status comment, transient GitHub Deployment, and dedicated
+  alias under `*.previews.thingtime.com`; SHA revalidation, marker-scoped
+  supersession/close cleanup, six-hour reconciliation, and bounded manual
+  recovery prevent stale builds from retaining aliases or shared develop
+  credentials. The fork-safe runbook keeps
+  `dev.thingtime.com` bound to the literal `develop` branch, stores the exact
+  Custom Environment ID only in a private GitHub variable, documents minimal
+  wildcard S3 CORS/DNS, and calls out that eligible PRs intentionally share the
+  same development data plane rather than receiving isolated sandboxes. — Codex
+  (AI), 2026-08-09
 - **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
   stacks (AI)** workflow evaluates every same-repository PR regardless of base
   branch. Standalone PRs that merge cleanly but cannot rebase and stack members

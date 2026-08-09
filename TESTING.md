@@ -15,6 +15,76 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] In a fresh Git checkout, `git ls-files -s AGENTS.md CLAUDE.md` reports
       mode `120000` for both links and both still resolve to `AI_ALL.md`.
 
+## Develop-target Vercel PR previews
+
+- [ ] Confirm `.github/workflows/develop-pr-preview.yml` and its controller
+      script are present on the default `main` branch before expecting
+      `pull_request_target` to run; a workflow present only on the feature PR is
+      deliberately inactive.
+- [ ] Inspect an eligible PR's two runs: the `pull_request_target` dispatcher
+      has no GitHub Environment/Vercel secret, checks out no code, and emits one
+      bounded `repository_dispatch`; only the downstream default-branch run
+      enters `vercel-develop-pr-control`, checks out `main`, and receives the
+      controller secret. Neither GitHub job executes the PR head.
+- [ ] Replay or forge a dispatch payload with a wrong source run id, workflow
+      path, repository, PR, action, actor, or head SHA: the privileged job fails
+      closed before any Vercel mutation. A stale legitimate dispatch also no-ops
+      after the live PR SHA fence.
+- [ ] Inspect the private `vercel-develop-pr-control` GitHub Environment
+      without printing values: only the `main` deployment branch is allowed,
+      `VERCEL_CUSTOM_ENVIRONMENT_ID` contains the exact immutable develop ID,
+      `DEVELOP_PREVIEW_TRUSTED_ACTORS` is explicit, the Vercel token is the
+      fresh dedicated `VERCEL_DEVELOP_DEPLOY_TOKEN` environment secret, the two
+      domain variables match controlled domains, the masked
+      `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret is an unsigned exact
+      develop-bucket HTTPS object URL with no query, and no live `env_*` ID,
+      bucket name, or token appears in tracked controller files or workflow
+      logs.
+- [ ] Confirm a `main` ruleset enforces CODEOWNER approval for the controller
+      workflow/script, or the controller Environment requires a trusted
+      reviewer, before either secret is installed; CODEOWNERS presence alone is
+      not an enforcement check.
+- [ ] In Vercel, confirm `dev.thingtime.com` is bound to the literal `develop`
+      Git branch and has no domain `customEnvironmentId`, rather than being
+      bound to the whole Custom Environment; the Custom Environment's own domain
+      list is empty. Confirm generic Preview has none of the develop
+      MongoDB/JWT/email/S3/AI private variables.
+- [ ] Open or update a same-repository, trusted-author PR targeting `develop`:
+      the `Develop S3 PR preview` workflow deploys the exact head SHA, the
+      one marker comment moves through deploying to ready, the GitHub Deployment
+      reaches success, and the comment links
+      `https://pr-<number>.previews.thingtime.com`; verify the deployed SHA again
+      after the build completes.
+- [ ] Confirm the wildcard Vercel domain is verified and detached, its
+      Cloudflare `*.previews` CNAME targets `cname.vercel-dns.com` with DNS-only
+      proxying, its Git branch and Custom Environment bindings are empty, and
+      the PR alias presents a valid certificate.
+- [ ] From that alias, sign in and upload/remove a small attachment: the direct
+      S3 `PUT` preflight permits only that exact origin pattern, `PUT`, and
+      `x-amz-checksum-sha256`; it exposes no headers, the bucket remains private,
+      and storage usage returns to its original value. Repeat from
+      `https://dev.thingtime.com` and reject an unrelated Preview origin.
+- [ ] Update the PR twice: the same alias moves to the newest successful SHA,
+      the comment is edited rather than duplicated, and older workflow-created
+      develop deployments are deleted. A canceled/superseded run must not move
+      the alias after the newer SHA wins.
+- [ ] A fork PR, draft PR, non-allowlisted author/actor, read-only collaborator,
+      and PR targeting `main` never receive a develop deployment or credentials;
+      their ordinary Vercel Preview remains available and cannot assume the
+      develop AWS role. Retargeting or converting an eligible PR to draft cleans
+      its existing credentialed preview.
+- [ ] With two eligible PRs open, use disposable accounts and verify that their
+      aliases intentionally see the same development data/quota plane; do not
+      describe either alias as an isolated sandbox.
+- [ ] Close the develop-target PR: its alias is removed, its transient GitHub
+      Deployment becomes inactive, and workflow-created Vercel deployments are
+      deleted without moving `dev.thingtime.com`.
+- [ ] Simulate a missed close/interrupted cleanup with workflow-tagged test
+      resources, then run/wait for the six-hour scheduled reconciliation: it
+      removes stale alias/deployments idempotently while preserving unmarked
+      deployments and the stable `develop` branch deployment. Manually dispatch
+      one PR number and verify the bounded per-PR recovery path separately.
+
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
 - [ ] In a fresh linked worktree with no copied `node_modules`, run
