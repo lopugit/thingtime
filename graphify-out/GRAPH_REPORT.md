@@ -9,7 +9,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a7b5f1c3`
+- Built from commit: `3f57ca13`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -3574,7 +3574,7 @@ Nodes (3): Green Canopy Icon Layer, Brown Trunk Icon Layer, Thingtime App Icon L
   docs/design/claude-design-mockup-v1/index.html · relation: semantically_similar_to
 
 ## Knowledge Gaps
-- **2132 isolated node(s):** `CFG`, `EXEC_OPTS`, `prCache`, `contentIndex`, `LABEL_SPECS` (+2127 more)
+- **2132 isolated node(s):** `Fixed`, `Added`, `Fixed`, `Changed`, `Added` (+2127 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **415 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
