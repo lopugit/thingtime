@@ -71,6 +71,20 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 
+// GitHub/Vercel control-plane projections and their append-only audit events.
+// This registry is the single source for their protection and schema docs.
+export const CI_CONTROL_THINGTIME = [
+  'ci-repository',
+  'ci-feature',
+  'ci-branch',
+  'ci-pull-request',
+  'ci-workflow-run',
+  'ci-deployment',
+  'ci-preview',
+  'ci-dispatch',
+  'ci-event'
+] as const;
+
 // ---------------------------------------------------------------------------
 // ACL permissions. A thing's audience is an array of tt: entries — grants,
 // plus '-'-prefixed exclusions:
@@ -1028,6 +1042,93 @@ const migrationDiagnosticSchema: ThingtimeSchema = {
 	}
 };
 
+const ciEntitySchema = (
+  id: Exclude<(typeof CI_CONTROL_THINGTIME)[number], 'ci-event'>,
+  title: string,
+  summary: string
+): ThingtimeSchema => ({
+  id,
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title,
+  summary,
+  detail:
+    'A private, system-owned control-plane projection written only by signed GitHub/Vercel webhook ingestion, ' +
+    'an administrator reconciliation, or an allowlisted administrator dispatch. The deterministic shareId ' +
+    'keeps one current projection per external entity; status changes are stored separately as relational ' +
+    'ci-event Things so history never grows an embedded array. Generic Thing CRUD cannot create, edit, or delete it.',
+  createdVia: 'Signed integration webhooks and /api/v1/admin/ci*',
+  fields: [
+    { name: 'provider', type: 'enum', required: true, values: ['github', 'vercel', 'thingtime'], description: 'Authoritative provider.' },
+    { name: 'repository', type: 'string', required: true, max: 300, description: 'Canonical owner/repository name.' },
+    { name: 'externalId', type: 'string', required: true, max: 300, description: 'Provider-scoped stable identifier.' },
+    { name: 'entityKey', type: 'string', required: true, max: 1000, description: 'Deterministic provider/repository/kind/id key.' },
+    { name: 'title', type: 'string', required: true, max: 500, description: 'Bounded operator-facing label.' },
+    { name: 'status', type: 'string', required: true, max: 120, description: 'Latest normalized provider status.' },
+    { name: 'url', type: 'string', required: false, max: 1500, description: 'Provider detail URL, when available.' },
+    { name: 'sourceUpdatedAt', type: 'date', required: true, description: 'Provider timestamp used to reject stale updates.' }
+  ],
+  example: {
+    provider: 'github',
+    repository: 'lopugit/thingtime',
+    externalId: '172',
+    entityKey: `github:lopugit/thingtime:${id}:172`,
+    title: 'Example control-plane entity',
+    status: 'clean',
+    url: 'https://github.com/lopugit/thingtime/pull/172',
+    sourceUpdatedAt: '2026-08-09T00:00:00.000Z'
+  }
+});
+
+const ciControlSchemas: ThingtimeSchema[] = [
+  ciEntitySchema('ci-repository', 'CI repository', 'Current integration and default-branch state for one repository.'),
+  ciEntitySchema('ci-feature', 'CI feature', 'A feature/stack grouping that relates source and promotion pull requests.'),
+  ciEntitySchema('ci-branch', 'CI branch', 'Current ref and head state for one repository branch.'),
+  ciEntitySchema('ci-pull-request', 'CI pull request', 'Current topology, mergeability, and review state for one pull request.'),
+  ciEntitySchema('ci-workflow-run', 'CI workflow run', 'Current state of one GitHub Actions workflow run or job.'),
+  ciEntitySchema('ci-deployment', 'CI deployment', 'Current state of one GitHub or Vercel deployment.'),
+  ciEntitySchema('ci-preview', 'CI preview', 'Current address and readiness of one branch/deployment preview.'),
+  ciEntitySchema('ci-dispatch', 'CI dispatch', 'An administrator-requested, allowlisted GitHub Actions dispatch.'),
+  {
+    id: 'ci-event',
+    version: 1,
+    kind: 'crystal',
+    collection: null,
+    title: 'CI status event',
+    summary: 'One immutable, idempotent status-history entry attached to a control-plane Thing.',
+    detail:
+      'A relational audit record keyed by provider delivery id and parent entity. Events are append-only and ' +
+      'bounded; retries of the same signed webhook do not duplicate history. Generic Thing CRUD cannot create, ' +
+      'edit, or delete it.',
+    createdVia: 'Signed integration webhooks and /api/v1/admin/ci*',
+    fields: [
+      { name: 'provider', type: 'enum', required: true, values: ['github', 'vercel', 'thingtime'], description: 'Event provider.' },
+      { name: 'repository', type: 'string', required: true, max: 300, description: 'Canonical owner/repository name.' },
+      { name: 'deliveryId', type: 'string', required: true, max: 300, description: 'Provider idempotency key.' },
+      { name: 'eventType', type: 'string', required: true, max: 120, description: 'Webhook or controller event family.' },
+      { name: 'action', type: 'string', required: false, max: 120, description: 'Provider action subtype.' },
+      { name: 'actor', type: 'string', required: false, max: 180, description: 'Bounded provider actor identifier.' },
+      { name: 'statusFrom', type: 'string', required: false, max: 120, description: 'Previous normalized status.' },
+      { name: 'statusTo', type: 'string', required: false, max: 120, description: 'New normalized status.' },
+      { name: 'occurredAt', type: 'date', required: true, description: 'Provider event time.' },
+      { name: 'data', type: 'record', required: false, description: 'Bounded event-specific metadata.' }
+    ],
+    example: {
+      provider: 'github',
+      repository: 'lopugit/thingtime',
+      deliveryId: 'delivery-id',
+      eventType: 'pull_request',
+      action: 'synchronize',
+      actor: 'github-actions[bot]',
+      statusFrom: 'conflicting',
+      statusTo: 'clean',
+      occurredAt: '2026-08-09T00:00:00.000Z',
+      data: {}
+    }
+  }
+];
+
 const accountLinkSchema: ThingtimeSchema = {
   id: 'account-link',
   version: 1,
@@ -1728,6 +1829,7 @@ export const PROTECTED_THINGTIME = [
 	'app-storage',
 	'service-quota',
   MIGRATION_DIAGNOSTIC_THINGTIME,
+  ...CI_CONTROL_THINGTIME,
   'follow',
   'friend',
   'notification'
@@ -1865,6 +1967,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   appStorageLedgerSchema,
 	serviceQuotaSchema,
   migrationDiagnosticSchema,
+  ...ciControlSchemas,
   // social graph + notifications (protected, server-minted). The `follow`
   // kind registers ONCE, below with the messenger family: followSchema is the
   // crystal.followKey shape POST /api/v1/users/follow actually mints, which
