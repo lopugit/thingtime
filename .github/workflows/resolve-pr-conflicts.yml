@@ -127,7 +127,8 @@ name: Resolve PR conflicts (AI)
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
-      && github.actor == 'github-actions[bot]'
+      && (github.actor == 'github-actions[bot]'
+          || github.actor == 'thingtime-ci-control[bot]')
       && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
       && inputs.branch == ''
@@ -172,6 +173,21 @@ on:
         description: "Internal: stacked-PR cascade depth (leave at 0)"
         required: false
         default: "0"
+        type: string
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: string
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
         type: string
   push:
     branches:
@@ -229,6 +245,22 @@ on:
         required: false
         default: "0"
         type: string
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: choice
+        options: [github-actions, vercel-sandbox]
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
   repository_dispatch:
     types: [resolve-conflicts-cascade]
 
@@ -242,7 +274,8 @@ concurrency:
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
         && inputs.detector_handoff == true
-        && github.actor == 'github-actions[bot]'
+        && (github.actor == 'github-actions[bot]'
+            || github.actor == 'thingtime-ci-control[bot]')
         && github.ref_name == 'github-actions'
         && inputs.pr_number != ''
         && inputs.branch == ''
@@ -268,7 +301,8 @@ concurrency:
   cancel-in-progress: >-
     ${{ github.event_name != 'workflow_dispatch'
         || inputs.detector_handoff != true
-        || github.actor != 'github-actions[bot]'
+        || (github.actor != 'github-actions[bot]'
+            && github.actor != 'thingtime-ci-control[bot]')
         || github.ref_name != 'github-actions'
         || inputs.pr_number == ''
         || inputs.branch != '' }}
@@ -277,11 +311,23 @@ permissions:
   contents: read
 
 jobs:
+  route:
+    uses: ./.github/workflows/ci-provider-router.yml
+    with:
+      workflow: resolve-conflicts
+      execution_provider: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
+      pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.pull_request.number || '' }}
+      branch: ${{ inputs.branch || (github.event_name == 'push' && github.ref_name) || '' }}
+    secrets: inherit
+
   detect:
     name: Find merge-conflicting PRs
+    needs: route
     # Branch deletions also fire `push`; there is nothing to scan then.
-    if: github.event_name != 'push' || github.event.deleted == false
-    runs-on: ubuntu-latest
+    if: needs.route.outputs.execute == 'true' && (github.event_name != 'push' || github.event.deleted == false)
+    runs-on: ${{ inputs.runner_label || github.event.client_payload.runner_label || 'ubuntu-latest' }}
     # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
     # (~8 minutes) before classification starts; keep headroom for sweeps.
     timeout-minutes: 15
@@ -390,8 +436,11 @@ jobs:
             # defense-in-depth and still permits re-runs of bot-originated work.
             invalid_handoff=false
             [ "$EVENT_NAME" = workflow_dispatch ] || invalid_handoff=true
-            [ "$EVENT_REF" = develop ] || invalid_handoff=true
-            [ "$EVENT_ACTOR" = "github-actions[bot]" ] || invalid_handoff=true
+            [ "$EVENT_REF" = github-actions ] || invalid_handoff=true
+            if [ "$EVENT_ACTOR" != "github-actions[bot]" ] \
+               && [ "$EVENT_ACTOR" != "thingtime-ci-control[bot]" ]; then
+              invalid_handoff=true
+            fi
             [ -n "$SELECTED_PR" ] || invalid_handoff=true
             [ -z "$INPUT_BRANCH" ] || invalid_handoff=true
             if [ "$invalid_handoff" = true ]; then
@@ -812,9 +861,10 @@ jobs:
       needs.detect.outputs.any == 'true'
       && (github.event_name != 'workflow_dispatch'
           || inputs.detector_handoff != true
-          || github.actor != 'github-actions[bot]'
+          || (github.actor != 'github-actions[bot]'
+              && github.actor != 'thingtime-ci-control[bot]')
           || github.ref_name != 'github-actions')
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner_label || github.event.client_payload.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
       actions: write
@@ -825,6 +875,9 @@ jobs:
           REPO: ${{ github.repository }}
           PRS: ${{ needs.detect.outputs.prs }}
           DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
+          EXECUTION_PROVIDER: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
+          RUNNER_LABEL: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
+          CONTROL_DISPATCH_ID: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
         run: |
           set -euo pipefail
           while IFS= read -r encoded; do
@@ -836,6 +889,9 @@ jobs:
             jq -n \
               --arg pr_number "$number" \
               --arg depth "$DEPTH" \
+              --arg execution_provider "$EXECUTION_PROVIDER" \
+              --arg runner_label "$RUNNER_LABEL" \
+              --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
               --argjson manual_retry "$manual_retry" '
                 {
                   ref:"github-actions",
@@ -844,7 +900,10 @@ jobs:
                     branch:"",
                     detector_handoff:true,
                     manual_retry:$manual_retry,
-                    depth:$depth
+                    depth:$depth,
+                    execution_provider:$execution_provider,
+                    runner_label:$runner_label,
+                    control_dispatch_id:$control_dispatch_id
                   }
                 }
               ' \
@@ -862,11 +921,12 @@ jobs:
       needs.detect.outputs.any == 'true'
       && github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
-      && github.actor == 'github-actions[bot]'
+      && (github.actor == 'github-actions[bot]'
+          || github.actor == 'thingtime-ci-control[bot]')
       && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
       && inputs.branch == ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner_label || github.event.client_payload.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 2
     # This job deliberately has no checkout and no repository permissions. It
     # reads one public, non-secret setting and turns it into a closed set of
@@ -976,11 +1036,12 @@ jobs:
       needs.detect.outputs.any == 'true'
       && github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
-      && github.actor == 'github-actions[bot]'
+      && (github.actor == 'github-actions[bot]'
+          || github.actor == 'thingtime-ci-control[bot]')
       && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
       && inputs.branch == ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner_label || github.event.client_payload.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       actions: write
@@ -1981,6 +2042,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
+          EXECUTION_PROVIDER: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
+          RUNNER_LABEL: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
+          CONTROL_DISPATCH_ID: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
         run: |
           set -euo pipefail
           labels="$(gh api "repos/$REPO/issues/$PR_NUMBER" --jq '[.labels[].name]')"
@@ -2014,7 +2078,10 @@ jobs:
                     branch:"",
                     detector_handoff:true,
                     manual_retry:false,
-                    depth:$depth
+                    depth:$depth,
+                    execution_provider:env.EXECUTION_PROVIDER,
+                    runner_label:env.RUNNER_LABEL,
+                    control_dispatch_id:env.CONTROL_DISPATCH_ID
                   }
                 }
               ' \
