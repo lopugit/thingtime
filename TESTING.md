@@ -301,6 +301,15 @@ is fixed, and cite the checklist you ran in the PR description.
       cherry-pick, and gets the expected tree. Repeat after a later revert and
       with a multi-commit rebase range: the revert must fail closed, while the
       full aggregate range (not only its last commit) must be verified.
+- [ ] Run the orphaned-history self-test with the clone's Git author name
+      deliberately empty. The attempted mainline cherry-pick must return an
+      operational error, abort the sequencer, leave `HEAD` at the target base,
+      and clean both the index and tracked worktree instead of treating the
+      words `empty ident name` as an empty source patch.
+- [ ] Configure a valid Git identity, apply the recovered source pick, then
+      apply that identical pick again. The second, genuinely empty pick must
+      be skipped from verified sequencer/index state and leave the promoted
+      tree unchanged.
 - [ ] Give one standalone source PR an invalid or unavailable historical merge
       object between two valid standalone PRs. A dry run must report that PR as
       blocked, continue to plan the later independent PR, and publish both the
