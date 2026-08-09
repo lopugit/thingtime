@@ -74,6 +74,16 @@ its PR/ref/label/stack/protection checks immediately before publication, and
 uses an exact head lease. If either branch moves while Claude is working, the
 resolved merge is discarded rather than overwriting the newer work.
 
+Detection is patient and audible: GitHub computes a PR's mergeability lazily
+after its base moves and verdicts can take minutes to settle, so the merge
+detector re-queries until every scanned PR has a verdict (time-budgeted via
+`MERGEABLE_POLL_SECONDS`, default 500 seconds — a little over eight minutes)
+instead of sampling once at push time. When it must leave a conflicted-looking PR alone — a fork PR it
+cannot push to, or a verdict that never settled — it upserts one status
+comment on the PR saying exactly that, so a silent PR means "nothing needed
+doing", never "nobody looked". Conflicts that are handed off announce
+themselves through the resolve job's "Auto-resolve running" comment.
+
 **Rebase PRs and stacks (AI)** rewrites PR history, so its force push has
 stricter boundaries:
 
@@ -452,6 +462,39 @@ sanitized resolved config (never credentials); `POST /api/v1/email/test-otp` is
 a dev/preview-only helper for the `/tests` page restricted to the configured
 test recipient (or a plus alias of it).
 
+### Notification emails (SES notification stream)
+
+Activity notifications (friend requests, new followers, comments, replies,
+reactions, shares — plus an optional weekly summary digest) can also email the
+recipient. They ride the same emit calls as the in-app bell, are always
+fire-and-forget, only go to verified addresses, and honor the per-user channel
+matrix from Settings → Notifications (`/api/v1/notifications/settings`: per
+type × channel switches plus a master switch per channel; the two high-volume
+post types are email-opt-in). Sends are capped per recipient per hour, and
+every email footer carries a manage link plus a one-click unsubscribe link
+(`GET /api/v1/notifications/email/unsubscribe?uid=…&token=…`, an HMAC token —
+no session needed).
+
+```sh
+THINGTIME_EMAIL_NOTIFICATIONS_FROM="Thingtime <no-reply@thingtime.com>"
+                                        # optional; falls back to the
+                                        # transactional from-address
+THINGTIME_EMAIL_UNSUB_SECRET=""         # optional HMAC secret for unsubscribe
+                                        # links; falls back to JWT_SECRET /
+                                        # JWT_PRIVATE_KEY
+CRON_SECRET="<random string>"           # lets the Vercel cron trigger the
+                                        # weekly digest run
+APP_URL="https://your-deployment.com"   # absolute links in emails
+```
+
+The weekly digest is scheduled in `remix/vercel.json` (`crons`) against
+`GET /api/v1/notifications/email/weekly-summary`; Vercel attaches
+`Authorization: Bearer <CRON_SECRET>` automatically when that env var exists.
+Signed-in admins can run the same endpoint manually (`?dryRun=1` or
+`POST { dryRun: true }` previews without sending), and the run is idempotent —
+a six-day per-recipient lookback in the `email_messages` outbox prevents
+double-sends.
+
 ### Service account provisioning
 
 Apps and backend services can create service-owned Thingtime accounts through:
@@ -506,6 +549,39 @@ When an AI key is configured, the musing endpoint uses MongoDB to allow 10
 AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
 the preset fallback responses instead of calling an AI provider.
+
+## Branch automation: develop → main promotion
+
+`develop` is the integration branch; `main` is the release branch. Four
+workflows keep them flowing without manual branch surgery, giving two
+complementary ways to ship:
+
+- **Promote features to main** (`.github/workflows/promote-features-to-main.yml`)
+  scans PRs merged into `develop` and opens one promotion PR per feature
+  against `main` (cherry-picked `promote/pr-<n>-<slug>` branches), so every
+  change can get a second, release-focused review on its own. PRs that share a
+  feature group (a `Promotion-Group: <key>` body line, a `stack:<key>`/
+  `group:<key>`/`feature:<key>` label, a `feature/<key>/...` branch, or a
+  `feat(<key>): ...` title) are opened as a stacked chain in merge order —
+  review and merge bottom-up, deleting each branch on merge. Label a develop
+  PR `no-promote` to keep it out of the train; close a promotion PR to reject
+  that change for `main` permanently.
+- **Promote develop to main** (`.github/workflows/promote-develop-to-main.yml`)
+  keeps one standing all-or-nothing PR open (head `develop`, base `main`).
+  When everything on `develop` is deemed mergeable, merge it instead of
+  merging every feature individually. The two trains never fight: after an
+  omnibus merge the per-feature workflow sees the content already on `main`,
+  skips it, and automatically closes any open promotion PRs whose diff has
+  become empty.
+- **Sync main into develop** back-merges `main` after promotions land.
+- The AI conflict/rebase workflows keep promotion PRs and stacks mergeable.
+
+Fork setup: everything runs with the default `GITHUB_TOKEN`, but promotion
+PRs it creates will not trigger CI, and promotion branches touching
+`.github/workflows/**` cannot be pushed. Optionally add a `PROMOTION_PAT`
+repository secret (fine-grained token with Contents + Pull requests +
+Workflows read/write, placeholder value `github_pat_...`) to lift both limits;
+`SYNC_BRANCHES_PAT` / `CONFLICT_RESOLVER_PAT` are honoured as fallbacks.
 
 ## Vercel deployment status
 

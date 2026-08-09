@@ -25,10 +25,7 @@ test('thingStorageSizeBytes is exact UTF-8 JSON bytes for the canonical payload'
 });
 
 test('missing payload fields normalize identically everywhere', () => {
-  assert.equal(
-    thingStorageSizeBytes({}),
-    Buffer.byteLength(JSON.stringify({ crystal: null, extended: null, tags: [] }), 'utf8')
-  );
+	assert.equal(thingStorageSizeBytes({}), Buffer.byteLength(JSON.stringify({ crystal: null, extended: null, tags: [] }), 'utf8'));
 });
 
 test('incremental ledger arithmetic accepts only an exact current canonical source stamp', () => {
@@ -53,6 +50,8 @@ test('incremental ledger arithmetic accepts only an exact current canonical sour
 test('billable policy defaults user content on and excludes control-plane and sandbox Things', () => {
   assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['post'], crystal: {} }), true);
   assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['future-user-kind'], crystal: {} }), true);
+  assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['schema'], crystal: {} }), true);
+  assert.equal(isBillableStorageThing({ ownerId: 'system', thingtime: ['schema'], storageClass: 'control', crystal: {} }), false);
   assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['subscription'], crystal: {} }), false);
   assert.equal(
     isBillableStorageThing({ ownerId: 'u1', thingtime: ['data'], crystal: { quotaKind: 'service-quota' } }),
@@ -60,16 +59,14 @@ test('billable policy defaults user content on and excludes control-plane and sa
     'user-authored crystal metadata cannot exempt content from billing'
   );
   assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['service-quota'], crystal: {} }), false);
+	assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['migration-diagnostic'], crystal: {} }), false);
   assert.equal(
     isBillableStorageThing({ ownerId: 'u1', thingtime: 'service-quota', crystal: {} }),
     true,
     'a malformed scalar kind cannot impersonate a protected control-plane array'
   );
   assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['data'], storageClass: 'control', crystal: {} }), false);
-  assert.equal(
-    isBillableStorageThing({ ownerId: 'sandbox:123', thingtime: ['data'], crystal: {}, sandboxExpiresAt: new Date() }),
-    false
-  );
+	assert.equal(isBillableStorageThing({ ownerId: 'sandbox:123', thingtime: ['data'], crystal: {}, sandboxExpiresAt: new Date() }), false);
   assert.equal(storageSandboxState({}), 'real');
   assert.equal(storageSandboxState({ sandboxExpiresAt: new Date() }), 'sandbox');
   assert.equal(storageSandboxState({ sandboxExpiresAt: null }), 'invalid');

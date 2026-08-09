@@ -143,6 +143,9 @@ jobs:
           # A stack member either targets another open PR's head branch or is
           # itself the base of another open PR. Compare only same-repo PRs;
           # neither secrets nor force-pushes may ever cross a fork boundary.
+          # no-ai-rebase also breaks topology edges. In particular, a standing
+          # integration-branch promotion PR must not turn every feature PR
+          # targeting that integration branch into one giant synthetic stack.
           same_repo="$(jq -c --arg repo "$REPO" '
             [.[]
               | select(.head.repo.full_name == $repo)
@@ -151,8 +154,12 @@ jobs:
           stacked="$(jq -c '
             . as $all
             | [$all[] as $pr
+                | select([$pr.labels[].name]
+                    | index("no-ai-rebase") == null)
                 | select(any($all[];
                     .number != $pr.number
+                    and ([.labels[].name]
+                        | index("no-ai-rebase") == null)
                     and (.head.ref == $pr.base.ref
                          or .base.ref == $pr.head.ref)))
                 | $pr]
@@ -563,10 +570,17 @@ jobs:
           if [ "$explicit" = true ]; then
             roots="$blocked"
           else
+            # Large PR bodies and file lists can make the repository-wide
+            # candidate graph exceed execve's argv limit. Keep JSON out of
+            # command-line arguments: write the three bounded detector values
+            # to RUNNER_TEMP, then let jq load them by short file path.
+            printf '%s\n' "$blocked" > "$RUNNER_TEMP/rebase-blocked.json"
+            printf '%s\n' "$barriers" > "$RUNNER_TEMP/rebase-barriers.json"
+            printf '%s\n' "$candidates" > "$RUNNER_TEMP/rebase-candidates.json"
             roots="$(jq -cn \
-              --argjson blocked "$blocked" \
-              --argjson barriers "$barriers" \
-              --argjson candidates "$candidates" '
+              --slurpfile blocked_file "$RUNNER_TEMP/rebase-blocked.json" \
+              --slurpfile barriers_file "$RUNNER_TEMP/rebase-barriers.json" \
+              --slurpfile candidates_file "$RUNNER_TEMP/rebase-candidates.json" '
               def head_ref:
                 if (.head | type) == "object" then .head.ref else .head end;
               def base_ref:
@@ -586,7 +600,10 @@ jobs:
                       has_ordering_ancestor($parents[0]; $all; $ordered; $depth + 1)
                     end
                 end;
-              ($blocked + $barriers) as $ordered
+              ($blocked_file[0] // []) as $blocked
+              | ($barriers_file[0] // []) as $barriers
+              | ($candidates_file[0] // []) as $candidates
+              | ($blocked + $barriers) as $ordered
               | [$blocked[] as $pr
                   | select(has_ordering_ancestor(
                       $pr; $candidates; $ordered; 0) | not)
@@ -795,6 +812,7 @@ jobs:
                   .number != $number
                   and .head.repo.full_name == $repo
                   and .base.repo.full_name == $repo
+                  and ([.labels[].name] | index("no-ai-rebase") == null)
                   and (.head.ref == $base or .base.ref == $head))
               ' <<<"$all_open")"
             [ "$stack_member" != true ] || topology=stack
@@ -1621,6 +1639,7 @@ jobs:
                   .number != $number
                   and .head.repo.full_name == $repo
                   and .base.repo.full_name == $repo
+                  and ([.labels[].name] | index("no-ai-rebase") == null)
                   and (.head.ref == $base or .base.ref == $head))
               ' <<<"$all_open")"
             mergeable="$(jq -r '.mergeable' <<<"$pr")"
@@ -1824,6 +1843,7 @@ jobs:
                   .number != $number
                   and .head.repo.full_name == $repo
                   and .base.repo.full_name == $repo
+                  and ([.labels[].name] | index("no-ai-rebase") == null)
                   and (.head.ref == $base or .base.ref == $head))
               ' <<<"$all_open")"
             mergeable="$(jq -r '.mergeable' <<<"$pr")"
@@ -2120,6 +2140,7 @@ jobs:
                         .number != $number
                         and .head.repo.full_name == $repo
                         and .base.repo.full_name == $repo
+                        and ([.labels[].name] | index("no-ai-rebase") == null)
                         and (.head.ref == $base or .base.ref == $head))
                     ' <<<"$all_open")"
                   [ "$stack_member" != true ] || topology=stack

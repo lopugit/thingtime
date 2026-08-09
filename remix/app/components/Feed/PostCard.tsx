@@ -24,7 +24,7 @@ import {
 } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { Link } from 'react-router';
-import { ArrowLeft, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
+import { ArrowLeft, Eye, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
@@ -34,11 +34,12 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
-import { sanitizeReactionToken, splitEmojis } from '~/utils/reactionTokens';
+import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
-import { mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
+import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
+import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
 import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, warmAvatars } from './threadCache';
 import {
   CIRCLE_META,
@@ -69,12 +70,12 @@ const applyReactionToggle = <T extends Pick<PublicPost, 'reactionCounts' | 'view
 
 // Reconcile ONLY the toggled token against the server's authoritative view,
 // leaving other tokens (possibly changed by concurrent reactions) intact.
-const reconcileReactionToken = (
-  prev: PublicPost,
+const reconcileReactionToken = <T extends Pick<PublicPost, 'reactionCounts' | 'viewerReactions'>>(
+  prev: T,
   token: string,
   serverCounts: Record<string, number>,
   serverViewer: string[]
-): PublicPost => {
+): T => {
   const reactionCounts = { ...prev.reactionCounts };
   const count = serverCounts[token] || 0;
   if (count > 0) reactionCounts[token] = count;
@@ -87,13 +88,35 @@ const reconcileReactionToken = (
   return { ...prev, reactionCounts, viewerReactions };
 };
 
+type ReactionTruth = Pick<PublicPost, 'id' | 'reactionCounts' | 'viewerReactions'>;
+
+const fetchReactionTruth = async (
+  api: ReturnType<typeof useApi>,
+  id: string
+): Promise<ReactionTruth | null> => {
+  // This is called only after a completed HTTP response, so a fetch started
+  // here cannot overtake that mutation. reactionOverlay still protects any
+  // newer concurrent tap while the fetch is in flight.
+  const startedAt = Date.now();
+  const response = await api.v1.things.get({ id });
+  if (!response?.post) return null;
+  const fresh = mergeReactionOverlay(startedAt, response.post as ReactionTruth);
+  return { id: fresh.id, reactionCounts: fresh.reactionCounts, viewerReactions: fresh.viewerReactions };
+};
+
+type CommentChange = PostComment | ((current: PostComment) => PostComment);
+
+const applyCommentChange = (current: PostComment, change: CommentChange): PostComment =>
+  typeof change === 'function' ? change(current) : change;
+
 // Compact everyone's-reactions summary for the merged react button: EVERY
 // token the viewer reacted with (your full set always shows), then the
 // crowd's top remaining tokens by count, capped at maxOthers. FB/X-style —
-// the button IS the counts, so one lead glyph per token keeps it tight
-// however wild the custom tokens get.
-// Joined with a zero-width space so adjacent leads can't shape into one glyph
-// (two lone regional indicators would otherwise merge into a flag).
+// the button IS the counts. Each token renders in FULL — a multi-emoji token
+// like 🤣🤣🙌 is ONE reaction and must read as one (truncating to a lead
+// glyph made multi-emoji reactions look like single-emoji ones).
+// Joined with a zero-width space so adjacent tokens can't shape into one
+// glyph (two lone regional indicators would otherwise merge into a flag).
 const reactionDisplayEmojis = (
   entries: Array<[string, number]>,
   viewerSet: Set<string>,
@@ -103,7 +126,7 @@ const reactionDisplayEmojis = (
     ...entries.filter(([token]) => viewerSet.has(token)),
     ...entries.filter(([token]) => !viewerSet.has(token)).slice(0, maxOthers),
   ]
-    .map(([token]) => splitEmojis(token)[0] || token)
+    .map(([token]) => token)
     .join('​');
 
 // The typed post renderer for the feed / profile columns. Renders text,
@@ -166,6 +189,20 @@ export type PostCardProps = {
 
 const authorName = (author: FeedAuthor | null) =>
   author?.displayName || author?.username || 'Anonymous 👻';
+
+// 1234 → "1.2k" — view counts stay one glyph-cluster wide however popular a
+// post gets (the other counters stay raw; they cap out far lower)
+const formatCompactCount = (count: number): string => {
+  if (count < 1000) return String(count);
+  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0).replace(/\.0$/, '')}k`;
+  return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+};
+
+const formatDwell = (ms: number): string => {
+  if (ms < 1000) return `${Math.round(ms / 100) / 10}s`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  return `${Math.round(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+};
 
 // Every post/comment timestamp is a permalink to its /post/:id page, the way
 // timestamps work on every major platform.
@@ -551,7 +588,7 @@ const ReplySkeleton = () => {
 // thread right here (the /post/:id permalink stays on the timestamp).
 const CommentRow = (props: {
   comment: PostComment;
-  onChanged: (next: PostComment) => void;
+  onChanged: (id: string, change: CommentChange) => void;
   onEngagement?: (event: EngagementEvent) => void;
   // 1 = a post's direct comment; grows down the thread. Only depth-1 rows
   // auto-open their preloaded replies (the default two-level view) — deeper
@@ -567,6 +604,7 @@ const CommentRow = (props: {
   const user = useCurrentUser();
   const lopu = useLopu();
   const { recent, pushRecent } = useRecentReactions();
+  const inFlightReactionTokensRef = React.useRef(new Set<string>());
   const replyFocus = React.useContext(ReplyFocusContext);
   const threadFocus = React.useContext(ThreadFocusContext);
   // at the cap, reveals hand over to the drill-down panel instead of nesting
@@ -633,24 +671,53 @@ const CommentRow = (props: {
     if (pending) return;
     const token = sanitizeReactionToken(rawToken);
     if (!token) return;
+    // The endpoint is a toggle, so two same-token requests cannot safely run
+    // concurrently. Ignore a duplicate tap until the first settles; distinct
+    // tokens still paint and save independently.
+    if (inFlightReactionTokensRef.current.has(token)) return;
+    inFlightReactionTokensRef.current.add(token);
 
     const adding = !viewerSet.has(token);
-    const optimistic = applyReactionToggle(comment, token, adding);
     // note every local mutation so background fetches snapshotted BEFORE it
     // merge through instead of clobbering (reactionOverlay contract)
-    noteLocalReactions(comment.id, optimistic.reactionCounts, optimistic.viewerReactions);
-    onChanged(optimistic);
+    onChanged(comment.id, (current) => {
+      const next = applyReactionToggle(current, token, adding);
+      noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
+      return next;
+    });
     if (adding) onEngagement?.({ thingId: comment.id, signal: 'react' });
+
+    const reconcileLocalToken = (reactionCounts: Record<string, number>, viewerReactions: string[]) => {
+      onChanged(comment.id, (current) => {
+        const next = reconcileReactionToken(current, token, reactionCounts, viewerReactions);
+        noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
+        return next;
+      });
+    };
 
     try {
       const resp = await api.v1.things.react({ id: comment.id, emoji: token });
-      noteLocalReactions(comment.id, resp.reactionCounts, resp.viewerReactions);
-      onChanged({ ...optimistic, reactionCounts: resp.reactionCounts, viewerReactions: resp.viewerReactions });
+      reconcileLocalToken(resp.reactionCounts, resp.viewerReactions);
       if (adding) pushRecent(token, resp.recentReactions);
     } catch (err: any) {
-      noteLocalReactions(comment.id, comment.reactionCounts, comment.viewerReactions);
-      onChanged(comment); // revert to the pre-toggle snapshot
-      lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
+      let reconciled = false;
+      if (shouldReconcileReactionFailure(err)) {
+        try {
+          const fresh = await fetchReactionTruth(api, comment.id);
+          if (fresh) {
+            reconcileLocalToken(fresh.reactionCounts, fresh.viewerReactions);
+            reconciled = true;
+          }
+        } catch {
+          // Outcome remains unknown; keep the optimistic copy and tell the
+          // viewer to refresh before retrying instead of guessing a rollback.
+        }
+      } else if (!isUnknownReactionFailure(err)) {
+        reconcileLocalToken(comment.reactionCounts, comment.viewerReactions);
+      }
+      lopu({ ...reactionFailureMessage(err, reconciled), status: 'error' });
+    } finally {
+      inFlightReactionTokensRef.current.delete(token);
     }
   };
 
@@ -764,7 +831,7 @@ const CommentRow = (props: {
     const pendingReply = buildPendingComment(user, comment.id, text);
     clearReplyDraft();
     setReplies((prev) => [...(prev || []), pendingReply]);
-    onChanged({ ...comment, commentCount: comment.commentCount + 1 });
+    onChanged(comment.id, (current) => ({ ...current, commentCount: current.commentCount + 1 }));
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
 
     try {
@@ -777,7 +844,7 @@ const CommentRow = (props: {
       });
     } catch (err: any) {
       setReplies((prev) => (prev || []).filter((reply) => reply.id !== pendingReply.id));
-      onChanged({ ...comment, commentCount: Math.max(0, comment.commentCount) });
+      onChanged(comment.id, (current) => ({ ...current, commentCount: Math.max(0, current.commentCount - 1) }));
       setReplyText(text); // give the draft back
       lopu({ title: err?.error || 'Reply did not send 😞', status: 'error' });
     }
@@ -792,13 +859,13 @@ const CommentRow = (props: {
       return next;
     });
     setRepliesOpen(true);
-    onChanged({ ...comment, commentCount: comment.commentCount + 1 });
+    onChanged(comment.id, (current) => ({ ...current, commentCount: current.commentCount + 1 }));
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
     setRichReplyOpen(false);
   };
 
-  const handleReplyChanged = (next: PostComment) => {
-    setReplies((prev) => (prev || []).map((reply) => (reply.id === next.id ? next : reply)));
+  const handleReplyChanged = (id: string, change: CommentChange) => {
+    setReplies((prev) => (prev || []).map((reply) => (reply.id === id ? applyCommentChange(reply, change) : reply)));
   };
 
   // parent comments carry the bigger avatar; replies step down (IG-style)
@@ -1075,6 +1142,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const expandSentRef = React.useRef(false);
 
   const { recent, pushRecent } = useRecentReactions();
+  const inFlightReactionTokensRef = React.useRef(new Set<string>());
 
   const isOwner = !!user && !!post.author && user.id === post.author.id;
   const circle = CIRCLE_META[post.visibility] || CIRCLE_META.public;
@@ -1108,12 +1176,17 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
     const token = sanitizeReactionToken(rawToken);
     if (!token) return;
+    // The API operation toggles rather than setting a desired value. Hold off
+    // duplicate same-token taps until the active request settles so response
+    // order can never invert that token; other tokens remain independent.
+    if (inFlightReactionTokensRef.current.has(token)) return;
+    inFlightReactionTokensRef.current.add(token);
 
     const adding = !viewerSet.has(token);
 
     // Optimistic + reconcile + revert all touch ONLY this token, applied to the
     // freshest post — so a concurrent reaction on another token isn't clobbered
-    // by a stale full snapshot (and out-of-order responses stay consistent).
+    // by a stale full snapshot.
     // Each updater notes its applied result in the reaction overlay so
     // background fetches snapshotted before the tap merge instead of
     // clobbering (idempotent under strict-mode double-invoke).
@@ -1124,22 +1197,39 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     });
     if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
 
-    try {
-      const resp = await api.v1.things.react({ id: post.id, emoji: token });
-      onChanged?.((prev) => {
-        const next = reconcileReactionToken(prev, token, resp.reactionCounts, resp.viewerReactions);
+    const reconcileLocalToken = (reactionCounts: Record<string, number>, viewerReactions: string[]) => {
+      onChanged?.((current) => {
+        const next = reconcileReactionToken(current, token, reactionCounts, viewerReactions);
         noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
         return next;
       });
+    };
+
+    try {
+      const resp = await api.v1.things.react({ id: post.id, emoji: token });
+      reconcileLocalToken(resp.reactionCounts, resp.viewerReactions);
       // record recents only on a successful ADD (server records the same)
       if (adding) pushRecent(token, resp.recentReactions);
     } catch (err: any) {
-      onChanged?.((prev) => {
-        const next = applyReactionToggle(prev, token, !adding); // undo just this token
-        noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
-        return next;
-      });
-      lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
+      let reconciled = false;
+      if (shouldReconcileReactionFailure(err)) {
+        try {
+          const fresh = await fetchReactionTruth(api, post.id);
+          if (fresh) {
+            reconcileLocalToken(fresh.reactionCounts, fresh.viewerReactions);
+            reconciled = true;
+          }
+        } catch {
+          // A completed 5xx or unreadable response can arrive after the write
+          // committed. Keep the optimistic copy when truth cannot be fetched;
+          // a blind undo can make the UI lie and a retry can reverse the tap.
+        }
+      } else if (!isUnknownReactionFailure(err)) {
+        reconcileLocalToken(post.reactionCounts, post.viewerReactions);
+      }
+      lopu({ ...reactionFailureMessage(err, reconciled), status: 'error' });
+    } finally {
+      inFlightReactionTokensRef.current.delete(token);
     }
   };
 
@@ -1180,8 +1270,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   );
 
   // reactions etc. on the focused row update the top-of-stack snapshot
-  const handleFocusedChanged = (next: PostComment) => {
-    setFocusStack((stack) => stack.map((entry, index) => (index === stack.length - 1 ? next : entry)));
+  const handleFocusedChanged = (id: string, change: CommentChange) => {
+    setFocusStack((stack) =>
+      stack.map((entry, index) => (index === stack.length - 1 && entry.id === id ? applyCommentChange(entry, change) : entry))
+    );
   };
 
   // optimistic: the comment renders the moment you hit send; the server copy
@@ -1230,10 +1322,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   };
 
   // a comment changed (reaction toggled) — swap it inside the freshest post
-  const handleCommentChanged = (next: PostComment) => {
+  const handleCommentChanged = (id: string, change: CommentChange) => {
     onChanged?.((prev) => ({
       ...prev,
-      comments: prev.comments.map((comment) => (comment.id === next.id ? next : comment))
+      comments: prev.comments.map((comment) => (comment.id === id ? applyCommentChange(comment, change) : comment))
     }));
   };
 
@@ -1562,6 +1654,34 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
           {/* outward share: native sheet / copy link */}
           <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
+
+          {/* public view stats (X-style, right edge): count = unique viewers;
+          the tooltip carries impressions + average time on screen */}
+          <Tooltip
+            label={`${post.viewCount || 0} unique ${(post.viewCount || 0) === 1 ? 'viewer' : 'viewers'} · ${
+              post.viewStats?.impressions || 0
+            } impressions · avg ${formatDwell(post.viewStats?.avgDwellMs || 0)} on screen`}
+            fontSize="xs"
+            borderRadius="8px"
+            hasArrow
+          >
+            <Flex
+              alignItems="center"
+              columnGap={1.5}
+              paddingX={2}
+              height="32px"
+              marginLeft="auto"
+              borderRadius="999px"
+              fontSize="sm"
+              fontWeight={600}
+              color={MUTED}
+              cursor="default"
+              aria-label={`${post.viewCount || 0} views`}
+            >
+              <Eye size={18} strokeWidth={2.2} />
+              <Text as="span">{formatCompactCount(post.viewCount || 0)}</Text>
+            </Flex>
+          </Tooltip>
         </Flex>
 
         {/* comments — the post's conversation, or a FOCUSED thread panel:

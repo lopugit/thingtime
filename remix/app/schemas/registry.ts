@@ -66,6 +66,11 @@ export type ThingtimeSchema = {
 export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'inherit'] as const;
 export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
+// Protected operational Things created when an admin migration throws. The
+// prefix is reserved so generic callers cannot squat a future diagnostic URL.
+export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
+export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
+
 // ---------------------------------------------------------------------------
 // ACL permissions. A thing's audience is an array of tt: entries — grants,
 // plus '-'-prefixed exclusions:
@@ -92,9 +97,10 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 // Evaluation: the MOST SPECIFIC entry matching the viewer decides (exclusions
 // win ties), so a broad '-tt:all' never locks out someone a narrower grant
 // admits. Specificity: tt:all < circles/groups < tt:user < tt:user/<name>.
-// Owners always view their own things regardless of acl. No relationship
-// graph exists yet, so circle entries currently resolve to the owner only —
-// matching the pre-acl behaviour of friends/family visibility.
+// Owners always view their own things regardless of acl. tt:userFriends
+// resolves against the real friend graph (accepted `friend` things — the read
+// path preloads the viewer's friend set into AclViewer.friendIds). No family
+// graph exists yet, so tt:userFamily still resolves to the owner only.
 
 export const ACL_ALL = 'tt:all';
 export const ACL_OWNER = 'tt:user';
@@ -150,7 +156,10 @@ export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: num
   return entries;
 };
 
-export type AclViewer = { id: string | null; username?: string | null } | null;
+// friendIds: shareIds of users the viewer has an ACCEPTED friendship with,
+// preloaded by the read path (one batched query per request) so acl checks
+// stay sync + pure. Absent set = no friend info loaded = circle denies.
+export type AclViewer = { id: string | null; username?: string | null; friendIds?: ReadonlySet<string> } | null;
 
 const aclSpecificity = (id: string): number => {
   if (id === ACL_ALL) return 0;
@@ -167,8 +176,12 @@ const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolea
     const username = id.slice(ACL_USER_PREFIX.length).toLowerCase();
     return !!viewer.username && viewer.username.toLowerCase() === username;
   }
-  // circles/groups: no relationship graph yet — owner only
-  if (id === ACL_FRIENDS || id === ACL_FAMILY) return viewer.id === ownerId;
+  // friends circle: real graph — the viewer sees it when they're an accepted
+  // friend of the owner (friendship is mutual, so the viewer's own friend set
+  // answers for any owner). Owner always counts as their own friend.
+  if (id === ACL_FRIENDS) return viewer.id === ownerId || viewer.friendIds?.has(ownerId) === true;
+  // family circle: no family graph yet — owner only
+  if (id === ACL_FAMILY) return viewer.id === ownerId;
   return false;
 };
 
@@ -241,6 +254,30 @@ export const SANDBOX_STORAGE_BYTES = 5 * 1024 * 1024;
 // bound. Newest N survive — multi-device keeps working up to the cap.
 export const MAX_APP_SESSIONS_PER_APP_USER = 10;
 
+// Messenger (see api/utils/messenger): chats, messages, communities, custom
+// emojis, follows. All bounds here so no write path can disagree about them.
+export const MAX_MESSAGE_CHARS = 4000;
+export const MAX_CHAT_NAME_CHARS = 80;
+export const MAX_CHAT_TOPIC_CHARS = 250;
+export const MAX_NICKNAME_CHARS = 40;
+// Direct adds per call and total members per group/channel. Communities are
+// the scale surface; a single chat stays a bounded fan-out for reads.
+export const MAX_CHAT_MEMBERS = 500;
+export const MAX_CHAT_MEMBERS_PER_ADD = 50;
+export const MAX_COMMUNITY_NAME_CHARS = 80;
+export const MAX_COMMUNITY_DESCRIPTION_CHARS = 500;
+export const MAX_SECTION_NAME_CHARS = 60;
+export const MAX_CHATS_PER_COMMUNITY = 500;
+export const MAX_COMMUNITIES_PER_USER = 50;
+// Custom emoji: the image is an inline data URI stored on its own thing doc
+// (the avatar pattern, FUNDAMENTALS §3 relational rule) — ~512KB binary ≈
+// 700K base64 chars. Names are the `:name:` vocabulary, Mongo-key-safe.
+export const MAX_EMOJI_NAME_CHARS = 32;
+export const MAX_EMOJI_DATA_URI_CHARS = 700 * 1024;
+export const MAX_EMOJIS_PER_SCOPE = 200;
+export const EMOJI_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]{1,31}$/;
+export const EMOJI_DATA_URI_PATTERN = /^data:image\/(gif|webp|png|apng|jpeg);base64,[A-Za-z0-9+/=]+$/;
+
 // Extended (the schema-free sidecar every thing carries) — see sanitizeExtended
 // below for the full story. Nesting has no validator rail — the only depth
 // bound is the database's own (MAX_STORABLE_NESTING below).
@@ -279,6 +316,8 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   rosters: 1,
   settings: 1,
   rateLimits: 1,
+  // post view telemetry: one doc per (postId, viewerKey) — see api/utils/things/views.ts
+  postViews: 1,
   email_events: 1,
   email_templates: 1,
   email_subscriptions: 1,
@@ -371,6 +410,13 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			system: true,
 			description: 'Version of the logical byte projection used for sizeBytes.'
+		},
+		{
+			name: 'expiresAt',
+			type: 'date',
+			required: false,
+			system: true,
+			description: 'Optional server-owned retention deadline for protected operational Things.'
 		},
     { name: 'createdAt', type: 'date', required: true, system: true, description: 'Creation time.' },
     { name: 'updatedAt', type: 'date', required: true, system: true, description: 'Last mutation time.' }
@@ -944,6 +990,44 @@ const serviceQuotaSchema: ThingtimeSchema = {
 	}
 };
 
+const migrationDiagnosticSchema: ThingtimeSchema = {
+	id: MIGRATION_DIAGNOSTIC_THINGTIME,
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Migration diagnostic',
+	summary: 'A short-lived, admin-owned report captured when a database migration throws.',
+	detail:
+		'Protected control-plane Thing written only by the admin migration runner after its lease is released. ' +
+		'The crystal contains bounded run metadata; the full redacted error is an opaque binary root field, read ' +
+		'only through the current-admin diagnostic endpoint. Version 2 may retain a bounded map of explicitly contextual MongoDB ObjectIds behind value-free references; each raw value requires fresh current-password confirmation through the closed reveal endpoint. Credentials and ambiguous values remain irreversible. It expires automatically and never enters storage billing.',
+	createdVia: 'POST /api/v1/admin/migrations/run (failure path)',
+	fields: [
+		{ name: 'diagnosticVersion', type: 'number', required: true, description: 'Diagnostic envelope version.' },
+		{ name: 'migrationId', type: 'string', required: true, max: 128, description: 'Registered migration id.' },
+		{
+			name: 'mode',
+			type: 'enum',
+			required: true,
+			values: ['run'],
+			description: 'Only real runs persist diagnostics; failed dry runs never create a diagnostic Thing.'
+		},
+		{ name: 'status', type: 'number', required: true, description: 'HTTP status returned by the migration endpoint.' },
+		{ name: 'outcome', type: 'enum', required: true, values: ['rejected', 'unknown'], description: 'Whether mutation outcome is known.' },
+		{ name: 'summary', type: 'string', required: true, max: 2048, description: 'Safe operator-facing failure summary.' },
+		{ name: 'capturedAt', type: 'date', required: true, description: 'Diagnostic capture time.' }
+	],
+	example: {
+		diagnosticVersion: 2,
+		migrationId: 'backfill-user-storage-accounting',
+		mode: 'run',
+		status: 500,
+		outcome: 'unknown',
+		summary: 'Migration stopped before completion.',
+		capturedAt: '2026-08-08T00:00:00.000Z'
+	}
+};
+
 const accountLinkSchema: ThingtimeSchema = {
   id: 'account-link',
   version: 1,
@@ -971,6 +1055,150 @@ const accountLinkSchema: ThingtimeSchema = {
     role: 'owner',
     createdBy: '664f1c2a9d3e5b0000000001'
   }
+};
+
+// ---------------------------------------------------------------------------
+// Social graph + notifications. All three kinds are PROTECTED (see
+// PROTECTED_THINGTIME): only their dedicated endpoints/utils mint them.
+
+// One follow edge: ownerId follows targetId (a user thing's shareId). No
+// approval involved. crystal.follow is a constant marker so the unique
+// partial index (targetId, ownerId where crystal.follow exists) can scope to
+// follow docs — same trick as the reaction dedup index.
+const followThingSchema: ThingtimeSchema = {
+  id: 'follow',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Follow',
+  summary: 'A one-way follow edge: the owner follows the target user. No approval needed.',
+  detail:
+    'Created/removed by POST /api/v1/users/follow { userId }. ownerId is the follower, targetId ' +
+    'the followed user\'s id. Always private to the follower (acl ["tt:user"]); follower/' +
+    'following counts and lists are served by /api/v1/users/relationships and ' +
+    '/api/v1/users/connections. The generic things CRUD refuses this kind.',
+  requiresTarget: true,
+  createdVia: 'POST /api/v1/users/follow',
+  fields: [
+    { name: 'follow', type: 'boolean', required: true, description: 'Always true — dedup index marker.' }
+  ],
+  example: { follow: true }
+};
+
+// One friendship per unordered pair: ownerId sent the request, targetId
+// received it. status flips pending → accepted; decline/cancel/unfriend
+// deletes the doc. crystal.friendKey = '<minId>~<maxId>' makes the pair
+// unique regardless of direction (unique partial index).
+const friendThingSchema: ThingtimeSchema = {
+  id: 'friend',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Friendship',
+  summary: 'A friendship (or pending friend request) between two users — one doc per pair.',
+  detail:
+    'Driven by POST /api/v1/users/friend { userId, intent }. ownerId is the requester, targetId ' +
+    'the recipient; crystal.status is pending until the recipient accepts. Accepted friendships ' +
+    'power the tt:userFriends acl circle (friends-only posts). Private to the pair (served via ' +
+    'the users endpoints); the generic things CRUD refuses this kind.',
+  requiresTarget: true,
+  createdVia: 'POST /api/v1/users/friend',
+  fields: [
+    { name: 'status', type: 'enum', required: true, values: ['pending', 'accepted'], description: 'Request state.' },
+    { name: 'friendKey', type: 'string', required: true, description: 'Canonical unordered pair key <minId>~<maxId> — unique per pair.' }
+  ],
+  example: { status: 'accepted', friendKey: '664f1c2a9d3e5b0012345678~664f1c2a9d3e5b0012345679' }
+};
+
+// Per-type notification switches users can flip in Settings → Notifications.
+// 'groups' is reserved for the future groups feature (the pref persists, no
+// emitter exists yet). Reads ALWAYS filter by the recipient's prefs, so a
+// fanned-out notification written before a pref flip stays hidden.
+export const NOTIFICATION_TYPES = [
+  'friend-request',
+  'friend-accepted',
+  'new-follower',
+  'post-from-followed',
+  'post-from-friend',
+  'comment',
+  'reply',
+  'reaction',
+  'share',
+  'groups'
+] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// Email-channel notification switches. Every bell type can also send an email,
+// plus email-only types (weekly-summary) that never mint a bell notification.
+export const EMAIL_ONLY_NOTIFICATION_TYPES = ['weekly-summary'] as const;
+export const EMAIL_NOTIFICATION_TYPES = [...NOTIFICATION_TYPES, ...EMAIL_ONLY_NOTIFICATION_TYPES] as const;
+export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
+
+// High-volume types whose EMAIL channel defaults OFF (the bell stays ON): a
+// busy follow graph would otherwise turn every post into an email.
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend'];
+
+export type NotificationChannelMasters = { push: boolean; email: boolean };
+export type NormalizedNotificationPrefs = {
+  push: Record<string, boolean>;
+  email: Record<string, boolean>;
+  masters: NotificationChannelMasters;
+};
+
+// Stored shape (meta.notificationPrefs): the flat { [type]: boolean } keys are
+// the push/in-app channel — unchanged from the original shape, so prefs saved
+// before channels existed keep working with zero migration — plus nested
+// email: { [type]: boolean } and masters: { push, email }. Absent = ON,
+// except EMAIL_DEFAULT_OFF_TYPES whose email channel is opt-in. Shared by the
+// server (write/read gating) and the settings UI (defaults) so both sides
+// agree on what absent keys mean. Also accepts an already-normalized matrix
+// (nested push object) so the wire shape round-trips: normalize(normalize(x))
+// === normalize(x), which lets the client cache the GET response as-is.
+export const normalizeNotificationPrefs = (
+  stored: Record<string, any> | null | undefined
+): NormalizedNotificationPrefs => {
+  const source = stored && typeof stored === 'object' ? stored : {};
+  const emailStored = source.email && typeof source.email === 'object' ? source.email : {};
+  const mastersStored = source.masters && typeof source.masters === 'object' ? source.masters : {};
+  const pushStored = source.push && typeof source.push === 'object' ? source.push : source;
+  const push: Record<string, boolean> = {};
+  for (const type of NOTIFICATION_TYPES) push[type] = pushStored[type] !== false;
+  const email: Record<string, boolean> = {};
+  for (const type of EMAIL_NOTIFICATION_TYPES) {
+    email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type)
+      ? emailStored[type] === true
+      : emailStored[type] !== false;
+  }
+  return {
+    push,
+    email,
+    masters: { push: mastersStored.push !== false, email: mastersStored.email !== false }
+  };
+};
+
+const notificationThingSchema: ThingtimeSchema = {
+  id: 'notification',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Notification',
+  summary: 'A server-minted in-app notification for one recipient (ownerId).',
+  detail:
+    'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
+    'comments, replies, reacts, shares, or (fan-out, capped) posts while you follow them. ' +
+    'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
+    'flips when read. Listed via GET /api/v1/notifications (filtered by the recipient\'s ' +
+    'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +
+    '["tt:user"]; the generic things CRUD refuses this kind.',
+  createdVia: 'server-side emission (social/engagement events)',
+  fields: [
+    { name: 'type', type: 'enum', required: true, values: [...NOTIFICATION_TYPES], description: 'Notification type (drives prefs + copy).' },
+    { name: 'actorId', type: 'id', required: true, description: 'The user whose action triggered this.' },
+    { name: 'actorName', type: 'string', required: false, description: 'Actor display name snapshot.' },
+    { name: 'postId', type: 'id', required: false, description: 'Related post for click-through.' },
+    { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview.' }
+  ],
+  example: { type: 'new-follower', actorId: '664f1c2a9d3e5b0012345678', actorName: 'Rick Deckard' }
 };
 
 const sessionSchema: ThingtimeSchema = {
@@ -1256,6 +1484,215 @@ const appDataSchema: ThingtimeSchema = {
 };
 
 // ---------------------------------------------------------------------------
+// Messenger kinds — chats, messages, communities, custom emojis, follows.
+// All of them are written ONLY through /api/v1/chats*, /api/v1/communities*,
+// /api/v1/emojis and /api/v1/users/follow (no generic-route sanitizers on
+// purpose: membership, roles and request states are server-derived and must
+// not be forgeable through /api/v1/things). Everything is private plumbing
+// (acl ["tt:user"]) — visibility is decided by chat/community MEMBERSHIP,
+// enforced in the messenger utils, never by the generic acl walk.
+
+const communitySchema: ThingtimeSchema = {
+  id: 'community',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Community',
+  summary: 'A Slack-style workspace that groups channels, members and custom emojis.',
+  detail:
+    'Created through POST /api/v1/communities. Channels (chat things with chatType "channel") ' +
+    'and sidebar sections link back via targetId; membership is relational community-member ' +
+    'things (never an embedded member array). Invites mint community-invite things with ' +
+    'single-use-or-capped codes.',
+  createdVia: 'POST /api/v1/communities',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: MAX_COMMUNITY_NAME_CHARS, description: 'Community name.' },
+    { name: 'description', type: 'string', required: false, max: MAX_COMMUNITY_DESCRIPTION_CHARS, description: 'Optional description.' }
+  ],
+  example: { name: 'Rainbow Makers', description: 'Everything rainbow.' }
+};
+
+const communityMemberSchema: ThingtimeSchema = {
+  id: 'community-member',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Community member',
+  summary: 'One user\'s membership of one community (relational child doc).',
+  detail:
+    'targetId = the community shareId, ownerId = the member. Uniqueness rides the single ' +
+    'crystal.memberKey field (`<communityId>:<userId>`, partial unique index) — the reaction-index ' +
+    'pattern. Roles: owner > admin > member.',
+  createdVia: 'POST /api/v1/communities (creator) / POST /api/v1/communities/join (invite code)',
+  fields: [
+    { name: 'memberKey', type: 'string', required: true, description: 'Unique `<communityId>:<userId>` pair key.' },
+    { name: 'role', type: 'enum', required: true, values: ['owner', 'admin', 'member'], description: 'Community role.' }
+  ],
+  example: { memberKey: 'c0ffee…:5eed…', role: 'member' }
+};
+
+const communityInviteSchema: ThingtimeSchema = {
+  id: 'community-invite',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Community invite',
+  summary: 'An invite code that lets a user join a community.',
+  detail:
+    'targetId = the community shareId. The code is server-minted, unique via a partial index on ' +
+    'crystal.inviteCode, optionally expiring and use-capped; redemption is atomic (uses is ' +
+    'incremented with a guard, never read-modify-write).',
+  createdVia: 'POST /api/v1/communities/invites',
+  fields: [
+    { name: 'inviteCode', type: 'string', required: true, description: 'Server-minted redemption code.' },
+    { name: 'uses', type: 'number', required: true, description: 'Times redeemed so far.' },
+    { name: 'maxUses', type: 'number', required: false, description: 'Redemption cap (null = unlimited).' },
+    { name: 'expiresAt', type: 'string', required: false, description: 'ISO expiry (null = never).' },
+    { name: 'revoked', type: 'boolean', required: false, description: 'True once revoked by an admin.' }
+  ],
+  example: { inviteCode: 'tt-inv-8f2a4c3d9e5b', uses: 0, maxUses: 25 }
+};
+
+const chatSectionSchema: ThingtimeSchema = {
+  id: 'chat-section',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Chat section',
+  summary: 'A named sidebar group that community channels can be filed under.',
+  detail: 'targetId = the community shareId. Pure organisation — deleting a section un-files its channels.',
+  createdVia: 'POST /api/v1/communities/sections',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: MAX_SECTION_NAME_CHARS, description: 'Section name.' },
+    { name: 'order', type: 'number', required: true, description: 'Sort position within the sidebar.' }
+  ],
+  example: { name: 'Announcements', order: 0 }
+};
+
+const chatSchema: ThingtimeSchema = {
+  id: 'chat',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Chat',
+  summary: 'A conversation: a community channel, a standalone group, or a direct message.',
+  detail:
+    'Created through POST /api/v1/chats. Membership, roles, nicknames and read receipts are ' +
+    'relational chat-member things; messages are relational chat-message things. DMs are deduped ' +
+    'by crystal.dmKey (sorted participant ids, partial unique index). Channels link their ' +
+    'community via targetId + crystal.communityId and can be public (any community member may ' +
+    'join) or private (admins add).',
+  createdVia: 'POST /api/v1/chats',
+  fields: [
+    { name: 'name', type: 'string', required: false, max: MAX_CHAT_NAME_CHARS, description: 'Chat name (null for DMs — the UI shows the other member).' },
+    { name: 'topic', type: 'string', required: false, max: MAX_CHAT_TOPIC_CHARS, description: 'Channel topic line.' },
+    { name: 'chatType', type: 'enum', required: true, values: ['channel', 'group', 'dm'], description: 'Conversation shape.' },
+    { name: 'communityId', type: 'id', required: false, description: 'Owning community shareId (channels only).' },
+    { name: 'sectionId', type: 'id', required: false, description: 'Sidebar section shareId (channels only).' },
+    { name: 'channelVisibility', type: 'enum', required: false, values: ['public', 'private'], description: 'Channel joinability within its community (channels only, default public).' },
+    { name: 'dmKey', type: 'string', required: false, description: 'Sorted participant-id pair key deduping DMs.' }
+  ],
+  example: { name: 'general', topic: 'Anything goes', chatType: 'channel', channelVisibility: 'public' }
+};
+
+const chatMemberSchema: ThingtimeSchema = {
+  id: 'chat-member',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Chat member',
+  summary: 'One user\'s membership of one chat — role, nickname, request state and read receipt.',
+  detail:
+    'targetId = the chat shareId, ownerId = the member. Unique per (chat, user) via ' +
+    'crystal.memberKey. state tracks the Messenger request flow: active, pending (message ' +
+    'request awaiting accept), left, declined. requestOrigin buckets pending DMs into ' +
+    '"follower" (the sender follows you) vs "unknown". lastReadMessageId/lastReadAt are the ' +
+    'read receipt — one atomic doc per member, never an array on the chat.',
+  createdVia: 'POST /api/v1/chats / POST /api/v1/chats/members',
+  fields: [
+    { name: 'memberKey', type: 'string', required: true, description: 'Unique `<chatId>:<userId>` pair key.' },
+    { name: 'role', type: 'enum', required: true, values: ['owner', 'admin', 'member'], description: 'Chat role.' },
+    { name: 'nickname', type: 'string', required: false, max: MAX_NICKNAME_CHARS, description: 'Per-chat nickname (Messenger style).' },
+    { name: 'state', type: 'enum', required: true, values: ['active', 'pending', 'left', 'declined'], description: 'Membership lifecycle / message-request state.' },
+    { name: 'requestOrigin', type: 'enum', required: false, values: ['follower', 'unknown'], description: 'Message-request bucket while pending.' },
+    { name: 'lastReadMessageId', type: 'id', required: false, description: 'Newest message this member has read.' },
+    { name: 'lastReadAt', type: 'string', required: false, description: 'ISO timestamp of that read (drives unread counts + seen-by).' },
+    { name: 'muted', type: 'boolean', required: false, description: 'Suppress notifications for this chat.' }
+  ],
+  example: { memberKey: 'cha7…:5eed…', role: 'member', state: 'active' }
+};
+
+const chatMessageSchema: ThingtimeSchema = {
+  id: 'chat-message',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Chat message',
+  summary: 'One message in a chat — the post shape adapted for conversations.',
+  detail:
+    'targetId = the chat shareId. Deliberately NOT a post kind, so messages can never surface ' +
+    'in feeds or profiles; visibility is chat membership, enforced by the messenger endpoints. ' +
+    'threadRootId threads Slack-style replies under a root message; replyToId quotes a message ' +
+    'Messenger-style. Deleting is soft (deletedAt + text cleared) so threads keep their shape. ' +
+    'System events (member added, renamed…) are messages with systemType. Reactions are the ' +
+    'standard reaction things targeting the message, including custom `custom:<emoji id>` tokens.',
+  createdVia: 'POST /api/v1/chats/messages',
+  fields: [
+    { name: 'text', type: 'string', required: true, max: MAX_MESSAGE_CHARS, description: `Message text, max ${MAX_MESSAGE_CHARS} chars. :name: tokens render as custom emojis.` },
+    { name: 'threadRootId', type: 'id', required: false, description: 'Root message shareId when this is a thread reply.' },
+    { name: 'replyToId', type: 'id', required: false, description: 'Quoted message shareId (inline reply).' },
+    { name: 'editedAt', type: 'string', required: false, description: 'ISO timestamp of the last edit.' },
+    { name: 'deletedAt', type: 'string', required: false, description: 'ISO soft-delete timestamp (text is cleared).' },
+    { name: 'systemType', type: 'enum', required: false, values: ['member-added', 'member-left', 'member-removed', 'chat-renamed', 'chat-created', 'topic-changed'], description: 'Set on system event messages.' },
+    { name: 'systemMeta', type: 'record', required: false, description: 'Event payload for system messages ({ subjectId, value… }).' }
+  ],
+  example: { text: 'hello from the messenger 👋' }
+};
+
+const customEmojiSchema: ThingtimeSchema = {
+  id: 'custom-emoji',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Custom emoji',
+  summary: 'An uploaded emoji/gif usable in chat reactions and messages.',
+  detail:
+    'One thing per emoji (relational, FUNDAMENTALS §3 — never an array on the community). The ' +
+    'image is an inline base64 data URI (gif/webp/png/apng/jpeg, ≤' +
+    `${Math.round(MAX_EMOJI_DATA_URI_CHARS / 1024)}K chars), the avatar-storage pattern. Scope is ` +
+    'a community (targetId set) or personal (targetId null); names are unique per scope via ' +
+    'crystal.emojiKey. Reaction tokens reference emojis by id (`custom:<shareId>`), so renames ' +
+    'never orphan reactions.',
+  createdVia: 'POST /api/v1/emojis',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: MAX_EMOJI_NAME_CHARS, description: 'Lowercase [a-z0-9_-] name, rendered as :name:.' },
+    { name: 'emojiKey', type: 'string', required: true, description: 'Unique `<scope>:<name>` key (scope = communityId or user:<userId>).' },
+    { name: 'image', type: 'string', required: true, description: 'Inline data:image/... base64 URI.' },
+    { name: 'animated', type: 'boolean', required: false, description: 'True for gif/apng uploads.' }
+  ],
+  example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', image: 'data:image/gif;base64,R0lGOD…', animated: true }
+};
+
+const followSchema: ThingtimeSchema = {
+  id: 'follow',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Follow',
+  summary: 'One user following another (the start of the relationship graph).',
+  detail:
+    'ownerId = the follower, targetId = the followed user\'s shareId; unique per pair via ' +
+    'crystal.followKey. Powers the messenger request buckets (a DM from someone you follow ' +
+    'lands normally; from a follower it queues as a "follower" request; otherwise "unknown"). ' +
+    'The acl circle entries (tt:userFriends…) are designed to plug into this graph later.',
+  createdVia: 'POST /api/v1/users/follow',
+  fields: [
+    { name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }
+  ],
+  example: { followKey: '5eed…:c0ffee…' }
+};
+
+// ---------------------------------------------------------------------------
 // System kinds — the satellite collections collapsing into things (see
 // claude-todo/12-everything-is-a-thing-collections.md). These kinds are
 // PROTECTED: the generic /api/v1/things CRUD unconditionally refuses them.
@@ -1272,6 +1709,13 @@ const appDataSchema: ThingtimeSchema = {
 // pricing, quota assignments, ownership links, and admission ledgers). Editing
 // any through generic CRUD would be privilege escalation, credential forgery,
 // or a quota bypass.
+// follow/friend/notification are protected for a different reason than the
+// system kinds above: they are server-owned state machines. A forged `friend`
+// doc would fake an ACL friendship (friends-only posts leak), a forged
+// `follow` would skip dedup + notification emission, and notifications are
+// minted only by the server on someone ELSE's action. Their dedicated
+// endpoints (/api/v1/users/follow, /api/v1/users/friend, notifications utils)
+// do direct inserts.
 export const PROTECTED_THINGTIME = [
   'user',
   'theme',
@@ -1282,9 +1726,29 @@ export const PROTECTED_THINGTIME = [
   'subscription',
   'account-link',
 	'app-storage',
-	'service-quota'
+	'service-quota',
+  MIGRATION_DIAGNOSTIC_THINGTIME,
+  'follow',
+  'friend',
+  'notification'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
+
+// Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
+// already refused by the missing crystal sanitizers, and DELETE must be too:
+// a chat thing "owned" by its creator is one doc standing in for EVERY
+// member's conversation, so the generic owner-may-delete rule cannot apply.
+export const MESSENGER_THINGTIME = [
+  'community',
+  'community-member',
+  'community-invite',
+  'chat-section',
+  'chat',
+  'chat-member',
+  'chat-message',
+  'custom-emoji',
+  'follow'
+] as const;
 
 const userThingSchema: ThingtimeSchema = {
   id: 'user',
@@ -1400,6 +1864,23 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   accountLinkSchema,
   appStorageLedgerSchema,
 	serviceQuotaSchema,
+  migrationDiagnosticSchema,
+  // social graph + notifications (protected, server-minted). The `follow`
+  // kind registers ONCE, below with the messenger family: followSchema is the
+  // crystal.followKey shape POST /api/v1/users/follow actually mints, which
+  // supersedes the earlier followThingSchema (crystal.follow marker) draft.
+  friendThingSchema,
+  notificationThingSchema,
+  // messenger kinds (dedicated endpoints only — no generic sanitizers)
+  communitySchema,
+  communityMemberSchema,
+  communityInviteSchema,
+  chatSectionSchema,
+  chatSchema,
+  chatMemberSchema,
+  chatMessageSchema,
+  customEmojiSchema,
+  followSchema,
   // system kinds (collections collapsing into things — dual-era)
   userThingSchema,
   themeThingSchema,
