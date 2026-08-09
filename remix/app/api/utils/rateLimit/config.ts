@@ -125,7 +125,21 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // /crypto password hasher: anonymous and pure (no DB), but bcrypt burns
   // ~100ms of CPU per call by design, so the budget is tight per IP — the
   // compute is the abuse surface, not the hash it returns
-  'crypto.hashPassword': { limit: 20, windowMs: 60_000, enabled: true }
+  'crypto.hashPassword': { limit: 20, windowMs: 60_000, enabled: true },
+  // Messenger. Sending is chattier than posting, so it gets a higher window
+  // than things.write; membership/chat mutations share one bounded bucket.
+  'chats.message': { limit: 120, windowMs: 60_000, enabled: true },
+  'chats.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // message reactions mirror things.react but chats toggle faster in practice
+  'chats.react': { limit: 120, windowMs: 60_000, enabled: true },
+  // read receipts fire on every focused chat scroll — cheap single-doc updates,
+  // but still bounded so a stuck client can't hammer the collection
+  'chats.read': { limit: 240, windowMs: 60_000, enabled: true },
+  // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
+  // interactive action, so the budget is per-hour like app registration
+  'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
+  // follow/unfollow toggles (also classifies messenger requests)
+  'users.follow': { limit: 60, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

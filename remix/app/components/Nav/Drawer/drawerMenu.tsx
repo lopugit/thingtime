@@ -52,6 +52,16 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'messages',
+		label: 'Messages',
+		icon: '💬',
+		to: '/messages',
+		children: [
+			{ id: 'messages-home', label: 'Messages', icon: '💬', to: '/messages', authOnly: true },
+			{ id: 'messages-requests', label: 'Requests', icon: '💌', to: '/messages?view=requests', authOnly: true }
+		]
+	},
+	{
 		id: 'search',
 		label: 'Search',
 		icon: '🔍',

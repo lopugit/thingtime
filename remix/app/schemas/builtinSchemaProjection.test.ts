@@ -80,6 +80,15 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   friend: ['status', 'friendKey'],
   notification: ['type', 'actorId', 'actorName', 'postId', 'preview'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
+  community: ['name', 'description'],
+  'community-member': ['memberKey', 'role'],
+  'community-invite': ['inviteCode', 'uses', 'maxUses', 'expiresAt', 'revoked'],
+  'chat-section': ['name', 'order'],
+  chat: ['name', 'topic', 'chatType', 'communityId', 'sectionId', 'channelVisibility', 'dmKey'],
+  'chat-member': ['memberKey', 'role', 'nickname', 'state', 'requestOrigin', 'lastReadMessageId', 'lastReadAt', 'muted'],
+  'chat-message': ['text', 'threadRootId', 'replyToId', 'editedAt', 'deletedAt', 'systemType'],
+  'custom-emoji': ['name', 'emojiKey', 'image', 'animated'],
+  follow: ['followKey'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
   'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt'], // weights: record → dropped
