@@ -2,6 +2,7 @@ import { getMongoUri } from './config';
 import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } from './endpoint';
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
+import { MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -72,6 +73,53 @@ const getClientCachedFor = (uri: string, isHome: boolean) => {
   return entry;
 };
 
+// Run one logical mutation against MongoDB's transaction retry contract. The
+// driver's withTransaction helper retries TransientTransactionError callbacks
+// and UnknownTransactionCommitResult commits with the same session. Storage
+// accounting deliberately has no non-transactional fallback: allowing a
+// content write when one of its ledgers could not commit would create a silent
+// under-count. Atlas replica sets support transactions; an unsupported local
+// deployment therefore fails the write loudly instead of weakening the
+// invariant.
+//
+// Sessions are CLIENT-bound: a session only works with collection handles from
+// the MongoClient that started it. The two variants mirror the collection
+// getters — withMongoTransaction follows the request's ACTIVE data plane
+// (exactly like getCollection/getThingtimeDb, so data-plane transactions stay
+// on the override's client when one is active), and withHomeMongoTransaction
+// is pinned to the home deployment (like getHomeCollection) for
+// identity/control-plane transactions, which must keep working while a
+// data-plane override is active on the request. A transaction cannot span both
+// planes: with an override active, home and active are different clients.
+const runMongoTransaction = async <T>(client: any, work: (session: any) => Promise<T>): Promise<T> => {
+	const session = client.startSession();
+	let result!: T;
+	try {
+		await session.withTransaction(
+			async () => {
+				result = await work(session);
+			},
+			{
+				readConcern: { level: 'snapshot' },
+				writeConcern: { w: 'majority' },
+				readPreference: 'primary'
+			}
+		);
+		return result;
+	} finally {
+		await session.endSession();
+	}
+};
+
+export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
+	runMongoTransaction(
+		await (isCustomMongoEndpointActive() ? getClientCachedFor(getActiveMongoUri(), false) : getClientCachedFor(getMongoUri(), true)),
+		work
+	);
+
+export const withHomeMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
+	runMongoTransaction(await getClientCachedFor(getMongoUri(), true), work);
+
 // Issues the last adoption pass could not resolve (rename unsupported /
 // unauthorized). Surfaced through the admin migrations census so a split
 // (legacy collection still holding data beside its versioned successor) is
@@ -91,9 +139,7 @@ export const getAdoptionIssues = () => [...adoptionIssues];
 // migration folds the residue forward instead. Rename failures are recorded,
 // never thrown — a degraded adoption must not take the whole API down.
 const adoptVersionedCollections = async (db: any) => {
-  const names = new Set<string>(
-    (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name)
-  );
+  const names = new Set<string>((await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name));
   const issues: string[] = [];
   for (const logical of COLLECTIONS) {
     const physical = physicalCollectionName(logical);
@@ -155,16 +201,53 @@ export const getThingtimeDb = async () => {
   return db;
 };
 
+// Transactions (storage accounting, registration's subscription-ledger seed)
+// require a REPLICA SET: a standalone mongod rejects them with
+// IllegalOperation, and there is deliberately no non-transactional fallback
+// (see withMongoTransaction). Atlas is always a replica set; a local dev
+// mongod usually is not — and every transactional flow (registration, service
+// accounts, storage-accounted writes) then 500s. Probe once at boot and say
+// so loudly with the exact fix, instead of letting the first registration
+// surface a bare IllegalOperation.
+let transactionSupportProbed = false;
+export const warnIfTransactionsUnsupported = async (): Promise<void> => {
+  if (transactionSupportProbed) return;
+  transactionSupportProbed = true;
+  try {
+    const db = await getHomeThingtimeDb();
+    const hello = await db.admin().command({ hello: 1 });
+    if (!hello?.setName) {
+      console.error(
+        '[mongodb] The connected MongoDB is STANDALONE — multi-document transactions (registration, service accounts, storage-accounted writes) WILL FAIL with IllegalOperation.\n' +
+          '[mongodb] Fix: run it as a single-node replica set. Add to mongod.conf (brew: /opt/homebrew/etc/mongod.conf):\n' +
+          '[mongodb]     replication:\n' +
+          '[mongodb]       replSetName: rs0\n' +
+          '[mongodb] restart mongod, then initiate ONCE with an explicit localhost member host:\n' +
+          `[mongodb]     mongosh --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'`
+      );
+    }
+  } catch (err: any) {
+    // A replSet-configured but NOT-YET-INITIATED mongod cannot serve normal
+    // operations, so the connect/hello above fails instead of answering. Name
+    // that state (conditionally — the same error also covers mongod-down).
+    const text = String(err?.message || err);
+    if (/NotYetInitialized|no replset config|Server selection timed out/i.test(text)) {
+      console.error(
+        '[mongodb] Could not reach a usable MongoDB. If mongod is running and was recently switched to replSetName without initiating, run ONCE:\n' +
+          `[mongodb]     mongosh --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'`
+      );
+    }
+  }
+};
+
 // THE way to a collection handle: logical name in, current-generation physical
 // collection out. Every read and write in the codebase goes through one of
 // these two (or a named getter below), so nothing can touch a stale generation
 // by accident. getCollection follows the request's ACTIVE endpoint (the open
 // data plane); getHomeCollection is pinned to the home deployment and is what
 // every identity / auth / control-plane getter uses.
-export const getCollection = async (logical: string) =>
-  (await getThingtimeDb()).collection(physicalCollectionName(logical));
-export const getHomeCollection = async (logical: string) =>
-  (await getHomeThingtimeDb()).collection(physicalCollectionName(logical));
+export const getCollection = async (logical: string) => (await getThingtimeDb()).collection(physicalCollectionName(logical));
+export const getHomeCollection = async (logical: string) => (await getHomeThingtimeDb()).collection(physicalCollectionName(logical));
 
 export const getUsersCollection = async () => getHomeCollection('users');
 export const getSessionsCollection = async () => getHomeCollection('sessions');
@@ -198,6 +281,10 @@ export const getEmailIdentitiesCollection = async () => getHomeCollection('email
 // TTL-reaped (mirrors emailVerifications).
 export const getPasswordResetsCollection = async () => getHomeCollection('passwordResets');
 export const getAuthOtpsCollection = async () => getHomeCollection('authOtps');
+// Post view telemetry: one doc per (postId, viewerKey) — home-pinned so view
+// counts (an anti-manipulation surface) stay under platform control even when
+// a request carries a custom data-endpoint override.
+export const getPostViewsCollection = async () => getHomeCollection('postViews');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -271,7 +358,10 @@ const taggedCollection = (collection: any, logical: string) => ({
       return await collection.createIndex(keys, options);
     } catch (err: any) {
       const name =
-        options?.name || Object.entries(keys).map(([field, dir]) => `${field}_${dir}`).join('_');
+				options?.name ||
+				Object.entries(keys)
+					.map(([field, dir]) => `${field}_${dir}`)
+					.join('_');
       if (err && typeof err === 'object') err.indexBeingBuilt = `${logical}.${name}`;
       throw err;
     }
@@ -309,16 +399,23 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     col.createIndex({ thingtime: 1, 'crystal.username': 1 }),
     // admin roster: a partial index over just the (rare) admin user things,
     // so listAdmins is a few-entry scan, not a full-user-base fetch+filter
-    col.createIndex(
-      { secureAdmin: 1 },
-      { partialFilterExpression: { secureAdmin: true } }
-    ),
+		col.createIndex({ secureAdmin: 1 }, { partialFilterExpression: { secureAdmin: true } }),
     col.createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
     // embed SDK: listEmbeddedThings pages a single owner's `kind: 'embed'`
     // things by most-recently-updated, so that sort needs its own index
     col.createIndex({ kind: 1, ownerId: 1, updatedAt: -1, shareId: 1 }),
+    // Admin user/app snapshots filter by thingtime without ownerId, then
+    // take a small newest-first window with a stable shareId tiebreaker.
+    col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // Canonical account-storage reconciliation: content allocations are
+    // grouped by owner and summed from their exact versioned byte stamps.
+    // Control-plane Things never enter this partial index.
+    col.createIndex(
+      { storageClass: 1, ownerId: 1, storageAccountingVersion: 1, sizeBytes: 1 },
+      { partialFilterExpression: { storageClass: 'content' } }
+    ),
     col.createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
     // schema-usage counting (schemas/browse decorate): data things are
     // grouped by crystal.schemaId (stamped) with a crystal.schema name
@@ -365,26 +462,77 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       },
       ['targetId_1_ownerId_1_crystal.emoji_1']
     ),
+    // One follow edge per (followed, follower): toggle-on is an idempotent
+    // upsert, deduped under races. Only follow things carry crystal.follow
+    // (constant true) — same marker-field trick as the reaction index, since
+    // partial filters can't reliably scope on the multikey thingtime array.
+    createIndexReplacing(
+      col,
+      { targetId: 1, ownerId: 1 },
+      {
+        name: 'things_follow_unique',
+        unique: true,
+        partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.follow': { $exists: true } }
+      }
+    ),
+    // One friendship doc per unordered user pair, regardless of who asked:
+    // crystal.friendKey is '<minId>~<maxId>', written only by the friend
+    // endpoint. Uniqueness kills duplicate/crossed requests structurally.
+    createIndexReplacing(
+      col,
+      { 'crystal.friendKey': 1 },
+      {
+        name: 'things_friend_unique',
+        unique: true,
+        partialFilterExpression: { 'crystal.friendKey': { $exists: true } }
+      }
+    ),
+    // (Notification list/unread queries are served by the general
+    // { thingtime, ownerId, createdAt desc, shareId } index above.)
     // Legacy relational era (kind:'reaction'/'comment' docs written by the
     // pre-unification relational model): aggregation + dedup indexes stay
     // until the things migration converts those docs to thingtime things.
     col.createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
-    col.createIndex(
-      { parentId: 1, ownerId: 1, token: 1 },
-      { unique: true, partialFilterExpression: { kind: 'reaction' } }
-    ),
-    col.createIndex(
-      { commentId: 1 },
-      { unique: true, partialFilterExpression: { kind: 'comment' } }
-    ),
+		col.createIndex({ parentId: 1, ownerId: 1, token: 1 }, { unique: true, partialFilterExpression: { kind: 'reaction' } }),
+		col.createIndex({ commentId: 1 }, { unique: true, partialFilterExpression: { kind: 'comment' } }),
     // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
     // clientId, ever — a second doc claiming an existing clientId (however
     // created) could answer origin lookups with a different allowlist, so
     // uniqueness is structural. Only app things carry crystal.clientId;
     // app-data things reference the app as crystal.appId instead.
+		col.createIndex({ 'crystal.clientId': 1 }, { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }),
+    // Immutable subscription-tier revisions: one (tierId, version) ever,
+    // at most one live revision per stable tier id, plus the status/order
+    // scan used by the admin Live / Draft / Archived sections.
     col.createIndex(
-      { 'crystal.clientId': 1 },
-      { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }
+      { 'crystal.quotaKind': 1, 'crystal.tierId': 1, 'crystal.version': 1 },
+      {
+        unique: true,
+        partialFilterExpression: {
+          thingtime: 'subscription-tier',
+          'crystal.quotaKind': 'subscription-tier'
+        }
+      }
+    ),
+    col.createIndex(
+      { 'crystal.tierId': 1, 'crystal.status': 1 },
+      {
+        unique: true,
+        partialFilterExpression: {
+          thingtime: 'subscription-tier',
+          'crystal.quotaKind': 'subscription-tier',
+          'crystal.status': 'live'
+        }
+      }
+    ),
+    col.createIndex(
+      { 'crystal.quotaKind': 1, 'crystal.status': 1, 'crystal.sortOrder': 1, updatedAt: -1 },
+      {
+        partialFilterExpression: {
+          thingtime: 'subscription-tier',
+          'crystal.quotaKind': 'subscription-tier'
+        }
+      }
     ),
     // App data: one thing per (user, app, key) — set() stays an idempotent
     // insert-or-update under races, and the index serves list-by-(user, app).
@@ -395,18 +543,81 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
         partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
       }
     ),
+    // Protected per-(app, user) storage ledgers. App-owner management and
+    // the admin directory enumerate one app's users newest-first; keeping
+    // quotaKind first excludes ordinary app-data without a second
+    // multikey field or an unbounded collection scan.
+    col.createIndex(
+      { 'crystal.quotaKind': 1, 'crystal.appId': 1, updatedAt: -1, ownerId: 1 },
+      { partialFilterExpression: { 'crystal.quotaKind': 'app-storage' } }
+    ),
+    // Admin user snapshots sum every app-storage ledger held by each user.
+    // ownerId must immediately follow quotaKind: the appId/updatedAt index
+    // above cannot seek its owner suffix without those fields constrained.
+    col.createIndex({ 'crystal.quotaKind': 1, ownerId: 1 }, { partialFilterExpression: { 'crystal.quotaKind': 'app-storage' } }),
     // The app-scoped shared read (/app-data/shared): entries whose acl
     // carries tt:app/<clientId>, newest first. acl is the only multikey
     // field here (appId/updatedAt/shareId are scalars), so the compound is
     // legal; partial keeps every non-app-data thing out.
+		col.createIndex({ 'crystal.appId': 1, acl: 1, updatedAt: -1, shareId: -1 }, { partialFilterExpression: { 'crystal.appId': { $exists: true } } }),
+    // Account-ownership links (accounts/accountLinks.ts): "who is linked
+    // to this target" — the admin owners view and app co-manager checks.
+    // Links a USER holds ride the (thingtime, ownerId) prefix instead.
     col.createIndex(
-      { 'crystal.appId': 1, acl: 1, updatedAt: -1, shareId: -1 },
-      { partialFilterExpression: { 'crystal.appId': { $exists: true } } }
+      { 'crystal.targetId': 1, 'crystal.linkKind': 1 },
+      { partialFilterExpression: { 'crystal.targetId': { $exists: true } } }
+    ),
+    // Messenger (api/utils/messenger). Structural invariants ride single
+    // crystal key fields with partial unique indexes (the reaction-index
+    // pattern — acl/thingtime are multikey, so compounds over them are out):
+    // one membership per (chat|community, user)…
+    col.createIndex(
+      { 'crystal.memberKey': 1 },
+      { name: 'things_member_key_unique', unique: true, partialFilterExpression: { 'crystal.memberKey': { $type: 'string' } } }
+    ),
+    // …one DM per participant pair (toggle-safe under create races)…
+    col.createIndex(
+      { 'crystal.dmKey': 1 },
+      { name: 'things_dm_key_unique', unique: true, partialFilterExpression: { 'crystal.dmKey': { $type: 'string' } } }
+    ),
+    // …invite codes are unguessable AND collision-proof…
+    col.createIndex(
+      { 'crystal.inviteCode': 1 },
+      { name: 'things_invite_code_unique', unique: true, partialFilterExpression: { 'crystal.inviteCode': { $type: 'string' } } }
+    ),
+    // …one custom emoji name per scope…
+    col.createIndex(
+      { 'crystal.emojiKey': 1 },
+      { name: 'things_emoji_key_unique', unique: true, partialFilterExpression: { 'crystal.emojiKey': { $type: 'string' } } }
+    ),
+    // …and one follow edge per (follower, followee).
+    col.createIndex(
+      { 'crystal.followKey': 1 },
+      { name: 'things_follow_key_unique', unique: true, partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } }
+    ),
+    // Thread replies list under their root message (main chat pages ride the
+    // shared { targetId, thingtime, createdAt, shareId } index above).
+    col.createIndex(
+      { 'crystal.threadRootId': 1, createdAt: 1, shareId: 1 },
+      { name: 'things_thread_root', partialFilterExpression: { 'crystal.threadRootId': { $type: 'string' } } }
+    ),
+    // Channel directory + channel caps query chats by their community.
+    col.createIndex(
+      { 'crystal.communityId': 1, createdAt: 1, shareId: 1 },
+      { name: 'things_chat_community', partialFilterExpression: { 'crystal.communityId': { $type: 'string' } } }
     ),
     // Sandbox app-data is ephemeral: only docs written under a sandbox
     // token carry sandboxExpiresAt (TTL skips docs without the field), so
     // pretend data reaps itself with the token's lifetime.
-    col.createIndex({ sandboxExpiresAt: 1 }, { expireAfterSeconds: 0 })
+    col.createIndex({ sandboxExpiresAt: 1 }, { expireAfterSeconds: 0 }),
+    // Full-power app namespaces: every thing written through an app token
+    // carries a server-stamped scalar root appId (the namespace marker —
+    // never inferred from acl, which users can hand-write). Own-namespace
+    // reads page by (appId, ownerId); shared-slice reads by (appId, acl).
+    // appId is scalar, so each compound has at most one multikey field
+    // (acl) and both are legal; partials keep non-app things out.
+    col.createIndex({ appId: 1, ownerId: 1, updatedAt: -1, shareId: -1 }, { partialFilterExpression: { appId: { $exists: true } } }),
+    col.createIndex({ appId: 1, acl: 1, updatedAt: -1, shareId: -1 }, { partialFilterExpression: { appId: { $exists: true } } })
   ];
 };
 
@@ -441,11 +652,17 @@ export const ensureIndexes = async () => {
       // failures are tagged with `<logical>.<index name>` (via taggedCollection)
       // because Promise.all surfaces only the first rejection and driver
       // messages don't always name the index being built
-      const col = (logical: string) =>
-        taggedCollection(db.collection(physicalCollectionName(logical)), logical);
+			const col = (logical: string) => taggedCollection(db.collection(physicalCollectionName(logical)), logical);
       await Promise.all([
         col('users').createIndex({ username: 1 }, { unique: true }),
         col('users').createIndex({ email: 1 }, { unique: true }),
+        // Admin directory snapshots merge this legacy store with user Things
+        // newest-first; the id suffix makes equal timestamps deterministic.
+        col('users').createIndex({ createdAt: -1, _id: 1 }),
+        // The current-admin roster filters legacy users by the stored flag and
+        // then takes the same deterministic newest-first window. Keep this
+        // rare subset partial so the sort never scans the whole legacy store.
+				col('users').createIndex({ 'meta.admin': 1, createdAt: -1, _id: 1 }, { partialFilterExpression: { 'meta.admin': true } }),
         col('sessions').createIndex({ jti: 1 }, { unique: true }),
         col('sessions').createIndex({ userId: 1 }),
         // TTL: reap sessions once expiresAt passes. getLiveSession already
@@ -456,10 +673,7 @@ export const ensureIndexes = async () => {
         // deleteApp revokes app sessions by clientId ACROSS users — without
         // this the sweep scans the whole sessions collection. Partial so the
         // (much larger) browser/service session population stays out.
-        col('sessions').createIndex(
-          { 'meta.clientId': 1 },
-          { partialFilterExpression: { purpose: 'app' } }
-        ),
+        col('sessions').createIndex({ 'meta.clientId': 1 }, { partialFilterExpression: { purpose: 'app' } }),
         // account-switcher rosters: one doc per browser, entries reference
         // sessions by jti; TTL reaps rosters abandoned past their rolling expiry
         col('rosters').createIndex({ rosterId: 1 }, { unique: true }),
@@ -478,6 +692,10 @@ export const ensureIndexes = async () => {
         col('email_messages').createIndex({ createdAt: -1 }),
         col('email_messages').createIndex({ to: 1 }),
         col('email_messages').createIndex({ stream: 1, status: 1, createdAt: -1 }),
+        // notification-email hourly throttle (stream+to+createdAt) and the
+        // weekly-digest idempotency lookback (templateKey+createdAt+to)
+        col('email_messages').createIndex({ stream: 1, to: 1, createdAt: -1 }),
+        col('email_messages').createIndex({ templateKey: 1, createdAt: -1 }),
         col('email_messages').createIndex({ providerMessageId: 1 }, { sparse: true }),
         col('email_events').createIndex({ emailMessageId: 1 }),
         col('email_events').createIndex({ providerMessageId: 1 }),
@@ -495,13 +713,29 @@ export const ensureIndexes = async () => {
         col('waitlist').createIndex({ email: 1 }, { unique: true }),
         // the shared data-plane (`things`) index set — see createThingsDataIndexes
         ...createThingsDataIndexes(db),
+				// Migration diagnostics exist only on Thingtime's HOME plane. Keep
+				// this live TTL deleter out of createThingsDataIndexes(), which also
+				// installs indexes on user-supplied custom Mongo endpoints.
+				col('things').createIndex(
+					{ expiresAt: 1 },
+					{
+						name: 'migration_diagnostic_expires_at',
+						expireAfterSeconds: 0,
+						partialFilterExpression: { thingtime: MIGRATION_DIAGNOSTIC_THINGTIME }
+					}
+				),
         col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)
         col('settings').createIndex({ key: 1 }, { unique: true }),
         // general per-endpoint rate-limit windows; TTL reaps expired windows
         col('rateLimits').createIndex({ key: 1 }, { unique: true }),
-        col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+        col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        // post view telemetry: one doc per (post, viewer identity) — the
+        // unique index IS the dedup that keeps unique-viewer counts honest
+        // under racing writes; its postId prefix serves the per-post stats
+        // aggregation on feed reads
+        col('postViews').createIndex({ postId: 1, viewerKey: 1 }, { unique: true })
       ]);
     })().catch((err: any) => {
       // Name the broken index, then clear the failed promise so the next

@@ -1,24 +1,11 @@
 import React from 'react';
-import {
-  Badge,
-  Box,
-  Button,
-  Flex,
-  Heading,
-  Icon,
-  Stack,
-  Table,
-  Tbody,
-  Td,
-  Text,
-  Th,
-  Thead,
-  Tr
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Flex, Heading, Icon, Stack, Table, Tbody, Td, Text, Th, Thead, Tr } from '@chakra-ui/react';
 import { Database, FlaskConical, Play } from 'lucide-react';
 
-import { useLopu } from '~/components/Lopu/useLopu';
+import { useDismissLopu, useLopu } from '~/components/Lopu/useLopu';
+import { apiAdminErrorDetail, apiDiagnosticThingId, apiErrorMessage, hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { useApi } from '~/hooks/useApi';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
 
 type CollectionCensus = {
@@ -72,9 +59,9 @@ const versionsSummary = (versions: Record<string, number>) =>
     .join(' · ');
 
 const reportSummary = (report?: Partial<MigrationReport>) => {
-  const counts = `matched ${report?.matched ?? 0} · migrated ${report?.migrated ?? 0} · created ${
-    report?.created ?? 0
-  } · skipped ${report?.skipped ?? 0}`;
+	const counts = `matched ${report?.matched ?? 0} · migrated ${report?.migrated ?? 0} · created ${report?.created ?? 0} · skipped ${
+		report?.skipped ?? 0
+	}`;
 
   return report?.notes?.length ? `${counts} — ${report.notes.join(' · ')}` : counts;
 };
@@ -86,11 +73,15 @@ export function MigrationsPanel() {
   // the useApi bindings are stable useCallbacks — safe effect deps
   const { migrations: getMigrations, migrationsRun } = v1.admin;
   const lopu = useLopu();
+	const dismissLopu = useDismissLopu();
+	const currentUser = useCurrentUser();
   const [status, setStatus] = React.useState<MigrationsStatus | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [runningKey, setRunningKey] = React.useState<string | null>(null);
   const [confirmId, setConfirmId] = React.useState<string | null>(null);
+
+	React.useEffect(() => () => dismissLopu(), [currentUser?.id, currentUser?.isAdmin, dismissLopu]);
 
   const fetchStatus = React.useCallback(async () => {
     try {
@@ -102,8 +93,10 @@ export function MigrationsPanel() {
         migrations: data?.migrations || []
       });
       setError(null);
+      return true;
     } catch (err: any) {
-      setError(err?.error || 'Failed to load migration status');
+      setError(apiErrorMessage(err, 'Failed to load migration status'));
+      return false;
     } finally {
       setLoading(false);
     }
@@ -130,10 +123,27 @@ export function MigrationsPanel() {
         });
         await fetchStatus();
       } catch (err: any) {
+        // A real migration may have applied an idempotent subset before a
+        // network/5xx failure. Refresh what remains instead of leaving stale
+        // pending counts on screen; dry runs never mutate target documents and
+        // need no status refresh.
+        if (!dryRun && hasUnknownMutationOutcome(err)) await fetchStatus();
+				const adminDetail = apiAdminErrorDetail(err);
+				const diagnosticThingId = apiDiagnosticThingId(err);
         lopu({
           title: dryRun ? `Dry run failed: ${migration.id}` : `Migration failed: ${migration.id}`,
-          description: err?.error || 'Something went wrong running the migration',
-          status: 'error'
+					description:
+						adminDetail || apiErrorMessage(err, dryRun ? 'Thingtime could not preview this migration.' : 'Thingtime could not run this migration.'),
+					status: 'error',
+					duration: adminDetail || diagnosticThingId ? 60_000 : undefined,
+					announceDescription: !adminDetail,
+					descriptionLabel: adminDetail ? 'Full redacted migration error' : undefined,
+					link: diagnosticThingId
+						? {
+								label: 'View full migration diagnostic',
+								href: `/thing/${encodeURIComponent(diagnosticThingId)}`
+						  }
+						: undefined
         });
       } finally {
         setRunningKey(null);
@@ -147,14 +157,7 @@ export function MigrationsPanel() {
   return (
     <Box as="section" id="database-migrations" minW={0} scrollMarginTop="112px">
       <Flex align="center" gap={2} mb={2} wrap="wrap">
-        <Text
-          color="var(--tt-muted, #9a9aa6)"
-          fontFamily="mono"
-          fontSize="11px"
-          fontWeight="700"
-          letterSpacing="0.14em"
-          textTransform="uppercase"
-        >
+				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700" letterSpacing="0.14em" textTransform="uppercase">
           Admin
         </Text>
         <Badge colorScheme="orange">admin only</Badge>
@@ -167,7 +170,7 @@ export function MigrationsPanel() {
         </Heading>
       </Flex>
       <Text color="var(--tt-text, #5a5a66)" fontSize="sm" lineHeight="1.7" maxW="760px" mb={5}>
-        Collection schema census and pending migrations. Dry runs report what would change without writing anything.
+        Collection schema census and pending migrations. Dry runs report what would change without mutating migration target documents.
       </Text>
 
       {loading ? (
@@ -272,8 +275,7 @@ export function MigrationsPanel() {
                 Storage generations
               </Heading>
               <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" mt={1}>
-                Every physical collection on the server. Stale generations are what
-                drop-stale-collection-generations removes once nothing needs them.
+								Every physical collection on the server. Stale generations are what drop-stale-collection-generations removes once nothing needs them.
               </Text>
             </Box>
             <Box overflowX="auto">
@@ -374,22 +376,10 @@ export function MigrationsPanel() {
                           <Text fontSize="sm" fontWeight="700">
                             Really run?
                           </Text>
-                          <Button
-                            colorScheme="red"
-                            isDisabled={busy}
-                            onClick={() => runMigration(migration, false)}
-                            size="sm"
-                            type="button"
-                          >
+													<Button colorScheme="red" isDisabled={busy} onClick={() => runMigration(migration, false)} size="sm" type="button">
                             Confirm
                           </Button>
-                          <Button
-                            isDisabled={busy}
-                            onClick={() => setConfirmId(null)}
-                            size="sm"
-                            type="button"
-                            variant="ghost"
-                          >
+													<Button isDisabled={busy} onClick={() => setConfirmId(null)} size="sm" type="button" variant="ghost">
                             Cancel
                           </Button>
                         </>

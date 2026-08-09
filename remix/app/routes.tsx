@@ -1,11 +1,9 @@
-import {
-  createBrowserRouter,
-  redirect,
-  type LoaderFunctionArgs
-} from 'react-router';
+import { createBrowserRouter, redirect, type LoaderFunctionArgs } from 'react-router';
 
 import App from './root';
 import type { RootLoaderData } from './root-data.server';
+import AppsRoute from './routes/apps';
+import AppsManageRoute from './routes/apps-manage';
 import Authorize from './routes/authorize';
 import Branding from './routes/branding/_index';
 import BrandingOld from './routes/branding_old';
@@ -19,8 +17,10 @@ import DocsDesignSystem from './routes/docs/design-system/index';
 import DocsIndex from './routes/docs/index';
 import MigrationsRoute from './routes/migrations';
 import Feed from './routes/feed';
+import Messages from './routes/messages';
 import Index from './routes/_index';
 import Login from './routes/login';
+import AdminRoute from './routes/admin';
 import SettingsRoute from './routes/settings';
 import MongoStatusPage from './routes/mongodb-status';
 import Ode from './routes/ode';
@@ -37,6 +37,7 @@ import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
 import TestsPage from './routes/tests';
 import Themes from './routes/themes';
+import ThingPage from './routes/thing';
 import VercelPage from './routes/vercel';
 import VerifyEmail from './routes/verify-email';
 import Welcome from './routes/welcome';
@@ -100,6 +101,13 @@ export const router = createBrowserRouter([
       // "Login with Thingtime" popup (embed SDK) — no guest/user guard: it
       // handles both states itself (login form → consent screen).
       { path: 'authorize', element: <Authorize /> },
+      // admin dashboard — no loader guard: it renders its own 🔐 card for
+      // non-admins (same idiom as the MongoDB workbench)
+      { path: 'admin', element: <AdminRoute /> },
+      // browse everything each connected app stores for you — no guard: it
+      // renders its own signed-out quiet state, like /settings
+      { path: 'apps', element: <AppsRoute /> },
+      { path: 'apps/manage', element: <AppsManageRoute /> },
       { path: 'branding', element: <Branding /> },
       { path: 'branding_old', element: <BrandingOld /> },
       { path: 'crypto', element: <CryptoPage /> },
@@ -119,6 +127,7 @@ export const router = createBrowserRouter([
         ]
       },
       { path: 'feed', element: <Feed /> },
+      { path: 'messages', element: <Messages />, loader: requireUser('/login') },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page
@@ -131,6 +140,9 @@ export const router = createBrowserRouter([
       { path: 'ode', element: <Ode /> },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },
+			// authenticated permalink for generic Things; protected migration
+			// diagnostics switch to their current-admin, home-plane read endpoint
+			{ path: 'thing/:id', element: <ThingPage /> },
       { path: 'profile', element: <Profile /> },
       { path: 'profile/:username', element: <Profile /> },
       { path: 'rainbow/*', element: <Rainbow /> },

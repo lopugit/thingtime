@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
 
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer, useIsMobileViewport } from './useDrawer';
-import { drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
+import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { useLopu } from '../../Lopu/useLopu';
 import { ColorControl } from '../../ThemeSettings/controls';
@@ -676,7 +676,7 @@ export const UserSettingsModal = () => {
 						Which menu items close the drawer when clicked (desktop and mobile)
 					</Text>
 					<Flex flexDirection="column" paddingTop={2}>
-						{filterDrawerItemsByAuth(drawerMenuItems, !!user).map((top) => (
+						{filterDrawerItemsByAuth(drawerMenuItems, !!user, !!user?.isAdmin).map((top) => (
 							<React.Fragment key={top.id}>
 								<Flex alignItems="center" columnGap={4} paddingY={1}>
 									<Text fontSize="sm">
@@ -685,11 +685,11 @@ export const UserSettingsModal = () => {
 									<Switch
 										size="sm"
 										marginLeft="auto"
-										isChecked={closeOnClick?.[top.id] !== false}
+										isChecked={drawerItemClosesOnClick(closeOnClick, top.id)}
 										onChange={(event) => setCloseOnClickFor(top.id, event.target.checked)}
 									></Switch>
 								</Flex>
-								{filterDrawerItemsByAuth(top.children || [], !!user).map((child) => (
+								{filterDrawerItemsByAuth(top.children || [], !!user, !!user?.isAdmin).map((child) => (
 									<Flex key={child.id} alignItems="center" columnGap={4} paddingY={0.5} paddingLeft={4}>
 										<Text fontSize="xs" opacity={0.8}>
 											{child.icon} {child.label}
@@ -697,7 +697,7 @@ export const UserSettingsModal = () => {
 										<Switch
 											size="sm"
 											marginLeft="auto"
-											isChecked={closeOnClick?.[child.id] !== false}
+											isChecked={drawerItemClosesOnClick(closeOnClick, child.id)}
 											onChange={(event) => setCloseOnClickFor(child.id, event.target.checked)}
 										></Switch>
 									</Flex>

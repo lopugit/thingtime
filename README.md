@@ -42,6 +42,109 @@ https://www.gofundme.com/f/thingtime
 
 ### Force Push ? 👉👈
 
+Thingtime has two deliberately separate conflict workflows:
+
+- **Resolve PR conflicts (AI)** merges a PR's base branch into its head branch.
+- **Rebase PRs and stacks (AI)** rebases the PR head and, when the PR is part
+  of a stack, continues from the stack root toward its leaves.
+
+Both workflows cover every same-repository PR regardless of its base branch.
+The merge workflow listens to pushes on `"**"` and checks open PRs both
+targeting and originating from the pushed branch. A staggered twice-hourly
+all-PR sweep catches conflicts whose original event was missed or ran from an
+older branch without the latest workflow. Their ownership is intentionally
+disjoint: standalone merge conflicts go to the merge workflow; standalone PRs
+that merge cleanly but cannot rebase, plus stack members whose current history
+needs a merge or rebase update, go to the rebase workflow. Adding
+`no-ai-rebase` opts a merge-conflicting stack member back into the merge-based
+resolver instead.
+
+The rebase workflow covers the case GitHub reports as `mergeable: true` but
+`rebaseable: false`: a plain merge needs no help, yet replaying the branch's
+commits onto its base stops at a conflict. It automatically scans same-repo
+PRs after branch pushes and PR `opened`/`reopened` events, with a scheduled
+all-PR scan as a backstop because GitHub emits no dedicated event when its
+**Rebase stack** button fails. A standalone PR is replayed onto its base; a
+detected stack is rebased root-to-leaf, so each child is replayed onto the
+rewritten parent rather than onto the parent's old SHA.
+
+To run it directly, open **Actions → Rebase PRs and stacks (AI) → Run
+workflow** on the default branch, enter the PR number, and leave cascading
+enabled when the PR has children. Leaving the number blank scans all open
+same-repository PRs. Manual dispatch is also the recovery path after reviewing
+a paused run.
+
+**Resolve PR conflicts (AI)** has the same manual convention: enter a base
+branch to scan only that base, or leave it blank to scan every open eligible
+PR. Broad scans are API-only detectors; they hand off one trusted
+default-branch run per conflicted base, so unrelated bases do not share one AI
+job. If a run fails while the same eligible snapshot is still live, it adds
+`ai-merge-paused` so the scheduled sweep cannot repeatedly spend AI budget.
+The hold is bound to the exact owner, refs, SHAs, and topology recorded in a
+bot-only hidden marker: a changed snapshot is eligible again automatically,
+while the same snapshot requires review and a named-base manual retry.
+
+The merge workflow also snapshots the exact live head and base SHAs, repeats
+its PR/ref/label/stack/protection checks immediately before publication, and
+uses an exact head lease. If either branch moves while Claude is working, the
+resolved merge is discarded rather than overwriting the newer work.
+
+Detection is patient and audible: GitHub computes a PR's mergeability lazily
+after its base moves and verdicts can take minutes to settle, so the merge
+detector re-queries until every scanned PR has a verdict (time-budgeted via
+`MERGEABLE_POLL_SECONDS`, default 500 seconds — a little over eight minutes)
+instead of sampling once at push time. When it must leave a conflicted-looking PR alone — a fork PR it
+cannot push to, or a verdict that never settled — it upserts one status
+comment on the PR saying exactly that, so a silent PR means "nothing needed
+doing", never "nobody looked". Conflicts that are handed off announce
+themselves through the resolve job's "Auto-resolve running" comment.
+
+**Rebase PRs and stacks (AI)** rewrites PR history, so its force push has
+stricter boundaries:
+
+- It operates only on branches in this repository. Fork PRs, the repository's
+  default branch, and protected branches are refused.
+- Claude receives only regular copies of the exact files stopped in conflict,
+  inside a repo-less scratch directory. It never sees the real checkout, Git
+  metadata, action implementation, or push credentials, and it has only
+  read/edit/write file tools—no shell, Git, search, or network tools. Code
+  loaded from the exact trusted default-branch commit
+  independently validates the scratch files, conflict set, index, and completed
+  rebase before any push.
+- Nothing is pushed until the complete rebase succeeds. The final update uses
+  an exact `--force-with-lease` against the head SHA inspected at the start, so
+  a concurrent human or bot push makes the run fail instead of being erased.
+- Add `no-ai-rebase` to opt a PR out of automatic rebasing. A failed automatic
+  run adds `ai-rebase-paused` for that exact owner/ref/SHA/topology snapshot,
+  preventing a retry loop while the failure is reviewed. A changed snapshot or
+  resolver owner invalidates the hold automatically; retry the unchanged
+  snapshot with a deliberate manual PR-number run.
+  `ai-rebase-in-progress` is the only cross-workflow mutex. Pause labels do not
+  decide ownership: a queued retry re-proves the exact refs and owner before
+  clearing its specific stale pause. Publication requires pauses to be absent,
+  and post-push cleanup preserves any fresh hold created for the new snapshot.
+  An orphaned `ai-rebase-in-progress` lock is recovered after 90 minutes, while
+  paused, active, or not-yet-computed parents—and protected or opted-out
+  parents that still need a rewrite—keep stacked children from running ahead.
+- A rewrite authenticated by `GITHUB_TOKEN` explicitly dispatches **Web CI**
+  against the new branch SHA when the final PR diff touches `remix/` or its CI
+  workflow, because token-authored pushes do not create ordinary Actions runs.
+
+For a fork of Thingtime, enable **Settings → Actions → General → Workflow
+permissions → Read and write permissions**, then add one of these repository
+Actions secrets:
+
+- `ANTHROPIC_API_KEY`, or
+- `CLAUDE_CODE_OAUTH_TOKEN` (created by the Claude CLI GitHub App setup).
+
+`CONFLICT_RESOLVER_PAT` is optional. Add it only if the resolver must rewrite a
+branch whose rebase changes files under `.github/workflows/`; the token needs
+repository contents access plus permission to update workflows. Keep all
+tokens in Actions secrets, scope them to the fork, and never put them in an
+environment file or commit. Automatic runs still skip PRs originating from
+another repository; the contributor's fork must run its own trusted workflow
+if it wants equivalent automation.
+
 # Setup for Forks
 
 Thingtime can run with mostly public configuration, but a few integrations need
@@ -226,6 +329,45 @@ Env-allowlisted usernames are a permanent override (they can't be demoted from
 the UI, so there's always a way back in) and are reserved at registration so
 nobody can squat an admin username before you register it.
 
+Admins get the `/admin` dashboard (also under the drawer's Account section):
+Users, Apps, Tiers, and System management. The Tiers tab manages protected,
+versioned `subscription-tier` Things in separate Live, Draft / not live, and
+Archived sections. Admins can create a tier or draft a new revision, edit its
+name, tagline, banner, currency, daily/weekly/monthly/yearly prices, six
+computed-or-custom percentage-saved comparisons, Editor.js inclusions, and
+quota defaults, then publish or archive without deleting history. User and app
+assignments pin the exact immutable revision and quota snapshot, so later tier
+changes never silently rewrite an existing customer's plan. The dashboard also
+supports per-field quota overrides (`null` = unlimited), platform-level app
+suspension, and many-to-many ownership links (assign accounts to an owner so
+one login can switch into its service accounts without credentials, and assign
+apps to co-managers).
+
+App owners and linked co-managers use `/apps/manage` to see the app's measured
+aggregate usage and choose among the current live tier cards (the bootstrapped
+catalog starts with Free 5 GiB, Plus 25 GiB, Pro 100 GiB, and metered PAYG).
+Cards show the configured banner, renewal prices, savings, and Editor.js
+inclusions; selection sends both the stable tier id and exact live revision id.
+Managers can also change the inherited per-app-user cap (50 MiB by default) and
+assign or reset custom caps for one or many app users. The app Thing is the
+aggregate ledger; protected relational `app-storage` Things hold per-user usage
+and optional sub-tiers, so neither generic app editing nor an end user can
+rewrite the accounting rows.
+
+The live verification suites need a disposable local database. The app-storage
+suite is deliberately local-URL-only; the admin suite needs an env-admin's
+credentials (placeholders — use your own throwaway admin):
+
+```sh
+node remix/scripts/verify-app-storage.mjs http://127.0.0.1:10000
+```
+
+```sh
+TT_VERIFY_ADMIN_USER="your-admin-username" \
+TT_VERIFY_ADMIN_PASS="your-admin-password" \
+node remix/scripts/verify-admin-subscriptions.mjs http://127.0.0.1:10000
+```
+
 ## Auth and Lopu AI
 
 JWT-backed browser sessions prefer ES256 asymmetric signing so other platforms
@@ -335,6 +477,39 @@ sanitized resolved config (never credentials); `POST /api/v1/email/test-otp` is
 a dev/preview-only helper for the `/tests` page restricted to the configured
 test recipient (or a plus alias of it).
 
+### Notification emails (SES notification stream)
+
+Activity notifications (friend requests, new followers, comments, replies,
+reactions, shares — plus an optional weekly summary digest) can also email the
+recipient. They ride the same emit calls as the in-app bell, are always
+fire-and-forget, only go to verified addresses, and honor the per-user channel
+matrix from Settings → Notifications (`/api/v1/notifications/settings`: per
+type × channel switches plus a master switch per channel; the two high-volume
+post types are email-opt-in). Sends are capped per recipient per hour, and
+every email footer carries a manage link plus a one-click unsubscribe link
+(`GET /api/v1/notifications/email/unsubscribe?uid=…&token=…`, an HMAC token —
+no session needed).
+
+```sh
+THINGTIME_EMAIL_NOTIFICATIONS_FROM="Thingtime <no-reply@thingtime.com>"
+                                        # optional; falls back to the
+                                        # transactional from-address
+THINGTIME_EMAIL_UNSUB_SECRET=""         # optional HMAC secret for unsubscribe
+                                        # links; falls back to JWT_SECRET /
+                                        # JWT_PRIVATE_KEY
+CRON_SECRET="<random string>"           # lets the Vercel cron trigger the
+                                        # weekly digest run
+APP_URL="https://your-deployment.com"   # absolute links in emails
+```
+
+The weekly digest is scheduled in `remix/vercel.json` (`crons`) against
+`GET /api/v1/notifications/email/weekly-summary`; Vercel attaches
+`Authorization: Bearer <CRON_SECRET>` automatically when that env var exists.
+Signed-in admins can run the same endpoint manually (`?dryRun=1` or
+`POST { dryRun: true }` previews without sending), and the run is idempotent —
+a six-day per-recipient lookback in the `email_messages` outbox prevents
+double-sends.
+
 ### Service account provisioning
 
 Apps and backend services can create service-owned Thingtime accounts through:
@@ -389,6 +564,39 @@ When an AI key is configured, the musing endpoint uses MongoDB to allow 10
 AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
 the preset fallback responses instead of calling an AI provider.
+
+## Branch automation: develop → main promotion
+
+`develop` is the integration branch; `main` is the release branch. Four
+workflows keep them flowing without manual branch surgery, giving two
+complementary ways to ship:
+
+- **Promote features to main** (`.github/workflows/promote-features-to-main.yml`)
+  scans PRs merged into `develop` and opens one promotion PR per feature
+  against `main` (cherry-picked `promote/pr-<n>-<slug>` branches), so every
+  change can get a second, release-focused review on its own. PRs that share a
+  feature group (a `Promotion-Group: <key>` body line, a `stack:<key>`/
+  `group:<key>`/`feature:<key>` label, a `feature/<key>/...` branch, or a
+  `feat(<key>): ...` title) are opened as a stacked chain in merge order —
+  review and merge bottom-up, deleting each branch on merge. Label a develop
+  PR `no-promote` to keep it out of the train; close a promotion PR to reject
+  that change for `main` permanently.
+- **Promote develop to main** (`.github/workflows/promote-develop-to-main.yml`)
+  keeps one standing all-or-nothing PR open (head `develop`, base `main`).
+  When everything on `develop` is deemed mergeable, merge it instead of
+  merging every feature individually. The two trains never fight: after an
+  omnibus merge the per-feature workflow sees the content already on `main`,
+  skips it, and automatically closes any open promotion PRs whose diff has
+  become empty.
+- **Sync main into develop** back-merges `main` after promotions land.
+- The AI conflict/rebase workflows keep promotion PRs and stacks mergeable.
+
+Fork setup: everything runs with the default `GITHUB_TOKEN`, but promotion
+PRs it creates will not trigger CI, and promotion branches touching
+`.github/workflows/**` cannot be pushed. Optionally add a `PROMOTION_PAT`
+repository secret (fine-grained token with Contents + Pull requests +
+Workflows read/write, placeholder value `github_pat_...`) to lift both limits;
+`SYNC_BRANCHES_PAT` / `CONFLICT_RESOLVER_PAT` are honoured as fallbacks.
 
 ## Vercel deployment status
 

@@ -1,6 +1,6 @@
 import { json } from '~/api/http';
 
-import { appAllowsOrigin, findAppByClientId, normalizeAppOrigin, toEmbedApp } from '~/api/utils/apps/apps';
+import { appAllowsOrigin, appIsRevoked, findAppByClientId, normalizeAppOrigin, toEmbedApp } from '~/api/utils/apps/apps';
 import { describeScopes, parseScopeParam, scopeCovers } from '~/api/utils/apps/scopes';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
@@ -55,6 +55,9 @@ export const loader = async ({ request }: { request: Request }) => {
 
   const app = await findAppByClientId(clientId);
   if (!app) return json({ ok: false, error: 'App not found' }, { status: 404 });
+  if (appIsRevoked(app)) {
+    return json({ ok: false, error: 'This app has been suspended by an administrator' }, { status: 403 });
+  }
 
   if (!appAllowsOrigin(app, origin)) {
     return json({ ok: false, error: 'This origin is not on the app’s allowlist' }, { status: 403 });

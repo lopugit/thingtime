@@ -10,6 +10,9 @@ import {
 import {
   POST_TYPES,
   VISIBILITIES,
+  appMatchClauses,
+  appShapeProjections,
+  appVisiblePage,
   asViewer,
   canViewInherited,
   chronoCursorClause,
@@ -24,6 +27,7 @@ import {
   typeClause,
   visibilityQueryFor,
   withMatch,
+  type AppLens,
   type Fail,
   type PostType,
   type PostVisibility,
@@ -358,8 +362,18 @@ const textLengthExpr = () => {
 // a visibility fix can never accidentally patch one branch and leak from the other.
 const projectVisiblePage = async (
   page: ThingDoc[],
-  viewer: Viewer
+  viewer: Viewer,
+  app: AppLens = null
 ): Promise<{ things: PublicThing[]; posts: Record<string, PublicPost> }> => {
+  // App lens: namespace verdict + author-liveness batch replace the acl walk,
+  // authors/acl are consent-shaped, and the PublicPost projection (scope-blind
+  // child aggregation) never rides an app response — generic things only.
+  if (app) {
+    const visible = await appVisiblePage(app, page);
+    const things = await toPublicThings(visible, viewer);
+    await appShapeProjections(app, visible, things);
+    return { things, posts: {} };
+  }
   const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
   const visible = page.filter((_, index) => verdicts[index]);
   const things = await toPublicThings(visible, viewer);
@@ -370,7 +384,11 @@ const projectVisiblePage = async (
   return { things, posts };
 };
 
-export const searchThings = async (viewerInput: string | Viewer, query: SearchQuery): Promise<Fail | SearchResult> => {
+export const searchThings = async (
+  viewerInput: string | Viewer,
+  query: SearchQuery,
+  app: AppLens = null
+): Promise<Fail | SearchResult> => {
   const viewer = asViewer(viewerInput);
   const limit = Math.min(Math.max(1, Number(query.limit) || DEFAULT_SEARCH_LIMIT), MAX_SEARCH_LIMIT);
 
@@ -483,7 +501,10 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   // + the viewer's own), the exact acl verdict happens per doc below. Things
   // carrying ['tt:inherit'] (comments/reactions) only surface for their owner —
   // matching listThings, attached things aren't independently discoverable.
-  const visibility = visibilityQueryFor(viewer, circles);
+  // Under the app lens the audience superset IS the namespace conjunction —
+  // server-injected, never expressible from the client grammar (appId/acl stay
+  // out of SEARCHABLE_ROOT_FIELDS).
+  const visibility = app ? withMatch({}, ...appMatchClauses(app)) : visibilityQueryFor(viewer, circles);
   if (!visibility) return emptyResult;
 
   const baseMatch = withMatch(visibility, ...clauses);
@@ -607,7 +628,7 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
     const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
     const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
 
-    const { things: publicThings, posts } = await projectVisiblePage(page, viewer);
+    const { things: publicThings, posts } = await projectVisiblePage(page, viewer, app);
 
     return {
       ok: true,
@@ -669,7 +690,7 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
 
   // exact acl evaluation — the DB match is only a superset; the cursor advances
   // over the raw page so filtered docs are skipped, not resurfaced.
-  const { things: publicThings, posts } = await projectVisiblePage(page, viewer);
+  const { things: publicThings, posts } = await projectVisiblePage(page, viewer, app);
 
   return { ok: true, things: publicThings, posts, nextCursor, total, totalCapped, ranked };
 };

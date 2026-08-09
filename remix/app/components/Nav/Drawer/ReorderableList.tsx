@@ -17,6 +17,10 @@ interface ReorderableListProps {
 	items: ReorderableEntry[];
 	onReorder: (ids: string[]) => void;
 	disabled?: boolean;
+	// When enabled, a drag can only start from an element marked with
+	// data-reorder-handle. Existing drawer lists deliberately keep their
+	// click-and-hold-anywhere behaviour.
+	handleOnly?: boolean;
 }
 
 const HOLD_MS = 280;
@@ -33,7 +37,7 @@ interface DragState {
 }
 
 export const ReorderableList = (props: ReorderableListProps) => {
-	const { items, onReorder, disabled } = props;
+	const { items, onReorder, disabled, handleOnly } = props;
 
 	const ids = React.useMemo(() => items.map((item) => item.id), [items]);
 	const idsRef = React.useRef(ids);
@@ -175,6 +179,13 @@ export const ReorderableList = (props: ReorderableListProps) => {
 				return;
 			}
 
+			if (handleOnly) {
+				const target = event.target instanceof Element ? event.target : null;
+				if (!target?.closest('[data-reorder-handle]')) {
+					return;
+				}
+			}
+
 			// primary button / touch only
 			if (event.pointerType === 'mouse' && event.button !== 0) {
 				return;
@@ -265,7 +276,7 @@ export const ReorderableList = (props: ReorderableListProps) => {
 			window.addEventListener('pointercancel', session.onPointerCancel);
 			window.addEventListener('touchmove', session.onTouchMove, { passive: false });
 		},
-		[disabled, armDrag, cleanupSession, computeOrder]
+		[disabled, handleOnly, armDrag, cleanupSession, computeOrder]
 	);
 
 	const onItemClickCapture = React.useCallback((event: React.MouseEvent) => {

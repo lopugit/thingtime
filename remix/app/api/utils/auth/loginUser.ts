@@ -3,7 +3,7 @@ import { sendEmailOtp } from './email';
 import { signJwt } from './jwt';
 import { verifyPassword } from './passwords';
 import { createSession } from './sessions';
-import { findUserById, findUserByUsername, PublicUser, toPublicUser } from './users';
+import { findUserById, findUserByUsername, PublicUser, toPublicUserWithStorage } from './users';
 
 // Machine-readable failure reason for the 2FA (OTP) step, so the client decides
 // whether to abandon the challenge from a STABLE code instead of matching server
@@ -19,7 +19,7 @@ export type LoginResult =
 const issueSession = async (user: any): Promise<LoginResult> => {
   const session = await createSession(String(user._id));
   const jwt = await signJwt({ sub: String(user._id), jti: session.jti });
-  return { ok: true, user: toPublicUser(user), jwt, jti: session.jti };
+	return { ok: true, user: await toPublicUserWithStorage(user), jwt, jti: session.jti };
 };
 
 // Login is allowed even when emailVerified is false (we just flag it). The
@@ -62,13 +62,7 @@ export const loginUser = async ({ username, password }: { username: string; pass
 
 // Second step of an email-2FA login: exchange challenge + emailed code for a
 // real session. Errors stay generic so challenge ids can't be probed.
-export const completeOtpLogin = async ({
-  challenge,
-  code
-}: {
-  challenge: string;
-  code: string;
-}): Promise<LoginResult> => {
+export const completeOtpLogin = async ({ challenge, code }: { challenge: string; code: string }): Promise<LoginResult> => {
   const result = await consumeOtpChallenge({
     challenge: String(challenge || ''),
     code: String(code || ''),
