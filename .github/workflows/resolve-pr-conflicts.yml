@@ -395,6 +395,10 @@ jobs:
           # Resolver ownership must not depend on which detector wins a race.
           # Build the full open same-repo PR graph so stack members go to the
           # rebase workflow before either workflow has had time to add labels.
+          # A no-ai-rebase PR is a topology boundary as well as an opt-out:
+          # long-lived integration branches use that label on their promotion
+          # PR, and must not make every feature PR targeting the integration
+          # branch look like one enormous stack.
           all_open="$(all_open_prs)"
 
           # A pause belongs to one exact failed snapshot, recorded in a strict
@@ -418,6 +422,7 @@ jobs:
               any(.[];
                 .number != $n
                 and (.isCrossRepository | not)
+                and ([.labels[].name] | index("no-ai-rebase") == null)
                 and (.headRefName == $base or .baseRefName == $head))
             ' <<<"$all_open")"
             no_ai="$(jq -r '[.labels[].name] | index("no-ai-rebase") != null' <<<"$paused_pr")"
@@ -505,6 +510,7 @@ jobs:
               | select(any($all[];
                   .number != $pr.number
                   and (.isCrossRepository | not)
+                  and ([.labels[].name] | index("no-ai-rebase") == null)
                   and (.headRefName == $pr.baseRefName
                        or .baseRefName == $pr.headRefName)))
               | .number]
@@ -548,6 +554,7 @@ jobs:
                   or (any($all[];
                       .number != $pr.number
                       and (.isCrossRepository | not)
+                      and ([.labels[].name] | index("no-ai-rebase") == null)
                       and (.headRefName == $pr.baseRefName
                            or .baseRefName == $pr.headRefName)) | not))
               | select($only == "" or (.number | tostring) == $only)
@@ -937,6 +944,7 @@ jobs:
                 .number != $number
                 and .head.repo.full_name == $repo
                 and .base.repo.full_name == $repo
+                and ([.labels[].name] | index("no-ai-rebase") == null)
                 and (.head.ref == $base or .base.ref == $head))
             ' <<<"$all_open")"
           merge_owned=false
@@ -1619,6 +1627,7 @@ jobs:
                   .number != $number
                   and .head.repo.full_name == $repo
                   and .base.repo.full_name == $repo
+                  and ([.labels[].name] | index("no-ai-rebase") == null)
                   and (.head.ref == $base or .base.ref == $head))
               ' <<<"$all_open")"
             [ "$stack_member" != true ] \
@@ -1766,6 +1775,11 @@ jobs:
           DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
         run: |
           set -euo pipefail
+          labels="$(gh api "repos/$REPO/issues/$PR_NUMBER" --jq '[.labels[].name]')"
+          if jq -e 'index("no-ai-rebase") != null' >/dev/null <<<"$labels"; then
+            echo "PR #$PR_NUMBER is a no-ai-rebase topology boundary — not cascading through $HEAD_REF."
+            exit 0
+          fi
           case "$DEPTH" in (*[!0-9]*) DEPTH=99 ;; esac
           if [ "$DEPTH" -ge 3 ]; then
             echo "Cascade depth cap reached ($DEPTH) — not dispatching further."
@@ -1848,6 +1862,7 @@ jobs:
                     .number != $number
                     and .head.repo.full_name == $repo
                     and .base.repo.full_name == $repo
+                    and ([.labels[].name] | index("no-ai-rebase") == null)
                     and (.head.ref == $base or .base.ref == $head))
                 ' >/dev/null <<<"$all_open"; then
                 stack_member=true

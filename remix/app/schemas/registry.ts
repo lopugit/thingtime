@@ -257,6 +257,30 @@ export const SANDBOX_STORAGE_BYTES = 5 * 1024 * 1024;
 // bound. Newest N survive — multi-device keeps working up to the cap.
 export const MAX_APP_SESSIONS_PER_APP_USER = 10;
 
+// Messenger (see api/utils/messenger): chats, messages, communities, custom
+// emojis, follows. All bounds here so no write path can disagree about them.
+export const MAX_MESSAGE_CHARS = 4000;
+export const MAX_CHAT_NAME_CHARS = 80;
+export const MAX_CHAT_TOPIC_CHARS = 250;
+export const MAX_NICKNAME_CHARS = 40;
+// Direct adds per call and total members per group/channel. Communities are
+// the scale surface; a single chat stays a bounded fan-out for reads.
+export const MAX_CHAT_MEMBERS = 500;
+export const MAX_CHAT_MEMBERS_PER_ADD = 50;
+export const MAX_COMMUNITY_NAME_CHARS = 80;
+export const MAX_COMMUNITY_DESCRIPTION_CHARS = 500;
+export const MAX_SECTION_NAME_CHARS = 60;
+export const MAX_CHATS_PER_COMMUNITY = 500;
+export const MAX_COMMUNITIES_PER_USER = 50;
+// Custom emoji: the image is an inline data URI stored on its own thing doc
+// (the avatar pattern, FUNDAMENTALS §3 relational rule) — ~512KB binary ≈
+// 700K base64 chars. Names are the `:name:` vocabulary, Mongo-key-safe.
+export const MAX_EMOJI_NAME_CHARS = 32;
+export const MAX_EMOJI_DATA_URI_CHARS = 700 * 1024;
+export const MAX_EMOJIS_PER_SCOPE = 200;
+export const EMOJI_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]{1,31}$/;
+export const EMOJI_DATA_URI_PATTERN = /^data:image\/(gif|webp|png|apng|jpeg);base64,[A-Za-z0-9+/=]+$/;
+
 // Extended (the schema-free sidecar every thing carries) — see sanitizeExtended
 // below for the full story. Nesting has no validator rail — the only depth
 // bound is the database's own (MAX_STORABLE_NESTING below).
@@ -1452,6 +1476,215 @@ const appDataSchema: ThingtimeSchema = {
 };
 
 // ---------------------------------------------------------------------------
+// Messenger kinds — chats, messages, communities, custom emojis, follows.
+// All of them are written ONLY through /api/v1/chats*, /api/v1/communities*,
+// /api/v1/emojis and /api/v1/users/follow (no generic-route sanitizers on
+// purpose: membership, roles and request states are server-derived and must
+// not be forgeable through /api/v1/things). Everything is private plumbing
+// (acl ["tt:user"]) — visibility is decided by chat/community MEMBERSHIP,
+// enforced in the messenger utils, never by the generic acl walk.
+
+const communitySchema: ThingtimeSchema = {
+  id: 'community',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Community',
+  summary: 'A Slack-style workspace that groups channels, members and custom emojis.',
+  detail:
+    'Created through POST /api/v1/communities. Channels (chat things with chatType "channel") ' +
+    'and sidebar sections link back via targetId; membership is relational community-member ' +
+    'things (never an embedded member array). Invites mint community-invite things with ' +
+    'single-use-or-capped codes.',
+  createdVia: 'POST /api/v1/communities',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: MAX_COMMUNITY_NAME_CHARS, description: 'Community name.' },
+    { name: 'description', type: 'string', required: false, max: MAX_COMMUNITY_DESCRIPTION_CHARS, description: 'Optional description.' }
+  ],
+  example: { name: 'Rainbow Makers', description: 'Everything rainbow.' }
+};
+
+const communityMemberSchema: ThingtimeSchema = {
+  id: 'community-member',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Community member',
+  summary: 'One user\'s membership of one community (relational child doc).',
+  detail:
+    'targetId = the community shareId, ownerId = the member. Uniqueness rides the single ' +
+    'crystal.memberKey field (`<communityId>:<userId>`, partial unique index) — the reaction-index ' +
+    'pattern. Roles: owner > admin > member.',
+  createdVia: 'POST /api/v1/communities (creator) / POST /api/v1/communities/join (invite code)',
+  fields: [
+    { name: 'memberKey', type: 'string', required: true, description: 'Unique `<communityId>:<userId>` pair key.' },
+    { name: 'role', type: 'enum', required: true, values: ['owner', 'admin', 'member'], description: 'Community role.' }
+  ],
+  example: { memberKey: 'c0ffee…:5eed…', role: 'member' }
+};
+
+const communityInviteSchema: ThingtimeSchema = {
+  id: 'community-invite',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Community invite',
+  summary: 'An invite code that lets a user join a community.',
+  detail:
+    'targetId = the community shareId. The code is server-minted, unique via a partial index on ' +
+    'crystal.inviteCode, optionally expiring and use-capped; redemption is atomic (uses is ' +
+    'incremented with a guard, never read-modify-write).',
+  createdVia: 'POST /api/v1/communities/invites',
+  fields: [
+    { name: 'inviteCode', type: 'string', required: true, description: 'Server-minted redemption code.' },
+    { name: 'uses', type: 'number', required: true, description: 'Times redeemed so far.' },
+    { name: 'maxUses', type: 'number', required: false, description: 'Redemption cap (null = unlimited).' },
+    { name: 'expiresAt', type: 'string', required: false, description: 'ISO expiry (null = never).' },
+    { name: 'revoked', type: 'boolean', required: false, description: 'True once revoked by an admin.' }
+  ],
+  example: { inviteCode: 'tt-inv-8f2a4c3d9e5b', uses: 0, maxUses: 25 }
+};
+
+const chatSectionSchema: ThingtimeSchema = {
+  id: 'chat-section',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Chat section',
+  summary: 'A named sidebar group that community channels can be filed under.',
+  detail: 'targetId = the community shareId. Pure organisation — deleting a section un-files its channels.',
+  createdVia: 'POST /api/v1/communities/sections',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: MAX_SECTION_NAME_CHARS, description: 'Section name.' },
+    { name: 'order', type: 'number', required: true, description: 'Sort position within the sidebar.' }
+  ],
+  example: { name: 'Announcements', order: 0 }
+};
+
+const chatSchema: ThingtimeSchema = {
+  id: 'chat',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Chat',
+  summary: 'A conversation: a community channel, a standalone group, or a direct message.',
+  detail:
+    'Created through POST /api/v1/chats. Membership, roles, nicknames and read receipts are ' +
+    'relational chat-member things; messages are relational chat-message things. DMs are deduped ' +
+    'by crystal.dmKey (sorted participant ids, partial unique index). Channels link their ' +
+    'community via targetId + crystal.communityId and can be public (any community member may ' +
+    'join) or private (admins add).',
+  createdVia: 'POST /api/v1/chats',
+  fields: [
+    { name: 'name', type: 'string', required: false, max: MAX_CHAT_NAME_CHARS, description: 'Chat name (null for DMs — the UI shows the other member).' },
+    { name: 'topic', type: 'string', required: false, max: MAX_CHAT_TOPIC_CHARS, description: 'Channel topic line.' },
+    { name: 'chatType', type: 'enum', required: true, values: ['channel', 'group', 'dm'], description: 'Conversation shape.' },
+    { name: 'communityId', type: 'id', required: false, description: 'Owning community shareId (channels only).' },
+    { name: 'sectionId', type: 'id', required: false, description: 'Sidebar section shareId (channels only).' },
+    { name: 'channelVisibility', type: 'enum', required: false, values: ['public', 'private'], description: 'Channel joinability within its community (channels only, default public).' },
+    { name: 'dmKey', type: 'string', required: false, description: 'Sorted participant-id pair key deduping DMs.' }
+  ],
+  example: { name: 'general', topic: 'Anything goes', chatType: 'channel', channelVisibility: 'public' }
+};
+
+const chatMemberSchema: ThingtimeSchema = {
+  id: 'chat-member',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Chat member',
+  summary: 'One user\'s membership of one chat — role, nickname, request state and read receipt.',
+  detail:
+    'targetId = the chat shareId, ownerId = the member. Unique per (chat, user) via ' +
+    'crystal.memberKey. state tracks the Messenger request flow: active, pending (message ' +
+    'request awaiting accept), left, declined. requestOrigin buckets pending DMs into ' +
+    '"follower" (the sender follows you) vs "unknown". lastReadMessageId/lastReadAt are the ' +
+    'read receipt — one atomic doc per member, never an array on the chat.',
+  createdVia: 'POST /api/v1/chats / POST /api/v1/chats/members',
+  fields: [
+    { name: 'memberKey', type: 'string', required: true, description: 'Unique `<chatId>:<userId>` pair key.' },
+    { name: 'role', type: 'enum', required: true, values: ['owner', 'admin', 'member'], description: 'Chat role.' },
+    { name: 'nickname', type: 'string', required: false, max: MAX_NICKNAME_CHARS, description: 'Per-chat nickname (Messenger style).' },
+    { name: 'state', type: 'enum', required: true, values: ['active', 'pending', 'left', 'declined'], description: 'Membership lifecycle / message-request state.' },
+    { name: 'requestOrigin', type: 'enum', required: false, values: ['follower', 'unknown'], description: 'Message-request bucket while pending.' },
+    { name: 'lastReadMessageId', type: 'id', required: false, description: 'Newest message this member has read.' },
+    { name: 'lastReadAt', type: 'string', required: false, description: 'ISO timestamp of that read (drives unread counts + seen-by).' },
+    { name: 'muted', type: 'boolean', required: false, description: 'Suppress notifications for this chat.' }
+  ],
+  example: { memberKey: 'cha7…:5eed…', role: 'member', state: 'active' }
+};
+
+const chatMessageSchema: ThingtimeSchema = {
+  id: 'chat-message',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Chat message',
+  summary: 'One message in a chat — the post shape adapted for conversations.',
+  detail:
+    'targetId = the chat shareId. Deliberately NOT a post kind, so messages can never surface ' +
+    'in feeds or profiles; visibility is chat membership, enforced by the messenger endpoints. ' +
+    'threadRootId threads Slack-style replies under a root message; replyToId quotes a message ' +
+    'Messenger-style. Deleting is soft (deletedAt + text cleared) so threads keep their shape. ' +
+    'System events (member added, renamed…) are messages with systemType. Reactions are the ' +
+    'standard reaction things targeting the message, including custom `custom:<emoji id>` tokens.',
+  createdVia: 'POST /api/v1/chats/messages',
+  fields: [
+    { name: 'text', type: 'string', required: true, max: MAX_MESSAGE_CHARS, description: `Message text, max ${MAX_MESSAGE_CHARS} chars. :name: tokens render as custom emojis.` },
+    { name: 'threadRootId', type: 'id', required: false, description: 'Root message shareId when this is a thread reply.' },
+    { name: 'replyToId', type: 'id', required: false, description: 'Quoted message shareId (inline reply).' },
+    { name: 'editedAt', type: 'string', required: false, description: 'ISO timestamp of the last edit.' },
+    { name: 'deletedAt', type: 'string', required: false, description: 'ISO soft-delete timestamp (text is cleared).' },
+    { name: 'systemType', type: 'enum', required: false, values: ['member-added', 'member-left', 'member-removed', 'chat-renamed', 'chat-created', 'topic-changed'], description: 'Set on system event messages.' },
+    { name: 'systemMeta', type: 'record', required: false, description: 'Event payload for system messages ({ subjectId, value… }).' }
+  ],
+  example: { text: 'hello from the messenger 👋' }
+};
+
+const customEmojiSchema: ThingtimeSchema = {
+  id: 'custom-emoji',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Custom emoji',
+  summary: 'An uploaded emoji/gif usable in chat reactions and messages.',
+  detail:
+    'One thing per emoji (relational, FUNDAMENTALS §3 — never an array on the community). The ' +
+    'image is an inline base64 data URI (gif/webp/png/apng/jpeg, ≤' +
+    `${Math.round(MAX_EMOJI_DATA_URI_CHARS / 1024)}K chars), the avatar-storage pattern. Scope is ` +
+    'a community (targetId set) or personal (targetId null); names are unique per scope via ' +
+    'crystal.emojiKey. Reaction tokens reference emojis by id (`custom:<shareId>`), so renames ' +
+    'never orphan reactions.',
+  createdVia: 'POST /api/v1/emojis',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: MAX_EMOJI_NAME_CHARS, description: 'Lowercase [a-z0-9_-] name, rendered as :name:.' },
+    { name: 'emojiKey', type: 'string', required: true, description: 'Unique `<scope>:<name>` key (scope = communityId or user:<userId>).' },
+    { name: 'image', type: 'string', required: true, description: 'Inline data:image/... base64 URI.' },
+    { name: 'animated', type: 'boolean', required: false, description: 'True for gif/apng uploads.' }
+  ],
+  example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', image: 'data:image/gif;base64,R0lGOD…', animated: true }
+};
+
+const followSchema: ThingtimeSchema = {
+  id: 'follow',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Follow',
+  summary: 'One user following another (the start of the relationship graph).',
+  detail:
+    'ownerId = the follower, targetId = the followed user\'s shareId; unique per pair via ' +
+    'crystal.followKey. Powers the messenger request buckets (a DM from someone you follow ' +
+    'lands normally; from a follower it queues as a "follower" request; otherwise "unknown"). ' +
+    'The acl circle entries (tt:userFriends…) are designed to plug into this graph later.',
+  createdVia: 'POST /api/v1/users/follow',
+  fields: [
+    { name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }
+  ],
+  example: { followKey: '5eed…:c0ffee…' }
+};
+
+// ---------------------------------------------------------------------------
 // System kinds — the satellite collections collapsing into things (see
 // claude-todo/12-everything-is-a-thing-collections.md). These kinds are
 // PROTECTED: the generic /api/v1/things CRUD unconditionally refuses them.
@@ -1483,6 +1716,22 @@ export const PROTECTED_THINGTIME = [
 	MIGRATION_DIAGNOSTIC_THINGTIME
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
+
+// Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
+// already refused by the missing crystal sanitizers, and DELETE must be too:
+// a chat thing "owned" by its creator is one doc standing in for EVERY
+// member's conversation, so the generic owner-may-delete rule cannot apply.
+export const MESSENGER_THINGTIME = [
+  'community',
+  'community-member',
+  'community-invite',
+  'chat-section',
+  'chat',
+  'chat-member',
+  'chat-message',
+  'custom-emoji',
+  'follow'
+] as const;
 
 const userThingSchema: ThingtimeSchema = {
   id: 'user',
@@ -1600,6 +1849,16 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   appStorageLedgerSchema,
 	serviceQuotaSchema,
 	migrationDiagnosticSchema,
+  // messenger kinds (dedicated endpoints only — no generic sanitizers)
+  communitySchema,
+  communityMemberSchema,
+  communityInviteSchema,
+  chatSectionSchema,
+  chatSchema,
+  chatMemberSchema,
+  chatMessageSchema,
+  customEmojiSchema,
+  followSchema,
   // system kinds (collections collapsing into things — dual-era)
   userThingSchema,
   themeThingSchema,

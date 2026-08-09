@@ -548,7 +548,49 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Account-ownership links (accounts/accountLinks.ts): "who is linked
     // to this target" — the admin owners view and app co-manager checks.
     // Links a USER holds ride the (thingtime, ownerId) prefix instead.
-		col.createIndex({ 'crystal.targetId': 1, 'crystal.linkKind': 1 }, { partialFilterExpression: { 'crystal.targetId': { $exists: true } } }),
+    col.createIndex(
+      { 'crystal.targetId': 1, 'crystal.linkKind': 1 },
+      { partialFilterExpression: { 'crystal.targetId': { $exists: true } } }
+    ),
+    // Messenger (api/utils/messenger). Structural invariants ride single
+    // crystal key fields with partial unique indexes (the reaction-index
+    // pattern — acl/thingtime are multikey, so compounds over them are out):
+    // one membership per (chat|community, user)…
+    col.createIndex(
+      { 'crystal.memberKey': 1 },
+      { name: 'things_member_key_unique', unique: true, partialFilterExpression: { 'crystal.memberKey': { $type: 'string' } } }
+    ),
+    // …one DM per participant pair (toggle-safe under create races)…
+    col.createIndex(
+      { 'crystal.dmKey': 1 },
+      { name: 'things_dm_key_unique', unique: true, partialFilterExpression: { 'crystal.dmKey': { $type: 'string' } } }
+    ),
+    // …invite codes are unguessable AND collision-proof…
+    col.createIndex(
+      { 'crystal.inviteCode': 1 },
+      { name: 'things_invite_code_unique', unique: true, partialFilterExpression: { 'crystal.inviteCode': { $type: 'string' } } }
+    ),
+    // …one custom emoji name per scope…
+    col.createIndex(
+      { 'crystal.emojiKey': 1 },
+      { name: 'things_emoji_key_unique', unique: true, partialFilterExpression: { 'crystal.emojiKey': { $type: 'string' } } }
+    ),
+    // …and one follow edge per (follower, followee).
+    col.createIndex(
+      { 'crystal.followKey': 1 },
+      { name: 'things_follow_key_unique', unique: true, partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } }
+    ),
+    // Thread replies list under their root message (main chat pages ride the
+    // shared { targetId, thingtime, createdAt, shareId } index above).
+    col.createIndex(
+      { 'crystal.threadRootId': 1, createdAt: 1, shareId: 1 },
+      { name: 'things_thread_root', partialFilterExpression: { 'crystal.threadRootId': { $type: 'string' } } }
+    ),
+    // Channel directory + channel caps query chats by their community.
+    col.createIndex(
+      { 'crystal.communityId': 1, createdAt: 1, shareId: 1 },
+      { name: 'things_chat_community', partialFilterExpression: { 'crystal.communityId': { $type: 'string' } } }
+    ),
     // Sandbox app-data is ephemeral: only docs written under a sandbox
     // token carry sandboxExpiresAt (TTL skips docs without the field), so
     // pretend data reaps itself with the token's lifetime.
