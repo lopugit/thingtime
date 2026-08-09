@@ -103,7 +103,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Script self-test
+      - name: Script and orphaned-history self-tests
         run: node .github/scripts/promote-features-to-main.mjs --self-test
 
       - name: Promote merged develop PRs to main

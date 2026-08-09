@@ -19,6 +19,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Per-feature promotion survives rewritten historical merge commits and
+  isolated failures**: the `develop` → `main` promoter now verifies every
+  source merge object, fetches unreachable historical merges by exact SHA,
+  distinguishes a normal non-ancestor result from a Git inspection error, and
+  requires original ancestry or both patch-equivalent history and current-tip
+  effect verification before an old change may be promoted. Later reverts and
+  removed aggregate ranges fail closed instead of being resurrected. It
+  records structured per-PR blocks instead of aborting the batch. A failed
+  standalone feature no longer prevents later independent promotions; a
+  failed stack member still defers only its dependent members. Group-local
+  exceptions are contained through the remaining groups before failing the
+  run, the partial summary is always published, reused promotion branches are
+  freshly fetched and checked against an exactly reconstructed source tree and
+  expected PR base before stacking, every external OPEN link is validated back
+  to `main`, every genuinely earlier CLOSED predecessor is checked, and
+  `MAX_NEW_PRS` applies to branch reuse too. A local-Git regression test
+  reproduces the force-rewritten-history failure before proving full-parent
+  recovery. Promotion-marker lookup also scans up to 1,000 PRs so older records
+  remain idempotent as the repository grows. See the
+  [PR #206 engineering note](../PRs/206-codex-harden-feature-promoter-keep-feature-promotion-running-across-historical-git-failures.md).
+  — Codex (AI), 2026-08-09
 - **Conflict resolution now uses a fixed `develop` control plane**: every
   external event and human manual run is detector-only, then dispatches each
   selected PR number to the resolver workflow revision on `develop`; only a
