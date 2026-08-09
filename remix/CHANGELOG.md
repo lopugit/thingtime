@@ -19,6 +19,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR conflict resolver model selection follows Thingtime Admin**: the older
+  workflow snapshot on PR #54 now loads the public, allowlisted model waterfall
+  instead of hardcoding Opus 4.8, safely falling back to the Claude default if
+  the setting is unavailable or malformed. — Codex (AI), 2026-08-10
+
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
   /search + profile/feed branch surfaced a batch of merge-blocking issues, all
   fixed here — Claude (AI), 2026-07-17:

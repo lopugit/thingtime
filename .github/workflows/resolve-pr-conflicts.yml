@@ -295,6 +295,86 @@ jobs:
             exit 1
           fi
 
+      - name: Load the conflict-resolver model waterfall
+        id: models
+        if: steps.merge.outputs.conflicted == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          endpoint="https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall"
+          response_file="$RUNNER_TEMP/pr-conflict-model-waterfall.json"
+          waterfall='["default"]'
+          source="built-in default"
+
+          if curl --fail --silent --show-error \
+            --proto '=https' \
+            --tlsv1.2 \
+            --connect-timeout 5 \
+            --max-time 12 \
+            --retry 2 \
+            --retry-delay 1 \
+            --retry-max-time 30 \
+            --max-filesize 65536 \
+            --output "$response_file" \
+            "$endpoint"; then
+            if configured="$(jq -cse '
+              select(length == 1)
+              | .[0]
+              | select(type == "object")
+              | select(.ok == true)
+              | select(.key == "Thingtime.PRConflictAutoResolverModelWaterfall")
+              | .waterfall
+              | select(type == "array")
+              | select(length >= 1 and length <= 3)
+              | select(all(.[]; type == "string"))
+              | select(all(.[];
+                  . == "default"
+                  or . == "claude-fable-5"
+                  or . == "claude-opus-5"))
+              | select(length == (unique | length))
+            ' "$response_file" 2>/dev/null)"; then
+              waterfall="$configured"
+              source="Thingtime admin setting"
+              if ! jq -e 'index("default") != null' >/dev/null <<<"$waterfall"; then
+                waterfall="$(jq -c '. + ["default"]' <<<"$waterfall")"
+              fi
+            else
+              echo "::warning::Thingtime returned a malformed conflict-resolver model waterfall; using [default]."
+            fi
+          else
+            echo "::warning::Thingtime conflict-resolver model waterfall is unavailable; using [default]."
+          fi
+
+          mapfile -t configured_ids < <(jq -r '.[]' <<<"$waterfall")
+          models=()
+          for id in "${configured_ids[@]}"; do
+            case "$id" in
+              default) models+=("default") ;;
+              claude-fable-5) models+=("claude-fable-5") ;;
+              claude-opus-5) models+=("claude-opus-5") ;;
+              *)
+                echo "::warning::Validated waterfall mapping failed closed; using [default]."
+                models=("default")
+                source="built-in default"
+                break
+                ;;
+            esac
+          done
+
+          primary="${models[0]}"
+          model_args="--model $primary"
+          if [ "${#models[@]}" -gt 1 ]; then
+            fallbacks="$(IFS=,; echo "${models[*]:1}")"
+            model_args="$model_args --fallback-model $fallbacks"
+          fi
+
+          echo "Model waterfall source: $source"
+          echo "Claude Code model waterfall: $(IFS=,; echo "${models[*]}")"
+          echo "Fallbacks apply only to model overload, unavailability, or eligible server errors."
+          echo "A model that completes but leaves conflict markers does not mechanically trigger the next model."
+          echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
+
       - name: Resolve conflicts with Claude
         if: steps.merge.outputs.conflicted == 'true'
         uses: anthropics/claude-code-action@v1
@@ -350,7 +430,8 @@ jobs:
             When you are done, every file you could confidently resolve should have no
             conflict markers left, and you should have touched nothing else.
           claude_args: |
-            --model claude-opus-4-8
+            ${{ steps.models.outputs.model_args }}
+            --effort max
             --max-turns 80
             --allowedTools "Read,Grep,Glob,Edit,Write"
             --disallowedTools "WebFetch,WebSearch,Bash,Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
