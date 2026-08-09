@@ -257,6 +257,17 @@ export function useApi() {
     },
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
+			reveal: useCallback(
+				async (
+					args: { thingId: string; reference: string; password: string },
+					options?: { signal?: AbortSignal }
+				) =>
+					asyncFetcher.submit(
+						{ thingId: args?.thingId, reference: args?.reference, password: args?.password },
+						{ action: '/api/v1/things/reveal', signal: options?.signal, errorContext: 'reveal a protected value' }
+					),
+				[asyncFetcher]
+			),
       // structured search — POST carries the condition tree (read-only despite
       // the verb); see /docs/api things-search. Anonymous simple searches
       // (anon flag set, no condition tree) go over the GET form instead so

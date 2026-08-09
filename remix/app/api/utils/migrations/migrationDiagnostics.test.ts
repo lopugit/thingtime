@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { fromBin } from '../auth/users';
+import { fromBin, toBin } from '../auth/users';
+import { captureAdminErrorDiagnostic } from '../errors/adminDiagnostic';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
-import { buildMigrationDiagnosticThing, formatMigrationDiagnosticDetail, isMigrationDiagnosticId } from './migrationDiagnostics';
+import {
+	buildMigrationDiagnosticThing,
+	formatMigrationDiagnosticDetail,
+	isMigrationDiagnosticId,
+	migrationDiagnosticFromThing,
+	migrationDiagnosticRevealFromThing
+} from './migrationDiagnostics';
 
 const id = 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90';
 
@@ -16,7 +23,20 @@ test('migration diagnostics are private, expiring, non-billable control Things',
 			status: 500,
 			outcome: 'unknown',
 			summary: 'Migration stopped before completion.',
-			diagnostic: { detail: '{\n  "stack": "redacted stack"\n}', redactions: 2, truncated: false }
+			diagnostic: {
+				detail: '{\n  "stack": "Billable Thing [redacted MongoDB ObjectId #1]"\n}',
+				redactions: 2,
+				truncated: false,
+				revealables: [
+					{
+						reference: 'mongodb-object-id-1',
+						kind: 'mongodb-object-id',
+						label: 'MongoDB ObjectId #1',
+						placeholder: '[redacted MongoDB ObjectId #1]',
+						value: '507f1f77bcf86cd799439011'
+					}
+				]
+			}
 		},
 		{ now, id }
 	);
@@ -30,11 +50,164 @@ test('migration diagnostics are private, expiring, non-billable control Things',
 	assert.equal(doc.expiresAt.toISOString(), '2026-09-07T00:00:00.000Z');
 	assert.equal('detail' in doc.crystal, false, 'full detail must stay outside wildcard-indexed crystal');
 	assert.deepEqual(JSON.parse(fromBin(doc.secure)), {
-		diagnosticVersion: 1,
-		detail: '{\n  "stack": "redacted stack"\n}',
+		diagnosticVersion: 2,
+		detail: '{\n  "stack": "Billable Thing [redacted MongoDB ObjectId #1]"\n}',
 		redactions: 2,
-		truncated: false
+		truncated: false,
+		revealables: [
+			{
+				reference: 'mongodb-object-id-1',
+				kind: 'mongodb-object-id',
+				label: 'MongoDB ObjectId #1',
+				placeholder: '[redacted MongoDB ObjectId #1]',
+				value: '507f1f77bcf86cd799439011'
+			}
+		]
 	});
+	const projected = migrationDiagnosticFromThing(doc, new Date('2026-08-08T00:00:01.000Z'));
+	assert.deepEqual(projected?.revealables, [
+		{
+			reference: 'mongodb-object-id-1',
+			kind: 'mongodb-object-id',
+			label: 'MongoDB ObjectId #1',
+			placeholder: '[redacted MongoDB ObjectId #1]'
+		}
+	]);
+	assert.doesNotMatch(JSON.stringify(projected), /507f1f77bcf86cd799439011/);
+	assert.deepEqual(migrationDiagnosticRevealFromThing(doc, 'mongodb-object-id-1', new Date('2026-08-08T00:00:01.000Z')), {
+		reference: 'mongodb-object-id-1',
+		kind: 'mongodb-object-id',
+		label: 'MongoDB ObjectId #1',
+		value: '507f1f77bcf86cd799439011'
+	});
+	assert.equal(migrationDiagnosticRevealFromThing(doc, 'mongodb-object-id-2', new Date('2026-08-08T00:00:01.000Z')), null);
+});
+
+test('stored diagnostic detail is re-scrubbed before ordinary projection', () => {
+	const now = new Date('2026-08-08T00:00:00.000Z');
+	const raw = '507f1f77bcf86cd799439011';
+	const doc = buildMigrationDiagnosticThing(
+		{
+			ownerId: 'admin-user-id',
+			migrationId: 'backfill-user-storage-accounting',
+			status: 500,
+			outcome: 'unknown',
+			summary: 'Migration stopped before completion.',
+			diagnostic: {
+				detail: `raw=${raw}\nBillable Thing [redacted MongoDB ObjectId #1]`,
+				redactions: 1,
+				truncated: false,
+				revealables: [
+					{
+						reference: 'mongodb-object-id-1',
+						kind: 'mongodb-object-id',
+						label: 'MongoDB ObjectId #1',
+						placeholder: '[redacted MongoDB ObjectId #1]',
+						value: raw
+					}
+				]
+			}
+		},
+		{ now, id }
+	);
+
+	const projected = migrationDiagnosticFromThing(doc, new Date('2026-08-08T00:00:01.000Z'));
+	assert.ok(projected);
+	assert.doesNotMatch(projected.detail, new RegExp(raw, 'i'));
+	assert.match(projected.detail, /raw=\[redacted-object-id\]/);
+	assert.equal(projected.revealables.length, 1);
+	assert.equal(migrationDiagnosticRevealFromThing(doc, 'mongodb-object-id-1', new Date('2026-08-08T00:00:01.000Z'))?.value, raw);
+});
+
+test('already-scrubbed diagnostic redaction counts stay stable through write and read', () => {
+	const now = new Date('2026-08-08T00:00:00.000Z');
+	const raw = '507f1f77bcf86cd799439011';
+	const diagnostics = [
+		captureAdminErrorDiagnostic(new Error(`Thing ${raw} failed in /Users/private-user/project`), {
+			mongodbObjectIds: [raw]
+		}),
+		captureAdminErrorDiagnostic(new Error('Cookie: sid=very-secret-cookie')),
+		captureAdminErrorDiagnostic(new Error('Authorization: Basic dXNlcjpzZWNyZXQ='))
+	];
+	for (const diagnostic of diagnostics) {
+		const doc = buildMigrationDiagnosticThing(
+			{
+				ownerId: 'admin-user-id',
+				migrationId: 'backfill-user-storage-accounting',
+				status: 500,
+				outcome: 'unknown',
+				summary: 'Migration stopped before completion.',
+				diagnostic
+			},
+			{ now, id }
+		);
+		const stored = JSON.parse(fromBin(doc.secure));
+		const projected = migrationDiagnosticFromThing(doc, new Date('2026-08-08T00:00:01.000Z'));
+
+		assert.equal(stored.redactions, diagnostic.redactions);
+		assert.equal(projected?.redactions, diagnostic.redactions);
+	}
+});
+
+test('stored JSON outside the closed error snapshot cannot become diagnostic detail', () => {
+	const now = new Date('2026-08-08T00:00:00.000Z');
+	const secret = 'super-sensitive-value-should-not-render';
+	const doc = buildMigrationDiagnosticThing(
+		{
+			ownerId: 'admin-user-id',
+			migrationId: 'backfill-user-storage-accounting',
+			status: 500,
+			outcome: 'unknown',
+			summary: 'Migration stopped before completion.',
+			diagnostic: {
+				detail: JSON.stringify({ nested: { privateValue: secret } }),
+				redactions: 0,
+				truncated: false,
+				revealables: []
+			}
+		},
+		{ now, id }
+	);
+
+	const stored = fromBin(doc.secure);
+	const projected = migrationDiagnosticFromThing(doc, new Date('2026-08-08T00:00:01.000Z'));
+	assert.doesNotMatch(stored, new RegExp(secret));
+	assert.doesNotMatch(JSON.stringify(projected), new RegExp(secret));
+	assert.match(projected?.detail || '', /UnavailableDiagnostic/);
+});
+
+test('legacy v1 diagnostics remain readable while unknown and mismatched envelopes fail closed', () => {
+	const now = new Date('2026-08-08T00:00:00.000Z');
+	const current = buildMigrationDiagnosticThing(
+		{
+			ownerId: 'admin-user-id',
+			migrationId: 'backfill-user-storage-accounting',
+			status: 500,
+			outcome: 'unknown',
+			summary: 'Migration stopped before completion.',
+			diagnostic: { detail: 'legacy redacted detail', redactions: 1, truncated: false, revealables: [] }
+		},
+		{ now, id }
+	);
+	const legacy = {
+		...current,
+		crystal: { ...current.crystal, diagnosticVersion: 1 },
+		secure: toBin(JSON.stringify({ diagnosticVersion: 1, detail: 'legacy redacted detail', redactions: 1, truncated: false }))
+	};
+
+	assert.equal(migrationDiagnosticFromThing(legacy, new Date('2026-08-08T00:00:01.000Z'))?.detail, 'legacy redacted detail');
+	assert.deepEqual(migrationDiagnosticFromThing(legacy, new Date('2026-08-08T00:00:01.000Z'))?.revealables, []);
+	assert.equal(
+		migrationDiagnosticFromThing({ ...legacy, crystal: { ...legacy.crystal, diagnosticVersion: 2 } }, new Date('2026-08-08T00:00:01.000Z')),
+		null
+	);
+	assert.equal(
+		migrationDiagnosticFromThing(
+			{ ...legacy, crystal: { ...legacy.crystal, diagnosticVersion: 99 }, secure: toBin(JSON.stringify({ diagnosticVersion: 99 })) },
+			new Date('2026-08-08T00:00:01.000Z')
+		),
+		null
+	);
 });
 
 test('migration diagnostic ids and inline fallback detail are bounded and normalized', () => {
@@ -48,7 +221,7 @@ test('migration diagnostic ids and inline fallback detail are bounded and normal
 		status: 999,
 		outcome: 'rejected',
 		summary: 'Operator summary',
-		diagnostic: { detail: 'full redacted detail', redactions: 1, truncated: false }
+		diagnostic: { detail: 'full redacted detail', redactions: 1, truncated: false, revealables: [] }
 	});
 	assert.match(detail, /Migration: requested-migration/);
 	assert.match(detail, /Mode: dry run/);
@@ -63,7 +236,7 @@ test('migration diagnostic ids and inline fallback detail are bounded and normal
 				status: 500,
 				outcome: 'unknown',
 				summary: 'summary',
-				diagnostic: { detail: 'detail', redactions: 0, truncated: false }
+				diagnostic: { detail: 'detail', redactions: 0, truncated: false, revealables: [] }
 			}),
 		/Invalid migration diagnostic owner/
 	);

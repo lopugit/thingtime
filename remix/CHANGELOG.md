@@ -19,6 +19,26 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Password-confirmed reveal for protected Thing diagnostics**: new migration
+  diagnostics use a backward-compatible v2 secure envelope that keeps a bounded
+  set of MongoDB ObjectIds supplied by explicitly authored server-side error
+  context behind numbered redaction
+  references. The ordinary diagnostic response exposes descriptors only;
+  credentials, tokens, URLs, private keys, query identifiers, and ambiguous
+  24-hex values remain irreversible. `/thing/:id` now offers a reusable Reveal
+  modal that verifies the current password on every lookup, keeps only one value
+  transiently in memory, and clears it on hide, account/Thing change, navigation,
+  or tab backgrounding. The closed-codec reveal endpoint rejects arbitrary
+  secure fields and cross-origin/non-JSON browser posts, returns private no-store
+  responses, and has a non-configurable fail-closed five-request/15-minute
+  confirmation ceiling. Existing v1 diagnostics remain readable without reveal values. — Codex
+  (AI), 2026-08-09
+- **Builtin schemas no longer block whole-account storage accounting**:
+  reserved system-owned `schema-*` Things are now seeded with the server-owned
+  `storageClass: "control"` stamp, existing genuine seeds missing that stamp
+  surface as pending and self-repair, and the account-storage orchestrator runs
+  the schema seed prerequisite before scanning billable content. Community and
+  user-authored schemas remain billable. — Codex (AI), 2026-08-09
 - **Conflict detection waits out GitHub and says so when it stands aside**:
   the merge resolver's detector polled mergeability for only ~80 seconds
   after a base push, but GitHub's verdicts can take ~6 minutes to settle —
@@ -37,7 +57,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   unchanged. Also restored the "AI PR and stack rebase conflict resolution"
   changelog bullet's opening line, dropped by the AI resolution of a previous
   merge. — Claude (AI), 2026-08-08
-
 - **Contextual reaction/migration errors + storage migration upsert repair**:
   Lopu can no longer render a lone 🌧️ when Nitro replaces an unhandled server
   exception with boolean `error: true`; fetch failures now become typed,

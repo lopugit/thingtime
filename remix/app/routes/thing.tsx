@@ -4,6 +4,10 @@ import { ArrowLeft, Copy, ExternalLink } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import {
+	SensitiveThingReveal,
+	type SensitiveThingRevealDescriptor
+} from '~/components/Things/SensitiveThingReveal';
 import { apiErrorMessage } from '~/hooks/apiFailure';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -23,6 +27,7 @@ type MigrationDiagnostic = {
 	detail: string;
 	redactions: number;
 	truncated: boolean;
+	revealables: SensitiveThingRevealDescriptor[];
 };
 
 type ThingViewData = { kind: 'diagnostic'; diagnostic: MigrationDiagnostic } | { kind: 'thing'; thing: Record<string, any> };
@@ -36,10 +41,42 @@ type ThingLoadState = {
 
 const diagnosticFromResponse = (response: any): MigrationDiagnostic => {
 	const diagnostic = response?.diagnostic;
-	if (!diagnostic || typeof diagnostic !== 'object' || typeof diagnostic.id !== 'string' || typeof diagnostic.detail !== 'string') {
+	const rawRevealables = diagnostic?.revealables == null ? [] : diagnostic.revealables;
+	if (
+		!diagnostic ||
+		typeof diagnostic !== 'object' ||
+		typeof diagnostic.id !== 'string' ||
+		typeof diagnostic.detail !== 'string' ||
+		!Array.isArray(rawRevealables) ||
+		rawRevealables.length > 32
+	) {
 		throw new Error('The diagnostic response was incomplete.');
 	}
-	return diagnostic as MigrationDiagnostic;
+	const references = new Set<string>();
+	const revealables = rawRevealables.map((value: unknown) => {
+		if (!value || typeof value !== 'object') throw new Error('The diagnostic response was incomplete.');
+		const descriptor = value as Record<string, unknown>;
+		const reference = typeof descriptor.reference === 'string' ? descriptor.reference : '';
+		const referenceMatch = reference.match(/^mongodb-object-id-([1-9]|[12][0-9]|3[0-2])$/);
+		const index = referenceMatch ? Number(referenceMatch[1]) : 0;
+		if (
+			!referenceMatch ||
+			descriptor.kind !== 'mongodb-object-id' ||
+			descriptor.label !== `MongoDB ObjectId #${index}` ||
+			descriptor.placeholder !== `[redacted MongoDB ObjectId #${index}]` ||
+			references.has(reference)
+		) {
+			throw new Error('The diagnostic response was incomplete.');
+		}
+		references.add(reference);
+		return {
+			reference,
+			kind: descriptor.kind,
+			label: descriptor.label,
+			placeholder: descriptor.placeholder
+		} as SensitiveThingRevealDescriptor;
+	});
+	return { ...diagnostic, revealables } as MigrationDiagnostic;
 };
 
 const thingFromResponse = (response: any): Record<string, any> => {
@@ -227,7 +264,7 @@ export default function ThingPage() {
 											<Text>Captured {readableDate(diagnostic.capturedAt)}</Text>
 											<Text>Expires {readableDate(diagnostic.expiresAt)}</Text>
 											<Text>
-												{diagnostic.redactions} secret pattern{diagnostic.redactions === 1 ? '' : 's'} redacted
+												{diagnostic.redactions} sensitive pattern{diagnostic.redactions === 1 ? '' : 's'} redacted
 												{diagnostic.truncated ? ' · output truncated to its safety limit' : ''}
 											</Text>
 										</Stack>
@@ -267,6 +304,15 @@ export default function ThingPage() {
 								{detail}
 							</Box>
 						</Box>
+
+						{diagnostic?.revealables.length ? (
+							<SensitiveThingReveal
+								key={requestKey}
+								thingId={diagnostic.id}
+								identityKey={currentUser?.id || 'anonymous'}
+								revealables={diagnostic.revealables}
+							/>
+						) : null}
 					</>
 				) : null}
 			</Stack>

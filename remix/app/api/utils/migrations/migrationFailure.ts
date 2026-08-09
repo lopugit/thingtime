@@ -27,7 +27,14 @@ const withDiagnosticSource = (failure: Omit<MigrationFailure, 'diagnosticSource'
 };
 
 export const captureMigrationFailureDiagnostic = (failure: MigrationFailure): AdminErrorDiagnostic | null =>
-	Object.prototype.hasOwnProperty.call(failure, 'diagnosticSource') ? captureAdminErrorDiagnostic(failure.diagnosticSource) : null;
+	Object.prototype.hasOwnProperty.call(failure, 'diagnosticSource')
+		? captureAdminErrorDiagnostic(
+				failure.diagnosticSource,
+				failure.diagnosticSource instanceof MigrationOperatorError
+					? failure.diagnosticSource.diagnosticRevealContext()
+					: undefined
+		  )
+		: null;
 
 export type MigrationOperatorCode =
   | 'lease_lost'
@@ -50,6 +57,7 @@ type MigrationOperatorOptions = {
   internalMessage?: string;
   prerequisiteId?: string;
   pending?: number;
+	diagnosticObjectIds?: readonly string[];
 };
 
 const safeCount = (value: unknown): number => (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0);
@@ -100,13 +108,13 @@ const operatorPresentation = (code: MigrationOperatorCode, options: MigrationOpe
       return {
         status: 409,
         message:
-          'A billable Thing belongs to no current user. Ledgers remain fenced. Inspect server logs to locate and repair the orphaned record, then rerun backfill-user-storage-accounting.'
+					'A billable Thing belongs to no current user. Ledgers remain fenced. Use the private diagnostic when provided to reveal and repair the orphaned record; server logs remain the fallback. Then rerun backfill-user-storage-accounting.'
       };
     case 'invalid_sandbox_marker':
       return {
         status: 409,
         message:
-          'A billable Thing has an invalid sandbox marker. Ledgers remain fenced. Inspect server logs to locate and repair the malformed record, then rerun backfill-user-storage-accounting.'
+					'A billable Thing has an invalid sandbox marker. Ledgers remain fenced. Use the private diagnostic when provided to reveal and repair the malformed record; server logs remain the fallback. Then rerun backfill-user-storage-accounting.'
       };
     case 'schema_prerequisite':
       return {
@@ -118,7 +126,7 @@ const operatorPresentation = (code: MigrationOperatorCode, options: MigrationOpe
       return {
         status: 409,
         message:
-          'A billable Thing changed to an owner that is not a current user. Ledgers remain fenced. Inspect server logs and repair its ownership, then rerun backfill-user-storage-accounting.'
+					'A billable Thing changed to an owner that is not a current user. Ledgers remain fenced. Use the private diagnostic when provided to reveal and repair the record; server logs remain the fallback. Then rerun backfill-user-storage-accounting.'
       };
     case 'billable_thing_churn':
       return {
@@ -151,6 +159,7 @@ export class MigrationOperatorError extends Error {
   readonly code: MigrationOperatorCode;
   readonly status: number;
   readonly publicMessage: string;
+	readonly #diagnosticObjectIds: readonly string[];
 
   constructor(code: MigrationOperatorCode, options: MigrationOperatorOptions = {}) {
     const presentation = operatorPresentation(code, options);
@@ -159,7 +168,17 @@ export class MigrationOperatorError extends Error {
     this.code = code;
     this.status = presentation.status;
     this.publicMessage = presentation.message;
+		this.#diagnosticObjectIds = Array.isArray(options.diagnosticObjectIds)
+			? [...new Set(options.diagnosticObjectIds.filter((value) => typeof value === 'string' && /^[0-9a-f]{24}$/i.test(value)).map((value) => value.toLowerCase()))].slice(
+					0,
+					32
+			  )
+			: [];
   }
+
+	diagnosticRevealContext(): { mongodbObjectIds: readonly string[] } {
+		return { mongodbObjectIds: this.#diagnosticObjectIds };
+	}
 }
 
 const storageMutationPresentation = (error: StorageMutationError): { status: number; message: string } => {
