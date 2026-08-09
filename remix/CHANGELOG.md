@@ -32,7 +32,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   two-pass multipart settlement fence. Production uses an exact-subject Vercel
   OIDC role and server-only `THINGTIME_PRIVATE_*` configuration; comments and
   messenger/thread surfaces remain intentionally unchanged in this post-only
-  scope. — Codex (AI), 2026-08-09
+  scope. See the
+  [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
+  — Codex (AI), 2026-08-09
 
 ### Fixed
 

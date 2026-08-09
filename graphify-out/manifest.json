@@ -1525,19 +1525,19 @@
     "semantic_hash": "9434e7191af48004e2365ca96fe0a502"
   },
   "FUNDAMENTALS.md": {
-    "mtime": 1786258211.6510975,
-    "ast_hash": "2b7044ef005786735d2ab90b2d82f5d2",
-    "semantic_hash": ""
+    "mtime": 1786259926.3468664,
+    "ast_hash": "d6a9405ed8c22cf976a49940c72e9311",
+    "semantic_hash": "d6a9405ed8c22cf976a49940c72e9311"
   },
   "README.md": {
-    "mtime": 1786257207.7758455,
-    "ast_hash": "1031c824c3c03b1b39eb1b16b5d31c0e",
-    "semantic_hash": ""
+    "mtime": 1786259926.2830157,
+    "ast_hash": "41957b8d0c8aca28be1355ec0015c57d",
+    "semantic_hash": "41957b8d0c8aca28be1355ec0015c57d"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1786258053.725594,
     "ast_hash": "0083906f00543df17b9ed95d0ee9e8db",
-    "semantic_hash": ""
+    "semantic_hash": "0083906f00543df17b9ed95d0ee9e8db"
   },
   "docs/Use Cases/car.md": {
     "mtime": 1786245149.9832015,
@@ -1755,9 +1755,9 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786258185.3435597,
-    "ast_hash": "0119203be572f3ef15ab398c23326aa4",
-    "semantic_hash": ""
+    "mtime": 1786259777.842579,
+    "ast_hash": "5a9f9acaec1701f8c72fbc225e22ec0d",
+    "semantic_hash": "5a9f9acaec1701f8c72fbc225e22ec0d"
   },
   "remix/README.md": {
     "mtime": 1786245150.2460377,
@@ -4160,9 +4160,9 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786258185.3019695,
-    "ast_hash": "cecb221d873a9286eb8aa44f78b45cfa",
-    "semantic_hash": ""
+    "mtime": 1786260453.7763171,
+    "ast_hash": "604f286fc7111afe47a12c8075396920",
+    "semantic_hash": "604f286fc7111afe47a12c8075396920"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786245149.978798,
@@ -5297,7 +5297,7 @@
   "remix/app/api/utils/attachments/attachmentCore.ts": {
     "mtime": 1786258646.9790246,
     "ast_hash": "efbc8663882f5705bc293c1c8d2a06cd",
-    "semantic_hash": ""
+    "semantic_hash": "efbc8663882f5705bc293c1c8d2a06cd"
   },
   "remix/app/api/utils/attachments/attachmentPresentation.test.ts": {
     "mtime": 1786257937.179849,
@@ -5330,14 +5330,14 @@
     "semantic_hash": "b1866ce5c3b85e4b0e9846fa88e534dc"
   },
   "remix/app/api/utils/attachments/config.test.ts": {
-    "mtime": 1786257937.318508,
-    "ast_hash": "8f51c70def6d8064a9501de5b5036868",
-    "semantic_hash": "8f51c70def6d8064a9501de5b5036868"
+    "mtime": 1786259815.735788,
+    "ast_hash": "99218702f4ec566df33ac243fe3fcfbf",
+    "semantic_hash": "99218702f4ec566df33ac243fe3fcfbf"
   },
   "remix/app/api/utils/attachments/config.ts": {
     "mtime": 1786258646.9793234,
     "ast_hash": "78e60dbefba82ea7346f25857227bc79",
-    "semantic_hash": ""
+    "semantic_hash": "78e60dbefba82ea7346f25857227bc79"
   },
   "remix/app/api/utils/attachments/postCreate.test.ts": {
     "mtime": 1786257937.324365,
@@ -5350,9 +5350,9 @@
     "semantic_hash": "82e983848d09878ffff91299a3a358f2"
   },
   "remix/app/api/utils/attachments/privateS3.test.ts": {
-    "mtime": 1786257937.3338964,
-    "ast_hash": "07710e450baf302089545f1aabd8e484",
-    "semantic_hash": "07710e450baf302089545f1aabd8e484"
+    "mtime": 1786259815.736216,
+    "ast_hash": "071548dea73be2e6f21dee5971612727",
+    "semantic_hash": "071548dea73be2e6f21dee5971612727"
   },
   "remix/app/api/utils/attachments/privateS3.ts": {
     "mtime": 1786257937.3440804,
@@ -5392,7 +5392,7 @@
   "remix/app/components/Attachments/useAttachmentUploads.ts": {
     "mtime": 1786258677.3148842,
     "ast_hash": "b57464e597801155e37ee2d0eaa38e12",
-    "semantic_hash": ""
+    "semantic_hash": "b57464e597801155e37ee2d0eaa38e12"
   },
   "remix/app/routes/api/v1/attachments/attachmentsRoutes.test.ts": {
     "mtime": 1786257937.4250941,
@@ -5433,5 +5433,10 @@
     "mtime": 1786257937.4413474,
     "ast_hash": "d61a12013150e526ae48f918588d7506",
     "semantic_hash": "d61a12013150e526ae48f918588d7506"
+  },
+  "PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md": {
+    "mtime": 1786259777.842236,
+    "ast_hash": "bd3d78565e6e193d55ac0d2ea6630332",
+    "semantic_hash": "bd3d78565e6e193d55ac0d2ea6630332"
   }
 }
