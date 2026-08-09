@@ -42,30 +42,50 @@ surfaces, not isolated sandboxes.
   deployment targeting the Custom Environment.
 - The PR wildcard is registered and verified in Vercel while remaining detached
   from both a Git branch and a Custom Environment.
+- Its DNS-only wildcard CNAME now resolves, but Vercel still reports the domain
+  as misconfigured and wildcard TLS fails because the narrow ACME nameserver
+  delegation is not yet published.
 - The protected GitHub Environment and its non-secret controller variables
   exist and allow only `main`.
+- The active `main` `Basic Protection` ruleset has no bypass, requires pull
+  requests with resolved review threads and strict Web CI/CodeQL status checks,
+  and blocks deletion and force-pushes.
+- The controller Environment intentionally has no required reviewer so event
+  cleanup and six-hour reconciliation remain automatic. Independent CODEOWNER
+  approval is optional future hardening once a second trusted collaborator can
+  review controller changes.
 - A previously used Vercel admin token was rotated and revoked during the final
-  security audit. No controller token is currently installed.
+  security audit. A fresh project-scoped 90-day controller token is installed
+  only as the masked `VERCEL_DEVELOP_DEPLOY_TOKEN` Environment secret.
+- Generic Preview has no private runtime rows. All nine legacy `develop` branch
+  rows, plus the develop S3 bucket/region/role and CRON, JWT, MongoDB, and
+  application variables, are now scoped only to the `develop` Custom
+  Environment. Production remains separately scoped.
 
 ## Activation gates
 
 Do not describe credentialed PR previews as live until all of these pass:
 
-1. Enforce CODEOWNER approval for the controller workflow/script on `main`, or
-   require a trusted reviewer on the controller Environment. CODEOWNERS alone is
-   not enforcement.
-2. Create a fresh, dedicated, project-scoped Vercel token and install it as the
-   masked `VERCEL_DEVELOP_DEPLOY_TOKEN` Environment secret.
-3. Publish the DNS-only wildcard CNAME documented in
-   `VERCEL_DEPLOYMENTS.md` and confirm Vercel reports `misconfigured: false`.
-4. Add the wildcard PR origin to the private develop bucket's minimal PUT CORS
+1. Keep the DNS-only `*.previews` CNAME and publish the two narrow
+   `_acme-challenge.previews` NS delegations documented in
+   `VERCEL_DEPLOYMENTS.md`; do not move the apex nameservers. Confirm Vercel
+   reports `misconfigured: false` and the wildcard certificate is valid.
+2. Add the wildcard PR origin to the private develop bucket's minimal PUT CORS
    rule.
-5. Install the unsigned exact-bucket probe URL as the masked
+3. Install the unsigned exact-bucket probe URL as the masked
    `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` Environment secret.
-6. Merge this PR to `main`; `pull_request_target` cannot activate from the
+4. Merge this PR to `main`; `pull_request_target` cannot activate from the
    feature branch that introduces it.
-7. Run the Develop-target checklist in `TESTING.md`, including upload/removal,
+5. Run the Develop-target checklist in `TESTING.md`, including upload/removal,
    negative-origin, supersession, close, and reconciliation cases.
+
+The `main` ruleset, Environment variables, dedicated Vercel token, and Vercel
+runtime scoping are already complete. The wildcard CNAME also resolves, but the
+ACME NS delegation, bucket CORS, probe secret, controller merge, and live
+checklist remain. Finish the DNS delegation and bucket CORS before installing
+the probe secret, then merge the trusted controller and run the live checklist.
+Until that final sequence succeeds, the controller is not active and no PR
+alias should be described as ready.
 
 ## Verification completed
 

@@ -59,26 +59,31 @@ checks before creating or promoting a Vercel deployment.
 
 The controller exists only after its workflow and script are merged to the
 default `main` branch: `pull_request_target` always loads its trusted workflow
-definition from the default branch, not from the PR. Keep required CODEOWNER
-review enabled for those two controller files. A CODEOWNERS file alone does not
-enforce approval: before installing either secret, add a `main` ruleset that
-requires CODEOWNER review (or require a trusted reviewer on the controller
-Environment).
+definition from the default branch, not from the PR. Thingtime's active `main`
+`Basic Protection` ruleset has no bypass: it requires a pull request, resolved
+review threads, strict Web CI and CodeQL status checks, and blocks deletion and
+force-pushes. CODEOWNERS requests owner review but does not enforce it;
+independent CODEOWNER approval is optional future hardening once a second
+trusted collaborator exists. Do not add a required reviewer to the controller
+Environment in the solo-maintainer configuration: every event cleanup and
+six-hour reconciliation job would otherwise wait for manual approval.
 
 One-time private setup (values never belong in git):
 
-- GitHub Environment: create `vercel-develop-pr-control`, select only the
-  `main` deployment branch, and keep its secrets/variables out of repository
-  scope. The secret-free `pull_request_target` stage hands off to a
-  default-branch `repository_dispatch`; scheduled runs use the default branch,
-  and the workflow refuses manual dispatch from another ref.
-- Environment secrets: `VERCEL_DEVELOP_DEPLOY_TOKEN`, set to a fresh dedicated
-  Vercel control-plane token rather than the app's runtime status token, and
-  `THINGTIME_DEVELOP_S3_CORS_PROBE_URL`, set to a credential-free HTTPS object
-  URL on the exact develop bucket with no query string or signature. The
-  controller uses the latter only for an unauthenticated CORS `OPTIONS` check
-  and refuses to publish the PR alias when the check fails. Keeping it masked
-  avoids exposing the private bucket name through an Actions variable.
+- GitHub Environment: Thingtime's `vercel-develop-pr-control` Environment
+  exists, selects only the `main` deployment branch, has no required reviewer,
+  and keeps its secrets/variables out of repository scope. The secret-free
+  `pull_request_target` stage hands off to a default-branch
+  `repository_dispatch`; scheduled runs use the default branch, and the
+  workflow refuses manual dispatch from another ref.
+- Environment secrets: the fresh, dedicated, project-scoped 90-day Vercel
+  control-plane token is installed as `VERCEL_DEVELOP_DEPLOY_TOKEN`, separate
+  from the app's runtime status token. `THINGTIME_DEVELOP_S3_CORS_PROBE_URL`
+  remains pending; it must be a credential-free HTTPS object URL on the exact
+  develop bucket with no query string or signature. The controller uses the
+  latter only for an unauthenticated CORS `OPTIONS` check and refuses to publish
+  the PR alias when the check fails. Keeping it masked avoids exposing the
+  private bucket name through an Actions variable.
 - Environment variables: `VERCEL_PROJECT_ID`, `VERCEL_PROJECT_NAME`,
   `VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG`, `VERCEL_GITHUB_REPO_ID`, and
   `VERCEL_CUSTOM_ENVIRONMENT_ID` with the exact immutable value
@@ -88,6 +93,10 @@ One-time private setup (values never belong in git):
   `PREVIEW_ALIAS_SUFFIX` (`previews.thingtime.com` here), and
   `STABLE_DEVELOP_DOMAIN` (`dev.thingtime.com` here). Forks must substitute
   domains they control.
+- Vercel runtime scope: generic Preview has no private runtime rows. All nine
+  legacy `develop` branch rows are now scoped only to the `develop` Custom
+  Environment, as are the develop S3 bucket/region/role and CRON, JWT, MongoDB,
+  and application variables. Production remains separately scoped.
 - Trust gate: both the PR author and the triggering actor must be on that
   explicit allowlist and retain current GitHub write/admin permission. Repository
   membership or a same-repository branch alone is insufficient.
@@ -100,21 +109,32 @@ One-time private setup (values never belong in git):
 - Vercel: `*.previews.thingtime.com` is already registered, verified, and
   detached from both Git branches and Custom Environments. The controller
   assigns each alias explicitly only after all identity/SHA gates.
-- DNS: the remaining Thingtime record is a DNS-only/grey-cloud CNAME from
-  `*.previews` to `cname.vercel-dns.com`. Forks must use the exact CNAME and any
-  verification record their own Vercel project currently displays; do not copy
-  another project's account-specific targets.
+- DNS: keep Cloudflare authoritative for the `thingtime.com` apex. Use a
+  DNS-only/grey-cloud CNAME from `*.previews` to `cname.vercel-dns.com`, plus NS
+  delegations from `_acme-challenge.previews` to both `ns1.vercel-dns.com` and
+  `ns2.vercel-dns.com` so Vercel can issue and renew wildcard TLS certificates.
+  Do not move the apex nameservers or delegate a broader subtree; reserve this
+  ACME subtree for the preview wildcard because the delegation can prevent
+  another provider from issuing certificates there. See Vercel's official
+  [wildcard-without-Vercel-nameservers guide](https://vercel.com/kb/guide/wildcard-domain-without-vercel-nameservers).
+  Forks must use the exact records their own Vercel project currently displays;
+  do not copy another project's account-specific targets.
 - Develop S3 bucket CORS: retain `https://dev.thingtime.com` and add
   `https://*.previews.thingtime.com`, with method `PUT`, allowed header
   `x-amz-checksum-sha256`, no exposed headers, and `MaxAgeSeconds: 300`.
   CORS is not authorization; only the custom-environment deployment can obtain
   a signed upload plan. Generic Preview OIDC remains untrusted by the role.
 
-The wildcard DNS record, bucket CORS update, masked probe secret, fresh
-dedicated Vercel token, and enforced controller review boundary are activation
-prerequisites and remain pending until their respective administrators complete
-and verify them. A green controller self-test alone does not prove browser
-uploads are ready.
+Activation status as of 2026-08-10: the no-bypass `main` ruleset, protected
+Environment, all controller variables, dedicated 90-day Vercel token, and
+private runtime scoping are complete. The wildcard CNAME now resolves, but
+Vercel still reports the domain as misconfigured and wildcard TLS fails until
+the two `_acme-challenge.previews` NS delegations are published. That narrow
+Cloudflare delegation, the exact develop-bucket CORS update, masked
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, merge of the controller to `main`,
+and the live end-to-end checklist remain pending. The installed token alone does
+not activate the feature, and a green controller self-test alone does not prove
+browser uploads are ready.
 
 Do not copy the develop bucket/role variables into Vercel's generic Preview
 environment or trust `environment:preview` in AWS. Keep MongoDB, JWT, email, S3,

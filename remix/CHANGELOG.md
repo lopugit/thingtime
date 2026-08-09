@@ -19,6 +19,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Develop-preview activation runbook now matches the live control plane**:
+  documents the no-bypass `main` ruleset, automatic no-reviewer cleanup,
+  installed project-scoped 90-day Vercel token, narrowed develop/production
+  runtime scope, and the remaining narrow ACME NS delegation, exact-bucket CORS,
+  probe-secret, `main` merge, and end-to-end gates. Independent CODEOWNER
+  approval is recorded as optional future hardening once a second trusted
+  collaborator exists. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
 - **The complete Actions control plane is ready for atomic promotion to
   `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
   #194, #190, #199, #206, #207, and #208 are replayed together so the default

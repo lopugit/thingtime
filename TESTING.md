@@ -40,10 +40,14 @@ is fixed, and cite the checklist you ran in the PR description.
       develop-bucket HTTPS object URL with no query, and no live `env_*` ID,
       bucket name, or token appears in tracked controller files or workflow
       logs.
-- [ ] Confirm a `main` ruleset enforces CODEOWNER approval for the controller
-      workflow/script, or the controller Environment requires a trusted
-      reviewer, before either secret is installed; CODEOWNERS presence alone is
-      not an enforcement check.
+- [ ] Confirm the active `main` `Basic Protection` ruleset has no bypass,
+      requires a pull request with resolved review threads, both strict Web CI
+      jobs, and the CodeQL Analyze checks for actions and javascript-typescript,
+      and blocks deletion and force-pushes. Confirm the controller Environment
+      has no required reviewer so event cleanup and six-hour reconciliation
+      remain automatic. CODEOWNERS presence alone is not an enforcement check;
+      independent CODEOWNER approval is optional future hardening once a second
+      trusted collaborator can review changes.
 - [ ] In Vercel, confirm `dev.thingtime.com` is bound to the literal `develop`
       Git branch and has no domain `customEnvironmentId`, rather than being
       bound to the whole Custom Environment; the Custom Environment's own domain
@@ -57,8 +61,11 @@ is fixed, and cite the checklist you ran in the PR description.
       after the build completes.
 - [ ] Confirm the wildcard Vercel domain is verified and detached, its
       Cloudflare `*.previews` CNAME targets `cname.vercel-dns.com` with DNS-only
-      proxying, its Git branch and Custom Environment bindings are empty, and
-      the PR alias presents a valid certificate.
+      proxying, and `_acme-challenge.previews` has NS delegations to both
+      `ns1.vercel-dns.com` and `ns2.vercel-dns.com` without moving the apex
+      nameservers or delegating a broader subtree. Confirm its Git branch and
+      Custom Environment bindings are empty, Vercel reports
+      `misconfigured: false`, and the PR alias presents a valid certificate.
 - [ ] From that alias, sign in and upload/remove a small attachment: the direct
       S3 `PUT` preflight permits only that exact origin pattern, `PUT`, and
       `x-amz-checksum-sha256`; it exposes no headers, the bucket remains private,
