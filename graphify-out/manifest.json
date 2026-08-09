@@ -1755,9 +1755,9 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786289501.8356798,
-    "ast_hash": "f7fe40e1b40ff83e77ab69a1b8494fae",
-    "semantic_hash": "f7fe40e1b40ff83e77ab69a1b8494fae"
+    "mtime": 1786291422.1346204,
+    "ast_hash": "3e475635a76f73472e61e87819616c7d",
+    "semantic_hash": "3e475635a76f73472e61e87819616c7d"
   },
   "remix/README.md": {
     "mtime": 1786288363.275707,
@@ -3215,9 +3215,9 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1786288363.3257918,
-    "ast_hash": "97e6e97a1e8cc5ea201ee2e8f4efd1a3",
-    "semantic_hash": "97e6e97a1e8cc5ea201ee2e8f4efd1a3"
+    "mtime": 1786291398.083201,
+    "ast_hash": "2da2821fb28c3013c192033c9a4240d1",
+    "semantic_hash": "2da2821fb28c3013c192033c9a4240d1"
   },
   "remix/app/routes/docs/api.tsx": {
     "mtime": 1786288363.3533745,
@@ -4160,9 +4160,9 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786289501.834806,
-    "ast_hash": "46c1a9611da3ee96cc5c5c938a7b183b",
-    "semantic_hash": "46c1a9611da3ee96cc5c5c938a7b183b"
+    "mtime": 1786291398.011644,
+    "ast_hash": "86d3261bbb92f52ab8d31bb36601043c",
+    "semantic_hash": "86d3261bbb92f52ab8d31bb36601043c"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786288362.8907492,
@@ -4440,9 +4440,9 @@
     "semantic_hash": "dffaa5ea2d490f2bfd41d219385181e5"
   },
   "remix/app/api/utils/settings/prConflictResolverModelWaterfall.ts": {
-    "mtime": 1786288363.293418,
-    "ast_hash": "1f73045dec5096f9eee0cb6cb59d82df",
-    "semantic_hash": "1f73045dec5096f9eee0cb6cb59d82df"
+    "mtime": 1786291398.0801904,
+    "ast_hash": "dafc1fe043f70172fcd2ea1caa95c0e2",
+    "semantic_hash": "dafc1fe043f70172fcd2ea1caa95c0e2"
   },
   "remix/app/api/utils/settings/prConflictResolverModelWaterfallCore.test.ts": {
     "mtime": 1786288363.2934806,
@@ -4460,9 +4460,9 @@
     "semantic_hash": "841ac498c582412315b2d9fa004bfc7d"
   },
   "remix/app/components/Admin/PRConflictResolverModelWaterfallEditor.tsx": {
-    "mtime": 1786288363.2979665,
-    "ast_hash": "3369fd8a8ae2921ea4d910653d00567e",
-    "semantic_hash": "3369fd8a8ae2921ea4d910653d00567e"
+    "mtime": 1786291398.0809171,
+    "ast_hash": "e286220c43dcc996595a235d3988d5eb",
+    "semantic_hash": "e286220c43dcc996595a235d3988d5eb"
   },
   "remix/app/routes/api/v1/settings/pr-conflict-auto-resolver-model-waterfall/_pr-conflict-auto-resolver-model-waterfall.tsx": {
     "mtime": 1786288363.345913,
@@ -5443,6 +5443,16 @@
     "mtime": 1786288362.8823822,
     "ast_hash": "401b734c5d3524605b18f94d2374a214",
     "semantic_hash": "401b734c5d3524605b18f94d2374a214"
+  },
+  "remix/app/api/utils/settings/prConflictResolverModelWaterfall.test.ts": {
+    "mtime": 1786291398.073599,
+    "ast_hash": "a6f9403b574027cf4f9bf7699ddca898",
+    "semantic_hash": "a6f9403b574027cf4f9bf7699ddca898"
+  },
+  ".vscode/launch.json": {
+    "mtime": 1786288362.8762262,
+    "ast_hash": "e44a5390fab451558717cd7959745f80",
+    "semantic_hash": "e44a5390fab451558717cd7959745f80"
   },
   "PRs/213-codex-auto-resolve-promotion-conflicts-automatically-resolve-promotion-creation-conflicts.md": {
     "mtime": 1786289501.8335605,

@@ -147,8 +147,8 @@ export const PRConflictResolverModelWaterfallEditor = () => {
       setRefreshFailed(false);
       setRefreshing(false);
       lopu({
-        title: 'Conflict resolver model order saved ✨',
-        description: 'New conflict-resolution runs will try this order from top to bottom.',
+        title: 'AI workflow model order saved ✨',
+        description: 'New conflict, rebase, and semantic-refresh runs will use this model order.',
         status: 'success',
         duration: 6000
       });
@@ -287,16 +287,16 @@ export const PRConflictResolverModelWaterfallEditor = () => {
   return (
     <Flex flexDirection="column" rowGap={3}>
       <Box>
-        <Text sx={eyebrow}>PR conflict resolver</Text>
+        <Text sx={eyebrow}>AI workflow model order</Text>
         <Text marginTop={1} fontSize="sm" color="var(--tt-text, #5a5a66)">
-          Models are considered from top to bottom when one is unavailable, overloaded, or returns an eligible server error.
+          The first entry is preferred for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes.
         </Text>
         <Text marginTop={1} fontSize="xs" color="var(--tt-muted, #8a8a96)">
-          A completed attempt that leaves conflicts stops for review instead of trying another model. Every attempt uses Max effort when supported, and Default is always included.
+          Conflict-editing calls try later entries only when a model is unavailable, overloaded, or returns an eligible server error. A completed attempt that leaves conflicts stops for review. Default is always included.
         </Text>
       </Box>
 
-      <Flex role="list" aria-label="PR conflict resolver model priority" flexDirection="column" rowGap={2}>
+      <Flex role="list" aria-label="AI workflow model priority" flexDirection="column" rowGap={2}>
         <ReorderableList
           items={items}
           onReorder={(ids) => {

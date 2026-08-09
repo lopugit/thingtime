@@ -763,11 +763,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
     group: 'settings',
-    title: 'PR conflict resolver model waterfall',
+    title: 'AI workflow model waterfall',
     endpoint: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall',
-    summary: 'Read or administratively reorder the model fallback chain used by the PR conflict resolver.',
+    summary: 'Read or administratively reorder the model chain used by conflict, rebase, and semantic-refresh AI workflows.',
     detail:
-      'GET publicly returns the ordered, non-secret model ids plus the closed model catalog. POST replaces the order for administrators only. The list must contain 1 to 3 unique known model ids and include default as the hard fallback. Missing or corrupt stored settings resolve safely to ["default"].',
+      'GET publicly returns the ordered, non-secret model ids plus the closed model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. The list must contain 1 to 3 unique known model ids and include default as the hard fallback. Missing or corrupt stored settings resolve safely to ["default"].',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an authenticated administrator session.'
@@ -781,7 +781,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     requestExamples: [
       {
-        name: 'Read the resolver waterfall',
+        name: 'Read the AI workflow waterfall',
         description: 'Load the public model preference chain.',
         method: 'GET'
       },
@@ -795,7 +795,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Current public resolver settings.',
+        description: 'Current public AI workflow settings.',
         body: {
           ok: true,
           key: 'Thingtime.PRConflictAutoResolverModelWaterfall',
