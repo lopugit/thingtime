@@ -473,9 +473,10 @@ client request id is hashed with the authenticated owner into an opaque
 owner-scoped attachment id, making lost start responses safely retryable without
 cross-account id squatting or existence disclosure.
 
-Configure only these server-side Vercel variables. Scope a production bucket
-and role to **Production** only; use a separate bucket/role for previews rather
-than granting preview branches access to production objects.
+Configure only these server-side Vercel variables. Scope the production bucket
+and role to **Production** only. Thingtime's long-lived `develop` deployment
+uses a separate Vercel Custom Environment, bucket, role, and cleanup secret;
+ordinary feature-branch Preview deployments receive none of them.
 
 ```sh
 THINGTIME_PRIVATE_S3_ROLE_ARN="arn:aws:iam::<12-digit-account-id>:role/<production-attachment-role>"
@@ -490,11 +491,21 @@ bucket must also belong to the same 12-digit AWS account named by the role ARN.
 The runtime derives `ExpectedBucketOwner` from that ARN and fails closed when
 the bucket owner differs.
 
-In Vercel, mark all four values **Sensitive** and scope them to **Production**
-only. `CRON_SECRET` authenticates only the hourly
-`/api/v1/attachments/cleanup` Vercel Cron request; it is not a Thingtime user,
-PAT, app, or service-account credential, and must never use a `THINGTIME_*`
-browser-visible name.
+In Vercel, mark all four values **Sensitive**. Give Production its values only
+in the built-in Production environment. Give `develop` a distinct set only in
+the branch-tracked Custom Environment named `develop`; never select the generic
+Preview environment. `CRON_SECRET` authenticates only
+`/api/v1/attachments/cleanup`; it is not a Thingtime user, PAT, app, or
+service-account credential, and must never use a `THINGTIME_*` browser-visible
+name. Use different secrets for Production and develop.
+
+The `develop` Custom Environment must use an exact `develop` branch matcher and
+own `https://dev.thingtime.com`. Its Vercel OIDC subject is
+`owner:<vercel-team-slug>:project:<vercel-project-name>:environment:develop`.
+This is intentionally different from ordinary PR deployments, whose subject
+ends in `environment:preview`. Branch-scoped Preview variables alone are not an
+AWS boundary because Vercel's Preview OIDC subject contains no Git branch; do
+not trust `environment:preview` for the develop role.
 
 The role must use Vercel OIDC temporary credentials and an exact production
 subject for this project. Do not create an S3 IAM user, reuse the SES IAM user,
@@ -516,13 +527,17 @@ trust policy (replace every angle-bracket value):
 			"Condition": {
 				"StringEquals": {
 					"oidc.vercel.com/<vercel-team-slug>:aud": "https://vercel.com/<vercel-team-slug>",
-					"oidc.vercel.com/<vercel-team-slug>:sub": "owner:<vercel-team-slug>:project:<vercel-project-name>:environment:production"
+					"oidc.vercel.com/<vercel-team-slug>:sub": "owner:<vercel-team-slug>:project:<vercel-project-name>:environment:<production-or-develop>"
 				}
 			}
 		}
 	]
 }
 ```
+
+Create one role per environment. Substitute `production` for the Production
+role and `develop` for the develop role; never wildcard the environment portion
+of `sub` and never let one role trust both subjects.
 
 Attach this placeholder-only permissions policy to the role. Keep generic
 `s3:DeleteObject` out: in a versioned bucket it can create a delete marker
@@ -542,6 +557,7 @@ without permanently removing the billed object version.
 				"s3:GetObjectVersion",
 				"s3:ListMultipartUploadParts",
 				"s3:PutObject",
+				"s3:PutObjectTagging",
 				"s3:PutObjectVersionTagging"
 			],
 			"Resource": "arn:aws:s3:::<private-bucket-name>/objects/*"
@@ -552,7 +568,7 @@ without permanently removing the billed object version.
 
 The runtime role needs only those object actions:
 
-- `s3:PutObject`
+- `s3:PutObject` and `s3:PutObjectTagging` (the MPU starts with a pending tag)
 - `s3:GetObject` and `s3:GetObjectVersion`
 - `s3:DeleteObjectVersion`
 - `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`
@@ -607,17 +623,19 @@ principals whose network context AWS redacts:
 }
 ```
 
-Configure CORS with only the production Thingtime origin, `PUT`, and the one
-application-authored request header. The uploader deliberately sends a Blob
-with no `Content-Type`, and completion obtains ETags/checksums server-side with
-ListParts, so no S3 response headers need to be exposed:
+Configure CORS with one exact origin per bucket, `PUT`, and the one
+application-authored request header: the production Thingtime origin for the
+production bucket, and `https://dev.thingtime.com` for the develop bucket. The
+uploader deliberately sends a Blob with no `Content-Type`, and completion
+obtains ETags/checksums server-side with ListParts, so no S3 response headers
+need to be exposed:
 
 ```json
 [
 	{
 		"AllowedHeaders": ["x-amz-checksum-sha256"],
 		"AllowedMethods": ["PUT"],
-		"AllowedOrigins": ["https://<production-origin>"],
+		"AllowedOrigins": ["https://<environment-origin>"],
 		"ExposeHeaders": [],
 		"MaxAgeSeconds": 300
 	}
@@ -644,8 +662,19 @@ rule fields):
 ```
 
 Presigned URLs work with a private bucket; public access must stay off.
-The app's hourly Vercel cron (minute 17, at most 1,000 rows and a 25-second
-wall-clock budget per pass) is the durable cleanup path. Pending cancellations
+Production uses the app's hourly Vercel Cron at minute 17. Vercel Cron runs
+Production deployments only, so the `develop` Custom Environment instead needs
+an external hourly scheduler that sends the same exact bearer header to
+`https://dev.thingtime.com/api/v1/attachments/cleanup`. Thingtime uses a
+dedicated AWS EventBridge API Destination for that call; keep its connection
+secret distinct, its invocation role limited to that one destination, and its
+rate at one request/second. Configure the Connection as API-key auth with
+header name `Authorization` and value `Bearer <develop-cron-secret>`. Restrict
+the role trust to `events.amazonaws.com` plus the exact rule `aws:SourceArn`
+and account, and grant only `events:InvokeApiDestination` on the exact API
+Destination ARN. Schedule `cron(17 * * * ? *)`; never put the connection secret
+in the rule payload, repository, or logs. Both paths process at most 1,000 rows with a
+25-second wall-clock budget per pass. Pending cancellations
 that issued a presigned part URL stay conservatively billed through an eight-day,
 lifecycle-backed settlement window. Cleanup then requires two empty
 Abort/ListParts checks at least one hour apart before HEAD verification,

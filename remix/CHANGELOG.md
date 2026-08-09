@@ -19,6 +19,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Isolated develop S3 attachment environment**: `dev.thingtime.com` now maps
+  to a branch-tracked Vercel Custom Environment named `develop`, with its own
+  private bucket, exact-subject OIDC role, dev-origin-only CORS, Sensitive S3
+  variables, and cleanup secret. Generic feature previews receive no attachment
+  configuration and their shared Preview OIDC identity cannot assume the
+  develop role. Because Vercel Cron runs Production only, a one-purpose AWS
+  EventBridge API Destination invokes develop cleanup hourly. Production
+  bucket variables and objects remain unchanged; its role gained the required
+  `s3:PutObjectTagging` action used by Thingtime's tagged multipart start. —
+  Codex (AI), 2026-08-09
 - **Private S3 post attachments with exact tier accounting**: posts can upload
   images, video, audio, and generic files directly through checksummed multipart
   S3 uploads without exposing AWS credentials or public objects. Protected
@@ -215,7 +225,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   domain, matching the existing staging pattern while preserving the
   branch-scoped Preview secrets already used by develop deployments. The
   deployment runbook now records the required Cloudflare DNS-only CNAME and
-  ownership-verification flow. — Codex (AI), 2026-08-07
+  ownership-verification flow. This original assignment was superseded on
+  2026-08-09 by the isolated `develop` Custom Environment recorded above. —
+  Codex (AI), 2026-08-07
 
 - **Typed queries across every admin workspace**: Users, Apps, Tiers, rate
   limits, and the administrator roster now share an all-field free-text,

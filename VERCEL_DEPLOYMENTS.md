@@ -26,10 +26,9 @@ Last updated: 2026-08-09
 - Private post attachments use Vercel OIDC to assume the AWS role named
   `thingtime-vercel-s3-production`. The project variables
   `THINGTIME_PRIVATE_S3_ROLE_ARN`, `THINGTIME_PRIVATE_S3_BUCKET`, and
-  `THINGTIME_PRIVATE_S3_REGION` are scoped to Production only. Preview branches
-  intentionally cannot assume this role or upload to the production bucket; a
-  future preview attachment environment needs its own role, bucket, and CORS
-  origin.
+  `THINGTIME_PRIVATE_S3_REGION` are scoped to Production only. Preview and
+  develop deployments cannot assume this role or upload to the production
+  bucket.
 - Add `CRON_SECRET` as a **Sensitive**, **Production-only** variable (never
   record its value here). `remix/vercel.json` invokes
   `GET /api/v1/attachments/cleanup` at minute 17 every hour; Vercel sends the
@@ -41,23 +40,40 @@ Last updated: 2026-08-09
   plus a safety day, then require two empty verification passes at least one
   hour apart.
 
+## Develop Custom Environment
+
+- Vercel Custom Environment: `develop` (Pre-Production), with an exact branch
+  matcher for `develop`. This is distinct from both Vercel's generic Preview
+  environment and its built-in local/CLI Development environment.
+- Stable origin: https://dev.thingtime.com. The domain is verified and assigned
+  directly to the `develop` Custom Environment; it no longer uses a generic
+  branch-Preview domain assignment.
+- Stable environment alias:
+  https://thingtime-env-develop-lopugits-projects.vercel.app.
+- Private attachments use a dedicated develop bucket and IAM role. The role
+  trusts only the exact Vercel OIDC subject
+  `owner:lopugits-projects:project:thingtime:environment:develop`; ordinary PR
+  tokens remain `environment:preview` and cannot assume it. The develop
+  bucket's CORS allowlist contains only `https://dev.thingtime.com`.
+- `THINGTIME_PRIVATE_S3_ROLE_ARN`, `THINGTIME_PRIVATE_S3_BUCKET`,
+  `THINGTIME_PRIVATE_S3_REGION`, and a distinct `CRON_SECRET` are Sensitive and
+  scoped only to this Custom Environment. Generic Preview and Production do not
+  inherit them.
+- Vercel Cron invokes Production deployments only. Develop cleanup is therefore
+  called at minute 17 every hour by a dedicated AWS EventBridge API Destination
+  using the develop `CRON_SECRET`; its IAM invocation role is limited to that
+  one destination. The app route still rejects missing, wrong, user, PAT, and
+  service-account credentials.
+- Cloudflare DNS remains `CNAME dev` to
+  `b45b7349d6eb9c18.vercel-dns-017.com`, DNS only, TTL Auto. Vercel domain
+  ownership and TLS are verified.
+
 ## Preview
 
 - Generated preview URLs use `https://thingtime-<generated>-lopugits-projects.vercel.app`.
-- The `develop` branch alias is
-  https://thingtime-git-develop-lopugits-projects.vercel.app.
-- https://dev.thingtime.com is configured as a branch-specific Preview domain
-  that tracks `develop`. This deliberately preserves the existing
-  `develop`-scoped Preview environment variables; Vercel's built-in
-  Development environment remains local/CLI-only.
-  - Cloudflare DNS: `CNAME dev` to
-    `b45b7349d6eb9c18.vercel-dns-017.com`, DNS only, TTL Auto.
-  - If Vercel reports a pending ownership challenge, publish the exact
-    `_vercel` TXT value returned by the Vercel project-domain inspector; do
-    not record the rotating verification value in this repository.
-  - Vercel assignment was configured on 2026-08-07. DNS, ownership
-    verification, and TLS remain pending until the Cloudflare records are
-    published.
+- Feature branches remain in the generic Preview environment. They do not
+  receive either Production or develop S3 variables and their shared
+  `environment:preview` OIDC subject is not trusted by either attachment role.
 - The `staging` branch alias is https://thingtime-git-staging-lopugits-projects.vercel.app.
 - For feature branches, use the Vercel PR status URL or deployment URL from
   the GitHub PR checks.

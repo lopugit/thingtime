@@ -105,13 +105,26 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] The Vercel OIDC role trust policy matches the exact team audience and
       `owner:<team>:project:<project>:environment:production` subject. A
       production function can assume it; preview/development tokens cannot.
-- [ ] The attachment role is limited to `objects/*` and the documented seven
+- [ ] The Vercel Custom Environment named `develop` has an exact `develop`
+      branch matcher, owns the verified `https://dev.thingtime.com` domain,
+      and is the only non-production scope containing the four Sensitive S3 /
+      cleanup variables. Generic Preview contains none of them.
+- [ ] The develop role trusts only
+      `owner:<team>:project:<project>:environment:develop`. A deployed develop
+      function can assume it, while a feature-branch
+      `environment:preview` token and local `environment:development` token
+      are both denied.
+- [ ] The attachment role is limited to `objects/*` and the documented eight
       version-aware multipart/object actions. Confirm `s3:ListBucket`,
       `s3:DeleteObject`, ACL, and bucket-administration actions are denied.
 - [ ] The bucket policy denies HTTP and TLS below 1.2 for non-service
       principals. CORS preflight succeeds only for the production origin's
       `PUT` with `x-amz-checksum-sha256`; a different origin, method, or header
       is denied, and no response header is unnecessarily exposed.
+- [ ] Repeat the bucket controls against develop: only
+      `https://dev.thingtime.com` can preflight its checksum-locked `PUT`, and
+      neither environment's role can read, write, list, or delete objects in
+      the other environment's bucket.
 - [ ] The enabled `objects/` lifecycle rule aborts incomplete multipart uploads
       after seven days and permanently expires noncurrent versions after 30
       days. Account and bucket settings still match after a fresh console load.
@@ -123,6 +136,15 @@ is fixed, and cite the checklist you ran in the PR description.
       and an incorrect cron secret: every request fails closed. The exact
       production `CRON_SECRET` succeeds only through the scheduled cleanup
       path, and a cleanup retry never exposes the secret or raw S3 errors.
+- [ ] Confirm the develop EventBridge rule invokes
+      `https://dev.thingtime.com/api/v1/attachments/cleanup` at minute 17 each
+      hour through its one-purpose API Destination/role. Its exact develop
+      secret succeeds, missing/wrong secrets fail, and EventBridge reports no
+      failed invocation.
+- [ ] On `dev.thingtime.com`, upload a tiny attachment, complete it, render or
+      download it, then remove the draft or delete its post. The exact S3
+      version disappears and the account storage meter returns to its starting
+      value without touching the production bucket.
 
 ## Editor windows & layer system (`remix/app/components/Thingtime/EditorSplit.tsx`)
 

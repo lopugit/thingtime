@@ -87,11 +87,11 @@ attachment children unless the S3 preparation hook is present.
 
 ## Deployment contract
 
-The application uses the Vercel OIDC AWS provider and a dedicated production
-role instead of long-lived AWS access keys. The role is scoped to the private
-object prefix and version-aware actions. It deliberately omits generic
+The application uses the Vercel OIDC AWS provider and dedicated per-environment
+roles instead of long-lived AWS access keys. Each role is scoped to its own
+private object prefix and version-aware actions. They deliberately omit generic
 `s3:DeleteObject`, making accidental delete-marker-only regressions fail at
-IAM. Server-only production configuration uses:
+IAM. Server-only configuration uses:
 
 - `THINGTIME_PRIVATE_S3_ROLE_ARN`
 - `THINGTIME_PRIVATE_S3_BUCKET`
@@ -102,6 +102,34 @@ The setup runbook in `README.md` covers account- and bucket-level Block Public
 Access, Bucket Owner Enforced ownership, versioning, SSE-S3, TLS-only bucket
 policy, restricted CORS, noncurrent-version cleanup, incomplete multipart
 cleanup, the exact OIDC subject, and least-privilege role policy.
+
+## Develop attachment environment (2026-08-09)
+
+- `dev.thingtime.com` is verified and attached to a Vercel Custom Environment
+  named `develop` with an exact `develop` branch matcher. It remains a familiar
+  pre-production deployment without sharing generic Preview identity.
+- The develop role trusts only
+  `owner:lopugits-projects:project:thingtime:environment:develop`. Ordinary PR
+  deployments remain `environment:preview`, and local CLI tokens are
+  `environment:development`; neither identity can assume the role.
+- The three private S3 values and a distinct cleanup secret are Sensitive and
+  scoped only to the `develop` Custom Environment. Production bucket values and
+  objects were not changed; the production role received the same required
+  `s3:PutObjectTagging` correction described below.
+- The dedicated bucket was verified with account- and bucket-level Block Public
+  Access, Bucket Owner Enforced ownership, versioning, SSE-S3, HTTP/TLS < 1.2
+  denies, `objects/` lifecycle cleanup, and CORS restricted to
+  `https://dev.thingtime.com` checksum-locked PUTs.
+- The role policy is limited to the documented object-prefix multipart,
+  version-aware read/tag, and exact-version delete actions. It has no generic
+  DeleteObject, bucket listing, ACL, public-read, or administration grant.
+- AWS's operation mapping requires `s3:PutObjectTagging` when
+  CreateMultipartUpload supplies Thingtime's pending tag; that distinct action
+  is included alongside exact-version `s3:PutObjectVersionTagging`.
+- Vercel Cron schedules only Production deployments. Develop therefore uses a
+  one-purpose AWS EventBridge API Destination at minute 17 each hour, with a
+  distinct encrypted connection secret and an invocation role limited to that
+  destination.
 
 ## Verification
 
@@ -152,9 +180,20 @@ ceiling.
 
 ## Remaining live verification
 
-The production upload path remains deliberately unverified until a deployment
-of this branch can receive the production-scoped OIDC environment. Local
-Chrome file selection was also blocked because the ChatGPT Chrome extension
-did not have file-URL access. No post or S3 object was created during that
-blocked test. A production smoke test should upload, render, download, delete,
-and confirm the storage meter returns to its prior value after deployment.
+The Vercel Custom Environment, exact develop branch matcher/domain, Sensitive
+variable scoping, distinct OIDC subject, bucket controls, IAM policies, and AWS
+EventBridge cleanup resources were verified live. A non-develop Vercel OIDC
+identity was denied by the develop role.
+
+The positive end-to-end upload/delete smoke remains unverified because the
+current live `develop` deployment does not yet contain this PR's attachment
+routes; the stable cleanup URL therefore returns 404 until the PR lands on
+`develop`. The EventBridge rule is enabled and correctly targeted, but a
+successful invocation cannot be claimed until that route is deployed. After
+merge, repeat the `TESTING.md` develop flow: upload a tiny attachment, render or
+download it, delete it, confirm the exact S3 version disappears, confirm the
+storage meter returns to its prior value, and check that EventBridge records a
+successful cleanup invocation.
+
+The production upload path remains deliberately unverified. No production S3
+object was created or deleted during this environment setup.
