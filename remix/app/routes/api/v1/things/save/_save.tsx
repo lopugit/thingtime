@@ -1,15 +1,19 @@
 import { json, readJsonBody } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import { toggleSave } from '~/api/utils/things/things';
+import { toggleSave, viewerOf } from '~/api/utils/things/things';
 
 // POST /api/v1/things/save — { id } — toggle the caller's private library save
 // of a thing ("add to my library"). Saves are relational child things
 // (thingtime ['save'], acl ['tt:user']) so a library is personal by
 // construction. Rate-limited per user (admin-configurable).
 export const action = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
+  const auth = await resolveThingsActor(request, 'things.save');
+  if (auth.ok === false) {
+    return json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+  const user = auth.actor.user;
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
@@ -20,7 +24,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 64 * 1024);
-  const result = await toggleSave({ id: user.id, username: user.username }, body?.id);
+  const result = await toggleSave(viewerOf(user, auth.actor.pat), body?.id);
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

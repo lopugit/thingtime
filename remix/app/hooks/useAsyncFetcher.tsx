@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 
+import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { recordApiCall } from './apiRequestLog';
 
 export function useAsyncFetcher() {
@@ -9,7 +10,10 @@ export function useAsyncFetcher() {
   });
 
   const submit = useCallback(
-    async (data, opts: { action: string; method?: string; encType?: string; signal?: AbortSignal }) => {
+    async (
+      data,
+      opts: { action: string; method?: string; encType?: string; signal?: AbortSignal; errorContext?: string }
+    ) => {
       const nextOpts = { ...defaultOpts, ...opts };
       const headers = new Headers();
       let body: BodyInit | undefined;
@@ -30,44 +34,52 @@ export function useAsyncFetcher() {
       // DevKit request log: every mutation is timed + recorded (body is
       // redacted by the recorder before it is stored)
       const loggedBody = nextOpts.encType === 'application/json' ? data || {} : undefined;
+      const method = nextOpts.method || 'POST';
       const started = performance.now();
       let response: Response;
       try {
         response = await fetch(nextOpts.action, {
-          method: nextOpts.method || 'POST',
+          method,
           credentials: 'include',
           headers,
           body,
           signal: nextOpts.signal
         });
-      } catch (err) {
+      } catch (error) {
         recordApiCall({
           at: Date.now(),
-          method: nextOpts.method || 'POST',
+          method,
           url: nextOpts.action,
           status: 0,
           ok: false,
           durationMs: Math.round(performance.now() - started),
           body: loggedBody
         });
-        throw err;
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        throw createApiFailure({ cause: error, action: nextOpts.errorContext, method });
       }
       recordApiCall({
         at: Date.now(),
-        method: nextOpts.method || 'POST',
+        method,
         url: nextOpts.action,
         status: response.status,
         ok: response.ok,
         durationMs: Math.round(performance.now() - started),
         body: loggedBody
       });
-      const contentType = response.headers.get('Content-Type') || '';
-      const payload = contentType.includes('application/json')
-        ? await response.json()
-        : await response.text();
+      const payload = await readApiResponsePayload(response, {
+        action: nextOpts.errorContext,
+        method
+      });
 
       if (!response.ok) {
-        throw payload;
+        throw createApiFailure({
+          payload,
+          status: response.status,
+          retryAfter: response.headers.get('Retry-After'),
+          action: nextOpts.errorContext,
+          method
+        });
       }
 
       return payload;

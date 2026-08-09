@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal } from './registry.ts';
+import { isProtectedThingtime, PROTECTED_THINGTIME, projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal } from './registry.ts';
 
 // The congruence alarm for builtin-schema seeding (seed-builtin-schemas in
 // api/utils/migrations/migrations.ts): every builtin crystal schema must
@@ -13,8 +13,7 @@ import { projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal
 
 const crystalSchemas = thingtimeSchemas.filter((schema) => schema.kind === 'crystal');
 
-const fieldNames = (crystal: Record<string, unknown>): string[] =>
-  (crystal.fields as Array<{ name: string }>).map((field) => field.name);
+const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fields as Array<{ name: string }>).map((field) => field.name);
 
 // Pinned projections. A diff here is a REVIEW PROMPT, not necessarily a bug:
 // a new registry field should appear (or be knowingly dropped as a record/
@@ -27,8 +26,69 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   data: [], // '*' is a record; 'schema' is a reserved top-level name
   schema: ['name', 'description', 'forkOf'], // fields + render: records → dropped
   save: [], // marker schema
-  app: ['clientId', 'name', 'origins'],
+  app: [
+    'clientId',
+    'name',
+    'origins',
+    'subscriptionTier',
+    'subscriptionTierVersionId',
+    'subscriptionTierVersion',
+    'storageAllowanceBytes',
+    'storageAllowanceOverrideBytes',
+    'storageUsedBytes',
+    'userStorageAllowanceBytes',
+    'storageAccountingVersion'
+  ],
   'app-data': ['appId', 'key'], // value: record → dropped
+  'subscription-tier': [
+    'quotaKind',
+    'tierId',
+    'version',
+    'status',
+    'title',
+    'tagline',
+    'emoji',
+    'bannerImageUrl',
+    'sortOrder',
+    'metered',
+    'currency',
+    'discountFormulaVersion',
+    'sourceVersionId',
+    'createdBy',
+    'updatedBy',
+    'publishedAt',
+    'archivedAt'
+  ], // pricing/inclusions/quotas: records → dropped
+	subscription: [
+		'quotaKind',
+		'subjectType',
+		'subjectId',
+		'tier',
+		'tierVersionId',
+		'tierVersion',
+		'note',
+		'updatedBy',
+		'storageUsedBytes',
+		'storageAccountingVersion',
+		'storageLedgerStatus',
+		'storageReconciledAt'
+	], // snapshots/overrides: records → dropped
+  'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
+	'service-quota': ['quotaKind', 'quotaVersion', 'key', 'dayKey', 'dailyUsed', 'permitIds', 'releasedIds'], // policy + state records → dropped
+	'migration-diagnostic': ['diagnosticVersion', 'migrationId', 'mode', 'status', 'outcome', 'summary', 'capturedAt'],
+  follow: ['follow'],
+  friend: ['status', 'friendKey'],
+  notification: ['type', 'actorId', 'actorName', 'postId', 'preview'],
+  'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
+  community: ['name', 'description'],
+  'community-member': ['memberKey', 'role'],
+  'community-invite': ['inviteCode', 'uses', 'maxUses', 'expiresAt', 'revoked'],
+  'chat-section': ['name', 'order'],
+  chat: ['name', 'topic', 'chatType', 'communityId', 'sectionId', 'channelVisibility', 'dmKey'],
+  'chat-member': ['memberKey', 'role', 'nickname', 'state', 'requestOrigin', 'lastReadMessageId', 'lastReadAt', 'muted'],
+  'chat-message': ['text', 'threadRootId', 'replyToId', 'editedAt', 'deletedAt', 'systemType'],
+  'custom-emoji': ['name', 'emojiKey', 'image', 'animated'],
+  follow: ['followKey'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
   'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt'], // weights: record → dropped
@@ -36,10 +96,15 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 };
 
 test('the builtin crystal-schema set matches the pinned projection table', () => {
-  assert.deepEqual(
-    crystalSchemas.map((schema) => schema.id).sort(),
-    Object.keys(EXPECTED_PROJECTED_FIELDS).sort()
-  );
+  assert.deepEqual(crystalSchemas.map((schema) => schema.id).sort(), Object.keys(EXPECTED_PROJECTED_FIELDS).sort());
+});
+
+test('registered app control Things are protected from generic Thing CRUD', () => {
+	assert.ok(PROTECTED_THINGTIME.includes('app'));
+	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
+	assert.equal(isProtectedThingtime(['app']), true);
+	assert.equal(isProtectedThingtime(['migration-diagnostic']), true);
+	assert.equal(isProtectedThingtime(['data', 'app']), true);
 });
 
 for (const schema of crystalSchemas) {

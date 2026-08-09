@@ -70,11 +70,6 @@ jobs:
     defaults:
       run:
         working-directory: remix
-    services:
-      mongodb:
-        image: mongo:7
-        ports:
-          - 27017:27017
     env:
       MONGODB_CONNECTION_STRING: mongodb://127.0.0.1:27017/
       # CI-only HS256 secret; the suite never needs the production ES256 keys
@@ -84,6 +79,32 @@ jobs:
       TT_API_PORT: '10000'
     steps:
       - uses: actions/checkout@v4
+
+      # Storage-accounted writes (registration's subscription-ledger seed, app
+      # data, content mutations) run inside real MongoDB transactions, which a
+      # STANDALONE mongod rejects with IllegalOperation ("Transaction numbers
+      # are only allowed on a replica set member or mongos") — by design there
+      # is no non-transactional fallback (see withMongoTransaction). A GitHub
+      # `services:` container cannot pass mongod arguments, so start the
+      # container directly as a single-node replica set. The member host must
+      # be 127.0.0.1 explicitly: a bare rs.initiate() would advertise the
+      # container hostname, which the runner-side driver cannot resolve when
+      # it follows replica-set discovery.
+      - name: Start MongoDB (single-node replica set — transactions need one)
+        run: |
+          docker run -d --name mongodb -p 27017:27017 mongo:7 mongod --replSet rs0 --bind_ip_all
+          for i in $(seq 1 30); do
+            if docker exec mongodb mongosh --quiet --eval 'db.runCommand({ping:1}).ok' >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          docker exec mongodb mongosh --quiet --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'
+          for i in $(seq 1 30); do
+            if [ "$(docker exec mongodb mongosh --quiet --eval 'db.hello().isWritablePrimary' 2>/dev/null)" = "true" ]; then
+              echo "replica set primary ready"; exit 0
+            fi
+            sleep 1
+          done
+          echo "MongoDB replica set did not become primary in time"; exit 1
 
       - uses: pnpm/action-setup@v4
         with:
