@@ -110,7 +110,12 @@ is fixed, and cite the checklist you ran in the PR description.
       without copying dependency files from another checkout.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
-scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+      scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+- [ ] In a disposable worktree, remove one transitive pnpm link required by
+      ESLint while leaving every direct dependency link present, then run the
+      targeted lint command: the startup probe performs one forced relink and
+      ESLint starts. `npm --prefix remix run ensure-deps -- --check` also proves
+      both ESLint and the directly declared Prettier CLI can start.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -315,6 +320,20 @@ scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
       show the user's avatar IMAGE when one is set — the rainbow initial
       circle is only the no-avatar fallback (regression: UserAvatarCircle
       ignored avatarUrl entirely).
+
+## Required Web CI contexts (`.github/workflows/web-ci.yml`)
+
+- [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
+      `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
+      runner)`, while both required-context companion jobs have distinct
+      skipped names and cannot satisfy a failed real job.
+- [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
+      confirm the lightweight companions report both exact required-context
+      names successfully and the expensive build/API jobs have distinct
+      skipped names. Neither context may remain in Expected/Pending state.
+- [ ] Break the path-classification job deliberately in a disposable branch.
+      Confirm neither exact required-context name is emitted and branch
+      protection blocks the PR instead of treating a skipped job as proof.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
