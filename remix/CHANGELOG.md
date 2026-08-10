@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Required Web CI checks no longer strand non-Remix pull requests**: the
+  protected implementation now classifies the complete changed-file list and
+  assigns both stable context names to either the real build/API jobs or
+  lightweight no-op companions. Incomplete file listings run the full suite,
+  and classifier failures leave the required names absent so protection fails
+  closed. — Codex (AI), 2026-08-10
 - **AI conflict resolution runs again (every worker was silently skipped)**:
   adding the promotion validator to `model_config`'s `needs` made GitHub apply
   that job's ordinary-mode skip to the whole downstream chain, so both the
