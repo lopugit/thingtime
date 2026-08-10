@@ -1,0 +1,13 @@
+# Machine-local interpreter & path pointers (absolute paths, not portable)
+.graphify_python
+.graphify_root
+# Internal pipeline temp files
+.graphify_*.json
+.needs_update
+# Extraction cache: semantic/ is tracked (content-addressed -> merge-safe, keeps
+# fresh-clone rebuilds LLM-free); ast/ + stat-index.json are regenerable and
+# machine-local (stat-index is keyed by absolute paths)
+cache/*
+!cache/semantic/
+# Deterministic local reflection scratch output
+reflections/
