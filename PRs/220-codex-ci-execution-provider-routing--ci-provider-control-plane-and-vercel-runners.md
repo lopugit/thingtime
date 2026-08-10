@@ -47,17 +47,17 @@ Let administrators choose, per supported automation, whether work runs on GitHub
 - targeted Remix lint passed;
 - CI control tests passed 16/16, including complete/partial readiness and
   Vercel runner identity/job-summary coverage;
-- every owned unit suite passed, including 16/16 CI-control tests; the aggregate
-  unit command currently reaches the inherited product-branch caller-contract
-  failure because current `develop` contains
-  `.github/scripts/deploy-develop-pr-preview.mjs` while that contract still
-  forbids every product-branch workflow script;
+- the aggregate unit suite passed, including 16/16 CI-control tests and the
+  seven-listener protected-control-plane contract; the redundant
+  product-branch copy of `.github/scripts/deploy-develop-pr-preview.mjs` was
+  removed because the listener already checks out its trusted controller from
+  `main` before execution;
 - typecheck ratchet remains warning-only at 145 errors versus the inherited
   143-error baseline; none of the reported errors is in this readiness patch;
 - production/Vercel build and output verification passed;
 - durable workflow compilation produced 79 steps and one workflow;
-- Graphify semantic refresh completed at 26,614 nodes / 66,532 edges with zero
-  missing, dangling, duplicate, or collapsed edges; the one pre-existing
+- Graphify semantic refresh completed with zero missing, dangling, duplicate,
+  or collapsed edges; the one pre-existing
   `remix/app/routes.tsx` self-loop is unchanged from the branch baseline;
 - `git diff --check` passed.
 
