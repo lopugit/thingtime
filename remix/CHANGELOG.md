@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **AI conflict resolution runs again (every worker was silently skipped)**:
+  adding the promotion validator to `model_config`'s `needs` made GitHub apply
+  that job's ordinary-mode skip to the whole downstream chain, so both the
+  `resolve` matrix job and `resolve_promotion` never started — detection,
+  routing, and model selection all reported success while nothing resolved
+  (PR #220 and every handoff after the promotion worker landed). Both workers
+  now opt out of inherited skips with `!cancelled()` plus exhaustive per-need
+  result checks. — Claude (AI), 2026-08-10
 - **Admin-selected conflict model now covers every protected AI runtime**: the
   `github-actions` control plane passes its validated Thingtime Admin primary
   model into merge- and rebase-side Graphify semantic refreshes as well as the
@@ -197,6 +205,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Control-plane pushes sweep every open PR, plus a `no-ai-merge` opt-out**:
+  pushing the `github-actions` branch now runs a repository-wide conflict
+  sweep instead of matching only PRs based on that branch, so landing a
+  resolver change retries every conflicting PR immediately rather than waiting
+  for the twice-hourly schedule. PRs labelled `no-ai-merge` (the new
+  never-auto-resolve opt-out, narrower `no-ai-rebase`'s counterpart) are
+  dropped by the detector before any comment, dispatch, or AI spend. — Claude
+  (AI), 2026-08-10
 - **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
   now creates the standing develop → main PR with — and re-applies on every
   develop push — the `no-ai-rebase` label (env `PROMOTION_PR_LABELS`, creating

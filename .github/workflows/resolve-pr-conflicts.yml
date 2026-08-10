@@ -8,7 +8,15 @@
 # branch — and the open PR FROM it, whose conflict may have been created by
 # that very head push during a quiet stretch on the base — is checked for
 # merge conflicts. A twice-hourly repository-wide sweep catches old conflicts
-# whose original event predated or otherwise missed the resolver.
+# whose original event predated or otherwise missed the resolver, and a push to
+# the `github-actions` control-plane branch itself sweeps every open PR at once
+# — landing a resolver change is precisely when every conflicting PR deserves
+# an immediate retry under the new revision instead of waiting for the clock.
+#
+# OPT-OUT: a PR labelled `no-ai-merge` is dropped by the detector before any
+# comment, dispatch, or AI spend, on every trigger including the sweeps. Remove
+# the label to hand the PR back to the resolver. (`no-ai-rebase` is narrower —
+# it declines history rewriting only, and such a PR still uses this resolver.)
 #
 # TRIGGER SHAPE (load-bearing): claude-code-action@v1 rejects the `push` event
 # ("Unsupported event type: push"), so a push-triggered run can only DETECT and
@@ -147,6 +155,8 @@ run-name: >-
       && format('Detect conflicts for PR #{0}', inputs.pr_number)
       || github.event_name == 'workflow_dispatch' && inputs.branch != ''
       && format('Detect conflicts matching PR base/head {0}', inputs.branch)
+      || github.event_name == 'push' && github.ref_name == 'github-actions'
+      && 'Detect conflicts across all open PRs (control-plane push)'
       || (github.event_name == 'schedule'
           || (github.event_name == 'workflow_dispatch'
               && inputs.pr_number == '' && inputs.branch == ''))
@@ -463,8 +473,16 @@ jobs:
                     && inputs.branch != '') }}
           # Scheduled sweeps and external blank manual runs cover every open PR.
           # Internal workers always carry an exact PR number and never scan all.
+          # A push to the control-plane branch ITSELF sweeps everything too: no
+          # PR targets `github-actions`, so the ordinary base/head match would
+          # find nothing, yet a control-plane push is exactly when every open
+          # PR deserves a fresh attempt under the new resolver revision (a
+          # resolver bug fix should not wait up to 30 minutes for the next
+          # scheduled sweep). PRs labelled no-ai-merge are excluded below.
           SCAN_ALL: >-
             ${{ github.event_name == 'schedule'
+                || (github.event_name == 'push'
+                    && github.ref_name == 'github-actions')
                 || (github.event_name == 'workflow_dispatch'
                     && inputs.detector_handoff != true
                     && inputs.pr_number == ''
@@ -783,6 +801,18 @@ jobs:
             | @base64
           ' <<<"$prs")
 
+          # The owner opt-out. `no-ai-rebase` only declines history rewriting;
+          # `no-ai-merge` declines automatic conflict resolution outright, so
+          # these PRs are dropped before any comment, dispatch, or AI spend —
+          # including in the repository-wide sweeps.
+          opted_out="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | index("no-ai-merge") != null) | .number] | join(", ")' <<<"$prs")"
+          [ -n "$opted_out" ] && echo "::notice::Skipping PR(s) #$opted_out — labelled no-ai-merge; this PR is opted out of automatic conflict resolution."
+          # Retained for the manual-selector summary below, which must still
+          # report "matched, nothing to do" rather than falling silent when the
+          # only match is opted out.
+          matched_open="$(jq 'length' <<<"$prs")"
+          prs="$(jq -c '[.[] | select([.labels[].name] | index("no-ai-merge") == null)]' <<<"$prs")"
+
           skipped="$(jq -r '[.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING") | .number] | join(", ")' <<<"$prs")"
           [ -n "$skipped" ] && echo "::warning::Skipping conflicting fork PR(s) #$skipped — cannot push to fork branches."
           while IFS= read -r encoded; do
@@ -910,16 +940,16 @@ jobs:
           done < <(jq -r '.[] | @base64' <<<"$conflicting")
           conflicting="$snapshots"
           if [ "$HUMAN_EXPLICIT" = true ] \
-             && [ "$(jq 'length' <<<"$prs")" -gt 0 ] \
+             && [ "${matched_open:-0}" -gt 0 ] \
              && [ "$(jq 'length' <<<"$conflicting")" -eq 0 ]; then
-            matched="$(jq 'length' <<<"$prs")"
+            matched="$matched_open"
             echo "::warning::The manual selector matched $matched open PR(s), but none is currently eligible for merge-conflict resolution."
             {
               echo "## Manual selector matched, but no merge worker is needed"
               echo
               echo "$matched open PR(s) matched. None is currently eligible for this merge resolver."
               echo
-              echo "Mergeable/UNKNOWN PRs, fork or protected/default heads, paused snapshots, and stack/rebase-owned PRs are intentionally excluded."
+              echo "Mergeable/UNKNOWN PRs, no-ai-merge opt-outs, fork or protected/default heads, paused snapshots, and stack/rebase-owned PRs are intentionally excluded."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
@@ -1401,8 +1431,13 @@ jobs:
   resolve_promotion:
     name: "Resolve promotion for source PR #${{ inputs.promotion_source_pr }}"
     needs: [promotion_validate, model_config]
+    # `!cancelled()` for the same reason as the ordinary resolve job below:
+    # route and detect are skipped in promotion mode, and that skip would
+    # otherwise propagate through model_config's always() and silently skip
+    # this worker too. The per-need result checks stay exhaustive.
     if: >-
-      needs.promotion_validate.result == 'success'
+      !cancelled()
+      && needs.promotion_validate.result == 'success'
       && needs.promotion_validate.outputs.ready == 'true'
       && needs.model_config.result == 'success'
       && github.event_name == 'workflow_dispatch'
@@ -2208,8 +2243,21 @@ jobs:
     # Secret-bearing resolution runs only from the fixed github-actions control-plane
     # revision after a bot-originated exact-PR selection handoff. The detect step has
     # already validated the routing shape and re-snapshotted live PR refs.
+    #
+    # `!cancelled()` plus explicit per-need result checks is LOAD-BEARING, not
+    # style: promotion_validate is skipped in ordinary PR mode, and GitHub
+    # applies a skip to the whole downstream dependency chain unless a job's
+    # own condition opts out of it. model_config survives on always(), but a
+    # plain success()-style condition here inherits promotion_validate's skip
+    # THROUGH model_config, so this job silently never ran (observed on PR #220
+    # and every other handoff after the promotion worker landed). The explicit
+    # result checks restore exactly what the implicit success() gate gave us.
     if: >-
-      needs.detect.outputs.any == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.detect.result == 'success'
+      && needs.model_config.result == 'success'
+      && needs.detect.outputs.any == 'true'
       && github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
       && github.actor == 'github-actions[bot]'
