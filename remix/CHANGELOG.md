@@ -19,6 +19,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **The thin product-branch listeners can reach the conflict resolver**: every
+  secret-bearing gate tested `github.ref_name == 'github-actions'`, but under
+  `workflow_call` that is the *caller's* ref, so `develop`'s listener was
+  rejected in `detect` on every push, schedule and handoff it forwarded —
+  including the worker handoffs older branch copies still aim at that ref.
+  The gates now also accept a run started by this workflow's own listener on
+  `develop`/`main`, which the caller contract already constrains to a single
+  pinned `@github-actions` call with no executable behavior of its own.
+  — Claude (AI), 2026-08-10
 - **AI conflict resolution runs again (every worker was silently skipped)**:
   adding the promotion validator to `model_config`'s `needs` made GitHub apply
   that job's ordinary-mode skip to the whole downstream chain, so both the

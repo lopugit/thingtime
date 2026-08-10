@@ -18,6 +18,30 @@
 # the label to hand the PR back to the resolver. (`no-ai-rebase` is narrower —
 # it declines history rewriting only, and such a PR still uses this resolver.)
 #
+# CONTROL-PLANE IDENTITY (load-bearing): the product branches carry thin
+# listeners — one `uses:` of this file pinned at `@github-actions`, no runners,
+# no steps, no shell (enforced by remix/scripts/workflow-caller-contract.mjs) —
+# and every trigger they receive reaches this implementation through
+# `workflow_call`. In a called workflow `github.ref_name` is the CALLER's ref,
+# so a bare `github.ref_name == 'github-actions'` test rejects the entire
+# listener path: `develop`'s listener failed 100% of the time, in `detect`, on
+# every push, schedule and handoff it received, including the worker
+# handoffs that older branch copies still aim at the retired ref. That was red
+# noise rather than lost resolutions, because the detectors that run directly on
+# this branch cover the same work. Each gate below therefore asks:
+#
+#   github.ref_name == 'github-actions'                       (direct run)
+#   || github.workflow_ref == '<repo>/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop'
+#   || github.workflow_ref == '<repo>/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main'
+#
+# The caller contract is what makes the second and third clauses safe: a file
+# matching those names on a product branch cannot contain executable behavior
+# and cannot call anything but this implementation at this ref. `main` is listed
+# ahead of its own conversion to a listener; its current full copy has no
+# `uses:` and so can never satisfy the test. `github.job_workflow_ref` would
+# name the called file directly and be the tighter check, but it exists only as
+# an OIDC claim, not in the expression context.
+#
 # TRIGGER SHAPE (load-bearing): claude-code-action@v1 rejects the `push` event
 # ("Unsupported event type: push"), so a push-triggered run can only DETECT and
 # then hand off — the `handoff` job dispatches one exact PR selection to this
@@ -334,7 +358,11 @@ concurrency:
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
         && github.actor == 'github-actions[bot]'
-        && github.ref_name == 'github-actions'
+        && (github.ref_name == 'github-actions'
+           || github.workflow_ref
+           == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+           || github.workflow_ref
+           == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
         && inputs.promotion_source_pr != ''
         && inputs.promotion_plan_b64 != ''
         && inputs.detector_handoff != true
@@ -348,7 +376,11 @@ concurrency:
         || github.event_name == 'workflow_dispatch'
         && inputs.detector_handoff == true
         && github.actor == 'github-actions[bot]'
-        && github.ref_name == 'github-actions'
+        && (github.ref_name == 'github-actions'
+           || github.workflow_ref
+           == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+           || github.workflow_ref
+           == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
         && inputs.pr_number != ''
         && inputs.branch == ''
         && format('resolve-pr{0}', inputs.pr_number)
@@ -372,7 +404,11 @@ concurrency:
   # must finish or fail coherently; never cancel it halfway through a merge.
   cancel-in-progress: >-
     ${{ !(github.event_name == 'workflow_dispatch'
-          && github.ref_name == 'github-actions'
+          && (github.ref_name == 'github-actions'
+             || github.workflow_ref
+             == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+             || github.workflow_ref
+             == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
           && (((github.actor == 'github-actions[bot]')
                && inputs.promotion_source_pr != ''
                && inputs.promotion_plan_b64 != ''
@@ -445,6 +481,10 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref_name }}
+          # Identity of the workflow that STARTED the run. Under
+          # workflow_call that is the thin product-branch listener, not
+          # this file; see CONTROL-PLANE IDENTITY at the top.
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
           EVENT_ACTOR: ${{ github.actor }}
           TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}
           SELECTED_PR: ${{ inputs.pr_number }}
@@ -510,6 +550,24 @@ jobs:
         run: |
           set -euo pipefail
 
+          # "Am I the control-plane revision?" — see CONTROL-PLANE IDENTITY
+          # at the top of this file. Either this run started on github-actions,
+          # or a thin product-branch listener for this same workflow called us,
+          # and the caller contract guarantees such a listener can only call
+          # this file pinned at @github-actions.
+          control_plane_revision() {
+            local self="$REPO/.github/workflows/resolve-pr-conflicts.yml"
+            if [ "$EVENT_REF" = github-actions ]; then
+              return 0
+            fi
+            if [ "$CALLER_WORKFLOW_REF" = "$self@refs/heads/develop" ] \
+               || [ "$CALLER_WORKFLOW_REF" = "$self@refs/heads/main" ]; then
+              return 0
+            fi
+            return 1
+          }
+          echo "Control plane entered via: ${CALLER_WORKFLOW_REF:-<none>} (ref $EVENT_REF)"
+
           case "$DEPTH" in
             ''|*[!0-9]*)
               echo "::error::depth must be a decimal integer from 0 through 3."
@@ -539,12 +597,12 @@ jobs:
             # defense-in-depth and still permits re-runs of bot-originated work.
             invalid_handoff=false
             [ "$EVENT_NAME" = workflow_dispatch ] || invalid_handoff=true
-            [ "$EVENT_REF" = github-actions ] || invalid_handoff=true
+            control_plane_revision || invalid_handoff=true
             [ "$EVENT_ACTOR" = "github-actions[bot]" ] || invalid_handoff=true
             [ -n "$SELECTED_PR" ] || invalid_handoff=true
             [ -z "$INPUT_BRANCH" ] || invalid_handoff=true
             if [ "$invalid_handoff" = true ]; then
-              echo "::error::Invalid internal resolver handoff: require bot-authored workflow_dispatch on github-actions with a positive pr_number and empty branch."
+              echo "::error::Invalid internal resolver handoff: require a bot-authored workflow_dispatch of the github-actions revision (directly, or through the develop/main listener) with a positive pr_number and empty branch."
               exit 1
             fi
           fi
@@ -992,6 +1050,10 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref_name }}
+          # Identity of the workflow that STARTED the run. Under
+          # workflow_call that is the thin product-branch listener, not
+          # this file; see CONTROL-PLANE IDENTITY at the top.
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
           EVENT_ACTOR: ${{ github.actor }}
           ORDINARY_PR: ${{ inputs.pr_number }}
           ORDINARY_BRANCH: ${{ inputs.branch }}
@@ -1039,8 +1101,26 @@ jobs:
             fi
           }
 
+          # "Am I the control-plane revision?" — see CONTROL-PLANE IDENTITY
+          # at the top of this file. Either this run started on github-actions,
+          # or a thin product-branch listener for this same workflow called us,
+          # and the caller contract guarantees such a listener can only call
+          # this file pinned at @github-actions.
+          control_plane_revision() {
+            local self="$REPO/.github/workflows/resolve-pr-conflicts.yml"
+            if [ "$EVENT_REF" = github-actions ]; then
+              return 0
+            fi
+            if [ "$CALLER_WORKFLOW_REF" = "$self@refs/heads/develop" ] \
+               || [ "$CALLER_WORKFLOW_REF" = "$self@refs/heads/main" ]; then
+              return 0
+            fi
+            return 1
+          }
+          echo "Control plane entered via: ${CALLER_WORKFLOW_REF:-<none>} (ref $EVENT_REF)"
+
           [ "$EVENT_NAME" = workflow_dispatch ] || fail "Promotion handoff requires workflow_dispatch."
-          [ "$EVENT_REF" = github-actions ] || fail "Promotion handoff must run from the fixed github-actions revision."
+          control_plane_revision || fail "Promotion handoff must run the github-actions revision (directly, or through the develop/main listener)."
           [ "$EVENT_ACTOR" = 'github-actions[bot]' ] || fail "Promotion handoff must be bot-authored."
           [ "$EXECUTION_PROVIDER" = github-actions ] \
             || fail "Promotion handoff cannot use external compute routing."
@@ -1246,7 +1326,11 @@ jobs:
       && (github.event_name != 'workflow_dispatch'
           || inputs.detector_handoff != true
           || github.actor != 'github-actions[bot]'
-          || github.ref_name != 'github-actions')
+          || !(github.ref_name == 'github-actions'
+               || github.workflow_ref
+               == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+               || github.workflow_ref
+               == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository)))
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
@@ -1310,7 +1394,11 @@ jobs:
     if: >-
       always()
       && github.event_name == 'workflow_dispatch'
-      && github.ref_name == 'github-actions'
+      && (github.ref_name == 'github-actions'
+         || github.workflow_ref
+         == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+         || github.workflow_ref
+         == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
       && ((needs.detect.result == 'success'
            && needs.detect.outputs.any == 'true'
            && github.actor == 'github-actions[bot]'
@@ -1443,7 +1531,11 @@ jobs:
       && github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff != true
       && github.actor == 'github-actions[bot]'
-      && github.ref_name == 'github-actions'
+      && (github.ref_name == 'github-actions'
+         || github.workflow_ref
+         == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+         || github.workflow_ref
+         == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
       && inputs.promotion_source_pr != ''
       && inputs.promotion_plan_b64 != ''
       && inputs.manual_retry != true
@@ -2261,7 +2353,11 @@ jobs:
       && github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
       && github.actor == 'github-actions[bot]'
-      && github.ref_name == 'github-actions'
+      && (github.ref_name == 'github-actions'
+         || github.workflow_ref
+         == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+         || github.workflow_ref
+         == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
       && inputs.pr_number != ''
       && inputs.branch == ''
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
