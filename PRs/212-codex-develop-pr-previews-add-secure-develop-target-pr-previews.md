@@ -4,13 +4,14 @@
 
 Vercel selects an environment from the deployment target/source branch, not a
 pull request's base branch. A feature branch targeting `develop` therefore gets
-an ordinary credential-free Preview unless a trusted controller explicitly
-deploys that exact commit to the `develop` Custom Environment.
+an ordinary Preview unless a trusted controller explicitly deploys that exact
+commit to the `develop` Custom Environment.
 
-This PR adds that controller without copying development secrets into generic
-Preview. Eligible builds intentionally share the same development MongoDB, S3,
-quotas, and other services as `dev.thingtime.com`; they are trusted integration
-surfaces, not isolated sandboxes.
+This PR adds that controller for trusted aliases, exact-SHA status, and durable
+cleanup. Generic Preview now intentionally receives the same current runtime
+variables as `develop`, so ordinary and controller-managed builds share the
+development MongoDB, S3, quotas, and other services as `dev.thingtime.com`;
+they are trusted integration surfaces, not isolated sandboxes.
 
 ## Security design
 
@@ -36,8 +37,9 @@ surfaces, not isolated sandboxes.
 
 ## Live setup completed during implementation
 
-- The existing development runtime variables are scoped to Vercel's `develop`
-  Custom Environment rather than generic Preview.
+- The existing development runtime variables are assigned to both Vercel's
+  `develop` Custom Environment and generic Preview. The six existing
+  Preview-only filesystem/CI/webhook variables remain in place.
 - `dev.thingtime.com` is bound to the literal `develop` Git branch, not to every
   deployment targeting the Custom Environment.
 - The develop PR wildcard is registered and verified in Vercel while remaining
@@ -59,16 +61,18 @@ surfaces, not isolated sandboxes.
 - The masked `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` Environment secret is
   installed with the unsigned exact-bucket probe URL; its value remains absent
   from tracked files and logs.
-- Generic Preview has no private runtime rows. All nine legacy `develop` branch
-  rows, plus the develop S3 bucket/region/role and CRON, JWT, MongoDB, and
-  application variables, are now scoped only to the `develop` Custom
-  Environment. Production remains separately scoped.
+- Generic Preview receives all 26 current `develop` rows. Development
+  APP/CRON/JWT/MongoDB/S3 values remain distinct from Production; AI, SES/email,
+  and the Vercel API value are intentionally shared across develop, Preview,
+  and Production.
 - The protected controller variable now uses
   `PREVIEW_ALIAS_SUFFIX=previews.dev.thingtime.com`. The detached Vercel
   wildcard, DNS-only `*.previews.dev` CNAME, narrow
   `_acme-challenge.previews.dev` NS delegation, wildcard TLS, and exact develop
-  bucket CORS origin are live. The shorter `*.previews.thingtime.com` namespace
-  remains reserved for a separate trusted production-preview controller.
+  bucket CORS origins are live. The development role trusts both the `develop`
+  and generic `preview` OIDC subjects. The shorter
+  `*.previews.thingtime.com` namespace remains reserved for a separate trusted
+  production-preview controller.
 
 ## Activation gates
 
@@ -84,8 +88,8 @@ Vercel runtime scoping, develop-only alias suffix, wildcard DNS/ACME/TLS, and
 develop bucket CORS are complete. The controller merge and live checklist
 remain. Until that final sequence succeeds, the controller is not active and no
 PR alias should be described as ready. Production previews remain inactive and
-must use a separate trusted controller; generic Preview receives neither AWS
-role.
+must use a separate trusted controller; generic Preview receives the development
+AWS role but never the production role.
 
 ## Verification completed
 

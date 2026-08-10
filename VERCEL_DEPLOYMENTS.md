@@ -36,15 +36,19 @@ Last updated: 2026-08-09
 Vercel Custom Environment branch tracking matches the deployment's source
 branch. It automatically sends the `develop` branch to the `develop` Custom
 Environment, but a feature branch whose PR targets `develop` is otherwise a
-generic Preview and does not inherit develop variables.
+generic Preview. Thingtime now assigns the same current runtime-variable set to
+generic Preview as to `develop`, so newly built feature previews share the
+development MongoDB, JWT, S3, AI, email, and integration configuration.
 
-The trusted `Develop S3 PR preview` workflow closes that gap without broadening
-generic Preview access. For a same-repository, trusted-author PR targeting
-`develop`, it asks Vercel to build the exact head SHA in the `develop` Custom
-Environment, publishes a transient GitHub Deployment, and maintains one sticky
-PR comment containing the deployment status and
-`https://pr-<number>.previews.dev.thingtime.com`. Forks, drafts, wrong-base PRs, and
-untrusted authors remain on the ordinary develop-credential-free Preview path.
+The trusted `Develop S3 PR preview` workflow still adds a controlled stable
+alias and lifecycle around eligible changes. For a same-repository,
+trusted-author PR targeting `develop`, it asks Vercel to build the exact head
+SHA in the `develop` Custom Environment, publishes a transient GitHub
+Deployment, and maintains one sticky PR comment containing the deployment
+status and `https://pr-<number>.previews.dev.thingtime.com`. Forks, drafts,
+wrong-base PRs, and untrusted authors never receive that controller-managed
+alias, although any ordinary Preview Vercel chooses to build now uses the
+shared development runtime.
 The workflow never checks out or executes PR-head code on the GitHub runner;
 Vercel performs the remote build.
 
@@ -94,10 +98,11 @@ One-time private setup (values never belong in git):
   `PREVIEW_ALIAS_SUFFIX` (`previews.dev.thingtime.com` here), and
   `STABLE_DEVELOP_DOMAIN` (`dev.thingtime.com` here). Forks must substitute
   domains they control.
-- Vercel runtime scope: generic Preview has no private runtime rows. All nine
-  legacy `develop` branch rows are now scoped only to the `develop` Custom
-  Environment, as are the develop S3 bucket/region/role and CRON, JWT, MongoDB,
-  and application variables. Production remains separately scoped.
+- Vercel runtime scope: every variable currently assigned to the `develop`
+  Custom Environment is also assigned to generic Preview, while the six
+  existing Preview-only filesystem/CI/webhook values remain. Development
+  MongoDB/JWT/S3 values stay distinct from Production; AI, SES/email, and the
+  Vercel API value are intentionally shared with Production and Preview.
 - Trust gate: both the PR author and the triggering actor must be on that
   explicit allowlist and retain current GitHub write/admin permission. Repository
   membership or a same-repository branch alone is insufficient.
@@ -121,17 +126,20 @@ One-time private setup (values never belong in git):
   [wildcard-without-Vercel-nameservers guide](https://vercel.com/kb/guide/wildcard-domain-without-vercel-nameservers).
   Forks must use the exact records their own Vercel project currently displays;
   do not copy another project's account-specific targets.
-- Develop S3 bucket CORS: retain `https://dev.thingtime.com` and add
-  `https://*.previews.dev.thingtime.com`, with method `PUT`, allowed header
-  `x-amz-checksum-sha256`, no exposed headers, and `MaxAgeSeconds: 300`.
-  CORS is not authorization; only the custom-environment deployment can obtain
-  a signed upload plan. Generic Preview OIDC remains untrusted by the role.
+- Develop S3 bucket CORS: retain `https://dev.thingtime.com`,
+  `https://*.previews.dev.thingtime.com`, and
+  `https://thingtime-*-lopugits-projects.vercel.app`, with method `PUT`, allowed
+  header `x-amz-checksum-sha256`, no exposed headers, and
+  `MaxAgeSeconds: 300`. The development role trusts both
+  `environment:develop` and `environment:preview`; the production role remains
+  excluded from generic Preview.
 
 Activation status as of 2026-08-10: the no-bypass `main` ruleset, protected
 Environment, all controller variables, dedicated 90-day Vercel token, masked
-`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, private runtime scoping, develop
-bucket CORS, detached Vercel wildcard, DNS-only wildcard CNAME, narrow ACME NS
-delegation, and wildcard TLS are complete for
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
+scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
+wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
+are complete for
 `*.previews.dev.thingtime.com`. Merge of the controller to `main` and the live
 end-to-end checklist remain pending. The installed secrets alone do not
 activate the feature, and a green controller self-test alone does not prove
@@ -140,21 +148,15 @@ browser uploads are ready.
 The shorter `*.previews.thingtime.com` namespace is reserved for a separate
 future production-preview controller. It must use an independently protected
 control environment and exact production OIDC trust. Never give the production
-S3 role—or the develop role—to Vercel's generic Preview environment; ordinary
-feature and fork previews stay credential-free.
+S3 role or production MongoDB/JWT/S3 values to Vercel's generic Preview
+environment. Generic Preview deliberately has the development role and current
+develop runtime instead.
 
-Do not copy the develop bucket/role variables into Vercel's generic Preview
-environment or trust `environment:preview` in AWS. Keep MongoDB, JWT, email, S3,
-AI, and every other private develop value scoped to the `develop` Custom
-Environment. Every ordinary project Preview shares the generic Preview identity,
-regardless of the PR's base branch, so it must remain free of the develop role
-and private runtime configuration.
-
-Develop-target PRs are not isolated from one another or from
-`dev.thingtime.com`: they use the same development MongoDB, S3 bucket, storage
-quotas, email/test services, and other Custom Environment state. Admit trusted
-same-repository code only, use disposable test data, and assume concurrent PRs
-can observe or mutate the same development resources.
+Generic Previews and develop-target PR aliases are not isolated from one another
+or from `dev.thingtime.com`: they use the same development MongoDB, S3 bucket,
+storage quotas, email/test services, and other runtime state. Allow only trusted
+code to build in this Vercel project, use disposable test data, and assume
+concurrent branches can observe or mutate the same development resources.
 
 Lifecycle and recovery:
 

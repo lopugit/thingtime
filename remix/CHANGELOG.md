@@ -19,12 +19,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Generic Vercel Preview now mirrors the shared development runtime**: all 26
+  variables currently assigned to `develop` also target Preview, while the six
+  existing Preview-only filesystem/CI/webhook settings remain. The development
+  S3 role now trusts the generic `environment:preview` OIDC subject and the
+  development bucket permits Thingtime's generated Vercel Preview origins;
+  production MongoDB/JWT/S3 and the production S3 role remain excluded. The
+  trusted controller is retained for stable `*.previews.dev.thingtime.com`
+  aliases, exact-SHA status, and cleanup. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
 - **Develop and production preview hostnames are now separated**: the trusted
   `develop` controller uses `*.previews.dev.thingtime.com`, with its protected
   GitHub variable, detached Vercel wildcard, DNS/ACME delegation, TLS, and S3
   CORS aligned to that origin. `*.previews.thingtime.com` is reserved for a
   separate future production-preview controller, while ordinary Vercel
-  previews retain neither AWS role. See the
+  previews retain the development role but never the production role. See the
   [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
   — Codex (AI), 2026-08-10
 - **Develop-preview activation runbook now matches the live control plane**:
@@ -232,9 +242,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   secret-free `pull_request_target` dispatcher and provenance-checked
   default-branch `repository_dispatch` controller to the exact Vercel `develop`
   Custom Environment. Neither GitHub job executes PR-head code, the detector
-  never receives the Vercel token, and generic Preview access is not broadened;
-  the approved Vercel build intentionally receives the shared develop runtime
-  configuration. An explicit trusted-actor plus live write/admin permission
+  never receives the Vercel token, and generic Preview access was not broadened
+  when the controller was introduced (it was deliberately broadened later as
+  recorded above); the approved Vercel build intentionally receives the shared
+  develop runtime configuration. An explicit trusted-actor plus live write/admin permission
   gate protects the dedicated GitHub Environment secret. Each PR gets a
   marker-updated status comment, transient GitHub Deployment, and dedicated
   alias under `*.previews.dev.thingtime.com`; SHA revalidation, marker-scoped

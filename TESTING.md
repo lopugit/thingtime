@@ -51,8 +51,9 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] In Vercel, confirm `dev.thingtime.com` is bound to the literal `develop`
       Git branch and has no domain `customEnvironmentId`, rather than being
       bound to the whole Custom Environment; the Custom Environment's own domain
-      list is empty. Confirm generic Preview has none of the develop
-      MongoDB/JWT/email/S3/AI private variables.
+      list is empty. Confirm a newly built generic Preview has all current
+      `develop` variables plus the six existing Preview-only values, while
+      production MongoDB/JWT/S3 values remain absent.
 - [ ] Open or update a same-repository, trusted-author PR targeting `develop`:
       the `Develop S3 PR preview` workflow deploys the exact head SHA, the
       one marker comment moves through deploying to ready, the GitHub Deployment
@@ -70,16 +71,19 @@ is fixed, and cite the checklist you ran in the PR description.
       S3 `PUT` preflight permits only that exact origin pattern, `PUT`, and
       `x-amz-checksum-sha256`; it exposes no headers, the bucket remains private,
       and storage usage returns to its original value. Repeat from
-      `https://dev.thingtime.com` and reject an unrelated Preview origin.
+      `https://dev.thingtime.com` and a newly built generated
+      `https://thingtime-*-lopugits-projects.vercel.app` Preview; reject an
+      unrelated origin.
 - [ ] Update the PR twice: the same alias moves to the newest successful SHA,
       the comment is edited rather than duplicated, and older workflow-created
       develop deployments are deleted. A canceled/superseded run must not move
       the alias after the newer SHA wins.
 - [ ] A fork PR, draft PR, non-allowlisted author/actor, read-only collaborator,
-      and PR targeting `main` never receive a develop deployment or credentials;
-      their ordinary Vercel Preview remains available and cannot assume the
-      develop AWS role. Retargeting or converting an eligible PR to draft cleans
-      its existing credentialed preview.
+      and PR targeting `main` never receive a controller-managed develop alias.
+      If Vercel builds their ordinary Preview, confirm it uses only the shared
+      development role/data plane and cannot assume the production AWS role.
+      Retargeting or converting an eligible PR to draft cleans its existing
+      controller-managed alias/deployment.
 - [ ] Confirm `*.previews.thingtime.com` is not used by the develop controller.
       Until a separately protected production-preview controller exists, no
       ordinary Preview can assume the production role or publish a trusted
@@ -106,7 +110,7 @@ is fixed, and cite the checklist you ran in the PR description.
       without copying dependency files from another checkout.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
-  scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -430,7 +434,7 @@ is fixed, and cite the checklist you ran in the PR description.
       no refresh may inject literal Sonnet. Repeat with `default` first and
       confirm Graphify leaves its backend default unforced. Run
       `node .github/scripts/resolve-pr-conflicts-routing-contract.mjs
-  --self-test` to prove all AI runtime YAML remains in this contract.
+--self-test` to prove all AI runtime YAML remains in this contract.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently

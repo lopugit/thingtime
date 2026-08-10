@@ -596,7 +596,12 @@ Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 A pull request's base branch does not select its Vercel environment. A feature
 branch targeting `develop` is therefore still an ordinary Preview unless the
 trusted controller in `.github/workflows/develop-pr-preview.yml` explicitly
-deploys its exact head SHA to the `develop` Custom Environment.
+deploys its exact head SHA to the `develop` Custom Environment. Thingtime now
+also assigns the current `develop` runtime variables to generic Preview, so an
+ordinary newly built Preview shares the development data/services even without
+the controller. The controller remains responsible for the stable
+`pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
+comment, and marker-scoped cleanup.
 
 The workflow deliberately uses two stages. Its `pull_request_target` job has no
 environment or Vercel secret, checks out no code, and emits only a bounded
@@ -660,12 +665,13 @@ only the verified PR wildcard alias explicitly. This leaves the stable
 development hostname on the real `develop` branch while PRs receive only
 `https://pr-<number>.previews.dev.thingtime.com`.
 
-The private Vercel runtime scope is already narrowed. Generic Preview has no
-private runtime rows; all nine legacy `develop` branch rows are now scoped only
-to the `develop` Custom Environment. The develop S3 bucket, region, and role,
-plus CRON, JWT, MongoDB, and application variables, are also Custom
-Environment-only. Production remains separately scoped and is not shared with
-develop or PR previews.
+Generic Preview intentionally receives every runtime variable currently
+assigned to the `develop` Custom Environment, while retaining its existing
+Preview-only filesystem, CI, repository, webhook, and workflow variables. This
+includes the development-only APP URL, CRON, JWT, MongoDB, and S3 settings, plus
+the AI, SES/email, and Vercel API values that `develop` intentionally shares
+with Production. Production MongoDB, JWT, and S3 settings remain separate and
+are not assigned to Preview.
 
 For Thingtime, set `PREVIEW_ALIAS_SUFFIX=previews.dev.thingtime.com` and
 `STABLE_DEVELOP_DOMAIN=dev.thingtime.com`. Forks should replace both with
@@ -691,16 +697,17 @@ Forks should first add their own wildcard to Vercel and copy every CNAME or
 verification record Vercel currently displays for that domain; do not copy
 another project's account-specific targets.
 
-The develop S3 bucket needs only browser upload CORS for the two controlled
-origin classes. Downloads remain same-origin through Thingtime and the bucket
-stays private:
+The develop S3 bucket permits browser upload CORS from the stable development
+origin, the controller-managed PR aliases, and Thingtime's generated Vercel
+Preview hostnames. Downloads remain same-origin through Thingtime and the
+bucket stays private:
 
 ```json
 [
 	{
 		"AllowedHeaders": ["x-amz-checksum-sha256"],
 		"AllowedMethods": ["PUT"],
-		"AllowedOrigins": ["https://dev.thingtime.com", "https://*.previews.dev.thingtime.com"],
+		"AllowedOrigins": ["https://dev.thingtime.com", "https://*.previews.dev.thingtime.com", "https://thingtime-*-lopugits-projects.vercel.app"],
 		"ExposeHeaders": [],
 		"MaxAgeSeconds": 300
 	}
@@ -709,35 +716,37 @@ stays private:
 
 Activation status as of 2026-08-10: the no-bypass `main` ruleset, protected
 Environment, nine controller variables, dedicated 90-day Vercel token, masked
-`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, private runtime scoping, develop
-bucket CORS, detached Vercel wildcard, DNS-only wildcard CNAME, narrow ACME NS
-delegation, and wildcard TLS are complete for
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
+scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
+wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
+are complete for
 `*.previews.dev.thingtime.com`. Merge of this controller to `main` and the live
 end-to-end checklist remain pending. The installed secrets do not make the
 controller live while its workflow is absent from `main`. Do not describe a PR
 alias as ready before every remaining gate passes.
 
-CORS is not authorization. Keep the bucket private and scope the AWS OIDC trust
-and server-only S3 variables to the `develop` Custom Environment. Do not copy
-MongoDB, JWT, email, S3, AI, or other private runtime variables into Vercel's
-generic Preview environment, and do not trust the broad
-`environment:preview` OIDC subject. Ordinary Vercel previews cover arbitrary
-feature/fork code and must remain free of the develop role and private runtime
-configuration.
+CORS is not authorization. The bucket remains private, while the development
+AWS role explicitly trusts both Thingtime's `environment:develop` and
+`environment:preview` OIDC subjects. Every new ordinary Preview can therefore
+read or mutate the same development MongoDB/S3/data plane and use the same
+private integration values as `dev.thingtime.com`. Treat all branches Vercel is
+allowed to build as trusted development code, use disposable data, and keep
+production MongoDB/JWT/S3 credentials out of Preview.
 
 `*.previews.thingtime.com` is reserved for a separate future production-preview
 controller. Do not point the develop controller at that suffix, copy the
 production S3 role into generic Preview, or let ordinary Vercel feature/fork
-previews assume either AWS role. A production-preview controller must have its
+previews assume the production AWS role. A production-preview controller must have its
 own trusted actors, protected control environment, exact production OIDC trust,
 deployment cleanup, CORS probe, and bucket CORS rule before that namespace is
 activated.
 
-Every eligible PR deployment intentionally shares the same development MongoDB,
-S3 bucket, quotas, and other Custom Environment state as `dev.thingtime.com`.
-It is a trusted integration surface, not an isolated sandbox: use disposable
-test accounts/data and never deploy an untrusted or fork PR into it. The
-controller updates one marker comment with deploying/ready/failure state, moves
+Every generic Preview and eligible controller deployment intentionally shares
+the same development MongoDB, S3 bucket, quotas, and other runtime state as
+`dev.thingtime.com`. It is a trusted integration surface, not an isolated
+sandbox: use disposable test accounts/data and do not allow Vercel to build
+untrusted code in this project. The controller updates one marker comment with
+deploying/ready/failure state, moves
 the PR alias only after the exact SHA is ready and revalidated, and deletes only
 its marker-tagged superseded resources. Close/retarget/draft handling removes
 the alias, inactivates the transient GitHub Deployment, and deletes its tagged
