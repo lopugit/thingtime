@@ -78,6 +78,25 @@ const flag = (key, fallback) => {
 const CFG = {
   source: env("SOURCE_BRANCH", "develop"),
   target: env("TARGET_BRANCH", "main"),
+  // The primary target never changes; `target` is swapped per pass when
+  // several targets are configured, and branch naming keys off this so the
+  // primary pass keeps its historical names.
+  primaryTarget: env("TARGET_BRANCH", "main"),
+  // Multi-target promotion. One merged source PR can legitimately owe changes
+  // to more than one branch: #211 converts `main` to thin listeners AND carries
+  // the executable implementation those listeners call, which may only live on
+  // `github-actions`. A single-target promoter can never express that — the
+  // half that does not belong on `main` just conflicts, and the promotion dies.
+  // Each configured target gets its own full pass (own branch, own promotion
+  // PR, own record), so one source yields as many promotion PRs as it owes.
+  // A pass whose cherry-pick does not apply cleanly onto its base is exactly
+  // the case the trusted AI worker already handles: it reconstructs the change
+  // to fit that base and opens the PR. Nothing here decides WHAT belongs where
+  // — the per-base replay and the worker do — which is why no path-routing
+  // table exists: the same file legitimately contributes different content to
+  // different bases.
+  targets: env("TARGET_BRANCHES", "")
+    .split(",").map((s) => s.trim()).filter(Boolean),
   lookback: Math.max(1, Math.min(100, Number(env("LOOKBACK", "50")) || 50)),
   maxNewPrs: Math.max(1, Number(env("MAX_NEW_PRS", "10")) || 10),
   requireLabel: env("REQUIRE_LABEL", ""),
@@ -404,8 +423,8 @@ export function inspectSourcePresence(
       ok: false,
       error:
         `source-lineage safety block: the exact historical patch is not present at current ` +
-        `\`${CFG.source}\` tip; it may have been intentionally removed or reverted, so no ` +
-        "promotion branch or AI worker was created",
+        `\`${CFG.source}\` tip; it may have been intentionally removed or reverted, so the ` +
+        "promotion is quarantined for review instead of being published as verified",
       sourceLineageStatus: "review-required-removed",
     };
   }
@@ -414,8 +433,8 @@ export function inspectSourcePresence(
       ok: false,
       error:
         `source-lineage safety block: the exact historical patch cannot be proven present at ` +
-        `current \`${CFG.source}\` tip because later edits overlap its effect; no promotion ` +
-        "branch or AI worker was created",
+        `current \`${CFG.source}\` tip because later edits overlap its effect, so the ` +
+        "promotion is quarantined for review instead of being published as verified",
       sourceLineageStatus: "review-required-ambiguous",
     };
   }
@@ -493,13 +512,54 @@ export function slugify(text, maxLen = 40) {
 
 const STRIP_PREFIXES = ["claude", "codex", "feature", "feat", "fix", "chore", "promote"];
 
-export function promotionBranchFor(pr) {
+export function promotionBranchFor(pr, target = CFG.target, primaryTarget = CFG.primaryTarget || CFG.target) {
   const segments = (pr.headRefName || "").split("/").filter(Boolean);
   while (segments.length > 1 && STRIP_PREFIXES.includes(segments[0].toLowerCase())) {
     segments.shift();
   }
   const base = segments.join("-") || pr.title || `pr-${pr.number}`;
-  return `promote/pr-${pr.number}-${slugify(base)}`;
+  // The primary target keeps the historical name so every promotion branch and
+  // record already in flight still matches. Additional targets are suffixed, so
+  // two promotions of one source can never collide on a branch name.
+  // `--to-` (double dash) is deliberate: slugify collapses runs of separators,
+  // so a slugified head ref can never contain it. A single dash would make the
+  // primary promotion of a branch literally named `foo-to-github-actions`
+  // indistinguishable from a github-actions-targeted promotion.
+  const suffix = target && target !== primaryTarget ? `--to-${slugify(target)}` : "";
+  return `promote/pr-${pr.number}-${slugify(base)}${suffix}`;
+}
+
+// Whether a promotion PR belongs to the pass currently running. The primary
+// pass owns every promotion without a target suffix (including all history
+// from before multi-target existed); an additional target owns exactly the
+// branches suffixed for it.
+export function promotionBelongsToPass(promotion, cfg = CFG) {
+  const head = String(promotion?.headRefName || "");
+  const primary = cfg.primaryTarget || cfg.target;
+  const suffix = `--to-${slugify(cfg.target)}`;
+  if (cfg.target === primary) {
+    return !promotionTargets(cfg)
+      .filter((target) => target !== primary)
+      .some((target) => head.endsWith(`--to-${slugify(target)}`));
+  }
+  return head.endsWith(suffix);
+}
+
+// The configured promotion targets, in order, always beginning with the
+// primary one. Unsafe, duplicate, and self-targeting entries are dropped rather
+// than allowed to aim a promotion at the branch it came from.
+export function promotionTargets(cfg = CFG) {
+  const seen = new Set();
+  const targets = [];
+  for (const candidate of [cfg.target, ...(cfg.targets || [])]) {
+    const name = String(candidate || "").trim();
+    if (!name || name === cfg.source) continue;
+    if (name.startsWith("-") || name.includes("..") || /[\s~^:?*[\\]/.test(name)) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    targets.push(name);
+  }
+  return targets;
 }
 
 export function parsePromotionOf(body) {
@@ -1541,6 +1601,79 @@ function upsertBotIssueComment(number, marker, body, token = process.env.ACTIONS
   }
 }
 
+export const PROMOTION_STANDASIDE_MARKER = "thingtime-promotion-standaside:v1";
+
+// Stand-aside visibility. A promotion the promoter declines to create used to
+// exist ONLY as a line in the run summary, so nobody learned about it unless
+// they happened to open the run: #211 — the PR that converts `main` from a
+// 2167-line resolver copy to a thin listener — was declined on 2026-08-09 and
+// sat unnoticed, because the verdict ("does not cherry-pick cleanly onto
+// `main`. Promote it manually", later "not verifiably present at current
+// `develop` tip") never reached the PR. Every decline now upserts one
+// hidden-marker comment on the SOURCE PR, edited in place on later runs so
+// repeat scans never stack. Never fatal: a failed comment is a warning, never a
+// reason to abandon promotion work, and dry runs stay side-effect free.
+export function noteSourceStandAside(
+  pr,
+  {
+    reason,
+    heldBehind = 0,
+    target = CFG.target,
+    source = CFG.source,
+    dryRun = CFG.dryRun,
+    upsert = upsertBotIssueComment,
+  } = {},
+) {
+  if (!pr?.number) return { ok: false, error: "stand-aside notice needs a source PR number" };
+  if (dryRun) return { ok: true, skipped: "dry-run" };
+  const lines = [
+    `⛔ **Not promoted to \`${target}\`.** The promoter examined this merged \`${source}\` PR and stood aside:`,
+    "",
+    `> ${String(reason || "no reason recorded").trim().replace(/\n/g, "\n> ")}`,
+    "",
+  ];
+  if (heldBehind > 0) {
+    lines.push(
+      `${heldBehind} later PR${heldBehind === 1 ? "" : "s"} in the same stack ${heldBehind === 1 ? "is" : "are"} held behind this one.`,
+      "",
+    );
+  }
+  lines.push(
+    "No promotion PR exists for this change. Later runs keep re-checking and edit this " +
+      "notice in place rather than repeating it; it is replaced with the promotion link once " +
+      "the change does ship.",
+    "",
+    `<!-- ${PROMOTION_STANDASIDE_MARKER} -->`,
+  );
+  return upsert(pr.number, PROMOTION_STANDASIDE_MARKER, lines.join("\n"));
+}
+
+// Clears a previous stand-aside notice by editing it into a resolution, so a
+// stale "not promoted" verdict can never outlive the promotion that fixed it.
+export function clearSourceStandAside(
+  pr,
+  {
+    promotionNumber,
+    target = CFG.target,
+    dryRun = CFG.dryRun,
+    upsert = upsertBotIssueComment,
+  } = {},
+) {
+  if (!pr?.number) return { ok: false, error: "stand-aside resolution needs a source PR number" };
+  if (dryRun) return { ok: true, skipped: "dry-run" };
+  return upsert(
+    pr.number,
+    PROMOTION_STANDASIDE_MARKER,
+    [
+      `✅ **Promoted to \`${target}\`**${promotionNumber ? ` in #${promotionNumber}` : ""}.`,
+      "",
+      "An earlier run stood aside on this PR; that verdict no longer applies.",
+      "",
+      `<!-- ${PROMOTION_STANDASIDE_MARKER} -->`,
+    ].join("\n"),
+  );
+}
+
 function encodePromotionAttestation(attestation) {
   return `<!-- thingtime-ai-promotion-resolved:v1 ${Buffer
     .from(JSON.stringify(attestation), "utf8")
@@ -2169,7 +2302,11 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     );
     assert.equal(ancestryReverted.ok, false);
     assert.equal(ancestryReverted.sourceLineageStatus, "review-required-removed");
-    assert.match(ancestryReverted.error, /no promotion branch or AI worker was created/);
+    assert.match(
+      ancestryReverted.error,
+      /quarantined for review instead of being published as verified/,
+      "the verdict must describe the quarantine, not claim nothing was created",
+    );
 
     // Reproduce the historical failure: force-rewrite develop to an equivalent
     // cherry-pick, leaving the original merge object stored but unadvertised.
@@ -2900,8 +3037,10 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     assert.equal(aggregatePresence.aggregateVerified, true);
 
     // Merely finding an equivalent rewritten commit in history is not enough:
-    // if a later source commit reverts it, preflight must block before any
-    // reservation, branch, AI work, or promotion PR can be created.
+    // if a later source commit reverts it, preflight must refuse to call the
+    // plan verified. Under the never-cancel policy that no longer means
+    // dropping the promotion — the plan survives, quarantined, so the trusted
+    // worker opens a labelled review PR instead of the change vanishing.
     testGit(["revert", "--no-edit", rewrittenSha], writer);
     testGit(["push", "origin", "HEAD:develop"], writer);
     testGit([
@@ -2912,8 +3051,15 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       sourceSha: "origin/develop",
     });
     const revertedPlan = revertedPlans.get(sourcePr.number);
-    assert.match(revertedPlan.error, /source-lineage safety block/);
-    assert.equal(revertedPlan.picks, undefined);
+    assert.equal(revertedPlan.error, undefined, "a reverted patch must no longer be dropped");
+    assert.equal(revertedPlan.sourceLineageStatus, "review-required-removed");
+    assert.equal(revertedPlan.sourceLineageReviewRequired, true);
+    assert.equal(sourceLineageReviewRequired(revertedPlan), true);
+    assert.match(revertedPlan.sourceLineageDetail, /source-lineage safety block/);
+    assert.ok(
+      Array.isArray(revertedPlan.picks) && revertedPlan.picks.length > 0,
+      "the quarantined plan must keep its picks so the worker has something to replay",
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -2925,26 +3071,68 @@ async function selfTest() {
   assert.equal(slugify("Hello, World! 42"), "hello-world-42");
   assert.equal(slugify("---"), "change");
   assert.equal(slugify("a".repeat(80)).length, 40);
+  // Never-cancel replacement for the retired close-before-AI boundary: a
+  // degraded lineage marks a plan for review instead of destroying the
+  // promotion a human was already given.
   assert.equal(
-    isSourceLineageSafetyBlocked({
-      error: "source-lineage safety block",
+    sourceLineageReviewRequired({
       sourceLineageStatus: "review-required-removed",
-      sourceLineageSafetyBlocked: true,
+      sourceLineageReviewRequired: true,
     }),
     true,
-    "an existing bot promotion whose source patch was removed is closed by maintenance",
+    "an open promotion whose source patch was removed is quarantined, never closed",
   );
   assert.equal(
-    isSourceLineageSafetyBlocked({
-      sourceLineageStatus: "verified",
-      sourceLineageSafetyBlocked: false,
-    }),
+    sourceLineageReviewRequired({ sourceLineageStatus: "verified" }),
     false,
-    "verified source lineage never activates the close-before-AI maintenance boundary",
+    "verified source lineage never quarantines a promotion",
   );
 
   const pr = { number: 7, headRefName: "claude/search-index-abc123", title: "feat: add search" };
   assert.equal(promotionBranchFor(pr), "promote/pr-7-search-index-abc123");
+
+  // Multi-target promotion: the primary target keeps its historical branch
+  // name so promotions already in flight still match, and every additional
+  // target gets its own suffixed branch so two promotions of one source can
+  // never collide.
+  assert.equal(
+    promotionBranchFor(pr, "main", "main"),
+    "promote/pr-7-search-index-abc123",
+  );
+  assert.equal(
+    promotionBranchFor(pr, "github-actions", "main"),
+    "promote/pr-7-search-index-abc123--to-github-actions",
+  );
+  const multiCfg = { source: "develop", target: "main", primaryTarget: "main", targets: ["github-actions", "main", "develop", "", "bad ref", "--evil"] };
+  assert.deepEqual(
+    promotionTargets(multiCfg),
+    ["main", "github-actions"],
+    "targets dedupe, drop the source branch, and reject unsafe ref names",
+  );
+  assert.deepEqual(promotionTargets({ source: "develop", target: "main", targets: [] }), ["main"]);
+  // Pass visibility: the primary pass must not see another target's promotion,
+  // and an additional target must see only its own.
+  const primaryPass = { ...multiCfg, target: "main" };
+  const secondPass = { ...multiCfg, target: "github-actions" };
+  const mainPromotion = { headRefName: "promote/pr-7-search-index-abc123" };
+  const gaPromotion = { headRefName: "promote/pr-7-search-index-abc123--to-github-actions" };
+  assert.equal(promotionBelongsToPass(mainPromotion, primaryPass), true);
+  assert.equal(promotionBelongsToPass(gaPromotion, primaryPass), false);
+  assert.equal(promotionBelongsToPass(gaPromotion, secondPass), true);
+  assert.equal(promotionBelongsToPass(mainPromotion, secondPass), false);
+  assert.equal(
+    promotionBelongsToPass({ headRefName: "promote/pr-9-legacy" }, primaryPass),
+    true,
+    "promotions from before multi-target existed belong to the primary pass",
+  );
+  assert.equal(
+    promotionBelongsToPass(
+      { headRefName: promotionBranchFor({ number: 5, headRefName: "codex/foo-to-github-actions", title: "t" }, "main", "main") },
+      primaryPass,
+    ),
+    true,
+    "a source branch that merely reads like a target suffix stays in the primary pass",
+  );
   assert.equal(promotionBranchFor({ number: 8, headRefName: "", title: "Fix: A thing" }),
     "promote/pr-8-fix-a-thing");
   const retiredSource = {
@@ -3106,6 +3294,61 @@ async function selfTest() {
   assert.match(lineageBody, /Source-lineage review required/);
   assert.match(lineageBody, /Do not merge this promotion unless restoring/);
   assert.match(lineageBody, /thingtime-promotion-source-lineage:v1/);
+
+  // Stand-aside notices: a declined promotion must say so on the source PR,
+  // under one reusable marker, and must never act during a dry run.
+  const standAsideCalls = [];
+  const standAsideUpsert = (number, marker, body) => {
+    standAsideCalls.push({ number, marker, body });
+    return { ok: true };
+  };
+  const stood = noteSourceStandAside(
+    { number: 211, title: "ci: centralize Actions" },
+    {
+      reason: "source-lineage safety block: the exact historical patch cannot be proven present",
+      heldBehind: 2,
+      target: "main",
+      source: "develop",
+      dryRun: false,
+      upsert: standAsideUpsert,
+    },
+  );
+  assert.equal(stood.ok, true);
+  assert.equal(standAsideCalls.length, 1);
+  assert.equal(standAsideCalls[0].number, 211);
+  assert.equal(standAsideCalls[0].marker, PROMOTION_STANDASIDE_MARKER);
+  assert.match(standAsideCalls[0].body, /Not promoted to `main`/);
+  assert.match(standAsideCalls[0].body, /source-lineage safety block/);
+  assert.match(standAsideCalls[0].body, /2 later PRs in the same stack are held behind this one/);
+  assert.match(standAsideCalls[0].body, /thingtime-promotion-standaside:v1/);
+  assert.equal(
+    noteSourceStandAside(
+      { number: 211 },
+      { reason: "x", dryRun: true, upsert: standAsideUpsert },
+    ).skipped,
+    "dry-run",
+    "a dry run must never comment on a source PR",
+  );
+  assert.equal(standAsideCalls.length, 1);
+  assert.equal(
+    noteSourceStandAside({}, { reason: "x", dryRun: false, upsert: standAsideUpsert }).ok,
+    false,
+    "a stand-aside notice without a PR number must fail closed",
+  );
+  assert.equal(standAsideCalls.length, 1);
+  const cleared = clearSourceStandAside(
+    { number: 211 },
+    { promotionNumber: 999, target: "main", dryRun: false, upsert: standAsideUpsert },
+  );
+  assert.equal(cleared.ok, true);
+  assert.equal(standAsideCalls.length, 2);
+  assert.equal(
+    standAsideCalls[1].marker,
+    PROMOTION_STANDASIDE_MARKER,
+    "a resolution must edit the same comment the decline created",
+  );
+  assert.match(standAsideCalls[1].body, /Promoted to `main`.*in #999/s);
+  assert.doesNotMatch(standAsideCalls[1].body, /Not promoted/);
   assert.doesNotMatch(
     promotionBody(
       { ...pr, author: { login: "tester" }, mergedAt: "2026-08-09T00:00:00Z", mergeCommit: { oid: "a".repeat(40) } },
@@ -4254,15 +4497,36 @@ export function preflightPromotionPlans(
         const blockedStatus = SOURCE_LINEAGE_STATUSES.has(present.sourceLineageStatus)
           ? present.sourceLineageStatus
           : "";
+        // NEVER CANCEL. A lineage verdict is a review question, not a dead end.
+        // This used to drop the promotion entirely — no branch, no worker, no
+        // PR, the verdict visible only in a run log — which is how #211 (the
+        // conversion of `main` to thin listeners) went a full day unnoticed.
+        // The plan is kept and quarantined instead: because the status is not
+        // `verified`, `sourceLineageReviewRequired` routes it through the
+        // trusted AI worker, and the PR it opens carries the
+        // `source-lineage-unverified` label plus a body that tells the reviewer
+        // exactly what could not be proven. The safety property is unchanged —
+        // nothing merges without a human — while the failure mode changes from
+        // "silently nothing" to "a PR you can reject".
+        //
+        // Operational failures are NOT lineage verdicts (no status is set):
+        // there the patch state is genuinely unknown, so handing it to an AI
+        // would be inventing an answer. Those stay errors, stay visible through
+        // the stand-aside notice on the source PR, and are retried next run.
+        if (blockedStatus && blockedStatus !== "verified") {
+          plans.set(pr.number, {
+            ...computed,
+            inTarget: false,
+            recovered: available.fetched,
+            sourceLineageStatus: blockedStatus,
+            sourceLineageReviewRequired: true,
+            sourceLineageDetail: present.error,
+          });
+          continue;
+        }
         plans.set(pr.number, {
           error: present.error,
           recovered: available.fetched,
-          ...(blockedStatus
-            ? {
-                sourceLineageStatus: blockedStatus,
-                sourceLineageSafetyBlocked: blockedStatus !== "verified",
-              }
-            : {}),
         });
         continue;
       }
@@ -4275,10 +4539,18 @@ export function preflightPromotionPlans(
       }
       const lineageStatus = present.sourceLineageStatus;
       if (lineageStatus !== "verified") {
+        // Same never-cancel rule as above, for an inspector that reports a
+        // non-verified status without failing outright.
         plans.set(pr.number, {
-          error:
-            "source-lineage safety block: only a patch proven present at the current source tip may be promoted",
+          ...computed,
+          inTarget: false,
           recovered: available.fetched,
+          sourceEquivalent: present.equivalentSha,
+          sourceRewritten: present.rewritten,
+          sourceLineageStatus: lineageStatus,
+          sourceLineageReviewRequired: true,
+          sourceLineageDetail:
+            "only a patch proven present at the current source tip promotes without review",
         });
         continue;
       }
@@ -4462,65 +4734,6 @@ function ensureSourceLineageReviewLabel(token = "") {
   sourceLineageLabelEnsured = result.ok;
   return sourceLineageLabelEnsured;
 }
-
-export function isSourceLineageSafetyBlocked(plan) {
-  return Boolean(
-    plan?.sourceLineageSafetyBlocked === true &&
-    (plan?.sourceLineageStatus === "review-required-removed" ||
-      plan?.sourceLineageStatus === "review-required-ambiguous"),
-  );
-}
-
-function closeSourceLineageBlockedPromotion(sourcePr, promotion, plan, results) {
-  if (!isSourceLineageSafetyBlocked(plan)) return false;
-  const status = plan.sourceLineageStatus;
-  const reason = sourceLineageReason(status);
-  if (ensureSourceLineageReviewLabel(process.env.ACTIONS_TOKEN)) {
-    const labelled = withActionsToken([
-      "pr", "edit", String(promotion.number), ...repoFlag(),
-      "--add-label", SOURCE_LINEAGE_REVIEW_LABEL,
-    ]);
-    if (!labelled.ok) {
-      results.warnings.push(
-        `Promotion #${promotion.number} lineage-block label repair failed: ${labelled.error}`,
-      );
-    }
-  }
-  const closed = withActionsToken([
-    "pr", "close", String(promotion.number), ...repoFlag(),
-    "--comment",
-    `Source-lineage safety block at current \`${CFG.source}\` tip: ${reason} ` +
-      "This bot-created promotion is closed without running AI or changing its branch. " +
-      "Restore or re-merge the intended source change before asking the promoter to try again.",
-  ]);
-  if (!closed.ok) {
-    results.warnings.push(
-      `Promotion #${promotion.number} could not be closed after its source lineage became ` +
-        `unverified: ${closed.error}`,
-    );
-    return true;
-  }
-  promotion.state = "CLOSED";
-  results.blocked.push(
-    `Promotion #${promotion.number} (source #${sourcePr.number}) was closed because its ` +
-      `historical patch is no longer provably present at current \`${CFG.source}\` tip; ` +
-      "no AI worker or replacement promotion was started.",
-  );
-  upsertBotIssueComment(
-    sourcePr.number,
-    "thingtime-promotion-source-lineage-blocked:v1",
-    [
-      `⛔ Promotion #${promotion.number} was closed by the source-lineage safety boundary.`,
-      "",
-      reason,
-      "",
-      `No AI worker or replacement promotion PR will run until the change is again provably present on \`${CFG.source}\`.`,
-      "<!-- thingtime-promotion-source-lineage-blocked:v1 -->",
-    ].join("\n"),
-  );
-  return true;
-}
-
 function promotionBody(pr, groupKey, position, groupPrs, statusFor, plan = {}) {
   const lines = [];
   lines.push(
@@ -4740,7 +4953,10 @@ async function runPromotion(results, state) {
 
   // --- Load state ----------------------------------------------------------
   const sourcePrs = listMergedSourcePrs();
-  const promotionPrs = listPromotionPrs();
+  // Each target pass may only see its own promotions. Without this, the
+  // second pass finds the first pass's PR under the same source marker and
+  // concludes the work is already promoted.
+  const promotionPrs = listPromotionPrs().filter(promotionBelongsToPass);
   const promoBySource = indexPromotionsBySource(promotionPrs);
   const remoteBranches = listRemotePromotionBranches();
 
@@ -5066,17 +5282,12 @@ async function runPromotion(results, state) {
     for (const promotion of promotionPrs.filter((candidate) => candidate.state === "OPEN")) {
       try {
         const loaded = loadExternalPromotionPlan(promotion);
-        if (
-          loaded.sourcePr &&
-          closeSourceLineageBlockedPromotion(
-            loaded.sourcePr,
-            promotion,
-            loaded.plan,
-            results,
-          )
-        ) {
-          continue;
-        }
+        // NEVER CANCEL. An open promotion whose source lineage degrades used to
+        // be CLOSED here, pre-empting review of a PR a human had already been
+        // given. It is now left open and handled by the quarantine path
+        // immediately below: `sourceLineageReviewRequired` re-stamps the
+        // metadata and the `source-lineage-unverified` label, so the reviewer
+        // sees the downgraded verdict on the PR rather than losing the PR.
         if (loaded.error || loaded.plan?.error || loaded.plan?.inTarget) continue;
         if (sourceLineageReviewRequired(loaded.plan)) {
           const warned = finalizeSourceLineageMetadata(
@@ -5579,6 +5790,16 @@ async function runPromotion(results, state) {
         }
         if (plan.error) {
           results.blocked.push(...groupFailureMessages(group, index, plan.error));
+          // The verdict has to reach the PR, not just this run's summary.
+          const noted = noteSourceStandAside(pr, {
+            reason: plan.error,
+            heldBehind: Math.max(0, group.length - index - 1),
+          });
+          if (!noted.ok) {
+            results.warnings.push(
+              `could not post the stand-aside notice on #${pr.number}: ${noted.error}`,
+            );
+          }
           break;
         }
         if (record?.state === "OPEN") {
@@ -5877,6 +6098,8 @@ async function runPromotion(results, state) {
               results.created.push(`${created.url} — ${title} (from existing branch)`);
               createdCount += 1;
               recoveredPromotionNumber = promotionNumberFromUrl(created.url);
+              // A stale "not promoted" verdict must never outlive its fix.
+              clearSourceStandAside(pr, { promotionNumber: recoveredPromotionNumber });
             } else {
               results.blocked.push(...groupFailureMessages(
                 group,
@@ -6145,6 +6368,8 @@ async function runPromotion(results, state) {
         createdCount += 1;
         remoteBranches.add(branch);
         const promotionNumber = promotionNumberFromUrl(created.url);
+        // A stale "not promoted" verdict must never outlive its fix.
+        clearSourceStandAside(pr, { promotionNumber });
         if (promotionNumber) {
           const lineage = finalizeSourceLineageMetadata(pr, promotionNumber, plan);
           if (!lineage.ok) {
@@ -6229,7 +6454,22 @@ async function main() {
     lineageReview: [], blocked: [], warnings: [], skipped: [],
   };
   const state = { eligibleCount: 0, scanCompleted: false };
-  await runWithSummary(() => runPromotion(results, state), results, state);
+  // One full pass per configured target. A pass is independent: its own
+  // promotion branches, its own promotion records, its own cherry-pick against
+  // its own base. A source PR that owes changes to two branches therefore ends
+  // up with two promotion PRs, and the pass whose replay does not apply cleanly
+  // is handed to the trusted AI worker exactly as a single-target conflict is.
+  const targets = promotionTargets();
+  await runWithSummary(async () => {
+    for (const target of targets) {
+      CFG.target = target;
+      if (targets.length > 1) {
+        console.log(`\n=== Promotion pass: \`${CFG.source}\` → \`${target}\` ===`);
+      }
+      await runPromotion(results, state);
+    }
+    CFG.target = CFG.primaryTarget;
+  }, results, state);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

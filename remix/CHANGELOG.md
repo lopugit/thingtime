@@ -19,6 +19,38 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **One merged PR can promote to several branches**: the promoter had exactly
+  one target, so a source PR owing changes to two branches — #211 converts
+  `main` to thin listeners *and* carries the implementation those listeners
+  call, which may only live on `github-actions` — could never be expressed; the
+  half that didn't belong on `main` just conflicted and the promotion died.
+  Each configured target now gets its own pass, branch (`…-to-<target>`),
+  promotion record, and PR, and a pass whose replay doesn't apply cleanly goes
+  to the trusted AI worker exactly as a single-target conflict does. Nothing
+  path-routes the split — the same file legitimately contributes different
+  content to different bases, so the per-base replay and the worker decide.
+  Off by default; set the `PROMOTION_TARGET_BRANCHES` repository variable to
+  enable. — Claude (AI), 2026-08-10
+- **A promotion is never cancelled for an unverifiable lineage**: a source
+  patch that can't be proven present at the current `develop` tip used to drop
+  the promotion entirely — no branch, no worker, no PR — so the change simply
+  vanished. The plan is now kept and quarantined instead: the non-verified
+  status routes it through the trusted AI worker, and the PR it opens carries
+  `source-lineage-unverified` plus the exact reason it could not be proven.
+  Nothing merges without a human either way; the failure mode changes from
+  "silently nothing" to "a PR you can reject". Operational inspection failures
+  are still errors — there the patch state is genuinely unknown — but they now
+  surface on the source PR and retry next run. — Claude (AI), 2026-08-10
+- **A declined promotion now says so on the source PR**: the promoter's
+  stand-aside verdicts existed only as lines in a run summary, so a decline was
+  invisible unless someone opened the run — which is why #211, the PR that
+  converts `main` from a 2167-line resolver copy to a thin listener, was
+  declined on 2026-08-09 and sat unnoticed. Declines now upsert one
+  hidden-marker comment on the merged source PR, edited in place on later runs
+  so repeat scans never stack, naming the reason and how many stacked PRs are
+  held behind it. Dry runs stay side-effect free and a failed comment is a
+  warning, never a reason to abandon promotion work. — Claude (AI), 2026-08-10
+
 - **The thin product-branch listeners can reach the conflict resolver**: every
   secret-bearing gate tested `github.ref_name == 'github-actions'`, but under
   `workflow_call` that is the *caller's* ref, so `develop`'s listener was

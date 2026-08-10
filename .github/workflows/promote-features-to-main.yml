@@ -182,6 +182,16 @@ jobs:
           ACTIONS_TOKEN: ${{ github.token }}
           SOURCE_BRANCH: develop
           TARGET_BRANCH: main
+          # Additional promotion targets, comma-separated. One merged source PR
+          # can owe changes to more than one branch — #211 converts `main` to
+          # thin listeners AND carries the implementation those listeners call,
+          # which may only live on `github-actions` — and each target listed
+          # here gets its own pass, branch, and promotion PR. Left EMPTY by
+          # default: switching it on makes every eligible merged PR fan out to a
+          # second promotion PR, which is a deliberate operational decision, not
+          # something to inherit silently. Set it through the repository
+          # variable to enable (for example `github-actions`).
+          TARGET_BRANCHES: ${{ vars.PROMOTION_TARGET_BRANCHES || '' }}
           LOOKBACK: ${{ inputs.lookback || '50' }}
           MAX_NEW_PRS: "10"
           REQUIRE_LABEL: ""
