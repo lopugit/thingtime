@@ -15,6 +15,91 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] In a fresh Git checkout, `git ls-files -s AGENTS.md CLAUDE.md` reports
       mode `120000` for both links and both still resolve to `AI_ALL.md`.
 
+## Develop-target Vercel PR previews
+
+- [ ] Confirm `.github/workflows/develop-pr-preview.yml` and its controller
+      script are present on the default `main` branch before expecting
+      `pull_request_target` to run; a workflow present only on the feature PR is
+      deliberately inactive.
+- [ ] Inspect an eligible PR's two runs: the `pull_request_target` dispatcher
+      has no GitHub Environment/Vercel secret, checks out no code, and emits one
+      bounded `repository_dispatch`; only the downstream default-branch run
+      enters `vercel-develop-pr-control`, checks out `main`, and receives the
+      controller secret. Neither GitHub job executes the PR head.
+- [ ] Replay or forge a dispatch payload with a wrong source run id, workflow
+      path, repository, PR, action, actor, or head SHA: the privileged job fails
+      closed before any Vercel mutation. A stale legitimate dispatch also no-ops
+      after the live PR SHA fence.
+- [ ] Inspect the private `vercel-develop-pr-control` GitHub Environment
+      without printing values: only the `main` deployment branch is allowed,
+      `VERCEL_CUSTOM_ENVIRONMENT_ID` contains the exact immutable develop ID,
+      `DEVELOP_PREVIEW_TRUSTED_ACTORS` is explicit, the Vercel token is the
+      fresh dedicated `VERCEL_DEVELOP_DEPLOY_TOKEN` environment secret, the two
+      domain variables match controlled domains, the masked
+      `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret is an unsigned exact
+      develop-bucket HTTPS object URL with no query, and no live `env_*` ID,
+      bucket name, or token appears in tracked controller files or workflow
+      logs.
+- [ ] Confirm the active `main` `Basic Protection` ruleset has no bypass,
+      requires a pull request with resolved review threads, both strict Web CI
+      jobs, and the CodeQL Analyze checks for actions and javascript-typescript,
+      and blocks deletion and force-pushes. Confirm the controller Environment
+      has no required reviewer so event cleanup and six-hour reconciliation
+      remain automatic. CODEOWNERS presence alone is not an enforcement check;
+      independent CODEOWNER approval is optional future hardening once a second
+      trusted collaborator can review changes.
+- [ ] In Vercel, confirm `dev.thingtime.com` is bound to the literal `develop`
+      Git branch and has no domain `customEnvironmentId`, rather than being
+      bound to the whole Custom Environment; the Custom Environment's own domain
+      list is empty. Confirm a newly built generic Preview has all current
+      `develop` variables plus the six existing Preview-only values, while
+      production MongoDB/JWT/S3 values remain absent.
+- [ ] Open or update a same-repository, trusted-author PR targeting `develop`:
+      the `Develop S3 PR preview` workflow deploys the exact head SHA, the
+      one marker comment moves through deploying to ready, the GitHub Deployment
+      reaches success, and the comment links
+      `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
+      after the build completes.
+- [ ] Confirm the wildcard Vercel domain is verified and detached, its
+      Cloudflare `*.previews.dev` CNAME targets `cname.vercel-dns.com` with
+      DNS-only proxying, and `_acme-challenge.previews.dev` has NS delegations
+      to both `ns1.vercel-dns.com` and `ns2.vercel-dns.com` without moving the
+      apex nameservers or delegating a broader subtree. Confirm its Git branch
+      and Custom Environment bindings are empty, Vercel reports
+      `misconfigured: false`, and the PR alias presents a valid certificate.
+- [ ] From that alias, sign in and upload/remove a small attachment: the direct
+      S3 `PUT` preflight permits only that exact origin pattern, `PUT`, and
+      `x-amz-checksum-sha256`; it exposes no headers, the bucket remains private,
+      and storage usage returns to its original value. Repeat from
+      `https://dev.thingtime.com` and a newly built generated
+      `https://thingtime-*-lopugits-projects.vercel.app` Preview; reject an
+      unrelated origin.
+- [ ] Update the PR twice: the same alias moves to the newest successful SHA,
+      the comment is edited rather than duplicated, and older workflow-created
+      develop deployments are deleted. A canceled/superseded run must not move
+      the alias after the newer SHA wins.
+- [ ] A fork PR, draft PR, non-allowlisted author/actor, read-only collaborator,
+      and PR targeting `main` never receive a controller-managed develop alias.
+      If Vercel builds their ordinary Preview, confirm it uses only the shared
+      development role/data plane and cannot assume the production AWS role.
+      Retargeting or converting an eligible PR to draft cleans its existing
+      controller-managed alias/deployment.
+- [ ] Confirm `*.previews.thingtime.com` is not used by the develop controller.
+      Until a separately protected production-preview controller exists, no
+      ordinary Preview can assume the production role or publish a trusted
+      production-preview alias.
+- [ ] With two eligible PRs open, use disposable accounts and verify that their
+      aliases intentionally see the same development data/quota plane; do not
+      describe either alias as an isolated sandbox.
+- [ ] Close the develop-target PR: its alias is removed, its transient GitHub
+      Deployment becomes inactive, and workflow-created Vercel deployments are
+      deleted without moving `dev.thingtime.com`.
+- [ ] Simulate a missed close/interrupted cleanup with workflow-tagged test
+      resources, then run/wait for the six-hour scheduled reconciliation: it
+      removes stale alias/deployments idempotently while preserving unmarked
+      deployments and the stable `develop` branch deployment. Manually dispatch
+      one PR number and verify the bounded per-PR recovery path separately.
+
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
 - [ ] In a fresh linked worktree with no copied `node_modules`, run
@@ -25,7 +110,7 @@ is fixed, and cite the checklist you ran in the PR description.
       without copying dependency files from another checkout.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
-      scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 - [ ] In a disposable worktree, remove one transitive pnpm link required by
       ESLint while leaving every direct dependency link present, then run the
       targeted lint command: the startup probe performs one forced relink and
@@ -122,7 +207,7 @@ is fixed, and cite the checklist you ran in the PR description.
       `props:{position:'fixed',inset:0,zIndex:99999,…}` renders as a data
       tree, NOT a viewport overlay; image/audio/cover URLs with unsafe schemes
       fall back to the emoji placeholder. Verify via DOM: no `a[href^=
-  "javascript:"]`, no fixed/absolute high-z overlay from post content.
+"javascript:"]`, no fixed/absolute high-z overlay from post content.
 - [ ] Editing a feed thing (context menu → Toggle Edit Mode) and pressing
       Cmd/Ctrl+Z does NOT undo the viewer's own persisted tree — the keydown
       is contained to the sandbox (native field undo still works).
@@ -439,7 +524,7 @@ is fixed, and cite the checklist you ran in the PR description.
       confirm Graphify leaves its backend default unforced. Run
       `node remix/scripts/workflow-caller-contract.mjs --self-test` in the
       product branch and `node .github/scripts/workflow-control-plane-contract.mjs
-      --self-test` in the `github-actions` control plane to prove both the
+--self-test` in the `github-actions` control plane to prove both the
       delegated callers and every AI runtime remain bound to the contract.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
@@ -756,7 +841,7 @@ is fixed, and cite the checklist you ran in the PR description.
       the entry's acl becomes `["tt:user", "tt:app/<clientId>"]`.
 - [ ] A plain `{ key, value }` rewrite of an existing shared entry keeps it
       shared (audience only changes when the write names one); `visibility:
-  'private'` flips the acl back to `["tt:user"]`.
+'private'` flips the acl back to `["tt:user"]`.
 - [ ] GET /api/v1/app-data/shared returns other users' `visibility: 'app'`
       entries for the SAME app only — never private entries, never another
       app's entries — newest first, and `key=post:*` prefix-filters.
@@ -777,7 +862,7 @@ is fixed, and cite the checklist you ran in the PR description.
       stamp; reads, updates, and deletes aimed at a first-party thing's id
       (or another app's doc) all 404.
 - [ ] App writes are acl-clamped: an acl beyond `tt:user` / `tt:app/<own
-  clientId>` (tt:all, other apps, other users, exclusions) 400s; an
+clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       insert that omits visibility/acl lands PRIVATE (never the generic
       route's public default); `save`/`share` thingtimes 403 as first-party
       surfaces; protected kinds stay refused.
@@ -1109,7 +1194,7 @@ re-checks the whole management plane end-to-end:
       plan change. Existing users without overrides immediately inherit it.
 - [ ] Select one user or many (up to all 200 shown) and apply a custom cap;
       each protected `app-storage` ledger records its own override, `Use app
-  default` unsets it, and runtime usage reports the effective cap. A custom
+default` unsets it, and runtime usage reports the effective cap. A custom
       value above the aggregate is refused; a later aggregate downgrade clamps
       enforcement even if a historical override was larger.
 - [ ] The roster includes users with current or past grants/ledgers, but a
