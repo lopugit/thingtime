@@ -89,8 +89,21 @@ high-growth class of user media.
 - `git diff --check`
 - Graphify semantic refresh, clustering, report, and portable graph export
 
-Live desktop/mobile preview validation is recorded after the stacked Vercel
-deployment becomes ready.
+## Live UI validation
+
+- The READY Vercel deployment rendered a nonblank Thingtime shell with Nitro
+  and Mongo health available and no framework error overlay.
+- An authenticated local stack was checked in Chrome on desktop and at
+  390×844. The full comment composer rendered the shared S3 media gallery,
+  progress-ready Add Media tile, and linked-image URL fallback without
+  horizontal overflow or clipping; the feed was inspected from top to footer.
+- Messenger's desktop/mobile Spaces and Chats empty states remained aligned
+  and overflow-free. This QA account has no chats or communities, so sending a
+  message/reply and opening the custom-emoji editor were not mutated merely to
+  manufacture test data; those interaction paths are covered by the focused
+  component/API suites above rather than claimed as live-clicked.
+- Chrome reported zero warning/error entries from the local app origin. Browser
+  extension warnings were excluded from the app result.
 
 ## Stack and rollout
 
