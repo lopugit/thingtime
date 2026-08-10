@@ -26,6 +26,11 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
       scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+- [ ] In a disposable worktree, remove one transitive pnpm link required by
+      ESLint while leaving every direct dependency link present, then run the
+      targeted lint command: the startup probe performs one forced relink and
+      ESLint starts. `npm --prefix remix run ensure-deps -- --check` also proves
+      both ESLint and the directly declared Prettier CLI can start.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
