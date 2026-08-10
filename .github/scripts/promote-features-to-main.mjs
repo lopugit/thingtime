@@ -1541,6 +1541,79 @@ function upsertBotIssueComment(number, marker, body, token = process.env.ACTIONS
   }
 }
 
+export const PROMOTION_STANDASIDE_MARKER = "thingtime-promotion-standaside:v1";
+
+// Stand-aside visibility. A promotion the promoter declines to create used to
+// exist ONLY as a line in the run summary, so nobody learned about it unless
+// they happened to open the run: #211 — the PR that converts `main` from a
+// 2167-line resolver copy to a thin listener — was declined on 2026-08-09 and
+// sat unnoticed, because the verdict ("does not cherry-pick cleanly onto
+// `main`. Promote it manually", later "not verifiably present at current
+// `develop` tip") never reached the PR. Every decline now upserts one
+// hidden-marker comment on the SOURCE PR, edited in place on later runs so
+// repeat scans never stack. Never fatal: a failed comment is a warning, never a
+// reason to abandon promotion work, and dry runs stay side-effect free.
+export function noteSourceStandAside(
+  pr,
+  {
+    reason,
+    heldBehind = 0,
+    target = CFG.target,
+    source = CFG.source,
+    dryRun = CFG.dryRun,
+    upsert = upsertBotIssueComment,
+  } = {},
+) {
+  if (!pr?.number) return { ok: false, error: "stand-aside notice needs a source PR number" };
+  if (dryRun) return { ok: true, skipped: "dry-run" };
+  const lines = [
+    `⛔ **Not promoted to \`${target}\`.** The promoter examined this merged \`${source}\` PR and stood aside:`,
+    "",
+    `> ${String(reason || "no reason recorded").trim().replace(/\n/g, "\n> ")}`,
+    "",
+  ];
+  if (heldBehind > 0) {
+    lines.push(
+      `${heldBehind} later PR${heldBehind === 1 ? "" : "s"} in the same stack ${heldBehind === 1 ? "is" : "are"} held behind this one.`,
+      "",
+    );
+  }
+  lines.push(
+    "No promotion PR exists for this change. Later runs keep re-checking and edit this " +
+      "notice in place rather than repeating it; it is replaced with the promotion link once " +
+      "the change does ship.",
+    "",
+    `<!-- ${PROMOTION_STANDASIDE_MARKER} -->`,
+  );
+  return upsert(pr.number, PROMOTION_STANDASIDE_MARKER, lines.join("\n"));
+}
+
+// Clears a previous stand-aside notice by editing it into a resolution, so a
+// stale "not promoted" verdict can never outlive the promotion that fixed it.
+export function clearSourceStandAside(
+  pr,
+  {
+    promotionNumber,
+    target = CFG.target,
+    dryRun = CFG.dryRun,
+    upsert = upsertBotIssueComment,
+  } = {},
+) {
+  if (!pr?.number) return { ok: false, error: "stand-aside resolution needs a source PR number" };
+  if (dryRun) return { ok: true, skipped: "dry-run" };
+  return upsert(
+    pr.number,
+    PROMOTION_STANDASIDE_MARKER,
+    [
+      `✅ **Promoted to \`${target}\`**${promotionNumber ? ` in #${promotionNumber}` : ""}.`,
+      "",
+      "An earlier run stood aside on this PR; that verdict no longer applies.",
+      "",
+      `<!-- ${PROMOTION_STANDASIDE_MARKER} -->`,
+    ].join("\n"),
+  );
+}
+
 function encodePromotionAttestation(attestation) {
   return `<!-- thingtime-ai-promotion-resolved:v1 ${Buffer
     .from(JSON.stringify(attestation), "utf8")
@@ -3106,6 +3179,61 @@ async function selfTest() {
   assert.match(lineageBody, /Source-lineage review required/);
   assert.match(lineageBody, /Do not merge this promotion unless restoring/);
   assert.match(lineageBody, /thingtime-promotion-source-lineage:v1/);
+
+  // Stand-aside notices: a declined promotion must say so on the source PR,
+  // under one reusable marker, and must never act during a dry run.
+  const standAsideCalls = [];
+  const standAsideUpsert = (number, marker, body) => {
+    standAsideCalls.push({ number, marker, body });
+    return { ok: true };
+  };
+  const stood = noteSourceStandAside(
+    { number: 211, title: "ci: centralize Actions" },
+    {
+      reason: "source-lineage safety block: the exact historical patch cannot be proven present",
+      heldBehind: 2,
+      target: "main",
+      source: "develop",
+      dryRun: false,
+      upsert: standAsideUpsert,
+    },
+  );
+  assert.equal(stood.ok, true);
+  assert.equal(standAsideCalls.length, 1);
+  assert.equal(standAsideCalls[0].number, 211);
+  assert.equal(standAsideCalls[0].marker, PROMOTION_STANDASIDE_MARKER);
+  assert.match(standAsideCalls[0].body, /Not promoted to `main`/);
+  assert.match(standAsideCalls[0].body, /source-lineage safety block/);
+  assert.match(standAsideCalls[0].body, /2 later PRs in the same stack are held behind this one/);
+  assert.match(standAsideCalls[0].body, /thingtime-promotion-standaside:v1/);
+  assert.equal(
+    noteSourceStandAside(
+      { number: 211 },
+      { reason: "x", dryRun: true, upsert: standAsideUpsert },
+    ).skipped,
+    "dry-run",
+    "a dry run must never comment on a source PR",
+  );
+  assert.equal(standAsideCalls.length, 1);
+  assert.equal(
+    noteSourceStandAside({}, { reason: "x", dryRun: false, upsert: standAsideUpsert }).ok,
+    false,
+    "a stand-aside notice without a PR number must fail closed",
+  );
+  assert.equal(standAsideCalls.length, 1);
+  const cleared = clearSourceStandAside(
+    { number: 211 },
+    { promotionNumber: 999, target: "main", dryRun: false, upsert: standAsideUpsert },
+  );
+  assert.equal(cleared.ok, true);
+  assert.equal(standAsideCalls.length, 2);
+  assert.equal(
+    standAsideCalls[1].marker,
+    PROMOTION_STANDASIDE_MARKER,
+    "a resolution must edit the same comment the decline created",
+  );
+  assert.match(standAsideCalls[1].body, /Promoted to `main`.*in #999/s);
+  assert.doesNotMatch(standAsideCalls[1].body, /Not promoted/);
   assert.doesNotMatch(
     promotionBody(
       { ...pr, author: { login: "tester" }, mergedAt: "2026-08-09T00:00:00Z", mergeCommit: { oid: "a".repeat(40) } },
@@ -5579,6 +5707,16 @@ async function runPromotion(results, state) {
         }
         if (plan.error) {
           results.blocked.push(...groupFailureMessages(group, index, plan.error));
+          // The verdict has to reach the PR, not just this run's summary.
+          const noted = noteSourceStandAside(pr, {
+            reason: plan.error,
+            heldBehind: Math.max(0, group.length - index - 1),
+          });
+          if (!noted.ok) {
+            results.warnings.push(
+              `could not post the stand-aside notice on #${pr.number}: ${noted.error}`,
+            );
+          }
           break;
         }
         if (record?.state === "OPEN") {

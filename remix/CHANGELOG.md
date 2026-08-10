@@ -19,6 +19,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **A declined promotion now says so on the source PR**: the promoter's
+  stand-aside verdicts existed only as lines in a run summary, so a decline was
+  invisible unless someone opened the run — which is why #211, the PR that
+  converts `main` from a 2167-line resolver copy to a thin listener, was
+  declined on 2026-08-09 and sat unnoticed. Declines now upsert one
+  hidden-marker comment on the merged source PR, edited in place on later runs
+  so repeat scans never stack, naming the reason and how many stacked PRs are
+  held behind it. Dry runs stay side-effect free and a failed comment is a
+  warning, never a reason to abandon promotion work. — Claude (AI), 2026-08-10
+
 - **The thin product-branch listeners can reach the conflict resolver**: every
   secret-bearing gate tested `github.ref_name == 'github-actions'`, but under
   `workflow_call` that is the *caller's* ref, so `develop`'s listener was
