@@ -1,9 +1,0 @@
-graphify-out/graph.json merge=graphify
-# graph.json + manifest.json must come from the same graphify run: manifest.json
-# records which files are already analyzed, so letting git line-merge it into a
-# union while graph.json resolves to one side marks the discarded side's files
-# as analyzed forever ("stale graph that update won't fix"). -merge forces a
-# conflict in clones without the graphify merge driver, so both files get taken
-# from the same side and healed by `graphify update .` (see AGENTS.md graphify rules).
-graphify-out/manifest.json -merge
-graphify-out/GRAPH_REPORT.md -merge
