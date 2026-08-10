@@ -1755,8 +1755,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786333476.4366398,
-    "ast_hash": "105231344921121fbf3217d8e99cd33b",
+    "mtime": 1786334810.2745557,
+    "ast_hash": "38dc7697688e5bc786ebbb5553ad4d11",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -4160,8 +4160,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786333476.3844912,
-    "ast_hash": "f90d4b971a4ca6b79b5b3bb350c13468",
+    "mtime": 1786334810.2739167,
+    "ast_hash": "4783bce28b98d199c488be8ca448d1de",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
