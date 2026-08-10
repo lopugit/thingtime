@@ -62,9 +62,128 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   scope. See the
   [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
   — Codex (AI), 2026-08-09
+- **One GitHub Actions control plane + Admin CI dashboard**: executable CI,
+  promotion, sync, release, rebase, and AI conflict-resolution behavior now
+  lives on the protected `github-actions` branch. `main`/`develop` retain only
+  GitHub-required trigger/input/permission callers pinned to that branch, with
+  a regression contract that rejects runner steps or local Actions scripts.
+  Admin → CI Control renders cached feature/branch/PR/run/deployment/preview
+  topology, signed GitHub/Vercel webhook freshness, relational status history,
+  GitHub App reconciliation, and allowlisted audited dispatch controls across
+  desktop and mobile. All current projections and append-only events are
+  protected, system-owned, non-billable Things. Fork-safe App/webhook setup and
+  failure-preserving verification are documented in README/TESTING. Reconcile
+  pagination covers repositories with more than 100 branches, and administrator
+  dispatches can enter only through the reviewed `develop`/`main` listeners. —
+  Codex (AI), 2026-08-09
 
 ### Fixed
 
+- **Worktree lint and formatting dependencies now self-heal completely**:
+  validation startup probes detect incomplete transitive pnpm links even when
+  every direct package looks installed, retry once with a forced relink, and
+  verify ESLint plus the now-direct Prettier CLI before reporting the checkout
+  ready. — Codex (AI), 2026-08-10
+- **Creation-time promotion conflicts are resolved automatically**: when a
+  selected `develop` feature cannot be replayed cleanly onto its promotion base,
+  the protected per-feature promoter first positively proves its historical
+  patch is still effective at the current `develop` tip, then reserves the
+  deterministic branch and hands the immutable source/base plan to a bot-only
+  worker on the fixed `github-actions` control plane. The thin `develop`
+  listener grants the Actions permission needed for that dispatch without
+  restoring executable workflow behavior to product branches. The
+  secret-bearing provider router stays on GitHub-hosted compute and accepts only
+  authenticated, validated downstream runner metadata; promotion-plan handoffs
+  bypass external provider routing until that boundary supports the same
+  immutable plan envelope. The worker re-derives live authority, resolves only
+  mechanically proven conflict paths, treats `graphify-out/**` as derived
+  target-side output, publishes with an exact lease, opens the promotion PR, and
+  resumes dependent stack members automatically. The result
+  is labelled for review and receives evidence naming the resolver run,
+  immutable SHAs, and AI-edited paths; unchanged failed snapshots pause
+  visibly instead of requiring undocumented manual cherry-picks or repeatedly
+  spending model budget. Bot attestations, exact leases, durable stale-snapshot
+  retirement, and idempotent checkpoint/metadata recovery make retries
+  converge across API ambiguity, worker crashes, base movement, or duplicate
+  comments. A recoverable historical patch that current `develop` classifies as
+  removed or ambiguous now blocks visibly before any reservation, branch,
+  immutable promotion plan, AI worker, or promotion PR is created. Only later
+  members of its dependent promotion group wait; unrelated groups continue
+  independently. A later run can proceed only after freshly proving the patch
+  effective and creating a new verified plan; no blocked state is upgraded in
+  place. Missing objects, unreadable patches, operational Git failures, and
+  worker classification mismatches likewise stop before publication. See the
+  [PR #213 engineering note](../PRs/213-codex-auto-resolve-promotion-conflicts-automatically-resolve-promotion-creation-conflicts.md).
+  Conflict-free and AI-resolved verified-source promotions that touch
+  `.github/**` still share the same bot-authored `[skip ci]` content commit and
+  `GITHUB_TOKEN` review checkpoint, so promoted workflow changes cannot execute
+  merely from the branch push that creates their review PR. Removed or ambiguous
+  historical patches never reach that gate because no branch or PR is created.
+  — Codex (AI), 2026-08-10
+- **Every live AI conflict/rebase path now follows the current Thingtime Admin
+  model order**: merge resolution, all rebase rounds, and their semantic
+  Graphify refreshes share the validated primary model instead of letting the
+  refresh silently fall back to Sonnet. The public setting endpoint now reads
+  the home-DB singleton on every request (retaining last-known-good only for a
+  real database outage), so a successful Admin reorder is visible immediately
+  across warm serverless instances. Source contracts cover the delegated
+  product-branch callers and inventory every control-plane AI workflow/action,
+  rejecting new unbound runtimes or obsolete hard-coded models. The deleted
+  legacy GitHub workflow registration was also disabled.
+  — Codex (AI), 2026-08-10
+- **The complete Actions control plane is ready for atomic promotion to
+  `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
+  #194, #190, #199, #206, #207, and #208 are replayed together so the default
+  branch never runs an obsolete intermediate resolver, rebaser, or feature
+  promoter revision. The seven action workflow/script files exactly match the
+  current `develop` versions. See the
+  [PR #210 engineering note](../PRs/210-promote-actions-control-plane-rollup.md).
+  — Codex (AI), 2026-08-09
+- **Promotion self-test and empty-pick handling are runner-safe**: the
+  per-feature promoter's orphaned-history fixture now configures its own Git
+  author identity instead of depending on runner account defaults. Failed
+  cherry-picks are classified from sequencer and index state rather than broad
+  error-message words, so an operational failure such as `empty ident name`
+  is aborted and reported instead of being mistaken for an empty patch and
+  silently skipped. A genuine already-applied cherry-pick still advances the
+  sequencer safely. See the
+  [PR #207 engineering note](../PRs/207-codex-fix-promoter-empty-pick-detection-distinguish-empty-promotion-cherry-picks-safely.md).
+  — Codex (AI), 2026-08-09
+- **Automatic rebasing is now restricted to genuine PR stacks**: the stack
+  detector still identifies a member only when its base targets another open
+  PR head or another open PR targets its head, but automatic scans no longer
+  override that topology for standalone PRs whose combined diff merges cleanly
+  while individual commits are not replayable. Those standalone branches are
+  left untouched instead of being force-rebased or ping-ponging after a merge
+  resolver update. Shared topology and ownership expressions are rechecked at
+  detection, worker validation, post-replay validation, pre-push validation,
+  and failure cleanup; an inline truth-table regression guard covers
+  standalone, stack, opt-out, and explicit exact-PR retry cases. — Codex (AI),
+  2026-08-09
+- **Per-feature promotion survives rewritten historical merge commits and
+  isolated failures**: the `develop` → `main` promoter now verifies every
+  source merge object, fetches unreachable historical merges by exact SHA,
+  distinguishes a normal non-ancestor result from a Git inspection error, and
+  requires original ancestry or both patch-equivalent history and current-tip
+  effect verification before an old change may be promoted. Later reverts and
+  removed aggregate ranges are classified instead of being mistaken for
+  current source; PR #213 visibly blocks removed or ambiguous recoverable cases
+  before any reservation, branch, worker, or promotion PR, while unrecoverable
+  authority still fails closed. It records structured per-PR blocks instead of
+  aborting the batch. A failed standalone feature no longer prevents later
+  independent promotions; a failed stack member still defers only its
+  dependent members. Group-local
+  exceptions are contained through the remaining groups before failing the
+  run, the partial summary is always published, reused promotion branches are
+  freshly fetched and checked against an exactly reconstructed source tree and
+  expected PR base before stacking, every external OPEN link is validated back
+  to `main`, every genuinely earlier CLOSED predecessor is checked, and
+  `MAX_NEW_PRS` applies to branch reuse too. A local-Git regression test
+  reproduces the force-rewritten-history failure before proving full-parent
+  recovery. Promotion-marker lookup also scans up to 1,000 PRs so older records
+  remain idempotent as the repository grows. See the
+  [PR #206 engineering note](../PRs/206-codex-harden-feature-promoter-keep-feature-promotion-running-across-historical-git-failures.md).
+  — Codex (AI), 2026-08-09
 - **Conflict resolution now uses a fixed `develop` control plane**: every
   external event and human manual run is detector-only, then dispatches each
   selected PR number to the resolver workflow revision on `develop`; only a
@@ -151,6 +270,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   predicate (MongoDB code 224); it upserts by the deterministic reserved
   `shareId` and still validates the complete protected envelope before trusting
   either a new or existing ledger. — Codex (AI), 2026-08-08
+- **Conflict detection waits out GitHub and says so when it stands aside**:
+  the merge resolver's detector polled mergeability for only ~80 seconds
+  after a base push, but GitHub's verdicts can take ~6 minutes to settle —
+  observed on PR #190, where the develop push that created the conflict ran
+  detection while the PR still read UNKNOWN, so nothing was handed off, no
+  comment appeared, and the conflict sat silent until the scheduled sweep.
+  Detection now re-queries until every scanned PR has a verdict or a time
+  budget runs out (`MERGEABLE_POLL_SECONDS`, default 500s, with
+  `MERGEABLE_POLL_INTERVAL` between re-queries; detect timeout raised to 15
+  minutes), and the detect job now upserts a status comment on any PR it must
+  leave alone — conflicting fork PRs it cannot push to, and PRs whose
+  mergeability never settled — so detector silence always means "nothing
+  needed doing", never "nobody looked". Conflicts that are handed off keep
+  announcing themselves through the existing "Auto-resolve running" comment;
+  the rebase workflow already polls its verdicts round-robin and is
+  unchanged. Also restored the "AI PR and stack rebase conflict resolution"
+  changelog bullet's opening line, dropped by the AI resolution of a previous
+  merge. — Claude (AI), 2026-08-08
+
 - **`withMongoTransaction` ReferenceError + Web CI transaction support**: the
   AI-resolved merge that landed on main via PR #158 left `withMongoTransaction`
   calling the removed `getClientCached()`, 500-ing every transactional write

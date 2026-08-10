@@ -26,6 +26,11 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
       scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+- [ ] In a disposable worktree, remove one transitive pnpm link required by
+      ESLint while leaving every direct dependency link present, then run the
+      targeted lint command: the startup probe performs one forced relink and
+      ESLint starts. `npm --prefix remix run ensure-deps -- --check` also proves
+      both ESLint and the directly declared Prettier CLI can start.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -416,6 +421,131 @@ is fixed, and cite the checklist you ran in the PR description.
       lands, the live-ref check must classify it as published rather than
       retrying it.
 
+## Per-feature develop → main promoter (protected `.github/scripts/promote-features-to-main.mjs`)
+
+- [ ] Merge a standalone source PR whose exact promotion patch conflicts with
+      `main`. Confirm the thin `develop` caller contains no executable behavior,
+      retains `actions: write`, and invokes the protected promoter. The promoter
+      must first prove the historical source patch is still effective at the
+      current `develop` tip, then create one immutable reservation branch,
+      dispatch one bot-authored worker to the fixed `github-actions` resolver
+      revision, and continue processing unrelated groups. The worker must
+      re-derive the source plan and live base/branch SHAs, resolve the conflict,
+      replace the reservation with an exact-lease push, and open the promotion
+      PR without any manual cherry-pick or follow-up promoter run.
+- [ ] Confirm an automatically resolved promotion PR has the `promotion`,
+      `ai-conflict-resolved`, and `review-ai-resolution` labels plus an upserted
+      comment naming the immutable source/base SHAs, resolver run, and exact
+      files that require review. Its merged source PR must link to the created
+      promotion PR. A Graphify-only collision must say it was resolved
+      deterministically without invoking a model.
+- [ ] Put a creation-time conflict in the middle of a three-member promotion
+      stack. The first member must remain the verified base, the conflicting
+      member must be queued exactly once, and a trusted follow-up promoter run
+      must resume the final dependent member on the resolved promotion branch.
+      A failed worker may defer only its dependent members; unrelated clean and
+      conflicting groups must continue independently.
+- [ ] Race the worker by moving the source tip, target base, or reservation
+      branch before resolution and immediately before push. Every stale worker
+      must stop without overwriting newer work, then permit a changed snapshot
+      to be planned automatically. Repeat after crashes following reservation
+      push, resolved-branch push, and PR creation; reruns must converge on one
+      branch, one promotion PR, and one current status comment.
+- [ ] Attempt the internal promotion handoff manually, from a feature workflow
+      revision, with malformed SHAs/refs, or with mismatched source/base/plan
+      metadata. No secret-bearing worker may start. During a valid run, make the
+      model leave conflict markers, edit a clean/non-planned path, introduce an
+      unsafe file type, or alter the trusted workflow/action copy. Verification
+      must reject publication and leave an exact-snapshot `ai-promotion-paused`
+      review comment instead of repeatedly spending model budget.
+- [ ] Promote a source whose diff includes `graphify-out/**`. Source-side
+      Graphify artifacts must never be cherry-picked or supplied to the model;
+      regenerate them from the exact promotion base plus selected feature and
+      verify the portable graph pair is coherent before publication.
+- [ ] Replace the Graphify executable in the worker fixture with one that
+      changes `HEAD` while leaving a clean worktree. Refresh and publication
+      must fail closed. A legitimate derived Graphify commit must be exactly
+      one direct child of the already-verified source head and may change only
+      the approved Graphify output paths.
+- [ ] Set `conflict-marker-size=10` for a planned text path and leave real
+      10-character start/base/end markers after the model round; verification
+      must reject them. A standalone Markdown `=======` divider must remain
+      valid and must not be treated as an unresolved conflict.
+- [ ] Exercise both conflict-free and AI-resolved promotions that change
+      `.github/**` after source authority is positively verified. Confirm their
+      bot-authored content commits carry `[skip ci]` rather than executable
+      historical commit messages, the promotion PR is created by
+      `GITHUB_TOKEN`, and an empty non-skip review-checkpoint child produces
+      approval-gated `pull_request` checks without executing the edited
+      automation automatically. Crash before/after checkpoint push and leave
+      duplicate pending comments: the next promoter run must recover the one
+      live checkpoint, make the latest final attestation authoritative, and
+      repair all review labels/comments idempotently.
+- [ ] Move the promotion base after the resolved content branch is published.
+      Confirm the bot records an exact durable retirement, closes and
+      lease-deletes only its unchanged stale branch, and requeues the source.
+      Stop after close and before delete, then repeat with a concurrently moved
+      branch and a transient reopen failure: recovery must resume exact cleanup
+      or preserve/reopen the moved branch, cancel every stale retirement event,
+      and respect a later intentional reviewer closure.
+- [ ] Merge a feature PR into `develop`, record its two-parent merge SHA, then
+      force-rewrite `develop` to an equivalent cherry-pick so that merge object
+      is no longer advertised by any ref. From a fresh full clone, confirm the
+      promoter's self-test first proves the object is absent, fetches it by
+      exact SHA with both parents, proves a stable patch-equivalent commit is
+      still effective at the current `develop` tip, performs the mainline
+      cherry-pick, and gets the expected tree. Repeat after a later revert and
+      with overlapping source edits that make both forward and reverse checks
+      inconclusive: the exact patch must remain mechanically recoverable, but
+      the promoter must classify the full aggregate range, not only its last
+      commit, as removed or ambiguous and block visibly before creating any
+      reservation, branch, AI worker, or promotion PR.
+- [ ] Exercise both a mechanically clean replay and a potentially conflicting
+      replay whose recovered source patch is removed or ambiguous at current
+      `develop`. Each must create no reservation, branch, immutable promotion
+      plan, AI worker, or promotion PR; the blocked summary must name the checked
+      `develop` tip and lineage classification. Defer only later members of that
+      promotion group while unrelated groups continue, and confirm no review
+      branch or PR is opened.
+- [ ] Move `develop` so a previously ambiguous blocked source becomes
+      verifiably present. A later run may proceed only after freshly proving
+      source authority and must create a new verified plan rather than upgrading
+      the blocked result in place. Conversely, a still-removed or ambiguous
+      patch, missing merge object, unreadable or empty exact patch, Git
+      inspection failure, or unknown lineage enum must create no reservation,
+      branch, worker, or PR and remain visible in the blocked summary. A worker-
+      observed classification mismatch after verified dispatch must stop before
+      publication and leave a visible blocked result.
+- [ ] Run the orphaned-history self-test with the clone's Git author name
+      deliberately empty. The attempted mainline cherry-pick must return an
+      operational error, abort the sequencer, leave `HEAD` at the target base,
+      and clean both the index and tracked worktree instead of treating the
+      words `empty ident name` as an empty source patch.
+- [ ] Configure a valid Git identity, apply the recovered source pick, then
+      apply that identical pick again. The second, genuinely empty pick must
+      be skipped from verified sequencer/index state and leave the promoted
+      tree unchanged.
+- [ ] Give one standalone source PR an invalid or unavailable historical merge
+      object between two valid standalone PRs. A dry run must report that PR as
+      blocked, continue to plan the later independent PR, and publish both the
+      block and partial plan in the step summary without exiting early.
+- [ ] Repeat with the unavailable PR in the middle of a named promotion stack.
+      The failed member and only its later dependent stack members must be
+      deferred while the next unrelated group continues. Force an unexpected
+      group-local Git error as well and confirm later groups still run.
+- [ ] Re-run after a partial batch has already created promotion PRs. Existing
+      `promotion-of` markers and branches must prevent duplicates, including
+      records older than the first 200 repository PRs, while `MAX_NEW_PRS`
+      counts reused branches as newly opened PRs too. Force-update an open
+      promotion branch between runs and confirm the promoter fetches its live
+      OID before stacking the next member rather than using a stale local ref;
+      a repurposed branch, same-path/whitespace drift, duplicate provenance,
+      or an OPEN promotion targeting the wrong stack base must be blocked. For
+      an external stack, validate every OPEN link back to `main` and every
+      CLOSED source merged before the current group; any unshipped earlier
+      CLOSED member must stop dependents, while a later successor must not be
+      misclassified as their prerequisite.
+
 ## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
 
 - [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
@@ -437,6 +567,19 @@ is fixed, and cite the checklist you ran in the PR description.
       duplicate/unknown model, wrong key, or empty array emits a warning and
       selects only `--model default`; no stored value can inject another CLI
       flag.
+- [ ] Save a new Admin order, then issue GETs through separate warm app
+      instances immediately (no 15-second wait): both must read the new
+      home-DB value. With Mongo unavailable, a warm instance may return its
+      last-known-good order and a cold instance must return only `default`.
+- [ ] Put `claude-opus-5` first and exercise a merge conflict, a replay/rebase
+      conflict, and each workflow's semantic Graphify refresh. Logs must show
+      the same Admin-selected primary for every Claude/Graphify invocation;
+      no refresh may inject literal Sonnet. Repeat with `default` first and
+      confirm Graphify leaves its backend default unforced. Run
+      `node remix/scripts/workflow-caller-contract.mjs --self-test` in the
+      product branch and `node .github/scripts/workflow-control-plane-contract.mjs
+      --self-test` in the `github-actions` control plane to prove both the
+      delegated callers and every AI runtime remain bound to the contract.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently
@@ -446,22 +589,26 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
-      Confirm **Rebase PRs and stacks (AI)** detects both while the merge-based
-      resolver correctly no-ops, and that replaying more than one conflicting
-      commit can advance through multiple bounded Claude/verify/continue
-      rounds. Then make a standalone PR genuinely merge-conflicting and
-      confirm only **Resolve PR conflicts (AI)** owns it.
+      Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
+      manual scans leave both histories untouched: they are not stacks and
+      already merge cleanly. An explicit PR-number retry may still replay one
+      deliberately. Then make a standalone PR genuinely merge-conflicting and
+      confirm only **Resolve PR conflicts (AI)** owns it. Regression class:
+      standalone replay failures were incorrectly force-rebased and could
+      ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
       root is rebased, confirm the child dispatch receives the old and new
       parent SHAs, replays with onto semantics, and completes root-to-leaf
-      without duplicating the parent's commits.
+      without duplicating the parent's commits. Confirm a stack member with
+      either `mergeable: false` or `rebaseable: false` remains rebase-owned,
+      while a clean stack is left alone.
 - [ ] Exercise detection from a branch push, PR opened/reopened event, the
-      scheduled scan, and a manual PR-number dispatch. Automatic scans select
-      every same-repo PR regardless of base branch, route standalone merge
-      conflicts to the merge workflow, do not race a blocked child ahead of
-      its parent, and terminate after resolution instead of looping on the
-      workflow's own push. A blank manual dispatch must perform the same
-      repository-wide scan.
+      scheduled scan, and a manual PR-number dispatch. Automatic scans evaluate
+      every same-repo PR regardless of base branch, never dispatch a
+      standalone history rewrite, route standalone merge conflicts to the
+      merge workflow, do not race a blocked child ahead of its parent, and
+      terminate after resolution instead of looping on the workflow's own
+      push. A blank manual dispatch must perform the same repository-wide scan.
 - [ ] Return unknown merge/rebaseability for several PRs at once and confirm
       polling proceeds round-robin, giving every candidate an API check in each
       bounded round. Exercise a stack deeper than eight PRs and confirm it is
@@ -965,7 +1112,7 @@ re-checks the whole management plane end-to-end:
 `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
-      the dashboard (Users / Apps / Tiers / System tabs) for admins; the drawer's
+      the dashboard (Users / Apps / Tiers / CI Control / System tabs) for admins; the drawer's
       Account section shows the 🛠️ Admin item only for admins.
 - [ ] Users tab: free-text query searches every safe projected field; typed
       filters cover created-day ranges, tier id/name/version, booleans, quotas,
@@ -1047,6 +1194,41 @@ re-checks the whole management plane end-to-end:
 - [ ] Mobile (375px): the admin tables scroll inside their own container —
       the page body itself never scrolls horizontally; modals fit with no
       clipped controls.
+
+## Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`)
+
+- [ ] With a prior snapshot cached, CI Control paints the last-known feature
+      rows on first render without a spinner, then reconciles in the background.
+      A failed refresh preserves those rows, says they are cached, and retries.
+- [ ] Anonymous and non-admin callers receive the standard admin denial from
+      all three `/api/v1/admin/ci*` endpoints. The dashboard never renders for
+      them and the webhook routes do not accept a browser session as authority.
+- [ ] Send the same signed GitHub delivery twice: the entity projection is
+      current and exactly one relational `ci-event` exists for that delivery
+      and parent. A payload with one changed byte, a missing delivery header,
+      another repository, or a bad HMAC is rejected without writes.
+- [ ] Send Vercel deployment created → ready and retry each exact body. One
+      current deployment and preview projection advance to ready; exact retries
+      do not duplicate history. Invalid HMAC and payloads over 2 MiB fail.
+- [ ] GitHub reconciliation groups promotion PRs with their source feature,
+      paginates beyond 100 branches/open PRs, refreshes runs/deployments,
+      preserves existing event history, and never exposes the App private key
+      or installation token.
+- [ ] Dispatch every allowlisted workflow and confirm the audit row moves
+      requested → accepted (or failed) with a relational event. Arbitrary
+      workflow names, non-allowlisted inputs, and feature-branch entry refs
+      cannot reach GitHub. Rebase/release require the UI confirmation gate.
+- [ ] Desktop: search/filter feature rows, select a PR, open its GitHub and
+      preview links, inspect topology, Actions runs, and the full status
+      timeline. Scroll the page top-to-bottom and the sticky detail panel to its
+      bottom without clipping, overlap, or horizontal page overflow.
+- [ ] Mobile (375px): search/filter rows, open the bottom detail drawer, scroll
+      every section, open the dispatch modal and confirmation state, then close
+      both. The drawer is flush left/right/bottom, has no clipped controls, and
+      the page never scrolls horizontally.
+- [ ] `node scripts/workflow-caller-contract.mjs` passes: every product-branch
+      workflow has exactly one reusable call pinned to `@github-actions`, no
+      runner/steps/shell behavior, and no product-branch Actions scripts.
 
 ## App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`)
 
