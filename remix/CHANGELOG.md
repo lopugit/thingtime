@@ -19,6 +19,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Worktree lint and formatting dependencies now self-heal completely**:
+  validation startup probes detect incomplete transitive pnpm links even when
+  every direct package looks installed, retry once with a forced relink, and
+  verify ESLint plus the now-direct Prettier CLI before reporting the checkout
+  ready. — Codex (AI), 2026-08-10
 - **Every live AI conflict/rebase path now follows the current Thingtime Admin
   model order**: merge resolution, all rebase rounds, and their semantic
   Graphify refreshes share the validated primary model instead of letting the
