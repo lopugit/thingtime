@@ -1437,7 +1437,7 @@
   "remix/package.json": {
     "mtime": 1786331617.039992,
     "ast_hash": "fc424fa9ec257696799338faa261cdd0",
-    "semantic_hash": ""
+    "semantic_hash": "fc424fa9ec257696799338faa261cdd0"
   },
   "remix/public/manifest.json": {
     "mtime": 1786326325.0101783,
@@ -1755,8 +1755,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786331275.930288,
-    "ast_hash": "db69535a4ea531c20e8ad71cd48fbecb",
+    "mtime": 1786333024.5657568,
+    "ast_hash": "60d5c90e48fd9a7fb11484a853293425",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -4162,7 +4162,7 @@
   "TESTING.md": {
     "mtime": 1786331436.2408412,
     "ast_hash": "1697d796a6ca2d577bef8bb203d2a89c",
-    "semantic_hash": ""
+    "semantic_hash": "1697d796a6ca2d577bef8bb203d2a89c"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786326323.80898,
@@ -4480,8 +4480,8 @@
     "semantic_hash": "d4960e1f10af263acb682e86e4d1c2af"
   },
   ".github/workflows/web-ci.yml": {
-    "mtime": 1786331367.4363027,
-    "ast_hash": "dad93152b6054164768a6cddbf5027ed",
+    "mtime": 1786332960.1373398,
+    "ast_hash": "2a79a2f094e6f1833fe73c81723e05b9",
     "semantic_hash": ""
   },
   "PRs/178-codex-use-fable-5-max-conflict-resolver--configurable-pr-conflict-resolver-model-waterfall.md": {
@@ -5085,13 +5085,13 @@
     "semantic_hash": "a9e918e3c362f0e68f0b269f0fab459d"
   },
   "remix/scripts/web-ci-required-context-contract.mjs": {
-    "mtime": 1786331326.9185052,
-    "ast_hash": "8cf571ca95a2516208406e2050baecfd",
-    "semantic_hash": "8cf571ca95a2516208406e2050baecfd"
+    "mtime": 1786332960.1376443,
+    "ast_hash": "2e149d1bac1dde4b9683754aff0009f2",
+    "semantic_hash": "2e149d1bac1dde4b9683754aff0009f2"
   },
   "PRs/222-codex-typecheck-ratchet-warning-main-ci-make-typecheck-ratchet-warning-only.md": {
-    "mtime": 1786331275.9305515,
-    "ast_hash": "a7aaaacf78c26c2de003e1037ac8eaa9",
+    "mtime": 1786333024.5652573,
+    "ast_hash": "43c34b43bce82b3679011c78fa745636",
     "semantic_hash": ""
   }
 }
