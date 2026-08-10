@@ -28,6 +28,26 @@ for (const filename of callers) {
   assert.equal((source.match(/^\s+uses:/gm) ?? []).length, 1, `${filename} must contain exactly one reusable-workflow call`);
 }
 
+const promotionCaller = readFileSync(
+  resolve(workflowsRoot, 'promote-features-to-main.yml'),
+  'utf8'
+);
+const promotionPermissionsStart = promotionCaller.indexOf('\npermissions:\n');
+const promotionJobsStart = promotionCaller.indexOf('\njobs:\n');
+assert.ok(
+  promotionPermissionsStart >= 0 && promotionJobsStart > promotionPermissionsStart,
+  'promote-features-to-main.yml must retain a top-level permissions block'
+);
+const promotionPermissions = promotionCaller.slice(
+  promotionPermissionsStart,
+  promotionJobsStart
+);
+assert.match(
+  promotionPermissions,
+  /^  actions: write$/m,
+  'promote-features-to-main.yml must grant the protected promoter permission to dispatch its resolver'
+);
+
 const filesUnder = (root) => {
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
