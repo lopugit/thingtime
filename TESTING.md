@@ -302,8 +302,73 @@ is fixed, and cite the checklist you ran in the PR description.
       lands, the live-ref check must classify it as published rather than
       retrying it.
 
-## Per-feature develop → main promoter (`.github/scripts/promote-features-to-main.mjs`)
+## Per-feature develop → main promoter (protected `.github/scripts/promote-features-to-main.mjs`)
 
+- [ ] Merge a standalone source PR whose exact promotion patch conflicts with
+      `main`. Confirm the thin `develop` caller contains no executable behavior,
+      retains `actions: write`, and invokes the protected promoter. The promoter
+      must first prove the historical source patch is still effective at the
+      current `develop` tip, then create one immutable reservation branch,
+      dispatch one bot-authored worker to the fixed `github-actions` resolver
+      revision, and continue processing unrelated groups. The worker must
+      re-derive the source plan and live base/branch SHAs, resolve the conflict,
+      replace the reservation with an exact-lease push, and open the promotion
+      PR without any manual cherry-pick or follow-up promoter run.
+- [ ] Confirm an automatically resolved promotion PR has the `promotion`,
+      `ai-conflict-resolved`, and `review-ai-resolution` labels plus an upserted
+      comment naming the immutable source/base SHAs, resolver run, and exact
+      files that require review. Its merged source PR must link to the created
+      promotion PR. A Graphify-only collision must say it was resolved
+      deterministically without invoking a model.
+- [ ] Put a creation-time conflict in the middle of a three-member promotion
+      stack. The first member must remain the verified base, the conflicting
+      member must be queued exactly once, and a trusted follow-up promoter run
+      must resume the final dependent member on the resolved promotion branch.
+      A failed worker may defer only its dependent members; unrelated clean and
+      conflicting groups must continue independently.
+- [ ] Race the worker by moving the source tip, target base, or reservation
+      branch before resolution and immediately before push. Every stale worker
+      must stop without overwriting newer work, then permit a changed snapshot
+      to be planned automatically. Repeat after crashes following reservation
+      push, resolved-branch push, and PR creation; reruns must converge on one
+      branch, one promotion PR, and one current status comment.
+- [ ] Attempt the internal promotion handoff manually, from a feature workflow
+      revision, with malformed SHAs/refs, or with mismatched source/base/plan
+      metadata. No secret-bearing worker may start. During a valid run, make the
+      model leave conflict markers, edit a clean/non-planned path, introduce an
+      unsafe file type, or alter the trusted workflow/action copy. Verification
+      must reject publication and leave an exact-snapshot `ai-promotion-paused`
+      review comment instead of repeatedly spending model budget.
+- [ ] Promote a source whose diff includes `graphify-out/**`. Source-side
+      Graphify artifacts must never be cherry-picked or supplied to the model;
+      regenerate them from the exact promotion base plus selected feature and
+      verify the portable graph pair is coherent before publication.
+- [ ] Replace the Graphify executable in the worker fixture with one that
+      changes `HEAD` while leaving a clean worktree. Refresh and publication
+      must fail closed. A legitimate derived Graphify commit must be exactly
+      one direct child of the already-verified source head and may change only
+      the approved Graphify output paths.
+- [ ] Set `conflict-marker-size=10` for a planned text path and leave real
+      10-character start/base/end markers after the model round; verification
+      must reject them. A standalone Markdown `=======` divider must remain
+      valid and must not be treated as an unresolved conflict.
+- [ ] Exercise both conflict-free and AI-resolved promotions that change
+      `.github/**` after source authority is positively verified. Confirm their
+      bot-authored content commits carry `[skip ci]` rather than executable
+      historical commit messages, the promotion PR is created by
+      `GITHUB_TOKEN`, and an empty non-skip review-checkpoint child produces
+      approval-gated `pull_request` checks without executing the edited
+      automation automatically. Crash before/after checkpoint push and leave
+      duplicate pending comments: the next promoter run must recover the one
+      live checkpoint, make the latest final attestation authoritative, and
+      repair all review labels/comments idempotently.
+- [ ] Move the promotion base after the resolved content branch is published.
+      Confirm the bot records an exact durable retirement, closes and
+      lease-deletes only its unchanged stale branch, and requeues the source.
+      Stop after close and before delete, then repeat with a concurrently moved
+      branch and a transient reopen failure: recovery must resume exact cleanup
+      or preserve/reopen the moved branch, cancel every stale retirement event,
+      and respect a later intentional reviewer closure.
 - [ ] Merge a feature PR into `develop`, record its two-parent merge SHA, then
       force-rewrite `develop` to an equivalent cherry-pick so that merge object
       is no longer advertised by any ref. From a fresh full clone, confirm the
@@ -311,8 +376,27 @@ is fixed, and cite the checklist you ran in the PR description.
       exact SHA with both parents, proves a stable patch-equivalent commit is
       still effective at the current `develop` tip, performs the mainline
       cherry-pick, and gets the expected tree. Repeat after a later revert and
-      with a multi-commit rebase range: the revert must fail closed, while the
-      full aggregate range (not only its last commit) must be verified.
+      with overlapping source edits that make both forward and reverse checks
+      inconclusive: the exact patch must remain mechanically recoverable, but
+      the promoter must classify the full aggregate range, not only its last
+      commit, as removed or ambiguous and block visibly before creating any
+      reservation, branch, AI worker, or promotion PR.
+- [ ] Exercise both a mechanically clean replay and a potentially conflicting
+      replay whose recovered source patch is removed or ambiguous at current
+      `develop`. Each must create no reservation, branch, immutable promotion
+      plan, AI worker, or promotion PR; the blocked summary must name the checked
+      `develop` tip and lineage classification. Defer only later members of that
+      promotion group while unrelated groups continue, and confirm no review
+      branch or PR is opened.
+- [ ] Move `develop` so a previously ambiguous blocked source becomes
+      verifiably present. A later run may proceed only after freshly proving
+      source authority and must create a new verified plan rather than upgrading
+      the blocked result in place. Conversely, a still-removed or ambiguous
+      patch, missing merge object, unreadable or empty exact patch, Git
+      inspection failure, or unknown lineage enum must create no reservation,
+      branch, worker, or PR and remain visible in the blocked summary. A worker-
+      observed classification mismatch after verified dispatch must stop before
+      publication and leave a visible blocked result.
 - [ ] Run the orphaned-history self-test with the clone's Git author name
       deliberately empty. The attempted mainline cherry-pick must return an
       operational error, abort the sequencer, leave `HEAD` at the target base,
