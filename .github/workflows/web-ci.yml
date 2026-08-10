@@ -51,12 +51,22 @@ jobs:
             }
 
             const expectedChangedFiles = Number(pullRequest.changed_files ?? 0);
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pullRequest.number,
-              per_page: 100,
-            });
+            let files;
+            try {
+              files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullRequest.number,
+                per_page: 100,
+              });
+            } catch (error) {
+              const status = error?.status ? ` (${error.status})` : '';
+              core.warning(
+                `Could not inspect pull-request files${status}; running the full Web CI suite.`
+              );
+              core.setOutput('full_web_ci', 'true');
+              return;
+            }
             const truncated = expectedChangedFiles > files.length;
             const touchesWebCi = files.some(({ filename }) =>
               filename.startsWith('remix/') ||
