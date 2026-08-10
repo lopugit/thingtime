@@ -32,22 +32,59 @@ Let administrators choose, per supported automation, whether work runs on GitHub
 - GitHub App installation tokens are short-lived, and ephemeral runners are registered for one exact job label.
 - No provider credential or webhook secret is committed.
 
-## Live bootstrap prepared
+## Live bootstrap and acceptance completed — 2026-08-10
 
-- Stable GitHub and Vercel webhook endpoints are deployed at `dev.thingtime.com`.
-- Project-scoped Vercel deployment webhook and protected preview/production environment entries are prepared.
-- The GitHub repository has the signed router secret and stable router URL configured.
-- Readiness is computed once on the server and shared by routing, policy writes,
-  and Admin UI. Partial configuration cannot be labelled ready or selected
-  through a direct API request.
-- GitHub App creation/installation and the first authenticated Reconcile remain the final external bootstrap steps.
+- The `Thingtime CI Control` GitHub App (App ID `4546468`, installation ID
+  `152644267`) is installed only on `lopugit/thingtime`. It has the bounded
+  Actions/Administration write and Contents/Deployments/Metadata/Pull requests
+  read permissions required by routing, runner registration, reconciliation,
+  and cleanup.
+- Production, `develop` preview, and this PR's preview have the App identity,
+  private key, signed GitHub webhook secret, and shared provider-router secret
+  configured in Vercel. The repository carries the matching router secret and
+  stable router URL; no credential value is committed or recorded here.
+- Credentialed deployment `dpl_BHkHgofhf8i9WMYvuxvM9kwE4KLW` reached READY
+  at `thingtime-dzafldfdg-lopugits-projects.vercel.app` and the stable branch
+  preview alias serves HTTP 200.
+- The first real route, [run 31388001114](https://github.com/lopugit/thingtime/actions/runs/31388001114),
+  reached Vercel but proved GitHub's universal runner archive still needed its
+  version-matched ICU dependencies. The durable Workflow safely fell back via
+  the App-authored [run 31388082177](https://github.com/lopugit/thingtime/actions/runs/31388082177).
+  The exact provisional GitHub runner and Sandbox left by the pre-handle
+  failure were removed after diagnosis.
+- The second real route, [run 31389237667](https://github.com/lopugit/thingtime/actions/runs/31389237667),
+  registered a uniquely labelled online runner and created App-authored
+  [run 31389299848](https://github.com/lopugit/thingtime/actions/runs/31389299848).
+  That runner exposed one more universal-image assumption: `/proc/self/fd`
+  existed but the conventional `/dev/fd` link required by Bash process
+  substitution did not. The failed job still removed its GitHub registration
+  and Sandbox automatically.
+- The final canary, [run 31389760018](https://github.com/lopugit/thingtime/actions/runs/31389760018),
+  routed through Vercel; registered runner
+  `thingtime-vercel-3a334083c40ef2fb9252f1d3a483`; re-entered the protected
+  workflow as `thingtime-ci-control[bot]` in
+  [run 31389810843](https://github.com/lopugit/thingtime/actions/runs/31389810843);
+  executed the exact PR #220 detector successfully; and then removed both the
+  GitHub runner registration and the exact Sandbox. Post-run API checks found
+  neither resource.
+- Admin → CI Control was reconciled and visually accepted in authenticated
+  Chrome at desktop and 375 px mobile widths. Readiness badges, provider
+  selection/persistence, PR detail panel/mobile drawer, dispatch confirmation,
+  top-to-bottom scrolling, and horizontal-overflow checks all passed.
+- `THINGTIME_CI_ROUTER_URL` was restored to the stable
+  `https://dev.thingtime.com/api/v1/integrations/ci/route`. Because that route
+  correctly remains unavailable until this PR reaches `develop`, the live
+  Resolve-conflicts policy was returned to GitHub-hosted compute after the
+  canary. It can be switched to Vercel again after the merged `develop`
+  deployment exposes the route.
 
 ## Validation
 
 - targeted Remix lint passed;
-- CI control tests passed 16/16, including complete/partial readiness and
-  Vercel runner identity/job-summary coverage;
-- the aggregate unit suite passed, including 16/16 CI-control tests and the
+- CI control tests passed 19/19, including complete/partial readiness, runner
+  identity/job summaries, version-matched dependency bootstrap, `/dev/fd`
+  compatibility, and fail-closed setup coverage;
+- the aggregate unit suite passed, including 19/19 CI-control tests and the
   seven-listener protected-control-plane contract; the redundant
   product-branch copy of `.github/scripts/deploy-develop-pr-preview.mjs` was
   removed because the listener already checks out its trusted controller from

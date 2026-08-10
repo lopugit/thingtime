@@ -47,6 +47,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Vercel's universal image now boots and tears down GitHub runners reliably**:
+  ephemeral CI setup runs GitHub's version-matched dependency installer,
+  provides the conventional `/dev/fd` link required by Bash process
+  substitution, and establishes a provisional cleanup handle immediately after
+  Sandbox creation. ICU or later bootstrap failures can no longer strand an
+  offline runner/Sandbox, and the same exact cleanup is preserved after a
+  registered job succeeds or fails. Three live canaries proved registration,
+  App-authored protected-workflow re-entry, GitHub fallback, successful Vercel
+  execution, and final resource deletion. — Codex (AI), 2026-08-10
 - **Vercel CI readiness now fails closed across UI, API, and routing**: Admin →
   CI Control no longer reports a runner ready merely because the page is hosted
   by Vercel. One server-derived capability now requires the GitHub App id,

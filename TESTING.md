@@ -1199,6 +1199,11 @@ re-checks the whole management plane end-to-end:
       labelled ephemeral Sandbox runner, and the exact protected workflow
       re-enters on that runner. Confirm completion/failure is projected and the
       Sandbox plus GitHub runner registration are deleted afterward.
+- [ ] On Vercel's universal image, bootstrap must run GitHub's version-matched
+      `bin/installdependencies.sh` non-interactively and provide `/dev/fd` from
+      `/proc/self/fd` before registration. Make each command fail in turn and
+      verify the provisional exact runner/Sandbox is still cleaned even though
+      `createRunner()` never returns its handle to the outer Workflow.
 - [ ] Remove or invalidate each router dependency in turn (router secret, App,
       Workflow/Sandbox auth) and verify automatic triggers fail over to
       GitHub-hosted compute with a visible event instead of silently stopping.
@@ -1217,6 +1222,22 @@ re-checks the whole management plane end-to-end:
 - [ ] `node scripts/workflow-caller-contract.mjs` passes: every product-branch
       workflow has exactly one reusable call pinned to `@github-actions`, no
       runner/steps/shell behavior, and no product-branch Actions scripts.
+
+PR #220 live acceptance recorded on 2026-08-10:
+
+- [x] A human exact-PR trigger handed off to Vercel, registered one unique
+      runner, re-entered as `thingtime-ci-control[bot]`, ran the protected
+      detector successfully, and deleted the exact runner and Sandbox.
+- [x] A setup failure after the original trigger exited dispatched the same
+      protected workflow back to GitHub-hosted compute through the App.
+- [x] First authenticated Reconcile populated the CI dashboard; GitHub App,
+      webhook, provider-router, and Vercel readiness were visible together.
+- [x] Desktop and 375 px mobile acceptance covered provider persistence,
+      dispatch confirmation/cancel, PR #220 detail panel/drawer, full-page
+      scrolling, and zero horizontal overflow.
+- [x] `node scripts/workflow-caller-contract.mjs`, focused CI-control tests,
+      targeted lint, build/output verification, and Graphify integrity checks
+      passed for the published branch.
 
 ## App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`)
 
