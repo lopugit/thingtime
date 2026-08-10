@@ -47,7 +47,8 @@ they are trusted integration surfaces, not isolated sandboxes.
   wildcard CNAME and narrow ACME nameserver delegation resolve publicly;
   wildcard TLS verifies. Vercel's external-DNS advisory still reports
   `misconfigured: true` because Cloudflare remains authoritative, so a
-  follow-up replaces that advisory gate with live CNAME and HTTPS checks.
+  [follow-up](233-codex-fix-develop-preview-dns-gate.md) replaces that advisory
+  gate with live CNAME and HTTPS checks.
 - The protected GitHub Environment and its non-secret controller variables
   exist and allow only `main`.
 - The active `main` `Basic Protection` ruleset has no bypass, requires pull

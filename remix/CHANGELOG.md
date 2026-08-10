@@ -26,7 +26,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Vercel's recommended target, verifies the assigned alias over HTTPS, and no
   longer claims generic Preview is credential-free when it intentionally uses
   the shared development runtime. The runbook also records the controller's
-  team-scoped token boundary accurately. — Codex (AI), 2026-08-10
+  team-scoped token boundary accurately. See the
+  [PR #233 engineering note](../PRs/233-codex-fix-develop-preview-dns-gate.md).
+  — Codex (AI), 2026-08-10
 - **Generic Vercel Preview now mirrors the shared development runtime**: all 26
   variables currently assigned to `develop` also target Preview, while the six
   existing Preview-only filesystem/CI/webhook settings remain. The development
