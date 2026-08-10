@@ -64,6 +64,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Worktree lint and formatting dependencies now self-heal completely**:
+  validation startup probes detect incomplete transitive pnpm links even when
+  every direct package looks installed, retry once with a forced relink, and
+  verify ESLint plus the now-direct Prettier CLI before reporting the checkout
+  ready. — Codex (AI), 2026-08-10
 - **Creation-time promotion conflicts are resolved automatically**: when a
   selected `develop` feature cannot be replayed cleanly onto its promotion base,
   the protected per-feature promoter first positively proves its historical
