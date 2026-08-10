@@ -31,6 +31,12 @@ concurrency:
 jobs:
   build:
     name: Build + typecheck ratchet + unit tests
+    # The control plane holds no app tree, so there is nothing here to build or
+    # test — a PR targeting it must not run the web suite. `base_ref` is the
+    # right signal: on a `pull_request` event `ref_name` is `<pr>/merge`, and
+    # under `workflow_call` from a product listener `base_ref` is that PR's
+    # base (`main`/`develop`), so those runs are unaffected.
+    if: github.base_ref != 'github-actions'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -66,6 +72,12 @@ jobs:
 
   api-tests:
     name: API suite (headless /tests runner)
+    # The control plane holds no app tree, so there is nothing here to build or
+    # test — a PR targeting it must not run the web suite. `base_ref` is the
+    # right signal: on a `pull_request` event `ref_name` is `<pr>/merge`, and
+    # under `workflow_call` from a product listener `base_ref` is that PR's
+    # base (`main`/`develop`), so those runs are unaffected.
+    if: github.base_ref != 'github-actions'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
