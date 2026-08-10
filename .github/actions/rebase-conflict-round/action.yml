@@ -38,6 +38,10 @@ inputs:
     description: Trusted administrator-selected Claude model arguments.
     required: false
     default: ""
+  conflict-policy:
+    description: "Closed path policy: pr-rebase (default) or trusted develop promotion."
+    required: false
+    default: pr-rebase
 
 outputs:
   complete:
@@ -49,6 +53,18 @@ outputs:
   conflict_paths:
     description: Newline-separated next conflict paths, empty when complete.
     value: ${{ steps.verify.outputs.conflict_paths }}
+  ai_conflict_paths:
+    description: Newline-separated initial paths whose bytes were exposed to the model.
+    value: ${{ steps.prepare.outputs.ai_conflict_paths }}
+  graphify_reset:
+    description: Whether Graphify conflicts were resolved deterministically to the destination side.
+    value: ${{ steps.prepare.outputs.graphify_reset }}
+  ai_started:
+    description: Whether a credentialed model attempt actually began.
+    value: ${{ steps.attempt.outputs.started }}
+  terminal_review_needed:
+    description: Whether deterministic path/content policy rejected the conflict before model execution.
+    value: ${{ steps.prepare.outputs.terminal_review_needed }}
 
 runs:
   using: composite
@@ -135,10 +151,23 @@ runs:
         SAFE_TRUSTED_PATH: ${{ steps.bootstrap.outputs.safe_trusted_abs }}
         ROUND_PATH: ${{ steps.bootstrap.outputs.round_abs }}
         WORKSPACE_PATH: ${{ github.workspace }}
+        CONFLICT_POLICY: ${{ inputs.conflict-policy }}
       run: |
         set -euo pipefail
-        "$SAFE_TRUSTED_PATH/.github/scripts/rebase-stack/prepare-round.sh" \
-          "$REAL_REPO_PATH" "$WORKSPACE_PATH" "$ROUND_PATH"
+        case "$CONFLICT_POLICY" in
+          pr-rebase|promotion) ;;
+          *) echo "::error::Unknown rebase conflict policy."; exit 1 ;;
+        esac
+        prepare_status=0
+        AI_REBASE_CONFLICT_POLICY="$CONFLICT_POLICY" \
+          "$SAFE_TRUSTED_PATH/.github/scripts/rebase-stack/prepare-round.sh" \
+          "$REAL_REPO_PATH" "$WORKSPACE_PATH" "$ROUND_PATH" || prepare_status=$?
+        if [[ $prepare_status -eq 78 ]]; then
+          echo "terminal_review_needed=true" >>"$GITHUB_OUTPUT"
+        else
+          echo "terminal_review_needed=false" >>"$GITHUB_OUTPUT"
+        fi
+        (( prepare_status == 0 )) || exit "$prepare_status"
 
     - name: Require an AI credential
       if: steps.prepare.outputs.needs_ai == 'true'
@@ -151,6 +180,12 @@ runs:
           echo "::error::An Anthropic API key or Claude Code OAuth token is required for a non-generated conflict."
           exit 1
         fi
+
+    - name: Mark the credentialed AI attempt
+      id: attempt
+      if: steps.prepare.outputs.needs_ai == 'true'
+      shell: bash
+      run: echo "started=true" >>"$GITHUB_OUTPUT"
 
     - name: Resolve this rebase conflict set with Claude in scratch
       if: steps.prepare.outputs.needs_ai == 'true'
@@ -485,9 +520,10 @@ runs:
             echo "::error::Resolved scratch set exceeds the 4 MiB aggregate output cap."
             exit 1
           fi
-          # Do not reject a bare ======= Markdown line. These three marker
-          # forms are sufficient evidence that a zdiff3 block remains.
-          if grep -qE '^(<{7}|\|{7}|>{7})( |$)' -- "$scratch_file"; then
+          # Do not reject a bare ======= Markdown line. Repositories may raise
+          # conflict-marker-size above seven, so reject every unambiguous
+          # start/base/end marker run of seven or more characters.
+          if grep -qE '^(<{7,}|\|{7,}|>{7,})( |$)' -- "$scratch_file"; then
             echo "::error::Conflict markers remain in scratch file: $path"
             exit 1
           fi

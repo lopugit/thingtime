@@ -72,6 +72,16 @@ on:
         required: false
         default: ""
         type: string
+      routing_proof:
+        description: "Internal: signed proof for an already-validated provider route"
+        required: false
+        default: ""
+        type: string
+      routing_proof_issued_at:
+        description: "Internal: Unix timestamp bound into routing_proof"
+        required: false
+        default: ""
+        type: string
       worker_handoff:
         description: "Internal: exact snapshot worker routing flag"
         required: false
@@ -149,6 +159,16 @@ on:
         type: string
       control_dispatch_id:
         description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
+      routing_proof:
+        description: "Internal: signed proof for an already-validated provider route"
+        required: false
+        default: ""
+        type: string
+      routing_proof_issued_at:
+        description: "Internal: Unix timestamp bound into routing_proof"
         required: false
         default: ""
         type: string
@@ -253,6 +273,16 @@ jobs:
       execution_provider: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
       runner_label: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
       control_dispatch_id: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
+      routing_proof: ${{ inputs.routing_proof || github.event.client_payload.routing_proof || '' }}
+      routing_proof_issued_at: ${{ inputs.routing_proof_issued_at || github.event.client_payload.routing_proof_issued_at || '' }}
+      internal_worker: >-
+        ${{ github.event_name == 'repository_dispatch'
+            || (github.event_name == 'workflow_dispatch'
+                && inputs.worker_handoff == true
+                && inputs.pr_number != ''
+                && inputs.branch == ''
+                && inputs.expected_head_sha != ''
+                && inputs.expected_base_sha != '') }}
       pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.pull_request.number || '' }}
       branch: ${{ inputs.branch || (github.event_name == 'push' && github.ref_name) || '' }}
       cascade: ${{ github.event_name != 'workflow_dispatch' || inputs.cascade }}
@@ -266,7 +296,7 @@ jobs:
       && github.event_name != 'repository_dispatch'
       && (github.event_name != 'workflow_dispatch' || inputs.worker_handoff != true)
       && (github.event_name != 'push' || github.event.deleted == false)
-    runs-on: ${{ inputs.runner_label || github.event.client_payload.runner_label || 'ubuntu-latest' }}
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     # A scheduled/manual sweep may evaluate every open same-repo PR. Most
     # mergeability answers are cached, but the API can require one or more
     # bounded polling rounds across a large open-PR set.
@@ -852,9 +882,9 @@ jobs:
 
   handoff:
     name: Hand off to trusted github-actions workers
-    needs: detect
+    needs: [route, detect]
     if: needs.detect.outputs.any == 'true'
-    runs-on: ${{ inputs.runner_label || github.event.client_payload.runner_label || 'ubuntu-latest' }}
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
       actions: write
@@ -864,9 +894,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           TARGETS: ${{ needs.detect.outputs.targets }}
-          EXECUTION_PROVIDER: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
-          RUNNER_LABEL: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
-          CONTROL_DISPATCH_ID: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
+          EXECUTION_PROVIDER: ${{ needs.route.outputs.execution_provider || 'github-actions' }}
+          RUNNER_LABEL: ${{ needs.route.outputs.runner_label || '' }}
+          CONTROL_DISPATCH_ID: ${{ needs.route.outputs.control_dispatch_id || '' }}
+          ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
+          ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -882,6 +914,8 @@ jobs:
               --arg execution_provider "$EXECUTION_PROVIDER" \
               --arg runner_label "$RUNNER_LABEL" \
               --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
+              --arg routing_proof "$ROUTING_PROOF" \
+              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" \
               --argjson cascade "$(jq -r '.cascade' <<<"$target")" \
               --argjson manual "$(jq -r '.manual' <<<"$target")" \
               --argjson recover_stale_lock "$(jq -r '.stale_lock' <<<"$target")" '
@@ -894,6 +928,8 @@ jobs:
                     execution_provider:$execution_provider,
                     runner_label:$runner_label,
                     control_dispatch_id:$control_dispatch_id,
+                    routing_proof:$routing_proof,
+                    routing_proof_issued_at:$routing_proof_issued_at,
                     worker_handoff:true,
                     expected_head_sha:$expected_head_sha,
                     expected_base_sha:$expected_base_sha,
@@ -918,10 +954,9 @@ jobs:
       && (github.event_name == 'repository_dispatch'
           || (github.event_name == 'workflow_dispatch'
               && inputs.worker_handoff == true
-              && (github.actor == 'github-actions[bot]'
-                  || github.actor == 'thingtime-ci-control[bot]')
+              && github.actor == 'github-actions[bot]'
               && github.ref_name == 'github-actions'))
-    runs-on: ${{ inputs.runner_label || github.event.client_payload.runner_label || 'ubuntu-latest' }}
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 55
     permissions:
       actions: write
@@ -2120,9 +2155,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NEW_PARENT_SHA: ${{ steps.published.outputs.sha }}
           VISITED_NEXT: ${{ steps.context.outputs.visited }}
-          EXECUTION_PROVIDER: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
-          RUNNER_LABEL: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
-          CONTROL_DISPATCH_ID: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
+          EXECUTION_PROVIDER: ${{ needs.route.outputs.execution_provider || 'github-actions' }}
+          RUNNER_LABEL: ${{ needs.route.outputs.runner_label || '' }}
+          CONTROL_DISPATCH_ID: ${{ needs.route.outputs.control_dispatch_id || '' }}
+          ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
+          ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -2144,7 +2181,9 @@ jobs:
               --arg visited "$VISITED_NEXT" \
               --arg execution_provider "$EXECUTION_PROVIDER" \
               --arg runner_label "$RUNNER_LABEL" \
-              --arg control_dispatch_id "$CONTROL_DISPATCH_ID" '
+              --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
+              --arg routing_proof "$ROUTING_PROOF" \
+              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" '
                 {
                   ref:"github-actions",
                   inputs:{
@@ -2154,6 +2193,8 @@ jobs:
                     execution_provider:$execution_provider,
                     runner_label:$runner_label,
                     control_dispatch_id:$control_dispatch_id,
+                    routing_proof:$routing_proof,
+                    routing_proof_issued_at:$routing_proof_issued_at,
                     worker_handoff:true,
                     expected_head_sha:$expected_head_sha,
                     expected_base_sha:$expected_base_sha,

@@ -81,7 +81,7 @@ jobs:
   sync:
     needs: route
     if: needs.route.outputs.execute == 'true'
-    runs-on: ${{ inputs.runner_label || 'ubuntu-latest' }}
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     steps:
       - name: Check develop exists
         id: develop

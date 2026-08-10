@@ -2,9 +2,14 @@
 // Promote develop → main as reviewable per-feature PRs (with stacks).
 //
 // Scans PRs merged into SOURCE_BRANCH (develop), and for each one that has not
-// yet reached TARGET_BRANCH (main) re-applies its exact diff onto main via
-// `git cherry-pick -x` on a dedicated `promote/pr-<n>-<slug>` branch, then
-// opens a promotion PR targeting main. PRs that belong to the same feature
+// yet reached TARGET_BRANCH (main) re-applies its exact diff on a dedicated
+// `promote/pr-<n>-<slug>` branch, then opens a promotion PR targeting main.
+// Verified non-CI-sensitive plans use the direct `git cherry-pick -x` fast
+// path. Every verified `.github/**` plan is quarantined before historical
+// replay and dispatched to the protected trusted worker, which reconstructs a
+// bot-authored `[skip ci]` content commit and publishes a review checkpoint.
+// A historical patch not provably present on current develop stops before any
+// branch, worker, or PR is created. PRs that belong to the same feature
 // group are stacked: the first promotion PR targets main, the second targets
 // the first promotion branch, and so on (ordered by merge time into develop).
 //
@@ -31,9 +36,14 @@
 //   - promotion OPEN    → reused as the base for later stack members.
 //   - promotion CLOSED  → the change was rejected for main; never recreated
 //                         (reopen the closed PR to change your mind).
-//   - cherry-pick conflict → the group stops there (later members depend on
-//     it); the summary prints exact manual commands, and the next run resumes
-//     once the manually-pushed branch exists.
+//   - cherry-pick conflict or clean replay requiring review quarantine →
+//     reserve the canonical promotion branch at its exact base and hand the
+//     immutable source plan to the trusted worker; later members of only that
+//     dependency group wait for the reviewed branch.
+//   - recoverable historical patch whose current-source intent is removed or
+//     ambiguous → block visibly before any branch, AI worker, or PR is created;
+//     only unrelated groups continue. Missing objects, malformed patches, and
+//     operational inspection failures use the same fail-closed boundary.
 //
 // Maintenance passes each run: open promotion PRs whose base promotion PR has
 // merged are retargeted (backstop for GitHub's delete-branch auto-retarget),
@@ -46,6 +56,7 @@
 // no network or GitHub access needed).
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -104,7 +115,11 @@ function tryRun(cmd, args, { preserveOutput = false, ...opts } = {}) {
 }
 
 const git = (args, cwd) => run("git", args, cwd ? { cwd } : {});
-const tryGit = (args, cwd) => tryRun("git", args, cwd ? { cwd } : {});
+const tryGit = (args, cwd, opts = {}) => tryRun(
+  "git",
+  args,
+  { ...(cwd ? { cwd } : {}), ...opts },
+);
 const gh = (args) => run("gh", args);
 const ghJson = (args) => JSON.parse(run("gh", args) || "null");
 const tryGh = (args) => tryRun("gh", args);
@@ -233,21 +248,30 @@ export function readPlannedPatch(
 ) {
   const endpoints = plannedDiffEndpoints(picks);
   if (!endpoints.ok) return endpoints;
-  const changed = gitRunner(["diff", "--name-only", endpoints.start, endpoints.end], cwd);
+  const changed = gitRunner([
+    "-c", "core.quotePath=false", "diff", "--name-only", "-z",
+    endpoints.start, endpoints.end,
+  ], cwd, { preserveOutput: true });
   if (!changed.ok) {
     return {
       ok: false,
       error: `cannot list the planned promotion patch: ${failureDetail(changed)}`,
     };
   }
-  const paths = changed.out.split("\n").filter(Boolean);
+  const paths = changed.out.split("\0").filter(Boolean);
+  if (paths.some((path) => !validPromotionPath(path))) {
+    return {
+      ok: false,
+      error: "planned promotion patch contains a control-character path",
+    };
+  }
   const meaningfulPaths = paths.filter(
     (path) => !path.startsWith("graphify-out/") && path !== "remix/CHANGELOG.md",
   );
   const selectedPaths = meaningfulPaths.length > 0 ? meaningfulPaths : paths;
   const diffArgs = ["diff", "--binary", "--full-index", endpoints.start, endpoints.end];
   if (selectedPaths.length > 0 && selectedPaths.length <= 200) {
-    diffArgs.push("--", ...selectedPaths);
+    diffArgs.push("--", ...selectedPaths.map(literalPathspec));
   } else if (meaningfulPaths.length > 0) {
     diffArgs.push("--", ".", ":(exclude)graphify-out/**", ":(exclude)remix/CHANGELOG.md");
   }
@@ -285,7 +309,9 @@ export function readPlannedPatch(
 // Check the current source tree, not merely its history. A force-rewritten
 // equivalent commit may later be reverted: in that case the old patch is
 // forward-applicable (absent), while a still-present patch is reverse-
-// applicable. Ambiguous/overlapping evolution fails closed for human review.
+// applicable. Ambiguous/overlapping evolution is classified explicitly so the
+// promoter can stop visibly without reconstructing code whose current source
+// intent cannot be proven.
 export function inspectPatchAtSourceTip(
   patch,
   sourceSha,
@@ -312,6 +338,16 @@ export function inspectPatchAtSourceTip(
     );
     const forward = check(false);
     const reverse = check(true);
+    for (const [direction, result] of [["forward", forward], ["reverse", reverse]]) {
+      if (result.status !== 0 && result.status !== 1) {
+        return {
+          ok: false,
+          error:
+            `cannot determine current source patch state: ${direction} apply check failed ` +
+            `operationally (${failureDetail(result)})`,
+        };
+      }
+    }
     if (reverse.ok && !forward.ok) return { ok: true, present: true };
     if (forward.ok && !reverse.ok) {
       return {
@@ -337,8 +373,10 @@ export function inspectPatchAtSourceTip(
 // A recovered historical merge is safe to promote only when the current
 // source branch still contains its effect. Ancestry alone is insufficient
 // because a later revert preserves ancestry. Exact patch identity plus a clean
-// current-tip reverse-application is required after rewrites; uncertain state
-// is blocked for manual review.
+// current-tip reverse-application is required after rewrites. A recoverable
+// but removed/ambiguous patch is never called verified. It is a hard safety
+// stop: no reservation, branch, AI worker, or promotion PR may be created.
+// Operational and patch-authority failures use the same fail-closed boundary.
 export function inspectSourcePresence(
   sha,
   sourceSha,
@@ -362,7 +400,24 @@ export function inspectSourcePresence(
   const presentAtTip = tipInspector(sourcePatch.patch, sourceSha, cwd);
   if (!presentAtTip.ok) return presentAtTip;
   if (presentAtTip.present === false) {
-    return { ok: false, error: presentAtTip.detail };
+    return {
+      ok: false,
+      error:
+        `source-lineage safety block: the exact historical patch is not present at current ` +
+        `\`${CFG.source}\` tip; it may have been intentionally removed or reverted, so no ` +
+        "promotion branch or AI worker was created",
+      sourceLineageStatus: "review-required-removed",
+    };
+  }
+  if (presentAtTip.present === null) {
+    return {
+      ok: false,
+      error:
+        `source-lineage safety block: the exact historical patch cannot be proven present at ` +
+        `current \`${CFG.source}\` tip because later edits overlap its effect; no promotion ` +
+        "branch or AI worker was created",
+      sourceLineageStatus: "review-required-ambiguous",
+    };
   }
 
   const candidatePaths = sourcePatch.paths || [];
@@ -374,6 +429,8 @@ export function inspectSourcePresence(
       equivalentSha: sha,
       rewritten: false,
       verifiedAtSourceTip: true,
+      sourceLineageStatus: "verified",
+      sourceLineageReviewRequired: false,
     };
   }
 
@@ -399,6 +456,8 @@ export function inspectSourcePresence(
         equivalentSha: candidate,
         rewritten: true,
         verifiedAtSourceTip: true,
+        sourceLineageStatus: "verified",
+        sourceLineageReviewRequired: false,
         checked,
       };
     }
@@ -411,6 +470,8 @@ export function inspectSourcePresence(
     equivalentSha: sourceSha,
     rewritten: true,
     verifiedAtSourceTip: true,
+    sourceLineageStatus: "verified",
+    sourceLineageReviewRequired: false,
     aggregateVerified: true,
     checked,
   };
@@ -499,9 +560,1553 @@ export function setsEqual(a, b) {
   return true;
 }
 
+export function literalPathspec(path) {
+  return `:(literal)${path}`;
+}
+
+function sortRepoPaths(paths) {
+  return [...paths].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+}
+
+function validPromotionPath(path) {
+  return typeof path === "string" && path.length > 0 && !/[\0-\x1f\x7f]/.test(path);
+}
+
+const PROMOTION_RESOLUTION_MARKER =
+  /<!--\s*thingtime-ai-promotion-resolved:v1\s+([A-Za-z0-9_-]+)\s*-->/g;
+const PROMOTION_RETIREMENT_MARKER =
+  /<!--\s*thingtime-ai-promotion-retired:v1\s+([A-Za-z0-9_-]+)\s*-->/g;
+const PROMOTION_PAUSE_LABEL = "ai-promotion-paused";
+const SOURCE_LINEAGE_REVIEW_LABEL = "source-lineage-unverified";
+const SOURCE_LINEAGE_STATUSES = new Set([
+  "verified",
+  "review-required-removed",
+  "review-required-ambiguous",
+]);
+
+function sourceLineageStatus(value) {
+  const status = value?.sourceLineageStatus;
+  return SOURCE_LINEAGE_STATUSES.has(status) ? status : "review-required-ambiguous";
+}
+
+function sourceLineageReviewRequired(value) {
+  return sourceLineageStatus(value) !== "verified";
+}
+
+// Clean replays are safe to publish directly only when their historical source
+// intent is verified and they cannot change GitHub automation. Everything else
+// must pass through the trusted worker before the promoter applies any original
+// commit: the worker reconstructs one bot-authored content commit, stamps
+// CI-sensitive content [skip ci], opens the PR with the bot token, and publishes
+// its review checkpoint under an exact lease.
+export function cleanReplayQuarantinePolicy(context) {
+  const pathsKnown = Array.isArray(context?.paths) && context.paths.length > 0 &&
+    context.paths.every((path) => typeof path === "string" && path.length > 0);
+  const ciSensitive = pathsKnown && context.paths.some((path) => path.startsWith(".github/"));
+  const lineageReviewRequired = sourceLineageReviewRequired(context);
+  return {
+    quarantine: !pathsKnown || ciSensitive || lineageReviewRequired,
+    ciSensitive,
+    lineageReviewRequired,
+  };
+}
+
+function sourceLineageReason(status) {
+  if (status === "review-required-removed") {
+    return (
+      `The exact historical patch is not present at current \`${CFG.source}\` tip. ` +
+      "It may have been intentionally removed or reverted after the source PR merged."
+    );
+  }
+  if (status === "review-required-ambiguous") {
+    return (
+      `Later edits overlap the historical patch, so its effect cannot be proven present at ` +
+      `current \`${CFG.source}\` tip.`
+    );
+  }
+  return `The exact source patch is verified at current \`${CFG.source}\` tip.`;
+}
+const PROMOTION_CHECKPOINT_SUBJECT = "ci: activate review-gated promotion checks";
+const PROMOTION_CHECKPOINT_TRAILERS = [
+  "Thingtime-Promotion-Review-Checkpoint",
+  "Thingtime-Promotion-Content-Head",
+  "Thingtime-Promotion-Plan-Hash",
+];
+const RESERVATION_TRAILER_KEYS = [
+  "Thingtime-Promotion-Reservation",
+  "Thingtime-Promotion-Source-PR",
+  "Thingtime-Promotion-Base-Ref",
+  "Thingtime-Promotion-Base-SHA",
+  "Thingtime-Promotion-Branch",
+  "Thingtime-Promotion-Source-Start-SHA",
+  "Thingtime-Promotion-Source-End-SHA",
+  "Thingtime-Promotion-Source-Lineage",
+  "Thingtime-Promotion-Plan-Hash",
+];
+
+function isObjectId(value) {
+  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(value || "");
+}
+
+function stablePromotionPlanManifest(context) {
+  return {
+    v: 1,
+    source_pr: context.sourcePr,
+    base_ref: context.baseRef,
+    base_sha: context.baseSha,
+    branch: context.branch,
+    source_start_sha: context.sourceStartSha,
+    source_end_sha: context.sourceEndSha,
+    source_lineage_status: context.sourceLineageStatus,
+    paths: sortRepoPaths(context.paths),
+    patch_id: context.patchId,
+  };
+}
+
+// Build the immutable, independently reproducible manifest shared by the
+// promoter and trusted resolver. Graphify output is derived after resolution,
+// so it never authorizes an AI-authored source change or contributes to the
+// plan hash.
+export function buildPromotionPlanContext(
+  { sourcePr, branch, baseRef, baseSha, sourceTipSha, plan, cwd },
+  { gitRunner = tryGit, commandRunner = tryRun } = {},
+) {
+  if (!Number.isInteger(sourcePr?.number) || sourcePr.number <= 0) {
+    return { ok: false, error: "promotion plan is missing a positive source PR number" };
+  }
+  if (!branch || !baseRef || !isObjectId(baseSha) || !isObjectId(sourceTipSha)) {
+    return {
+      ok: false,
+      error: "promotion plan is missing its canonical branch, exact base, or source tip",
+    };
+  }
+  const endpoints = plannedDiffEndpoints(plan?.picks);
+  if (!endpoints.ok) return endpoints;
+  const resolveCommit = (value, label) => {
+    const resolved = gitRunner(["rev-parse", "--verify", `${value}^{commit}`], cwd);
+    if (!resolved.ok || !isObjectId(resolved.out)) {
+      return { ok: false, error: `cannot resolve promotion ${label} commit \`${value}\`` };
+    }
+    return { ok: true, sha: resolved.out };
+  };
+  const start = resolveCommit(endpoints.start, "source-start");
+  if (!start.ok) return start;
+  const end = resolveCommit(endpoints.end, "source-end");
+  if (!end.ok) return end;
+  const listed = commandRunner(
+    "git",
+    ["-c", "core.quotePath=false", "diff", "--name-only", "-z", start.sha, end.sha],
+    { ...EXEC_OPTS, cwd, preserveOutput: true },
+  );
+  if (!listed.ok) {
+    return { ok: false, error: `cannot list promotion source paths: ${failureDetail(listed)}` };
+  }
+  const rawPaths = listed.out.split("\0").filter(Boolean);
+  if (rawPaths.some((path) => !validPromotionPath(path))) {
+    return { ok: false, error: "promotion source contains a control-character path" };
+  }
+  const paths = sortRepoPaths(new Set(
+    rawPaths.filter((path) => !path.startsWith("graphify-out/")),
+  ));
+  if (paths.length === 0) {
+    return {
+      ok: false,
+      error: "promotion conflict has no non-Graphify source paths to authorize",
+    };
+  }
+  const diff = commandRunner(
+    "git",
+    [
+      "diff", "--binary", "--full-index", start.sha, end.sha,
+      "--", ...paths.map(literalPathspec),
+    ],
+    { ...EXEC_OPTS, cwd, preserveOutput: true },
+  );
+  if (!diff.ok || !diff.out) {
+    return {
+      ok: false,
+      error: `cannot read promotion source manifest patch: ${failureDetail(diff)}`,
+    };
+  }
+  const identified = commandRunner("git", ["patch-id", "--stable"], {
+    ...EXEC_OPTS,
+    cwd,
+    input: `${diff.out}\n`,
+  });
+  const patchId = identified.ok ? identified.out.split(/\s+/)[0] : "";
+  if (!isObjectId(patchId)) {
+    return {
+      ok: false,
+      error: `cannot calculate promotion source manifest identity: ${failureDetail(identified)}`,
+    };
+  }
+  const context = {
+    sourcePr: sourcePr.number,
+    baseRef,
+    baseSha,
+    branch,
+    sourceTipSha,
+    sourceStartSha: start.sha,
+    sourceEndSha: end.sha,
+    sourceLineageStatus: plan?.sourceLineageStatus,
+    paths,
+    patchId,
+  };
+  if (!SOURCE_LINEAGE_STATUSES.has(context.sourceLineageStatus)) {
+    return { ok: false, error: "promotion plan has an invalid source-lineage status" };
+  }
+  context.planHash = createHash("sha256")
+    .update(JSON.stringify(stablePromotionPlanManifest(context)))
+    .digest("hex");
+  return { ok: true, context };
+}
+
+export function promotionReservationTrailers(context) {
+  return [
+    "Thingtime-Promotion-Reservation: v1",
+    `Thingtime-Promotion-Source-PR: ${context.sourcePr}`,
+    `Thingtime-Promotion-Base-Ref: ${context.baseRef}`,
+    `Thingtime-Promotion-Base-SHA: ${context.baseSha}`,
+    `Thingtime-Promotion-Branch: ${context.branch}`,
+    `Thingtime-Promotion-Source-Start-SHA: ${context.sourceStartSha}`,
+    `Thingtime-Promotion-Source-End-SHA: ${context.sourceEndSha}`,
+    `Thingtime-Promotion-Source-Lineage: ${context.sourceLineageStatus}`,
+    `Thingtime-Promotion-Plan-Hash: ${context.planHash}`,
+  ];
+}
+
+function expectedReservationTrailers(context) {
+  return new Map(promotionReservationTrailers(context).map((line) => {
+    const separator = line.indexOf(":");
+    return [line.slice(0, separator), line.slice(separator + 1).trim()];
+  }));
+}
+
+export function parsePromotionReservationTrailers(message) {
+  const parsed = new Map();
+  for (const line of String(message || "").split("\n")) {
+    const match = /^(Thingtime-Promotion-[A-Za-z-]+):\s*(.*?)\s*$/.exec(line);
+    if (!match || !RESERVATION_TRAILER_KEYS.includes(match[1])) continue;
+    if (parsed.has(match[1])) return { ok: false, error: `duplicate reservation trailer \`${match[1]}\`` };
+    parsed.set(match[1], match[2]);
+  }
+  if (!parsed.has("Thingtime-Promotion-Reservation")) return { ok: true, present: false };
+  for (const key of RESERVATION_TRAILER_KEYS) {
+    if (!parsed.has(key)) return { ok: false, error: `reservation commit is missing trailer \`${key}\`` };
+  }
+  return { ok: true, present: true, trailers: parsed };
+}
+
+export function inspectUnresolvedPromotionReservationHead(
+  branchRef,
+  sourcePr,
+  canonicalBranch,
+  cwd,
+  gitRunner = tryGit,
+) {
+  const head = gitRunner(["rev-parse", "--verify", `${branchRef}^{commit}`], cwd);
+  if (!head.ok) return { ok: false, error: "cannot resolve possible reservation head" };
+  const body = gitRunner(["show", "-s", "--format=%B", head.out], cwd);
+  if (!body.ok) return { ok: false, error: "cannot read possible reservation head" };
+  const parsed = parsePromotionReservationTrailers(body.out);
+  if (!parsed.ok || !parsed.present) return parsed;
+  if (
+    parsed.trailers.get("Thingtime-Promotion-Reservation") !== "v1" ||
+    parsed.trailers.get("Thingtime-Promotion-Source-PR") !== String(sourcePr?.number) ||
+    parsed.trailers.get("Thingtime-Promotion-Branch") !== canonicalBranch
+  ) {
+    return {
+      ok: false,
+      error: "reservation head does not belong to this exact source PR and canonical branch",
+    };
+  }
+  const parents = gitRunner(["rev-list", "--parents", "-n", "1", head.out], cwd);
+  const parts = parents.ok ? parents.out.split(/\s+/).filter(Boolean) : [];
+  if (parts.length !== 2) {
+    return { ok: false, error: "unresolved promotion reservation is not single-parent" };
+  }
+  const headTree = gitRunner(["rev-parse", `${head.out}^{tree}`], cwd);
+  const parentTree = gitRunner(["rev-parse", `${parts[1]}^{tree}`], cwd);
+  if (!headTree.ok || !parentTree.ok || headTree.out !== parentTree.out) {
+    return { ok: false, error: "unresolved promotion reservation is not an empty commit" };
+  }
+  return {
+    ok: true,
+    present: true,
+    reservationSha: head.out,
+    parentSha: parts[1],
+    trailers: parsed.trailers,
+  };
+}
+
+export function createPromotionReservation(worktree, context, gitRunner = tryGit) {
+  const head = gitRunner(["rev-parse", "--verify", "HEAD"], worktree);
+  if (!head.ok || head.out !== context.baseSha) {
+    return {
+      ok: false,
+      error: `cannot reserve \`${context.branch}\`: worktree is not at exact base \`${context.baseSha}\``,
+    };
+  }
+  const message = [
+    `chore(ci): reserve AI promotion resolution for #${context.sourcePr} [skip ci]`,
+    "",
+    ...promotionReservationTrailers(context),
+  ].join("\n");
+  const committed = gitRunner(["commit", "--allow-empty", "-m", message], worktree);
+  if (!committed.ok) {
+    return { ok: false, error: `cannot create promotion reservation: ${failureDetail(committed)}` };
+  }
+  const reservation = gitRunner(["rev-parse", "--verify", "HEAD"], worktree);
+  if (!reservation.ok || !isObjectId(reservation.out)) {
+    return { ok: false, error: "promotion reservation commit has no readable SHA" };
+  }
+  return { ok: true, reservationSha: reservation.out };
+}
+
+export function inspectPromotionReservation(
+  branchRef,
+  expectedBaseRef,
+  context,
+  cwd,
+  gitRunner = tryGit,
+) {
+  const base = gitRunner(["rev-parse", "--verify", `${expectedBaseRef}^{commit}`], cwd);
+  const head = gitRunner(["rev-parse", "--verify", `${branchRef}^{commit}`], cwd);
+  if (!base.ok || !head.ok) {
+    return { ok: false, error: "cannot resolve promotion reservation base/head" };
+  }
+  if (base.out !== context.baseSha) {
+    return { ok: false, error: "promotion reservation base SHA does not match the selected base" };
+  }
+  const commits = gitRunner(["rev-list", "--reverse", `${base.out}..${head.out}`], cwd);
+  if (!commits.ok) return { ok: false, error: `cannot inspect promotion reservation history: ${failureDetail(commits)}` };
+  const first = commits.out.split("\n").filter(Boolean)[0];
+  if (!first) return { ok: true, present: false };
+  const body = gitRunner(["show", "-s", "--format=%B", first], cwd);
+  if (!body.ok) return { ok: false, error: "cannot read promotion reservation commit" };
+  const parsed = parsePromotionReservationTrailers(body.out);
+  if (!parsed.ok || !parsed.present) return parsed;
+  const expected = expectedReservationTrailers(context);
+  for (const [key, value] of expected) {
+    if (parsed.trailers.get(key) !== value) {
+      return { ok: false, error: `promotion reservation trailer \`${key}\` does not match the immutable plan` };
+    }
+  }
+  const parents = gitRunner(["rev-list", "--parents", "-n", "1", first], cwd);
+  if (!parents.ok || parents.out.split(/\s+/).filter(Boolean).length !== 2 ||
+      parents.out.split(/\s+/)[1] !== base.out) {
+    return { ok: false, error: "promotion reservation is not the direct child of its exact base" };
+  }
+  const reservationTree = gitRunner(["rev-parse", `${first}^{tree}`], cwd);
+  const baseTree = gitRunner(["rev-parse", `${base.out}^{tree}`], cwd);
+  if (!reservationTree.ok || !baseTree.ok || reservationTree.out !== baseTree.out) {
+    return { ok: false, error: "promotion reservation commit is not empty" };
+  }
+  return {
+    ok: true,
+    present: true,
+    reservationSha: first,
+    headSha: head.out,
+    resolved: head.out !== first,
+  };
+}
+
+export function parsePromotionResolutionAttestations(body) {
+  const attestations = [];
+  PROMOTION_RESOLUTION_MARKER.lastIndex = 0;
+  for (const match of String(body || "").matchAll(PROMOTION_RESOLUTION_MARKER)) {
+    try {
+      const decoded = Buffer.from(match[1], "base64url").toString("utf8");
+      const value = JSON.parse(decoded);
+      if (value && typeof value === "object" && !Array.isArray(value)) attestations.push(value);
+    } catch {
+      // Invalid or attacker-authored lookalikes are ignored and can never
+      // satisfy reuse validation.
+    }
+  }
+  return attestations;
+}
+
+export function parsePromotionRetirements(body) {
+  const retirements = [];
+  PROMOTION_RETIREMENT_MARKER.lastIndex = 0;
+  for (const match of String(body || "").matchAll(PROMOTION_RETIREMENT_MARKER)) {
+    try {
+      const value = JSON.parse(Buffer.from(match[1], "base64url").toString("utf8"));
+      if (value && typeof value === "object" && !Array.isArray(value)) retirements.push(value);
+    } catch {
+      // Invalid/user-authored lookalikes never authorize resuming a retired
+      // automatic snapshot.
+    }
+  }
+  return retirements;
+}
+
+function botCommentsByLatestEvent(comments) {
+  return (comments || [])
+    .map((comment, index) => ({ comment, index }))
+    .filter(({ comment }) => isBotAuthoredComment(comment))
+    .sort((left, right) => {
+      const leftTime = Date.parse(
+        left.comment?.updated_at || left.comment?.updatedAt ||
+        left.comment?.created_at || left.comment?.createdAt || "",
+      );
+      const rightTime = Date.parse(
+        right.comment?.updated_at || right.comment?.updatedAt ||
+        right.comment?.created_at || right.comment?.createdAt || "",
+      );
+      const timeOrder = (Number.isFinite(rightTime) ? rightTime : 0) -
+        (Number.isFinite(leftTime) ? leftTime : 0);
+      if (timeOrder !== 0) return timeOrder;
+      const leftId = Number(left.comment?.id);
+      const rightId = Number(right.comment?.id);
+      if (Number.isFinite(leftId) && Number.isFinite(rightId) && leftId !== rightId) {
+        return rightId - leftId;
+      }
+      return right.index - left.index;
+    })
+    .map(({ comment }) => comment);
+}
+
+function latestBotPromotionAttestationEvents(comments) {
+  const seen = new Set();
+  const events = [];
+  for (const comment of botCommentsByLatestEvent(comments)) {
+    const grouped = new Map();
+    for (const attestation of parsePromotionResolutionAttestations(comment.body)) {
+      const key = `${attestation?.source_pr || ""}:${attestation?.branch || ""}:${attestation?.plan_hash || ""}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(attestation);
+    }
+    for (const [key, attestations] of grouped) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      events.push({ comment, attestations });
+    }
+  }
+  return events;
+}
+
+function promotionRetirementMarker(value) {
+  return `<!-- thingtime-ai-promotion-retired:v1 ${Buffer
+    .from(JSON.stringify(value), "utf8")
+    .toString("base64url")} -->`;
+}
+
+function findBotPromotionRetirement(promotion, sourcePr, comments) {
+  if (
+    promotion?.state !== "CLOSED" ||
+    promotionSourceNumber(promotion) !== sourcePr?.number ||
+    promotion.headRefName !== promotionBranchFor(sourcePr)
+  ) {
+    return null;
+  }
+  const cancellation =
+    `<!-- thingtime-ai-promotion-retirement-cancelled:v1 ${promotion.number} -->`;
+  for (const comment of botCommentsByLatestEvent(comments)) {
+    const body = String(comment?.body || "");
+    if (body.includes(cancellation)) return null;
+    const matching = parsePromotionRetirements(body).find((value) =>
+      value?.v === 1 &&
+      value.source_pr === sourcePr.number &&
+      value.promotion_pr === promotion.number &&
+      value.branch === promotion.headRefName &&
+      isObjectId(value.retired_head) &&
+      isObjectId(value.reservation_sha) &&
+      /^[0-9a-f]{64}$/i.test(value.plan_hash || ""),
+    );
+    if (matching) return matching;
+  }
+  return null;
+}
+
+export function retiredBranchCleanupDisposition(retirement, liveHead = "") {
+  if (!liveHead) return "already-deleted";
+  return liveHead === retirement?.retired_head ? "delete-exact" : "preserve-moved";
+}
+
+function cancelPromotionRetirement(promotion, sourcePr, reason) {
+  return upsertBotIssueComment(
+    sourcePr.number,
+    "thingtime-ai-promotion-retired:v1",
+    [
+      `↩️ Automatic retirement of promotion #${promotion.number} was cancelled.`,
+      "",
+      reason,
+      "",
+      `<!-- thingtime-ai-promotion-retirement-cancelled:v1 ${promotion.number} -->`,
+    ].join("\n"),
+  );
+}
+
+function isBotAuthoredComment(comment) {
+  const actor = comment?.user || comment?.author;
+  return actor?.type === "Bot" && actor?.login === "github-actions[bot]";
+}
+
+function sourcePrHasLabel(sourcePr, name) {
+  return (sourcePr?.labels || []).some((label) =>
+    (typeof label === "string" ? label : label?.name) === name,
+  );
+}
+
+export function isExactPausedPromotionSnapshot(sourcePr, context, comments) {
+  if (!sourcePrHasLabel(sourcePr, PROMOTION_PAUSE_LABEL)) return false;
+  const marker = `<!-- thingtime-ai-promotion-paused:v1 ${context?.planHash || ""} -->`;
+  return (comments || []).some((comment) =>
+    isBotAuthoredComment(comment) && String(comment?.body || "").includes(marker),
+  );
+}
+
+function attestationMatches(attestation, context, reservation, headSha) {
+  return attestation?.v === 1 &&
+    attestation.source_pr === context.sourcePr &&
+    attestation.base_ref === context.baseRef &&
+    attestation.base_sha === context.baseSha &&
+    attestation.branch === context.branch &&
+    isObjectId(attestation.source_tip_sha) &&
+    attestation.source_start_sha === context.sourceStartSha &&
+    attestation.source_end_sha === context.sourceEndSha &&
+    attestation.source_lineage_status === context.sourceLineageStatus &&
+    attestation.plan_hash === context.planHash &&
+    attestation.reservation_sha === reservation.reservationSha &&
+    attestation.head_sha === headSha &&
+    Array.isArray(attestation.conflict_paths) &&
+    attestation.conflict_paths.every(
+      (path) => typeof path === "string" && !path.startsWith("graphify-out/") && context.paths.includes(path),
+    ) &&
+    /^https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/\d+(?:\/.*)?$/.test(attestation.run_url || "");
+}
+
+export function inspectPromotionReviewCheckpoint(
+  branchRef,
+  context,
+  cwd,
+  gitRunner = tryGit,
+) {
+  const head = gitRunner(["rev-parse", "--verify", `${branchRef}^{commit}`], cwd);
+  if (!head.ok) return { ok: false, error: "cannot resolve possible promotion review-checkpoint" };
+  const body = gitRunner(["show", "-s", "--format=%B", head.out], cwd);
+  if (!body.ok) return { ok: false, error: "cannot read possible promotion review-checkpoint" };
+  const parsed = new Map();
+  for (const line of String(body.out || "").split("\n")) {
+    const match = /^(Thingtime-Promotion-[A-Za-z-]+):\s*(.*?)\s*$/.exec(line);
+    if (!match || !PROMOTION_CHECKPOINT_TRAILERS.includes(match[1])) continue;
+    if (parsed.has(match[1])) {
+      return { ok: false, error: `duplicate review-checkpoint trailer \`${match[1]}\`` };
+    }
+    parsed.set(match[1], match[2]);
+  }
+  if (!parsed.has("Thingtime-Promotion-Review-Checkpoint")) {
+    return { ok: true, present: false, headSha: head.out };
+  }
+  for (const key of PROMOTION_CHECKPOINT_TRAILERS) {
+    if (!parsed.has(key)) {
+      return { ok: false, error: `review-checkpoint is missing trailer \`${key}\`` };
+    }
+  }
+  const parents = gitRunner(["rev-list", "--parents", "-n", "1", head.out], cwd);
+  const parts = parents.ok ? parents.out.split(/\s+/).filter(Boolean) : [];
+  const contentHead = parsed.get("Thingtime-Promotion-Content-Head");
+  if (
+    body.out.split("\n")[0] !== PROMOTION_CHECKPOINT_SUBJECT ||
+    parsed.get("Thingtime-Promotion-Review-Checkpoint") !== "v1" ||
+    parsed.get("Thingtime-Promotion-Plan-Hash") !== context.planHash ||
+    !isObjectId(contentHead) ||
+    parts.length !== 2 ||
+    parts[1] !== contentHead
+  ) {
+    return { ok: false, error: "promotion review-checkpoint provenance does not match its immutable plan" };
+  }
+  const headTree = gitRunner(["rev-parse", `${head.out}^{tree}`], cwd);
+  const contentTree = gitRunner(["rev-parse", `${contentHead}^{tree}`], cwd);
+  if (!headTree.ok || !contentTree.ok || headTree.out !== contentTree.out) {
+    return { ok: false, error: "promotion review-checkpoint is not an empty child of its content head" };
+  }
+  return { ok: true, present: true, headSha: head.out, contentHead };
+}
+
+export function validateAiResolvedPromotionBranch(
+  branchRef,
+  expectedBaseRef,
+  context,
+  reservation,
+  comments,
+  cwd,
+  gitRunner = tryGit,
+  commandRunner = tryRun,
+) {
+  const latestEvent = latestBotPromotionAttestationEvents(comments).find(({ attestations }) =>
+    attestations.some((attestation) =>
+      attestation?.source_pr === context.sourcePr &&
+      attestation?.branch === context.branch &&
+      attestation?.plan_hash === context.planHash,
+    ),
+  );
+  const attestations = latestEvent?.attestations || [];
+  const matching = attestations.filter((attestation) =>
+    attestationMatches(attestation, context, reservation, reservation.headSha),
+  );
+  if (matching.length === 0) {
+    return {
+      ok: false,
+      error: "AI-resolved promotion branch has no matching bot-authored source-PR attestation",
+    };
+  }
+  const listed = commandRunner(
+    "git",
+    [
+      "-c", "core.quotePath=false", "diff", "--name-only", "-z",
+      expectedBaseRef, branchRef,
+    ],
+    { ...EXEC_OPTS, cwd, preserveOutput: true },
+  );
+  if (!listed.ok) return { ok: false, error: `cannot inspect AI-resolved promotion paths: ${failureDetail(listed)}` };
+  const rawChanged = listed.out.split("\0").filter(Boolean);
+  if (rawChanged.some((path) => !validPromotionPath(path))) {
+    return { ok: false, error: "AI-resolved promotion contains a control-character path" };
+  }
+  const changed = rawChanged
+    .filter((path) => !path.startsWith("graphify-out/"));
+  if (changed.length === 0) {
+    return { ok: false, error: "AI-resolved promotion has no non-Graphify source changes" };
+  }
+  const unexpected = changed.filter((path) => !context.paths.includes(path));
+  if (unexpected.length > 0) {
+    return {
+      ok: false,
+      error: `AI-resolved promotion changes path(s) outside its source plan: ${unexpected
+        .slice(0, 10).map((path) => `\`${path}\``).join(", ")}`,
+    };
+  }
+  const markers = commandRunner(
+    "git",
+    [
+      // A bare `=======` is valid Markdown (for example a divider or Setext
+      // heading). The start/base/end marker lines are unambiguous and keep
+      // this check aligned with the trusted conflict-round parser.
+      "grep", "-n", "-I", "-E",
+      "^(<{7,}( |$)|\\|{7,}( |$)|>{7,}( |$))",
+      branchRef, "--", ...changed.map(literalPathspec),
+    ],
+    { ...EXEC_OPTS, cwd },
+  );
+  if (markers.status === 0) {
+    return { ok: false, error: "AI-resolved promotion still contains conflict markers" };
+  }
+  if (markers.status !== 1) {
+    return { ok: false, error: `cannot scan AI-resolved promotion for conflict markers: ${failureDetail(markers)}` };
+  }
+  const pendingCheckpoint = Boolean(
+    latestEvent && String(latestEvent.comment?.body || "").includes(
+      `<!-- thingtime-ai-promotion-checkpoint-pending:v1 ${context.planHash} -->`,
+    ),
+  );
+  if (pendingCheckpoint) {
+    const checkpoint = inspectPromotionReviewCheckpoint(branchRef, context, cwd, gitRunner);
+    if (!checkpoint.ok) return checkpoint;
+    if (checkpoint.present) {
+      const contentAttestation = attestations.find((attestation) =>
+        attestationMatches(attestation, context, reservation, checkpoint.contentHead),
+      );
+      if (!contentAttestation) {
+        return {
+          ok: false,
+          error: "review-checkpoint has no matching bot-authored content-head attestation",
+        };
+      }
+      return {
+        ok: true,
+        mode: "ai-resolved-checkpoint-finalize",
+        attestation: matching.at(-1),
+        contentAttestation,
+        checkpoint,
+      };
+    }
+    return {
+      ok: true,
+      mode: "ai-resolved-checkpoint-pending",
+      attestation: matching.at(-1),
+    };
+  }
+  return { ok: true, mode: "ai-resolved", attestation: matching.at(-1) };
+}
+
+export function validateStalePendingAiPromotionBranch(
+  branchRef,
+  currentContext,
+  comments,
+  cwd,
+  gitRunner = tryGit,
+  commandRunner = tryRun,
+) {
+  const liveHead = gitRunner(["rev-parse", "--verify", `${branchRef}^{commit}`], cwd);
+  if (!liveHead.ok) return { ok: false, error: "cannot resolve stale pending promotion head" };
+  for (const event of latestBotPromotionAttestationEvents(comments)) {
+    const comment = event.comment;
+    for (const attestation of event.attestations) {
+      const pendingMarker =
+        `<!-- thingtime-ai-promotion-checkpoint-pending:v1 ${attestation?.plan_hash || ""} -->`;
+      if (
+        !String(comment.body || "").includes(pendingMarker) ||
+        attestation?.v !== 1 ||
+        attestation.source_pr !== currentContext.sourcePr ||
+        attestation.base_ref !== currentContext.baseRef ||
+        attestation.branch !== currentContext.branch ||
+        attestation.source_start_sha !== currentContext.sourceStartSha ||
+        attestation.source_end_sha !== currentContext.sourceEndSha ||
+        attestation.head_sha !== liveHead.out ||
+        !isObjectId(attestation.base_sha) ||
+        !isObjectId(attestation.source_tip_sha) ||
+        !isObjectId(attestation.reservation_sha) ||
+        !/^[0-9a-f]{64}$/i.test(attestation.plan_hash || "")
+      ) {
+        continue;
+      }
+      const oldContext = {
+        ...currentContext,
+        baseSha: attestation.base_sha,
+        sourceTipSha: attestation.source_tip_sha,
+        planHash: attestation.plan_hash,
+      };
+      const reservation = inspectPromotionReservation(
+        branchRef,
+        attestation.base_sha,
+        oldContext,
+        cwd,
+        gitRunner,
+      );
+      if (
+        !reservation.ok ||
+        !reservation.present ||
+        !reservation.resolved ||
+        reservation.reservationSha !== attestation.reservation_sha
+      ) {
+        continue;
+      }
+      const validated = validateAiResolvedPromotionBranch(
+        branchRef,
+        attestation.base_sha,
+        oldContext,
+        reservation,
+        comments,
+        cwd,
+        gitRunner,
+        commandRunner,
+      );
+      if (
+        validated.ok &&
+        (validated.mode === "ai-resolved-checkpoint-pending" ||
+          validated.mode === "ai-resolved-checkpoint-finalize")
+      ) {
+        return { ...validated, present: true, staleContext: oldContext, liveHead: liveHead.out };
+      }
+    }
+  }
+  return { ok: true, present: false };
+}
+
+export function buildPromotionDispatchRequest(repo, context, reservationSha, title, body) {
+  if (Buffer.byteLength(title, "utf8") > 256) {
+    return {
+      ok: false,
+      error: "promotion title exceeds the trusted resolver's 256-byte bound",
+    };
+  }
+  if (Buffer.byteLength(body, "utf8") > 24_000) {
+    return {
+      ok: false,
+      error: "promotion body exceeds the trusted resolver's 24,000-byte bound",
+    };
+  }
+  const promotionPlan = {
+    base_ref: context.baseRef,
+    base_sha: context.baseSha,
+    branch: context.branch,
+    reservation_sha: reservationSha,
+    source_tip_sha: context.sourceTipSha,
+    source_start_sha: context.sourceStartSha,
+    source_end_sha: context.sourceEndSha,
+    source_lineage_status: context.sourceLineageStatus,
+    plan_hash: context.planHash,
+    title_b64: Buffer.from(title, "utf8").toString("base64"),
+    body_b64: Buffer.from(body, "utf8").toString("base64"),
+  };
+  const encodedPlan = Buffer.from(JSON.stringify(promotionPlan), "utf8").toString("base64");
+  const approximateInputCharacters =
+    encodedPlan.length + String(context.sourcePr).length + 64;
+  if (approximateInputCharacters > 60_000) {
+    return {
+      ok: false,
+      error:
+        "promotion title/body exceed the safe workflow-dispatch payload bound; " +
+        "the source PR needs a shorter review body before automatic handoff",
+    };
+  }
+  return {
+    ok: true,
+    endpoint: `repos/${repo}/actions/workflows/resolve-pr-conflicts.yml/dispatches`,
+    payload: {
+      ref: "github-actions",
+      inputs: {
+        promotion_source_pr: String(context.sourcePr),
+        promotion_plan_b64: encodedPlan,
+      },
+    },
+  };
+}
+
+export function promotionDispatchArgs(endpoint, inputPath) {
+  return ["api", "--method", "POST", endpoint, "--input", inputPath];
+}
+
+function dispatchPromotionResolution(request, actionToken, commandRunner = tryRun) {
+  if (!actionToken) return { ok: false, error: "ACTIONS_TOKEN is unavailable for bot-authored workflow dispatch" };
+  const inputPath = join(
+    process.env.RUNNER_TEMP || os.tmpdir(),
+    `promotion-dispatch-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
+  );
+  writeFileSync(inputPath, JSON.stringify(request.payload));
+  try {
+    const dispatched = commandRunner("gh", promotionDispatchArgs(request.endpoint, inputPath), {
+      ...EXEC_OPTS,
+      env: { ...process.env, GH_TOKEN: actionToken },
+    });
+    return dispatched.ok
+      ? { ok: true }
+      : { ok: false, error: `trusted resolver dispatch failed: ${failureDetail(dispatched)}` };
+  } finally {
+    rmSync(inputPath, { force: true });
+  }
+}
+
+export function exactReservationDeleteArgs(branch, reservationSha) {
+  return [
+    "push",
+    `--force-with-lease=refs/heads/${branch}:${reservationSha}`,
+    "origin",
+    `:refs/heads/${branch}`,
+  ];
+}
+
+export function exactReservationPushArgs(branch) {
+  return [
+    "push",
+    `--force-with-lease=refs/heads/${branch}:`,
+    "origin",
+    `HEAD:refs/heads/${branch}`,
+  ];
+}
+
+function queueTrustedPromotionWorker({
+  worktree,
+  context,
+  title,
+  body,
+  conflictPaths,
+}) {
+  const reservation = createPromotionReservation(worktree, context);
+  if (!reservation.ok) return reservation;
+  const request = buildPromotionDispatchRequest(
+    CFG.repo,
+    context,
+    reservation.reservationSha,
+    title,
+    body,
+  );
+  if (!request.ok) return request;
+  const pushed = tryGit(exactReservationPushArgs(context.branch), worktree);
+  if (!pushed.ok) {
+    return {
+      ok: false,
+      error:
+        `cannot publish exact reservation for \`${context.branch}\`: ` +
+        failureDetail(pushed),
+    };
+  }
+  const dispatched = dispatchPromotionResolution(
+    request,
+    process.env.ACTIONS_TOKEN,
+  );
+  if (!dispatched.ok) {
+    const cleaned = tryGit(
+      exactReservationDeleteArgs(context.branch, reservation.reservationSha),
+      worktree,
+    );
+    return {
+      ok: false,
+      error:
+        `${dispatched.error}. ` +
+        (cleaned.ok
+          ? "The exact unclaimed reservation branch was removed safely."
+          : `The reservation cleanup lease was refused, so \`${context.branch}\` was preserved for review: ${failureDetail(cleaned)}`),
+    };
+  }
+
+  let commentWarning = "";
+  if (CFG.commentOnSource) {
+    const conflicts = conflictPaths || [];
+    const conflictSummary = conflicts
+      .filter((path) => !path.startsWith("graphify-out/"))
+      .slice(0, 20)
+      .map((path) => `\`${path}\``)
+      .join(", ");
+    const handoffKind = conflicts.length > 0
+      ? "Promotion conflict resolution"
+      : "Protected promotion replay";
+    const commented = tryGh([
+      "pr", "comment", String(context.sourcePr), ...repoFlag(),
+      "--body",
+      `<!-- thingtime-promotion-ai-queued:v1 ${context.planHash} -->\n` +
+        `🤖 ${handoffKind} was queued automatically for ` +
+        `\`${context.branch}\` at exact base \`${context.baseRef}\` ` +
+        `(\`${context.baseSha}\`).` +
+        `${conflictSummary ? `\n\nConflicted source paths: ${conflictSummary}.` : ""}\n\n` +
+        `The trusted worker will reconstruct, verify, publish, and attest the review branch; ` +
+        `no manual branch update is needed.` +
+        (sourceLineageReviewRequired(context)
+          ? `\n\n⚠️ Source lineage is \`${context.sourceLineageStatus}\`; the resulting PR will ` +
+            `carry \`${SOURCE_LINEAGE_REVIEW_LABEL}\` and must be reviewed for restoration intent.`
+          : ""),
+    ]);
+    if (!commented.ok) {
+      commentWarning = `Could not add the queued-status comment to source PR #${context.sourcePr}.`;
+    }
+  }
+  return {
+    ok: true,
+    reservationSha: reservation.reservationSha,
+    warning: commentWarning,
+  };
+}
+
+function redispatchPromotionReservation(context, reservationSha, title, body) {
+  const request = buildPromotionDispatchRequest(
+    CFG.repo,
+    context,
+    reservationSha,
+    title,
+    body,
+  );
+  if (!request.ok) return request;
+  return dispatchPromotionResolution(request, process.env.ACTIONS_TOKEN);
+}
+
+function withActionsToken(args, token = process.env.ACTIONS_TOKEN, commandRunner = tryRun) {
+  if (!token) return { ok: false, error: "ACTIONS_TOKEN is unavailable for bot-authored promotion recovery" };
+  const result = commandRunner("gh", args, {
+    ...EXEC_OPTS,
+    env: { ...process.env, GH_TOKEN: token },
+  });
+  return result.ok ? result : { ...result, error: failureDetail(result) };
+}
+
+function upsertBotIssueComment(number, marker, body, token = process.env.ACTIONS_TOKEN) {
+  const listed = withActionsToken([
+    "api", "--paginate",
+    `repos/${CFG.repo}/issues/${number}/comments?per_page=100`,
+    "--slurp",
+  ], token);
+  if (!listed.ok) return { ok: false, error: `cannot list bot comments: ${listed.error}` };
+  let comments;
+  try {
+    comments = JSON.parse(listed.out || "[]").flat();
+  } catch (error) {
+    return { ok: false, error: `cannot parse bot comments: ${String(error?.message || error)}` };
+  }
+  const existing = comments.filter((comment) =>
+    isBotAuthoredComment(comment) && String(comment?.body || "").includes(marker),
+  ).at(-1);
+  const bodyFile = join(
+    process.env.RUNNER_TEMP || os.tmpdir(),
+    `promotion-comment-${Date.now()}-${Math.random().toString(36).slice(2)}.md`,
+  );
+  writeFileSync(bodyFile, body, { mode: 0o600 });
+  try {
+    const updated = existing
+      ? withActionsToken([
+          "api", "--method", "PATCH",
+          `repos/${CFG.repo}/issues/comments/${existing.id}`,
+          "-F", `body=@${bodyFile}`,
+        ], token)
+      : withActionsToken([
+          "api", `repos/${CFG.repo}/issues/${number}/comments`,
+          "-F", `body=@${bodyFile}`,
+        ], token);
+    return updated.ok
+      ? { ok: true }
+      : { ok: false, error: `cannot upsert bot comment: ${updated.error}` };
+  } finally {
+    rmSync(bodyFile, { force: true });
+  }
+}
+
+function encodePromotionAttestation(attestation) {
+  return `<!-- thingtime-ai-promotion-resolved:v1 ${Buffer
+    .from(JSON.stringify(attestation), "utf8")
+    .toString("base64url")} -->`;
+}
+
+function liveRefShaWithActionsToken(ref, token = process.env.ACTIONS_TOKEN) {
+  const fetched = withActionsToken([
+    "api", `repos/${CFG.repo}/git/ref/heads/${encodeURIComponent(ref)}`,
+    "--jq", ".object.sha",
+  ], token);
+  return fetched.ok && isObjectId(fetched.out)
+    ? { ok: true, sha: fetched.out }
+    : { ok: false, error: `cannot resolve live ref \`${ref}\`: ${fetched.error || "invalid SHA"}` };
+}
+
+function promotionAttestationBody(attestations, context, pending = false) {
+  const lines = [
+    `🤖 Verified automatic promotion resolution for \`${context.branch}\`.`,
+    "",
+    "Each marker is inert unless the live branch equals its attested head.",
+    "",
+    ...attestations.map(encodePromotionAttestation),
+  ];
+  if (pending) {
+    lines.push(`<!-- thingtime-ai-promotion-checkpoint-pending:v1 ${context.planHash} -->`);
+  }
+  lines.push("<!-- thingtime-ai-promotion-attestation:v1 -->");
+  return lines.join("\n");
+}
+
+function createPromotionReviewCheckpoint(worktree, context, contentHead, runUrl, gitRunner = tryGit) {
+  const head = gitRunner(["rev-parse", "--verify", "HEAD"], worktree);
+  if (!head.ok || head.out !== contentHead) {
+    return { ok: false, error: "promotion recovery worktree is not at the attested content head" };
+  }
+  const committed = gitRunner([
+    "-c", "core.hooksPath=/dev/null",
+    "-c", "user.name=github-actions[bot]",
+    "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+    "commit", "--allow-empty",
+    "-m", PROMOTION_CHECKPOINT_SUBJECT,
+    "-m", "Thingtime-Promotion-Review-Checkpoint: v1",
+    "-m", `Thingtime-Promotion-Content-Head: ${contentHead}`,
+    "-m", `Thingtime-Promotion-Plan-Hash: ${context.planHash}`,
+    "-m", `Recovered by the promotion workflow from: ${runUrl}`,
+  ], worktree);
+  if (!committed.ok) {
+    return { ok: false, error: `cannot create promotion review-checkpoint: ${failureDetail(committed)}` };
+  }
+  const checkpoint = inspectPromotionReviewCheckpoint("HEAD", context, worktree, gitRunner);
+  return checkpoint.ok && checkpoint.present
+    ? checkpoint
+    : { ok: false, error: checkpoint.error || "created review-checkpoint failed verification" };
+}
+
+function exactCheckpointPush(
+  worktree,
+  branch,
+  contentHead,
+  checkpointHead,
+  token = process.env.ACTIONS_TOKEN,
+  commandRunner = tryRun,
+) {
+  if (!token) return { ok: false, error: "ACTIONS_TOKEN is unavailable for review-checkpoint push" };
+  const basic = Buffer.from(`x-access-token:${token}`, "utf8").toString("base64");
+  const pushed = commandRunner(
+    "git",
+    [
+      "push", "--porcelain",
+      `--force-with-lease=refs/heads/${branch}:${contentHead}`,
+      `https://github.com/${CFG.repo}.git`,
+      `${checkpointHead}:refs/heads/${branch}`,
+    ],
+    {
+      ...EXEC_OPTS,
+      cwd: worktree,
+      env: {
+        ...process.env,
+        GIT_CONFIG_COUNT: "4",
+        GIT_CONFIG_KEY_0: "core.hooksPath",
+        GIT_CONFIG_VALUE_0: "/dev/null",
+        GIT_CONFIG_KEY_1: "core.fsmonitor",
+        GIT_CONFIG_VALUE_1: "false",
+        // actions/checkout persists its PAT as this multi-valued header. An
+        // empty higher-priority value resets every inherited value before the
+        // sole run-scoped GITHUB_TOKEN header is added.
+        GIT_CONFIG_KEY_2: "http.https://github.com/.extraheader",
+        GIT_CONFIG_VALUE_2: "",
+        GIT_CONFIG_KEY_3: "http.https://github.com/.extraheader",
+        GIT_CONFIG_VALUE_3: `AUTHORIZATION: basic ${basic}`,
+      },
+    },
+  );
+  if (pushed.ok) return { ok: true };
+  const live = liveRefShaWithActionsToken(branch, token);
+  return live.ok && live.sha === checkpointHead
+    ? { ok: true, acceptedAfterTransportError: true }
+    : { ok: false, error: `review-checkpoint push failed: ${failureDetail(pushed)}` };
+}
+
+function exactBranchDeleteWithActionsToken(
+  cwd,
+  branch,
+  expectedHead,
+  token = process.env.ACTIONS_TOKEN,
+  commandRunner = tryRun,
+) {
+  if (!token) return { ok: false, error: "ACTIONS_TOKEN is unavailable for stale promotion cleanup" };
+  const basic = Buffer.from(`x-access-token:${token}`, "utf8").toString("base64");
+  const deleted = commandRunner(
+    "git",
+    [
+      "push", "--porcelain",
+      `--force-with-lease=refs/heads/${branch}:${expectedHead}`,
+      `https://github.com/${CFG.repo}.git`,
+      `:refs/heads/${branch}`,
+    ],
+    {
+      ...EXEC_OPTS,
+      cwd,
+      env: {
+        ...process.env,
+        GIT_CONFIG_COUNT: "4",
+        GIT_CONFIG_KEY_0: "core.hooksPath",
+        GIT_CONFIG_VALUE_0: "/dev/null",
+        GIT_CONFIG_KEY_1: "core.fsmonitor",
+        GIT_CONFIG_VALUE_1: "false",
+        GIT_CONFIG_KEY_2: "http.https://github.com/.extraheader",
+        GIT_CONFIG_VALUE_2: "",
+        GIT_CONFIG_KEY_3: "http.https://github.com/.extraheader",
+        GIT_CONFIG_VALUE_3: `AUTHORIZATION: basic ${basic}`,
+      },
+    },
+  );
+  if (deleted.ok) return { ok: true };
+  const checked = withActionsToken([
+    "api", `repos/${CFG.repo}/git/ref/heads/${encodeURIComponent(branch)}`,
+    "--jq", ".object.sha",
+  ], token);
+  return !checked.ok && /(?:HTTP\s+404|Not Found)/i.test(checked.error || "")
+    ? { ok: true, acceptedAfterTransportError: true }
+    : { ok: false, error: `stale promotion cleanup lease was refused: ${failureDetail(deleted)}` };
+}
+
+function revalidateCheckpointRefs(context, expectedHead) {
+  for (const [ref, expected] of [
+    ["develop", context.sourceTipSha],
+    [context.baseRef, context.baseSha],
+    [context.branch, expectedHead],
+  ]) {
+    const live = liveRefShaWithActionsToken(ref);
+    if (!live.ok) return live;
+    if (live.sha !== expected) {
+      return { ok: false, error: `live ref \`${ref}\` moved before promotion recovery` };
+    }
+  }
+  return { ok: true };
+}
+
+export function checkpointRecoveryDisposition(status, conclusion = "") {
+  if (["queued", "in_progress", "waiting", "pending", "requested"].includes(status)) {
+    return "defer";
+  }
+  if (status === "completed") return "recover";
+  return conclusion ? "recover" : "defer";
+}
+
+function promotionResolverRunDisposition(runUrl) {
+  const match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/actions\/runs\/(\d+)(?:\/.*)?$/.exec(
+    String(runUrl || ""),
+  );
+  if (!match || match[1].toLowerCase() !== CFG.repo.toLowerCase()) {
+    return { ok: false, error: "promotion attestation has no same-repository resolver run" };
+  }
+  const inspected = withActionsToken([
+    "api", `repos/${CFG.repo}/actions/runs/${match[2]}`,
+    "--jq", "[.status,.conclusion // \"\"] | @tsv",
+  ]);
+  if (!inspected.ok) {
+    return { ok: false, error: `cannot inspect attested resolver run: ${inspected.error}` };
+  }
+  const [status = "", conclusion = ""] = inspected.out.split("\t");
+  return {
+    ok: true,
+    status,
+    conclusion,
+    disposition: checkpointRecoveryDisposition(status, conclusion),
+  };
+}
+
+function recoverPromotionReviewCheckpoint(worktree, sourcePr, context, reusable) {
+  if (!process.env.ACTIONS_TOKEN) {
+    return { ok: false, error: "ACTIONS_TOKEN is unavailable for checkpoint recovery" };
+  }
+  if (reusable.mode === "ai-resolved-checkpoint-finalize") {
+    const finalized = upsertBotIssueComment(
+      sourcePr.number,
+      "thingtime-ai-promotion-attestation:v1",
+      promotionAttestationBody([reusable.attestation], context, false),
+    );
+    return finalized.ok
+      ? { ok: true, attestation: reusable.attestation, headSha: reusable.attestation.head_sha }
+      : finalized;
+  }
+  if (reusable.mode !== "ai-resolved-checkpoint-pending") {
+    return { ok: true, attestation: reusable.attestation, headSha: reusable.attestation?.head_sha };
+  }
+  const contentAttestation = reusable.attestation;
+  const contentHead = contentAttestation?.head_sha;
+  if (!isObjectId(contentHead)) {
+    return { ok: false, error: "pending review-checkpoint has no valid attested content head" };
+  }
+  const resolverRun = promotionResolverRunDisposition(contentAttestation.run_url);
+  if (!resolverRun.ok) return resolverRun;
+  if (resolverRun.disposition === "defer") {
+    return {
+      ok: false,
+      deferred: true,
+      error:
+        `attested resolver run is still \`${resolverRun.status}\`; ` +
+        "checkpoint recovery deferred to avoid racing its exact-lease publication",
+    };
+  }
+  const live = revalidateCheckpointRefs(context, contentHead);
+  if (!live.ok) return live;
+  const checkpoint = createPromotionReviewCheckpoint(
+    worktree,
+    context,
+    contentHead,
+    contentAttestation.run_url,
+  );
+  if (!checkpoint.ok) return checkpoint;
+  const checkpointAttestation = {
+    ...contentAttestation,
+    head_sha: checkpoint.headSha,
+  };
+  const preAttested = upsertBotIssueComment(
+    sourcePr.number,
+    "thingtime-ai-promotion-attestation:v1",
+    promotionAttestationBody([contentAttestation, checkpointAttestation], context, true),
+  );
+  if (!preAttested.ok) return preAttested;
+  const stillLive = revalidateCheckpointRefs(context, contentHead);
+  if (!stillLive.ok) return stillLive;
+  const pushed = exactCheckpointPush(
+    worktree,
+    context.branch,
+    contentHead,
+    checkpoint.headSha,
+  );
+  if (!pushed.ok) return pushed;
+  const accepted = liveRefShaWithActionsToken(context.branch);
+  if (!accepted.ok || accepted.sha !== checkpoint.headSha) {
+    return { ok: false, error: "live promotion branch does not equal its pushed review-checkpoint" };
+  }
+  const finalized = upsertBotIssueComment(
+    sourcePr.number,
+    "thingtime-ai-promotion-attestation:v1",
+    promotionAttestationBody([checkpointAttestation], context, false),
+  );
+  return finalized.ok
+    ? { ok: true, attestation: checkpointAttestation, headSha: checkpoint.headSha }
+    : finalized;
+}
+
+function finalizeSourceLineageMetadata(sourcePr, promotionNumber, lineage) {
+  if (!Number.isInteger(Number(promotionNumber)) || Number(promotionNumber) <= 0) {
+    return { ok: false, error: "promotion PR number is unavailable for lineage metadata" };
+  }
+  const status = sourceLineageStatus(lineage);
+  const reviewRequired = status !== "verified";
+  if (reviewRequired) {
+    if (!ensureSourceLineageReviewLabel(process.env.ACTIONS_TOKEN)) {
+      return { ok: false, error: `cannot ensure \`${SOURCE_LINEAGE_REVIEW_LABEL}\` label` };
+    }
+    const labelled = withActionsToken([
+      "pr", "edit", String(promotionNumber), ...repoFlag(),
+      "--add-label", SOURCE_LINEAGE_REVIEW_LABEL,
+    ]);
+    if (!labelled.ok) return { ok: false, error: `cannot add source-lineage label: ${labelled.error}` };
+  } else {
+    // A later develop tip can make a formerly ambiguous historical patch
+    // provable. Remove the warning label idempotently; an absent label is fine.
+    withActionsToken([
+      "api", "--method", "DELETE",
+      `repos/${CFG.repo}/issues/${promotionNumber}/labels/${SOURCE_LINEAGE_REVIEW_LABEL}`,
+    ]);
+  }
+  const sourceTipSha = isObjectId(lineage?.sourceTipSha) ? lineage.sourceTipSha : "unknown";
+  const promotionBodyText = reviewRequired
+    ? [
+        "⚠️ **Source-lineage review is required before merging this promotion.**",
+        "",
+        sourceLineageReason(status),
+        "",
+        `The branch contains only source PR #${sourcePr.number}'s recoverable historical patch. ` +
+          "Automation cannot decide whether restoring it is still intended.",
+        "",
+        `Status: \`${status}\` · checked source tip: \`${sourceTipSha}\``,
+        "",
+        "<!-- thingtime-promotion-lineage-review:v1 -->",
+      ].join("\n")
+    : [
+        "✅ **Source-lineage verification currently passes.**",
+        "",
+        `Source PR #${sourcePr.number}'s exact patch is provably present at the current ` +
+          `\`${CFG.source}\` tip \`${sourceTipSha}\`.`,
+        "",
+        "<!-- thingtime-promotion-lineage-review:v1 -->",
+      ].join("\n");
+  const reviewed = upsertBotIssueComment(
+    Number(promotionNumber),
+    "thingtime-promotion-lineage-review:v1",
+    promotionBodyText,
+  );
+  if (!reviewed.ok) return reviewed;
+  const sourceBodyText = reviewRequired
+    ? [
+        `⚠️ Promotion #${promotionNumber} re-applies this PR's exact historical patch, but ` +
+          `current \`${CFG.source}\` does not prove the change remains intended.`,
+        "",
+        sourceLineageReason(status),
+        "",
+        "Review the promotion diff and merge it only if restoring the change is intentional.",
+        "",
+        `Status: \`${status}\` · checked source tip: \`${sourceTipSha}\``,
+        "",
+        "<!-- thingtime-promotion-lineage-status:v1 -->",
+      ].join("\n")
+    : [
+        `✅ Promotion #${promotionNumber} has verified source lineage at current ` +
+          `\`${CFG.source}\` tip \`${sourceTipSha}\`.`,
+        "",
+        "<!-- thingtime-promotion-lineage-status:v1 -->",
+      ].join("\n");
+  return upsertBotIssueComment(
+    sourcePr.number,
+    "thingtime-promotion-lineage-status:v1",
+    sourceBodyText,
+  );
+}
+
+function finalizeAiPromotionMetadata(sourcePr, promotionNumber, context, attestation) {
+  if (!Number.isInteger(Number(promotionNumber)) || Number(promotionNumber) <= 0) {
+    return { ok: false, error: "promotion PR number is unavailable for metadata finalization" };
+  }
+  const lineage = finalizeSourceLineageMetadata(
+    sourcePr,
+    promotionNumber,
+    context,
+  );
+  if (!lineage.ok) return lineage;
+  const paths = (attestation?.conflict_paths || []).map((path) => `- \`${path}\``);
+  const aiResolved = paths.length > 0;
+  const labelArgs = [
+    "pr", "edit", String(promotionNumber), ...repoFlag(),
+    "--add-label", "promotion",
+  ];
+  if (aiResolved) {
+    labelArgs.push(
+      "--add-label", "ai-conflict-resolved",
+      "--add-label", "review-ai-resolution",
+    );
+  }
+  const labelled = withActionsToken(labelArgs);
+  if (!labelled.ok) return { ok: false, error: `cannot repair promotion labels: ${labelled.error}` };
+  const inline = (value, fallback) => String(value || fallback)
+    .slice(0, 500)
+    .replace(/`/g, "\\`");
+  const reviewBody = [
+    aiResolved
+      ? "🤖 **Automatic promotion conflict resolution completed.**"
+      : "🤖 **Protected promotion replay completed without an AI edit.**",
+    "",
+    `Source PR: #${sourcePr.number} · plan: \`${context.planHash}\` · [workflow run](${attestation.run_url})`,
+    "",
+    `Base: \`${context.baseRef}\` at \`${context.baseSha}\``,
+    "",
+    `Reservation: \`${attestation.reservation_sha}\` · verified head: \`${attestation.head_sha}\``,
+    "",
+    ...(paths.length > 0
+      ? ["Please manually review the paths the isolated AI resolved:", ...paths]
+      : ["The reconstructed synthetic patch replayed cleanly; no model-edited path remained."]),
+    "",
+    ...(aiResolved
+      ? [
+          `Model waterfall: \`${inline(attestation?.model_args, "recorded in the linked run")}\` · ` +
+            `Graphify refresh: \`${inline(attestation?.graphify_mode, "recorded in the linked run")}\` ` +
+            `(semantic: \`${inline(attestation?.graphify_semantic, "recorded in the linked run")}\`).`,
+        ]
+      : [
+          `No model round ran. Graphify refresh: ` +
+            `\`${inline(attestation?.graphify_mode, "recorded in the linked run")}\` ` +
+            `(semantic: \`${inline(attestation?.graphify_semantic, "recorded in the linked run")}\`).`,
+        ]),
+    ...(attestation?.ci_sensitive === true
+      ? [
+          "",
+          "⚠️ CI-sensitive `.github/**` content is protected by an empty review-checkpoint; " +
+            "approve its PR checks only after reviewing the paths above.",
+        ]
+      : []),
+    ...(sourceLineageReviewRequired(context)
+      ? [
+          "",
+          `⚠️ Source lineage is \`${context.sourceLineageStatus}\`. ` +
+            "This is separate from the AI conflict review: merge only if restoring the historical change is intended.",
+        ]
+      : []),
+    "",
+    "<!-- thingtime-ai-promotion-review:v1 -->",
+  ].join("\n");
+  const reviewed = upsertBotIssueComment(
+    Number(promotionNumber),
+    "thingtime-ai-promotion-review:v1",
+    reviewBody,
+  );
+  if (!reviewed.ok) return reviewed;
+  const statusBody = [
+    `✅ Automatic promotion conflict resolution opened #${promotionNumber} for \`${context.branch}\`.`,
+    "",
+    `Review the exact resolved paths and immutable snapshot in the promotion PR comment. [Workflow run](${attestation.run_url}).`,
+    ...(sourceLineageReviewRequired(context)
+      ? [
+          "",
+          `⚠️ Source lineage is \`${context.sourceLineageStatus}\`; the promotion still requires an explicit product-intent review before merge.`,
+        ]
+      : []),
+    "",
+    encodePromotionAttestation(attestation),
+    "<!-- thingtime-ai-promotion-status:v1 -->",
+  ].join("\n");
+  const status = upsertBotIssueComment(
+    sourcePr.number,
+    "thingtime-ai-promotion-status:v1",
+    statusBody,
+  );
+  if (!status.ok) return status;
+  withActionsToken([
+    "api", "--method", "DELETE",
+    `repos/${CFG.repo}/issues/${sourcePr.number}/labels/${PROMOTION_PAUSE_LABEL}`,
+  ]);
+  return { ok: true };
+}
+
+function promotionNumberFromUrl(url) {
+  const match = /\/pull\/(\d+)(?:$|[/?#])/.exec(String(url || ""));
+  return match ? Number(match[1]) : null;
+}
+
+function findOpenPromotionNumber(branch) {
+  const listed = withActionsToken([
+    "pr", "list", ...repoFlag(), "--head", branch, "--state", "open",
+    "--json", "number", "--limit", "2",
+  ]);
+  if (!listed.ok) return { ok: false, error: `cannot find open promotion PR: ${listed.error}` };
+  try {
+    const records = JSON.parse(listed.out || "[]");
+    return records.length === 1 && Number.isInteger(records[0]?.number)
+      ? { ok: true, number: records[0].number }
+      : { ok: false, error: `expected exactly one open PR for \`${branch}\`` };
+  } catch (error) {
+    return { ok: false, error: `cannot parse open promotion PR lookup: ${String(error?.message || error)}` };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Self-test
 // ---------------------------------------------------------------------------
+
+function pathspecAuthorityIntegrationTest(assert) {
+  const root = mkdtempSync(join(os.tmpdir(), "promote-pathspec-authority-test-"));
+  const testGit = (args) => run("git", [
+    "-c", "core.hooksPath=/dev/null",
+    "-c", "maintenance.auto=false",
+    ...args,
+  ], { cwd: root });
+  try {
+    testGit(["init", "--initial-branch=main"]);
+    testGit(["config", "user.name", "Promotion Pathspec Test"]);
+    testGit(["config", "user.email", "promotion-pathspec-test@example.invalid"]);
+    const literalExclude = ":(exclude)critical.txt";
+    const leadingSpace = " leading.txt";
+    const trailingSpace = "trailing.txt ";
+    writeFileSync(join(root, "normal.txt"), "normal base\n");
+    writeFileSync(join(root, "critical.txt"), "critical base\n");
+    writeFileSync(join(root, literalExclude), "literal base\n");
+    writeFileSync(join(root, leadingSpace), "leading base\n");
+    writeFileSync(join(root, trailingSpace), "trailing base\n");
+    testGit([
+      "add", "--", literalPathspec("normal.txt"), literalPathspec("critical.txt"),
+      literalPathspec(literalExclude), literalPathspec(leadingSpace), literalPathspec(trailingSpace),
+    ]);
+    testGit(["commit", "-m", "pathspec base"]);
+    const baseCommit = testGit(["rev-parse", "HEAD"]);
+
+    writeFileSync(join(root, "normal.txt"), "normal source\n");
+    writeFileSync(join(root, "critical.txt"), "critical source\n");
+    writeFileSync(join(root, literalExclude), "literal source\n");
+    writeFileSync(join(root, leadingSpace), "leading source\n");
+    writeFileSync(join(root, trailingSpace), "trailing source\n");
+    testGit([
+      "add", "--", literalPathspec("normal.txt"), literalPathspec("critical.txt"),
+      literalPathspec(literalExclude), literalPathspec(leadingSpace), literalPathspec(trailingSpace),
+    ]);
+    testGit(["commit", "-m", "PROMOTION-QUARANTINE-SOURCE-SENTINEL"]);
+    const sourceCommit = testGit(["rev-parse", "HEAD"]);
+
+    // Only the ordinary critical path is later removed. If the literal
+    // pathspec-looking filename is interpreted as magic, it excludes
+    // critical.txt from the planned patch and can falsely report verified.
+    writeFileSync(join(root, "critical.txt"), "critical base\n");
+    testGit(["add", "--", literalPathspec("critical.txt")]);
+    testGit(["commit", "-m", "remove only critical source intent"]);
+    const sourceTip = testGit(["rev-parse", "HEAD"]);
+
+    const patch = readPlannedPatch([{ sha: sourceCommit }], root);
+    assert.equal(patch.ok, true);
+    assert.deepEqual(new Set(patch.paths), new Set([
+      "normal.txt",
+      "critical.txt",
+      literalExclude,
+      leadingSpace,
+      trailingSpace,
+    ]));
+    const presence = inspectSourcePresence(sourceCommit, sourceTip, root, {
+      picks: [{ sha: sourceCommit }],
+    });
+    assert.equal(presence.ok, false);
+    assert.equal(presence.sourceLineageStatus, "review-required-ambiguous");
+    assert.match(presence.error, /source-lineage safety block/);
+
+    testGit(["checkout", "--detach", baseCommit]);
+    testGit(["cherry-pick", "-x", sourceCommit]);
+    const directPlan = {
+      picks: [{ sha: sourceCommit }],
+      sourceLineageStatus: "verified",
+    };
+    assert.equal(
+      validateReusablePromotionBranch("HEAD", baseCommit, { mergeCommit: { oid: sourceCommit } }, root, directPlan).ok,
+      true,
+    );
+    writeFileSync(join(root, literalExclude), "mutated orphan content\n");
+    testGit(["add", "--", literalPathspec(literalExclude)]);
+    testGit(["commit", "--amend", "--no-edit"]);
+    assert.equal(
+      validateReusablePromotionBranch("HEAD", baseCommit, { mergeCommit: { oid: sourceCommit } }, root, directPlan).ok,
+      false,
+      "a mutable direct branch cannot hide drift behind a magic-looking literal filename",
+    );
+
+    const controlPath = readPlannedPatch([{ sha: sourceCommit }], root, {
+      gitRunner: (args) => args.includes("--name-only")
+        ? { ok: true, out: "normal.txt\0bad\nname.txt\0", err: "", status: 0 }
+        : { ok: false, out: "", err: "unexpected git call", status: 2 },
+      commandRunner: () => {
+        throw new Error("control-character path must fail before patch extraction");
+      },
+    });
+    assert.equal(controlPath.ok, false);
+    assert.match(controlPath.error, /control-character path/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
 
 function orphanedMergeHydrationIntegrationTest(assert) {
   const root = mkdtempSync(join(os.tmpdir(), "promote-orphan-merge-test-"));
@@ -524,8 +2129,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
   ];
   const testGit = (args, cwd = root) =>
     run("git", isolatedArgs(args), { cwd, env: isolatedEnv });
-  const testTryGit = (args, cwd = root) =>
-    tryRun("git", isolatedArgs(args), { cwd, env: isolatedEnv });
+  const testTryGit = (args, cwd = root, opts = {}) =>
+    tryRun("git", isolatedArgs(args), { cwd, env: isolatedEnv, ...opts });
 
   try {
     testGit(["init", "--bare", remote]);
@@ -552,7 +2157,7 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     testGit(["push", "origin", "main", "develop"], writer);
 
     // A normal merge remains an ancestor after `git revert`; ancestry alone
-    // must not cause the removed feature to be promoted again.
+    // must not silently call the removed feature verified or create a branch.
     testGit(["checkout", "-b", "ancestry-revert", "develop"], writer);
     testGit(["revert", "-m", "1", "--no-edit", orphanedMergeSha], writer);
     const ancestryRevertTip = testGit(["rev-parse", "HEAD"], writer);
@@ -563,7 +2168,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       { picks: [{ sha: orphanedMergeSha, mainline: true }] },
     );
     assert.equal(ancestryReverted.ok, false);
-    assert.match(ancestryReverted.error, /not present at current `develop` tip/);
+    assert.equal(ancestryReverted.sourceLineageStatus, "review-required-removed");
+    assert.match(ancestryReverted.error, /no promotion branch or AI worker was created/);
 
     // Reproduce the historical failure: force-rewrite develop to an equivalent
     // cherry-pick, leaving the original merge object stored but unadvertised.
@@ -606,7 +2212,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     );
     const removedFromSource = inspectSourcePresence(orphanedMergeSha, "origin/main", fresh);
     assert.equal(removedFromSource.ok, false);
-    assert.match(removedFromSource.error, /not present at current `develop` tip/);
+    assert.equal(removedFromSource.sourceLineageStatus, "review-required-removed");
+    assert.match(removedFromSource.error, /source-lineage safety block/);
 
     testGit(["push", "origin", "main:refs/heads/promote/test-reuse"], writer);
     const firstBranchFetch = ensureRemoteBranchAvailable("promote/test-reuse", fresh, testTryGit);
@@ -650,6 +2257,506 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     );
 
     testGit(["config", "user.name", "Promoter Test"], fresh);
+    const reservationBranch = promotionBranchFor(sourcePr);
+    const reservationContext = buildPromotionPlanContext({
+      sourcePr,
+      branch: reservationBranch,
+      baseRef: "main",
+      baseSha: testGit(["rev-parse", "origin/main"], fresh),
+      sourceTipSha: testGit(["rev-parse", "origin/develop"], fresh),
+      plan,
+      cwd: fresh,
+    });
+    assert.equal(reservationContext.ok, true);
+    const missingRecoveryContext = validateReusablePromotionForRun({
+      branchRef: "HEAD",
+      actualBranchName: reservationBranch,
+      expectedBaseRef: "origin/main",
+      expectedBaseName: "main",
+      sourceTipSha: testGit(["rev-parse", "origin/develop"], fresh),
+      sourcePr,
+      cwd: fresh,
+      plan: { picks: [], sourceLineageStatus: "verified" },
+    });
+    assert.equal(missingRecoveryContext.ok, false);
+    assert.match(missingRecoveryContext.error, /cannot build immutable context/);
+    const advancedSourceTipContext = buildPromotionPlanContext({
+      sourcePr,
+      branch: reservationBranch,
+      baseRef: "main",
+      baseSha: testGit(["rev-parse", "origin/main"], fresh),
+      sourceTipSha: orphanedMergeSha,
+      plan,
+      cwd: fresh,
+    });
+    assert.equal(advancedSourceTipContext.ok, true);
+    assert.equal(
+      advancedSourceTipContext.context.planHash,
+      reservationContext.context.planHash,
+      "source tip is a transient dispatch race guard, not durable plan identity",
+    );
+    assert.deepEqual(
+      promotionReservationTrailers(advancedSourceTipContext.context),
+      promotionReservationTrailers(reservationContext.context),
+    );
+    const ambiguousContext = buildPromotionPlanContext({
+      sourcePr,
+      branch: reservationBranch,
+      baseRef: "main",
+      baseSha: testGit(["rev-parse", "origin/main"], fresh),
+      sourceTipSha: testGit(["rev-parse", "origin/develop"], fresh),
+      plan: { ...plan, sourceLineageStatus: "review-required-ambiguous" },
+      cwd: fresh,
+    });
+    assert.equal(ambiguousContext.ok, true);
+    assert.notEqual(
+      ambiguousContext.context.planHash,
+      reservationContext.context.planHash,
+      "a review-required lineage classification must be bound into immutable plan identity",
+    );
+    assert.match(
+      promotionReservationTrailers(ambiguousContext.context).join("\n"),
+      /Thingtime-Promotion-Source-Lineage: review-required-ambiguous/,
+    );
+    assert.equal(buildPromotionPlanContext({
+      sourcePr,
+      branch: reservationBranch,
+      baseRef: "main",
+      baseSha: testGit(["rev-parse", "origin/main"], fresh),
+      sourceTipSha: testGit(["rev-parse", "origin/develop"], fresh),
+      plan: { ...plan, sourceLineageStatus: "unknown" },
+      cwd: fresh,
+    }).ok, false);
+    const reservation = createPromotionReservation(
+      fresh,
+      reservationContext.context,
+      testTryGit,
+    );
+    assert.equal(reservation.ok, true);
+    assert.match(
+      testGit(["show", "-s", "--format=%B", reservation.reservationSha], fresh),
+      /\[skip ci\]/,
+      "empty reservation commits must not trigger unrelated push workflows",
+    );
+    assert.deepEqual(
+      validateReusablePromotionBranch(
+        "HEAD",
+        "origin/main",
+        sourcePr,
+        fresh,
+        plan,
+        {
+          promotionContext: reservationContext.context,
+          actualBranchName: reservationBranch,
+          attestations: null,
+          gitRunner: testTryGit,
+        },
+      ),
+      {
+        ok: true,
+        mode: "reservation",
+        reservationSha: reservation.reservationSha,
+      },
+      "an exact empty reservation is reusable as an idempotent queued handoff",
+    );
+    const staleReservation = validateReusablePromotionBranch(
+      "HEAD",
+      "origin/main",
+      sourcePr,
+      fresh,
+      plan,
+      {
+        promotionContext: {
+          ...reservationContext.context,
+          planHash: "f".repeat(64),
+        },
+        actualBranchName: reservationBranch,
+        attestations: null,
+        gitRunner: testTryGit,
+      },
+    );
+    assert.equal(staleReservation.ok, false);
+    assert.equal(staleReservation.staleReservation, true);
+    assert.equal(staleReservation.reservationSha, reservation.reservationSha);
+    writeFileSync(join(fresh, "feature.txt"), "feature\n");
+    testGit(["add", "feature.txt"], fresh);
+    testGit(["commit", "-m", "AI-resolved promotion fixture"], fresh);
+    const resolvedHead = testGit(["rev-parse", "HEAD"], fresh);
+    const resolvedAttestation = {
+      v: 1,
+      source_pr: sourcePr.number,
+      base_ref: reservationContext.context.baseRef,
+      base_sha: reservationContext.context.baseSha,
+      branch: reservationBranch,
+      source_tip_sha: orphanedMergeSha,
+      source_start_sha: reservationContext.context.sourceStartSha,
+      source_end_sha: reservationContext.context.sourceEndSha,
+      source_lineage_status: reservationContext.context.sourceLineageStatus,
+      plan_hash: reservationContext.context.planHash,
+      reservation_sha: reservation.reservationSha,
+      head_sha: resolvedHead,
+      conflict_paths: ["feature.txt"],
+      run_url: "https://github.com/lopugit/thingtime/actions/runs/123",
+    };
+    const botComment = (attestation) => ({
+      user: { login: "github-actions[bot]", type: "Bot" },
+      body:
+        "resolved\n<!-- thingtime-ai-promotion-resolved:v1 " +
+        `${Buffer.from(JSON.stringify(attestation)).toString("base64url")} -->`,
+    });
+    const pausedSourcePr = {
+      ...sourcePr,
+      labels: [{ name: PROMOTION_PAUSE_LABEL }],
+    };
+    const pausedComment = {
+      user: { login: "github-actions[bot]", type: "Bot" },
+      body:
+        `Automatic promotion paused.\n<!-- thingtime-ai-promotion-paused:v1 ` +
+        `${reservationContext.context.planHash} -->`,
+    };
+    assert.equal(
+      isExactPausedPromotionSnapshot(
+        pausedSourcePr,
+        reservationContext.context,
+        [pausedComment],
+      ),
+      true,
+      "an exact bot marker plus pause label suppresses repeated automatic dispatch",
+    );
+    assert.equal(
+      isExactPausedPromotionSnapshot(
+        { ...pausedSourcePr, labels: [] },
+        reservationContext.context,
+        [pausedComment],
+      ),
+      false,
+      "removing the pause label explicitly retries the same immutable snapshot",
+    );
+    assert.equal(
+      isExactPausedPromotionSnapshot(
+        pausedSourcePr,
+        reservationContext.context,
+        [{ ...pausedComment, user: { login: "lopugit", type: "User" } }],
+      ),
+      false,
+      "a user-authored lookalike cannot suppress automatic resolution",
+    );
+    assert.equal(
+      validateReusablePromotionBranch(
+        "HEAD",
+        "origin/main",
+        sourcePr,
+        fresh,
+        plan,
+        {
+          promotionContext: reservationContext.context,
+          actualBranchName: reservationBranch,
+          attestations: [botComment(resolvedAttestation)],
+          gitRunner: testTryGit,
+        },
+      ).mode,
+      "ai-resolved",
+      "an attested AI resolution may reuse only planned source paths",
+    );
+    const pendingAttestationComment = {
+      user: { login: "github-actions[bot]", type: "Bot" },
+      body: [
+        encodePromotionAttestation(resolvedAttestation),
+        `<!-- thingtime-ai-promotion-checkpoint-pending:v1 ${reservationContext.context.planHash} -->`,
+        "<!-- thingtime-ai-promotion-attestation:v1 -->",
+      ].join("\n"),
+    };
+    assert.equal(
+      validateReusablePromotionBranch(
+        "HEAD",
+        "origin/main",
+        sourcePr,
+        fresh,
+        plan,
+        {
+          promotionContext: reservationContext.context,
+          actualBranchName: reservationBranch,
+          attestations: [pendingAttestationComment],
+          gitRunner: testTryGit,
+        },
+      ).mode,
+      "ai-resolved-checkpoint-pending",
+      "a pending content-head attestation must never be treated as final",
+    );
+    const stalePending = validateStalePendingAiPromotionBranch(
+      "HEAD",
+      {
+        ...reservationContext.context,
+        baseSha: rewrittenSha,
+        planHash: "0".repeat(64),
+      },
+      [pendingAttestationComment],
+      fresh,
+      testTryGit,
+    );
+    assert.equal(stalePending.ok, true);
+    assert.equal(stalePending.present, true);
+    assert.equal(stalePending.liveHead, resolvedHead);
+    assert.equal(
+      validateStalePendingAiPromotionBranch(
+        "HEAD",
+        {
+          ...reservationContext.context,
+          baseSha: rewrittenSha,
+          planHash: "0".repeat(64),
+        },
+        [{ ...pendingAttestationComment, user: { login: "lopugit", type: "User" } }],
+        fresh,
+        testTryGit,
+      ).present,
+      false,
+      "stale cleanup authority must never come from a user-authored marker",
+    );
+    const reviewCheckpoint = createPromotionReviewCheckpoint(
+      fresh,
+      reservationContext.context,
+      resolvedHead,
+      resolvedAttestation.run_url,
+      testTryGit,
+    );
+    assert.equal(reviewCheckpoint.ok, true);
+    const checkpointAttestation = {
+      ...resolvedAttestation,
+      head_sha: reviewCheckpoint.headSha,
+    };
+    const checkpointPendingComment = {
+      user: { login: "github-actions[bot]", type: "Bot" },
+      body: [
+        encodePromotionAttestation(resolvedAttestation),
+        encodePromotionAttestation(checkpointAttestation),
+        `<!-- thingtime-ai-promotion-checkpoint-pending:v1 ${reservationContext.context.planHash} -->`,
+        "<!-- thingtime-ai-promotion-attestation:v1 -->",
+      ].join("\n"),
+    };
+    const checkpointReuse = validateReusablePromotionBranch(
+      "HEAD",
+      "origin/main",
+      sourcePr,
+      fresh,
+      plan,
+      {
+        promotionContext: reservationContext.context,
+        actualBranchName: reservationBranch,
+        attestations: [checkpointPendingComment],
+        gitRunner: testTryGit,
+      },
+    );
+    assert.equal(checkpointReuse.mode, "ai-resolved-checkpoint-finalize");
+    assert.equal(checkpointReuse.checkpoint.contentHead, resolvedHead);
+    const duplicatePendingComment = {
+      ...checkpointPendingComment,
+      id: 201,
+      created_at: "2026-08-09T00:00:00Z",
+      updated_at: "2026-08-09T00:00:00Z",
+    };
+    const finalizedCheckpointComment = {
+      id: 202,
+      created_at: "2026-08-09T00:00:01Z",
+      updated_at: "2026-08-09T00:00:02Z",
+      user: { login: "github-actions[bot]", type: "Bot" },
+      body: [
+        encodePromotionAttestation(checkpointAttestation),
+        "<!-- thingtime-ai-promotion-attestation:v1 -->",
+      ].join("\n"),
+    };
+    assert.equal(
+      validateReusablePromotionBranch(
+        "HEAD",
+        "origin/main",
+        sourcePr,
+        fresh,
+        plan,
+        {
+          promotionContext: reservationContext.context,
+          actualBranchName: reservationBranch,
+          attestations: [duplicatePendingComment, finalizedCheckpointComment],
+          gitRunner: testTryGit,
+        },
+      ).mode,
+      "ai-resolved",
+      "the latest finalized bot attestation supersedes an older duplicate pending marker",
+    );
+    assert.equal(
+      validateStalePendingAiPromotionBranch(
+        "HEAD",
+        {
+          ...reservationContext.context,
+          baseSha: rewrittenSha,
+          planHash: "0".repeat(64),
+        },
+        [duplicatePendingComment, finalizedCheckpointComment],
+        fresh,
+        testTryGit,
+      ).present,
+      false,
+      "an older duplicate pending marker cannot re-authorize stale cleanup after finalization",
+    );
+    testGit(["reset", "--hard", resolvedHead], fresh);
+    const rolledBackAfterCheckpoint = validateReusablePromotionBranch(
+      "HEAD",
+      "origin/main",
+      sourcePr,
+      fresh,
+      plan,
+      {
+        promotionContext: reservationContext.context,
+        actualBranchName: reservationBranch,
+        attestations: [duplicatePendingComment, finalizedCheckpointComment],
+        gitRunner: testTryGit,
+      },
+    );
+    assert.equal(
+      rolledBackAfterCheckpoint.ok,
+      false,
+      "rolling a finalized branch back to its older content head cannot bypass the review checkpoint",
+    );
+    assert.match(rolledBackAfterCheckpoint.error, /no matching bot-authored/);
+    writeFileSync(join(fresh, "feature.txt"), "feature\n=======\nnotes\n");
+    testGit(["add", "feature.txt"], fresh);
+    testGit(["commit", "-m", "retain valid Markdown divider"], fresh);
+    const dividerAttestation = {
+      ...resolvedAttestation,
+      head_sha: testGit(["rev-parse", "HEAD"], fresh),
+    };
+    assert.equal(
+      validateReusablePromotionBranch(
+        "HEAD",
+        "origin/main",
+        sourcePr,
+        fresh,
+        plan,
+        {
+          promotionContext: reservationContext.context,
+          actualBranchName: reservationBranch,
+          attestations: [botComment(dividerAttestation)],
+          gitRunner: testTryGit,
+        },
+      ).mode,
+      "ai-resolved",
+      "a standalone Markdown divider must not be mistaken for a conflict marker",
+    );
+    writeFileSync(
+      join(fresh, "feature.txt"),
+      "<<<<<<< ours\nfeature\n=======\nother\n>>>>>>> theirs\n",
+    );
+    testGit(["add", "feature.txt"], fresh);
+    testGit(["commit", "-m", "leave real conflict markers"], fresh);
+    const markerAttestation = {
+      ...resolvedAttestation,
+      head_sha: testGit(["rev-parse", "HEAD"], fresh),
+    };
+    const rejectedMarkers = validateReusablePromotionBranch(
+      "HEAD",
+      "origin/main",
+      sourcePr,
+      fresh,
+      plan,
+      {
+        promotionContext: reservationContext.context,
+        actualBranchName: reservationBranch,
+        attestations: [botComment(markerAttestation)],
+        gitRunner: testTryGit,
+      },
+    );
+    assert.equal(rejectedMarkers.ok, false);
+    assert.match(rejectedMarkers.error, /conflict markers/);
+    writeFileSync(join(fresh, "feature.txt"), "<<<<<<<\n");
+    testGit(["add", "feature.txt"], fresh);
+    testGit(["commit", "-m", "leave malformed bare marker"], fresh);
+    const bareMarkerAttestation = {
+      ...resolvedAttestation,
+      head_sha: testGit(["rev-parse", "HEAD"], fresh),
+    };
+    const rejectedBareMarker = validateReusablePromotionBranch(
+      "HEAD",
+      "origin/main",
+      sourcePr,
+      fresh,
+      plan,
+      {
+        promotionContext: reservationContext.context,
+        actualBranchName: reservationBranch,
+        attestations: [botComment(bareMarkerAttestation)],
+        gitRunner: testTryGit,
+      },
+    );
+    assert.equal(rejectedBareMarker.ok, false);
+    assert.match(rejectedBareMarker.error, /conflict markers/);
+    writeFileSync(
+      join(fresh, "feature.txt"),
+      "<<<<<<<<<< ours\nfeature\n==========\nother\n>>>>>>>>>> theirs\n",
+    );
+    testGit(["add", "feature.txt"], fresh);
+    testGit(["commit", "-m", "leave ten-character conflict markers"], fresh);
+    const wideMarkerAttestation = {
+      ...resolvedAttestation,
+      head_sha: testGit(["rev-parse", "HEAD"], fresh),
+    };
+    const rejectedWideMarkers = validateReusablePromotionBranch(
+      "HEAD",
+      "origin/main",
+      sourcePr,
+      fresh,
+      plan,
+      {
+        promotionContext: reservationContext.context,
+        actualBranchName: reservationBranch,
+        attestations: [botComment(wideMarkerAttestation)],
+        gitRunner: testTryGit,
+      },
+    );
+    assert.equal(rejectedWideMarkers.ok, false);
+    assert.match(rejectedWideMarkers.error, /conflict markers/);
+    testGit(["reset", "--hard", resolvedHead], fresh);
+    writeFileSync(join(fresh, "unrelated.txt"), "not authorized\n");
+    testGit(["add", "unrelated.txt"], fresh);
+    testGit(["commit", "-m", "unauthorized AI drift"], fresh);
+    const driftedAttestation = {
+      ...resolvedAttestation,
+      head_sha: testGit(["rev-parse", "HEAD"], fresh),
+    };
+    const rejectedAiDrift = validateReusablePromotionBranch(
+      "HEAD",
+      "origin/main",
+      sourcePr,
+      fresh,
+      plan,
+      {
+        promotionContext: reservationContext.context,
+        actualBranchName: reservationBranch,
+        attestations: [botComment(driftedAttestation)],
+        gitRunner: testTryGit,
+      },
+    );
+    assert.equal(rejectedAiDrift.ok, false);
+    assert.match(rejectedAiDrift.error, /outside its source plan/);
+    assert.equal(
+      validateReusablePromotionBranch(
+        "HEAD",
+        "origin/main",
+        sourcePr,
+        fresh,
+        plan,
+        {
+          promotionContext: reservationContext.context,
+          actualBranchName: reservationBranch,
+          attestations: [{
+            user: { login: "dependabot[bot]", type: "Bot" },
+            body: botComment(driftedAttestation).body,
+          }],
+          gitRunner: testTryGit,
+        },
+      ).ok,
+      false,
+      "an arbitrary bot's marker must never attest a promotion result",
+    );
+    testGit(["reset", "--hard", "origin/main"], fresh);
+
     assert.deepEqual(applyPicks(fresh, plan.picks, testTryGit), { status: "ok" });
     assert.equal(
       testGit(["rev-parse", "HEAD^{tree}"], fresh),
@@ -667,6 +2774,73 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       validateReusablePromotionBranch("HEAD", "origin/main", sourcePr, fresh, plan),
       { ok: true },
       "a genuine `cherry-pick -x` promotion remains reusable",
+    );
+    assert.equal(
+      validateReusablePromotionBranch(
+        "HEAD",
+        "origin/main",
+        sourcePr,
+        fresh,
+        plan,
+        {
+          promotionContext: reservationContext.context,
+          actualBranchName: reservationBranch,
+          gitRunner: testTryGit,
+        },
+      ).ok,
+      true,
+      "a verified non-CI-sensitive canonical direct branch keeps the fast-path recovery",
+    );
+    const reviewRequiredDirect = validateReusablePromotionBranch(
+      "HEAD",
+      "origin/main",
+      sourcePr,
+      fresh,
+      plan,
+      {
+        promotionContext: {
+          ...reservationContext.context,
+          sourceLineageStatus: "review-required-removed",
+        },
+        actualBranchName: reservationBranch,
+        gitRunner: testTryGit,
+      },
+    );
+    assert.equal(reviewRequiredDirect.ok, false);
+    assert.equal(reviewRequiredDirect.requiresReviewGateReplan, true);
+    assert.match(reviewRequiredDirect.error, /refusing PR creation or stack-base reuse/);
+    const ciSensitiveDirect = validateReusablePromotionBranch(
+      "HEAD",
+      "origin/main",
+      sourcePr,
+      fresh,
+      plan,
+      {
+        promotionContext: {
+          ...reservationContext.context,
+          paths: [".github/workflows/quarantine-restart-canary.yml"],
+        },
+        actualBranchName: reservationBranch,
+        gitRunner: testTryGit,
+      },
+    );
+    assert.equal(ciSensitiveDirect.ok, false);
+    assert.equal(ciSensitiveDirect.requiresReviewGateReplan, true);
+    assert.equal(
+      validateReusablePromotionBranch(
+        "HEAD",
+        "origin/main",
+        sourcePr,
+        fresh,
+        plan,
+        {
+          promotionContext: reservationContext.context,
+          actualBranchName: `${reservationBranch}-noncanonical`,
+          gitRunner: testTryGit,
+        },
+      ).ok,
+      false,
+      "a plain direct promotion branch must always use the canonical name",
     );
     const validPromotionSha = testGit(["rev-parse", "HEAD"], fresh);
     testGit(["config", "user.name", "Promoter Test"], fresh);
@@ -726,7 +2900,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     assert.equal(aggregatePresence.aggregateVerified, true);
 
     // Merely finding an equivalent rewritten commit in history is not enough:
-    // if a later source commit reverts it, preflight must fail closed.
+    // if a later source commit reverts it, preflight must block before any
+    // reservation, branch, AI work, or promotion PR can be created.
     testGit(["revert", "--no-edit", rewrittenSha], writer);
     testGit(["push", "origin", "HEAD:develop"], writer);
     testGit([
@@ -736,10 +2911,9 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       cwd: fresh,
       sourceSha: "origin/develop",
     });
-    assert.match(
-      revertedPlans.get(sourcePr.number).error,
-      /not present at current `develop` tip/,
-    );
+    const revertedPlan = revertedPlans.get(sourcePr.number);
+    assert.match(revertedPlan.error, /source-lineage safety block/);
+    assert.equal(revertedPlan.picks, undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -751,11 +2925,149 @@ async function selfTest() {
   assert.equal(slugify("Hello, World! 42"), "hello-world-42");
   assert.equal(slugify("---"), "change");
   assert.equal(slugify("a".repeat(80)).length, 40);
+  assert.equal(
+    isSourceLineageSafetyBlocked({
+      error: "source-lineage safety block",
+      sourceLineageStatus: "review-required-removed",
+      sourceLineageSafetyBlocked: true,
+    }),
+    true,
+    "an existing bot promotion whose source patch was removed is closed by maintenance",
+  );
+  assert.equal(
+    isSourceLineageSafetyBlocked({
+      sourceLineageStatus: "verified",
+      sourceLineageSafetyBlocked: false,
+    }),
+    false,
+    "verified source lineage never activates the close-before-AI maintenance boundary",
+  );
 
   const pr = { number: 7, headRefName: "claude/search-index-abc123", title: "feat: add search" };
   assert.equal(promotionBranchFor(pr), "promote/pr-7-search-index-abc123");
   assert.equal(promotionBranchFor({ number: 8, headRefName: "", title: "Fix: A thing" }),
     "promote/pr-8-fix-a-thing");
+  const retiredSource = {
+    number: 8,
+    headRefName: "",
+    title: "Fix: A thing",
+  };
+  const retiredBranch = promotionBranchFor(retiredSource);
+  const retiredPromotion = {
+    number: 508,
+    state: "CLOSED",
+    headRefName: retiredBranch,
+    body: "<!-- promotion-of: 8 -->",
+  };
+  const retirementFixture = {
+    v: 1,
+    source_pr: 8,
+    promotion_pr: 508,
+    branch: retiredBranch,
+    retired_head: "a".repeat(40),
+    reservation_sha: "b".repeat(40),
+    plan_hash: "c".repeat(64),
+  };
+  const retiredComment = {
+    id: 100,
+    created_at: "2026-08-09T00:00:00Z",
+    updated_at: "2026-08-09T00:00:00Z",
+    user: { login: "github-actions[bot]", type: "Bot" },
+    body: promotionRetirementMarker(retirementFixture),
+  };
+  assert.deepEqual(
+    findBotPromotionRetirement(retiredPromotion, retiredSource, [retiredComment]),
+    retirementFixture,
+    "a restart after close/delete must resume only an exact durable bot retirement",
+  );
+  assert.equal(
+    retiredBranchCleanupDisposition(retirementFixture, retirementFixture.retired_head),
+    "delete-exact",
+    "a restart after close but before delete resumes the exact leased cleanup",
+  );
+  assert.equal(
+    retiredBranchCleanupDisposition(retirementFixture, "d".repeat(40)),
+    "preserve-moved",
+    "a user-advanced branch must be preserved after a failed retirement cleanup",
+  );
+  assert.deepEqual(
+    parsePromotionRetirements(
+      "<!-- thingtime-ai-promotion-retirement-cancelled:v1 508 -->",
+    ),
+    [],
+    "successful reopen recovery clears active retirement authority so later user closure is respected",
+  );
+  assert.equal(
+    findBotPromotionRetirement(
+      retiredPromotion,
+      retiredSource,
+      [{ ...retiredComment, user: { login: "lopugit", type: "User" } }],
+    ),
+    null,
+    "a user-authored retirement lookalike cannot recreate a closed promotion",
+  );
+  const duplicateRetirement = {
+    ...retiredComment,
+    id: 101,
+    created_at: "2026-08-09T00:00:01Z",
+    updated_at: "2026-08-09T00:00:01Z",
+  };
+  const retirementCancellation = {
+    ...duplicateRetirement,
+    updated_at: "2026-08-09T00:00:02Z",
+    body: "<!-- thingtime-ai-promotion-retirement-cancelled:v1 508 -->",
+  };
+  assert.equal(
+    findBotPromotionRetirement(
+      retiredPromotion,
+      retiredSource,
+      [retiredComment, retirementCancellation],
+    ),
+    null,
+    "the latest bot cancellation supersedes every older duplicate retirement marker",
+  );
+  const reorderedStack = [
+    { number: 22, mergedAt: "2026-08-09T02:00:00Z" },
+    { number: 21, mergedAt: "2026-08-09T01:00:00Z" },
+  ];
+  sortPromotionCandidates(reorderedStack);
+  assert.deepEqual(
+    reorderedStack.map((candidate) => candidate.number),
+    [21, 22],
+    "outside-lookback predecessors requeued by maintenance must regain chronological stack order",
+  );
+
+  let checkpointPushOptions;
+  const checkpointPushFixture = exactCheckpointPush(
+    "/tmp",
+    "promote/pr-8-fix-a-thing",
+    "a".repeat(40),
+    "b".repeat(40),
+    "run-scoped-bot-token",
+    (_command, _args, options) => {
+      checkpointPushOptions = options;
+      return { ok: true, status: 0, out: "", err: "" };
+    },
+  );
+  assert.equal(checkpointPushFixture.ok, true);
+  assert.equal(checkpointPushOptions.env.GIT_CONFIG_COUNT, "4");
+  assert.equal(checkpointPushOptions.env.GIT_CONFIG_KEY_2, "http.https://github.com/.extraheader");
+  assert.equal(
+    checkpointPushOptions.env.GIT_CONFIG_VALUE_2,
+    "",
+    "checkpoint push must reset the PAT header persisted by actions/checkout",
+  );
+  assert.equal(checkpointPushOptions.env.GIT_CONFIG_KEY_3, "http.https://github.com/.extraheader");
+  assert.match(checkpointPushOptions.env.GIT_CONFIG_VALUE_3, /^AUTHORIZATION: basic /);
+  for (const status of ["queued", "in_progress", "waiting", "pending", "requested"]) {
+    assert.equal(
+      checkpointRecoveryDisposition(status),
+      "defer",
+      `promoter must not race an attested resolver run in ${status}`,
+    );
+  }
+  assert.equal(checkpointRecoveryDisposition("completed", "failure"), "recover");
+  assert.equal(checkpointRecoveryDisposition("completed", "success"), "recover");
 
   assert.equal(parsePromotionOf("hi\n<!-- promotion-of: 123 -->\nbye"), 123);
   assert.equal(parsePromotionOf("<!-- promotion-of: #45 -->"), 45);
@@ -783,9 +3095,221 @@ async function selfTest() {
   assert.equal(promotionTitleFor({ title: "Add search", number: 9 }, null, 1), "[Promote] Add search (#9)");
   assert.equal(promotionTitleFor({ title: "Add search", number: 9 }, "search", 2),
     "[Promote][search #2] Add search (#9)");
+  const lineageBody = promotionBody(
+    { ...pr, author: { login: "tester" }, mergedAt: "2026-08-09T00:00:00Z", mergeCommit: { oid: "a".repeat(40) } },
+    null,
+    1,
+    [],
+    () => "",
+    { sourceLineageStatus: "review-required-removed" },
+  );
+  assert.match(lineageBody, /Source-lineage review required/);
+  assert.match(lineageBody, /Do not merge this promotion unless restoring/);
+  assert.match(lineageBody, /thingtime-promotion-source-lineage:v1/);
+  assert.doesNotMatch(
+    promotionBody(
+      { ...pr, author: { login: "tester" }, mergedAt: "2026-08-09T00:00:00Z", mergeCommit: { oid: "a".repeat(40) } },
+      null,
+      1,
+      [],
+      () => "",
+      { sourceLineageStatus: "verified" },
+    ),
+    /Source-lineage review required/,
+  );
 
   assert.ok(setsEqual(new Set(["a", "b"]), new Set(["b", "a"])));
   assert.ok(!setsEqual(new Set(["a"]), new Set(["a", "b"])));
+  assert.equal(literalPathspec(":(top,glob)**"), ":(literal):(top,glob)**");
+  assert.deepEqual(sortRepoPaths(["é.txt", "z.txt", "a.txt"]), ["a.txt", "z.txt", "é.txt"]);
+  assert.deepEqual(
+    cleanReplayQuarantinePolicy({
+      paths: ["remix/app/feature.ts"],
+      sourceLineageStatus: "verified",
+    }),
+    { quarantine: false, ciSensitive: false, lineageReviewRequired: false },
+  );
+  assert.deepEqual(
+    cleanReplayQuarantinePolicy({
+      paths: [".github/workflows/promotion-quarantine-canary.yml"],
+      sourceLineageStatus: "verified",
+    }),
+    { quarantine: true, ciSensitive: true, lineageReviewRequired: false },
+  );
+  assert.deepEqual(
+    cleanReplayQuarantinePolicy({
+      paths: ["remix/app/restored-feature.ts"],
+      sourceLineageStatus: "review-required-removed",
+    }),
+    { quarantine: true, ciSensitive: false, lineageReviewRequired: true },
+  );
+  assert.equal(
+    cleanReplayQuarantinePolicy({ sourceLineageStatus: "verified" }).quarantine,
+    true,
+    "an incomplete path classification must fail into quarantine",
+  );
+  const cleanQuarantineBody = promotionWorkerReviewBody(
+    "candidate\n---\nfooter",
+    {
+      sourcePr: 7,
+      baseRef: "main",
+      paths: [".github/workflows/promotion-quarantine-canary.yml"],
+      sourceLineageStatus: "verified",
+    },
+  );
+  assert.match(cleanQuarantineBody, /Protected clean-replay review/);
+  assert.doesNotMatch(cleanQuarantineBody, /exact source patch conflicted/);
+  assert.match(
+    promotionWorkerReviewBody(
+      "candidate\n---\nfooter",
+      {
+        sourcePr: 7,
+        baseRef: "main",
+        paths: ["remix/app/conflict.ts"],
+        sourceLineageStatus: "verified",
+      },
+    ),
+    /exact source patch conflicted/,
+  );
+
+  const dispatchContext = {
+    sourcePr: 193,
+    baseRef: "main",
+    baseSha: "a".repeat(40),
+    branch: "promote/pr-193-fixture",
+    sourceTipSha: "9".repeat(40),
+    sourceStartSha: "b".repeat(40),
+    sourceEndSha: "c".repeat(40),
+    sourceLineageStatus: "review-required-ambiguous",
+    planHash: "d".repeat(64),
+  };
+  const dispatchRequest = buildPromotionDispatchRequest(
+    "lopugit/thingtime",
+    dispatchContext,
+    "e".repeat(40),
+    "fixture title",
+    "fixture body",
+  );
+  assert.equal(dispatchRequest.ok, true);
+  assert.equal(
+    dispatchRequest.endpoint,
+    "repos/lopugit/thingtime/actions/workflows/resolve-pr-conflicts.yml/dispatches",
+  );
+  assert.equal(dispatchRequest.payload.ref, "github-actions");
+  assert.deepEqual(Object.keys(dispatchRequest.payload.inputs), [
+    "promotion_source_pr",
+    "promotion_plan_b64",
+  ]);
+  const decodedDispatchPlan = JSON.parse(
+    Buffer.from(dispatchRequest.payload.inputs.promotion_plan_b64, "base64").toString("utf8"),
+  );
+  assert.deepEqual(Object.keys(decodedDispatchPlan), [
+    "base_ref",
+    "base_sha",
+    "branch",
+    "reservation_sha",
+    "source_tip_sha",
+    "source_start_sha",
+    "source_end_sha",
+    "source_lineage_status",
+    "plan_hash",
+    "title_b64",
+    "body_b64",
+  ]);
+  assert.equal(decodedDispatchPlan.source_tip_sha, dispatchContext.sourceTipSha);
+  assert.equal(
+    decodedDispatchPlan.source_lineage_status,
+    dispatchContext.sourceLineageStatus,
+  );
+  assert.equal(
+    Buffer.from(decodedDispatchPlan.title_b64, "base64").toString("utf8"),
+    "fixture title",
+  );
+  assert.equal(
+    Buffer.from(decodedDispatchPlan.body_b64, "base64").toString("utf8"),
+    "fixture body",
+  );
+  assert.deepEqual(
+    promotionDispatchArgs(dispatchRequest.endpoint, "/tmp/dispatch.json"),
+    ["api", "--method", "POST", dispatchRequest.endpoint, "--input", "/tmp/dispatch.json"],
+  );
+  let dispatchInvocation = null;
+  assert.deepEqual(
+    dispatchPromotionResolution(
+      dispatchRequest,
+      "fixture-actions-token",
+      (command, args, options) => {
+        dispatchInvocation = { command, args, token: options.env.GH_TOKEN };
+        return { ok: true, status: 0, out: "", err: "" };
+      },
+    ),
+    { ok: true },
+  );
+  assert.equal(dispatchInvocation.command, "gh");
+  assert.equal(dispatchInvocation.token, "fixture-actions-token");
+  assert.equal(dispatchInvocation.args[0], "api");
+  assert.equal(dispatchInvocation.args.includes(dispatchRequest.endpoint), true);
+  const oversizedDispatch = buildPromotionDispatchRequest(
+    "lopugit/thingtime",
+    dispatchContext,
+    "e".repeat(40),
+    "fixture title",
+    "x".repeat(50_000),
+  );
+  assert.equal(oversizedDispatch.ok, false);
+  assert.match(oversizedDispatch.error, /24,000-byte bound/);
+  const oversizedTitleDispatch = buildPromotionDispatchRequest(
+    "lopugit/thingtime",
+    dispatchContext,
+    "e".repeat(40),
+    "🥰".repeat(65),
+    "fixture body",
+  );
+  assert.equal(oversizedTitleDispatch.ok, false);
+  assert.match(oversizedTitleDispatch.error, /256-byte bound/);
+  assert.deepEqual(exactReservationPushArgs(dispatchContext.branch), [
+    "push",
+    `--force-with-lease=refs/heads/${dispatchContext.branch}:`,
+    "origin",
+    `HEAD:refs/heads/${dispatchContext.branch}`,
+  ]);
+  assert.deepEqual(exactReservationDeleteArgs(dispatchContext.branch, "e".repeat(40)), [
+    "push",
+    `--force-with-lease=refs/heads/${dispatchContext.branch}:${"e".repeat(40)}`,
+    "origin",
+    `:refs/heads/${dispatchContext.branch}`,
+  ]);
+
+  const attestationFixture = {
+    v: 1,
+    source_pr: 193,
+    base_ref: "main",
+    base_sha: "a".repeat(40),
+    branch: dispatchContext.branch,
+    source_tip_sha: "9".repeat(40),
+    source_start_sha: "b".repeat(40),
+    source_end_sha: "c".repeat(40),
+    source_lineage_status: "review-required-ambiguous",
+    plan_hash: "d".repeat(64),
+    reservation_sha: "e".repeat(40),
+    head_sha: "f".repeat(40),
+    conflict_paths: [],
+    run_url: "https://github.com/lopugit/thingtime/actions/runs/123",
+  };
+  const encodedAttestation = Buffer.from(JSON.stringify(attestationFixture), "utf8")
+    .toString("base64url");
+  assert.deepEqual(
+    parsePromotionResolutionAttestations(
+      `resolved\n<!-- thingtime-ai-promotion-resolved:v1 ${encodedAttestation} -->`,
+    ),
+    [attestationFixture],
+  );
+  assert.deepEqual(
+    parsePromotionResolutionAttestations(
+      "<!-- thingtime-ai-promotion-resolved:v1 not-json -->",
+    ),
+    [],
+  );
 
   for (const length of [39, 41, 63, 65]) {
     assert.equal(
@@ -812,6 +3336,49 @@ async function selfTest() {
       () => ({ ok: false, status: 128, out: "", err: "fatal: bad object" })).error,
     /bad object/,
   );
+  for (const failingApplyIndex of [1, 2]) {
+    let sourceTipCommand = 0;
+    const operationalPatchCheck = inspectPatchAtSourceTip(
+      "fixture patch",
+      "b".repeat(40),
+      undefined,
+      () => {
+        const index = sourceTipCommand++;
+        if (index === 0) return { ok: true, status: 0, out: "", err: "" };
+        if (index === failingApplyIndex) {
+          return { ok: false, status: 128, out: "", err: "fatal: fixture apply failure" };
+        }
+        return { ok: false, status: 1, out: "", err: "patch does not apply" };
+      },
+    );
+    assert.equal(operationalPatchCheck.ok, false);
+    assert.match(operationalPatchCheck.error, /failed operationally/);
+  }
+  const ambiguousLineage = inspectSourcePresence(
+    "a".repeat(40),
+    "b".repeat(40),
+    undefined,
+    {
+      ancestry: () => ({ ok: true, isAncestor: false }),
+      plannedPatch: () => ({ ok: true, patch: "fixture patch", patchId: "c".repeat(40), paths: [] }),
+      tipInspector: () => ({ ok: true, present: null }),
+    },
+  );
+  assert.equal(ambiguousLineage.ok, false);
+  assert.equal(ambiguousLineage.sourceLineageStatus, "review-required-ambiguous");
+  assert.match(ambiguousLineage.error, /source-lineage safety block/);
+  const failedLineageInspection = inspectSourcePresence(
+    "a".repeat(40),
+    "b".repeat(40),
+    undefined,
+    {
+      ancestry: () => ({ ok: true, isAncestor: false }),
+      plannedPatch: () => ({ ok: true, patch: "fixture patch", patchId: "c".repeat(40), paths: [] }),
+      tipInspector: () => ({ ok: false, error: "fixture source-tip read failure" }),
+    },
+  );
+  assert.equal(failedLineageInspection.ok, false);
+  assert.match(failedLineageInspection.error, /source-tip read failure/);
 
   const sourcePrs = [
     { number: 10, title: "first", mergeCommit: { oid: "a".repeat(40) } },
@@ -822,7 +3389,13 @@ async function selfTest() {
     ensure: (sha) => sha === "b".repeat(40)
       ? { ok: false, error: "fixture object unavailable" }
       : { ok: true, fetched: false },
-    sourcePresence: (sha) => ({ ok: true, equivalentSha: sha, rewritten: false }),
+    sourcePresence: (sha) => ({
+      ok: true,
+      equivalentSha: sha,
+      rewritten: false,
+      verifiedAtSourceTip: true,
+      sourceLineageStatus: "verified",
+    }),
     ancestry: () => ({ ok: true, isAncestor: false }),
     compute: (sourcePr) => ({ picks: [{ sha: sourcePr.mergeCommit.oid }] }),
     plannedPatch: () => ({ ok: true, patch: "fixture patch" }),
@@ -846,6 +3419,29 @@ async function selfTest() {
   assert.equal(targetEquivalentPlans.get(10).inTarget, true);
   assert.equal(targetEquivalentPlans.get(10).targetPatchEquivalent, true);
   assert.equal(sourcePresenceCalledForTarget, false);
+
+  for (const invalidLineageStatus of [undefined, "unexpected-lineage-state"]) {
+    const invalidLineagePlans = preflightPromotionPlans([sourcePrs[0]], "d".repeat(40), {
+      sourceSha: "e".repeat(40),
+      ensure: () => ({ ok: true, fetched: false }),
+      ancestry: () => ({ ok: true, isAncestor: false }),
+      compute: (sourcePr) => ({ picks: [{ sha: sourcePr.mergeCommit.oid }] }),
+      plannedPatch: () => ({ ok: true, patch: "fixture patch" }),
+      targetPresence: () => ({ ok: true, present: false }),
+      sourcePresence: () => ({
+        ok: true,
+        equivalentSha: null,
+        rewritten: true,
+        verifiedAtSourceTip: false,
+        sourceLineageStatus: invalidLineageStatus,
+      }),
+    });
+    assert.match(
+      invalidLineagePlans.get(10).error,
+      /invalid source-lineage classification/,
+      "missing or unknown lineage must fail closed during preflight",
+    );
+  }
 
   const stack = { key: "alpha", prs: sourcePrs };
   assert.deepEqual(dependentMembersAfter(stack, 1).map((member) => member.number), [12]);
@@ -908,14 +3504,14 @@ async function selfTest() {
   assert.deepEqual(failedGroups, ["broken:fixture failure"]);
 
   const partialResults = {
-    created: [], recovered: [], retargeted: [], closed: [], conflicts: [],
-    blocked: [], warnings: [], skipped: [],
+    created: [], recovered: [], retargeted: [], closed: [], queued: [],
+    lineageReview: [], blocked: [], warnings: [], skipped: [],
   };
   let summarizedPartial = null;
   await assert.rejects(
     runWithSummary(
       async () => {
-        partialResults.conflicts.push("fixture conflict");
+        partialResults.queued.push("fixture conflict handoff");
         throw new Error("fixture fatal");
       },
       partialResults,
@@ -925,7 +3521,7 @@ async function selfTest() {
     /fixture fatal/,
   );
   assert.equal(summarizedPartial.count, 3);
-  assert.deepEqual(summarizedPartial.results.conflicts, ["fixture conflict"]);
+  assert.deepEqual(summarizedPartial.results.queued, ["fixture conflict handoff"]);
   assert.match(summarizedPartial.results.blocked[0], /fixture fatal/);
 
   const structuredPlanFailure = computePicks(
@@ -934,6 +3530,7 @@ async function selfTest() {
   );
   assert.match(structuredPlanFailure.error, /cannot inspect merge commit/);
 
+  pathspecAuthorityIntegrationTest(assert);
   orphanedMergeHydrationIntegrationTest(assert);
 
   console.log("self-test OK");
@@ -976,6 +3573,102 @@ function listPromotionPrs() {
   return prs.filter(
     (pr) => pr.headRefName?.startsWith("promote/pr-") || parsePromotionOf(pr.body) !== null,
   );
+}
+
+function listSourceIssueComments(number) {
+  const pages = ghJson([
+    "api", "--paginate",
+    `repos/${CFG.repo}/issues/${number}/comments?per_page=100`,
+    "--slurp",
+  ]) || [];
+  return pages.flatMap((page) => Array.isArray(page) ? page : [page]);
+}
+
+function promotionPauseStateForRun(sourcePr, context) {
+  if (!sourcePrHasLabel(sourcePr, PROMOTION_PAUSE_LABEL)) {
+    return { ok: true, paused: false };
+  }
+  try {
+    const comments = listSourceIssueComments(sourcePr.number);
+    return {
+      ok: true,
+      paused: isExactPausedPromotionSnapshot(sourcePr, context, comments),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        `cannot verify the exact automatic-promotion pause for source PR #${sourcePr.number}: ` +
+        failureDetail({ err: String(error?.message || error) }),
+    };
+  }
+}
+
+function validateReusablePromotionForRun({
+  branchRef,
+  actualBranchName,
+  expectedBaseRef,
+  expectedBaseName,
+  sourceTipSha,
+  sourcePr,
+  cwd,
+  plan,
+}) {
+  const baseShaResult = tryGit(["rev-parse", "--verify", `${expectedBaseRef}^{commit}`], cwd);
+  const contextResult = baseShaResult.ok
+    ? buildPromotionPlanContext({
+        sourcePr,
+        branch: promotionBranchFor(sourcePr),
+        baseRef: expectedBaseName,
+        baseSha: baseShaResult.out,
+        sourceTipSha,
+        plan,
+        cwd,
+      })
+    : { ok: false, error: `cannot resolve exact reusable-branch base: ${failureDetail(baseShaResult)}` };
+  if (!contextResult.ok) {
+    return {
+      ok: false,
+      error:
+        `cannot build immutable context for reusable promotion branch: ` +
+        contextResult.error,
+    };
+  }
+  const options = {
+    promotionContext: contextResult.context,
+    actualBranchName,
+    attestations: null,
+  };
+  let reusable = validateReusablePromotionBranch(
+    branchRef,
+    expectedBaseRef,
+    sourcePr,
+    cwd,
+    plan,
+    options,
+  );
+  if (reusable.needsAttestations) {
+    let comments;
+    try {
+      comments = listSourceIssueComments(sourcePr.number);
+    } catch (error) {
+      return {
+        ok: false,
+        error:
+          `cannot load source-PR attestations for AI-resolved promotion: ` +
+          failureDetail({ err: String(error?.message || error) }),
+      };
+    }
+    reusable = validateReusablePromotionBranch(
+      branchRef,
+      expectedBaseRef,
+      sourcePr,
+      cwd,
+      plan,
+      { ...options, attestations: comments },
+    );
+  }
+  return { ...reusable, promotionContext: contextResult.context };
 }
 
 // Collapse possibly-multiple promotion records per source PR: MERGED wins,
@@ -1051,9 +3744,48 @@ export function validateReusablePromotionBranch(
   {
     ancestry = inspectAncestry,
     gitRunner = tryGit,
+    commandRunner = tryRun,
     plannedPatch = readPlannedPatch,
+    promotionContext = null,
+    actualBranchName = "",
+    attestations = null,
   } = {},
 ) {
+  if (promotionContext && actualBranchName) {
+    const unresolved = inspectUnresolvedPromotionReservationHead(
+      branchRef,
+      sourcePr,
+      promotionContext.branch,
+      cwd,
+      gitRunner,
+    );
+    if (!unresolved.ok) return unresolved;
+    if (unresolved.present) {
+      if (actualBranchName !== promotionContext.branch) {
+        return {
+          ok: false,
+          error: `reserved promotion must use canonical branch \`${promotionContext.branch}\``,
+        };
+      }
+      const expected = expectedReservationTrailers(promotionContext);
+      const exact = unresolved.parentSha === promotionContext.baseSha &&
+        [...expected].every(([key, value]) => unresolved.trailers.get(key) === value);
+      if (exact) {
+        return {
+          ok: true,
+          mode: "reservation",
+          reservationSha: unresolved.reservationSha,
+        };
+      }
+      return {
+        ok: false,
+        staleReservation: true,
+        reservationSha: unresolved.reservationSha,
+        error:
+          "unresolved reservation belongs to an older base, source endpoint, or immutable plan",
+      };
+    }
+  }
   const descended = ancestry(expectedBaseRef, branchRef, cwd, gitRunner);
   if (!descended.ok) return descended;
   if (!descended.isAncestor) {
@@ -1061,6 +3793,65 @@ export function validateReusablePromotionBranch(
       ok: false,
       error: `promotion branch is not based on current expected base \`${expectedBaseRef}\``,
     };
+  }
+  if (promotionContext) {
+    const reservation = inspectPromotionReservation(
+      branchRef,
+      expectedBaseRef,
+      promotionContext,
+      cwd,
+      gitRunner,
+    );
+    if (!reservation.ok) return reservation;
+    if (reservation.present) {
+      if (!actualBranchName || actualBranchName !== promotionContext.branch) {
+        return {
+          ok: false,
+          error:
+            `reserved/AI-resolved promotion must use canonical branch ` +
+            `\`${promotionContext.branch}\``,
+        };
+      }
+      if (!reservation.resolved) {
+        return {
+          ok: true,
+          mode: "reservation",
+          reservationSha: reservation.reservationSha,
+        };
+      }
+      if (attestations === null) {
+        return { ok: false, needsAttestations: true, reservation };
+      }
+      return validateAiResolvedPromotionBranch(
+        branchRef,
+        expectedBaseRef,
+        promotionContext,
+        reservation,
+        attestations,
+        cwd,
+        gitRunner,
+        commandRunner,
+      );
+    }
+    if (!actualBranchName || actualBranchName !== promotionContext.branch) {
+      return {
+        ok: false,
+        error:
+          `plain promotion branch must use canonical branch ` +
+          `\`${promotionContext.branch}\` before it can be reused`,
+      };
+    }
+    const quarantine = cleanReplayQuarantinePolicy(promotionContext);
+    if (quarantine.quarantine) {
+      return {
+        ok: false,
+        requiresReviewGateReplan: true,
+        error:
+          "legacy/plain promotion branch lacks the trusted review-gate reservation, " +
+          "bot attestation, and checkpoint required by its current immutable plan; " +
+          "preserving the branch and refusing PR creation or stack-base reuse",
+      };
+    }
   }
   const history = gitRunner(["log", "--format=%B", `${expectedBaseRef}..${branchRef}`], cwd);
   if (!history.ok) {
@@ -1101,15 +3892,23 @@ export function validateReusablePromotionBranch(
   const expectedPatch = plannedPatch(plan.picks, cwd, { gitRunner });
   if (!expectedPatch.ok) return expectedPatch;
 
-  const actualFiles = gitRunner(
-    ["diff", "--name-only", expectedBaseRef, branchRef],
-    cwd,
+  const actualFiles = commandRunner(
+    "git",
+    [
+      "-c", "core.quotePath=false", "diff", "--name-only", "-z",
+      expectedBaseRef, branchRef,
+    ],
+    { ...EXEC_OPTS, cwd, preserveOutput: true },
   );
   if (!actualFiles.ok) {
     return { ok: false, error: `cannot inspect reusable promotion diff: ${failureDetail(actualFiles)}` };
   }
   const expectedPaths = new Set(expectedPatch.paths);
-  const unexpectedPaths = actualFiles.out.split("\n").filter(Boolean).filter(
+  const actualPaths = actualFiles.out.split("\0").filter(Boolean);
+  if (actualPaths.some((path) => !validPromotionPath(path))) {
+    return { ok: false, error: "reusable promotion diff contains a control-character path" };
+  }
+  const unexpectedPaths = actualPaths.filter(
     (path) =>
       !expectedPaths.has(path) &&
       !path.startsWith("graphify-out/") &&
@@ -1124,7 +3923,7 @@ export function validateReusablePromotionBranch(
     };
   }
   if (!setsEqual(expectedPaths, new Set(
-    actualFiles.out.split("\n").filter(Boolean).filter(
+    actualPaths.filter(
       (path) => !path.startsWith("graphify-out/") && path !== "remix/CHANGELOG.md",
     ),
   ))) {
@@ -1157,8 +3956,14 @@ export function validateReusablePromotionBranch(
       };
     }
     for (const path of expectedPatch.paths) {
-      const expectedEntry = verificationGit(["ls-tree", "HEAD", "--", path], verificationWorktree);
-      const actualEntry = gitRunner(["ls-tree", branchRef, "--", path], cwd);
+      const expectedEntry = verificationGit(
+        ["ls-tree", "HEAD", "--", literalPathspec(path)],
+        verificationWorktree,
+      );
+      const actualEntry = gitRunner(
+        ["ls-tree", branchRef, "--", literalPathspec(path)],
+        cwd,
+      );
       if (!expectedEntry.ok || !actualEntry.ok || expectedEntry.out !== actualEntry.out) {
         return {
           ok: false,
@@ -1193,10 +3998,14 @@ export function validateReusablePromotionBranch(
       );
       continue;
     }
-    const files = gitRunner(["diff-tree", "--no-commit-id", "--name-only", "-r", commit], cwd);
-    const changed = files.ok ? files.out.split("\n").filter(Boolean) : [];
+    const files = gitRunner(
+      ["-c", "core.quotePath=false", "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", commit],
+      cwd,
+      { preserveOutput: true },
+    );
+    const changed = files.ok ? files.out.split("\0").filter(Boolean) : [];
     if (
-      files.ok && changed.length > 0 &&
+      files.ok && changed.every(validPromotionPath) && changed.length > 0 &&
       changed.every((path) => path.startsWith("graphify-out/") || path === "remix/CHANGELOG.md")
     ) {
       continue;
@@ -1442,7 +4251,35 @@ export function preflightPromotionPlans(
       }
       const present = sourcePresence(sha, sourceSha, cwd, { picks: computed.picks });
       if (!present.ok) {
-        plans.set(pr.number, { error: present.error, recovered: available.fetched });
+        const blockedStatus = SOURCE_LINEAGE_STATUSES.has(present.sourceLineageStatus)
+          ? present.sourceLineageStatus
+          : "";
+        plans.set(pr.number, {
+          error: present.error,
+          recovered: available.fetched,
+          ...(blockedStatus
+            ? {
+                sourceLineageStatus: blockedStatus,
+                sourceLineageSafetyBlocked: blockedStatus !== "verified",
+              }
+            : {}),
+        });
+        continue;
+      }
+      if (!SOURCE_LINEAGE_STATUSES.has(present.sourceLineageStatus)) {
+        plans.set(pr.number, {
+          error: "source inspection returned an invalid source-lineage classification",
+          recovered: available.fetched,
+        });
+        continue;
+      }
+      const lineageStatus = present.sourceLineageStatus;
+      if (lineageStatus !== "verified") {
+        plans.set(pr.number, {
+          error:
+            "source-lineage safety block: only a patch proven present at the current source tip may be promoted",
+          recovered: available.fetched,
+        });
         continue;
       }
       plans.set(pr.number, {
@@ -1453,6 +4290,10 @@ export function preflightPromotionPlans(
         sourceRewritten: present.rewritten,
         verifiedAtSourceTip: present.verifiedAtSourceTip,
         aggregateVerified: present.aggregateVerified,
+        sourceLineageStatus: lineageStatus,
+        sourceLineageReviewRequired: lineageStatus !== "verified",
+        sourceLineageDetail: present.sourceLineageDetail || "",
+        sourceTipSha: sourceSha,
       });
     } catch (error) {
       plans.set(pr.number, {
@@ -1511,6 +4352,12 @@ export function processGroupsIndependently(groups, processGroup, onFailure) {
   }
 }
 
+export function sortPromotionCandidates(prs) {
+  return prs.sort((a, b) =>
+    Date.parse(a.mergedAt || "") - Date.parse(b.mergedAt || "") || a.number - b.number,
+  );
+}
+
 export function externalStackPromotionState(group, promotionPrs, promoBySource) {
   if (!group.key) return { closed: null, closeds: [], open: null, opens: [] };
   const currentSourceNumbers = new Set(group.prs.map((member) => member.number));
@@ -1559,7 +4406,8 @@ function applyPicks(worktree, picks, gitRunner = tryGit) {
       }
       if (unmerged.out) {
         gitRunner(["cherry-pick", "--abort"], worktree);
-        return { status: "conflict", detail: unmerged.out.split("\n").slice(0, 20).join(", ") };
+        const paths = unmerged.out.split("\n").filter(Boolean).slice(0, 200);
+        return { status: "conflict", paths, detail: paths.slice(0, 20).join(", ") };
       }
 
       const cherryPickHead = gitRunner(
@@ -1591,6 +4439,7 @@ function applyPicks(worktree, picks, gitRunner = tryGit) {
 // ---------------------------------------------------------------------------
 
 let labelEnsured = false;
+let sourceLineageLabelEnsured = false;
 function ensurePromotionLabel() {
   if (labelEnsured || !CFG.promotionLabel) return labelEnsured;
   const res = tryGh(["label", "create", CFG.promotionLabel, ...repoFlag(),
@@ -1600,7 +4449,79 @@ function ensurePromotionLabel() {
   return labelEnsured;
 }
 
-function promotionBody(pr, groupKey, position, groupPrs, statusFor) {
+function ensureSourceLineageReviewLabel(token = "") {
+  if (sourceLineageLabelEnsured) return true;
+  const args = [
+    "label", "create", SOURCE_LINEAGE_REVIEW_LABEL, ...repoFlag(),
+    "--color", "b60205", "--force",
+    "--description", "Historical source intent must be reviewed before promotion",
+  ];
+  const result = token
+    ? tryRun("gh", args, { ...EXEC_OPTS, env: { ...process.env, GH_TOKEN: token } })
+    : tryGh(args);
+  sourceLineageLabelEnsured = result.ok;
+  return sourceLineageLabelEnsured;
+}
+
+export function isSourceLineageSafetyBlocked(plan) {
+  return Boolean(
+    plan?.sourceLineageSafetyBlocked === true &&
+    (plan?.sourceLineageStatus === "review-required-removed" ||
+      plan?.sourceLineageStatus === "review-required-ambiguous"),
+  );
+}
+
+function closeSourceLineageBlockedPromotion(sourcePr, promotion, plan, results) {
+  if (!isSourceLineageSafetyBlocked(plan)) return false;
+  const status = plan.sourceLineageStatus;
+  const reason = sourceLineageReason(status);
+  if (ensureSourceLineageReviewLabel(process.env.ACTIONS_TOKEN)) {
+    const labelled = withActionsToken([
+      "pr", "edit", String(promotion.number), ...repoFlag(),
+      "--add-label", SOURCE_LINEAGE_REVIEW_LABEL,
+    ]);
+    if (!labelled.ok) {
+      results.warnings.push(
+        `Promotion #${promotion.number} lineage-block label repair failed: ${labelled.error}`,
+      );
+    }
+  }
+  const closed = withActionsToken([
+    "pr", "close", String(promotion.number), ...repoFlag(),
+    "--comment",
+    `Source-lineage safety block at current \`${CFG.source}\` tip: ${reason} ` +
+      "This bot-created promotion is closed without running AI or changing its branch. " +
+      "Restore or re-merge the intended source change before asking the promoter to try again.",
+  ]);
+  if (!closed.ok) {
+    results.warnings.push(
+      `Promotion #${promotion.number} could not be closed after its source lineage became ` +
+        `unverified: ${closed.error}`,
+    );
+    return true;
+  }
+  promotion.state = "CLOSED";
+  results.blocked.push(
+    `Promotion #${promotion.number} (source #${sourcePr.number}) was closed because its ` +
+      `historical patch is no longer provably present at current \`${CFG.source}\` tip; ` +
+      "no AI worker or replacement promotion was started.",
+  );
+  upsertBotIssueComment(
+    sourcePr.number,
+    "thingtime-promotion-source-lineage-blocked:v1",
+    [
+      `⛔ Promotion #${promotion.number} was closed by the source-lineage safety boundary.`,
+      "",
+      reason,
+      "",
+      `No AI worker or replacement promotion PR will run until the change is again provably present on \`${CFG.source}\`.`,
+      "<!-- thingtime-promotion-source-lineage-blocked:v1 -->",
+    ].join("\n"),
+  );
+  return true;
+}
+
+function promotionBody(pr, groupKey, position, groupPrs, statusFor, plan = {}) {
   const lines = [];
   lines.push(
     `Automated promotion of #${pr.number} from \`${CFG.source}\` to \`${CFG.target}\`, ` +
@@ -1620,6 +4541,25 @@ function promotionBody(pr, groupKey, position, groupPrs, statusFor) {
     `| Merge commit | \`${pr.mergeCommit?.oid || "unknown"}\` |`,
     `| Head branch | \`${pr.headRefName}\` |`,
   );
+  if (sourceLineageReviewRequired(plan)) {
+    const status = sourceLineageStatus(plan);
+    lines.push(
+      "",
+      "## ⚠️ Source-lineage review required",
+      "",
+      `**Do not merge this promotion unless restoring the historical source change is intended.**`,
+      "",
+      sourceLineageReason(status),
+      "",
+      `The workflow recovered and re-applied only source PR #${pr.number}'s exact historical patch. ` +
+        "It did not ask AI to infer whether that change still belongs in the release.",
+      "A reviewer must compare this candidate with current product intent before merging it to `main`.",
+      "",
+      `Lineage status: \`${status}\` · current source tip was checked automatically.`,
+      "",
+      "<!-- thingtime-promotion-source-lineage:v1 -->",
+    );
+  }
   if (groupKey && groupPrs.length > 1) {
     lines.push(
       "",
@@ -1657,14 +4597,87 @@ function promotionBody(pr, groupKey, position, groupPrs, statusFor) {
   return lines.join("\n");
 }
 
-function createPromotionPr({ branch, base, title, body }) {
+function promotionConflictReviewBody(body, context) {
+  const review = [
+    "## Automatic conflict-resolution review",
+    "",
+    `- The exact source patch conflicted with \`${context.baseRef}\`, so the trusted AI`,
+    "  promotion resolver produced this branch automatically instead of leaving manual commands.",
+    "- Its write scope was limited to non-Graphify paths already changed by the source PR;",
+    "  Graphify output was handled as derived data, and unresolved conflict markers were rejected.",
+    `- A \`github-actions[bot]\` comment on source PR #${context.sourcePr} attests the exact`,
+    "  base, source endpoints, reservation commit, final head, plan hash, and resolver run.",
+    ...(sourceLineageReviewRequired(context)
+      ? [
+          `- The separate \`${SOURCE_LINEAGE_REVIEW_LABEL}\` warning concerns whether the historical`,
+          "  feature is still intended; AI conflict resolution does not clear or answer that review.",
+        ]
+      : []),
+    "- Please review the resolved diff before merging; no manual branch repair is required.",
+    "",
+  ].join("\n");
+  return body.replace("\n---\n", `\n${review}\n---\n`);
+}
+
+function promotionQuarantineReviewBody(body, context, policy) {
+  const reasons = [
+    ...(policy.ciSensitive
+      ? ["the exact source patch changes CI-sensitive `.github/**` content"]
+      : []),
+    ...(policy.lineageReviewRequired
+      ? [`its source lineage is \`${context.sourceLineageStatus}\``]
+      : []),
+  ];
+  const review = [
+    "## Protected clean-replay review",
+    "",
+    `- This candidate was quarantined before the promoter applied any historical commit because ${reasons.join(" and ")}.`,
+    "- The trusted worker reconstructs the exact patch as a bot-authored synthetic commit instead of",
+    "  publishing original commit messages or executable workflow history with the promotion PAT.",
+    ...(policy.ciSensitive
+      ? [
+          "- CI-sensitive content commits are stamped `[skip ci]`; the bot-authored empty checkpoint",
+          "  exposes approval-required PR checks only after the review branch and PR exist.",
+        ]
+      : []),
+    `- A \`github-actions[bot]\` comment on source PR #${context.sourcePr} attests the exact`,
+    "  source endpoints, destination base, reservation, plan hash, and published head.",
+    "- Please review the exact candidate before merging; no manual branch repair is required.",
+    "",
+  ].join("\n");
+  const accurateBody = body.replace(
+    "  (`git cherry-pick -x`; each commit message references the original SHA).",
+    "  (the trusted worker reconstructs one exact bot-authored synthetic commit).",
+  );
+  return accurateBody.replace("\n---\n", `\n${review}\n---\n`);
+}
+
+function promotionWorkerReviewBody(body, context) {
+  const policy = cleanReplayQuarantinePolicy(context);
+  return policy.quarantine
+    ? promotionQuarantineReviewBody(body, context, policy)
+    : promotionConflictReviewBody(body, context);
+}
+
+function createPromotionPr({ branch, base, title, body, token = "", sourceLineage = "" }) {
+  if (!SOURCE_LINEAGE_STATUSES.has(sourceLineage)) {
+    return { ok: false, err: "promotion PR is missing a valid source-lineage classification" };
+  }
   const bodyFile = join(os.tmpdir(), `promotion-body-${Date.now()}-${Math.random().toString(36).slice(2)}.md`);
   writeFileSync(bodyFile, body);
   try {
     const args = ["pr", "create", ...repoFlag(),
       "--base", base, "--head", branch, "--title", title, "--body-file", bodyFile];
     if (ensurePromotionLabel()) args.push("--label", CFG.promotionLabel);
-    return { ok: true, url: gh(args).split("\n").pop() };
+    if (sourceLineage !== "verified" && ensureSourceLineageReviewLabel(token)) {
+      args.push("--label", SOURCE_LINEAGE_REVIEW_LABEL);
+    }
+    const created = token
+      ? tryRun("gh", args, { ...EXEC_OPTS, env: { ...process.env, GH_TOKEN: token } })
+      : tryGh(args);
+    return created.ok
+      ? { ok: true, url: created.out.split("\n").pop() }
+      : { ok: false, err: failureDetail(created) };
   } catch (error) {
     return { ok: false, err: String(error.stderr || error.message || error).slice(0, 500) };
   } finally {
@@ -1692,30 +4705,17 @@ function summarize(results, eligibleCount, scanCompleted = true) {
   section("Recovered or verified rewritten history", results.recovered);
   section("Retargeted", results.retargeted);
   section("Closed as redundant", results.closed);
-  section("Conflicts (manual promotion needed)", results.conflicts);
+  section("Queued for trusted promotion worker", results.queued);
+  section("Source-lineage review required", results.lineageReview);
   section("Blocked", results.blocked);
   section("Warnings", results.warnings);
   section("Skipped", results.skipped);
-  if (!results.created.length && !results.conflicts.length && !results.blocked.length) {
+  if (!results.created.length && !results.queued.length && !results.lineageReview.length && !results.blocked.length) {
     md.push("Nothing new to promote. ✅", "");
   }
   const text = md.join("\n");
   console.log(`\n${text}`);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`);
-}
-
-function conflictHelp(pr, branch, base) {
-  return [
-    `#${pr.number} (**${pr.title}**) does not cherry-pick cleanly onto \`${base}\`. Promote it manually:`,
-    "  ```",
-    `  git fetch origin ${CFG.target} ${CFG.source}`,
-    `  git switch -c ${branch} ${base === CFG.target ? `origin/${CFG.target}` : `origin/${base}`}`,
-    `  git cherry-pick -x -m 1 ${pr.mergeCommit?.oid || "<merge-commit>"}`,
-    "  # resolve conflicts, git cherry-pick --continue",
-    `  git push -u origin ${branch}`,
-    "  ```",
-    `  The next workflow run will open the promotion PR for \`${branch}\` automatically.`,
-  ].join("\n");
 }
 
 async function runPromotion(results, state) {
@@ -1776,7 +4776,13 @@ async function runPromotion(results, state) {
   const plans = preflightPromotionPlans(eligible, mainSha, { sourceSha });
   for (const pr of eligible) {
     const plan = plans.get(pr.number);
-    if (plan?.sourceRewritten) {
+    if (plan?.sourceLineageReviewRequired) {
+      results.lineageReview.push(
+        `#${pr.number} — exact historical patch recovered, but source lineage is ` +
+        `\`${plan.sourceLineageStatus}\`: ${sourceLineageReason(plan.sourceLineageStatus)} ` +
+        "The workflow will create a visibly quarantined review candidate instead of treating it as verified.",
+      );
+    } else if (plan?.sourceRewritten) {
       results.recovered.push(
         `#${pr.number} — historical merge \`${pr.mergeCommit.oid}\` has its planned patch ` +
         `verified at current \`${CFG.source}\` tip` +
@@ -1908,19 +4914,138 @@ async function runPromotion(results, state) {
             "its stale open topology must be closed/retargeted before stacking",
         };
       }
-      const available = ensureRemoteBranchAvailable(promotion.headRefName);
+      if (!CFG.dryRun && sourceLineageReviewRequired(loaded.plan)) {
+        const warned = finalizeSourceLineageMetadata(
+          loaded.sourcePr,
+          promotion.number,
+          loaded.plan,
+        );
+        if (!warned.ok) {
+          results.warnings.push(
+            `External promotion #${promotion.number} lineage warning repair deferred: ${warned.error}`,
+          );
+        }
+      }
+      let available = ensureRemoteBranchAvailable(promotion.headRefName);
       if (!available.ok) return available;
-      const reusable = validateReusablePromotionBranch(
-        available.ref,
+      let reusable = validateReusablePromotionForRun({
+        branchRef: available.ref,
+        actualBranchName: promotion.headRefName,
         expectedBaseRef,
-        loaded.sourcePr,
-        process.cwd(),
-        loaded.plan,
-      );
+        expectedBaseName,
+        sourceTipSha: sourceSha,
+        sourcePr: loaded.sourcePr,
+        cwd: process.cwd(),
+        plan: loaded.plan,
+      });
       if (!reusable.ok) {
         return {
           ok: false,
           error: `external promotion #${promotion.number} is unsafe to reuse: ${reusable.error}`,
+        };
+      }
+      if (reusable.mode === "reservation") {
+        return {
+          ok: false,
+          error: `external promotion #${promotion.number} is still awaiting its trusted AI resolution`,
+        };
+      }
+      if (
+        reusable.mode === "ai-resolved-checkpoint-pending" ||
+        reusable.mode === "ai-resolved-checkpoint-finalize"
+      ) {
+        if (CFG.dryRun) {
+          return {
+            ok: false,
+            error:
+              `external promotion #${promotion.number} needs review-checkpoint recovery; ` +
+              "the dry run deferred its dependents without mutating the branch",
+          };
+        }
+        const recoveryRoot = mkdtempSync(
+          join(process.env.RUNNER_TEMP || os.tmpdir(), "promote-external-recovery-"),
+        );
+        const recoveryWorktree = join(recoveryRoot, "wt");
+        let added = false;
+        try {
+          git(["worktree", "add", "--detach", recoveryWorktree, available.ref]);
+          added = true;
+          const recovered = recoverPromotionReviewCheckpoint(
+            recoveryWorktree,
+            loaded.sourcePr,
+            reusable.promotionContext,
+            reusable,
+          );
+          if (!recovered.ok) {
+            return {
+              ok: false,
+              error:
+                `external promotion #${promotion.number} review-checkpoint recovery failed: ` +
+                recovered.error,
+            };
+          }
+          results.recovered.push(
+            `External promotion #${promotion.number} — completed/finalized review checkpoint ` +
+            `\`${recovered.headSha}\` before extending its stack.`,
+          );
+        } finally {
+          if (added) tryGit(["worktree", "remove", "--force", recoveryWorktree]);
+          rmSync(recoveryRoot, { recursive: true, force: true });
+        }
+        available = ensureRemoteBranchAvailable(promotion.headRefName);
+        if (!available.ok) return available;
+        reusable = validateReusablePromotionForRun({
+          branchRef: available.ref,
+          actualBranchName: promotion.headRefName,
+          expectedBaseRef,
+          expectedBaseName,
+          sourceTipSha: sourceSha,
+          sourcePr: loaded.sourcePr,
+          cwd: process.cwd(),
+          plan: loaded.plan,
+        });
+        if (!reusable.ok || reusable.mode !== "ai-resolved") {
+          return {
+            ok: false,
+            error:
+              `external promotion #${promotion.number} did not validate as final after checkpoint recovery: ` +
+              `${reusable.error || reusable.mode || "unknown state"}`,
+          };
+        }
+      }
+      if (reusable.mode === "ai-resolved" && !CFG.dryRun) {
+        const finalized = finalizeAiPromotionMetadata(
+          loaded.sourcePr,
+          promotion.number,
+          reusable.promotionContext,
+          reusable.attestation,
+        );
+        if (!finalized.ok) {
+          results.warnings.push(
+            `External promotion #${promotion.number} is content-valid, but its bot review metadata ` +
+            `could not be repaired yet: ${finalized.error}`,
+          );
+        }
+      }
+      if (!CFG.dryRun && !reusable.mode?.startsWith("ai-resolved") && reusable.mode !== "reservation") {
+        const lineage = finalizeSourceLineageMetadata(
+          loaded.sourcePr,
+          promotion.number,
+          loaded.plan,
+        );
+        if (!lineage.ok) {
+          results.warnings.push(
+            `External promotion #${promotion.number} source-lineage metadata ` +
+            `could not be repaired yet: ${lineage.error}`,
+          );
+        }
+      }
+      if (sourceLineageReviewRequired(loaded.plan)) {
+        return {
+          ok: false,
+          error:
+            `external promotion #${promotion.number} requires explicit source-lineage review ` +
+            `before later members can extend its stack`,
         };
       }
       expectedBaseName = promotion.headRefName;
@@ -1932,6 +5057,376 @@ async function runPromotion(results, state) {
 
   retargetPass(promotionPrs, results);
   closeRedundantPass(promotionPrs, results);
+
+  // Metadata and checkpoint recovery must not depend on the source PR still
+  // fitting inside LOOKBACK. A transient API outage can happen after a valid
+  // branch/PR is published, so repair every open, bot-attested promotion
+  // idempotently before planning new stack members.
+  if (!CFG.dryRun) {
+    for (const promotion of promotionPrs.filter((candidate) => candidate.state === "OPEN")) {
+      try {
+        const loaded = loadExternalPromotionPlan(promotion);
+        if (
+          loaded.sourcePr &&
+          closeSourceLineageBlockedPromotion(
+            loaded.sourcePr,
+            promotion,
+            loaded.plan,
+            results,
+          )
+        ) {
+          continue;
+        }
+        if (loaded.error || loaded.plan?.error || loaded.plan?.inTarget) continue;
+        if (sourceLineageReviewRequired(loaded.plan)) {
+          const warned = finalizeSourceLineageMetadata(
+            loaded.sourcePr,
+            promotion.number,
+            loaded.plan,
+          );
+          if (!warned.ok) {
+            results.warnings.push(
+              `Promotion #${promotion.number} lineage warning repair deferred: ${warned.error}`,
+            );
+          }
+        }
+        const expectedBaseName = promotion.baseRefName;
+        let expectedBaseRef = mainSha;
+        if (expectedBaseName !== CFG.target) {
+          const base = ensureRemoteBranchAvailable(expectedBaseName);
+          if (!base.ok) {
+            results.warnings.push(
+              `Promotion #${promotion.number} metadata repair deferred: ${base.error}`,
+            );
+            continue;
+          }
+          expectedBaseRef = base.ref;
+        }
+        let available = ensureRemoteBranchAvailable(promotion.headRefName);
+        if (!available.ok) {
+          results.warnings.push(
+            `Promotion #${promotion.number} metadata repair deferred: ${available.error}`,
+          );
+          continue;
+        }
+        let reusable = validateReusablePromotionForRun({
+          branchRef: available.ref,
+          actualBranchName: promotion.headRefName,
+          expectedBaseRef,
+          expectedBaseName,
+          sourceTipSha: sourceSha,
+          sourcePr: loaded.sourcePr,
+          cwd: process.cwd(),
+          plan: loaded.plan,
+        });
+        let comments = [];
+        try {
+          comments = listSourceIssueComments(loaded.sourcePr.number);
+        } catch {
+          // The ordinary warning below remains sufficient; never mutate a
+          // stale branch unless its exact bot attestation can be loaded.
+        }
+        const activeRetirement = findBotPromotionRetirement(
+          { ...promotion, state: "CLOSED" },
+          loaded.sourcePr,
+          comments,
+        );
+        const availableHead = tryGit([
+          "rev-parse", "--verify", `${available.ref}^{commit}`,
+        ]);
+        if (
+          activeRetirement &&
+          availableHead.ok &&
+          retiredBranchCleanupDisposition(activeRetirement, availableHead.out) === "preserve-moved"
+        ) {
+          const cancelled = cancelPromotionRetirement(
+            promotion,
+            loaded.sourcePr,
+            `The promotion PR was already open and its branch moved to \`${availableHead.out}\`. ` +
+              "The branch was preserved and future PR closure remains a reviewer decision.",
+          );
+          if (cancelled.ok) {
+            results.recovered.push(
+              `Promotion #${promotion.number} — cleared stale bot-retirement state after ` +
+              `preserving newer branch \`${availableHead.out}\`.`,
+            );
+          } else {
+            results.warnings.push(
+              `Promotion #${promotion.number} stale retirement marker cleanup deferred: ${cancelled.error}`,
+            );
+          }
+          continue;
+        }
+        if (!reusable.ok && reusable.promotionContext) {
+          const exactRetirement = findBotPromotionRetirement(
+            { ...promotion, state: "CLOSED" },
+            loaded.sourcePr,
+            comments,
+          );
+          const stale = validateStalePendingAiPromotionBranch(
+            available.ref,
+            reusable.promotionContext,
+            comments,
+            process.cwd(),
+          );
+          if (stale.ok && stale.present && (!exactRetirement || exactRetirement.retired_head === stale.liveHead)) {
+            const retirement = {
+              v: 1,
+              source_pr: loaded.sourcePr.number,
+              promotion_pr: promotion.number,
+              branch: promotion.headRefName,
+              retired_head: stale.liveHead,
+              reservation_sha: stale.attestation.reservation_sha,
+              plan_hash: stale.staleContext.planHash,
+            };
+            const retirementRecorded = upsertBotIssueComment(
+              loaded.sourcePr.number,
+              "thingtime-ai-promotion-retired:v1",
+              [
+                `🔄 Promotion #${promotion.number} is being retired because its base moved ` +
+                  "before the automatic review-checkpoint completed.",
+                "",
+                "This durable bot marker allows a later run to resume the replacement safely if cleanup succeeds but this run stops early.",
+                "",
+                promotionRetirementMarker(retirement),
+              ].join("\n"),
+            );
+            if (!retirementRecorded.ok) {
+              results.warnings.push(
+                `Promotion #${promotion.number} stale snapshot cleanup deferred because its ` +
+                `durable retirement marker could not be recorded: ${retirementRecorded.error}`,
+              );
+              continue;
+            }
+            const closed = withActionsToken([
+              "pr", "close", String(promotion.number), ...repoFlag(),
+              "--comment",
+              "The automatic promotion base moved before its review-checkpoint completed. " +
+                "This exact bot-attested pending snapshot is being retired and replanned; " +
+                "no user-authored branch state will be overwritten.",
+            ]);
+            if (!closed.ok) {
+              results.warnings.push(
+                `Promotion #${promotion.number} stale snapshot cleanup deferred: ${closed.error}`,
+              );
+              continue;
+            }
+            const deleted = exactBranchDeleteWithActionsToken(
+              process.cwd(),
+              promotion.headRefName,
+              stale.liveHead,
+            );
+            if (!deleted.ok) {
+              withActionsToken([
+                "pr", "reopen", String(promotion.number), ...repoFlag(),
+              ]);
+              results.warnings.push(
+                `Promotion #${promotion.number} moved during stale cleanup; its PR was reopened ` +
+                `and no branch ref was changed: ${deleted.error}`,
+              );
+              continue;
+            }
+            promoBySource.delete(loaded.sourcePr.number);
+            remoteBranches.delete(promotion.headRefName);
+            promotion.state = "STALE_AI_CLEANED";
+            if (!eligible.some((candidate) => candidate.number === loaded.sourcePr.number)) {
+              eligible.push(loaded.sourcePr);
+              plans.set(loaded.sourcePr.number, loaded.plan);
+            }
+            results.recovered.push(
+              `Promotion #${promotion.number} — retired stale pending AI snapshot ` +
+              `\`${stale.liveHead}\` after its base moved; source PR #${loaded.sourcePr.number} ` +
+              "was re-queued against the current base without repeating or preserving stale state.",
+            );
+            upsertBotIssueComment(
+              loaded.sourcePr.number,
+              "thingtime-ai-promotion-status:v1",
+              [
+                `🔄 Promotion #${promotion.number} was retired because its base moved before ` +
+                  "the review-checkpoint completed.",
+                "",
+                "The source PR has been re-queued automatically against the current promotion base.",
+                "<!-- thingtime-ai-promotion-status:v1 -->",
+              ].join("\n"),
+            );
+          }
+          continue;
+        }
+        if (!reusable.ok || !reusable.mode?.startsWith("ai-resolved")) continue;
+        if (
+          reusable.mode === "ai-resolved-checkpoint-pending" ||
+          reusable.mode === "ai-resolved-checkpoint-finalize"
+        ) {
+          const recoveryRoot = mkdtempSync(
+            join(process.env.RUNNER_TEMP || os.tmpdir(), "promote-maintenance-recovery-"),
+          );
+          const recoveryWorktree = join(recoveryRoot, "wt");
+          let added = false;
+          try {
+            git(["worktree", "add", "--detach", recoveryWorktree, available.ref]);
+            added = true;
+            const recovered = recoverPromotionReviewCheckpoint(
+              recoveryWorktree,
+              loaded.sourcePr,
+              reusable.promotionContext,
+              reusable,
+            );
+            if (!recovered.ok) {
+              results.warnings.push(
+                `Promotion #${promotion.number} review-checkpoint recovery deferred: ${recovered.error}`,
+              );
+              continue;
+            }
+            results.recovered.push(
+              `Promotion #${promotion.number} — completed/finalized review checkpoint ` +
+              `\`${recovered.headSha}\` during the all-open maintenance pass.`,
+            );
+          } finally {
+            if (added) tryGit(["worktree", "remove", "--force", recoveryWorktree]);
+            rmSync(recoveryRoot, { recursive: true, force: true });
+          }
+          available = ensureRemoteBranchAvailable(promotion.headRefName);
+          if (!available.ok) continue;
+          reusable = validateReusablePromotionForRun({
+            branchRef: available.ref,
+            actualBranchName: promotion.headRefName,
+            expectedBaseRef,
+            expectedBaseName,
+            sourceTipSha: sourceSha,
+            sourcePr: loaded.sourcePr,
+            cwd: process.cwd(),
+            plan: loaded.plan,
+          });
+        }
+        if (reusable.ok && reusable.mode === "ai-resolved") {
+          const finalized = finalizeAiPromotionMetadata(
+            loaded.sourcePr,
+            promotion.number,
+            reusable.promotionContext,
+            reusable.attestation,
+          );
+          if (!finalized.ok) {
+            results.warnings.push(
+              `Promotion #${promotion.number} bot review metadata repair deferred: ${finalized.error}`,
+            );
+          }
+        } else if (reusable.ok && reusable.mode !== "reservation") {
+          const lineage = finalizeSourceLineageMetadata(
+            loaded.sourcePr,
+            promotion.number,
+            loaded.plan,
+          );
+          if (!lineage.ok) {
+            results.warnings.push(
+              `Promotion #${promotion.number} source-lineage metadata repair ` +
+              `deferred: ${lineage.error}`,
+            );
+          }
+        }
+      } catch (error) {
+        results.warnings.push(
+          `Promotion #${promotion.number} maintenance recovery failed safely: ` +
+          failureDetail({ err: String(error?.message || error) }),
+        );
+      }
+    }
+    for (const promotion of promotionPrs.filter((candidate) => candidate.state === "CLOSED")) {
+      const loaded = loadExternalPromotionPlan(promotion);
+      if (loaded.error || loaded.plan?.error || loaded.plan?.inTarget) continue;
+      let comments;
+      try {
+        comments = listSourceIssueComments(loaded.sourcePr.number);
+      } catch (error) {
+        results.warnings.push(
+          `Promotion #${promotion.number} retirement recovery deferred: ` +
+          failureDetail({ err: String(error?.message || error) }),
+        );
+        continue;
+      }
+      const retirement = findBotPromotionRetirement(
+        promotion,
+        loaded.sourcePr,
+        comments,
+      );
+      if (!retirement) continue;
+      const liveBranch = withActionsToken([
+        "api", `repos/${CFG.repo}/git/ref/heads/${encodeURIComponent(promotion.headRefName)}`,
+        "--jq", ".object.sha",
+      ]);
+      const missingBranch =
+        !liveBranch.ok && /(?:HTTP\s+404|Not Found)/i.test(liveBranch.error || "");
+      if (!liveBranch.ok && !missingBranch) {
+        results.warnings.push(
+          `Promotion #${promotion.number} retirement recovery could not inspect its branch: ` +
+          liveBranch.error,
+        );
+        continue;
+      }
+      const disposition = retiredBranchCleanupDisposition(
+        retirement,
+        liveBranch.ok ? liveBranch.out : "",
+      );
+      if (disposition === "preserve-moved") {
+        const reopened = withActionsToken([
+          "pr", "reopen", String(promotion.number), ...repoFlag(),
+        ]);
+        if (!reopened.ok) {
+          results.warnings.push(
+            `Promotion #${promotion.number} retirement recovery preserved user/newer branch state ` +
+            `\`${liveBranch.out}\`, but its bot-closed PR could not yet be reopened: ${reopened.error}`,
+          );
+          continue;
+        }
+        promotion.state = "OPEN";
+        const cancelled = cancelPromotionRetirement(
+          promotion,
+          loaded.sourcePr,
+          `The branch moved to \`${liveBranch.out}\` after the bot initiated cleanup. ` +
+            "The branch was preserved and the PR reopened; any later closure is treated as an intentional review decision.",
+        );
+        if (!cancelled.ok) {
+          results.warnings.push(
+            `Promotion #${promotion.number} was reopened after its branch moved, but its durable ` +
+            `retirement marker still needs cleanup: ${cancelled.error}`,
+          );
+        } else {
+          results.recovered.push(
+            `Promotion #${promotion.number} — reopened bot-closed PR and cancelled stale retirement ` +
+            `after preserving newer branch \`${liveBranch.out}\`.`,
+          );
+        }
+        continue;
+      }
+      if (disposition === "delete-exact") {
+        const deleted = exactBranchDeleteWithActionsToken(
+          process.cwd(),
+          promotion.headRefName,
+          retirement.retired_head,
+        );
+        if (!deleted.ok) {
+          results.warnings.push(
+            `Promotion #${promotion.number} retirement recovery deferred: ${deleted.error}`,
+          );
+          continue;
+        }
+        remoteBranches.delete(promotion.headRefName);
+      }
+      promoBySource.delete(loaded.sourcePr.number);
+      promotion.state = "STALE_AI_CLEANED";
+      if (!eligible.some((candidate) => candidate.number === loaded.sourcePr.number)) {
+        eligible.push(loaded.sourcePr);
+        plans.set(loaded.sourcePr.number, loaded.plan);
+      }
+      results.recovered.push(
+        `Promotion #${promotion.number} — resumed durable replan for bot-retired snapshot ` +
+        `\`${retirement.retired_head}\`; source PR #${loaded.sourcePr.number} was re-queued ` +
+        "against the current base.",
+      );
+    }
+  }
+
+  sortPromotionCandidates(eligible);
+  state.eligibleCount = eligible.length;
 
   // --- Group ---------------------------------------------------------------
   const groups = new Map(); // key → { key, prs } ; standalone key = "pr-<n>"
@@ -2096,20 +5591,142 @@ async function runPromotion(results, state) {
             ));
             break;
           }
+          if (!CFG.dryRun && sourceLineageReviewRequired(plan)) {
+            const warned = finalizeSourceLineageMetadata(pr, record.number, plan);
+            if (!warned.ok) {
+              results.warnings.push(
+                `#${pr.number} — promotion #${record.number} lineage warning ` +
+                `repair was deferred: ${warned.error}`,
+              );
+            }
+          }
           const expectedBaseRef = git(["rev-parse", "HEAD"], worktree);
           const checked = checkoutRemoteBranch(worktree, record.headRefName);
           if (!checked.ok) {
             results.blocked.push(...groupFailureMessages(group, index, checked.error));
             break;
           }
-          const reusable = validateReusablePromotionBranch(
-            "HEAD", expectedBaseRef, pr, worktree, plan,
-          );
+          const reusable = validateReusablePromotionForRun({
+            branchRef: "HEAD",
+            actualBranchName: record.headRefName,
+            expectedBaseRef,
+            expectedBaseName: baseName,
+            sourceTipSha: sourceSha,
+            sourcePr: pr,
+            cwd: worktree,
+            plan,
+          });
           if (!reusable.ok) {
             results.blocked.push(...groupFailureMessages(group, index, reusable.error));
             break;
           }
+          if (reusable.mode === "reservation") {
+            const pause = promotionPauseStateForRun(pr, reusable.promotionContext);
+            if (!pause.ok) {
+              results.blocked.push(...groupFailureMessages(group, index, pause.error));
+              break;
+            }
+            if (pause.paused) {
+              results.blocked.push(...groupFailureMessages(
+                group,
+                index,
+                `automatic promotion resolution is paused for immutable plan ` +
+                  `\`${reusable.promotionContext.planHash}\`; remove the ` +
+                  `\`${PROMOTION_PAUSE_LABEL}\` label from source PR #${pr.number} to retry automatically`,
+              ));
+              break;
+            }
+            const title = promotionTitleFor(pr, group.key, position);
+            const body = promotionWorkerReviewBody(
+              promotionBody(pr, group.key, position, group.prs, statusFor, plan),
+              reusable.promotionContext,
+            );
+            if (!CFG.dryRun) {
+              const redispatched = redispatchPromotionReservation(
+                reusable.promotionContext,
+                reusable.reservationSha,
+                title,
+                body,
+              );
+              if (!redispatched.ok) {
+                results.blocked.push(...groupFailureMessages(
+                  group,
+                  index,
+                  `valid reservation could not be re-dispatched safely: ${redispatched.error}`,
+                ));
+                break;
+              }
+            }
+            results.queued.push(
+              `#${pr.number} (**${pr.title}**) already has valid reservation ` +
+              `\`${reusable.reservationSha}\` on \`${record.headRefName}\`; ` +
+              `${CFG.dryRun ? "a dry run would re-dispatch" : "re-dispatched"} the same immutable ` +
+              "trusted-resolver handoff without creating another branch.",
+            );
+            break;
+          }
+          let finalAttestation = reusable.attestation;
+          if (
+            reusable.mode === "ai-resolved-checkpoint-pending" ||
+            reusable.mode === "ai-resolved-checkpoint-finalize"
+          ) {
+            if (CFG.dryRun) {
+              results.recovered.push(
+                `(dry-run) would finish the review-gated checkpoint for promotion #${record.number}.`,
+              );
+            } else {
+              const recovered = recoverPromotionReviewCheckpoint(
+                worktree,
+                pr,
+                reusable.promotionContext,
+                reusable,
+              );
+              if (!recovered.ok) {
+                results.blocked.push(...groupFailureMessages(
+                  group,
+                  index,
+                  `review-checkpoint recovery failed safely: ${recovered.error}`,
+                ));
+                break;
+              }
+              finalAttestation = recovered.attestation;
+              results.recovered.push(
+                `#${pr.number} — completed/finalized the approval-gated review checkpoint ` +
+                `\`${recovered.headSha}\` without repeating the AI round.`,
+              );
+            }
+          }
+          if (!CFG.dryRun && reusable.mode?.startsWith("ai-resolved")) {
+            const finalized = finalizeAiPromotionMetadata(
+              pr,
+              record.number,
+              reusable.promotionContext,
+              finalAttestation,
+            );
+            if (!finalized.ok) {
+              results.warnings.push(
+                `#${pr.number} — promotion content is verified, but bot review metadata ` +
+                `could not be repaired yet: ${finalized.error}`,
+              );
+            }
+          }
+          if (!CFG.dryRun && !reusable.mode?.startsWith("ai-resolved")) {
+            const lineage = finalizeSourceLineageMetadata(pr, record.number, plan);
+            if (!lineage.ok) {
+              results.warnings.push(
+                `#${pr.number} — promotion #${record.number} is content-valid, but its ` +
+                `source-lineage metadata could not be repaired yet: ${lineage.error}`,
+              );
+            }
+          }
           skip(pr, `promotion #${record.number} already open`);
+          if (sourceLineageReviewRequired(plan)) {
+            results.lineageReview.push(
+              `#${pr.number} — promotion #${record.number} remains open for explicit source-intent review; ` +
+              "later members of this stack were deferred.",
+            );
+            break;
+          }
           baseName = record.headRefName;
           continue;
         }
@@ -2131,36 +5748,135 @@ async function runPromotion(results, state) {
         const existingBranch = [...remoteBranches].find((name) =>
           name.startsWith(`promote/pr-${pr.number}-`));
         if (existingBranch) {
-          // Branch pushed earlier (or manually after a conflict) but PR missing.
-          if (createdCount >= CFG.maxNewPrs) {
-            results.warnings.push(
-              `MAX_NEW_PRS=${CFG.maxNewPrs} reached — #${pr.number}${group.key ? ` (and the rest of \`${group.key}\`)` : ""} deferred to the next run.`,
-            );
-            break;
-          }
+          // A prior clean run may have pushed the branch before PR creation;
+          // a conflict run leaves an exact empty reservation until the trusted
+          // resolver publishes and attests the AI-resolved result.
           const expectedBaseRef = git(["rev-parse", "HEAD"], worktree);
           const checked = checkoutRemoteBranch(worktree, existingBranch);
           if (!checked.ok) {
             results.blocked.push(...groupFailureMessages(group, index, checked.error));
             break;
           }
-          const reusable = validateReusablePromotionBranch(
-            "HEAD", expectedBaseRef, pr, worktree, plan,
-          );
+          const reusable = validateReusablePromotionForRun({
+            branchRef: "HEAD",
+            actualBranchName: existingBranch,
+            expectedBaseRef,
+            expectedBaseName: baseName,
+            sourceTipSha: sourceSha,
+            sourcePr: pr,
+            cwd: worktree,
+            plan,
+          });
+          let removedStaleReservation = false;
           if (!reusable.ok) {
-            results.blocked.push(...groupFailureMessages(group, index, reusable.error));
+            if (!reusable.staleReservation) {
+              results.blocked.push(...groupFailureMessages(group, index, reusable.error));
+              break;
+            }
+            if (CFG.dryRun) {
+              results.recovered.push(
+                `(dry-run) would remove stale exact reservation ` +
+                `\`${reusable.reservationSha}\` from \`${existingBranch}\` before replanning #${pr.number}.`,
+              );
+            } else {
+              const removed = tryGit(
+                exactReservationDeleteArgs(existingBranch, reusable.reservationSha),
+                worktree,
+              );
+              if (!removed.ok) {
+                results.blocked.push(...groupFailureMessages(
+                  group,
+                  index,
+                  `stale reservation cleanup lease was refused; preserving remote state: ${failureDetail(removed)}`,
+                ));
+                break;
+              }
+              results.recovered.push(
+                `#${pr.number} — removed stale exact reservation ` +
+                `\`${reusable.reservationSha}\` from \`${existingBranch}\` before replanning.`,
+              );
+              remoteBranches.delete(existingBranch);
+            }
+            git(["checkout", "--detach", expectedBaseRef], worktree);
+            removedStaleReservation = true;
+          }
+          if (!removedStaleReservation && reusable.mode === "reservation") {
+            const pause = promotionPauseStateForRun(pr, reusable.promotionContext);
+            if (!pause.ok) {
+              results.blocked.push(...groupFailureMessages(group, index, pause.error));
+              break;
+            }
+            if (pause.paused) {
+              results.blocked.push(...groupFailureMessages(
+                group,
+                index,
+                `automatic promotion resolution is paused for immutable plan ` +
+                  `\`${reusable.promotionContext.planHash}\`; remove the ` +
+                  `\`${PROMOTION_PAUSE_LABEL}\` label from source PR #${pr.number} to retry automatically`,
+              ));
+              break;
+            }
+            const title = promotionTitleFor(pr, group.key, position);
+            const body = promotionWorkerReviewBody(
+              promotionBody(pr, group.key, position, group.prs, statusFor, plan),
+              reusable.promotionContext,
+            );
+            if (!CFG.dryRun) {
+              const redispatched = redispatchPromotionReservation(
+                reusable.promotionContext,
+                reusable.reservationSha,
+                title,
+                body,
+              );
+              if (!redispatched.ok) {
+                results.blocked.push(...groupFailureMessages(
+                  group,
+                  index,
+                  `valid reservation could not be re-dispatched safely: ${redispatched.error}`,
+                ));
+                break;
+              }
+            }
+            results.queued.push(
+              `#${pr.number} (**${pr.title}**) already has valid reservation ` +
+              `\`${reusable.reservationSha}\` on \`${existingBranch}\`; ` +
+              `${CFG.dryRun ? "a dry run would re-dispatch" : "re-dispatched"} the same immutable ` +
+              "trusted-resolver handoff without creating another branch.",
+            );
             break;
           }
-          if (CFG.dryRun) {
+          if (!removedStaleReservation && createdCount >= CFG.maxNewPrs) {
+            results.warnings.push(
+              `MAX_NEW_PRS=${CFG.maxNewPrs} reached — #${pr.number}${group.key ? ` (and the rest of \`${group.key}\`)` : ""} deferred to the next run.`,
+            );
+            break;
+          }
+          let recoveredPromotionNumber = null;
+          if (!removedStaleReservation && CFG.dryRun) {
             results.created.push(`(dry-run) would open PR for existing branch \`${existingBranch}\` → \`${baseName}\``);
             createdCount += 1;
-          } else {
+          } else if (!removedStaleReservation) {
             const title = promotionTitleFor(pr, group.key, position);
-            const body = promotionBody(pr, group.key, position, group.prs, statusFor);
-            const created = createPromotionPr({ branch: existingBranch, base: baseName, title, body });
+            const plainBody = promotionBody(pr, group.key, position, group.prs, statusFor, plan);
+            const body = reusable.mode?.startsWith("ai-resolved")
+              ? promotionWorkerReviewBody(plainBody, reusable.promotionContext)
+              : plainBody;
+            const reviewGated =
+              reusable.mode === "ai-resolved-checkpoint-pending" ||
+              reusable.mode === "ai-resolved-checkpoint-finalize" ||
+              cleanReplayQuarantinePolicy(reusable.promotionContext).quarantine;
+            const created = createPromotionPr({
+              branch: existingBranch,
+              base: baseName,
+              title,
+              body,
+              token: reviewGated ? process.env.ACTIONS_TOKEN : "",
+              sourceLineage: sourceLineageStatus(plan),
+            });
             if (created.ok) {
               results.created.push(`${created.url} — ${title} (from existing branch)`);
               createdCount += 1;
+              recoveredPromotionNumber = promotionNumberFromUrl(created.url);
             } else {
               results.blocked.push(...groupFailureMessages(
                 group,
@@ -2170,8 +5886,81 @@ async function runPromotion(results, state) {
               break;
             }
           }
-          baseName = existingBranch;
-          continue;
+          if (!removedStaleReservation && !CFG.dryRun && reusable.mode?.startsWith("ai-resolved")) {
+            if (!recoveredPromotionNumber) {
+              const found = findOpenPromotionNumber(existingBranch);
+              if (!found.ok) {
+                results.blocked.push(...groupFailureMessages(group, index, found.error));
+                break;
+              }
+              recoveredPromotionNumber = found.number;
+            }
+            let finalAttestation = reusable.attestation;
+            if (
+              reusable.mode === "ai-resolved-checkpoint-pending" ||
+              reusable.mode === "ai-resolved-checkpoint-finalize"
+            ) {
+              const recovered = recoverPromotionReviewCheckpoint(
+                worktree,
+                pr,
+                reusable.promotionContext,
+                reusable,
+              );
+              if (!recovered.ok) {
+                results.blocked.push(...groupFailureMessages(
+                  group,
+                  index,
+                  `review-checkpoint recovery failed safely: ${recovered.error}`,
+                ));
+                break;
+              }
+              finalAttestation = recovered.attestation;
+              results.recovered.push(
+                `#${pr.number} — completed/finalized review checkpoint ` +
+                `\`${recovered.headSha}\` without repeating the AI round.`,
+              );
+            }
+            const finalized = finalizeAiPromotionMetadata(
+              pr,
+              recoveredPromotionNumber,
+              reusable.promotionContext,
+              finalAttestation,
+            );
+            if (!finalized.ok) {
+              results.warnings.push(
+                `#${pr.number} — created the verified promotion PR, but its bot review metadata ` +
+                `could not be repaired yet: ${finalized.error}`,
+              );
+            }
+          }
+          if (!removedStaleReservation && !CFG.dryRun && !reusable.mode?.startsWith("ai-resolved")) {
+            if (!recoveredPromotionNumber) {
+              const found = findOpenPromotionNumber(existingBranch);
+              if (!found.ok) {
+                results.blocked.push(...groupFailureMessages(group, index, found.error));
+                break;
+              }
+              recoveredPromotionNumber = found.number;
+            }
+            const lineage = finalizeSourceLineageMetadata(pr, recoveredPromotionNumber, plan);
+            if (!lineage.ok) {
+              results.warnings.push(
+                `#${pr.number} — created the promotion PR, but source-lineage metadata ` +
+                `repair was deferred: ${lineage.error}`,
+              );
+            }
+          }
+          if (!removedStaleReservation) {
+            if (sourceLineageReviewRequired(plan)) {
+              results.lineageReview.push(
+                `#${pr.number} — recovered promotion branch \`${existingBranch}\` as a ` +
+                "source-lineage review candidate; later stack members were deferred.",
+              );
+              break;
+            }
+            baseName = existingBranch;
+            continue;
+          }
         }
 
         if (plan.warning) results.warnings.push(plan.warning);
@@ -2184,9 +5973,127 @@ async function runPromotion(results, state) {
         }
 
         const beforeSha = git(["rev-parse", "HEAD"], worktree);
+        const planned = buildPromotionPlanContext({
+          sourcePr: pr,
+          branch,
+          baseRef: baseName,
+          baseSha: beforeSha,
+          sourceTipSha: sourceSha,
+          plan,
+          cwd: worktree,
+        });
+        if (!planned.ok) {
+          results.blocked.push(...groupFailureMessages(
+            group,
+            index,
+            `cannot build trusted promotion handoff: ${planned.error}`,
+          ));
+          break;
+        }
+        const quarantine = cleanReplayQuarantinePolicy(planned.context);
+        if (quarantine.quarantine) {
+          const title = promotionTitleFor(pr, group.key, position);
+          const body = promotionQuarantineReviewBody(
+            promotionBody(pr, group.key, position, group.prs, statusFor, plan),
+            planned.context,
+            quarantine,
+          );
+          createdCount += 1; // protected worker handoffs share MAX_NEW_PRS
+          if (CFG.dryRun) {
+            results.queued.push(
+              `(dry-run) would quarantine #${pr.number} before applying historical commits, ` +
+              `reserve \`${branch}\` at exact base \`${baseName}\` (\`${beforeSha}\`), and ` +
+              "dispatch the immutable plan to the trusted promotion worker.",
+            );
+            if (quarantine.lineageReviewRequired) {
+              results.lineageReview.push(
+                `(dry-run) #${pr.number} would be queued as a source-lineage review candidate ` +
+                `with \`${SOURCE_LINEAGE_REVIEW_LABEL}\`.`,
+              );
+            }
+            break;
+          }
+          const queued = queueTrustedPromotionWorker({
+            worktree,
+            context: planned.context,
+            title,
+            body,
+            conflictPaths: [],
+          });
+          if (!queued.ok) {
+            results.blocked.push(...groupFailureMessages(
+              group,
+              index,
+              `protected clean-replay handoff failed: ${queued.error}`,
+            ));
+            break;
+          }
+          remoteBranches.add(branch);
+          results.queued.push(
+            `#${pr.number} (**${pr.title}**) — quarantined before historical replay, reserved ` +
+            `\`${branch}\` at exact base \`${baseName}\` (\`${beforeSha}\`), and dispatched ` +
+            `the trusted promotion worker; reservation \`${queued.reservationSha}\`.`,
+          );
+          if (quarantine.lineageReviewRequired) {
+            results.lineageReview.push(
+              `#${pr.number} — queued the exact historical patch with ` +
+              `\`${SOURCE_LINEAGE_REVIEW_LABEL}\`; merging still requires source-intent review.`,
+            );
+          }
+          if (queued.warning) results.warnings.push(queued.warning);
+          break; // publication is async; later group members depend on this branch
+        }
+
         const applied = applyPicks(worktree, plan.picks);
         if (applied.status === "conflict") {
-          results.conflicts.push(conflictHelp(pr, branch, baseName));
+          const title = promotionTitleFor(pr, group.key, position);
+          const body = promotionWorkerReviewBody(
+            promotionBody(pr, group.key, position, group.prs, statusFor, plan),
+            planned.context,
+          );
+          createdCount += 1; // conflict-resolution handoffs share MAX_NEW_PRS
+          if (CFG.dryRun) {
+            results.queued.push(
+              `(dry-run) would reserve \`${branch}\` at exact base \`${baseName}\` ` +
+              `(\`${beforeSha}\`) and dispatch its immutable plan to the trusted AI resolver ` +
+              `for #${pr.number} (**${pr.title}**).`,
+            );
+            if (sourceLineageReviewRequired(plan)) {
+              results.lineageReview.push(
+                `(dry-run) #${pr.number} would be queued as a source-lineage review candidate ` +
+                `with \`${SOURCE_LINEAGE_REVIEW_LABEL}\`.`,
+              );
+            }
+            break;
+          }
+          const queued = queueTrustedPromotionWorker({
+            worktree,
+            context: planned.context,
+            title,
+            body,
+            conflictPaths: applied.paths,
+          });
+          if (!queued.ok) {
+            results.blocked.push(...groupFailureMessages(
+              group,
+              index,
+              `automatic AI promotion handoff failed: ${queued.error}`,
+            ));
+            break;
+          }
+          remoteBranches.add(branch);
+          results.queued.push(
+            `#${pr.number} (**${pr.title}**) — reserved \`${branch}\` at exact base ` +
+            `\`${baseName}\` (\`${beforeSha}\`) and dispatched the trusted AI resolver; ` +
+            `reservation \`${queued.reservationSha}\`.`,
+          );
+          if (sourceLineageReviewRequired(plan)) {
+            results.lineageReview.push(
+              `#${pr.number} — queued the exact historical patch for conflict resolution with ` +
+              `\`${SOURCE_LINEAGE_REVIEW_LABEL}\`; merging will still require source-intent review.`,
+            );
+          }
+          if (queued.warning) results.warnings.push(queued.warning);
           break; // later group members depend on this one
         }
         if (applied.status === "error") {
@@ -2201,8 +6108,15 @@ async function runPromotion(results, state) {
 
         if (CFG.dryRun) {
           results.created.push(`(dry-run) would create \`${branch}\` → \`${baseName}\` (${ahead} commit${ahead === 1 ? "" : "s"}) for #${pr.number} ${pr.title}`);
-          baseName = branch;
           createdCount += 1;
+          if (sourceLineageReviewRequired(plan)) {
+            results.lineageReview.push(
+              `(dry-run) #${pr.number} would open as a source-lineage review candidate with ` +
+              `\`${SOURCE_LINEAGE_REVIEW_LABEL}\`; later stack members would be deferred.`,
+            );
+            break;
+          }
+          baseName = branch;
           continue;
         }
 
@@ -2215,20 +6129,43 @@ async function runPromotion(results, state) {
           break;
         }
         const title = promotionTitleFor(pr, group.key, position);
-        const body = promotionBody(pr, group.key, position, group.prs, statusFor);
-        const created = createPromotionPr({ branch, base: baseName, title, body });
+        const body = promotionBody(pr, group.key, position, group.prs, statusFor, plan);
+        const created = createPromotionPr({
+          branch,
+          base: baseName,
+          title,
+          body,
+          sourceLineage: sourceLineageStatus(plan),
+        });
         if (!created.ok) {
           results.blocked.push(`#${pr.number}: pushed \`${branch}\` but PR creation failed: ${created.err} — the next run will open it.`);
           break;
         }
         results.created.push(`${created.url} — ${title}`);
         createdCount += 1;
-        baseName = branch;
         remoteBranches.add(branch);
+        const promotionNumber = promotionNumberFromUrl(created.url);
+        if (promotionNumber) {
+          const lineage = finalizeSourceLineageMetadata(pr, promotionNumber, plan);
+          if (!lineage.ok) {
+            results.warnings.push(
+              `#${pr.number} — promotion created, but source-lineage metadata repair ` +
+              `was deferred: ${lineage.error}`,
+            );
+          }
+        }
         if (CFG.commentOnSource) {
           tryGh(["pr", "comment", String(pr.number), ...repoFlag(),
             "--body", `🚀 Promotion PR for \`${CFG.target}\` opened: ${created.url}`]);
         }
+        if (sourceLineageReviewRequired(plan)) {
+          results.lineageReview.push(
+            `#${pr.number} — opened ${created.url} from the exact historical patch with ` +
+            `\`${SOURCE_LINEAGE_REVIEW_LABEL}\`; later stack members were deferred for review.`,
+          );
+          break;
+        }
+        baseName = branch;
       }
     }, (group, error) => {
       tryGit(["cherry-pick", "--abort"], worktree);
@@ -2288,8 +6225,8 @@ async function main() {
   }
 
   const results = {
-    created: [], recovered: [], retargeted: [], closed: [], conflicts: [],
-    blocked: [], warnings: [], skipped: [],
+    created: [], recovered: [], retargeted: [], closed: [], queued: [],
+    lineageReview: [], blocked: [], warnings: [], skipped: [],
   };
   const state = { eligibleCount: 0, scanCompleted: false };
   await runWithSummary(() => runPromotion(results, state), results, state);
