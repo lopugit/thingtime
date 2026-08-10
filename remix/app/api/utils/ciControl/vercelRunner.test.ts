@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  installVercelRunnerDependencies,
   summarizeVercelRunnerJobs,
   vercelRunnerIdentity
 } from './vercelRunner';
@@ -30,5 +31,37 @@ test('Vercel runner job summaries deduplicate runs and preserve failure state', 
       failed: 2,
       runIds: [101, 102, 103]
     }
+  );
+});
+
+test('Vercel runner bootstrap uses GitHub\'s dependency installer non-interactively', async () => {
+  const calls: Array<{ cmd: string; args: string[]; cwd: string }> = [];
+  await installVercelRunnerDependencies(
+    {
+      runCommand: async (params) => {
+        calls.push(params);
+        return { exitCode: 0 };
+      }
+    },
+    '/vercel/actions-runner'
+  );
+  assert.deepEqual(calls, [
+    {
+      cmd: 'sudo',
+      args: ['-n', 'env', 'DEBIAN_FRONTEND=noninteractive', './bin/installdependencies.sh'],
+      cwd: '/vercel/actions-runner'
+    }
+  ]);
+});
+
+test('Vercel runner bootstrap fails closed when dependencies cannot be installed', async () => {
+  await assert.rejects(
+    installVercelRunnerDependencies(
+      {
+        runCommand: async () => ({ exitCode: 1 })
+      },
+      '/vercel/actions-runner'
+    ),
+    /runtime dependencies could not be installed/
   );
 });

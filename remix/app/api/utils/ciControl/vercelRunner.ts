@@ -32,6 +32,14 @@ type RunnerHandle = {
   name: string;
 };
 
+type RunnerCommandExecutor = {
+  runCommand: (params: {
+    cmd: string;
+    args: string[];
+    cwd: string;
+  }) => Promise<{ exitCode: number }>;
+};
+
 type RunnerJobSnapshot = {
   seen: number;
   active: number;
@@ -74,6 +82,20 @@ export const summarizeVercelRunnerJobs = (jobs: VercelRunnerJob[]): RunnerJobSna
   };
 };
 
+export const installVercelRunnerDependencies = async (
+  sandbox: RunnerCommandExecutor,
+  runnerDir: string
+) => {
+  const install = await sandbox.runCommand({
+    cmd: 'sudo',
+    args: ['-n', 'env', 'DEBIAN_FRONTEND=noninteractive', './bin/installdependencies.sh'],
+    cwd: runnerDir
+  });
+  if (install.exitCode !== 0) {
+    throw new Error('The GitHub runner runtime dependencies could not be installed');
+  }
+};
+
 const createRunner = async (input: VercelCiRunnerInput): Promise<RunnerHandle> => {
   'use step';
 
@@ -99,62 +121,77 @@ const createRunner = async (input: VercelCiRunnerInput): Promise<RunnerHandle> =
     persistent: true,
     tags: { purpose: 'github-runner', workflow: safeSegment(input.workflow, 30) }
   });
-  const runnerDir = `${sandbox.cwd}/actions-runner`;
-  await sandbox.runCommand({ cmd: 'mkdir', args: ['-p', runnerDir] });
-  const configured = await sandbox.runCommand({
-    cmd: 'bash',
-    args: ['-lc', 'test -f .runner'],
-    cwd: runnerDir
-  });
-  if (configured.exitCode !== 0) {
-    const download = await sandbox.runCommand({
-      cmd: 'curl',
-      args: ['--fail', '--location', '--silent', '--show-error', '--output', 'actions-runner.tar.gz', runner.download_url],
-      cwd: runnerDir
-    });
-    if (download.exitCode !== 0) throw new Error('The GitHub runner archive could not be downloaded');
-    const extract = await sandbox.runCommand({
-      cmd: 'tar',
-      args: ['xzf', 'actions-runner.tar.gz'],
-      cwd: runnerDir
-    });
-    if (extract.exitCode !== 0) throw new Error('The GitHub runner archive could not be extracted');
-    const configure = await sandbox.runCommand({
+  const handle = { sandbox, label, name };
+  try {
+    const runnerDir = `${sandbox.cwd}/actions-runner`;
+    await sandbox.runCommand({ cmd: 'mkdir', args: ['-p', runnerDir] });
+    const configured = await sandbox.runCommand({
       cmd: 'bash',
-      args: [
-        '-lc',
-        './config.sh --unattended --replace --url "$RUNNER_REPOSITORY_URL" --token "$RUNNER_REGISTRATION_TOKEN" --name "$RUNNER_NAME" --labels "$RUNNER_LABELS" --work _work'
-      ],
-      cwd: runnerDir,
-      env: {
-        RUNNER_ALLOW_RUNASROOT: '1',
-        RUNNER_REPOSITORY_URL: `https://github.com/${repository}`,
-        RUNNER_REGISTRATION_TOKEN: registration.token,
-        RUNNER_NAME: name,
-        RUNNER_LABELS: `vercel-sandbox,${label}`
-      }
+      args: ['-lc', 'test -f .runner'],
+      cwd: runnerDir
     });
-    if (configure.exitCode !== 0) throw new Error('The Vercel Sandbox runner could not register with GitHub');
-  }
-
-  await sandbox.runCommand({
-    cmd: 'bash',
-    args: ['-lc', 'exec ./run.sh'],
-    cwd: runnerDir,
-    env: { RUNNER_ALLOW_RUNASROOT: '1' },
-    detached: true
-  });
-
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const listing = await githubRequest<{ runners?: Array<{ name?: string; status?: string }> }>(
-      `/repos/${repository}/actions/runners?per_page=100`
-    );
-    if (listing.runners?.some((candidate) => candidate.name === name && candidate.status === 'online')) {
-      return { sandbox, label, name };
+    if (configured.exitCode !== 0) {
+      const download = await sandbox.runCommand({
+        cmd: 'curl',
+        args: ['--fail', '--location', '--silent', '--show-error', '--output', 'actions-runner.tar.gz', runner.download_url],
+        cwd: runnerDir
+      });
+      if (download.exitCode !== 0) throw new Error('The GitHub runner archive could not be downloaded');
+      const extract = await sandbox.runCommand({
+        cmd: 'tar',
+        args: ['xzf', 'actions-runner.tar.gz'],
+        cwd: runnerDir
+      });
+      if (extract.exitCode !== 0) throw new Error('The GitHub runner archive could not be extracted');
+      // The Vercel universal image intentionally stays minimal. GitHub's
+      // runner currently needs ICU in addition to the archive contents, and
+      // config.sh exits before registration when it is absent. Use GitHub's
+      // own version-matched installer instead of maintaining a distro package
+      // list here.
+      await installVercelRunnerDependencies(sandbox, runnerDir);
+      const configure = await sandbox.runCommand({
+        cmd: 'bash',
+        args: [
+          '-lc',
+          './config.sh --unattended --replace --url "$RUNNER_REPOSITORY_URL" --token "$RUNNER_REGISTRATION_TOKEN" --name "$RUNNER_NAME" --labels "$RUNNER_LABELS" --work _work'
+        ],
+        cwd: runnerDir,
+        env: {
+          RUNNER_ALLOW_RUNASROOT: '1',
+          RUNNER_REPOSITORY_URL: `https://github.com/${repository}`,
+          RUNNER_REGISTRATION_TOKEN: registration.token,
+          RUNNER_NAME: name,
+          RUNNER_LABELS: `vercel-sandbox,${label}`
+        }
+      });
+      if (configure.exitCode !== 0) throw new Error('The Vercel Sandbox runner could not register with GitHub');
     }
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
+
+    await sandbox.runCommand({
+      cmd: 'bash',
+      args: ['-lc', 'exec ./run.sh'],
+      cwd: runnerDir,
+      env: { RUNNER_ALLOW_RUNASROOT: '1' },
+      detached: true
+    });
+
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const listing = await githubRequest<{ runners?: Array<{ name?: string; status?: string }> }>(
+        `/repos/${repository}/actions/runners?per_page=100`
+      );
+      if (listing.runners?.some((candidate) => candidate.name === name && candidate.status === 'online')) {
+        return handle;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
+    throw new Error('The Vercel Sandbox runner did not become available to GitHub');
+  } catch (error) {
+    // createRunner used to leak the Sandbox whenever setup failed before the
+    // handle was returned to runCiOnVercel. Clean the exact provisional
+    // identity here as well as in the workflow's outer finally block.
+    await cleanupRunner(input, handle);
+    throw error;
   }
-  throw new Error('The Vercel Sandbox runner did not become available to GitHub');
 };
 
 const dispatchToRunner = async (input: VercelCiRunnerInput, runner: RunnerHandle) => {
@@ -312,7 +349,7 @@ const fallbackToGithub = async (input: VercelCiRunnerInput, detail: string) => {
   });
 };
 
-const cleanupRunner = async (input: VercelCiRunnerInput, runner: RunnerHandle | null) => {
+async function cleanupRunner(input: VercelCiRunnerInput, runner: RunnerHandle | null) {
   'use step';
 
   if (!runner) return;
@@ -329,14 +366,15 @@ const cleanupRunner = async (input: VercelCiRunnerInput, runner: RunnerHandle | 
     if (registered?.id) {
       await githubRequest<void>(`/repos/${input.repository}/actions/runners/${registered.id}`, { method: 'DELETE' });
     }
-  } finally {
-    try {
-      await runner.sandbox.delete();
-    } catch {
-      // Sandbox retention is bounded by its timeout even when deletion is unavailable.
-    }
+  } catch {
+    // Continue to the Sandbox deletion even when GitHub cleanup is unavailable.
   }
-};
+  try {
+    await runner.sandbox.delete();
+  } catch {
+    // Sandbox retention is bounded by its timeout even when deletion is unavailable.
+  }
+}
 
 export async function runCiOnVercel(input: VercelCiRunnerInput) {
   'use workflow';
