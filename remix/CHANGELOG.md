@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Required Web CI checks no longer strand non-Remix pull requests**: the
+  pull-request listener now always starts, classifies the complete changed-file
+  list, and assigns both stable ruleset context names to either the real
+  build/API jobs or lightweight no-op companions. The historical build label
+  remains stable even though typecheck growth is warning-only, and classifier
+  failures leave the required names absent so protection fails closed. See the
+  [PR #222 engineering note](../PRs/222-codex-typecheck-ratchet-warning-main-ci-make-typecheck-ratchet-warning-only.md).
+  — Codex (AI), 2026-08-10
 - **Worktree lint and formatting dependencies now self-heal completely**:
   validation startup probes detect incomplete transitive pnpm links even when
   every direct package looks installed, retry once with a forced relink, and
