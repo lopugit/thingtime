@@ -86,6 +86,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and explicitly cross-site requests still fail closed. Invalid external
   profile-image URLs also expose their error state to assistive technology. —
   Codex (AI), 2026-08-10
+- **Attachment parent refresh preserves deployment and workflow boundaries**:
+  the hourly attachment cleanup and weekly notification digest each appear
+  exactly once in `vercel.json`, with an automated uniqueness contract that
+  prevents duplicate-cron deployment rejection. Product branches also retain
+  only the secret-free develop-preview listener; the privileged controller
+  implementation remains owned by the protected default-branch control plane.
+  See the
+  [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
+  — Codex (AI), 2026-08-10
 - **Worktree lint and formatting dependencies now self-heal completely**:
   validation startup probes detect incomplete transitive pnpm links even when
   every direct package looks installed, retry once with a forced relink, and

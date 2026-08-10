@@ -114,15 +114,17 @@ post containing linked photos plus uploaded media. Production remains untouched.
 
 ## Latest parent refresh (2026-08-10)
 
-Merged PR #201's current head `f79fc531`, which contains the latest `develop`
-history. All source and product documentation merged automatically; only
-generated Graphify files conflicted, so one complete graph side was selected and
-the graph was regenerated from the combined source as required.
+Merged repaired PR #201 head `1d6015c0`, which contains the latest `develop`
+history and closes the two parent refresh seams: `remix/vercel.json` now
+registers each cron once, and product branches no longer retain the privileged
+develop-preview controller script. All feature source merged automatically; the
+only manual source resolution kept both additive changelog entries. Generated
+Graphify files were reset to one complete side and regenerated from the combined
+source as required.
 
-After that refresh, the attachment/profile/media suite remains **96/96** and the
-inherited develop-preview controller self-test is **40/40**. The aggregate unit
-command now stops only at `test:workflow-callers`: PR #201 itself currently
-inherits `.github/scripts/deploy-develop-pr-preview.mjs` from `develop`, while
-the existing product-branch contract rejects workflow scripts outside the
-protected control-plane branch. PR #201's own Web CI reports the same upstream
-failure. No media/profile source owns or changes that controller boundary.
+After this refresh, the complete unit suite passes, including the
+attachment/profile/media suite at **96/96**, schemas at **51/51**, migrations at
+**19/19**, the Vercel cron uniqueness contract, and the product-branch workflow
+caller contract. The TypeScript ratchet remains improved at **141** diagnostics
+against the inherited **143** ceiling, and the production Vercel output build
+passes. The earlier upstream workflow/deployment blocker is closed.

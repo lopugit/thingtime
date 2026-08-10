@@ -1435,9 +1435,9 @@
     "semantic_hash": "829580533674af55b849c25c5a518ae8"
   },
   "remix/package.json": {
-    "mtime": 1786334860.9719348,
-    "ast_hash": "46497d4d46a4242961ac68f016f8f8ae",
-    "semantic_hash": "46497d4d46a4242961ac68f016f8f8ae"
+    "mtime": 1786340835.1513906,
+    "ast_hash": "18821a4184919ac44a6059d148c90712",
+    "semantic_hash": "18821a4184919ac44a6059d148c90712"
   },
   "remix/public/manifest.json": {
     "mtime": 1786245150.5096147,
@@ -1500,9 +1500,9 @@
     "semantic_hash": "31384afdefa4facbf9e4f2a175d5bfd2"
   },
   "remix/vercel.json": {
-    "mtime": 1786266398.1138778,
-    "ast_hash": "f78ccd92c4156ff3a5fae873e194e7bd",
-    "semantic_hash": "f78ccd92c4156ff3a5fae873e194e7bd"
+    "mtime": 1786340835.1516266,
+    "ast_hash": "72bd1b78239c5769387d27aca9b0b4b2",
+    "semantic_hash": "72bd1b78239c5769387d27aca9b0b4b2"
   },
   "remix/vite.config.ts": {
     "mtime": 1786245150.520709,
@@ -5714,11 +5714,6 @@
     "ast_hash": "6dad9eb4d073242995306ce66eef598c",
     "semantic_hash": ""
   },
-  ".github/scripts/deploy-develop-pr-preview.mjs": {
-    "mtime": 1786335541.4331808,
-    "ast_hash": "1e98b9f0c6b99f9491d1eeef9e6751bd",
-    "semantic_hash": "1e98b9f0c6b99f9491d1eeef9e6751bd"
-  },
   ".github/workflows/develop-pr-preview.yml": {
     "mtime": 1786335541.4333212,
     "ast_hash": "f7a77eb69231159da81bdd21ce7e76b5",
@@ -5728,5 +5723,10 @@
     "mtime": 1786335541.4334493,
     "ast_hash": "ba5f492117e83f1d171cc393b6dc01d2",
     "semantic_hash": "ba5f492117e83f1d171cc393b6dc01d2"
+  },
+  "remix/scripts/vercel-config.test.mjs": {
+    "mtime": 1786340835.1515179,
+    "ast_hash": "acda88233433ad178fb017cf254d6e12",
+    "semantic_hash": "acda88233433ad178fb017cf254d6e12"
   }
 }
