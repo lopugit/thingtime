@@ -285,6 +285,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [PR #183 implementation notes](../PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md).
   — Codex (AI), 2026-08-08
 
+- **Stable Vercel domain for the `develop` branch**: the Thingtime project now
+  assigns `dev.thingtime.com` to `develop` as a branch-specific Preview
+  domain, matching the existing staging pattern while preserving the
+  branch-scoped Preview secrets already used by develop deployments. The
+  deployment runbook now records the required Cloudflare DNS-only CNAME and
+  ownership-verification flow. — Codex (AI), 2026-08-07
+
 - **Typed queries across every admin workspace**: Users, Apps, Tiers, rate
   limits, and the administrator roster now share an all-field free-text,
   filter, and deterministic-sort interface. It handles nested/list fields,
