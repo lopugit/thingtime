@@ -1340,8 +1340,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       only reach explicit opt-ins. Throttle: >10 notification emails to one
       recipient within an hour are silently skipped (digest excluded). A
       failed/slow send never fails or delays the triggering action.
-- [ ] One-click unsubscribe: the footer link (`/api/v1/notifications/email/
-      unsubscribe?uid&token`) flips ONLY the email master off, renders the
+- [ ] One-click unsubscribe: the footer link
+      (`/api/v1/notifications/email/unsubscribe?uid&token`) flips ONLY the
+      email master off, renders the
       confirmation page (mobile viewport included), is idempotent, and rejects
       a tampered token with the 400 page. Bell/push switches are untouched;
       re-enabling from Settings works.
@@ -1429,5 +1430,5 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       admin, else earliest member.
 - [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
       kind 403s ("managed by their own endpoints"); chats/messages are 404
-      through `GET /api/v1/things?id=` for non-owners; `POST
-      /api/v1/things/react` cannot reach another member's chat message.
+      through `GET /api/v1/things?id=` for non-owners;
+      `POST /api/v1/things/react` cannot reach another member's chat message.
