@@ -122,14 +122,14 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.equal(isProtectedThingtime(['user']), true);
 });
 
-test('managed attachment purpose, profile slot, and user references are closed server-owned root fields', () => {
+test('managed attachment purpose, profile slot, user references, and emoji reference are closed server-owned root fields', () => {
 	const root = thingtimeSchemas.find((schema) => schema.id === 'thing')!;
 	const fields = new Map(root.fields.map((field) => [field.name, field]));
-	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'avatarAttachmentId', 'bannerAttachmentId']) {
+	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'avatarAttachmentId', 'bannerAttachmentId', 'emojiAttachmentId']) {
 		assert.equal(fields.get(name)?.system, true, name);
 		assert.equal(fields.get(name)?.required, false, name);
 	}
-	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'profile']);
+	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji']);
 	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
 });
 
@@ -176,13 +176,13 @@ test('post attachment preflight allows attachment-only posts without weakening o
   );
 });
 
-test('post attachment preflight never enables attachment-only rich comments', () => {
+test('server attachment preflight enables attachment-only rich comments', () => {
   const emptyComment = { type: 'text', text: '', images: [], listing: null, thing: null };
   assert.equal(
     validateThingtimeCrystal(['post', 'comment'], emptyComment, {
       postAttachments: { hasAny: true, hasVisual: true }
     }).ok,
-    false
+		true
   );
 });
 

@@ -1,5 +1,10 @@
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
-import { COLLECTION_SCHEMA_VERSIONS, MIGRATION_DIAGNOSTIC_THINGTIME, USER_STORAGE_ACCOUNTING_VERSION } from '../../../schemas/registry.ts';
+import {
+	COLLECTION_SCHEMA_VERSIONS,
+	MESSENGER_THINGTIME,
+	MIGRATION_DIAGNOSTIC_THINGTIME,
+	USER_STORAGE_ACCOUNTING_VERSION
+} from '../../../schemas/registry.ts';
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import { attachmentObjectSizeBytesForAccounting } from '../attachments/attachmentCore.ts';
 
@@ -102,9 +107,12 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
   'app-storage',
 	// Protected server-plumbing state is platform overhead. These Things are
 	// minted by dedicated home-plane state machines, never generic user CRUD.
-	'follow',
 	'friend',
 	'notification',
+	// Messenger rows are bounded server-managed relationship/index plumbing.
+	// User file bytes live in separately metered attachment Things, so message,
+	// comment and custom-emoji media cannot bypass account storage quotas.
+	...MESSENGER_THINGTIME,
   'service-quota',
   'subscription',
   'subscription-tier',

@@ -148,11 +148,12 @@ scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 - [ ] The in-post editor height-drags via the bottom handle (mouse and touch)
       with no upper limit, and never below the small floor.
 
-## Post attachments (`remix/app/components/Attachments/`)
+## Post and comment attachments (`remix/app/components/Attachments/`)
 
-- [ ] The top-level feed/profile composer shows the attachment drop zone, but
-      rich comment and reply composers do not. The existing image-URL rows and
-      URL-only photo-post flow remain available.
+- [ ] Top-level post, rich comment, and reply composers use the same responsive
+      attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
+      flow remains available as a quota-saving alternative on every rich
+      post/comment surface.
 - [ ] In Photos, add one public image URL, then paste several newline-separated
       URLs. Valid unique URLs become responsive preview tiles in stable order,
       duplicates are skipped, invalid/credentialed URLs remain editable with an
@@ -179,6 +180,22 @@ scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 - [ ] Post an attachment without body text, then post URL photos and uploaded
       attachments together. The optimistic card receives stable metadata only
       and survives a later reload without persisting a presigned URL.
+- [ ] Add an attachment-only comment, a text-plus-files comment, and a reply
+      containing an image, video, and generic download. Each renders inline or
+      as a safe download exactly like the parent post, survives reload and its
+      `/post/:id` permalink, and never persists a presigned URL.
+- [ ] Build a 6+-deep reply chain and attach a file at multiple depths. An
+      authorized viewer can open each file through the inherited root ACL;
+      logged-out, unauthorized, broken-chain, and custom-Mongo collision reads
+      return not found without revealing attachment metadata.
+- [ ] Simulate a lost attachment-comment response, then retry. The immutable
+      shareId, comment payload, and exact attachment set reconcile once without
+      a duplicate comment or second quota charge. A definitive first-attempt
+      rejection returns the composer to an editable state.
+- [ ] Delete an attached reply, an attached comment subtree, and finally the
+      root post. Every descendant object's exact S3 version is removed before
+      its attachment Thing and quota charge; a partial remote failure keeps the
+      remaining tombstone billed and retryable rather than orphaning bytes.
 - [ ] Feed, profile, nested repost, and permalink cards render vetted raster
       images and videos inline. SVG, HTML, script, and unknown types render only
       as named download rows; their bytes never execute inline.
@@ -1553,6 +1570,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Threads: Reply in thread opens the side panel, replies stay OUT of the
       main list, the root shows a 🧵 count chip. One level deep only —
       replying to a reply files under the same root.
+- [ ] In DMs, groups, message requests, community channels, inline replies, and
+      Slack-style threads, the composer shows the same responsive attachment
+      gallery as posts. Send image, video, generic file, text-plus-files, and
+      attachment-only messages; each optimistic message reconciles to stable
+      metadata and safe inline/download rendering after reload.
+- [ ] Simulate a lost message-send response with files. The composer freezes
+      the immutable request id, text, and attachment set, then exact retry
+      reconciles one message without duplicate bytes or chat-preview drift.
+      Known validation failures remain editable and show only authored errors.
+- [ ] A non-member, departed member, declined request recipient, arbitrary id,
+      and custom-Mongo shareId collision cannot open a message attachment. A
+      current pending/active participant can, including from a thread reply.
+- [ ] Delete an attachment message and verify its exact S3 versions disappear
+      before the soft-delete/refund completes, the chat preview loses its file
+      count, and displayed account storage refreshes without a stale balance.
 - [ ] Reactions: hover/long-press → quick row + full picker; same token
       toggles off; custom tab lists community + personal emojis; a custom
       reaction renders its image chip for OTHER members too (resolved by id,
@@ -1560,7 +1592,11 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       endpoint (namespace isolation both ways).
 - [ ] Custom emojis: upload ≤512KB gif/webp/png/jpeg → renders inline via
       `:name:` in messages, animated gifs animate; duplicate name in scope
-      409s; another user's PERSONAL emoji is refused in your chat.
+      409s. Personal emoji can render for authenticated recipients where it was
+      used; community emoji content remains membership-gated. The upload uses
+      the same single-tile gallery, charges the uploader's storage tier, and
+      deleting it removes the exact S3 version before refunding quota. Legacy
+      inline data-URI emoji remain read-only and cannot be newly created.
 - [ ] Read receipts: opening a chat advances your receipt (forward-only —
       REGRESSION: reading an old message must never rewind it); seen-by
       avatars appear under the last-read message in Messenger mode; the

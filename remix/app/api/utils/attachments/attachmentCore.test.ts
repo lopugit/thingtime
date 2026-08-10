@@ -71,6 +71,9 @@ test('every lifecycle state remains a valid billable attachment envelope', () =>
 	assert.equal(isAttachmentObjectVersionId('opaque-version-id'), true);
 	assert.equal(isAttachmentFinalizationLeaseId('finalize:lease-1'), true);
 	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentPurpose: 'profile', attachmentProfileSlot: 'avatar' })), 42);
+	for (const attachmentPurpose of ['comment', 'message', 'emoji'] as const) {
+		assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentPurpose })), 42, attachmentPurpose);
+	}
 	assert.equal(
 		attachmentObjectSizeBytesForAccounting(attachment({ attachmentPurpose: undefined, attachmentProfileSlot: undefined })),
 		42,

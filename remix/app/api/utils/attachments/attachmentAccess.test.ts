@@ -94,3 +94,91 @@ test('home target lookup supports exact legacy profile refs but never falls thro
 	};
 	assert.equal(await canView(null, attachment), true);
 });
+
+test('comment attachment authorization walks the exact home comment chain to the root ACL and fails closed on cycles or owner mismatch', async () => {
+	const docs = new Map<string, any>([
+		['comment-1', { shareId: 'comment-1', ownerId: 'author-1', thingtime: ['post', 'comment'], targetId: 'comment-2', acl: ['tt:inherit'] }],
+		['comment-2', { shareId: 'comment-2', ownerId: 'author-2', thingtime: ['comment'], targetId: 'post-1', acl: ['tt:inherit'] }],
+		['post-1', post()]
+	]);
+	const canView = createCanViewHomeAttachmentTarget({
+		getThings: async () => ({ findOne: async (filter: any) => docs.get(filter.shareId) || null } as any),
+		getUsers: async () => ({ findOne: async () => null } as any)
+	});
+	const attachment = {
+		shareId: 'attachment-1',
+		ownerId: 'author-1',
+		targetId: 'comment-1',
+		attachmentPurpose: 'comment' as const
+	};
+	assert.equal(await canView(null, attachment), true);
+	assert.equal(await canView(null, { ...attachment, ownerId: 'attacker' }), false);
+	docs.set('comment-2', { ...docs.get('comment-2'), targetId: 'comment-1' });
+	assert.equal(await canView(null, attachment), false);
+});
+
+test('message attachment authorization requires the exact live message and an active or pending chat membership', async () => {
+	let memberState: string | null = 'active';
+	const canView = createCanViewHomeAttachmentTarget({
+		getThings: async () =>
+			({
+				findOne: async (filter: any) => {
+					if (filter.shareId === 'message-1') {
+						return { shareId: 'message-1', ownerId: 'author-1', thingtime: ['chat-message'], targetId: 'chat-1', crystal: {} };
+					}
+					if (filter.thingtime === 'chat-member' && memberState && filter.ownerId === 'reader-1') {
+						return { shareId: 'member-1', crystal: { state: memberState } };
+					}
+					return null;
+				}
+			} as any),
+		getUsers: async () => ({ findOne: async () => null } as any)
+	});
+	const attachment = {
+		shareId: 'attachment-1',
+		ownerId: 'author-1',
+		targetId: 'message-1',
+		attachmentPurpose: 'message' as const
+	};
+	assert.equal(await canView({ id: 'reader-1' }, attachment), true);
+	assert.equal(await canView(null, attachment), false);
+	memberState = null;
+	assert.equal(await canView({ id: 'reader-1' }, attachment), false);
+});
+
+test('custom emoji attachment authorization requires the exact emoji reference and community membership when scoped', async () => {
+	let communityScoped = false;
+	let member = true;
+	const canView = createCanViewHomeAttachmentTarget({
+		getThings: async () =>
+			({
+				findOne: async (filter: any) => {
+					if (filter.shareId === 'emoji-1') {
+						return {
+							shareId: 'emoji-1',
+							ownerId: 'author-1',
+							thingtime: ['custom-emoji'],
+							targetId: communityScoped ? 'community-1' : null,
+							emojiAttachmentId: 'attachment-1'
+						};
+					}
+					if (filter.thingtime === 'community-member' && member) return { shareId: 'community-member-1' };
+					return null;
+				}
+			} as any),
+		getUsers: async () => ({ findOne: async () => null } as any)
+	});
+	const attachment = {
+		shareId: 'attachment-1',
+		ownerId: 'author-1',
+		targetId: 'emoji-1',
+		attachmentPurpose: 'emoji' as const
+	};
+	assert.equal(await canView({ id: 'reader-1' }, attachment), true);
+	assert.equal(await canView(null, attachment), false);
+	assert.equal(await canView({ id: 'reader-1' }, { ...attachment, shareId: 'stale' }), false);
+	communityScoped = true;
+	assert.equal(await canView({ id: 'reader-1' }, attachment), true);
+	member = false;
+	assert.equal(await canView({ id: 'reader-1' }, attachment), false);
+});

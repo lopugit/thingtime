@@ -5,7 +5,7 @@ import { CheckCircle2, File as FileIcon, Image as ImageIcon, RotateCcw, UploadCl
 import { useLopu } from '~/components/Lopu/useLopu';
 import { MediaAddTile, MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
 import { formatAttachmentBytes, localFileMediaKind, MAX_POST_ATTACHMENTS, sameAttachmentSnapshot } from './attachmentUiCore';
-import type { AttachmentComposerSnapshot, ComposerAttachmentUpload } from './attachmentTypes';
+import type { AttachmentComposerSnapshot, AttachmentUploadPurpose, ComposerAttachmentUpload } from './attachmentTypes';
 import { useAttachmentUploads } from './useAttachmentUploads';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -17,6 +17,13 @@ export type AttachmentComposerProps = {
 	remainingBytes?: number | null;
 	storageStatus?: 'ready' | 'reconciling' | 'unavailable';
 	onChange: (snapshot: AttachmentComposerSnapshot) => void;
+	purpose?: AttachmentUploadPurpose;
+	maxFiles?: number;
+	imageOnly?: boolean;
+	maxBytesPerFile?: number;
+	allowedContentTypes?: readonly string[];
+	ariaLabel?: string;
+	helperText?: string;
 };
 
 export type AttachmentComposerHandle = {
@@ -226,7 +233,21 @@ const UploadFileRow = React.memo(
 UploadFileRow.displayName = 'UploadFileRow';
 
 const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, AttachmentComposerProps>((props, ref) => {
-	const { ownerId, disabled, remainingBytes, storageStatus, onChange } = props;
+	const {
+		ownerId,
+		disabled,
+		remainingBytes,
+		storageStatus,
+		onChange,
+		purpose = 'post',
+		maxFiles = MAX_POST_ATTACHMENTS,
+		imageOnly = false,
+		maxBytesPerFile,
+		allowedContentTypes,
+		ariaLabel = 'Post attachments',
+		helperText
+	} = props;
+	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
 	const lopu = useLopu();
 	const [dragging, setDragging] = React.useState(false);
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -248,9 +269,10 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		onCleanupError,
 		onSelectionError,
 		disabled === true,
-		onCleanupDeferred
+		onCleanupDeferred,
+		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes }
 	);
-	const pickerDisabled = disabled || uploads.length >= MAX_POST_ATTACHMENTS;
+	const pickerDisabled = disabled || uploads.length >= boundedMaxFiles;
 	const visualUploads: ComposerAttachmentUpload[] = [];
 	const fileUploads: ComposerAttachmentUpload[] = [];
 	for (const upload of uploads) {
@@ -284,7 +306,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			: `${formatAttachmentBytes(remainingBytes)} available on this account.`;
 
 	return (
-		<Flex flexDirection="column" rowGap={2} role="group" aria-label="Post attachments">
+		<Flex flexDirection="column" rowGap={2} role="group" aria-label={ariaLabel}>
 			<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap">
 				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
 					Media & files 📎
@@ -317,7 +339,8 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 				<input
 					ref={inputRef}
 					type="file"
-					multiple
+					multiple={boundedMaxFiles > 1}
+					accept={allowedContentTypes?.join(',') || (imageOnly ? 'image/gif,image/jpeg,image/png,image/webp' : undefined)}
 					hidden
 					disabled={pickerDisabled}
 					onChange={(event) => {
@@ -326,15 +349,20 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 					}}
 				/>
 				<Text fontSize="11px" color={MUTED} paddingBottom={2} whiteSpace="normal">
-					Photos, videos, or any file · up to 25 · drop files anywhere in this panel
+					{helperText ||
+						(imageOnly
+							? `${boundedMaxFiles === 1 ? 'One image' : `Up to ${boundedMaxFiles} images`} · drop ${
+									boundedMaxFiles === 1 ? 'it' : 'them'
+							  } anywhere in this panel`
+							: `Photos, videos, or any file · up to ${boundedMaxFiles} · drop files anywhere in this panel`)}
 						</Text>
 
-				{visualUploads.length > 0 || uploads.length < MAX_POST_ATTACHMENTS ? (
+				{visualUploads.length > 0 || uploads.length < boundedMaxFiles ? (
 					<MediaGalleryGrid ariaLabel="Selected media uploads">
 						{visualUploads.map((upload) => (
 							<UploadVisualTile key={upload.localId} upload={upload} disabled={disabled} onRetry={retry} onRemove={remove} />
 						))}
-						{uploads.length < MAX_POST_ATTACHMENTS ? (
+						{uploads.length < boundedMaxFiles ? (
 							<MediaAddTile ariaLabel="Add media files" disabled={pickerDisabled} onClick={() => inputRef.current?.click()}>
 								<Flex flexDirection="column" alignItems="center" rowGap={2}>
 									<UploadCloud size={22} aria-hidden />
@@ -346,7 +374,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 				) : null}
 
 				{fileUploads.length > 0 ? (
-					<Flex flexDirection="column" rowGap={2} paddingTop={visualUploads.length > 0 || uploads.length < MAX_POST_ATTACHMENTS ? 2 : 0}>
+					<Flex flexDirection="column" rowGap={2} paddingTop={visualUploads.length > 0 || uploads.length < boundedMaxFiles ? 2 : 0}>
 						{fileUploads.map((upload) => (
 							<UploadFileRow key={upload.localId} upload={upload} disabled={disabled} onRetry={retry} onRemove={remove} />
 					))}

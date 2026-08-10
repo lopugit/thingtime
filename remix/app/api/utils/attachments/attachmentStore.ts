@@ -639,14 +639,26 @@ export const attachmentStore: AttachmentStore = {
 	}
 };
 
-// Called by the post writer inside the SAME home-Mongo transaction as post
-// creation. This is the only supported transition from a private unattached
-// object to a relational child inheriting the post's audience.
-export const bindReadyAttachmentsToTarget = async (
+type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile'>;
+
+const attachmentPurposeLabel: Record<BindableAttachmentPurpose, string> = {
+	post: 'post',
+	comment: 'comment',
+	message: 'message',
+	emoji: 'custom emoji'
+};
+
+// Called by each content writer inside the SAME home-Mongo transaction as its
+// target creation. This is the only supported transition from a private,
+// unbound object to a relational child. Purpose is immutable: an upload plan
+// minted for a DM cannot be replayed into a public post or custom emoji.
+const bindReadyAttachmentsForPurpose = async (
 	ownerId: string,
 	attachmentIds: readonly string[],
 	targetId: string,
-	session: any
+	session: any,
+	purpose: BindableAttachmentPurpose,
+	maxAttachments = MAX_ATTACHMENTS_PER_TARGET
 ): Promise<void> => {
 	if (isCustomMongoEndpointActive()) {
 		throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
@@ -659,14 +671,19 @@ export const bindReadyAttachmentsToTarget = async (
 				.filter(Boolean)
 		)
 	];
-	if (ids.length !== attachmentIds.length || ids.length > MAX_ATTACHMENTS_PER_TARGET) {
-		throw new AttachmentBindingError(400, `A post can contain at most ${MAX_ATTACHMENTS_PER_TARGET} unique attachments`);
+	if (ids.length !== attachmentIds.length || ids.length > maxAttachments) {
+		throw new AttachmentBindingError(
+			400,
+			`A ${attachmentPurposeLabel[purpose]} can contain at most ${maxAttachments} unique attachment${maxAttachments === 1 ? '' : 's'}`
+		);
 	}
 	if (!ids.length) return;
 	if (!targetId.trim()) throw new AttachmentBindingError(400, 'Attachment target is required');
 
 	const things = await getHomeThingsCollection();
 	const now = new Date();
+	const purposeFence =
+		purpose === 'post' ? { $or: [{ attachmentPurpose: 'post' }, { attachmentPurpose: { $exists: false } }] } : { attachmentPurpose: purpose };
 	const candidates = (await things
 		.find(
 			{
@@ -675,9 +692,7 @@ export const bindReadyAttachmentsToTarget = async (
 				thingtime: ATTACHMENT_THINGTIME,
 				attachmentState: 'ready',
 				$and: [
-					{
-						$or: [{ attachmentPurpose: 'post' }, { attachmentPurpose: { $exists: false } }]
-					},
+					purposeFence,
 					{ attachmentProfileSlot: { $exists: false } },
 					{
 				$or: [
@@ -702,9 +717,7 @@ export const bindReadyAttachmentsToTarget = async (
 			thingtime: ATTACHMENT_THINGTIME,
 			attachmentState: 'ready',
 			$and: [
-				{
-					$or: [{ attachmentPurpose: 'post' }, { attachmentPurpose: { $exists: false } }]
-				},
+				purposeFence,
 				{ attachmentProfileSlot: { $exists: false } },
 				{
 			$or: [
@@ -715,15 +728,43 @@ export const bindReadyAttachmentsToTarget = async (
 			]
 		} as any,
 		{
-			$set: { targetId, acl: [ACL_INHERIT], attachmentPurpose: 'post', updatedAt: now },
+			$set: { targetId, acl: [ACL_INHERIT], attachmentPurpose: purpose, updatedAt: now },
 			$unset: { attachmentExpiresAt: '', attachmentProfileSlot: '' }
 		},
 		{ session }
 	);
 	if (write.matchedCount !== ids.length) {
-		throw new AttachmentBindingError(409, 'One or more attachments changed while the post was being created');
+		throw new AttachmentBindingError(409, `One or more attachments changed while the ${attachmentPurposeLabel[purpose]} was being created`);
 	}
 };
+
+export const bindReadyAttachmentsToTarget = async (
+	ownerId: string,
+	attachmentIds: readonly string[],
+	targetId: string,
+	session: any
+): Promise<void> => bindReadyAttachmentsForPurpose(ownerId, attachmentIds, targetId, session, 'post');
+
+export const bindReadyCommentAttachmentsToTarget = async (
+	ownerId: string,
+	attachmentIds: readonly string[],
+	targetId: string,
+	session: any
+): Promise<void> => bindReadyAttachmentsForPurpose(ownerId, attachmentIds, targetId, session, 'comment');
+
+export const bindReadyMessageAttachmentsToTarget = async (
+	ownerId: string,
+	attachmentIds: readonly string[],
+	targetId: string,
+	session: any
+): Promise<void> => bindReadyAttachmentsForPurpose(ownerId, attachmentIds, targetId, session, 'message');
+
+export const bindReadyEmojiAttachmentToTarget = async (
+	ownerId: string,
+	attachmentIds: readonly string[],
+	targetId: string,
+	session: any
+): Promise<void> => bindReadyAttachmentsForPurpose(ownerId, attachmentIds, targetId, session, 'emoji', 1);
 
 export type ProfileAttachmentRefs = Record<ProfileAttachmentSlot, string | null>;
 

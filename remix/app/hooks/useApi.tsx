@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
+import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 
@@ -141,8 +142,7 @@ export function useApi() {
     },
     admin: {
       ciControl: useCallback(
-        async (args?: { limit?: number }, options?: { signal?: AbortSignal }) =>
-          getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
+				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         []
       ),
       reconcileCiControl: useCallback(
@@ -282,7 +282,7 @@ export function useApi() {
 							filename: string;
 							contentType: string;
 							sizeBytes: number;
-							purpose?: 'post' | 'profile-avatar' | 'profile-banner';
+							purpose?: AttachmentUploadPurpose;
 						},
 						options?: { signal?: AbortSignal }
 					) => {
@@ -456,10 +456,17 @@ export function useApi() {
       save: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }), [asyncFetcher]),
       comment: useCallback(
         // simple text comments send { id, text }; rich comments add
-        // type/images/listing/thing/tags — comments share the post schema
+				// type/images/listing/thing/tags/attachments — comments share the post schema
         async (args) => {
-          const { id, text, type, images, listing, thing, tags } = args || {};
-          return asyncFetcher.submit({ id, text, type, images, listing, thing, tags }, { action: '/api/v1/things/comment' });
+					const { id, text, type, images, listing, thing, tags, shareId, attachmentIds } = args || {};
+					const ret = asyncFetcher.submit(
+						{ id, text, type, images, listing, thing, tags, shareId, attachmentIds },
+						{ action: '/api/v1/things/comment' }
+					);
+					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
+						ret.then(refreshRootData).catch(() => {});
+					}
+					return ret;
         },
         [asyncFetcher]
       ),

@@ -532,17 +532,28 @@ sanitized resolved config (never credentials); `POST /api/v1/email/test-otp` is
 a dev/preview-only helper for the `/tests` page restricted to the configured
 test recipient (or a plus alias of it).
 
-### Private S3 post and profile attachments
+### Private S3 media and attachments
 
-Post images, video, audio, and generic files—and profile avatar/banner images—
-use direct, checksummed multipart uploads to a private S3 bucket. The browser
-receives short-lived part URLs, not AWS credentials; posts and user profile
-slots reference stable attachment ids, never expiring S3 URLs. Attachment bytes
-are reserved against the account's Thingtime storage tier before upload and
-remain charged until exact-version S3 deletion is confirmed. A stable client
-request id is hashed with the authenticated owner into an opaque owner-scoped
-attachment id, making lost start responses safely retryable without
-cross-account id squatting or existence disclosure.
+Posts, comments and replies, Messenger messages and thread replies, custom
+reaction emoji, and profile avatar/banner images use direct, checksummed
+multipart uploads to a private S3 bucket. The browser receives short-lived part
+URLs, not AWS credentials; product records reference stable attachment ids,
+never expiring S3 URLs. Attachment bytes are reserved against the account's
+Thingtime storage tier before upload and remain charged until exact-version S3
+deletion is confirmed. A stable client request id is hashed with the
+authenticated owner into an opaque owner-scoped attachment id, making lost
+start responses safely retryable without cross-account id squatting or
+existence disclosure.
+
+Every surface binds only its own server-validated attachment purpose. Comment
+and reply files inherit the root post visibility through the complete parent
+chain. Message and thread files require current chat membership. Personal and
+community custom emoji bind one safe raster image to their exact owner/scope;
+community images require membership, while an emoji already used in a shared
+conversation remains renderable to its authenticated participants. Deleting an
+owning post/comment/message/emoji removes the exact S3 versions before Mongo
+rows and quota reservations are released. Custom Mongo data planes cannot bind
+or authorize these home-storage objects.
 
 Profile media is limited to JPEG, PNG, GIF, WebP, or AVIF and 64 MiB per image.
 The server binds a ready upload only to its exact owner and requested avatar or
@@ -555,9 +566,10 @@ image URLs remain a separate, quota-saving alternative and are never fetched by
 the Thingtime server.
 
 Configure only these server-side Vercel variables. Scope the production bucket
-and role to **Production** only. Thingtime's long-lived `develop` deployment
-uses a separate Vercel Custom Environment, bucket, role, and cleanup secret;
-ordinary feature-branch Preview deployments receive none of them.
+and role to **Production** only. Thingtime's `develop` Custom Environment and
+standard feature Preview deployments use the separate development bucket,
+role, data plane, and cleanup secret; never expose the production values to
+either environment.
 
 ```sh
 THINGTIME_PRIVATE_S3_ROLE_ARN="arn:aws:iam::<12-digit-account-id>:role/<production-attachment-role>"
