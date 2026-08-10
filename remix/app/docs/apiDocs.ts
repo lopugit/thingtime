@@ -73,6 +73,114 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Markdown document.', headers: { 'Content-Type': 'text/markdown; charset=utf-8' } }]
   }),
   endpoint({
+    id: 'admin-ci-control',
+    group: 'admin',
+    title: 'CI control dashboard snapshot',
+    endpoint: '/api/v1/admin/ci',
+    summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
+    detail:
+      'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET'],
+    steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
+    requestExamples: [{ name: 'Load CI control', description: 'Load up to 100 current entities per kind.', method: 'GET', query: { limit: 100 } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'CI control snapshot.',
+        body: {
+          ok: true,
+          dashboard: {
+            pullRequests: [{ kind: 'ci-pull-request', number: 190, status: 'conflicting' }],
+            workflowRuns: [{ kind: 'ci-workflow-run', runId: 31303934385, status: 'in_progress' }],
+            events: [{ kind: 'ci-event', eventType: 'workflow_run', statusTo: 'in_progress' }]
+          },
+          integration: { repository: 'lopugit/thingtime', controlPlaneRef: 'github-actions', githubAppConfigured: true }
+        }
+      },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-dispatch',
+    group: 'admin',
+    title: 'Dispatch a CI control-plane workflow',
+    endpoint: '/api/v1/admin/ci/dispatch',
+    summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
+    detail:
+      'Admins can request the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. Workflow names and inputs are server-allowlisted; arbitrary workflow paths and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: ['Choose an allowlisted workflow and target ref.', 'POST optional allowlisted inputs.', 'Follow the returned dispatch id in /api/v1/admin/ci.'],
+    requestExamples: [
+      {
+        name: 'Retry conflict resolution',
+        description: 'Ask the develop listener to resolve one exact PR using the github-actions control plane.',
+        method: 'POST',
+        body: { workflow: 'resolve-conflicts', ref: 'develop', inputs: { pr_number: '190' } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 202,
+        description: 'GitHub accepted the dispatch.',
+        body: { ok: true, dispatchId: 'ci-example', workflowFile: 'resolve-pr-conflicts.yml', ref: 'develop', controlPlaneRef: 'github-actions' }
+      },
+      { status: 502, description: 'GitHub could not accept the request.', body: { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-reconcile',
+    group: 'admin',
+    title: 'Reconcile CI state from GitHub',
+    endpoint: '/api/v1/admin/ci/reconcile',
+    summary: 'Refresh branches, open PRs, Actions runs, and deployments without discarding webhook history.',
+    detail:
+      'Uses the least-privileged Thingtime GitHub App installation token to reconcile current GitHub state. Existing ci-event history is append-only; reconciliation corrects current projections and writes its own audit event.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: ['POST with an admin session.', 'Reload /api/v1/admin/ci after completion.'],
+    requestExamples: [{ name: 'Reconcile', description: 'Refresh current GitHub state.', method: 'POST', body: {} }],
+    responseExamples: [
+      { status: 200, description: 'Reconciliation completed.', body: { ok: true, repository: 'lopugit/thingtime', touched: 72 } },
+      { status: 502, description: 'GitHub could not be queried.', body: { ok: false, error: 'GitHub reconciliation failed. Existing dashboard history was preserved.' } }
+    ]
+  }),
+  endpoint({
+    id: 'github-ci-webhook',
+    group: 'integrations',
+    title: 'GitHub CI webhook',
+    endpoint: '/api/v1/integrations/github/webhook',
+    summary: 'Receive signed GitHub App events for the CI control plane.',
+    detail:
+      'Validates X-Hub-Signature-256 against the raw body with a constant-time HMAC-SHA256 comparison, rejects oversized payloads, allowlists the configured repository, and projects only bounded operational fields into protected Things.',
+    auth: { mode: 'none', description: 'Public transport endpoint; every request requires a valid GitHub webhook signature.' },
+    methods: ['POST'],
+    steps: ['Configure the GitHub App webhook secret.', 'Subscribe only to the required repository, PR, workflow, check, deployment, push, create, and delete events.', 'POSTs are idempotent by X-GitHub-Delivery.'],
+    requestExamples: [{ name: 'Signed GitHub delivery', description: 'Sent by GitHub App webhooks with signature and delivery headers.', method: 'POST', body: { action: 'synchronize', repository: { full_name: 'lopugit/thingtime' } } }],
+    responseExamples: [
+      { status: 202, description: 'Verified event accepted.', body: { ok: true, accepted: true, touched: ['ci-example'] } },
+      { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
+    ]
+  }),
+  endpoint({
+    id: 'vercel-ci-webhook',
+    group: 'integrations',
+    title: 'Vercel deployment webhook',
+    endpoint: '/api/v1/integrations/vercel/webhook',
+    summary: 'Receive signed Vercel deployment and preview status events.',
+    detail:
+      'Validates x-vercel-signature with a constant-time HMAC-SHA1 comparison over the raw body, then stores deployment and preview projections plus relational history Things. The webhook secret is never returned by any API.',
+    auth: { mode: 'none', description: 'Public transport endpoint; every request requires a valid Vercel signature.' },
+    methods: ['POST'],
+    steps: ['Create a project-scoped Vercel webhook.', 'Subscribe to deployment.created, deployment.ready, deployment.error, deployment.canceled, and deployment.deleted.', 'Store the one-time webhook secret in THINGTIME_VERCEL_WEBHOOK_SECRET.'],
+    requestExamples: [{ name: 'Signed Vercel delivery', description: 'Sent by Vercel with x-vercel-signature.', method: 'POST', body: { type: 'deployment.ready', payload: { deployment: { id: 'dpl_example', url: 'preview.example.app' } } } }],
+    responseExamples: [
+      { status: 202, description: 'Verified deployment event accepted.', body: { ok: true, accepted: true, touched: ['ci-deployment', 'ci-preview'] } },
+      { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-rate-limits',
     group: 'admin',
     title: 'Rate-limit config',
@@ -2259,6 +2367,1304 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'chats',
+    group: 'messenger',
+    title: 'Chats',
+    endpoint: '/api/v1/chats',
+    summary: 'Lists every conversation the caller is in, or creates a channel, group, or DM.',
+    detail:
+      'GET returns every conversation the caller belongs to — community channels, groups, and DMs — each with an ' +
+      'unread count, a lastMessage preview, and the caller membership entry (role, nickname, state, muted, read ' +
+      'receipt), plus totalUnread (muted chats excluded), requestsCount, and serverTime. POST creates a chat: ' +
+      'channels live inside a community, groups are free-floating, and DMs take exactly one memberId and are ' +
+      'deduped per pair, so re-opening an existing DM returns it with existing: true. A fresh DM — and every ' +
+      'group invite — lands as a message request for the recipient unless they already follow the creator; ' +
+      'pending requests are bucketed follower when the creator follows them and unknown otherwise. Channel ' +
+      'invitees must already be community members.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with credentials to list chats, unread counts, and lastMessage previews.',
+      'POST chatType channel, group, or dm, with name, topic, communityId, sectionId, channelVisibility, or memberIds as needed.',
+      'For a DM send exactly one memberId and check existing: true before treating the chat as new.',
+      'Use totalUnread and requestsCount from GET to drive badges without extra requests.',
+      'Poll /api/v1/chats/updates for the same payload when watching for new messages.'
+    ],
+    requestExamples: [
+      {
+        name: 'List chats',
+        description: 'Read every conversation for the current account.',
+        method: 'GET'
+      },
+      {
+        name: 'Create a group',
+        description: 'Start a named group chat with two other members.',
+        method: 'POST',
+        body: {
+          chatType: 'group',
+          name: 'Weekend plans',
+          memberIds: ['c0ffee12-cccc-4ccc-8ccc-000000000003', 'c0ffee12-cccc-4ccc-8ccc-000000000004']
+        }
+      },
+      {
+        name: 'Start a DM',
+        description: 'Open (or reuse) the direct conversation with one user.',
+        method: 'POST',
+        body: { chatType: 'dm', memberIds: ['c0ffee12-cccc-4ccc-8ccc-000000000003'] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Chats listed.',
+        body: {
+          ok: true,
+          chats: [
+            {
+              id: 'c0ffee12-aaaa-4aaa-8aaa-000000000001',
+              chatType: 'group',
+              name: 'Weekend plans',
+              unreadCount: 2,
+              lastMessage: {
+                id: 'c0ffee12-bbbb-4bbb-8bbb-000000000002',
+                text: 'See you there',
+                senderId: 'c0ffee12-cccc-4ccc-8ccc-000000000003'
+              },
+              myMember: { role: 'member', nickname: null, state: 'active', muted: false }
+            }
+          ],
+          totalUnread: 2,
+          requestsCount: 1,
+          serverTime: '2026-08-03T10:15:00.000Z'
+        }
+      },
+      {
+        status: 400,
+        description: 'DM created without exactly one memberId.',
+        body: { ok: false, error: 'A DM needs exactly one memberId' }
+      }
+    ],
+    notes: ['Chat creation draws from the chats.write rate-limit bucket (60 requests per minute).']
+  }),
+  endpoint({
+    id: 'chats-get',
+    group: 'messenger',
+    title: 'Chat detail',
+    endpoint: '/api/v1/chats/get',
+    summary: 'Reads one chat with its full member list.',
+    detail:
+      'Returns a single chat by id along with every member — profile, role, nickname, and per-member read ' +
+      'receipt — plus communityName for channels. Read receipts follow the privacy parity rule: a member who ' +
+      'turned receipts off neither shares a reading position nor sees the positions of others. Only members of ' +
+      'the chat can read it; everyone else gets a 403.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send the chat id as a query parameter.',
+      'Render members with their roles, nicknames, and read receipts.',
+      'Use communityName to label channels with their parent community.',
+      'Handle 403 when the caller is not a member of the chat.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read a chat',
+        description: 'Fetch one chat and its member list.',
+        method: 'GET',
+        query: { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000001' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Chat found.',
+        body: {
+          ok: true,
+          chat: {
+            id: 'c0ffee12-aaaa-4aaa-8aaa-000000000001',
+            chatType: 'channel',
+            name: 'general',
+            communityName: 'Thingtime HQ'
+          },
+          members: [
+            {
+              user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' },
+              role: 'owner',
+              nickname: null,
+              lastReadMessageId: 'c0ffee12-bbbb-4bbb-8bbb-000000000002'
+            }
+          ]
+        }
+      },
+      {
+        status: 403,
+        description: 'Caller is not a member of this chat.',
+        body: { ok: false, error: 'Not a member of this chat' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'chats-update',
+    group: 'messenger',
+    title: 'Update chat',
+    endpoint: '/api/v1/chats/update',
+    summary: 'Renames a chat or updates its topic, section, or channel visibility.',
+    detail:
+      'Groups follow the Messenger convention: any member may rename them. Channels are stricter — only chat or ' +
+      'community admins may change them, and channel names are slugged to lowercase. DMs have nothing to rename ' +
+      'and return 400. Renames and topic changes insert a system message into the chat so the history explains ' +
+      'itself.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the chat id with any of name, topic, sectionId, or channelVisibility.',
+      'Expect channel names to come back slugged to lowercase.',
+      'Let the inserted system message tell the room what changed — no extra announcement needed.',
+      'Handle 400 for DMs and 403 when a non-admin edits a channel.'
+    ],
+    requestExamples: [
+      {
+        name: 'Rename a group',
+        description: 'Any member may rename a group chat.',
+        method: 'POST',
+        body: { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', name: 'Weekend plans v2' }
+      },
+      {
+        name: 'Move a channel into a section',
+        description: 'Admins file a channel under a community section.',
+        method: 'POST',
+        body: { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000002', sectionId: 'c0ffee12-eeee-4eee-8eee-000000000005' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Chat updated.',
+        body: { ok: true, chat: { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', name: 'Weekend plans v2' } }
+      },
+      {
+        status: 400,
+        description: 'DMs cannot be renamed.',
+        body: { ok: false, error: 'DMs cannot be updated' }
+      }
+    ],
+    notes: ['Shares the chats.write rate-limit bucket (60 requests per minute).']
+  }),
+  endpoint({
+    id: 'chats-members',
+    group: 'messenger',
+    title: 'Chat members',
+    endpoint: '/api/v1/chats/members',
+    summary: 'Manages chat membership with one verb per call: join, add, remove, role, nickname, or mute.',
+    detail:
+      'POST the chatId plus exactly one verb. join: true joins a public channel of a community you belong to. ' +
+      'add lists user ids to bring in (any member may add to a group; private channels need an admin, and everyone ' +
+      'added to a channel must already be a community member — channel access never outruns the invite gate). ' +
+      'remove takes one userId (admins only; the owner cannot be removed; DMs refuse remove and role outright). ' +
+      'role promotes or demotes between admin and member (admins only). nickname sets a Messenger-style nickname ' +
+      'for yourself or another member (any member; null clears it). mute toggles your own notifications for the ' +
+      'chat. Rejoining after leaving always lands as a plain member. Every verb returns the refreshed member list.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST chatId plus exactly one verb — join, add, remove, role, nickname, or mute.',
+      'Use join: true for public channels in communities you belong to.',
+      'Use add for groups and private channels, respecting the admin rules.',
+      'Read the returned members array as the new source of truth.',
+      'Handle 403 when the verb needs a role the caller does not have.'
+    ],
+    requestExamples: [
+      {
+        name: 'Join a public channel',
+        description: 'Join a public channel of a community you are in.',
+        method: 'POST',
+        body: { chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000002', join: true }
+      },
+      {
+        name: 'Add members',
+        description: 'Bring more users into a group.',
+        method: 'POST',
+        body: { chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', add: ['c0ffee12-cccc-4ccc-8ccc-000000000004'] }
+      },
+      {
+        name: 'Set a nickname',
+        description: 'Give a member a Messenger-style nickname.',
+        method: 'POST',
+        body: {
+          chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001',
+          nickname: { userId: 'c0ffee12-cccc-4ccc-8ccc-000000000003', nickname: 'Captain' }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Membership updated.',
+        body: {
+          ok: true,
+          members: [
+            {
+              user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' },
+              role: 'admin',
+              nickname: 'Captain'
+            }
+          ]
+        }
+      },
+      {
+        status: 403,
+        description: 'Verb requires a role the caller does not have.',
+        body: { ok: false, error: 'Only admins can remove members' }
+      }
+    ],
+    notes: ['Shares the chats.write rate-limit bucket (60 requests per minute).']
+  }),
+  endpoint({
+    id: 'chats-leave',
+    group: 'messenger',
+    title: 'Leave chat',
+    endpoint: '/api/v1/chats/leave',
+    summary: 'Leaves a group or channel.',
+    detail:
+      'Removes the caller from a group or channel; DMs cannot be left. When the departing member is the owner, ' +
+      'ownership auto-promotes the earliest admin, or the earliest remaining member when no admin exists, so a ' +
+      'chat never ends up ownerless.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the chatId to leave.',
+      'Expect ownership to pass automatically when the owner departs.',
+      'Rejoin public channels at any time via /api/v1/chats/members with join: true.',
+      'Handle 400 when trying to leave a DM.'
+    ],
+    requestExamples: [
+      {
+        name: 'Leave a chat',
+        description: 'Depart a group or channel.',
+        method: 'POST',
+        body: { chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Left the chat.',
+        body: { ok: true }
+      },
+      {
+        status: 400,
+        description: 'DMs cannot be left.',
+        body: { ok: false, error: 'You cannot leave a DM' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'chats-messages',
+    group: 'messenger',
+    title: 'Chat messages',
+    endpoint: '/api/v1/chats/messages',
+    summary: 'Reads a page of messages or sends a new one, including Slack-style thread replies.',
+    detail:
+      'GET pages a chat newest-first with cursor and limit (max 100, default 40); pass threadRootId to scope the ' +
+      'page to one thread. The response bundles customEmojis (a map of id to name, image, and animated for any ' +
+      'custom reaction tokens on the page), nextCursor, threadRoot, members, chat, and myMember so one request ' +
+      'can paint a conversation. POST sends text up to 4000 characters with optional threadRootId or replyToId. ' +
+      'Replying to a pending message request accepts it, and sending marks the chat read up to your own message.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with chatId, plus cursor and limit to page older messages newest-first.',
+      'Pass threadRootId to read or post inside a single thread.',
+      'POST chatId and text (4000 characters max), with replyToId for inline replies.',
+      'Resolve custom:<emojiId> reaction tokens through the returned customEmojis map.',
+      'Follow nextCursor until it is null to reach the start of history.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read messages',
+        description: 'First page of a conversation, newest first.',
+        method: 'GET',
+        query: { chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', limit: 40 }
+      },
+      {
+        name: 'Send a message',
+        description: 'Post a message to the chat.',
+        method: 'POST',
+        body: { chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', text: 'Shipping the messenger docs today.' }
+      },
+      {
+        name: 'Reply in a thread',
+        description: 'Post into a Slack-style thread under one root message.',
+        method: 'POST',
+        body: {
+          chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001',
+          text: 'Continuing this in the thread.',
+          threadRootId: 'c0ffee12-bbbb-4bbb-8bbb-000000000002'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Messages listed.',
+        body: {
+          ok: true,
+          messages: [
+            {
+              id: 'c0ffee12-bbbb-4bbb-8bbb-000000000002',
+              senderId: 'c0ffee12-cccc-4ccc-8ccc-000000000003',
+              text: 'See you there',
+              createdAt: '2026-08-03T10:14:00.000Z'
+            }
+          ],
+          customEmojis: {},
+          nextCursor: null,
+          threadRoot: null,
+          members: [
+            { user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'member' }
+          ],
+          chat: { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', chatType: 'group', name: 'Weekend plans' },
+          myMember: { role: 'member', muted: false }
+        }
+      },
+      {
+        status: 403,
+        description: 'Caller is not a member of this chat.',
+        body: { ok: false, error: 'Not a member of this chat' }
+      }
+    ],
+    notes: ['Sending draws from the chats.message rate-limit bucket (120 messages per minute).']
+  }),
+  endpoint({
+    id: 'chats-messages-edit',
+    group: 'messenger',
+    title: 'Edit message',
+    endpoint: '/api/v1/chats/messages/edit',
+    summary: 'Edits the text of a message the caller sent.',
+    detail:
+      'Only the author can edit a message. The new text replaces the old and the message is stamped with ' +
+      'editedAt so clients can show an edited marker. The 4000-character limit applies just as it does on send.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the message id and the replacement text.',
+      'Only the author of the message may edit it.',
+      'Show the editedAt stamp so readers know the message changed.',
+      'Handle 403 when editing a message someone else sent.'
+    ],
+    requestExamples: [
+      {
+        name: 'Edit a message',
+        description: 'Replace the text of an own message.',
+        method: 'POST',
+        body: { id: 'c0ffee12-bbbb-4bbb-8bbb-000000000002', text: 'See you there at 7pm' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Message edited.',
+        body: {
+          ok: true,
+          message: {
+            id: 'c0ffee12-bbbb-4bbb-8bbb-000000000002',
+            text: 'See you there at 7pm',
+            editedAt: '2026-08-03T10:20:00.000Z'
+          }
+        }
+      },
+      {
+        status: 403,
+        description: 'Only the author can edit a message.',
+        body: { ok: false, error: 'Only the author can edit this message' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'chats-messages-delete',
+    group: 'messenger',
+    title: 'Delete message',
+    endpoint: '/api/v1/chats/messages/delete',
+    summary: 'Soft-deletes a message, leaving a placeholder in the history.',
+    detail:
+      'The author or a chat admin can delete a message. Deletion is soft: the row stays as a placeholder, its ' +
+      'text is cleared, and its reactions are removed, so conversation flow and reply anchors survive.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the message id to delete.',
+      'The author or a chat admin may delete; anyone else gets a 403.',
+      'Render the surviving placeholder row as a deleted-message marker.',
+      'Expect reactions on the message to be removed with it.'
+    ],
+    requestExamples: [
+      {
+        name: 'Delete a message',
+        description: 'Soft-delete one message.',
+        method: 'POST',
+        body: { id: 'c0ffee12-bbbb-4bbb-8bbb-000000000002' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Message soft-deleted.',
+        body: { ok: true }
+      },
+      {
+        status: 403,
+        description: 'Caller is neither the author nor a chat admin.',
+        body: { ok: false, error: 'Not allowed to delete this message' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'chats-react',
+    group: 'messenger',
+    title: 'React to message',
+    endpoint: '/api/v1/chats/react',
+    summary: 'Toggles an emoji reaction on a message.',
+    detail:
+      'POST a messageId and an emoji token to add the reaction, or again to remove it. The token is either a ' +
+      'unicode emoji (the same grammar post reactions use) or custom:<emojiId> referencing an uploaded custom ' +
+      'emoji from the community this chat belongs to or from your personal set. The response returns the ' +
+      'refreshed reactionCounts, your own viewerReactions, and a customEmojis map for rendering custom tokens.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST messageId and an emoji token to toggle a reaction.',
+      'Use a unicode emoji or custom:<emojiId> for uploaded custom emojis.',
+      'Render counts from reactionCounts and highlight viewerReactions.',
+      'Resolve custom tokens through the returned customEmojis map.'
+    ],
+    requestExamples: [
+      {
+        name: 'React with unicode',
+        description: 'Toggle a plain emoji reaction.',
+        method: 'POST',
+        body: { messageId: 'c0ffee12-bbbb-4bbb-8bbb-000000000002', emoji: '🎉' }
+      },
+      {
+        name: 'React with a custom emoji',
+        description: 'Toggle an uploaded custom emoji by id.',
+        method: 'POST',
+        body: {
+          messageId: 'c0ffee12-bbbb-4bbb-8bbb-000000000002',
+          emoji: 'custom:c0ffee12-ffff-4fff-8fff-000000000006'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Reaction toggled.',
+        body: {
+          ok: true,
+          reactionCounts: { '🎉': 3, 'custom:c0ffee12-ffff-4fff-8fff-000000000006': 1 },
+          viewerReactions: ['🎉'],
+          customEmojis: {
+            'c0ffee12-ffff-4fff-8fff-000000000006': {
+              name: 'party-blob',
+              image: 'data:image/gif;base64,R0lGODlh...',
+              animated: true
+            }
+          }
+        }
+      },
+      {
+        status: 404,
+        description: 'Message not found or not visible to the caller.',
+        body: { ok: false, error: 'Message not found' }
+      }
+    ],
+    notes: ['Reactions draw from the chats.react rate-limit bucket (120 requests per minute).']
+  }),
+  endpoint({
+    id: 'chats-read',
+    group: 'messenger',
+    title: 'Read receipt',
+    endpoint: '/api/v1/chats/read',
+    summary: 'Advances the current user read receipt in a chat.',
+    detail:
+      'POST chatId and the newest messageId you have displayed. The receipt is a forward-only high-water mark: ' +
+      'attempts to move it backwards are ignored. It drives unread counts everywhere and the seen-by indicators ' +
+      'other members see, subject to the read-receipt privacy setting.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST chatId and the id of the newest message on screen.',
+      'Call as the user scrolls; the mark only ever moves forward.',
+      'Expect unread counts in /api/v1/chats to drop accordingly.',
+      'Handle 403 when the caller is not a member of the chat.'
+    ],
+    requestExamples: [
+      {
+        name: 'Mark read',
+        description: 'Advance the read receipt in one chat.',
+        method: 'POST',
+        body: {
+          chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001',
+          messageId: 'c0ffee12-bbbb-4bbb-8bbb-000000000002'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Receipt advanced.',
+        body: {
+          ok: true,
+          lastReadMessageId: 'c0ffee12-bbbb-4bbb-8bbb-000000000002',
+          lastReadAt: '2026-08-03T10:21:00.000Z'
+        }
+      },
+      {
+        status: 403,
+        description: 'Caller is not a member of this chat.',
+        body: { ok: false, error: 'Not a member of this chat' }
+      }
+    ],
+    notes: ['Read marks draw from the chats.read rate-limit bucket (240 requests per minute).']
+  }),
+  endpoint({
+    id: 'chats-requests',
+    group: 'messenger',
+    title: 'Message requests',
+    endpoint: '/api/v1/chats/requests',
+    summary: 'Lists pending DM requests, or accepts and declines them.',
+    detail:
+      'GET returns pending DM requests in two buckets: follower for senders who follow you, and unknown for ' +
+      'everyone else. POST chatId with accept: true opens the conversation and moves it into the normal inbox; ' +
+      'accept: false declines and hides it, and the sender is not told either way. Replying to a pending request ' +
+      'from /api/v1/chats/messages also accepts it.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to list pending requests in the follower and unknown buckets.',
+      'POST chatId and accept: true to open the conversation.',
+      'POST accept: false to quietly decline; the sender is not notified.',
+      'Use requestsCount from /api/v1/chats for the badge instead of polling this route.'
+    ],
+    requestExamples: [
+      {
+        name: 'List requests',
+        description: 'Read pending DM requests by bucket.',
+        method: 'GET'
+      },
+      {
+        name: 'Accept a request',
+        description: 'Open a pending DM.',
+        method: 'POST',
+        body: { chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000009', accept: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Requests listed.',
+        body: {
+          ok: true,
+          requests: {
+            follower: [
+              {
+                id: 'c0ffee12-aaaa-4aaa-8aaa-000000000009',
+                chatType: 'dm',
+                lastMessage: { text: 'Hey! Loved your post.' }
+              }
+            ],
+            unknown: []
+          }
+        }
+      },
+      {
+        status: 200,
+        description: 'Request accepted.',
+        body: { ok: true, state: 'active' }
+      },
+      {
+        status: 404,
+        description: 'No pending request for that chat.',
+        body: { ok: false, error: 'Request not found' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'chats-updates',
+    group: 'messenger',
+    title: 'Chat updates poll',
+    endpoint: '/api/v1/chats/updates',
+    summary: 'Polling endpoint behind the unread badge and new-message toasts.',
+    detail:
+      'Returns the same payload as GET /api/v1/chats — chats with lastMessage previews, unread counts, ' +
+      'totalUnread, requestsCount, and serverTime. Clients poll it on an interval and diff lastMessage ids ' +
+      'between polls to decide when to toast a new message. Keeping it identical to the list endpoint means one ' +
+      'renderer handles both.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET on a polling interval while the app is open.',
+      'Diff lastMessage ids against the previous poll to detect new messages.',
+      'Update the unread badge from totalUnread and requestsCount.',
+      'Use serverTime as the clock reference instead of the local clock.'
+    ],
+    requestExamples: [
+      {
+        name: 'Poll for updates',
+        description: 'Fetch the latest chat list snapshot.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Snapshot returned.',
+        body: {
+          ok: true,
+          chats: [
+            {
+              id: 'c0ffee12-aaaa-4aaa-8aaa-000000000001',
+              unreadCount: 1,
+              lastMessage: { id: 'c0ffee12-bbbb-4bbb-8bbb-000000000012', text: 'New message' }
+            }
+          ],
+          totalUnread: 1,
+          requestsCount: 0,
+          serverTime: '2026-08-03T10:22:00.000Z'
+        }
+      },
+      {
+        status: 401,
+        description: 'No authenticated user.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'chats-settings',
+    group: 'messenger',
+    title: 'Messenger settings',
+    endpoint: '/api/v1/chats/settings',
+    summary: 'Reads or updates the current user read-receipt setting.',
+    detail:
+      'GET returns the current readReceipts flag. POST readReceipts: false turns receipts off under the parity ' +
+      'rule: you stop sharing your reading position and stop seeing the positions of others, in both directions ' +
+      'at once. Unread counts are unaffected either way — they are private bookkeeping, not sharing.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to read the current readReceipts flag.',
+      'POST readReceipts: true or false to change it.',
+      'Remember parity: turning receipts off also hides everyone else from you.',
+      'Unread counts keep working regardless of this setting.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read settings',
+        description: 'Fetch the read-receipt flag.',
+        method: 'GET'
+      },
+      {
+        name: 'Turn receipts off',
+        description: 'Stop sharing and seeing read receipts.',
+        method: 'POST',
+        body: { readReceipts: false }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Settings returned.',
+        body: { ok: true, readReceipts: true }
+      },
+      {
+        status: 400,
+        description: 'readReceipts must be a boolean.',
+        body: { ok: false, error: 'readReceipts must be a boolean' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'communities',
+    group: 'messenger',
+    title: 'Communities',
+    endpoint: '/api/v1/communities',
+    summary: 'Lists the caller communities or creates a new one.',
+    detail:
+      'GET returns every community the caller belongs to, with the caller role, memberCount, and the ordered ' +
+      'sections that file its channels. POST creates a community from a name and optional description, and the ' +
+      'creator becomes its owner.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with credentials to list communities, roles, and sections.',
+      'POST name and optional description to create a community.',
+      'The creator is the owner; add admins via /api/v1/communities/members.',
+      'Create channels inside the community via POST /api/v1/chats with chatType channel.'
+    ],
+    requestExamples: [
+      {
+        name: 'List communities',
+        description: 'Read the communities for the current account.',
+        method: 'GET'
+      },
+      {
+        name: 'Create a community',
+        description: 'Found a new community owned by the caller.',
+        method: 'POST',
+        body: { name: 'Thingtime HQ', description: 'Where Thingtime gets built.' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Communities listed.',
+        body: {
+          ok: true,
+          communities: [
+            {
+              id: 'c0ffee12-dddd-4ddd-8ddd-000000000004',
+              name: 'Thingtime HQ',
+              role: 'owner',
+              memberCount: 12,
+              sections: [{ id: 'c0ffee12-eeee-4eee-8eee-000000000005', name: 'Announcements' }]
+            }
+          ]
+        }
+      },
+      {
+        status: 400,
+        description: 'Community name missing.',
+        body: { ok: false, error: 'name is required' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'communities-get',
+    group: 'messenger',
+    title: 'Community detail',
+    endpoint: '/api/v1/communities/get',
+    summary: 'Reads one community with members, sections, and its channel directory.',
+    detail:
+      'Returns the community (including its sections), the first 100 members with roles, the full memberCount, ' +
+      'and the channel directory: every channel you have joined plus the joinable public ones, each with ' +
+      'memberCount and a joined flag. It is the one call a community screen needs.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send the community id as a query parameter.',
+      'Render sections and file the returned channels under them.',
+      'Offer join buttons on public channels where joined is false.',
+      'Handle 403 when the caller is not a member of the community.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read a community',
+        description: 'Fetch one community with members and channels.',
+        method: 'GET',
+        query: { id: 'c0ffee12-dddd-4ddd-8ddd-000000000004' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Community found.',
+        body: {
+          ok: true,
+          community: {
+            id: 'c0ffee12-dddd-4ddd-8ddd-000000000004',
+            name: 'Thingtime HQ',
+            sections: [{ id: 'c0ffee12-eeee-4eee-8eee-000000000005', name: 'Announcements' }]
+          },
+          members: [
+            { user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'owner' }
+          ],
+          memberCount: 12,
+          channels: [
+            { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000002', name: 'general', memberCount: 12, joined: true }
+          ]
+        }
+      },
+      {
+        status: 403,
+        description: 'Caller is not a member of this community.',
+        body: { ok: false, error: 'Not a member of this community' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'communities-update',
+    group: 'messenger',
+    title: 'Update community',
+    endpoint: '/api/v1/communities/update',
+    summary: 'Updates a community name or description.',
+    detail:
+      'Community admins can rename the community or rewrite its description. Sections and channels have their ' +
+      'own routes; this one only touches the community record itself.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the community id with a new name, description, or both.',
+      'Only community admins may update it.',
+      'Leave a field out to keep its current value.',
+      'Handle 403 for non-admin callers.'
+    ],
+    requestExamples: [
+      {
+        name: 'Update a community',
+        description: 'Rename and re-describe a community.',
+        method: 'POST',
+        body: {
+          id: 'c0ffee12-dddd-4ddd-8ddd-000000000004',
+          name: 'Thingtime HQ',
+          description: 'Design, build, ship.'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Community updated.',
+        body: {
+          ok: true,
+          community: {
+            id: 'c0ffee12-dddd-4ddd-8ddd-000000000004',
+            name: 'Thingtime HQ',
+            description: 'Design, build, ship.'
+          }
+        }
+      },
+      {
+        status: 403,
+        description: 'Only admins can update a community.',
+        body: { ok: false, error: 'Only admins can update this community' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'communities-members',
+    group: 'messenger',
+    title: 'Community members',
+    endpoint: '/api/v1/communities/members',
+    summary: 'Changes a community member role, removes a member, or leaves.',
+    detail:
+      'POST the communityId plus exactly one operation. userId with role promotes or demotes between admin and ' +
+      'member (admins only). userId with remove: true removes a member (admins only; the owner is untouchable). ' +
+      'leave: true removes the caller — anyone but the owner may leave, since a community must keep its owner.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST communityId plus exactly one of the role, remove, or leave operations.',
+      'Use userId and role to promote or demote members (admins only).',
+      'Use userId and remove: true to remove someone; the owner cannot be removed.',
+      'Use leave: true to depart yourself; the owner cannot leave.'
+    ],
+    requestExamples: [
+      {
+        name: 'Promote to admin',
+        description: 'Give a member the admin role.',
+        method: 'POST',
+        body: {
+          communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004',
+          userId: 'c0ffee12-cccc-4ccc-8ccc-000000000004',
+          role: 'admin'
+        }
+      },
+      {
+        name: 'Leave a community',
+        description: 'Depart a community you belong to.',
+        method: 'POST',
+        body: { communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004', leave: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Membership updated.',
+        body: { ok: true }
+      },
+      {
+        status: 403,
+        description: 'Operation requires a role the caller does not have.',
+        body: { ok: false, error: 'Only admins can change member roles' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'communities-invites',
+    group: 'messenger',
+    title: 'Community invites',
+    endpoint: '/api/v1/communities/invites',
+    summary: 'Lists, mints, or revokes community invite codes.',
+    detail:
+      'GET with communityId lists the community invites (admins only). POST with communityId mints a new invite ' +
+      '— optionally bounded by expiresInDays and maxUses — and returns its code; POST with communityId and ' +
+      'revokeId revokes an existing invite. Codes are redeemed through /api/v1/communities/join.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with communityId to list invites (admins only).',
+      'POST communityId with optional expiresInDays and maxUses to mint a code.',
+      'POST communityId and revokeId to revoke an invite.',
+      'Share the code out of band; redemption happens at /api/v1/communities/join.'
+    ],
+    requestExamples: [
+      {
+        name: 'List invites',
+        description: 'Read the invites for a community.',
+        method: 'GET',
+        query: { communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004' }
+      },
+      {
+        name: 'Mint an invite',
+        description: 'Create a 7-day, 10-use invite code.',
+        method: 'POST',
+        body: { communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004', expiresInDays: 7, maxUses: 10 }
+      },
+      {
+        name: 'Revoke an invite',
+        description: 'Kill an existing invite code.',
+        method: 'POST',
+        body: {
+          communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004',
+          revokeId: 'c0ffee12-abab-4abc-8abc-000000000007'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Invite minted.',
+        body: {
+          ok: true,
+          invite: {
+            id: 'c0ffee12-abab-4abc-8abc-000000000007',
+            code: 'TT-9f3kq2',
+            expiresAt: '2026-08-10T10:00:00.000Z',
+            maxUses: 10,
+            uses: 0
+          }
+        }
+      },
+      {
+        status: 403,
+        description: 'Only admins can manage invites.',
+        body: { ok: false, error: 'Only admins can manage invites' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'communities-join',
+    group: 'messenger',
+    title: 'Join community',
+    endpoint: '/api/v1/communities/join',
+    summary: 'Joins a community by redeeming an invite code.',
+    detail:
+      'POST a code to join the community it belongs to. Redemption is atomic — expiry, revocation, and use caps ' +
+      'are all checked inside the update filter, so an invite can never be over-redeemed in a race. Re-joining a ' +
+      'community you are already in is a friendly no-op success.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the invite code exactly as it was shared.',
+      'On success the caller becomes a member of the returned community.',
+      'Re-joining an existing membership succeeds without side effects.',
+      'Handle 404 for expired, revoked, exhausted, or unknown codes.'
+    ],
+    requestExamples: [
+      {
+        name: 'Redeem an invite',
+        description: 'Join a community with a code.',
+        method: 'POST',
+        body: { code: 'TT-9f3kq2' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Joined the community.',
+        body: { ok: true, community: { id: 'c0ffee12-dddd-4ddd-8ddd-000000000004', name: 'Thingtime HQ' } }
+      },
+      {
+        status: 404,
+        description: 'Code invalid, expired, revoked, or used up.',
+        body: { ok: false, error: 'Invite not found' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'communities-sections',
+    group: 'messenger',
+    title: 'Community sections',
+    endpoint: '/api/v1/communities/sections',
+    summary: 'Creates, renames, removes, or reorders community sections.',
+    detail:
+      'Sections are the folders channels are filed under. POST the communityId plus exactly one operation: ' +
+      'create with a name, rename with an id and name, remove with an id, or reorder with the full ordered id ' +
+      'list. All four are admin-only and return the refreshed sections. Removing a section un-files its channels ' +
+      'rather than deleting them.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST communityId plus exactly one of create, rename, remove, or reorder.',
+      'Send reorder as the complete ordered list of section ids.',
+      'Removing a section leaves its channels intact but unfiled.',
+      'Read the returned sections array as the new order.'
+    ],
+    requestExamples: [
+      {
+        name: 'Create a section',
+        description: 'Add a section to file channels under.',
+        method: 'POST',
+        body: { communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004', create: { name: 'Announcements' } }
+      },
+      {
+        name: 'Reorder sections',
+        description: 'Set the full section order.',
+        method: 'POST',
+        body: {
+          communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004',
+          reorder: ['c0ffee12-eeee-4eee-8eee-000000000005', 'c0ffee12-eeee-4eee-8eee-000000000006']
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Sections updated.',
+        body: {
+          ok: true,
+          sections: [
+            { id: 'c0ffee12-eeee-4eee-8eee-000000000005', name: 'Announcements' },
+            { id: 'c0ffee12-eeee-4eee-8eee-000000000006', name: 'Projects' }
+          ]
+        }
+      },
+      {
+        status: 403,
+        description: 'Only admins can manage sections.',
+        body: { ok: false, error: 'Only admins can manage sections' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'emojis',
+    group: 'messenger',
+    title: 'Custom emojis',
+    endpoint: '/api/v1/emojis',
+    summary: 'Lists or uploads custom emojis for a community or the personal set.',
+    detail:
+      'GET with chatId or communityId returns the emojis usable in that scope — the community set plus your ' +
+      'personal set — and requires membership for community scopes. GET with ids (comma-separated emoji ids) ' +
+      'resolves specific emojis with their image bytes: message payloads reference reacted emojis as ' +
+      '{ name, animated } only, and clients fetch images once by id and cache them. POST uploads one: a name of ' +
+      '2-32 characters matching [a-z0-9_-], an image as a base64 data URI (gif, webp, png, apng, or jpeg, roughly ' +
+      '512 KB of binary), and an optional communityId to share it with a community instead of keeping it ' +
+      'personal. Names are unique per scope, and messages react with the custom:<emoji id> token.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with chatId or communityId to list the emojis usable there.',
+      'POST name, image data URI, and optional communityId to upload one.',
+      'Keep names 2-32 characters of lowercase letters, digits, underscores, and hyphens.',
+      'Stay under the roughly 512 KB binary image cap.',
+      'React with custom:<emoji id> once the upload lands.'
+    ],
+    requestExamples: [
+      {
+        name: 'List emojis for a chat',
+        description: 'Emojis usable in one chat scope.',
+        method: 'GET',
+        query: { chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001' }
+      },
+      {
+        name: 'Upload a community emoji',
+        description: 'Add an animated emoji to a community set.',
+        method: 'POST',
+        body: {
+          name: 'party-blob',
+          image: 'data:image/gif;base64,R0lGODlh...',
+          communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Emoji uploaded.',
+        body: {
+          ok: true,
+          emoji: { id: 'c0ffee12-ffff-4fff-8fff-000000000006', name: 'party-blob', animated: true }
+        }
+      },
+      {
+        status: 400,
+        description: 'Name already used in this scope.',
+        body: { ok: false, error: 'An emoji with that name already exists here' }
+      }
+    ],
+    notes: ['Uploads draw from the emojis.write rate-limit bucket (30 uploads per hour).']
+  }),
+  endpoint({
+    id: 'emojis-delete',
+    group: 'messenger',
+    title: 'Delete custom emoji',
+    endpoint: '/api/v1/emojis/delete',
+    summary: 'Deletes a custom emoji.',
+    detail:
+      'The uploader can always delete their own emoji, and community admins can delete any emoji in their ' +
+      'community set. Existing custom:<emoji id> reaction tokens simply stop resolving once the emoji is gone.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the emoji id to delete.',
+      'The uploader or a community admin may delete it.',
+      'Expect old reactions using the token to stop resolving.',
+      'Handle 403 when the caller is neither uploader nor admin.'
+    ],
+    requestExamples: [
+      {
+        name: 'Delete an emoji',
+        description: 'Remove one custom emoji.',
+        method: 'POST',
+        body: { id: 'c0ffee12-ffff-4fff-8fff-000000000006' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Emoji deleted.',
+        body: { ok: true }
+      },
+      {
+        status: 403,
+        description: 'Caller is neither the uploader nor a community admin.',
+        body: { ok: false, error: 'Not allowed to delete this emoji' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-follow',
+    group: 'messenger',
+    title: 'Follow user',
+    endpoint: '/api/v1/users/follow',
+    summary: 'Reads or changes the follow relationship with another user.',
+    detail:
+      'GET with username or userId returns the user, whether you follow them (following), whether they follow ' +
+      'you (followsYou), and their follower and following counts. POST with follow: true or false follows or ' +
+      'unfollows. Follow state matters in Messenger: when you follow someone, their DMs arrive straight in your ' +
+      'inbox instead of the message-requests pile.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with username or userId to read the relationship and counts.',
+      'POST the same identifier with follow: true to follow or false to unfollow.',
+      'Show followsYou to explain why a DM skipped message requests.',
+      'Handle 404 when the user does not exist.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read a relationship',
+        description: 'Check the follow state with one user.',
+        method: 'GET',
+        query: { username: 'ada-lovelace' }
+      },
+      {
+        name: 'Follow a user',
+        description: 'Start following by username.',
+        method: 'POST',
+        body: { username: 'ada-lovelace', follow: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Relationship returned.',
+        body: {
+          ok: true,
+          user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' },
+          following: true,
+          followsYou: false,
+          followerCount: 42,
+          followingCount: 17
+        }
+      },
+      {
+        status: 404,
+        description: 'User not found.',
+        body: { ok: false, error: 'User not found' }
+      }
+    ],
+    notes: ['Follow changes draw from the users.follow rate-limit bucket (60 requests per minute).']
+  }),
+  endpoint({
     id: 'algorithms',
     group: 'algorithms',
     title: 'Feed algorithms',
@@ -4422,6 +5828,502 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           ok: true,
           users: [{ id: '664f…', username: 'lopu', displayName: 'Lopu', bio: 'Making Thingtime 🦄', avatarUrl: null }]
         }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-follow',
+    group: 'social',
+    title: 'Follow / unfollow',
+    endpoint: '/api/v1/users/follow',
+    summary: 'Follow or unfollow another user — one-way, no approval needed.',
+    detail:
+      'Follows are one-way edges (thingtime ["follow"], one thing per follower/followed pair, deduped ' +
+      'by a unique index). Omitting `follow` toggles; passing it explicitly makes the call idempotent. ' +
+      'A new follow emits a new-follower notification to the followed user (respecting their ' +
+      'notification prefs). Friendships are a separate, approval-based system — see /api/v1/users/friend.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { userId } or { username } of the user to follow.',
+      'Optionally pass follow: true|false for an idempotent set instead of a toggle.',
+      'Read { following, followerCount } back and update the button + count optimistically.',
+      'Handle 400 self-follow, 401 unauthenticated, 404 unknown user, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Toggle follow',
+        description: 'Follow (or unfollow, if already following) by user id.',
+        method: 'POST',
+        body: { userId: '664f1c2a9d3e5b0012345678' }
+      },
+      {
+        name: 'Explicit follow',
+        description: 'Idempotent follow by username.',
+        method: 'POST',
+        body: { username: 'lopu', follow: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Now following.',
+        body: { ok: true, following: true, followerCount: 12 }
+      },
+      {
+        status: 400,
+        description: 'Self-follow.',
+        body: { ok: false, error: 'You already have your own undivided attention 💅' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-friend',
+    group: 'social',
+    title: 'Friend request actions',
+    endpoint: '/api/v1/users/friend',
+    summary: 'Drive the friendship state machine: request, cancel, accept, decline, unfriend.',
+    detail:
+      'Friendships need approval (unlike follows): one thing per user pair (thingtime ["friend"], ' +
+      'crystal.friendKey = sorted pair, unique index), status pending until the recipient accepts. ' +
+      'Requesting someone who already requested you accepts instead of duplicating. Requests emit ' +
+      'friend-request notifications; accepts emit friend-accepted. Accepted friendships power the ' +
+      'tt:userFriends acl circle — friends-only posts become visible to real friends.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { userId | username, intent } — intent: request | cancel | accept | decline | unfriend.',
+      'request → pending-outgoing (or friends, if they had already asked you).',
+      'accept/decline act on a pending-incoming request; cancel retracts your own.',
+      'Read { friendState } back: none | pending-outgoing | pending-incoming | friends.',
+      'Handle 400 bad intent/self, 401 unauthenticated, 404 unknown user or no pending request, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Send request',
+        description: 'Ask another user to be friends.',
+        method: 'POST',
+        body: { username: 'lopu', intent: 'request' }
+      },
+      {
+        name: 'Accept request',
+        description: 'Accept a pending incoming request.',
+        method: 'POST',
+        body: { userId: '664f1c2a9d3e5b0012345678', intent: 'accept' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Request sent.',
+        body: { ok: true, friendState: 'pending-outgoing' }
+      },
+      {
+        status: 404,
+        description: 'Nothing to accept.',
+        body: { ok: false, error: 'No pending friend request from that user' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-relationships',
+    group: 'social',
+    title: 'Relationship summary',
+    endpoint: '/api/v1/users/relationships',
+    summary: 'Public follower/following/friend counts for a profile, plus the viewer’s relationship state.',
+    detail:
+      'Counts are public (they render on every profile). When authenticated, `viewer` reports your ' +
+      'relationship to that user: following, followedBy, and friendState (none | pending-outgoing | ' +
+      'pending-incoming | friends). Asking about yourself adds incomingRequests — the pending ' +
+      'friend-request badge count. Logged out, `viewer` is null.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out (counts only); anonymous callers are rate-limited per hashed IP.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?username=<name> (or ?userId=).',
+      'Render counts on the profile header; drive the Follow / Add friend buttons from `viewer`.',
+      'Handle 404 unknown user and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Profile summary',
+        description: 'Counts + viewer state for a profile page.',
+        method: 'GET',
+        query: { username: 'lopu' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Counts and the viewer’s state.',
+        body: {
+          ok: true,
+          userId: '664f…',
+          counts: { followers: 12, following: 34, friends: 5 },
+          viewer: { following: true, followedBy: false, friendState: 'friends' }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-connections',
+    group: 'social',
+    title: 'Connection lists',
+    endpoint: '/api/v1/users/connections',
+    summary: 'Paged public lists of a user’s followers, following, or friends (and your own pending requests).',
+    detail:
+      'type=followers|following|friends return public profile projections for anyone (matching the ' +
+      'public counts). type=requests lists the PENDING incoming friend requests — only for your own ' +
+      'account (403 otherwise). Cursor pagination: pass back `nextBefore` as `before` until it is null.',
+    auth: {
+      mode: 'optional',
+      description: 'Public lists work logged out; type=requests requires auth and your own userId/username.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?username=<name>&type=followers|following|friends&limit=&before=.',
+      'Render as profile rows; page with before=<nextBefore>.',
+      'type=requests (your own account) powers the accept/decline inbox.',
+      'Handle 400 bad type, 403 requests-for-someone-else, 404 unknown user, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Followers list',
+        description: 'First page of a user’s followers.',
+        method: 'GET',
+        query: { username: 'lopu', type: 'followers', limit: 20 }
+      },
+      {
+        name: 'Pending requests',
+        description: 'Your own incoming friend requests.',
+        method: 'GET',
+        query: { username: 'me-myself', type: 'requests' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One page of public profiles.',
+        body: {
+          ok: true,
+          users: [{ id: '664f…', username: 'rick', displayName: 'Rick Deckard', avatarUrl: null }],
+          nextBefore: null
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-list',
+    group: 'notifications',
+    title: 'List notifications',
+    endpoint: '/api/v1/notifications',
+    summary: 'Your notifications, newest first, filtered by your notification prefs — plus the unread count.',
+    detail:
+      'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
+      'replies, reactions, shares, and capped posts-from-followed/friends fan-out). The list is ' +
+      'ALWAYS filtered by your current notification settings, so disabling a type hides even ' +
+      'already-written notifications of that type. unreadCount backs the bell badge. Cursor ' +
+      'pagination via before=<nextBefore>.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?limit=&before= — newest first.',
+      'Show unreadCount on the bell; refetch on window focus.',
+      'Click-through: postId → /post/<id>, otherwise actor → /profile/<username>.',
+      'Handle 401 unauthenticated and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Bell dropdown',
+        description: 'First page for the notifications popover.',
+        method: 'GET',
+        query: { limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Notifications + unread count.',
+        body: {
+          ok: true,
+          notifications: [
+            {
+              id: 'a1b2…',
+              type: 'new-follower',
+              actorId: '664f…',
+              actorUsername: 'rick',
+              actorName: 'Rick Deckard',
+              actorAvatarUrl: null,
+              targetId: '664f…',
+              postId: null,
+              preview: null,
+              readAt: null,
+              createdAt: '2026-08-01T12:00:00.000Z'
+            }
+          ],
+          unreadCount: 1,
+          nextBefore: null
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-read',
+    group: 'notifications',
+    title: 'Mark notifications read',
+    endpoint: '/api/v1/notifications/read',
+    summary: 'Mark some ({ ids }) or all ({ all: true }) of your notifications as read.',
+    detail:
+      'Flips root readAt on your unread notification things; the unread badge recomputes from it. ' +
+      'Already-read ids are skipped (updated counts only fresh flips).',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { all: true } when opening the bell, or { ids: [...] } for targeted marks.',
+      'Optimistically zero the badge; reconcile with the response.',
+      'Handle 400 (neither ids nor all), 401 unauthenticated, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Mark all read',
+        description: 'Zero the bell badge.',
+        method: 'POST',
+        body: { all: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Marked.',
+        body: { ok: true, updated: 3 }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-settings',
+    group: 'notifications',
+    title: 'Notification settings',
+    endpoint: '/api/v1/notifications/settings',
+    summary: 'Read or merge-patch your notification switches — per type, per channel (push + email), plus channel masters.',
+    detail:
+      'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
+      'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
+      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, groups ' +
+      '(reserved), plus the email-only weekly-summary digest. Defaults ON, except email for the two ' +
+      'high-volume post types (post-from-followed / post-from-friend), which are opt-in. GET always ' +
+      'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
+      '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
+      '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +
+      'list and unread count immediately; a disabled email type stops future emails. Emails only go ' +
+      'to verified addresses and are capped per recipient per hour; every one carries a manage link ' +
+      'and a one-click unsubscribe link.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET returns { prefs: { push, email, masters } } with every switch as a boolean.',
+      'POST { prefs: { email: { <type>: boolean } } } (or push / masters) merges just those switches.',
+      'The flat legacy body { prefs: { <type>: boolean } } still works and patches push.',
+      'Flip switches optimistically; revert on failure.',
+      'Handle 400 unknown key / non-boolean, 401 unauthenticated, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Disable follower emails',
+        description: 'Stop new-follower emails only — the bell keeps working.',
+        method: 'POST',
+        body: { prefs: { email: { 'new-follower': false } } }
+      },
+      {
+        name: 'Mute all emails',
+        description: 'Flip the email master off without touching per-type switches.',
+        method: 'POST',
+        body: { prefs: { masters: { email: false } } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The full merged switch matrix.',
+        body: {
+          ok: true,
+          prefs: {
+            push: {
+              'friend-request': true,
+              'friend-accepted': true,
+              'new-follower': true,
+              'post-from-followed': true,
+              'post-from-friend': true,
+              comment: true,
+              reply: true,
+              reaction: true,
+              share: true,
+              groups: true
+            },
+            email: {
+              'friend-request': true,
+              'friend-accepted': true,
+              'new-follower': false,
+              'post-from-followed': false,
+              'post-from-friend': false,
+              comment: true,
+              reply: true,
+              reaction: true,
+              share: true,
+              groups: true,
+              'weekly-summary': true
+            },
+            masters: { push: true, email: true }
+          }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-email-unsubscribe',
+    group: 'notifications',
+    title: 'Email one-click unsubscribe',
+    endpoint: '/api/v1/notifications/email/unsubscribe',
+    summary: 'The one-click link in notification email footers — flips the email master switch off.',
+    detail:
+      'GET with ?uid=<userId>&token=<hmac> (both come pre-built in every notification email footer; ' +
+      'the token is an HMAC over the user id, so a link can only ever mute its own recipient). No ' +
+      'session needed — email clients don’t carry cookies. Responds with a small HTML confirmation ' +
+      'page, is idempotent, and the switch can be flipped back on any time in Settings → ' +
+      'Notifications. Invalid or missing tokens get a 400 page; requests are IP rate-limited.',
+    auth: {
+      mode: 'none',
+      description: 'Authenticated by the HMAC token in the link, not by session.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Click the “Unsubscribe from all” link in any notification email.',
+      'The email master switch flips off; per-type switches are untouched.',
+      'Re-enable any time from Settings → Notifications.'
+    ],
+    requestExamples: [
+      {
+        name: 'One-click unsubscribe',
+        description: 'As clicked from an email footer.',
+        method: 'GET',
+        query: { uid: '664f…', token: '3f2a…' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'HTML confirmation page (text/html, not JSON).',
+        body: { note: 'Returns an HTML page: “You’re unsubscribed 💌”.' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-email-weekly-summary',
+    group: 'notifications',
+    title: 'Weekly summary digest run',
+    endpoint: '/api/v1/notifications/email/weekly-summary',
+    summary: 'Kick off the weekly email digest — cron (CRON_SECRET bearer) or admin only.',
+    detail:
+      'Sends every opted-in, email-verified user a recap of the last seven days around their things ' +
+      '(new followers, friend requests, comments, replies, reactions, shares, post views, posts). ' +
+      'Users with zero activity are skipped, and a six-day per-recipient lookback makes the run ' +
+      'idempotent — a retried cron or a manual admin run never double-sends. The Vercel cron ' +
+      '(remix/vercel.json) calls GET with Authorization: Bearer <CRON_SECRET>; signed-in admins can ' +
+      'also run it, and POST { dryRun: true } (or GET ?dryRun=1) previews counts without sending.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin session, or the CRON_SECRET bearer token Vercel cron attaches.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Configure CRON_SECRET in Vercel so the scheduled cron authenticates.',
+      'GET ?dryRun=1 as an admin to preview who would get a digest.',
+      'POST {} (admin) to run manually; the lookback prevents double-sends.',
+      'Handle 401 unauthenticated / 403 non-admin.'
+    ],
+    requestExamples: [
+      {
+        name: 'Dry run',
+        description: 'Preview counts without sending anything.',
+        method: 'POST',
+        body: { dryRun: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Run summary.',
+        body: {
+          ok: true,
+          considered: 42,
+          eligible: 17,
+          sent: 9,
+          skipped: { alreadySent: 5, noActivity: 3, failed: 0 },
+          truncated: false,
+          dryRun: false
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-views',
+    group: 'things',
+    title: 'Record post views',
+    endpoint: '/api/v1/things/views',
+    summary: 'Batched post view/impression telemetry — unique-viewer deduped, anti-bot filtered, beacon-safe.',
+    detail:
+      'The client reports posts that were ≥50% visible for ≥1s: { events: [{ id, dwellMs, ratio, pos }] } ' +
+      '(dwellMs = on-screen time, ratio = max visible fraction, pos = viewport position 0..1). One doc ' +
+      'per (post, viewer identity) keeps the public viewCount = UNIQUE viewers — replay only bumps ' +
+      'impressions, which the rate limit bounds. Anonymous viewers dedup on a salted hash of IP+UA ' +
+      '(no raw IP stored); UA-less requests are dropped. Owner self-views never count. Views are only ' +
+      'accepted for posts the caller could read. Stats surface publicly on every post payload as ' +
+      'viewCount + viewStats { impressions, avgDwellMs }.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out (anonymous identities dedup per salted IP+UA hash).'
+    },
+    methods: ['POST'],
+    steps: [
+      'Batch events client-side (the app flushes every ~10s and on page hide via sendBeacon).',
+      'POST { events: [{ id, dwellMs?, ratio?, pos? }] } — up to 50 per call.',
+      'The response { counted } is informational; failures are safe to ignore.',
+      'Handle 429 rate-limited by dropping the batch (never retry-loop telemetry).'
+    ],
+    requestExamples: [
+      {
+        name: 'Flush view batch',
+        description: 'Two posts seen this scroll session.',
+        method: 'POST',
+        body: {
+          events: [
+            { id: 'a1b2c3…', dwellMs: 4200, ratio: 1, pos: 0.31 },
+            { id: 'd4e5f6…', dwellMs: 900, ratio: 0.8, pos: 0.66 }
+          ]
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Batch accepted (counted = events that passed validation).',
+        body: { ok: true, counted: 2 }
       }
     ]
   }),

@@ -136,6 +136,20 @@ export function useApi() {
 			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), [])
     },
     admin: {
+      ciControl: useCallback(
+        async (args?: { limit?: number }, options?: { signal?: AbortSignal }) =>
+          getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
+        []
+      ),
+      reconcileCiControl: useCallback(
+        async () => asyncFetcher.submit({}, { action: '/api/v1/admin/ci/reconcile', errorContext: 'reconcile CI control data' }),
+        [asyncFetcher]
+      ),
+      dispatchCiWorkflow: useCallback(
+        async (args: { workflow: string; ref?: string; inputs?: Record<string, unknown> }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/dispatch', errorContext: `dispatch ${args.workflow}` }),
+        [asyncFetcher]
+      ),
       setPrConflictResolverModelWaterfall: useCallback(
 				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
         [asyncFetcher]
@@ -463,6 +477,48 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ algorithmId: args?.algorithmId, events: args?.events }, { action: '/api/v1/algorithms/track' }),
         [asyncFetcher]
       )
+    },
+    social: {
+      // counts + viewer relationship state for a profile ({ username | userId })
+      relationships: useCallback(async (args) => getJson(`/api/v1/users/relationships${toQuery(args)}`), []),
+      // paged lists: { username | userId, type: followers|following|friends|requests, limit, before }
+      connections: useCallback(async (args) => getJson(`/api/v1/users/connections${toQuery(args)}`), []),
+      // toggle (or explicitly set with follow: boolean) a one-way follow
+      follow: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, username: args?.username, follow: args?.follow },
+            { action: '/api/v1/users/follow' }
+          ),
+        [asyncFetcher]
+      ),
+      // friendship state machine: intent request|cancel|accept|decline|unfriend
+      friend: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, username: args?.username, intent: args?.intent },
+            { action: '/api/v1/users/friend' }
+          ),
+        [asyncFetcher]
+      )
+    },
+    notifications: {
+      list: useCallback(async (args?: Record<string, unknown>) => getJson(`/api/v1/notifications${toQuery(args)}`), []),
+      markRead: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            args?.all ? { all: true } : { ids: args?.ids },
+            { action: '/api/v1/notifications/read' }
+          ),
+        [asyncFetcher]
+      ),
+      settings: {
+        get: useCallback(async () => getJson('/api/v1/notifications/settings'), []),
+        set: useCallback(
+          async (args) => asyncFetcher.submit({ prefs: args?.prefs }, { action: '/api/v1/notifications/settings' }),
+          [asyncFetcher]
+        )
+      }
     },
     profile: {
       get: useCallback(async (args) => getJson(`/api/v1/users/profile${toQuery(args)}`), []),

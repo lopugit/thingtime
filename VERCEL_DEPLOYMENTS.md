@@ -27,6 +27,20 @@ Last updated: 2026-08-09
 ## Preview
 
 - Generated preview URLs use `https://thingtime-<generated>-lopugits-projects.vercel.app`.
+- The `develop` branch alias is
+  https://thingtime-git-develop-lopugits-projects.vercel.app.
+- https://dev.thingtime.com is configured as a branch-specific Preview domain
+  that tracks `develop`. This deliberately preserves the existing
+  `develop`-scoped Preview environment variables; Vercel's built-in
+  Development environment remains local/CLI-only.
+  - Cloudflare DNS: `CNAME dev` to
+    `b45b7349d6eb9c18.vercel-dns-017.com`, DNS only, TTL Auto.
+  - If Vercel reports a pending ownership challenge, publish the exact
+    `_vercel` TXT value returned by the Vercel project-domain inspector; do
+    not record the rotating verification value in this repository.
+  - Vercel assignment was configured on 2026-08-07. DNS, ownership
+    verification, and TLS remain pending until the Cloudflare records are
+    published.
 - The `staging` branch alias is https://thingtime-git-staging-lopugits-projects.vercel.app.
 - For feature branches, use the Vercel PR status URL or deployment URL from
   the GitHub PR checks.

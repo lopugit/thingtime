@@ -17,6 +17,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **One GitHub Actions control plane + Admin CI dashboard**: executable CI,
+  promotion, sync, release, rebase, and AI conflict-resolution behavior now
+  lives on the protected `github-actions` branch. `main`/`develop` retain only
+  GitHub-required trigger/input/permission callers pinned to that branch, with
+  a regression contract that rejects runner steps or local Actions scripts.
+  Admin → CI Control renders cached feature/branch/PR/run/deployment/preview
+  topology, signed GitHub/Vercel webhook freshness, relational status history,
+  GitHub App reconciliation, and allowlisted audited dispatch controls across
+  desktop and mobile. All current projections and append-only events are
+  protected, system-owned, non-billable Things. Fork-safe App/webhook setup and
+  failure-preserving verification are documented in README/TESTING. Reconcile
+  pagination covers repositories with more than 100 branches, and administrator
+  dispatches can enter only through the reviewed `develop`/`main` listeners. —
+  Codex (AI), 2026-08-09
+
 ### Fixed
 
 - **Develop PR preview DNS publication now tests the live path**: externally
@@ -28,6 +45,47 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the shared development runtime. The runbook also records the controller's
   team-scoped token boundary accurately. See the
   [PR #233 engineering note](../PRs/233-codex-fix-develop-preview-dns-gate.md).
+  — Codex (AI), 2026-08-10
+- **Worktree lint and formatting dependencies now self-heal completely**:
+  validation startup probes detect incomplete transitive pnpm links even when
+  every direct package looks installed, retry once with a forced relink, and
+  verify ESLint plus the now-direct Prettier CLI before reporting the checkout
+  ready. — Codex (AI), 2026-08-10
+- **Creation-time promotion conflicts are resolved automatically**: when a
+  selected `develop` feature cannot be replayed cleanly onto its promotion base,
+  the protected per-feature promoter first positively proves its historical
+  patch is still effective at the current `develop` tip, then reserves the
+  deterministic branch and hands the immutable source/base plan to a bot-only
+  worker on the fixed `github-actions` control plane. The thin `develop`
+  listener grants the Actions permission needed for that dispatch without
+  restoring executable workflow behavior to product branches. The
+  secret-bearing provider router stays on GitHub-hosted compute and accepts only
+  authenticated, validated downstream runner metadata; promotion-plan handoffs
+  bypass external provider routing until that boundary supports the same
+  immutable plan envelope. The worker re-derives live authority, resolves only
+  mechanically proven conflict paths, treats `graphify-out/**` as derived
+  target-side output, publishes with an exact lease, opens the promotion PR, and
+  resumes dependent stack members automatically. The result
+  is labelled for review and receives evidence naming the resolver run,
+  immutable SHAs, and AI-edited paths; unchanged failed snapshots pause
+  visibly instead of requiring undocumented manual cherry-picks or repeatedly
+  spending model budget. Bot attestations, exact leases, durable stale-snapshot
+  retirement, and idempotent checkpoint/metadata recovery make retries
+  converge across API ambiguity, worker crashes, base movement, or duplicate
+  comments. A recoverable historical patch that current `develop` classifies as
+  removed or ambiguous now blocks visibly before any reservation, branch,
+  immutable promotion plan, AI worker, or promotion PR is created. Only later
+  members of its dependent promotion group wait; unrelated groups continue
+  independently. A later run can proceed only after freshly proving the patch
+  effective and creating a new verified plan; no blocked state is upgraded in
+  place. Missing objects, unreadable patches, operational Git failures, and
+  worker classification mismatches likewise stop before publication. See the
+  [PR #213 engineering note](../PRs/213-codex-auto-resolve-promotion-conflicts-automatically-resolve-promotion-creation-conflicts.md).
+  Conflict-free and AI-resolved verified-source promotions that touch
+  `.github/**` still share the same bot-authored `[skip ci]` content commit and
+  `GITHUB_TOKEN` review checkpoint, so promoted workflow changes cannot execute
+  merely from the branch push that creates their review PR. Removed or ambiguous
+  historical patches never reach that gate because no branch or PR is created.
   — Codex (AI), 2026-08-10
 - **Generic Vercel Preview now mirrors the shared development runtime**: all 26
   variables currently assigned to `develop` also target Preview, while the six
@@ -63,9 +121,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   refresh silently fall back to Sonnet. The public setting endpoint now reads
   the home-DB singleton on every request (retaining last-known-good only for a
   real database outage), so a successful Admin reorder is visible immediately
-  across warm serverless instances. A source contract inventories every AI
-  workflow/action and rejects new unbound runtimes or obsolete hard-coded
-  models. The deleted legacy GitHub workflow registration was also disabled.
+  across warm serverless instances. Source contracts cover the delegated
+  product-branch callers and inventory every control-plane AI workflow/action,
+  rejecting new unbound runtimes or obsolete hard-coded models. The deleted
+  legacy GitHub workflow registration was also disabled.
   — Codex (AI), 2026-08-10
 - **The complete Actions control plane is ready for atomic promotion to
   `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
@@ -102,10 +161,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   distinguishes a normal non-ancestor result from a Git inspection error, and
   requires original ancestry or both patch-equivalent history and current-tip
   effect verification before an old change may be promoted. Later reverts and
-  removed aggregate ranges fail closed instead of being resurrected. It
-  records structured per-PR blocks instead of aborting the batch. A failed
-  standalone feature no longer prevents later independent promotions; a
-  failed stack member still defers only its dependent members. Group-local
+  removed aggregate ranges are classified instead of being mistaken for
+  current source; PR #213 visibly blocks removed or ambiguous recoverable cases
+  before any reservation, branch, worker, or promotion PR, while unrecoverable
+  authority still fails closed. It records structured per-PR blocks instead of
+  aborting the batch. A failed standalone feature no longer prevents later
+  independent promotions; a failed stack member still defers only its
+  dependent members. Group-local
   exceptions are contained through the remaining groups before failing the
   run, the partial summary is always published, reused promotion branches are
   freshly fetched and checked against an exactly reconstructed source tree and
@@ -159,6 +221,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   surface as pending and self-repair, and the account-storage orchestrator runs
   the schema seed prerequisite before scanning billable content. Community and
   user-authored schemas remain billable. — Codex (AI), 2026-08-09
+- **Conflict detection waits out GitHub and says so when it stands aside**:
+  the merge resolver's detector polled mergeability for only ~80 seconds
+  after a base push, but GitHub's verdicts can take ~6 minutes to settle —
+  observed on PR #190, where the develop push that created the conflict ran
+  detection while the PR still read UNKNOWN, so nothing was handed off, no
+  comment appeared, and the conflict sat silent until the scheduled sweep.
+  Detection now re-queries until every scanned PR has a verdict or a time
+  budget runs out (`MERGEABLE_POLL_SECONDS`, default 500s, with
+  `MERGEABLE_POLL_INTERVAL` between re-queries; detect timeout raised to 15
+  minutes), and the detect job now upserts a status comment on any PR it must
+  leave alone — conflicting fork PRs it cannot push to, and PRs whose
+  mergeability never settled — so detector silence always means "nothing
+  needed doing", never "nobody looked". Conflicts that are handed off keep
+  announcing themselves through the existing "Auto-resolve running" comment;
+  the rebase workflow already polls its verdicts round-robin and is
+  unchanged. Also restored the "AI PR and stack rebase conflict resolution"
+  changelog bullet's opening line, dropped by the AI resolution of a previous
+  merge. — Claude (AI), 2026-08-08
 - **Contextual reaction/migration errors + storage migration upsert repair**:
   Lopu can no longer render a lone 🌧️ when Nitro replaces an unhandled server
   exception with boolean `error: true`; fetch failures now become typed,
@@ -344,6 +424,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [PR #183 implementation notes](../PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md).
   — Codex (AI), 2026-08-08
 
+- **Stable Vercel domain for the `develop` branch**: the Thingtime project now
+  assigns `dev.thingtime.com` to `develop` as a branch-specific Preview
+  domain, matching the existing staging pattern while preserving the
+  branch-scoped Preview secrets already used by develop deployments. The
+  deployment runbook now records the required Cloudflare DNS-only CNAME and
+  ownership-verification flow. — Codex (AI), 2026-08-07
+
 - **Typed queries across every admin workspace**: Users, Apps, Tiers, rate
   limits, and the administrator roster now share an all-field free-text,
   filter, and deterministic-sort interface. It handles nested/list fields,
@@ -383,6 +470,38 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   30-check local-only live suite. This supersedes the earlier app→end-user-tier
   fallback from the stacked admin-manager change. — Codex (AI), 2026-08-05
 
+- **Per-channel notification toggles + SES notification emails**: Settings →
+  Notifications is now a per-type × per-channel switch matrix — Push (the
+  bell/in-app channel, stored as the original flat pref keys so existing prefs
+  keep working) and Email (new nested `email`/`masters` keys in the same
+  secure-blob pref object), each with a master switch. Activity notifications
+  (friend requests/accepts, new followers, comments, replies, reactions,
+  shares; posts-from-followed/friends email opt-in) now also send SES emails on
+  the new `notification` email stream — fire-and-forget from the same emits,
+  verified addresses only, ≤10/recipient/hour throttle, manage +
+  one-click-unsubscribe links in every footer (HMAC-tokened
+  `GET /api/v1/notifications/email/unsubscribe`). A weekly summary digest
+  (email-only type, Vercel cron `remix/vercel.json` →
+  `GET /api/v1/notifications/email/weekly-summary` with `CRON_SECRET` bearer or
+  admin session, six-day idempotency lookback, dry-run mode) recaps followers,
+  requests, comments, replies, reactions, shares, post views and posts. New
+  env: `THINGTIME_EMAIL_NOTIFICATIONS_FROM`, `THINGTIME_EMAIL_UNSUB_SECRET`
+  (optional), `CRON_SECRET`, `APP_URL` (email links) — see README “Notification
+  emails”. — Claude (AI), 2026-08-03
+
+- **Followers + friends, notifications, and public post view stats**: one-way
+  follows and approval-based friendships (`follow`/`friend` protected things,
+  `/api/v1/users/{follow,friend,relationships,connections}`) with the
+  `tt:userFriends` acl circle now resolving against the real friend graph;
+  server-minted in-app notifications (nav bell 🔔 + popover, capped post
+  fan-out, per-type switches in Settings → Notifications stored in the user
+  secure blob, read-time pref filtering); and anti-bot post view telemetry
+  (`postViews` collection, unique-viewer dedup per salted identity,
+  dwell/ratio/position capture via `useViewTracking` on feed/profile/permalink,
+  public 👁 viewCount + impressions/avg-read-time on every post). Detailed
+  notes in `PRs/followers-friends-notifications-views.md`.
+  — Claude (AI), 2026-08-03
+
 - **CI conflict-resolver graphify refresh now does LLM semantic extraction**:
   after an auto-resolved merge, `resolve-pr-conflicts.yml` runs
   `graphify extract` + `cluster-only` with whichever Claude credential the
@@ -394,6 +513,31 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the old AST-only `graphify update` when no credential exists or extraction
   fails. Staged refresh outputs get the same best-effort secret scan as
   resolved files. — Claude (AI), 2026-08-03
+
+- **Thingtime Messenger** (`/messages`): a full chat platform inside the app —
+  Slack-style **Spaces** (communities with channels, sidebar sections, topics,
+  invites, threads) and FB-style **Chats** (DMs, groups, nicknames, message
+  requests bucketed follower/unknown) behind one mode toggle. Everything is a
+  thing: nine new dedicated-endpoint kinds (`chat`, `chat-member`,
+  `chat-message`, `chat-section`, `community`, `community-member`,
+  `community-invite`, `custom-emoji`, `follow`) with membership enforced in
+  `api/utils/messenger/` and the generic `/api/v1/things` paths refusing them.
+  Reactions reuse the post reaction store + unique index and add a
+  `custom:<emoji id>` token namespace for uploaded gif/webp emojis (≤512KB
+  data URIs, the avatar pattern). Read receipts are per-member forward-only
+  high-water marks with a parity privacy setting (off = neither share nor
+  see); unread counts skip system messages and muted chats; new-message Lopu
+  toasts + nav badge ride a visibility-aware poll (4s open chat / 15s list /
+  25s global). 23 new documented endpoints (docs registry = Nitro
+  registration), 6 new rate-limit buckets, 7 new partial/thread indexes, and
+  `scripts/verify-messenger.mjs` (100 live-API checks, including 14
+  regressions locked in from the pre-merge adversarial multi-agent review —
+  community-gated channel adds, a generic-DELETE wall for messenger kinds,
+  community-leave channel revocation, ex-owner role reset, sealed DM member
+  verbs, request-walled group invites, receipt-free pending reads, and
+  cursor/limit fixes). Detailed note:
+  [PR #174](../PRs/174-thingtime-messenger-platform-thingtime-messenger-spaces-chats.md).
+  — Claude (AI), 2026-08-03
 
 - **/admin dashboard + subscription tiers + ownership links** (stacked on the
   PAT × app-namespace tree): admin-gated `/admin` page (Users / Apps / System
@@ -441,6 +585,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   through the existing detect→handoff→dispatch hop — API-only in the target
   context, no PR code checkout, resolve job excluded for that event.
   — Claude (AI), 2026-08-03
+
+- **Multi-emoji reaction tokens render in full on the react button**: the
+  merged reaction control truncated every token to its first grapheme, so a
+  🤣🤣🙌💀💦 reaction looked like 🤣; posts and comments now show the whole
+  token. — Claude (AI), 2026-08-03
+- **Mobile nav controls no longer sit under the commander pill**: the
+  nav-right section (bell, username) stacks above the absolutely-positioned
+  search pill and the pill reserves room for the bell, so those controls are
+  tappable on phones. — Claude (AI), 2026-08-03
 
 - **Index bootstrap recovery after PRs #159/#161**: failed boot-time
   `ensureIndexes()` work no longer caches a rejected promise for 60 seconds.
@@ -577,6 +730,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   — Claude (AI), 2026-07-12
 
 ### Added
+
+- **Public sign-up rate limit (`auth.register`)**: POST /api/v1/auth/register is
+  now throttled per IP (default 10 per 15 minutes, admin-tunable like every
+  rule) before any work runs. Registration was the one unauthenticated mutating
+  auth route with no limiter — each attempt burns a bcrypt hash, a success
+  emails an arbitrary address, and since PR #162 a broken-index state re-runs
+  the ensureIndexes battery per attempt; blocked requests now 429 before
+  reaching any of that. — Claude (AI), 2026-07-30
 
 - **Atomic service-account quotas**: `GET|POST /api/v1/things/quota` stores one
   private deterministic `data` Thing per service owner + key and atomically

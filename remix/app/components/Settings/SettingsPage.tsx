@@ -3,6 +3,7 @@ import { Badge, Box, Button, Flex, Image, Input, Progress, Switch, Text, Textare
 import { useNavigate } from 'react-router';
 
 import { AlgorithmManager } from './AlgorithmManager';
+import { NotificationSettingsSection } from './NotificationSettings';
 import { TokenMinter } from './TokenMinter';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
@@ -473,6 +474,9 @@ export const SettingsPage = () => {
             <TokenMinter key={user.id} userId={user.id} />
           </SettingsSection>
         )}
+
+        {/* notifications (auth only) — per-type switches for the bell */}
+        {user && <NotificationSettingsSection user={user} />}
 
         {/* admin (admins only) */}
         {user?.isAdmin && (
