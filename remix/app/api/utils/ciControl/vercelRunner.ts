@@ -94,6 +94,19 @@ export const installVercelRunnerDependencies = async (
   if (install.exitCode !== 0) {
     throw new Error('The GitHub runner runtime dependencies could not be installed');
   }
+
+  // GitHub's workflow scripts use Bash process substitution (`< <(...)`).
+  // Vercel's universal image exposes /proc/self/fd but does not create the
+  // conventional /dev/fd link, so otherwise an otherwise healthy runner
+  // fails as soon as one of those scripts opens /dev/fd/63.
+  const fileDescriptors = await sandbox.runCommand({
+    cmd: 'sudo',
+    args: ['-n', 'sh', '-c', 'test -e /dev/fd || ln -s /proc/self/fd /dev/fd'],
+    cwd: runnerDir
+  });
+  if (fileDescriptors.exitCode !== 0) {
+    throw new Error('The GitHub runner file-descriptor compatibility link could not be installed');
+  }
 };
 
 const createRunner = async (input: VercelCiRunnerInput): Promise<RunnerHandle> => {

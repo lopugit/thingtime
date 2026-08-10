@@ -50,6 +50,11 @@ test('Vercel runner bootstrap uses GitHub\'s dependency installer non-interactiv
       cmd: 'sudo',
       args: ['-n', 'env', 'DEBIAN_FRONTEND=noninteractive', './bin/installdependencies.sh'],
       cwd: '/vercel/actions-runner'
+    },
+    {
+      cmd: 'sudo',
+      args: ['-n', 'sh', '-c', 'test -e /dev/fd || ln -s /proc/self/fd /dev/fd'],
+      cwd: '/vercel/actions-runner'
     }
   ]);
 });
@@ -64,4 +69,18 @@ test('Vercel runner bootstrap fails closed when dependencies cannot be installed
     ),
     /runtime dependencies could not be installed/
   );
+});
+
+test('Vercel runner bootstrap fails closed when Bash process substitution cannot be enabled', async () => {
+  let calls = 0;
+  await assert.rejects(
+    installVercelRunnerDependencies(
+      {
+        runCommand: async () => ({ exitCode: calls++ === 0 ? 0 : 1 })
+      },
+      '/vercel/actions-runner'
+    ),
+    /file-descriptor compatibility link could not be installed/
+  );
+  assert.equal(calls, 2);
 });
