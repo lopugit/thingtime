@@ -24,8 +24,14 @@ export const withAttachmentPrivateResponse = async (handler: () => Response | Pr
 export const isSameOriginAttachmentRequest = (request: Request): boolean => {
 	const origin = request.headers.get('Origin');
 	if (!origin) return true;
+	const fetchSite = request.headers.get('Sec-Fetch-Site')?.trim().toLowerCase();
+	if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') return false;
 	try {
-		return new URL(origin).origin === new URL(request.url).origin;
+		const requestUrl = new URL(request.url);
+		const forwardedHost = request.headers.get('X-Forwarded-Host')?.split(',')[0]?.trim();
+		const forwardedProto = request.headers.get('X-Forwarded-Proto')?.split(',')[0]?.trim();
+		const effectiveOrigin = forwardedHost && forwardedProto ? new URL(`${forwardedProto}://${forwardedHost}`).origin : requestUrl.origin;
+		return new URL(origin).origin === effectiveOrigin;
 	} catch {
 		return false;
 	}

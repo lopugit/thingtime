@@ -111,6 +111,10 @@ is fixed, and cite the checklist you ran in the PR description.
       horizontal overflow, controls remain at least 44px touchable, keyboard
       users can add/retry/cancel/remove files, and progress/error updates are
       announced without stealing focus.
+- [ ] Through the local Vite proxy or a trusted reverse proxy, attachment and
+      profile-media mutations succeed only when `Origin` matches the forwarded
+      public host/protocol. A mismatched origin or `Sec-Fetch-Site: cross-site`
+      request remains forbidden even if forwarded headers are spoofed.
 - [ ] In the production AWS account, all four account-level and bucket-level
       Block Public Access switches are on, Object Ownership is Bucket Owner
       Enforced, versioning is enabled, default encryption is on, and no bucket

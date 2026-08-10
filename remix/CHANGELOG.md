@@ -79,6 +79,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Proxied private-media mutations preserve same-origin protection**:
+  attachment and avatar/banner writes now compare browser origins with the
+  trusted forwarded public host and protocol, so local and reverse-proxied
+  requests no longer fail against the internal Nitro origin while mismatched
+  and explicitly cross-site requests still fail closed. Invalid external
+  profile-image URLs also expose their error state to assistive technology. —
+  Codex (AI), 2026-08-10
 - **Worktree lint and formatting dependencies now self-heal completely**:
   validation startup probes detect incomplete transitive pnpm links even when
   every direct package looks installed, retry once with a forced relink, and

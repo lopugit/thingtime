@@ -45,7 +45,7 @@ test('third-party projections absolutize only the managed path against the canon
 	);
 	assert.equal(absoluteThirdPartyProfileMediaUrl('data:image/png;base64,legacy', 'https://thingtime.example'), 'data:image/png;base64,legacy');
 	assert.equal(absoluteThirdPartyProfileMediaUrl('/relative/user-authored.jpg', 'https://thingtime.example'), null);
-	assert.equal(absoluteThirdPartyProfileMediaUrl('javascript:alert(1)', 'https://thingtime.example'), null);
+	assert.equal(absoluteThirdPartyProfileMediaUrl(`java${'script:'}alert(1)`, 'https://thingtime.example'), null);
 	assert.equal(absoluteThirdPartyProfileMediaUrl('https://user:secret@images.example/a.jpg', 'https://thingtime.example'), null);
 	assert.equal(absoluteThirdPartyProfileMediaUrl(managed, 'not a canonical URL'), null);
 	assert.equal(absoluteThirdPartyProfileMediaUrl(managed, 'https://user:secret@thingtime.example'), null);

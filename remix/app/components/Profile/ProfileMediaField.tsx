@@ -419,7 +419,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 						placeholder="https://…"
 						minHeight="44px"
 						isDisabled={disabled}
-						aria-invalid={intent === 'external' && !externalValid}
+						isInvalid={intent === 'external' && !externalValid}
 						aria-describedby={`${slot}-external-image-help`}
 						onChange={(event) => {
 							const value = event.target.value;
