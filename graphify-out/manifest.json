@@ -415,9 +415,9 @@
     "semantic_hash": "7a9487375978d8001acd93869df362b0"
   },
   "package.json": {
-    "mtime": 1786326324.266823,
-    "ast_hash": "e235e86f8262262262e68529a0af6c16",
-    "semantic_hash": "e235e86f8262262262e68529a0af6c16"
+    "mtime": 1786328824.8396707,
+    "ast_hash": "a03ed9cc028428a12c7465356644938e",
+    "semantic_hash": ""
   },
   "raycast/.eslintrc.json": {
     "mtime": 1786326324.2671742,
@@ -1435,8 +1435,8 @@
     "semantic_hash": "829580533674af55b849c25c5a518ae8"
   },
   "remix/package.json": {
-    "mtime": 1786327289.8984647,
-    "ast_hash": "a6d424182436b16bff6691b10f2859d8",
+    "mtime": 1786328824.8392951,
+    "ast_hash": "e54765e6042ffbd30e7fd2baaf9d8a08",
     "semantic_hash": ""
   },
   "remix/public/manifest.json": {
@@ -1755,9 +1755,9 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786327256.8008962,
-    "ast_hash": "7c45f9a870491b0ce16e09f652827141",
-    "semantic_hash": "7c45f9a870491b0ce16e09f652827141"
+    "mtime": 1786328732.0045345,
+    "ast_hash": "bf1d8eec9009045c6bbd71998c194488",
+    "semantic_hash": ""
   },
   "remix/README.md": {
     "mtime": 1786326324.3469694,
@@ -4160,9 +4160,9 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786327256.7314224,
-    "ast_hash": "0daa04345fef414bb475df4819feaacb",
-    "semantic_hash": "0daa04345fef414bb475df4819feaacb"
+    "mtime": 1786328824.8400729,
+    "ast_hash": "986be891d9e387e3e6933b163f2a3dc5",
+    "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786326323.80898,
@@ -4360,9 +4360,9 @@
     "semantic_hash": "1eb3475e5cdc6cd164932130b38e8edd"
   },
   "remix/scripts/ensure-dependencies.js": {
-    "mtime": 1786326325.0934792,
-    "ast_hash": "d7857b56849b98411785bb6045cc001b",
-    "semantic_hash": "d7857b56849b98411785bb6045cc001b"
+    "mtime": 1786328885.8122163,
+    "ast_hash": "9a1d0e5f5c88b8d0cfdfc2f5886227f2",
+    "semantic_hash": ""
   },
   "PRs/163-codex-worktree-dependency-bootstrap-fix-worktree-setup-and-unify-ai-instructions.md": {
     "mtime": 1786326323.6994758,
@@ -5467,6 +5467,11 @@
   "remix/scripts/typecheck-ratchet.test.mjs": {
     "mtime": 1786327279.064029,
     "ast_hash": "cf53abc5f9549d3eb74ab390063c4417",
+    "semantic_hash": ""
+  },
+  "remix/scripts/ensure-dependencies.test.js": {
+    "mtime": 1786328753.9246387,
+    "ast_hash": "a9e918e3c362f0e68f0b269f0fab459d",
     "semantic_hash": ""
   }
 }
