@@ -2973,8 +2973,10 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     assert.equal(aggregatePresence.aggregateVerified, true);
 
     // Merely finding an equivalent rewritten commit in history is not enough:
-    // if a later source commit reverts it, preflight must block before any
-    // reservation, branch, AI work, or promotion PR can be created.
+    // if a later source commit reverts it, preflight must refuse to call the
+    // plan verified. Under the never-cancel policy that no longer means
+    // dropping the promotion — the plan survives, quarantined, so the trusted
+    // worker opens a labelled review PR instead of the change vanishing.
     testGit(["revert", "--no-edit", rewrittenSha], writer);
     testGit(["push", "origin", "HEAD:develop"], writer);
     testGit([
@@ -2985,8 +2987,15 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       sourceSha: "origin/develop",
     });
     const revertedPlan = revertedPlans.get(sourcePr.number);
-    assert.match(revertedPlan.error, /source-lineage safety block/);
-    assert.equal(revertedPlan.picks, undefined);
+    assert.equal(revertedPlan.error, undefined, "a reverted patch must no longer be dropped");
+    assert.equal(revertedPlan.sourceLineageStatus, "review-required-removed");
+    assert.equal(revertedPlan.sourceLineageReviewRequired, true);
+    assert.equal(sourceLineageReviewRequired(revertedPlan), true);
+    assert.match(revertedPlan.sourceLineageDetail, /source-lineage safety block/);
+    assert.ok(
+      Array.isArray(revertedPlan.picks) && revertedPlan.picks.length > 0,
+      "the quarantined plan must keep its picks so the worker has something to replay",
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -4382,15 +4391,36 @@ export function preflightPromotionPlans(
         const blockedStatus = SOURCE_LINEAGE_STATUSES.has(present.sourceLineageStatus)
           ? present.sourceLineageStatus
           : "";
+        // NEVER CANCEL. A lineage verdict is a review question, not a dead end.
+        // This used to drop the promotion entirely — no branch, no worker, no
+        // PR, the verdict visible only in a run log — which is how #211 (the
+        // conversion of `main` to thin listeners) went a full day unnoticed.
+        // The plan is kept and quarantined instead: because the status is not
+        // `verified`, `sourceLineageReviewRequired` routes it through the
+        // trusted AI worker, and the PR it opens carries the
+        // `source-lineage-unverified` label plus a body that tells the reviewer
+        // exactly what could not be proven. The safety property is unchanged —
+        // nothing merges without a human — while the failure mode changes from
+        // "silently nothing" to "a PR you can reject".
+        //
+        // Operational failures are NOT lineage verdicts (no status is set):
+        // there the patch state is genuinely unknown, so handing it to an AI
+        // would be inventing an answer. Those stay errors, stay visible through
+        // the stand-aside notice on the source PR, and are retried next run.
+        if (blockedStatus && blockedStatus !== "verified") {
+          plans.set(pr.number, {
+            ...computed,
+            inTarget: false,
+            recovered: available.fetched,
+            sourceLineageStatus: blockedStatus,
+            sourceLineageReviewRequired: true,
+            sourceLineageDetail: present.error,
+          });
+          continue;
+        }
         plans.set(pr.number, {
           error: present.error,
           recovered: available.fetched,
-          ...(blockedStatus
-            ? {
-                sourceLineageStatus: blockedStatus,
-                sourceLineageSafetyBlocked: blockedStatus !== "verified",
-              }
-            : {}),
         });
         continue;
       }
@@ -4403,10 +4433,18 @@ export function preflightPromotionPlans(
       }
       const lineageStatus = present.sourceLineageStatus;
       if (lineageStatus !== "verified") {
+        // Same never-cancel rule as above, for an inspector that reports a
+        // non-verified status without failing outright.
         plans.set(pr.number, {
-          error:
-            "source-lineage safety block: only a patch proven present at the current source tip may be promoted",
+          ...computed,
+          inTarget: false,
           recovered: available.fetched,
+          sourceEquivalent: present.equivalentSha,
+          sourceRewritten: present.rewritten,
+          sourceLineageStatus: lineageStatus,
+          sourceLineageReviewRequired: true,
+          sourceLineageDetail:
+            "only a patch proven present at the current source tip promotes without review",
         });
         continue;
       }

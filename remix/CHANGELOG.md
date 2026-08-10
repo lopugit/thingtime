@@ -19,6 +19,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **A promotion is never cancelled for an unverifiable lineage**: a source
+  patch that can't be proven present at the current `develop` tip used to drop
+  the promotion entirely — no branch, no worker, no PR — so the change simply
+  vanished. The plan is now kept and quarantined instead: the non-verified
+  status routes it through the trusted AI worker, and the PR it opens carries
+  `source-lineage-unverified` plus the exact reason it could not be proven.
+  Nothing merges without a human either way; the failure mode changes from
+  "silently nothing" to "a PR you can reject". Operational inspection failures
+  are still errors — there the patch state is genuinely unknown — but they now
+  surface on the source PR and retry next run. — Claude (AI), 2026-08-10
 - **A declined promotion now says so on the source PR**: the promoter's
   stand-aside verdicts existed only as lines in a run summary, so a decline was
   invisible unless someone opened the run — which is why #211, the PR that
