@@ -521,7 +521,11 @@ export function promotionBranchFor(pr, target = CFG.target, primaryTarget = CFG.
   // The primary target keeps the historical name so every promotion branch and
   // record already in flight still matches. Additional targets are suffixed, so
   // two promotions of one source can never collide on a branch name.
-  const suffix = target && target !== primaryTarget ? `-to-${slugify(target)}` : "";
+  // `--to-` (double dash) is deliberate: slugify collapses runs of separators,
+  // so a slugified head ref can never contain it. A single dash would make the
+  // primary promotion of a branch literally named `foo-to-github-actions`
+  // indistinguishable from a github-actions-targeted promotion.
+  const suffix = target && target !== primaryTarget ? `--to-${slugify(target)}` : "";
   return `promote/pr-${pr.number}-${slugify(base)}${suffix}`;
 }
 
@@ -532,11 +536,11 @@ export function promotionBranchFor(pr, target = CFG.target, primaryTarget = CFG.
 export function promotionBelongsToPass(promotion, cfg = CFG) {
   const head = String(promotion?.headRefName || "");
   const primary = cfg.primaryTarget || cfg.target;
-  const suffix = `-to-${slugify(cfg.target)}`;
+  const suffix = `--to-${slugify(cfg.target)}`;
   if (cfg.target === primary) {
     return !promotionTargets(cfg)
       .filter((target) => target !== primary)
-      .some((target) => head.endsWith(`-to-${slugify(target)}`));
+      .some((target) => head.endsWith(`--to-${slugify(target)}`));
   }
   return head.endsWith(suffix);
 }
@@ -3093,7 +3097,7 @@ async function selfTest() {
   );
   assert.equal(
     promotionBranchFor(pr, "github-actions", "main"),
-    "promote/pr-7-search-index-abc123-to-github-actions",
+    "promote/pr-7-search-index-abc123--to-github-actions",
   );
   const multiCfg = { source: "develop", target: "main", primaryTarget: "main", targets: ["github-actions", "main", "develop", "", "bad ref", "--evil"] };
   assert.deepEqual(
@@ -3107,7 +3111,7 @@ async function selfTest() {
   const primaryPass = { ...multiCfg, target: "main" };
   const secondPass = { ...multiCfg, target: "github-actions" };
   const mainPromotion = { headRefName: "promote/pr-7-search-index-abc123" };
-  const gaPromotion = { headRefName: "promote/pr-7-search-index-abc123-to-github-actions" };
+  const gaPromotion = { headRefName: "promote/pr-7-search-index-abc123--to-github-actions" };
   assert.equal(promotionBelongsToPass(mainPromotion, primaryPass), true);
   assert.equal(promotionBelongsToPass(gaPromotion, primaryPass), false);
   assert.equal(promotionBelongsToPass(gaPromotion, secondPass), true);
@@ -3116,6 +3120,14 @@ async function selfTest() {
     promotionBelongsToPass({ headRefName: "promote/pr-9-legacy" }, primaryPass),
     true,
     "promotions from before multi-target existed belong to the primary pass",
+  );
+  assert.equal(
+    promotionBelongsToPass(
+      { headRefName: promotionBranchFor({ number: 5, headRefName: "codex/foo-to-github-actions", title: "t" }, "main", "main") },
+      primaryPass,
+    ),
+    true,
+    "a source branch that merely reads like a target suffix stays in the primary pass",
   );
   assert.equal(promotionBranchFor({ number: 8, headRefName: "", title: "Fix: A thing" }),
     "promote/pr-8-fix-a-thing");
