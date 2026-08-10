@@ -6015,6 +6015,8 @@ async function runPromotion(results, state) {
               results.created.push(`${created.url} — ${title} (from existing branch)`);
               createdCount += 1;
               recoveredPromotionNumber = promotionNumberFromUrl(created.url);
+              // A stale "not promoted" verdict must never outlive its fix.
+              clearSourceStandAside(pr, { promotionNumber: recoveredPromotionNumber });
             } else {
               results.blocked.push(...groupFailureMessages(
                 group,
@@ -6283,6 +6285,8 @@ async function runPromotion(results, state) {
         createdCount += 1;
         remoteBranches.add(branch);
         const promotionNumber = promotionNumberFromUrl(created.url);
+        // A stale "not promoted" verdict must never outlive its fix.
+        clearSourceStandAside(pr, { promotionNumber });
         if (promotionNumber) {
           const lineage = finalizeSourceLineageMetadata(pr, promotionNumber, plan);
           if (!lineage.ok) {
