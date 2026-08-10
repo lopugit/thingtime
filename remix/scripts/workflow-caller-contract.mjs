@@ -57,6 +57,13 @@ const filesUnder = (root) => {
 };
 
 assert.deepEqual(filesUnder(resolve(repositoryRoot, '.github', 'actions')), [], 'product branches must not retain local Actions behavior');
-assert.deepEqual(filesUnder(resolve(repositoryRoot, '.github', 'scripts')), [], 'product branches must not retain workflow scripts');
+const approvedWorkflowScripts = [
+  resolve(repositoryRoot, '.github', 'scripts', 'deploy-develop-pr-preview.mjs')
+];
+assert.deepEqual(
+  filesUnder(resolve(repositoryRoot, '.github', 'scripts')).sort(),
+  approvedWorkflowScripts,
+  'product branches may retain only the approved develop-preview controller script'
+);
 
 console.log(`workflow caller contract: ${callers.length} thin listeners pinned to github-actions`);
