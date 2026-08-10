@@ -17,6 +17,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The `develop` resolver shim forwards instead of failing**: it called the
+  control-plane workflow with `workflow_call`, which runs the implementation
+  with `github.ref_name` set to the caller's ref (`develop`) — so every
+  secret-bearing gate over there, all of which assert `github-actions`,
+  rejected it. The shim failed 100% of the time, in `detect`, on every push,
+  schedule and handoff it received, including the legacy `ref:"develop"`
+  handoffs that `main`'s copy still sends. It now re-dispatches the same
+  selection at the control-plane ref, so the implementation always runs on its
+  own branch with its identity checks untouched, needs no `secrets: inherit`
+  from this unprotected branch, and no longer runs a duplicate sweep schedule.
+  — Claude (AI), 2026-08-10
+
 ### Added
 
 - **One GitHub Actions control plane + Admin CI dashboard**: executable CI,

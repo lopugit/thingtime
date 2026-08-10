@@ -1,15 +1,46 @@
+# Compatibility shim for the retired `develop` resolver control plane.
+#
+# The real resolver lives on the protected `github-actions` branch. Branch
+# copies that predate the move — including `main`'s — still hand their selected
+# PRs off with `ref:"develop"`, so this file must keep answering at that ref and
+# forward the request to where the implementation actually lives.
+#
+# IT FORWARDS BY RE-DISPATCH, NOT BY `workflow_call`. That is load-bearing.
+# Calling `…/resolve-pr-conflicts.yml@github-actions` as a reusable workflow
+# runs the implementation with `github.ref_name` set to the CALLER's ref
+# (`develop`), and every secret-bearing gate over there asserts it is running on
+# `github-actions`. The result was a shim that failed 100% of the time, in
+# `detect`, on every push, schedule and handoff it received — visible only as
+# permanent red runs, since the github-actions-side detectors were covering the
+# same work anyway. Re-dispatching instead means the implementation always
+# executes on its own ref with its strict identity checks completely untouched,
+# and this shim needs no secrets at all: `actions: write` on GITHUB_TOKEN is
+# enough, so `secrets: inherit` from this unprotected branch is gone too.
+#
+# A GITHUB_TOKEN dispatch is attributed to github-actions[bot], which is exactly
+# the actor the control plane's internal-handoff validation expects, so a
+# forwarded `detector_handoff` worker selection survives the hop intact.
+#
+# No `schedule:` trigger here on purpose — the control plane runs its own
+# twice-hourly repository-wide sweep, and a second one from this shim would be
+# pure duplication.
+
 name: Resolve PR conflicts (AI)
 
 run-name: >-
-  Resolve PR conflicts${{ inputs.pr_number && format(' for #{0}', inputs.pr_number) || inputs.branch && format(' under {0}', inputs.branch) || format(' after {0}', github.event_name) }}
+  ${{ inputs.detector_handoff == true && inputs.pr_number != ''
+      && format('Forward resolver worker for PR #{0} to the control plane', inputs.pr_number)
+      || inputs.pr_number != ''
+      && format('Forward conflict detection for PR #{0} to the control plane', inputs.pr_number)
+      || inputs.branch != ''
+      && format('Forward conflict detection under {0} to the control plane', inputs.branch)
+      || format('Forward {0} conflict detection to the control plane', github.event_name) }}
 
 on:
   push:
     branches: ["**"]
   pull_request_target:
     types: [opened, reopened]
-  schedule:
-    - cron: "2,32 * * * *"
   workflow_dispatch:
     inputs:
       pr_number:
@@ -41,18 +72,108 @@ on:
     types: [resolve-conflicts-cascade]
 
 permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  issues: write
+  contents: read
+
+# Detection forwarding is disposable and safe to supersede; a forwarded worker
+# selection is not, so it gets its own per-PR namespace that no detector can
+# cancel. This mirrors the control plane's own namespacing one hop upstream.
+concurrency:
+  group: >-
+    ${{ github.event_name == 'workflow_dispatch'
+        && inputs.detector_handoff == true
+        && inputs.pr_number != ''
+        && format('resolve-forward-pr{0}', inputs.pr_number)
+        || format('resolve-forward-detect-{0}-{1}',
+             github.event_name,
+             inputs.pr_number || inputs.branch
+             || github.event.pull_request.number
+             || github.event.client_payload.branch
+             || github.ref_name || github.run_id) }}
+  cancel-in-progress: >-
+    ${{ !(github.event_name == 'workflow_dispatch'
+          && inputs.detector_handoff == true
+          && inputs.pr_number != '') }}
 
 jobs:
-  control-plane:
-    uses: lopugit/thingtime/.github/workflows/resolve-pr-conflicts.yml@github-actions
-    with:
-      pr_number: ${{ inputs.pr_number || '' }}
-      branch: ${{ inputs.branch || '' }}
-      detector_handoff: ${{ inputs.detector_handoff || false }}
-      manual_retry: ${{ inputs.manual_retry || false }}
-      depth: ${{ inputs.depth || '0' }}
-    secrets: inherit
+  forward:
+    name: Forward to the github-actions control plane
+    # Branch deletions also fire `push`; there is nothing to forward then.
+    if: github.event_name != 'push' || github.event.deleted == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Re-dispatch this trigger at the control-plane ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # Every selector below comes from the triggering event, never from a
+          # ref name the control plane would have to re-derive. On
+          # pull_request_target the PR record is authoritative; on push the
+          # pushed ref is the base/head selector; a dispatch or a legacy
+          # repository_dispatch already carries an exact selection.
+          IN_PR_NUMBER: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.pull_request.number || '' }}
+          IN_BRANCH: ${{ inputs.branch || github.event.client_payload.branch || (github.event_name == 'push' && github.ref_name) || '' }}
+          IN_DETECTOR_HANDOFF: ${{ inputs.detector_handoff && 'true' || 'false' }}
+          IN_MANUAL_RETRY: ${{ inputs.manual_retry && 'true' || 'false' }}
+          IN_DEPTH: ${{ inputs.depth || github.event.client_payload.depth || '0' }}
+        run: |
+          set -euo pipefail
+
+          pr_number="$IN_PR_NUMBER"
+          branch="$IN_BRANCH"
+          depth="$IN_DEPTH"
+
+          # Validate before forwarding. The control plane rejects malformed
+          # routing anyway, but a bad value should fail here, where the log
+          # still says which trigger produced it, rather than one hop away.
+          if [ -n "$pr_number" ] && ! [[ "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Refusing to forward a non-numeric PR selector: $pr_number"
+            exit 1
+          fi
+          if ! [[ "$depth" =~ ^[0-3]$ ]]; then
+            echo "::error::Refusing to forward an out-of-range cascade depth: $depth"
+            exit 1
+          fi
+          # An exact PR selector always wins: the control plane treats a PR
+          # number and a branch selector as mutually exclusive, and its
+          # internal-worker validation requires the branch to be empty.
+          if [ -n "$pr_number" ]; then
+            branch=""
+          fi
+          if [ "$IN_DETECTOR_HANDOFF" = true ] && [ -z "$pr_number" ]; then
+            echo "::error::Refusing to forward a worker handoff with no PR selector."
+            exit 1
+          fi
+
+          if [ "$IN_DETECTOR_HANDOFF" = true ]; then
+            echo "Forwarding worker selection for PR #$pr_number to the github-actions control plane."
+          elif [ -n "$pr_number" ]; then
+            echo "Forwarding conflict detection for PR #$pr_number to the github-actions control plane."
+          elif [ -n "$branch" ]; then
+            echo "Forwarding conflict detection under $branch to the github-actions control plane."
+          else
+            echo "Forwarding a repository-wide conflict scan to the github-actions control plane."
+          fi
+
+          jq -n \
+            --arg pr_number "$pr_number" \
+            --arg branch "$branch" \
+            --arg depth "$depth" \
+            --argjson detector_handoff "$IN_DETECTOR_HANDOFF" \
+            --argjson manual_retry "$IN_MANUAL_RETRY" '
+              {
+                ref:"github-actions",
+                inputs:{
+                  pr_number:$pr_number,
+                  branch:$branch,
+                  detector_handoff:$detector_handoff,
+                  manual_retry:$manual_retry,
+                  depth:$depth
+                }
+              }
+            ' \
+            | gh api --method POST \
+                "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+                --input -
