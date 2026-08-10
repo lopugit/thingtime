@@ -3007,22 +3007,21 @@ async function selfTest() {
   assert.equal(slugify("Hello, World! 42"), "hello-world-42");
   assert.equal(slugify("---"), "change");
   assert.equal(slugify("a".repeat(80)).length, 40);
+  // Never-cancel replacement for the retired close-before-AI boundary: a
+  // degraded lineage marks a plan for review instead of destroying the
+  // promotion a human was already given.
   assert.equal(
-    isSourceLineageSafetyBlocked({
-      error: "source-lineage safety block",
+    sourceLineageReviewRequired({
       sourceLineageStatus: "review-required-removed",
-      sourceLineageSafetyBlocked: true,
+      sourceLineageReviewRequired: true,
     }),
     true,
-    "an existing bot promotion whose source patch was removed is closed by maintenance",
+    "an open promotion whose source patch was removed is quarantined, never closed",
   );
   assert.equal(
-    isSourceLineageSafetyBlocked({
-      sourceLineageStatus: "verified",
-      sourceLineageSafetyBlocked: false,
-    }),
+    sourceLineageReviewRequired({ sourceLineageStatus: "verified" }),
     false,
-    "verified source lineage never activates the close-before-AI maintenance boundary",
+    "verified source lineage never quarantines a promotion",
   );
 
   const pr = { number: 7, headRefName: "claude/search-index-abc123", title: "feat: add search" };
@@ -4628,65 +4627,6 @@ function ensureSourceLineageReviewLabel(token = "") {
   sourceLineageLabelEnsured = result.ok;
   return sourceLineageLabelEnsured;
 }
-
-export function isSourceLineageSafetyBlocked(plan) {
-  return Boolean(
-    plan?.sourceLineageSafetyBlocked === true &&
-    (plan?.sourceLineageStatus === "review-required-removed" ||
-      plan?.sourceLineageStatus === "review-required-ambiguous"),
-  );
-}
-
-function closeSourceLineageBlockedPromotion(sourcePr, promotion, plan, results) {
-  if (!isSourceLineageSafetyBlocked(plan)) return false;
-  const status = plan.sourceLineageStatus;
-  const reason = sourceLineageReason(status);
-  if (ensureSourceLineageReviewLabel(process.env.ACTIONS_TOKEN)) {
-    const labelled = withActionsToken([
-      "pr", "edit", String(promotion.number), ...repoFlag(),
-      "--add-label", SOURCE_LINEAGE_REVIEW_LABEL,
-    ]);
-    if (!labelled.ok) {
-      results.warnings.push(
-        `Promotion #${promotion.number} lineage-block label repair failed: ${labelled.error}`,
-      );
-    }
-  }
-  const closed = withActionsToken([
-    "pr", "close", String(promotion.number), ...repoFlag(),
-    "--comment",
-    `Source-lineage safety block at current \`${CFG.source}\` tip: ${reason} ` +
-      "This bot-created promotion is closed without running AI or changing its branch. " +
-      "Restore or re-merge the intended source change before asking the promoter to try again.",
-  ]);
-  if (!closed.ok) {
-    results.warnings.push(
-      `Promotion #${promotion.number} could not be closed after its source lineage became ` +
-        `unverified: ${closed.error}`,
-    );
-    return true;
-  }
-  promotion.state = "CLOSED";
-  results.blocked.push(
-    `Promotion #${promotion.number} (source #${sourcePr.number}) was closed because its ` +
-      `historical patch is no longer provably present at current \`${CFG.source}\` tip; ` +
-      "no AI worker or replacement promotion was started.",
-  );
-  upsertBotIssueComment(
-    sourcePr.number,
-    "thingtime-promotion-source-lineage-blocked:v1",
-    [
-      `⛔ Promotion #${promotion.number} was closed by the source-lineage safety boundary.`,
-      "",
-      reason,
-      "",
-      `No AI worker or replacement promotion PR will run until the change is again provably present on \`${CFG.source}\`.`,
-      "<!-- thingtime-promotion-source-lineage-blocked:v1 -->",
-    ].join("\n"),
-  );
-  return true;
-}
-
 function promotionBody(pr, groupKey, position, groupPrs, statusFor, plan = {}) {
   const lines = [];
   lines.push(
@@ -5232,17 +5172,12 @@ async function runPromotion(results, state) {
     for (const promotion of promotionPrs.filter((candidate) => candidate.state === "OPEN")) {
       try {
         const loaded = loadExternalPromotionPlan(promotion);
-        if (
-          loaded.sourcePr &&
-          closeSourceLineageBlockedPromotion(
-            loaded.sourcePr,
-            promotion,
-            loaded.plan,
-            results,
-          )
-        ) {
-          continue;
-        }
+        // NEVER CANCEL. An open promotion whose source lineage degrades used to
+        // be CLOSED here, pre-empting review of a PR a human had already been
+        // given. It is now left open and handled by the quarantine path
+        // immediately below: `sourceLineageReviewRequired` re-stamps the
+        // metadata and the `source-lineage-unverified` label, so the reviewer
+        // sees the downgraded verdict on the PR rather than losing the PR.
         if (loaded.error || loaded.plan?.error || loaded.plan?.inTarget) continue;
         if (sourceLineageReviewRequired(loaded.plan)) {
           const warned = finalizeSourceLineageMetadata(
