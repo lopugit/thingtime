@@ -36,6 +36,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Develop-preview automation no longer breaks product-branch CI**: the thin
+  workflow-caller contract now permits exactly the approved
+  `deploy-develop-pr-preview.mjs` controller introduced on `main`, while still
+  rejecting every other local Actions script. — Codex (AI), 2026-08-10
 - **Required Web CI checks no longer strand non-Remix pull requests**: the
   stable product-branch listener is now path-filter-free and grants only the
   read access needed by the protected classifier. The control plane assigns
