@@ -36,6 +36,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Required Web CI checks no longer strand non-Remix pull requests**: the
+  stable product-branch listener is now path-filter-free and grants only the
+  read access needed by the protected classifier. The control plane assigns
+  both existing `control-plane /` check names to either the real build/API
+  jobs or lightweight no-op companions, without changing their ruleset
+  identity. — Codex (AI), 2026-08-10
 - **Worktree lint and formatting dependencies now self-heal completely**:
   validation startup probes detect incomplete transitive pnpm links even when
   every direct package looks installed, retry once with a forced relink, and
