@@ -628,13 +628,15 @@ scheduled reconciliation instead of letting them run automatically.
 
 Thingtime's protected GitHub Environment `vercel-develop-pr-control` allows only
 the `main` deployment branch. It contains the nine controller variables and a
-dedicated project-scoped 90-day Vercel token. The masked unsigned S3 CORS probe
-secret is also installed. The secret-free `pull_request_target` stage hands off
-to a `repository_dispatch` run in the default-branch context; scheduled runs
-also use the default branch, and the workflow refuses a manual dispatch from
-any other ref. Forks must use values from their own Vercel project; the examples
-are placeholders and must not be committed with live credentials or
-identifiers:
+dedicated 90-day Vercel token scoped to the owning team. Vercel does not offer
+a project-scoped PAT for this API surface, so the protected Environment and the
+controller's exact project/team checks are the project boundary. The masked
+unsigned S3 CORS probe secret is also installed. The secret-free
+`pull_request_target` stage hands off to a `repository_dispatch` run in the
+default-branch context; scheduled runs also use the default branch, and the
+workflow refuses a manual dispatch from any other ref. Forks must use values
+from their own Vercel project; the examples are placeholders and must not be
+committed with live credentials or identifiers:
 
 ```sh
 # GitHub Environment secrets
@@ -691,6 +693,11 @@ delegations from `_acme-challenge.previews.dev` to `ns1.vercel-dns.com` and
 or delegate a broader subtree. Dedicate `_acme-challenge.previews.dev` to this
 preview wildcard, because that delegation gives Vercel control of certificate
 validation for the subtree and can prevent another provider from issuing there.
+Vercel may still label this externally managed arrangement `DNS Change
+Recommended` or return `misconfigured: true`; that advisory asks to move the
+apex nameservers and is not the publication gate. The controller instead
+requires the live probe hostname to resolve to Vercel's currently recommended
+CNAME target, then verifies HTTPS on the exact alias after assigning it.
 See Vercel's official
 [wildcard-without-Vercel-nameservers guide](https://vercel.com/kb/guide/wildcard-domain-without-vercel-nameservers).
 Forks should first add their own wildcard to Vercel and copy every CNAME or
@@ -719,11 +726,11 @@ Environment, nine controller variables, dedicated 90-day Vercel token, masked
 `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
 scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
 wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
-are complete for
-`*.previews.dev.thingtime.com`. Merge of this controller to `main` and the live
-end-to-end checklist remain pending. The installed secrets do not make the
-controller live while its workflow is absent from `main`. Do not describe a PR
-alias as ready before every remaining gate passes.
+are complete for `*.previews.dev.thingtime.com`, and the controller is merged
+to `main`. The first live dispatch authenticated successfully and exposed the
+externally managed DNS advisory mismatch fixed by this follow-up. A successful
+post-fix exact-SHA deployment, alias publication, CORS probe, and attachment
+upload/removal check remain before the activation checklist is complete.
 
 CORS is not authorization. The bucket remains private, while the development
 AWS role explicitly trusts both Thingtime's `environment:develop` and

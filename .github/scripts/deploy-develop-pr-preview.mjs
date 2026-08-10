@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { resolveCname } from 'node:dns/promises';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -100,6 +101,29 @@ const safeHostname = (value, name) => {
 		throw new Error(`${name} is invalid`);
 	}
 	return hostname;
+};
+
+const normalizedDnsHostname = (value) => {
+	const normalized = String(value ?? '')
+		.trim()
+		.toLowerCase()
+		.replace(/\.$/, '');
+	try {
+		return safeHostname(normalized, 'DNS hostname');
+	} catch {
+		return null;
+	}
+};
+
+const wildcardDnsConfigurationIssue = (domainConfig, resolvedCnames) => {
+	if (domainConfig?.configuredBy !== 'CNAME') return 'wrong-configuration-mode';
+	const recommendedTargets = new Set(
+		(domainConfig.recommendedCNAME ?? []).map((candidate) => normalizedDnsHostname(candidate?.value)).filter(Boolean)
+	);
+	if (recommendedTargets.size === 0) return 'missing-recommended-cname';
+	const liveTargets = new Set((resolvedCnames ?? []).map(normalizedDnsHostname).filter(Boolean));
+	if (![...liveTargets].some((target) => recommendedTargets.has(target))) return 'wrong-live-cname';
+	return null;
 };
 
 const isS3BucketHostname = (hostname) => {
@@ -360,6 +384,22 @@ const runSelfTest = () => {
 	throws(() => parseTrustedLogins(''));
 	truthy(TRUSTED_PERMISSIONS.has('write'));
 	truthy(!TRUSTED_PERMISSIONS.has('read'));
+	equal(
+		wildcardDnsConfigurationIssue({ configuredBy: 'CNAME', misconfigured: true, recommendedCNAME: [{ value: 'cname.vercel-dns.com.' }] }, [
+			'cname.vercel-dns.com'
+		]),
+		null
+	);
+	equal(
+		wildcardDnsConfigurationIssue({ configuredBy: 'CNAME', misconfigured: false, recommendedCNAME: [{ value: 'cname.vercel-dns.com.' }] }, [
+			'wrong.example.com'
+		]),
+		'wrong-live-cname'
+	);
+	equal(
+		wildcardDnsConfigurationIssue({ configuredBy: 'A', recommendedCNAME: [{ value: 'cname.vercel-dns.com.' }] }, ['cname.vercel-dns.com']),
+		'wrong-configuration-mode'
+	);
 
 	const snapshot = pullRequestSnapshot(base);
 	truthy(pullRequestMatchesSnapshot(base, snapshot));
@@ -696,7 +736,7 @@ const deploymentComment = ({ state, pullRequest, alias, deploymentUrl, dashboard
 		deploymentUrl ? `\n- Immutable deployment: [${deploymentUrl}](${deploymentUrl})` : ''
 	}${dashboard ? `\n- Vercel status: [open deployment](${dashboard})` : ''}${
 		note ? `\n\n${note}` : ''
-	}\n\nGeneric Vercel Preview deployments remain isolated and do not receive the develop S3 role or bucket.`;
+	}\n\nGeneric Vercel Preview deployments use the shared development runtime; this controller adds the stable exact-SHA alias and marker-scoped cleanup.`;
 };
 
 const verifyCors = async (origin, probeUrl) => {
@@ -757,9 +797,35 @@ const assertVercelConfiguration = async (config) => {
 		throw new Error('PR preview wildcard must be verified and detached from branches and custom environments');
 	}
 	const wildcardDomainConfig = await vercelRequest(`/v6/domains/${wildcardDomainPath}/config`);
-	if (wildcardDomainConfig?.misconfigured !== false) {
-		throw new Error('PR preview wildcard DNS is not correctly configured for Vercel');
+	let resolvedCnames;
+	try {
+		resolvedCnames = await resolveCname(`controller-dns-probe.${config.previewAliasSuffix}`);
+	} catch {
+		throw new Error('PR preview wildcard CNAME did not resolve');
 	}
+	const wildcardDnsIssue = wildcardDnsConfigurationIssue(wildcardDomainConfig, resolvedCnames);
+	if (wildcardDnsIssue) {
+		throw new Error(`PR preview wildcard DNS failed live CNAME verification (${wildcardDnsIssue})`);
+	}
+};
+
+const verifyPublishedAlias = async (aliasUrl) => {
+	let lastError = null;
+	for (let attempt = 0; attempt < 5; attempt += 1) {
+		try {
+			const response = await fetch(aliasUrl, {
+				method: 'HEAD',
+				redirect: 'manual',
+				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+			});
+			if (response.status >= 200 && response.status < 500) return;
+			lastError = new Error(`HTTP ${response.status}`);
+		} catch (error) {
+			lastError = error;
+		}
+		if (attempt < 4) await delay(1_000 * (attempt + 1));
+	}
+	throw new Error(`Published PR preview alias did not pass HTTPS verification (${lastError instanceof Error ? lastError.message : 'unknown'})`);
 };
 
 const deploymentDetail = async (deploymentId) => vercelRequest(`/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true`);
@@ -1055,7 +1121,11 @@ const handleIneligible = async (config, pullRequest, reason, { comment = true } 
 	const prNumber = boundedInteger(pullRequest.number, 'PR number');
 	const cleaned = await cleanupPrResources(config, prNumber);
 	if (comment) {
-		await upsertComment(config.repository, prNumber, `${cleanupComment(reason)}\n\nGeneric Vercel Preview deployments remain isolated.`);
+		await upsertComment(
+			config.repository,
+			prNumber,
+			`${cleanupComment(reason)}\n\nThe ordinary generated Vercel Preview remains available on the shared development runtime.`
+		);
 	}
 	console.log(`Develop preview ineligible for PR #${prNumber}: ${reason}; alias=${cleaned.aliasRemoved}; deployments=${cleaned.deleted}`);
 };
@@ -1142,7 +1212,7 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 				deploymentUrl: immutableUrl,
 				dashboard,
-				note: 'The ordinary credential-free Vercel Preview remains available. Re-run this workflow after correcting the deployment or CORS configuration.'
+				note: 'The ordinary generated Vercel Preview remains available on the shared development runtime. Re-run this workflow after correcting the deployment, DNS, or CORS configuration.'
 			})
 		)
 	);
@@ -1199,6 +1269,7 @@ const deploy = async (config, pullRequest) => {
 		await verifyCors(aliasUrl, corsProbeUrl);
 		await assertCurrentPullRequest(config, snapshot, config.actor);
 		await assignAliasVerified(config, ready, pullRequest.number);
+		await verifyPublishedAlias(aliasUrl);
 		published = true;
 
 		await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {

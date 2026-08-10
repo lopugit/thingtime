@@ -80,9 +80,11 @@ One-time private setup (values never belong in git):
   `pull_request_target` stage hands off to a default-branch
   `repository_dispatch`; scheduled runs use the default branch, and the
   workflow refuses manual dispatch from another ref.
-- Environment secrets: the fresh, dedicated, project-scoped 90-day Vercel
+- Environment secrets: the fresh, dedicated, team-scoped 90-day Vercel
   control-plane token is installed as `VERCEL_DEVELOP_DEPLOY_TOKEN`, separate
-  from the app's runtime status token. The masked
+  from the app's runtime status token. Vercel does not offer a project-scoped
+  PAT for this API surface, so the protected Environment plus the controller's
+  exact team/project checks constrain its use. The masked
   `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret is also installed as a
   credential-free HTTPS object URL on the exact develop bucket with no query
   string or signature. The controller uses it only for an unauthenticated CORS
@@ -124,6 +126,11 @@ One-time private setup (values never belong in git):
   ACME subtree for the preview wildcard because the delegation can prevent
   another provider from issuing certificates there. See Vercel's official
   [wildcard-without-Vercel-nameservers guide](https://vercel.com/kb/guide/wildcard-domain-without-vercel-nameservers).
+  With this external-DNS topology Vercel can continue to show `DNS Change
+Recommended` or return `misconfigured: true` because the apex nameservers
+  remain on Cloudflare. The controller verifies the live wildcard CNAME against
+  Vercel's recommended target and the published alias over HTTPS instead of
+  treating that advisory as a failure.
   Forks must use the exact records their own Vercel project currently displays;
   do not copy another project's account-specific targets.
 - Develop S3 bucket CORS: retain `https://dev.thingtime.com`,
@@ -139,11 +146,11 @@ Environment, all controller variables, dedicated 90-day Vercel token, masked
 `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
 scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
 wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
-are complete for
-`*.previews.dev.thingtime.com`. Merge of the controller to `main` and the live
-end-to-end checklist remain pending. The installed secrets alone do not
-activate the feature, and a green controller self-test alone does not prove
-browser uploads are ready.
+are complete for `*.previews.dev.thingtime.com`, and the controller is merged
+to `main`. The first live dispatch authenticated successfully and exposed the
+externally managed DNS advisory mismatch fixed by this follow-up. A successful
+post-fix exact-SHA deployment, alias publication, CORS probe, and attachment
+upload/removal check remain before browser uploads are fully verified.
 
 The shorter `*.previews.thingtime.com` namespace is reserved for a separate
 future production-preview controller. It must use an independently protected
