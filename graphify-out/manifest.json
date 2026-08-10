@@ -1530,14 +1530,14 @@
     "semantic_hash": "d5da585882b846c1a6567634e0e2b469"
   },
   "README.md": {
-    "mtime": 1786333476.3839924,
-    "ast_hash": "da7c99db4cb19a6c87ec74f7b1d23cf7",
-    "semantic_hash": "da7c99db4cb19a6c87ec74f7b1d23cf7"
+    "mtime": 1786335541.4337087,
+    "ast_hash": "1bab4109f11cddb04e08531dcb94e7ae",
+    "semantic_hash": "1bab4109f11cddb04e08531dcb94e7ae"
   },
   "VERCEL_DEPLOYMENTS.md": {
-    "mtime": 1786266583.7579703,
-    "ast_hash": "67f883e01e4f142331cab28a0bce4492",
-    "semantic_hash": "67f883e01e4f142331cab28a0bce4492"
+    "mtime": 1786335541.434354,
+    "ast_hash": "184c86d50e58e45d919d9498c92c1db0",
+    "semantic_hash": "184c86d50e58e45d919d9498c92c1db0"
   },
   "docs/Use Cases/car.md": {
     "mtime": 1786245149.9832015,
@@ -1755,9 +1755,9 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786335262.2511363,
-    "ast_hash": "b6880a430f4496c9675990b92b914574",
-    "semantic_hash": ""
+    "mtime": 1786335541.4801466,
+    "ast_hash": "097bf06c74f06f361ddfe36b7eba58a4",
+    "semantic_hash": "097bf06c74f06f361ddfe36b7eba58a4"
   },
   "remix/README.md": {
     "mtime": 1786245150.2460377,
@@ -4160,9 +4160,9 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786334810.2739167,
-    "ast_hash": "4783bce28b98d199c488be8ca448d1de",
-    "semantic_hash": "4783bce28b98d199c488be8ca448d1de"
+    "mtime": 1786335541.4340918,
+    "ast_hash": "03aecf39053133b15c617bd8ce41f1c0",
+    "semantic_hash": "03aecf39053133b15c617bd8ce41f1c0"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786245149.978798,
@@ -5718,5 +5718,15 @@
     "mtime": 1786335541.4331808,
     "ast_hash": "1e98b9f0c6b99f9491d1eeef9e6751bd",
     "semantic_hash": "1e98b9f0c6b99f9491d1eeef9e6751bd"
+  },
+  ".github/workflows/develop-pr-preview.yml": {
+    "mtime": 1786335541.4333212,
+    "ast_hash": "f7a77eb69231159da81bdd21ce7e76b5",
+    "semantic_hash": "f7a77eb69231159da81bdd21ce7e76b5"
+  },
+  "PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md": {
+    "mtime": 1786335541.4334493,
+    "ast_hash": "ba5f492117e83f1d171cc393b6dc01d2",
+    "semantic_hash": "ba5f492117e83f1d171cc393b6dc01d2"
   }
 }

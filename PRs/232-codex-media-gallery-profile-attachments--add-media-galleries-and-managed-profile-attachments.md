@@ -78,7 +78,8 @@ forwarded headers.
 
 ## Verification
 
-- Full Remix unit suite passed after the final proxy and accessibility fixes.
+- Full Remix unit suite passed after the final proxy and accessibility fixes,
+  before the latest parent-branch refresh described below.
 - Attachment/profile/media suite: **96 passed, 0 failed**.
 - Schema suite: **51 passed, 0 failed**; storage suite: **7 passed, 0 failed**;
   migration suite: **19 passed, 0 failed**.
@@ -110,3 +111,18 @@ is deployed to the configured `develop` Custom Environment, run the permanent
 projections, replace/remove each slot, verify the exact S3 versions disappear,
 and confirm the account storage meter returns to its prior value. Repeat one
 post containing linked photos plus uploaded media. Production remains untouched.
+
+## Latest parent refresh (2026-08-10)
+
+Merged PR #201's current head `f79fc531`, which contains the latest `develop`
+history. All source and product documentation merged automatically; only
+generated Graphify files conflicted, so one complete graph side was selected and
+the graph was regenerated from the combined source as required.
+
+After that refresh, the attachment/profile/media suite remains **96/96** and the
+inherited develop-preview controller self-test is **40/40**. The aggregate unit
+command now stops only at `test:workflow-callers`: PR #201 itself currently
+inherits `.github/scripts/deploy-develop-pr-preview.mjs` from `develop`, while
+the existing product-branch contract rejects workflow scripts outside the
+protected control-plane branch. PR #201's own Web CI reports the same upstream
+failure. No media/profile source owns or changes that controller boundary.
