@@ -3,11 +3,10 @@ name: Web CI
 # Stable event listener only. The build/test implementation is versioned once
 # on github-actions, while checkout inside that implementation still tests the
 # exact PR/push commit that triggered this caller.
+# Pull requests stay path-filter-free so the protected implementation can
+# always report the required full-job or lightweight companion contexts.
 on:
   pull_request:
-    paths:
-      - remix/**
-      - .github/workflows/web-ci.yml
   push:
     branches: [main]
     paths:
@@ -17,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   control-plane:
