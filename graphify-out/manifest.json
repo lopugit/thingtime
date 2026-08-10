@@ -1755,8 +1755,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786332002.2049527,
-    "ast_hash": "9e4ceed4d6cf4476170c9b95534e4b19",
+    "mtime": 1786332518.3498712,
+    "ast_hash": "d034c8fce901bfe64a74b3e5d29b2369",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -3312,7 +3312,7 @@
   ".github/workflows/electron-release.yml": {
     "mtime": 1786331865.1334074,
     "ast_hash": "45accab0eccdbdba5150d49a90956fe2",
-    "semantic_hash": ""
+    "semantic_hash": "45accab0eccdbdba5150d49a90956fe2"
   },
   "PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md": {
     "mtime": 1786331865.1408453,
@@ -4162,7 +4162,7 @@
   "TESTING.md": {
     "mtime": 1786332002.2043579,
     "ast_hash": "5b6a99c41d2abfa3ca574048b1a6bbe2",
-    "semantic_hash": ""
+    "semantic_hash": "5b6a99c41d2abfa3ca574048b1a6bbe2"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786331865.1461878,
@@ -4245,8 +4245,8 @@
     "semantic_hash": "505fca8e81926065aff3be4ea340c700"
   },
   ".github/workflows/resolve-pr-conflicts.yml": {
-    "mtime": 1786331865.135079,
-    "ast_hash": "1085858a7ab925a42c98f00f24260db8",
+    "mtime": 1786332503.9355116,
+    "ast_hash": "d4f5ad1217809e24593f478af0950f5f",
     "semantic_hash": ""
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/canopy.svg": {
@@ -4432,7 +4432,7 @@
   ".github/workflows/sync-main-into-develop.yml": {
     "mtime": 1786331865.1353707,
     "ast_hash": "88bb30401f1cfd5581e847db1ff5c4a8",
-    "semantic_hash": ""
+    "semantic_hash": "88bb30401f1cfd5581e847db1ff5c4a8"
   },
   "PRs/164-claude-crypto-password-hasher-7c31e9--password-hasher-mongosh-rotate-snippet.md": {
     "mtime": 1786331865.1382487,
@@ -4482,7 +4482,7 @@
   ".github/workflows/web-ci.yml": {
     "mtime": 1786331978.0244625,
     "ast_hash": "8e96a9be37855b4c106fd76311301108",
-    "semantic_hash": ""
+    "semantic_hash": "8e96a9be37855b4c106fd76311301108"
   },
   "PRs/178-codex-use-fable-5-max-conflict-resolver--configurable-pr-conflict-resolver-model-waterfall.md": {
     "mtime": 1786331865.1389277,
@@ -4877,12 +4877,12 @@
   ".github/actions/rebase-conflict-round/action.yml": {
     "mtime": 1786331865.128723,
     "ast_hash": "81ee25923ae7b677f1de1be8faf27a11",
-    "semantic_hash": ""
+    "semantic_hash": "81ee25923ae7b677f1de1be8faf27a11"
   },
   ".github/workflows/rebase-pr-stacks.yml": {
     "mtime": 1786331865.134512,
     "ast_hash": "02222ed17514310312edc6a26f00b142",
-    "semantic_hash": ""
+    "semantic_hash": "02222ed17514310312edc6a26f00b142"
   },
   "PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md": {
     "mtime": 1786331865.1390898,
@@ -5267,7 +5267,7 @@
   ".github/workflows/promote-develop-to-main.yml": {
     "mtime": 1786331865.1336446,
     "ast_hash": "2ea712ed2101516fd521eacea1003eb4",
-    "semantic_hash": ""
+    "semantic_hash": "2ea712ed2101516fd521eacea1003eb4"
   },
   "PRs/174-thingtime-messenger-platform-thingtime-messenger-spaces-chats.md": {
     "mtime": 1786331865.138855,
@@ -5382,7 +5382,7 @@
   ".github/workflows/promote-features-to-main.yml": {
     "mtime": 1786331865.1339238,
     "ast_hash": "40d0d43bf30ca99abda0210f11f272c0",
-    "semantic_hash": ""
+    "semantic_hash": "40d0d43bf30ca99abda0210f11f272c0"
   },
   "PRs/190-claude-github-action-pr-promotion-c65173-per-feature-develop-main-promotion-prs-with-stacks.md": {
     "mtime": 1786331865.1393542,
@@ -5407,12 +5407,12 @@
   ".github/workflows/control-plane-ci.yml": {
     "mtime": 1786331865.1331787,
     "ast_hash": "a1d8064d391c8ef70343c27a4d8b5238",
-    "semantic_hash": ""
+    "semantic_hash": "a1d8064d391c8ef70343c27a4d8b5238"
   },
   ".github/workflows/ci-provider-router.yml": {
     "mtime": 1786331865.1329353,
     "ast_hash": "97d3a1b83b64c2a664e81f29a629fa57",
-    "semantic_hash": ""
+    "semantic_hash": "97d3a1b83b64c2a664e81f29a629fa57"
   },
   ".github/scripts/promotion-worker-contract.sh": {
     "mtime": 1786331865.1301334,
