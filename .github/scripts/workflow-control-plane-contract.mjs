@@ -494,6 +494,7 @@ export function assertControlPlaneContract() {
   assert.match(resolver, /routing_proof:\$routing_proof/);
   assert.match(resolver, /routing_proof_issued_at:\$routing_proof_issued_at/);
   for (const input of [
+    "pr_batch_b64",
     "promotion_source_pr",
     "promotion_plan_b64",
     "routing_proof",
