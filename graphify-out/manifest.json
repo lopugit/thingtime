@@ -417,7 +417,7 @@
   "package.json": {
     "mtime": 1786329216.4700627,
     "ast_hash": "a03ed9cc028428a12c7465356644938e",
-    "semantic_hash": ""
+    "semantic_hash": "a03ed9cc028428a12c7465356644938e"
   },
   "raycast/.eslintrc.json": {
     "mtime": 1786326324.2671742,
@@ -1435,8 +1435,8 @@
     "semantic_hash": "829580533674af55b849c25c5a518ae8"
   },
   "remix/package.json": {
-    "mtime": 1786329251.1911933,
-    "ast_hash": "c2a05bb424cb373d91cf8c4286c526ac",
+    "mtime": 1786331617.039992,
+    "ast_hash": "fc424fa9ec257696799338faa261cdd0",
     "semantic_hash": ""
   },
   "remix/public/manifest.json": {
@@ -1755,8 +1755,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786329251.1908855,
-    "ast_hash": "ef45a47618b21f09705d4c7ff06d5c4f",
+    "mtime": 1786331275.930288,
+    "ast_hash": "db69535a4ea531c20e8ad71cd48fbecb",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -4160,8 +4160,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786329216.4697075,
-    "ast_hash": "87fcdae338f36d9735124724533c1e02",
+    "mtime": 1786331436.2408412,
+    "ast_hash": "1697d796a6ca2d577bef8bb203d2a89c",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -4247,7 +4247,7 @@
   ".github/workflows/resolve-pr-conflicts.yml": {
     "mtime": 1786329186.5809302,
     "ast_hash": "5c31d5df7f6d60c3e76edabecefdb190",
-    "semantic_hash": ""
+    "semantic_hash": "5c31d5df7f6d60c3e76edabecefdb190"
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/canopy.svg": {
     "mtime": 1786326324.2576008,
@@ -4362,7 +4362,7 @@
   "remix/scripts/ensure-dependencies.js": {
     "mtime": 1786329216.4717412,
     "ast_hash": "9a1d0e5f5c88b8d0cfdfc2f5886227f2",
-    "semantic_hash": ""
+    "semantic_hash": "9a1d0e5f5c88b8d0cfdfc2f5886227f2"
   },
   "PRs/163-codex-worktree-dependency-bootstrap-fix-worktree-setup-and-unify-ai-instructions.md": {
     "mtime": 1786326323.6994758,
@@ -4477,11 +4477,11 @@
   "remix/scripts/typecheck-ratchet.mjs": {
     "mtime": 1786327279.063891,
     "ast_hash": "d4960e1f10af263acb682e86e4d1c2af",
-    "semantic_hash": ""
+    "semantic_hash": "d4960e1f10af263acb682e86e4d1c2af"
   },
   ".github/workflows/web-ci.yml": {
-    "mtime": 1786329186.5814266,
-    "ast_hash": "35b1b1a8801942ba0c0adf2b3d9dfa86",
+    "mtime": 1786331367.4363027,
+    "ast_hash": "dad93152b6054164768a6cddbf5027ed",
     "semantic_hash": ""
   },
   "PRs/178-codex-use-fable-5-max-conflict-resolver--configurable-pr-conflict-resolver-model-waterfall.md": {
@@ -4882,7 +4882,7 @@
   ".github/workflows/rebase-pr-stacks.yml": {
     "mtime": 1786329186.5802705,
     "ast_hash": "c8c3083ecf256c9e8b03156d93add7e9",
-    "semantic_hash": ""
+    "semantic_hash": "c8c3083ecf256c9e8b03156d93add7e9"
   },
   "PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md": {
     "mtime": 1786326323.7034297,
@@ -5072,16 +5072,26 @@
   "remix/api/index.js": {
     "mtime": 1786326350.3190498,
     "ast_hash": "844210d487b558804d922d7ac0c53dfa",
-    "semantic_hash": ""
+    "semantic_hash": "844210d487b558804d922d7ac0c53dfa"
   },
   "remix/scripts/typecheck-ratchet.test.mjs": {
     "mtime": 1786327279.064029,
     "ast_hash": "cf53abc5f9549d3eb74ab390063c4417",
-    "semantic_hash": ""
+    "semantic_hash": "cf53abc5f9549d3eb74ab390063c4417"
   },
   "remix/scripts/ensure-dependencies.test.js": {
     "mtime": 1786329216.4719617,
     "ast_hash": "a9e918e3c362f0e68f0b269f0fab459d",
+    "semantic_hash": "a9e918e3c362f0e68f0b269f0fab459d"
+  },
+  "remix/scripts/web-ci-required-context-contract.mjs": {
+    "mtime": 1786331326.9185052,
+    "ast_hash": "8cf571ca95a2516208406e2050baecfd",
+    "semantic_hash": "8cf571ca95a2516208406e2050baecfd"
+  },
+  "PRs/222-codex-typecheck-ratchet-warning-main-ci-make-typecheck-ratchet-warning-only.md": {
+    "mtime": 1786331275.9305515,
+    "ast_hash": "a7aaaacf78c26c2de003e1037ac8eaa9",
     "semantic_hash": ""
   }
 }
