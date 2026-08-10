@@ -25,8 +25,8 @@
 # `workflow_call`. In a called workflow `github.ref_name` is the CALLER's ref,
 # so a bare `github.ref_name == 'github-actions'` test rejects the entire
 # listener path: `develop`'s listener failed 100% of the time, in `detect`, on
-# every push, schedule and handoff it received, including the `ref:"develop"`
-# worker handoffs that older branch copies still send. That was invisible red
+# every push, schedule and handoff it received, including the worker
+# handoffs that older branch copies still aim at the retired ref. That was red
 # noise rather than lost resolutions, because the detectors that run directly on
 # this branch cover the same work. Each gate below therefore asks:
 #

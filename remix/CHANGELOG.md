@@ -23,7 +23,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   secret-bearing gate tested `github.ref_name == 'github-actions'`, but under
   `workflow_call` that is the *caller's* ref, so `develop`'s listener was
   rejected in `detect` on every push, schedule and handoff it forwarded —
-  including the `ref:"develop"` worker handoffs older branch copies still send.
+  including the worker handoffs older branch copies still aim at that ref.
   The gates now also accept a run started by this workflow's own listener on
   `develop`/`main`, which the caller contract already constrains to a single
   pinned `@github-actions` call with no executable behavior of its own.
