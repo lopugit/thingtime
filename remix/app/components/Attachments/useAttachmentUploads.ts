@@ -13,7 +13,7 @@ import {
 	multipartPartRange,
 	normalizePublicAttachment
 } from './attachmentUiCore';
-import type { ComposerAttachmentUpload, SignedUploadPart } from './attachmentTypes';
+import type { AttachmentUploadOptions, ComposerAttachmentUpload, SignedUploadPart } from './attachmentTypes';
 import { registerAttachmentDraftCleanup } from './attachmentDraftCleanup';
 
 const MAX_CONCURRENT_FILES = 3;
@@ -80,8 +80,14 @@ export const useAttachmentUploads = (
 	onCleanupError?: (message: string) => void,
 	onSelectionError?: (message: string) => void,
 	preserveReadyOnUnmount = false,
-	onCleanupDeferred?: () => void
+	onCleanupDeferred?: () => void,
+	options: AttachmentUploadOptions = {}
 ) => {
+	const uploadPurpose = options.purpose ?? 'post';
+	const maxFiles = Number.isSafeInteger(options.maxFiles)
+		? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Number(options.maxFiles)))
+		: MAX_POST_ATTACHMENTS;
+	const imageOnly = options.imageOnly === true;
 	const api = useApi();
 	const apiRef = React.useRef(api.v1.attachments);
 	apiRef.current = api.v1.attachments;
@@ -174,7 +180,8 @@ export const useAttachmentUploads = (
 							requestId: localId,
 							filename: file.name,
 							contentType: file.type || 'application/octet-stream',
-							sizeBytes: file.size
+							sizeBytes: file.size,
+							...(uploadPurpose === 'post' ? {} : { purpose: uploadPurpose })
 						},
 						{ signal: controller.signal }
 					);
@@ -249,7 +256,7 @@ export const useAttachmentUploads = (
 				if (activeRequestsRef.current.get(localId) === controller) activeRequestsRef.current.delete(localId);
 			}
 		},
-		[completeUpload, isCurrent, patchUpload]
+		[completeUpload, isCurrent, patchUpload, uploadPurpose]
 	);
 
 	pumpRef.current = () => {
@@ -269,13 +276,41 @@ export const useAttachmentUploads = (
 		pumpRef.current();
 	}, []);
 
-	const addFiles = React.useCallback(
-		(files: File[]) => {
-			const unique = dedupeSelectedFiles(uploadsRef.current, files);
-			const availableSlots = Math.max(0, MAX_POST_ATTACHMENTS - uploadsRef.current.length);
+	const addFilesInternal = React.useCallback(
+		(files: File[], replaceExisting: boolean) => {
+			const current = replaceExisting ? [] : uploadsRef.current;
+			const eligible = imageOnly ? files.filter((file) => localFileMediaKind(file) === 'image') : files;
+			if (eligible.length < files.length) {
+				onSelectionError?.('Choose a JPEG, PNG, GIF, WebP, or AVIF image.');
+			}
+			const unique = dedupeSelectedFiles(current, eligible);
+			const availableSlots = Math.max(0, maxFiles - current.length);
 			const accepted = unique.slice(0, availableSlots);
-			if (accepted.length < unique.length) onSelectionError?.('Posts can include up to 25 attachments.');
+			if (accepted.length < unique.length) {
+				onSelectionError?.(maxFiles === 1 ? 'Choose one image for this profile field.' : `Posts can include up to ${maxFiles} attachments.`);
+			}
 			if (!accepted.length) return;
+
+			if (replaceExisting) {
+				for (const upload of uploadsRef.current) {
+					attemptsRef.current.set(upload.localId, (attemptsRef.current.get(upload.localId) || 0) + 1);
+					queueRef.current = queueRef.current.filter((entry) => entry.localId !== upload.localId);
+					activeRequestsRef.current.get(upload.localId)?.abort();
+					activeRequestsRef.current.delete(upload.localId);
+					activeXhrsRef.current.get(upload.localId)?.abort();
+					activeXhrsRef.current.delete(upload.localId);
+					if (upload.previewUrl) URL.revokeObjectURL(upload.previewUrl);
+					uploadPlansRef.current.delete(upload.localId);
+					const cleanup = preserveReadyOnUnmountRef.current && upload.attachment ? null : cleanupUpload(upload);
+					void cleanup
+						?.then((result: any) => {
+							if (result?.deferred === true) onCleanupDeferred?.();
+						})
+						.catch((error: unknown) => onCleanupError?.(attachmentUploadError(error, 'cleanup')));
+				}
+				uploadsRef.current = [];
+				setUploads([]);
+			}
 			const next = accepted.map((file) => {
 				const localId = localUploadId();
 				const previewUrl = localFileMediaKind(file) === 'file' ? null : URL.createObjectURL(file);
@@ -292,11 +327,16 @@ export const useAttachmentUploads = (
 					failedAt: null
 				};
 			});
-			setUploads((current) => [...current, ...next]);
+			const nextUploads = [...current, ...next];
+			uploadsRef.current = nextUploads;
+			setUploads(nextUploads);
 			for (const upload of next) enqueue({ localId: upload.localId, file: upload.file, attempt: 1 });
 		},
-		[enqueue, onSelectionError]
+		[cleanupUpload, enqueue, imageOnly, maxFiles, onCleanupDeferred, onCleanupError, onSelectionError]
 	);
+
+	const addFiles = React.useCallback((files: File[]) => addFilesInternal(files, false), [addFilesInternal]);
+	const replaceFiles = React.useCallback((files: File[]) => addFilesInternal(files, true), [addFilesInternal]);
 
 	const retry = React.useCallback(
 		async (localId: string) => {
@@ -438,6 +478,7 @@ export const useAttachmentUploads = (
 	return {
 		uploads,
 		addFiles,
+		replaceFiles,
 		retry,
 		remove,
 		markCommitted,

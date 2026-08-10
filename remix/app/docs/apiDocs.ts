@@ -2100,7 +2100,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		summary: 'Reserves account storage and starts a private, checksummed S3 multipart upload.',
 		detail:
 			'Creates a billable pending attachment before S3 accepts any bytes, preventing concurrent uploads from oversubscribing the account storage tier. ' +
-			'A client-generated requestId makes ambiguous starts idempotent for the same owner and exact metadata. The server derives an owner-scoped opaque attachment id, so another account using the same requestId neither collides nor learns that it exists. The object key and multipart id remain private. Request presigned URLs in bounded batches from /uploads/parts.',
+			'A client-generated requestId makes ambiguous starts idempotent for the same owner, exact metadata, and purpose. The server derives an owner-scoped opaque attachment id, so another account using the same requestId neither collides nor learns that it exists. The object key and multipart id remain private. Request presigned URLs in bounded batches from /uploads/parts.',
 		auth: {
 			mode: 'session-or-bearer',
 			description:
@@ -2108,7 +2108,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['POST'],
 		steps: [
-			'POST a stable random requestId, filename, browser-reported contentType, and exact sizeBytes.',
+			'POST a stable random requestId, filename, browser-reported contentType, and exact sizeBytes. Omit purpose for posts; use profile-avatar or profile-banner only for those profile slots.',
 			'Split the file using partSizeBytes; the final part may be smaller.',
 			'Compute base64 SHA-256 for each part and request its signed PUT URL.',
 			'Abort unused uploads and honor deferred/retryAt while the conservative storage reservation settles.'
@@ -2123,6 +2123,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 					filename: 'launch.mp4',
 					contentType: 'video/mp4',
 					sizeBytes: 18874368
+				}
+			},
+			{
+				name: 'Reserve a profile avatar',
+				description: 'Profile media is limited to a supported raster image of at most 64 MiB.',
+				method: 'POST',
+				body: {
+					requestId: '8de83d1a-898b-45ad-b9a2-caf2a99b27e3',
+					filename: 'avatar.webp',
+					contentType: 'image/webp',
+					sizeBytes: 524288,
+					purpose: 'profile-avatar'
 				}
 			}
 		],
@@ -2144,7 +2156,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		],
 		notes: [
 			'The bucket remains private. Browser uploads use short-lived presigned UploadPart URLs, not public object access.',
-			'Private attachments are unavailable while a custom MongoDB data endpoint is active because quota and object ownership stay on Thingtime home storage.'
+			'Private post attachments are unavailable while a custom MongoDB data endpoint is active. Profile media remains home-pinned identity data and may still use the private profile purposes.'
 		]
 	}),
 	endpoint({
@@ -5898,7 +5910,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
-      'GET returns a stripped public projection that never includes email or verification fields. POST updates the caller display name, bio, avatar URL, or banner URL.',
+			'GET returns a stripped public projection that never includes email or verification fields. POST updates the caller display name, bio, avatar, or banner. Avatar/banner may use either one external http(s) URL or a ready private attachment created for the exact profile slot; managed media remains in the private bucket and is served through a stable same-origin content route.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an auth cookie or Authorization: Bearer token.'
@@ -5906,8 +5918,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with username to read a public profile and post count.',
-      'POST displayName, bio, avatarUrl, or bannerUrl to update the current user profile.',
-      'Only http(s) and data:image URLs are accepted for avatar/banner fields.',
+			'POST displayName or bio independently of profile media.',
+			'Use avatarAttachmentId or bannerAttachmentId to bind a ready owner-matched profile upload. Use avatarUrl or bannerUrl for the quota-saving external-link alternative; sending a URL clears that slot’s managed attachment.',
+			'Never send a non-null attachment id with a URL. Send both fields as null to clear a slot, or send only attachmentId:null to remove managed media while preserving its stored external fallback.',
+			'External writes accept structurally valid credential-free http(s) URLs; legacy data:image values remain read-compatible.',
       'Handle 400 missing username or invalid profile fields, 401 anonymous updates, and 404 unknown users.'
     ],
     requestExamples: [
@@ -5922,6 +5936,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Update the caller profile fields.',
         method: 'POST',
         body: { bio: 'Working on Thingtime.', avatarUrl: 'https://example.com/avatar.png' }
+			},
+			{
+				name: 'Use a private uploaded banner',
+				description: 'Bind a completed profile-banner upload to the current user.',
+				method: 'POST',
+				body: { bannerAttachmentId: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e' }
       }
     ],
     responseExamples: [

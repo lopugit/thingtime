@@ -107,7 +107,7 @@ System-kind rules (never bypass):
 ### Appended/child data is relational — never an unbounded embedded array
 
 Data that accumulates on a parent (post **reactions**, post **comments**, and
-post **attachments**) is stored as its OWN atomic `things` doc
+protected **attachments**) is stored as its OWN atomic `things` doc
 (`thingtime: ['reaction']`, `thingtime: ['comment']`, …) and aggregated back on
 read. The canonical v2 child relation is root `targetId`, containing the
 parent's stable `shareId`; `parentId` is legacy compatibility only. NEVER append
@@ -123,7 +123,11 @@ How (see `api/utils/things/things.ts`):
 
 - Canonical child records are full Things with a stable `shareId`, `ownerId`,
   their `thingtime` discriminator, server-validated root `targetId`, and payload.
-  Protected attachment binding sets `targetId` server-side. A child without a
+  Protected attachment binding sets `targetId` server-side. Post attachments
+  carry server-owned purpose `post` and inherit the exact post ACL. Profile
+  attachments carry server-owned purpose `profile` plus exact `avatar` or
+  `banner` slot; the user root stores the current attachment id and content
+  authorization rechecks that exact slot reference. A child without a
   `shareId`, or any child using `kind`/`parentId` instead of
   `thingtime`/`targetId`, is legacy compatibility data, not the shape for new
   writers.
@@ -157,6 +161,13 @@ Uploads reserve the complete logical allocation transactionally before S3
 accepts data, and deletion refunds it only after the private object is confirmed
 inaccessible. Ordinary user-authored Things cannot supply the protected root
 envelope or opt themselves into or out of object-byte accounting.
+
+User Things remain non-billable identity/control-plane records. Managed avatar
+and banner objects are still ordinary billable protected attachment Things:
+their server-owned root references do not move object bytes into the user
+crystal or hide them from the account ledger. An external profile image URL is
+only bounded metadata and never causes Thingtime to fetch or store the remote
+image bytes.
 
 `currentContentStorageSizeBytes()` is the shared proof used by every
 incremental writer: current schema + array `thingtime` + current content stamp

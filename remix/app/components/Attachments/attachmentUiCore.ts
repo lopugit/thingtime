@@ -78,6 +78,9 @@ export const attachmentUploadError = (error: unknown, phase: 'prepare' | 'upload
 	if (status === 413) return 'This file is larger than Thingtime can accept.';
 	if (status === 429) return 'Uploads are moving too quickly. Wait a moment, then retry this file.';
 	if (status === 507) return 'This account does not have enough storage remaining for this file.';
+	if (status === 503 && phase === 'prepare') {
+		return 'Private uploads are unavailable in this environment. For images, use the public image URL option instead.';
+	}
 	if (status === 410 || (error as { code?: unknown } | null)?.code === 'upload_unavailable') {
 		return 'This upload can no longer resume. Remove the file, then add it again.';
 	}
@@ -115,6 +118,26 @@ export const attachmentSnapshot = (uploads: ComposerAttachmentUpload[]): Attachm
 		blocking: uploads.some((upload) => upload.status !== 'ready'),
 		hasSelection: uploads.length > 0
 	};
+};
+
+export const sameAttachmentSnapshot = (left: AttachmentComposerSnapshot, right: AttachmentComposerSnapshot): boolean => {
+	if (left.blocking !== right.blocking || left.hasSelection !== right.hasSelection) return false;
+	if (left.attachments.length !== right.attachments.length || left.attachmentIds.length !== right.attachmentIds.length) return false;
+	for (let index = 0; index < left.attachments.length; index += 1) {
+		const leftAttachment = left.attachments[index];
+		const rightAttachment = right.attachments[index];
+		if (
+			left.attachmentIds[index] !== right.attachmentIds[index] ||
+			leftAttachment.id !== rightAttachment.id ||
+			leftAttachment.name !== rightAttachment.name ||
+			leftAttachment.size !== rightAttachment.size ||
+			leftAttachment.contentType !== rightAttachment.contentType ||
+			leftAttachment.mediaKind !== rightAttachment.mediaKind
+		) {
+			return false;
+		}
+	}
+	return true;
 };
 
 export type AttachmentCleanupAction = { kind: 'delete'; attachmentId: string } | { kind: 'abort'; uploadId: string } | null;

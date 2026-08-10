@@ -462,16 +462,27 @@ sanitized resolved config (never credentials); `POST /api/v1/email/test-otp` is
 a dev/preview-only helper for the `/tests` page restricted to the configured
 test recipient (or a plus alias of it).
 
-### Private S3 post attachments
+### Private S3 post and profile attachments
 
-Post images, video, audio, and generic files use direct, checksummed multipart
-uploads to a private S3 bucket. The browser receives short-lived part URLs, not
-AWS credentials; stored posts reference stable attachment ids, never expiring
-S3 URLs. Attachment bytes are reserved against the account's Thingtime storage
-tier before upload and remain charged until S3 deletion is confirmed. A stable
-client request id is hashed with the authenticated owner into an opaque
-owner-scoped attachment id, making lost start responses safely retryable without
+Post images, video, audio, and generic files—and profile avatar/banner images—
+use direct, checksummed multipart uploads to a private S3 bucket. The browser
+receives short-lived part URLs, not AWS credentials; posts and user profile
+slots reference stable attachment ids, never expiring S3 URLs. Attachment bytes
+are reserved against the account's Thingtime storage tier before upload and
+remain charged until exact-version S3 deletion is confirmed. A stable client
+request id is hashed with the authenticated owner into an opaque owner-scoped
+attachment id, making lost start responses safely retryable without
 cross-account id squatting or existence disclosure.
+
+Profile media is limited to JPEG, PNG, GIF, WebP, or AVIF and 64 MiB per image.
+The server binds a ready upload only to its exact owner and requested avatar or
+banner slot in the same home-Mongo transaction as the profile update. Public
+profile rendering uses the stable same-origin content route; the bucket stays
+private. Replacing or removing managed profile media releases the old reference
+transactionally, but its bytes remain billed until the cleanup path permanently
+deletes the exact S3 version and removes the attachment Thing. External http(s)
+image URLs remain a separate, quota-saving alternative and are never fetched by
+the Thingtime server.
 
 Configure only these server-side Vercel variables. Scope the production bucket
 and role to **Production** only. Thingtime's long-lived `develop` deployment
@@ -548,7 +559,7 @@ without permanently removing the billed object version.
 	"Version": "2012-10-17",
 	"Statement": [
 		{
-			"Sid": "ThingtimePrivatePostAttachments",
+			"Sid": "ThingtimePrivateAttachments",
 			"Effect": "Allow",
 			"Action": [
 				"s3:AbortMultipartUpload",

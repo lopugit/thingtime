@@ -17,6 +17,7 @@ import { applyUserStorageDelta } from '../storage/userStorage';
 import { userSubscriptionLedgerMatch } from '../subscriptions/subscriptionIdentity';
 import { toAttachmentPublicMetadata, type AttachmentPublicMetadata } from '../attachments/attachmentCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
+import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
   ACL_ALL,
   ACL_FAMILY,
@@ -147,12 +148,18 @@ export type ThingDoc = {
 	objectKey?: string;
 	objectVersionId?: string;
 	attachmentRequestFingerprint?: string;
+	attachmentPurpose?: 'post' | 'profile';
+	attachmentProfileSlot?: 'avatar' | 'banner';
 	attachmentFinalizationLeaseId?: string;
 	attachmentPartsIssuedAt?: Date;
 	attachmentObjectlessDelete?: true;
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
+	// Protected current managed-profile references. They live at the user root,
+	// never in its public crystal; projections derive same-origin content paths.
+	avatarAttachmentId?: string;
+	bannerAttachmentId?: string;
   sandboxExpiresAt?: Date;
   sandboxSpace?: string;
   // System kinds only (user/theme/feed-algorithm/waitlist — the collections
@@ -1141,7 +1148,7 @@ const toFeedAuthor = (doc: any): FeedAuthor => ({
   id: String(doc._id),
   username: doc.username,
   displayName: doc.displayName ?? null,
-  avatarUrl: typeof doc.avatarUrl === 'string' ? doc.avatarUrl : null
+	avatarUrl: effectiveProfileMediaUrl(doc, 'avatar')
 });
 
 export const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAuthor>> => {
@@ -1155,14 +1162,14 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
   const things = await getHomeThingsCollection();
   const userThings = await things
     .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
-    .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1 })
+		.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1, avatarAttachmentId: 1 })
     .toArray();
   for (const doc of userThings as any[]) {
     profiles.set(String(doc.shareId), {
       id: String(doc.shareId),
       username: doc.crystal?.username,
       displayName: doc.crystal?.displayName ?? null,
-      avatarUrl: typeof doc.crystal?.avatarUrl === 'string' ? doc.crystal.avatarUrl : null
+			avatarUrl: effectiveProfileMediaUrl(doc, 'avatar')
     });
   }
 
@@ -1171,7 +1178,7 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
     const users = await getUsersCollection();
     const docs = await users
       .find({ _id: { $in: remaining.map((id) => new ObjectId(id)) } })
-      .project({ username: 1, displayName: 1, avatarUrl: 1 })
+			.project({ username: 1, displayName: 1, avatarUrl: 1, avatarAttachmentId: 1 })
       .toArray();
     for (const doc of docs as any[]) profiles.set(String(doc._id), toFeedAuthor(doc));
   }

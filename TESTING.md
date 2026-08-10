@@ -57,7 +57,15 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] The top-level feed/profile composer shows the attachment drop zone, but
       rich comment and reply composers do not. The existing image-URL rows and
-      URL-only photo-post flow still work unchanged.
+      URL-only photo-post flow remain available.
+- [ ] In Photos, add one public image URL, then paste several newline-separated
+      URLs. Valid unique URLs become responsive preview tiles in stable order,
+      duplicates are skipped, invalid/credentialed URLs remain editable with an
+      accessible error, and linked images use `referrerPolicy=no-referrer`.
+- [ ] The visual upload area uses responsive thumbnail tiles plus a real
+      `🏞️ Add Media` control. At desktop and 390px mobile widths it has no
+      horizontal overflow; the URL fallback panel and every lower composer
+      control remain reachable after scrolling top-to-bottom.
 - [ ] Pick and drag/drop raster images, a supported video, and an arbitrary
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
@@ -109,6 +117,10 @@ is fixed, and cite the checklist you ran in the PR description.
       branch matcher, owns the verified `https://dev.thingtime.com` domain,
       and is the only non-production scope containing the four Sensitive S3 /
       cleanup variables. Generic Preview contains none of them.
+- [ ] On an ordinary feature-branch Preview, selecting a file fails before
+      quota reservation with the fixed client-authored “private uploads are
+      unavailable in this environment” guidance and offers the public image URL
+      fallback. Never expose Vercel, proxy, AWS, role, bucket, or request text.
 - [ ] The develop role trusts only
       `owner:<team>:project:<project>:environment:develop`. A deployed develop
       function can assume it, while a feature-branch
@@ -147,6 +159,38 @@ is fixed, and cite the checklist you ran in the PR description.
       draft or delete its post. The exact S3 version disappears and the account
       storage meter returns to its starting value without touching the
       production bucket.
+
+## Profile avatar and banner media (`remix/app/components/Profile/`)
+
+- [ ] Open both Edit profile and Settings → Profile. With no saved image, each
+      avatar/banner field shows a responsive `🏞️ Add Media` tile and a separate
+      “Use public image URL” fallback; all controls remain at least 44px.
+- [ ] Select JPEG, PNG, GIF, WebP, and AVIF files. A local preview paints
+      immediately, progress/retry/remove remain usable, Save stays disabled
+      until the image is ready, and SVG/non-image/empty/>64 MiB files fail with
+      fixed client-authored guidance before upload.
+- [ ] Save a managed avatar and banner, reload, and verify profile, feed cards,
+      search, notifications, Messenger/account navigation, and the owned-account
+      roster render the stable same-origin content URL without exposing an S3
+      key, upload id, version id, or presigned URL.
+- [ ] Load a public profile logged out and verify its current managed avatar and
+      banner render. A replaced, unbound, cross-account, wrong-slot, custom-Mongo
+      collision, or arbitrary attachment id must return not found.
+- [ ] Replace a saved managed avatar/banner, clear it, and switch it to one
+      credential-free http(s) URL. The user-slot update and new attachment bind
+      are atomic; the old object stays charged until exact-version deletion and
+      then the storage meter refreshes to the correct value.
+- [ ] Paste a valid external image URL: it previews with no referrer, remains a
+      quota-saving remote link, and is never server-fetched. Credentialed,
+      protocol-relative, whitespace/control-character, and non-http(s) URLs are
+      rejected without raw server/proxy text.
+- [ ] Close the editor, navigate away, or switch accounts while a profile upload
+      is preparing/uploading/ready-but-unsaved. Requests cancel, local object
+      URLs clear, unbound drafts are cleaned safely, and no filename, preview,
+      attachment id, or storage state flashes into the next account.
+- [ ] Simulate a lost profile-save response and retry the same attachment ids.
+      An already-bound exact owner/slot succeeds idempotently; a mismatched slot
+      or changed attachment fails closed without deleting another current image.
 
 ## Editor windows & layer system (`remix/app/components/Thingtime/EditorSplit.tsx`)
 

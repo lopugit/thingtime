@@ -16,6 +16,7 @@ const attachment = (overrides: Record<string, unknown> = {}) => ({
 	thingtime: ['attachment'],
 	attachmentEnvelopeVersion: ATTACHMENT_ENVELOPE_VERSION,
 	attachmentState: 'pending',
+	attachmentPurpose: 'post',
 	objectSizeBytes: 42,
 	objectKey: 'pending/user/attachment-id',
 	crystal: {
@@ -69,6 +70,12 @@ test('every lifecycle state remains a valid billable attachment envelope', () =>
 	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ objectVersionId: 'opaque-version-id' })), 42);
 	assert.equal(isAttachmentObjectVersionId('opaque-version-id'), true);
 	assert.equal(isAttachmentFinalizationLeaseId('finalize:lease-1'), true);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentPurpose: 'profile', attachmentProfileSlot: 'avatar' })), 42);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(attachment({ attachmentPurpose: undefined, attachmentProfileSlot: undefined })),
+		42,
+		'pre-purpose post rows remain accountable during rollout'
+	);
 });
 
 test('only an exact server envelope contributes object bytes', () => {
@@ -81,6 +88,11 @@ test('only an exact server envelope contributes object bytes', () => {
 	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ objectVersionId: 'bad\nversion' })), null);
 	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentRequestFingerprint: 'a'.repeat(64) })), 42);
 	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentRequestFingerprint: 'not-a-fingerprint' })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentPurpose: 'unknown' })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentPurpose: 'post', attachmentProfileSlot: 'avatar' })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentPurpose: 'profile', attachmentProfileSlot: undefined })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentPurpose: 'profile', attachmentProfileSlot: 'cover' })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentPurpose: undefined, attachmentProfileSlot: 'avatar' })), null);
 	assert.equal(
 		attachmentObjectSizeBytesForAccounting(attachment({ attachmentState: 'finalizing', attachmentFinalizationLeaseId: 'finalize:lease-1' })),
 		42

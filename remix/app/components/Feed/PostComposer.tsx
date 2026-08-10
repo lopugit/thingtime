@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Button, Flex, IconButton, Image, Input, Modal, ModalContent, ModalOverlay, Select, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, IconButton, Input, Modal, ModalContent, ModalOverlay, Select, Text } from '@chakra-ui/react';
 import { PictureInPicture2, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
@@ -14,6 +14,8 @@ import {
 } from '~/components/Attachments/attachmentUiCore';
 import { LongTextEditor } from '~/components/Editor/LongTextEditor';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { LinkedImageGallery } from '~/components/Media/LinkedImageGallery';
+import { canonicalLinkedImageUrls, type LinkedImageItem } from '~/components/Media/mediaGalleryCore';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
 import { EditorSplit } from '~/components/Thingtime/EditorSplit';
 import { ThingView } from '~/components/Thingtime/ThingView';
@@ -43,7 +45,6 @@ const BORDER = '1px solid var(--tt-border, #ececef)';
 const RADIUS_SM = 'var(--tt-radius-sm, 9px)';
 const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 
-const MAX_IMAGES = 8;
 const CURRENCIES = ['AUD', 'USD', 'EUR'];
 
 const EMPTY_ATTACHMENT_SNAPSHOT: AttachmentComposerSnapshot = {
@@ -79,8 +80,6 @@ const COMPOSER_SESSION_KEY = /^s[0-9a-f]{10}$/;
 // the in-post editor's default height; drag the handle for anything else
 const DEFAULT_EDITOR_HEIGHT = 440;
 const MIN_EDITOR_HEIGHT = 120;
-
-const isImageUrl = (url: string) => /^https?:\/\/\S+$/i.test(url.trim());
 
 const clonePostJson = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
@@ -132,7 +131,7 @@ export const PostComposer = (props: PostComposerProps) => {
   const [expanded, setExpanded] = React.useState(isComment);
   const [type, setType] = React.useState<PostType>('text');
   const [text, setText] = React.useState('');
-  const [images, setImages] = React.useState<string[]>([]);
+	const [linkedImages, setLinkedImages] = React.useState<LinkedImageItem[]>([]);
   const [title, setTitle] = React.useState('');
   const [price, setPrice] = React.useState('');
   const [currency, setCurrency] = React.useState('AUD');
@@ -172,7 +171,7 @@ export const PostComposer = (props: PostComposerProps) => {
 
 	const parsedTags = canonicalPostTags(tagsInput.split(','));
 
-  const validImages = images.map((url) => url.trim()).filter(isImageUrl);
+	const validImages = canonicalLinkedImageUrls(linkedImages);
 
   // this composer's session-scoped draft home (fresh per mount — see
   // DRAFT_ROOT_KEY above). State, not a const: renaming the draft's root key
@@ -254,7 +253,7 @@ export const PostComposer = (props: PostComposerProps) => {
     setType('text');
     setText('');
     setComposerSession((session) => session + 1);
-    setImages([]);
+		setLinkedImages([]);
     setTitle('');
     setPrice('');
     setCurrency('AUD');
@@ -266,14 +265,6 @@ export const PostComposer = (props: PostComposerProps) => {
     setThingPhotos(false);
     setThingListing(false);
 		setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
-  };
-
-  const setImageAt = (index: number, url: string) => {
-    setImages((prev) => prev.map((existing, i) => (i === index ? url : existing)));
-  };
-
-  const removeImageAt = (index: number) => {
-    setImages((prev) => prev.filter((_url, i) => i !== index));
   };
 
   const handlePost = async () => {
@@ -631,51 +622,13 @@ export const PostComposer = (props: PostComposerProps) => {
       {showPhotos && (
         <Flex flexDirection="column" rowGap={2}>
           <Eyebrow>Photos {type !== 'image' ? '(optional) ' : ''}🖼️</Eyebrow>
-          {images.map((url, index) => (
-            <Flex key={index} columnGap={2} alignItems="center">
-              {isImageUrl(url) && (
-                <Image
-                  src={url.trim()}
-                  alt={`Image ${index + 1} preview`}
-                  boxSize="36px"
-                  borderRadius="8px"
-                  objectFit="cover"
-                  flexShrink={0}
-                  background="var(--tt-surface-alt, #f5f5f7)"
-                />
-              )}
-              <Input
-                size="sm"
-                borderRadius={RADIUS_SM}
-                placeholder="https://…"
-                value={url}
-                onChange={(event) => setImageAt(index, event.target.value)}
-              />
-              <IconButton
-                aria-label="Remove image"
-                icon={<X size={13} />}
-                size="xs"
-                variant="ghost"
-                color={MUTED}
-                borderRadius="8px"
-                onClick={() => removeImageAt(index)}
+						<LinkedImageGallery
+							items={linkedImages}
+							onChange={setLinkedImages}
+							disabled={posting || submissionUncertain}
+							helperText="One URL per line. Linked images stay on the original site and don't use your private file-storage quota."
               />
             </Flex>
-          ))}
-          {images.length < MAX_IMAGES && (
-            <Button
-              size="xs"
-              variant="outline"
-              alignSelf="flex-start"
-              borderRadius={RADIUS_SM}
-              borderColor="var(--tt-border, #ececef)"
-              color={TEXT}
-              onClick={() => setImages((prev) => [...prev, ''])}
-            >
-              Add image ➕
-            </Button>
-          )}
-        </Flex>
       )}
 
       {/* marketplace listing */}

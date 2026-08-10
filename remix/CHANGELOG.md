@@ -19,6 +19,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Gallery-style post and profile media**: post photo links now use responsive
+  preview tiles with stable multi-line URL add, deduplication, credential-free
+  http(s) validation, and no-referrer previews, while private image/video/file
+  uploads use a Facebook-like `🏞️ Add Media` tile without removing the
+  quota-saving URL option. Avatar and banner editors in both Profile and
+  Settings can now upload safe raster images through the same private,
+  checksummed S3 pipeline or retain an external URL. Profile attachment purpose
+  and slot are server-owned; ready media binds to the exact owner/user slot in
+  the profile transaction, renders through the stable same-origin content
+  route, and old bytes remain billed until exact-version cleanup. Ordinary PR
+  Previews now explain that private storage is unavailable there without
+  exposing provider errors; the develop Custom Environment remains the secure
+  positive upload target. See the
+  [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
+  — Codex (AI), 2026-08-09
 - **Isolated develop S3 attachment environment**: `dev.thingtime.com` now maps
   to a branch-tracked Vercel Custom Environment named `develop`, with its own
   private bucket, exact-subject OIDC role, dev-origin-only CORS, Sensitive S3

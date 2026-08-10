@@ -1,5 +1,13 @@
 export type AttachmentMediaKind = 'image' | 'video' | 'file';
 
+export type AttachmentUploadPurpose = 'post' | 'profile-avatar' | 'profile-banner';
+
+export type AttachmentUploadOptions = {
+	purpose?: AttachmentUploadPurpose;
+	maxFiles?: number;
+	imageOnly?: boolean;
+};
+
 // Stable, public attachment metadata. S3 bucket names, object keys, upload ids,
 // and presigned URLs never enter this shape. Content is always reached through
 // the authenticated same-origin endpoint derived from `id`.

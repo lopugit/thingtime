@@ -262,13 +262,23 @@ export function useApi() {
 		attachments: {
 			uploads: {
 				create: useCallback(
-					async (args: { requestId: string; filename: string; contentType: string; sizeBytes: number }, options?: { signal?: AbortSignal }) => {
+					async (
+						args: {
+							requestId: string;
+							filename: string;
+							contentType: string;
+							sizeBytes: number;
+							purpose?: 'post' | 'profile-avatar' | 'profile-banner';
+						},
+						options?: { signal?: AbortSignal }
+					) => {
 						const ret = asyncFetcher.submit(
 							{
 								requestId: args?.requestId,
 								filename: args?.filename,
 								contentType: args?.contentType,
-								sizeBytes: args?.sizeBytes
+								sizeBytes: args?.sizeBytes,
+								...(args?.purpose ? { purpose: args.purpose } : {})
 							},
 							{
 								action: '/api/v1/attachments/uploads',
@@ -558,38 +568,25 @@ export function useApi() {
       // toggle (or explicitly set with follow: boolean) a one-way follow
       follow: useCallback(
         async (args) =>
-          asyncFetcher.submit(
-            { userId: args?.userId, username: args?.username, follow: args?.follow },
-            { action: '/api/v1/users/follow' }
-          ),
+					asyncFetcher.submit({ userId: args?.userId, username: args?.username, follow: args?.follow }, { action: '/api/v1/users/follow' }),
         [asyncFetcher]
       ),
       // friendship state machine: intent request|cancel|accept|decline|unfriend
       friend: useCallback(
         async (args) =>
-          asyncFetcher.submit(
-            { userId: args?.userId, username: args?.username, intent: args?.intent },
-            { action: '/api/v1/users/friend' }
-          ),
+					asyncFetcher.submit({ userId: args?.userId, username: args?.username, intent: args?.intent }, { action: '/api/v1/users/friend' }),
         [asyncFetcher]
       )
     },
     notifications: {
       list: useCallback(async (args?: Record<string, unknown>) => getJson(`/api/v1/notifications${toQuery(args)}`), []),
       markRead: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
-            args?.all ? { all: true } : { ids: args?.ids },
-            { action: '/api/v1/notifications/read' }
-          ),
+				async (args) => asyncFetcher.submit(args?.all ? { all: true } : { ids: args?.ids }, { action: '/api/v1/notifications/read' }),
         [asyncFetcher]
       ),
       settings: {
         get: useCallback(async () => getJson('/api/v1/notifications/settings'), []),
-        set: useCallback(
-          async (args) => asyncFetcher.submit({ prefs: args?.prefs }, { action: '/api/v1/notifications/settings' }),
-          [asyncFetcher]
-        )
+				set: useCallback(async (args) => asyncFetcher.submit({ prefs: args?.prefs }, { action: '/api/v1/notifications/settings' }), [asyncFetcher])
       }
     },
     profile: {
@@ -598,8 +595,11 @@ export function useApi() {
       search: useCallback(async (args) => getJson(`/api/v1/users/search${toQuery(args)}`), []),
       update: useCallback(
         async (args) => {
-          const { displayName, bio, avatarUrl, bannerUrl } = args;
-          const ret = asyncFetcher.submit({ displayName, bio, avatarUrl, bannerUrl }, { action: '/api/v1/users/profile' });
+					const body: Record<string, unknown> = {};
+					for (const key of ['displayName', 'bio', 'avatarUrl', 'bannerUrl', 'avatarAttachmentId', 'bannerAttachmentId'] as const) {
+						if (Object.prototype.hasOwnProperty.call(args || {}, key)) body[key] = args?.[key];
+					}
+					const ret = asyncFetcher.submit(body, { action: '/api/v1/users/profile' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
         },

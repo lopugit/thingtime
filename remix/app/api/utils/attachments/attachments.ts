@@ -17,10 +17,14 @@ import {
 	ATTACHMENT_MPU_EMPTY_RECHECK_MS,
 	ATTACHMENT_UPLOAD_INITIALIZATION_LEASE_MS,
 	MAX_ATTACHMENTS_PER_TARGET,
+	MAX_PROFILE_ATTACHMENT_BYTES,
+	PROFILE_ATTACHMENT_CONTENT_TYPES,
 	attachmentMpuSettlementAt,
 	attachmentStore,
 	bindReadyAttachmentsToTarget,
 	type AttachmentDoc,
+	type AttachmentPurpose,
+	type ProfileAttachmentSlot,
 	type AttachmentStore
 } from './attachmentStore';
 import {
@@ -41,6 +45,8 @@ export const MAX_EXPIRED_ATTACHMENTS_PER_REAP = 1000;
 export const ATTACHMENT_REAP_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_REAP_CONCURRENCY = 5;
 export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
+export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'profile-avatar', 'profile-banner'] as const;
+export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
 
 type AttachmentFail = {
 	ok: false;
@@ -61,7 +67,7 @@ type AttachmentServiceDependencies = {
 	now: () => Date;
 	uuid: () => string;
 	customMongoActive: () => boolean;
-	canViewTarget: (viewer: AttachmentViewer, targetId: string) => Promise<boolean>;
+	canViewTarget: (viewer: AttachmentViewer, attachment: AttachmentDoc) => Promise<boolean>;
 	clock: () => number;
 };
 
@@ -87,16 +93,28 @@ const normalizeId = (value: unknown): string | null => {
 	return /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value) ? value : null;
 };
 
-const attachmentRequestFingerprint = (metadata: AttachmentCrystal): string =>
+const attachmentRequestFingerprint = (metadata: AttachmentCrystal, purpose: AttachmentUploadPurpose): string =>
 	createHash('sha256')
 		.update(
 			JSON.stringify({
 				name: metadata.name,
 				size: metadata.size,
-				contentType: metadata.contentType
+				contentType: metadata.contentType,
+				// Preserve the original post-upload fingerprint so in-flight uploads
+				// created before purpose stamping remain safely resumable.
+				...(purpose === 'post' ? {} : { purpose })
 			})
 		)
 		.digest('hex');
+
+const attachmentUploadIntent = (
+	value: unknown
+): { requestPurpose: AttachmentUploadPurpose; purpose: AttachmentPurpose; profileSlot?: ProfileAttachmentSlot } | null => {
+	if (value === undefined || value === 'post') return { requestPurpose: 'post', purpose: 'post' };
+	if (value === 'profile-avatar') return { requestPurpose: value, purpose: 'profile', profileSlot: 'avatar' };
+	if (value === 'profile-banner') return { requestPurpose: value, purpose: 'profile', profileSlot: 'banner' };
+	return null;
+};
 
 export const attachmentIdForRequest = (ownerId: string, requestId: string): string =>
 	`att_${createHash('sha256').update('thingtime-attachment-request-v1\0').update(ownerId).update('\0').update(requestId).digest('hex')}`;
@@ -497,13 +515,15 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 	const start = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ upload: Record<string, unknown> }>> => {
 		try {
-			if (dependencies.customMongoActive()) {
-				return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
-			}
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment upload request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => !['filename', 'contentType', 'sizeBytes', 'requestId'].includes(key))) {
+			if (Object.keys(raw).some((key) => !['filename', 'contentType', 'sizeBytes', 'requestId', 'purpose'].includes(key))) {
 				return fail(400, 'Invalid attachment upload request');
+			}
+			const intent = attachmentUploadIntent(raw.purpose);
+			if (!intent) return fail(400, 'Invalid attachment upload purpose');
+			if (intent.purpose === 'post' && dependencies.customMongoActive()) {
+				return fail(400, 'Private post attachments are unavailable with a custom MongoDB endpoint');
 			}
 			const requestedId = raw.requestId === undefined ? null : normalizeId(raw.requestId);
 			if (raw.requestId !== undefined && !requestedId) return fail(400, 'Invalid attachment request id');
@@ -517,6 +537,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				contentType: raw.contentType
 			});
 			if (sanitized.ok === false) return fail(400, sanitized.error);
+			if (intent.purpose === 'profile') {
+				if (sizeBytes > MAX_PROFILE_ATTACHMENT_BYTES) {
+					return fail(400, `Profile images can contain at most ${MAX_PROFILE_ATTACHMENT_BYTES} bytes`);
+				}
+				if (!PROFILE_ATTACHMENT_CONTENT_TYPES.has(sanitized.crystal.contentType)) {
+					return fail(400, 'Profile attachments must be a supported raster image');
+				}
+			}
 			const crystal: AttachmentCrystal = {
 				name: sanitized.crystal.name,
 				size: sizeBytes,
@@ -532,14 +560,19 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const id = requestedId ? attachmentIdForRequest(ownerId, requestedId) : dependencies.uuid();
 			const objectKey = `objects/${id}`;
 			const expires = new Date(dependencies.now().getTime() + ATTACHMENT_UPLOAD_TTL_MS);
-			const requestFingerprint = attachmentRequestFingerprint(sanitized.crystal);
+			const requestFingerprint = attachmentRequestFingerprint(sanitized.crystal, intent.requestPurpose);
 			const uploadPlan = (doc: AttachmentDoc) => ({
 				id: doc.shareId,
 				partSizeBytes: plan.partSizeBytes,
 				partCount: plan.partCount,
 				expiresAt: doc.attachmentExpiresAt!.toISOString()
 			});
-			const sameRequest = (doc: AttachmentDoc) => doc.ownerId === ownerId && doc.attachmentRequestFingerprint === requestFingerprint;
+			const sameRequest = (doc: AttachmentDoc) =>
+				doc.ownerId === ownerId &&
+				doc.attachmentRequestFingerprint === requestFingerprint &&
+				(intent.purpose === 'post'
+					? (doc.attachmentPurpose === undefined || doc.attachmentPurpose === 'post') && doc.attachmentProfileSlot === undefined
+					: doc.attachmentPurpose === 'profile' && doc.attachmentProfileSlot === intent.profileSlot);
 
 			let ownsInitialization = false;
 			let reserved = requestedId ? await dependencies.store.getById(id) : null;
@@ -554,6 +587,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						crystal,
 						objectKey,
 						requestFingerprint,
+						purpose: intent.purpose,
+						profileSlot: intent.profileSlot,
 						expiresAt: expires
 					});
 					ownsInitialization = true;
@@ -959,13 +994,24 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		try {
 			const id = normalizeId(idInput);
 			if (!id) return fail(404, 'Attachment not found');
-			// Never authorize a home-bucket object against a caller-selected custom
-			// Mongo data plane: a spoofed target shareId there must not become a
-			// confused-deputy grant to the home attachment.
-			if (dependencies.customMongoActive()) return fail(404, 'Attachment not found');
 			let doc = await dependencies.store.getById(id);
 			if (!doc || doc.attachmentState !== 'ready') return fail(404, 'Attachment not found');
-			const allowed = viewer?.id === doc.ownerId || (!!doc.targetId && (await dependencies.canViewTarget(viewer, doc.targetId)));
+			// Unbound drafts are owner-previewable only while their reservation is
+			// live. Profile replacement stamps immediate expiry in the same Mongo
+			// transaction that removes the user-slot reference, making the old object
+			// inaccessible while it remains billed until exact-version cleanup.
+			if (!doc.targetId && (!doc.attachmentExpiresAt || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
+				return fail(404, 'Attachment not found');
+			}
+			// Post attachments must never authorize a home object against a caller-
+			// selected data plane. Profile media is different: both its attachment and
+			// exact user-slot reference are protected home identity data, so the lean
+			// home-pinned helper remains authoritative under a custom post data plane.
+			if (dependencies.customMongoActive() && doc.attachmentPurpose !== 'profile') return fail(404, 'Attachment not found');
+			const allowed =
+				doc.attachmentPurpose === 'profile' && doc.targetId
+					? await dependencies.canViewTarget(viewer, doc)
+					: viewer?.id === doc.ownerId || (!!doc.targetId && (await dependencies.canViewTarget(viewer, doc)));
 			if (!allowed) return fail(404, 'Attachment not found');
 
 			const s3 = dependencies.getS3();
@@ -1011,6 +1057,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				docs.some(
 					(doc) =>
 						doc.attachmentState !== 'ready' ||
+						(doc.attachmentPurpose !== undefined && doc.attachmentPurpose !== 'post') ||
+						doc.attachmentProfileSlot !== undefined ||
 						!!doc.targetId ||
 						!doc.attachmentExpiresAt ||
 						doc.attachmentExpiresAt.getTime() <= now ||

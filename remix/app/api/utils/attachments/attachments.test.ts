@@ -156,6 +156,94 @@ test('start rejects zero-byte files before reserving quota or creating an MPU', 
 	assert.equal(touched, false);
 });
 
+test('profile upload purpose is home-pinned, fingerprinted, raster-only, and bounded before reservation', async () => {
+	const stored = new Map<string, AttachmentDoc>();
+	const reservations: any[] = [];
+	let creates = 0;
+	const store: any = {
+		listExpiredOwned: async () => [],
+		getById: async (id: string) => stored.get(id) || null,
+		reservePending: async (input: any) => {
+			reservations.push(input);
+			const doc = attachmentDoc({
+				shareId: input.id,
+				ownerId: input.ownerId,
+				crystal: input.crystal,
+				objectSizeBytes: input.crystal.size,
+				objectKey: input.objectKey,
+				attachmentRequestFingerprint: input.requestFingerprint,
+				attachmentPurpose: input.purpose,
+				attachmentProfileSlot: input.profileSlot,
+				attachmentExpiresAt: input.expiresAt,
+				uploadId: undefined
+			});
+			stored.set(input.id, doc);
+			return doc;
+		},
+		setUploadId: async (_ownerId: string, id: string, uploadId: string) => {
+			const doc = { ...stored.get(id)!, uploadId };
+			stored.set(id, doc);
+			return doc;
+		}
+	};
+	const service = createAttachmentService({
+		store,
+		getS3: () =>
+			noopS3({
+				createMultipartUpload: async () => {
+					creates += 1;
+					return { uploadId: `mpu-${creates}` };
+				}
+			}),
+		now: () => now,
+		customMongoActive: () => true
+	});
+	const sizeBytes = Math.floor(31.6 * 1024 * 1024);
+	const started = await service.start('user-1', {
+		requestId: 'profile-avatar-request',
+		purpose: 'profile-avatar',
+		filename: 'avatar.jpg',
+		contentType: 'image/jpeg',
+		sizeBytes
+	});
+	assert.equal(started.ok, true);
+	if (started.ok) {
+		assert.equal(started.upload.partCount, 4);
+		assert.equal(started.upload.partSizeBytes, ATTACHMENT_MIN_PART_BYTES);
+	}
+	assert.equal(reservations[0].purpose, 'profile');
+	assert.equal(reservations[0].profileSlot, 'avatar');
+	assert.equal(reservations[0].crystal.contentType, 'application/octet-stream');
+
+	assert.deepEqual(
+		await service.start('user-1', {
+			requestId: 'profile-avatar-request',
+			purpose: 'profile-banner',
+			filename: 'avatar.jpg',
+			contentType: 'image/jpeg',
+			sizeBytes
+		}),
+		{ ok: false, status: 409, error: 'Attachment request id is already in use' }
+	);
+	for (const [contentType, size] of [
+		['image/svg+xml', 1024],
+		['video/mp4', 1024],
+		['image/jpeg', 64 * 1024 * 1024 + 1]
+	] as const) {
+		const rejected = await service.start('user-1', {
+			requestId: `${contentType}-${size}`.replace(/[^A-Za-z0-9._:-]/g, '-'),
+			purpose: 'profile-avatar',
+			filename: 'profile.bin',
+			contentType,
+			sizeBytes: size
+		});
+		assert.equal(rejected.ok, false);
+		if (!rejected.ok) assert.equal(rejected.status, 400);
+	}
+	assert.equal(reservations.length, 1);
+	assert.equal(creates, 1);
+});
+
 test('stable requestId makes reservation and MPU creation idempotent while rejecting metadata or owner collisions', async () => {
 	const stored = new Map<string, AttachmentDoc>();
 	let reserves = 0;
@@ -858,8 +946,72 @@ test('download never authorizes a home S3 object against a custom data plane', a
 		status: 404,
 		error: 'Attachment not found'
 	});
-	assert.equal(storeReads, 0);
+	assert.equal(storeReads, 1);
 	assert.equal(visibilityChecks, 0);
+});
+
+test('profile download under a custom post data plane requires the exact home user slot even for its owner', async () => {
+	const profile = attachmentDoc({
+		attachmentState: 'ready',
+		targetId: 'user-1',
+		attachmentPurpose: 'profile',
+		attachmentProfileSlot: 'avatar',
+		objectVersionId: 'version-1',
+		uploadId: undefined,
+		attachmentExpiresAt: undefined,
+		crystal: { name: 'avatar.jpg', size: 10, contentType: 'image/jpeg', mediaKind: 'image' }
+	});
+	let checked: AttachmentDoc | null = null;
+	const allowed = createAttachmentService({
+		customMongoActive: () => true,
+		store: { getById: async () => profile } as any,
+		canViewTarget: async (_viewer, attachment) => {
+			checked = attachment;
+			return true;
+		},
+		getS3: () => noopS3()
+	});
+	assert.equal((await allowed.download(null, 'attachment-1', false)).ok, true);
+	assert.equal(checked, profile);
+
+	const stale = createAttachmentService({
+		customMongoActive: () => true,
+		store: { getById: async () => profile } as any,
+		canViewTarget: async () => false,
+		getS3: () => noopS3()
+	});
+	assert.deepEqual(await stale.download({ id: 'user-1' }, 'attachment-1', false), {
+		ok: false,
+		status: 404,
+		error: 'Attachment not found'
+	});
+});
+
+test('an expired released profile draft is inaccessible to its owner while exact-version cleanup remains pending', async () => {
+	let s3Reads = 0;
+	const released = attachmentDoc({
+		attachmentState: 'ready',
+		attachmentPurpose: 'profile',
+		attachmentProfileSlot: 'avatar',
+		targetId: undefined,
+		attachmentExpiresAt: now,
+		objectVersionId: 'version-1',
+		uploadId: undefined
+	});
+	const service = createAttachmentService({
+		now: () => now,
+		store: { getById: async () => released } as any,
+		getS3: () => {
+			s3Reads += 1;
+			return noopS3();
+		}
+	});
+	assert.deepEqual(await service.download({ id: 'user-1' }, 'attachment-1', false), {
+		ok: false,
+		status: 404,
+		error: 'Attachment not found'
+	});
+	assert.equal(s3Reads, 0);
 });
 
 test('explicit delete cannot remove an attachment after an ambiguously successful post create', async () => {
