@@ -19,6 +19,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **One merged PR can promote to several branches**: the promoter had exactly
+  one target, so a source PR owing changes to two branches — #211 converts
+  `main` to thin listeners *and* carries the implementation those listeners
+  call, which may only live on `github-actions` — could never be expressed; the
+  half that didn't belong on `main` just conflicted and the promotion died.
+  Each configured target now gets its own pass, branch (`…-to-<target>`),
+  promotion record, and PR, and a pass whose replay doesn't apply cleanly goes
+  to the trusted AI worker exactly as a single-target conflict does. Nothing
+  path-routes the split — the same file legitimately contributes different
+  content to different bases, so the per-base replay and the worker decide.
+  Off by default; set the `PROMOTION_TARGET_BRANCHES` repository variable to
+  enable. — Claude (AI), 2026-08-10
 - **A promotion is never cancelled for an unverifiable lineage**: a source
   patch that can't be proven present at the current `develop` tip used to drop
   the promotion entirely — no branch, no worker, no PR — so the change simply

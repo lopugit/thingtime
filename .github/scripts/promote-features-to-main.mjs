@@ -78,6 +78,25 @@ const flag = (key, fallback) => {
 const CFG = {
   source: env("SOURCE_BRANCH", "develop"),
   target: env("TARGET_BRANCH", "main"),
+  // The primary target never changes; `target` is swapped per pass when
+  // several targets are configured, and branch naming keys off this so the
+  // primary pass keeps its historical names.
+  primaryTarget: env("TARGET_BRANCH", "main"),
+  // Multi-target promotion. One merged source PR can legitimately owe changes
+  // to more than one branch: #211 converts `main` to thin listeners AND carries
+  // the executable implementation those listeners call, which may only live on
+  // `github-actions`. A single-target promoter can never express that — the
+  // half that does not belong on `main` just conflicts, and the promotion dies.
+  // Each configured target gets its own full pass (own branch, own promotion
+  // PR, own record), so one source yields as many promotion PRs as it owes.
+  // A pass whose cherry-pick does not apply cleanly onto its base is exactly
+  // the case the trusted AI worker already handles: it reconstructs the change
+  // to fit that base and opens the PR. Nothing here decides WHAT belongs where
+  // — the per-base replay and the worker do — which is why no path-routing
+  // table exists: the same file legitimately contributes different content to
+  // different bases.
+  targets: env("TARGET_BRANCHES", "")
+    .split(",").map((s) => s.trim()).filter(Boolean),
   lookback: Math.max(1, Math.min(100, Number(env("LOOKBACK", "50")) || 50)),
   maxNewPrs: Math.max(1, Number(env("MAX_NEW_PRS", "10")) || 10),
   requireLabel: env("REQUIRE_LABEL", ""),
@@ -493,13 +512,50 @@ export function slugify(text, maxLen = 40) {
 
 const STRIP_PREFIXES = ["claude", "codex", "feature", "feat", "fix", "chore", "promote"];
 
-export function promotionBranchFor(pr) {
+export function promotionBranchFor(pr, target = CFG.target, primaryTarget = CFG.primaryTarget || CFG.target) {
   const segments = (pr.headRefName || "").split("/").filter(Boolean);
   while (segments.length > 1 && STRIP_PREFIXES.includes(segments[0].toLowerCase())) {
     segments.shift();
   }
   const base = segments.join("-") || pr.title || `pr-${pr.number}`;
-  return `promote/pr-${pr.number}-${slugify(base)}`;
+  // The primary target keeps the historical name so every promotion branch and
+  // record already in flight still matches. Additional targets are suffixed, so
+  // two promotions of one source can never collide on a branch name.
+  const suffix = target && target !== primaryTarget ? `-to-${slugify(target)}` : "";
+  return `promote/pr-${pr.number}-${slugify(base)}${suffix}`;
+}
+
+// Whether a promotion PR belongs to the pass currently running. The primary
+// pass owns every promotion without a target suffix (including all history
+// from before multi-target existed); an additional target owns exactly the
+// branches suffixed for it.
+export function promotionBelongsToPass(promotion, cfg = CFG) {
+  const head = String(promotion?.headRefName || "");
+  const primary = cfg.primaryTarget || cfg.target;
+  const suffix = `-to-${slugify(cfg.target)}`;
+  if (cfg.target === primary) {
+    return !promotionTargets(cfg)
+      .filter((target) => target !== primary)
+      .some((target) => head.endsWith(`-to-${slugify(target)}`));
+  }
+  return head.endsWith(suffix);
+}
+
+// The configured promotion targets, in order, always beginning with the
+// primary one. Unsafe, duplicate, and self-targeting entries are dropped rather
+// than allowed to aim a promotion at the branch it came from.
+export function promotionTargets(cfg = CFG) {
+  const seen = new Set();
+  const targets = [];
+  for (const candidate of [cfg.target, ...(cfg.targets || [])]) {
+    const name = String(candidate || "").trim();
+    if (!name || name === cfg.source) continue;
+    if (name.startsWith("-") || name.includes("..") || /[\s~^:?*[\\]/.test(name)) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    targets.push(name);
+  }
+  return targets;
 }
 
 export function parsePromotionOf(body) {
@@ -3026,6 +3082,41 @@ async function selfTest() {
 
   const pr = { number: 7, headRefName: "claude/search-index-abc123", title: "feat: add search" };
   assert.equal(promotionBranchFor(pr), "promote/pr-7-search-index-abc123");
+
+  // Multi-target promotion: the primary target keeps its historical branch
+  // name so promotions already in flight still match, and every additional
+  // target gets its own suffixed branch so two promotions of one source can
+  // never collide.
+  assert.equal(
+    promotionBranchFor(pr, "main", "main"),
+    "promote/pr-7-search-index-abc123",
+  );
+  assert.equal(
+    promotionBranchFor(pr, "github-actions", "main"),
+    "promote/pr-7-search-index-abc123-to-github-actions",
+  );
+  const multiCfg = { source: "develop", target: "main", primaryTarget: "main", targets: ["github-actions", "main", "develop", "", "bad ref", "--evil"] };
+  assert.deepEqual(
+    promotionTargets(multiCfg),
+    ["main", "github-actions"],
+    "targets dedupe, drop the source branch, and reject unsafe ref names",
+  );
+  assert.deepEqual(promotionTargets({ source: "develop", target: "main", targets: [] }), ["main"]);
+  // Pass visibility: the primary pass must not see another target's promotion,
+  // and an additional target must see only its own.
+  const primaryPass = { ...multiCfg, target: "main" };
+  const secondPass = { ...multiCfg, target: "github-actions" };
+  const mainPromotion = { headRefName: "promote/pr-7-search-index-abc123" };
+  const gaPromotion = { headRefName: "promote/pr-7-search-index-abc123-to-github-actions" };
+  assert.equal(promotionBelongsToPass(mainPromotion, primaryPass), true);
+  assert.equal(promotionBelongsToPass(gaPromotion, primaryPass), false);
+  assert.equal(promotionBelongsToPass(gaPromotion, secondPass), true);
+  assert.equal(promotionBelongsToPass(mainPromotion, secondPass), false);
+  assert.equal(
+    promotionBelongsToPass({ headRefName: "promote/pr-9-legacy" }, primaryPass),
+    true,
+    "promotions from before multi-target existed belong to the primary pass",
+  );
   assert.equal(promotionBranchFor({ number: 8, headRefName: "", title: "Fix: A thing" }),
     "promote/pr-8-fix-a-thing");
   const retiredSource = {
@@ -4846,7 +4937,10 @@ async function runPromotion(results, state) {
 
   // --- Load state ----------------------------------------------------------
   const sourcePrs = listMergedSourcePrs();
-  const promotionPrs = listPromotionPrs();
+  // Each target pass may only see its own promotions. Without this, the
+  // second pass finds the first pass's PR under the same source marker and
+  // concludes the work is already promoted.
+  const promotionPrs = listPromotionPrs().filter(promotionBelongsToPass);
   const promoBySource = indexPromotionsBySource(promotionPrs);
   const remoteBranches = listRemotePromotionBranches();
 
@@ -6344,7 +6438,22 @@ async function main() {
     lineageReview: [], blocked: [], warnings: [], skipped: [],
   };
   const state = { eligibleCount: 0, scanCompleted: false };
-  await runWithSummary(() => runPromotion(results, state), results, state);
+  // One full pass per configured target. A pass is independent: its own
+  // promotion branches, its own promotion records, its own cherry-pick against
+  // its own base. A source PR that owes changes to two branches therefore ends
+  // up with two promotion PRs, and the pass whose replay does not apply cleanly
+  // is handed to the trusted AI worker exactly as a single-target conflict is.
+  const targets = promotionTargets();
+  await runWithSummary(async () => {
+    for (const target of targets) {
+      CFG.target = target;
+      if (targets.length > 1) {
+        console.log(`\n=== Promotion pass: \`${CFG.source}\` → \`${target}\` ===`);
+      }
+      await runPromotion(results, state);
+    }
+    CFG.target = CFG.primaryTarget;
+  }, results, state);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
