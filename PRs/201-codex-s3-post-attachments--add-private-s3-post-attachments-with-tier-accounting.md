@@ -1,4 +1,4 @@
-# PR #201 — Add private S3 post/profile attachments with tier accounting
+# PR #201 — Add private S3 post attachments with tier accounting
 
 - **Branch:** `codex/s3-post-attachments` → `develop`
 - **PR:** https://github.com/lopugit/thingtime/pull/201
@@ -6,21 +6,15 @@
 ## Scope
 
 This PR gives top-level posts a private attachment primitive for images,
-videos, audio, and arbitrary files, and uses the same protected primitive for
-profile avatar/banner images. It intentionally does not enable the same
+videos, audio, and arbitrary files. It intentionally does not enable the same
 primitive for comments, Messenger messages, or threads. Existing URL-based
-photo and profile fields remain compatible, while uploaded files use stable
-attachment Things and same-origin content URLs rather than persisted presigned
-S3 URLs.
+photo fields remain compatible, while uploaded files use stable attachment
+Things and same-origin content URLs rather than persisted presigned S3 URLs.
 
 ## User experience
 
 - The post composer accepts up to 25 files with immediate local previews,
   per-file progress, retry, cancel, and remove controls.
-- Photos use responsive linked-image preview tiles with a newline-friendly URL
-  adder, stable ordering, deduplication, parsed credential-free http(s)
-  validation, and no-referrer previews. A real `🏞️ Add Media` thumbnail tile
-  opens private uploads; linked images remain the quota-saving alternative.
 - Posting stays disabled until every selected file is ready. Failed files must
   be retried or removed instead of being silently omitted.
 - Safe server-detected raster images and MP4/WebM video render inline. Audio
@@ -28,9 +22,6 @@ S3 URLs.
   forced to download.
 - Attachment-only text posts and visual-only photo posts are valid. The full
   comment composer remains attachment-free in this scope.
-- Profile and Settings editors expose the same Add Media interaction for one
-  avatar and one banner, accept safe raster images up to 64 MiB, and retain a
-  separate public URL choice. Save blocks until selected uploads are ready.
 - Account storage availability refreshes after upload, cancellation, removal,
   post creation, and post deletion. Deferred multipart settlement is surfaced
   with fixed client-authored Lopu copy rather than raw AWS/server errors.
@@ -91,14 +82,6 @@ attachment children unless the S3 preparation hook is present.
   from authorizing a home-bucket object with a colliding ID.
 - Public projections expose canonical metadata and stable attachment IDs only;
   S3 keys, upload IDs, object versions, and signed URLs remain server-only.
-- Profile uploads carry a protected server purpose and exact avatar/banner slot.
-  Binding and the user-root reference update share one home-Mongo transaction;
-  public content authorization rechecks the exact owner, current user slot, and
-  attachment id. A public user record alone cannot authorize an arbitrary file.
-- Current-user projections keep the managed attachment id and external linked
-  fallback distinct while ordinary avatarUrl/bannerUrl consumers receive only
-  the effective stable display URL. The managed content path is never persisted
-  as caller-authored profile URL data.
 - Content-Disposition filenames are normalized and RFC 5987 encoded; HTML,
   SVG, XML, JavaScript, and unknown formats are never rendered inline.
 
@@ -151,8 +134,7 @@ cleanup, the exact OIDC subject, and least-privilege role policy.
 ## Verification
 
 - Full repository unit suite passed.
-- Attachment/profile-media focused suites are rerun after every profile binding
-  or gallery change; final counts are recorded in the publishing handoff.
+- Attachment suite: **63 passed, 0 failed**.
 - Storage/schema focused suites passed.
 - Production client + Nitro server build passed, including the generated
   Vercel output verifier.
@@ -220,22 +202,3 @@ only production-side change was adding the required `s3:PutObjectTagging`
 permission to the existing attachment role. An earlier local Chrome
 file-selection attempt was also blocked because the ChatGPT Chrome extension
 did not have file-URL access; it created no post or S3 object.
-
-## Gallery and profile-media extension (2026-08-09)
-
-The 31.6 MiB JPEG failure reported from the PR alias was traced to the upload
-start request returning 503 before quota reservation or S3 MPU creation. That
-alias is an ordinary `environment:preview` deployment and deliberately receives
-no develop bucket variables; the image was within the normal multipart limit.
-The client now explains this fixed deployment boundary and points image users to
-the public-URL fallback without echoing provider text. The positive S3 path must
-be tested on `dev.thingtime.com` after this PR is deployed to the exact
-`environment:develop` Custom Environment.
-
-The extension also replaces raw post URL rows with responsive gallery tiles and
-adds owner/slot-bound profile attachments. Replacing profile media releases the
-old attachment reference in the same transaction as the new user reference,
-but never refunds first: the old protected row remains billable until the
-existing exact-VersionId cleanup deletes S3 and removes the row. Both profile
-edit surfaces share the same upload lifecycle, abandoned-draft cleanup, fixed
-client-authored errors, and external URL fallback.

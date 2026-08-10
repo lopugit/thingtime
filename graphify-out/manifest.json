@@ -1527,12 +1527,12 @@
   "FUNDAMENTALS.md": {
     "mtime": 1786333476.3828998,
     "ast_hash": "d5da585882b846c1a6567634e0e2b469",
-    "semantic_hash": ""
+    "semantic_hash": "d5da585882b846c1a6567634e0e2b469"
   },
   "README.md": {
     "mtime": 1786333476.3839924,
     "ast_hash": "da7c99db4cb19a6c87ec74f7b1d23cf7",
-    "semantic_hash": ""
+    "semantic_hash": "da7c99db4cb19a6c87ec74f7b1d23cf7"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1786266583.7579703,
@@ -4162,7 +4162,7 @@
   "TESTING.md": {
     "mtime": 1786334810.2739167,
     "ast_hash": "4783bce28b98d199c488be8ca448d1de",
-    "semantic_hash": ""
+    "semantic_hash": "4783bce28b98d199c488be8ca448d1de"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786245149.978798,

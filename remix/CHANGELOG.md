@@ -32,7 +32,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Previews now explain that private storage is unavailable there without
   exposing provider errors; the develop Custom Environment remains the secure
   positive upload target. See the
-  [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
+  [PR #232 implementation notes](../PRs/232-codex-media-gallery-profile-attachments--add-media-galleries-and-managed-profile-attachments.md).
   — Codex (AI), 2026-08-09
 - **Isolated develop S3 attachment environment**: `dev.thingtime.com` now maps
   to a branch-tracked Vercel Custom Environment named `develop`, with its own
