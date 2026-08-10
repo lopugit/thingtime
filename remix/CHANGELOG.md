@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Develop and production preview hostnames are now separated**: the trusted
+  `develop` controller uses `*.previews.dev.thingtime.com`, with its protected
+  GitHub variable, detached Vercel wildcard, DNS/ACME delegation, TLS, and S3
+  CORS aligned to that origin. `*.previews.thingtime.com` is reserved for a
+  separate future production-preview controller, while ordinary Vercel
+  previews retain neither AWS role. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
 - **Develop-preview activation runbook now matches the live control plane**:
   documents the no-bypass `main` ruleset, automatic no-reviewer cleanup,
   installed project-scoped 90-day Vercel token and exact-bucket CORS-probe
@@ -229,7 +237,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   configuration. An explicit trusted-actor plus live write/admin permission
   gate protects the dedicated GitHub Environment secret. Each PR gets a
   marker-updated status comment, transient GitHub Deployment, and dedicated
-  alias under `*.previews.thingtime.com`; SHA revalidation, marker-scoped
+  alias under `*.previews.dev.thingtime.com`; SHA revalidation, marker-scoped
   supersession/close cleanup, six-hour reconciliation, and bounded manual
   recovery prevent stale builds from retaining aliases or shared develop
   credentials. The fork-safe runbook keeps

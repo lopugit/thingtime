@@ -130,7 +130,7 @@ const safeCorsProbeUrl = (value) => {
 	return parsed.href;
 };
 
-const previewAlias = (number, suffix = 'previews.thingtime.com') => {
+const previewAlias = (number, suffix = 'previews.dev.thingtime.com') => {
 	const prNumber = boundedInteger(number, 'PR number');
 	return `pr-${prNumber}.${safeHostname(suffix, 'Preview alias suffix')}`;
 };
@@ -343,7 +343,7 @@ const runSelfTest = () => {
 	);
 	equal(classifyPullRequest({ ...base, author_association: 'CONTRIBUTOR' }, config.repository, config.repositoryId).reason, 'untrusted-association');
 	equal(classifyPullRequest({ ...base, draft: true }, config.repository, config.repositoryId).reason, 'draft');
-	equal(previewAlias(201), 'pr-201.previews.thingtime.com');
+	equal(previewAlias(201), 'pr-201.previews.dev.thingtime.com');
 	throws(() => previewAlias('../201'));
 	throws(() => previewAlias(201, 'previews..thingtime.com'));
 	equal(

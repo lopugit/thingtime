@@ -658,7 +658,7 @@ environment's branch matcher on the literal `develop` branch. Bind
 and keep the Custom Environment's own domain list empty. The controller assigns
 only the verified PR wildcard alias explicitly. This leaves the stable
 development hostname on the real `develop` branch while PRs receive only
-`https://pr-<number>.previews.thingtime.com`.
+`https://pr-<number>.previews.dev.thingtime.com`.
 
 The private Vercel runtime scope is already narrowed. Generic Preview has no
 private runtime rows; all nine legacy `develop` branch rows are now scoped only
@@ -667,7 +667,7 @@ plus CRON, JWT, MongoDB, and application variables, are also Custom
 Environment-only. Production remains separately scoped and is not shared with
 develop or PR previews.
 
-For Thingtime, set `PREVIEW_ALIAS_SUFFIX=previews.thingtime.com` and
+For Thingtime, set `PREVIEW_ALIAS_SUFFIX=previews.dev.thingtime.com` and
 `STABLE_DEVELOP_DOMAIN=dev.thingtime.com`. Forks should replace both with
 domains they control. The masked Environment secret
 `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` is required and must be a credential-free
@@ -675,14 +675,14 @@ HTTPS object URL on the exact develop bucket, with no query string or presigned
 parameters. The controller sends only an unauthenticated CORS `OPTIONS` probe
 and fail-closes alias publication if it is not accepted.
 
-`*.previews.thingtime.com` is already registered, verified, and detached from
+`*.previews.dev.thingtime.com` is registered, verified, and detached from
 both Git branches and Custom Environments in Vercel. Its remaining Thingtime
 DNS setup keeps Cloudflare authoritative for the apex. The **DNS only**
-(grey-cloud) CNAME from `*.previews` to `cname.vercel-dns.com` routes wildcard
+(grey-cloud) CNAME from `*.previews.dev` to `cname.vercel-dns.com` routes wildcard
 traffic, while wildcard TLS issuance and renewal require two narrow NS
-delegations from `_acme-challenge.previews` to `ns1.vercel-dns.com` and
+delegations from `_acme-challenge.previews.dev` to `ns1.vercel-dns.com` and
 `ns2.vercel-dns.com`. Do not move the `thingtime.com` apex to Vercel nameservers
-or delegate a broader subtree. Dedicate `_acme-challenge.previews` to this
+or delegate a broader subtree. Dedicate `_acme-challenge.previews.dev` to this
 preview wildcard, because that delegation gives Vercel control of certificate
 validation for the subtree and can prevent another provider from issuing there.
 See Vercel's official
@@ -700,7 +700,7 @@ stays private:
 	{
 		"AllowedHeaders": ["x-amz-checksum-sha256"],
 		"AllowedMethods": ["PUT"],
-		"AllowedOrigins": ["https://dev.thingtime.com", "https://*.previews.thingtime.com"],
+		"AllowedOrigins": ["https://dev.thingtime.com", "https://*.previews.dev.thingtime.com"],
 		"ExposeHeaders": [],
 		"MaxAgeSeconds": 300
 	}
@@ -709,16 +709,13 @@ stays private:
 
 Activation status as of 2026-08-10: the no-bypass `main` ruleset, protected
 Environment, nine controller variables, dedicated 90-day Vercel token, masked
-`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, and private runtime scoping are
-complete. The wildcard CNAME also resolves through Cloudflare's authoritative
-DNS and the `1.1.1.1` and `8.8.8.8` public resolvers. Vercel still reports the
-domain as misconfigured and wildcard TLS fails until the two
-`_acme-challenge.previews` NS delegations are published. That narrow Cloudflare
-delegation, the exact develop-bucket CORS update, merge of this controller to
-`main`, and live end-to-end checklist remain pending. The installed secrets do
-not make the controller live while its workflow is absent from `main`, and
-alias publication will fail closed without a successful exact-bucket CORS
-probe. Do not describe a PR alias as ready before every remaining gate passes.
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, private runtime scoping, develop
+bucket CORS, detached Vercel wildcard, DNS-only wildcard CNAME, narrow ACME NS
+delegation, and wildcard TLS are complete for
+`*.previews.dev.thingtime.com`. Merge of this controller to `main` and the live
+end-to-end checklist remain pending. The installed secrets do not make the
+controller live while its workflow is absent from `main`. Do not describe a PR
+alias as ready before every remaining gate passes.
 
 CORS is not authorization. Keep the bucket private and scope the AWS OIDC trust
 and server-only S3 variables to the `develop` Custom Environment. Do not copy
@@ -727,6 +724,14 @@ generic Preview environment, and do not trust the broad
 `environment:preview` OIDC subject. Ordinary Vercel previews cover arbitrary
 feature/fork code and must remain free of the develop role and private runtime
 configuration.
+
+`*.previews.thingtime.com` is reserved for a separate future production-preview
+controller. Do not point the develop controller at that suffix, copy the
+production S3 role into generic Preview, or let ordinary Vercel feature/fork
+previews assume either AWS role. A production-preview controller must have its
+own trusted actors, protected control environment, exact production OIDC trust,
+deployment cleanup, CORS probe, and bucket CORS rule before that namespace is
+activated.
 
 Every eligible PR deployment intentionally shares the same development MongoDB,
 S3 bucket, quotas, and other Custom Environment state as `dev.thingtime.com`.
