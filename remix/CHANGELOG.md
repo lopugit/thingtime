@@ -28,6 +28,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `develop`/`main`, which the caller contract already constrains to a single
   pinned `@github-actions` call with no executable behavior of its own.
   — Claude (AI), 2026-08-10
+- **Required Web CI checks no longer strand non-Remix pull requests**: the
+  protected implementation now classifies the complete changed-file list and
+  assigns both stable context names to either the real build/API jobs or
+  lightweight no-op companions. Incomplete or temporarily unavailable file
+  listings safely run the full suite instead of stranding the required names.
+  — Codex (AI), 2026-08-10
 - **AI conflict resolution runs again (every worker was silently skipped)**:
   adding the promotion validator to `model_config`'s `needs` made GitHub apply
   that job's ordinary-mode skip to the whole downstream chain, so both the
