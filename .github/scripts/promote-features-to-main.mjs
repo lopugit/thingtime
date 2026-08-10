@@ -423,8 +423,8 @@ export function inspectSourcePresence(
       ok: false,
       error:
         `source-lineage safety block: the exact historical patch is not present at current ` +
-        `\`${CFG.source}\` tip; it may have been intentionally removed or reverted, so no ` +
-        "promotion branch or AI worker was created",
+        `\`${CFG.source}\` tip; it may have been intentionally removed or reverted, so the ` +
+        "promotion is quarantined for review instead of being published as verified",
       sourceLineageStatus: "review-required-removed",
     };
   }
@@ -433,8 +433,8 @@ export function inspectSourcePresence(
       ok: false,
       error:
         `source-lineage safety block: the exact historical patch cannot be proven present at ` +
-        `current \`${CFG.source}\` tip because later edits overlap its effect; no promotion ` +
-        "branch or AI worker was created",
+        `current \`${CFG.source}\` tip because later edits overlap its effect, so the ` +
+        "promotion is quarantined for review instead of being published as verified",
       sourceLineageStatus: "review-required-ambiguous",
     };
   }
@@ -2302,7 +2302,11 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     );
     assert.equal(ancestryReverted.ok, false);
     assert.equal(ancestryReverted.sourceLineageStatus, "review-required-removed");
-    assert.match(ancestryReverted.error, /no promotion branch or AI worker was created/);
+    assert.match(
+      ancestryReverted.error,
+      /quarantined for review instead of being published as verified/,
+      "the verdict must describe the quarantine, not claim nothing was created",
+    );
 
     // Reproduce the historical failure: force-rewrite develop to an equivalent
     // cherry-pick, leaving the original merge object stored but unadvertised.
