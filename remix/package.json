@@ -18,7 +18,7 @@
     "lint:files": "node scripts/ensure-dependencies.js && eslint",
     "test": "npm run test:unit && npm run test:api",
     "test:api": "tsx scripts/run-api-tests.mts",
-    "test:unit": "npm run test:acl && npm run test:autosave && npm run test:client-errors && npm run test:collections && npm run test:editorjs && npm run test:migrations && npm run test:quota && npm run test:schemas && npm run test:sensitive-reveal && npm run test:settings && npm run test:storage && npm run test:storage-recovery",
+    "test:unit": "npm run test:acl && npm run test:autosave && npm run test:client-errors && npm run test:collections && npm run test:editorjs && npm run test:migrations && npm run test:quota && npm run test:schemas && npm run test:sensitive-reveal && npm run test:settings && npm run test:storage && npm run test:storage-recovery && npm run test:web-ci-context",
     "typecheck": "tsc --noEmit",
     "typecheck:ratchet": "node scripts/typecheck-ratchet.mjs",
     "lint-fix": "node scripts/ensure-dependencies.js && eslint --ext .js,.ts,.jsx,.tsx . --fix",
@@ -41,6 +41,7 @@
     "test:settings": "node --import tsx --test app/api/utils/settings/*.test.ts",
     "test:storage": "node --import tsx --test app/api/utils/storage/*.test.ts",
     "test:storage-recovery": "node --import tsx --test app/api/utils/apps/namespaceStorageRecovery.test.ts",
+    "test:web-ci-context": "node scripts/web-ci-required-context-contract.mjs",
     "test:subscriptions": "node --import tsx --test app/api/utils/subscriptions/tierCatalog.test.ts",
     "verify:vercel-output": "node scripts/verify-vercel-output.mjs"
   },

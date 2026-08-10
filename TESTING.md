@@ -231,6 +231,21 @@ is fixed, and cite the checklist you ran in the PR description.
       circle is only the no-avatar fallback (regression: UserAvatarCircle
       ignored avatarUrl entirely).
 
+## Required Web CI contexts (`.github/workflows/web-ci.yml`)
+
+- [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
+      `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
+      runner)`, while both required-context companion jobs have distinct
+      skipped names and cannot satisfy a failed real job. Reusable callers keep
+      the same inner names under their existing `control-plane /` prefix.
+- [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
+      confirm the lightweight companions report both exact required-context
+      names successfully and the expensive build/API jobs have distinct
+      skipped names. Neither context may remain in Expected/Pending state.
+- [ ] Break the path-classification job deliberately in a disposable branch.
+      Confirm neither exact required-context name is emitted and branch
+      protection blocks the PR instead of treating a skipped job as proof.
+
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
