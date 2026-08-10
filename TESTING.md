@@ -1168,6 +1168,12 @@ re-checks the whole management plane end-to-end:
       and verify the cached dashboard updates optimistically and rolls back with
       authored copy on failure. Web CI and Electron release visibly remain
       GitHub-only rather than accepting an unsupported provider.
+- [ ] Remove each Vercel-provider prerequisite in turn (GitHub App id,
+      installation id, private key, router secret, and Vercel runtime identity).
+      The Admin badge says setup is needed, names the missing server setting,
+      disables the Vercel option, and a direct policy POST returns the authored
+      409 without changing the prior policy. Vercel is shown ready only when all
+      prerequisites are present.
 - [ ] Send a fresh, correctly HMAC-signed provider request and verify a GitHub
       policy returns `execute: true`; a Vercel policy creates exactly one
       idempotent dispatch for duplicate delivery keys. Reject stale timestamps,

@@ -95,7 +95,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             workflowRuns: [{ kind: 'ci-workflow-run', runId: 31303934385, status: 'in_progress' }],
             events: [{ kind: 'ci-event', eventType: 'workflow_run', statusTo: 'in_progress' }]
           },
-          integration: { repository: 'lopugit/thingtime', controlPlaneRef: 'github-actions', githubAppConfigured: true }
+          integration: {
+            repository: 'lopugit/thingtime',
+            controlPlaneRef: 'github-actions',
+            githubAppConfigured: true,
+            providerRouterConfigured: true,
+            vercelRunnerConfigured: true,
+            vercelRunnerReady: true,
+            vercelRunnerMissing: []
+          }
         }
       },
       { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
@@ -150,7 +158,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     responseExamples: [
       { status: 200, description: 'Policy updated.', body: { ok: true, policy: { key: 'resolve-conflicts', executionProvider: 'vercel-sandbox', enabled: true } } },
-      { status: 409, description: 'Provider unsupported for this workflow.', body: { ok: false, error: 'This automation requires a GitHub-hosted runner' } }
+      { status: 409, description: 'Provider unsupported for this workflow.', body: { ok: false, error: 'This automation requires a GitHub-hosted runner' } },
+      {
+        status: 409,
+        description: 'Vercel provider setup is incomplete.',
+        body: {
+          ok: false,
+          error: 'Vercel Sandbox is not ready. Complete the GitHub App, provider router, and Vercel runtime setup first.',
+          missing: ['THINGTIME_GITHUB_APP_PRIVATE_KEY']
+        }
+      }
     ]
   }),
   endpoint({

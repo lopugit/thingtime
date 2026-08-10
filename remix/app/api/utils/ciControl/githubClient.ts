@@ -1,6 +1,7 @@
 import { createSign } from 'node:crypto';
 
 import type { CiWorkflowKey } from './automationPolicy';
+import { ciProviderReadiness } from './providerReadiness';
 import { getCiAutomationPolicy, recordCiEvent, upsertCiEntity } from './store';
 import { ciFeatureIdentity } from './webhooks';
 
@@ -576,8 +577,4 @@ export const reconcileGitHubRepository = async (actorId: string) => {
 };
 
 export const githubAppConfigured = () =>
-  Boolean(
-    process.env.THINGTIME_GITHUB_APP_ID &&
-      process.env.THINGTIME_GITHUB_APP_INSTALLATION_ID &&
-      process.env.THINGTIME_GITHUB_APP_PRIVATE_KEY
-  );
+  ciProviderReadiness().githubAppConfigured;

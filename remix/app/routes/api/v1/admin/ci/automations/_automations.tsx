@@ -5,6 +5,7 @@ import {
   isCiExecutionProvider,
   isCiWorkflowKey
 } from '~/api/utils/ciControl/automationPolicy';
+import { validateCiExecutionProvider } from '~/api/utils/ciControl/providerReadiness';
 import { setCiAutomationPolicy } from '~/api/utils/ciControl/store';
 
 export const action = ({ request }: { request: Request }) =>
@@ -17,6 +18,13 @@ export const action = ({ request }: { request: Request }) =>
     }
     if (!isCiExecutionProvider(body?.executionProvider)) {
       return json({ ok: false, error: 'Choose GitHub Actions or Vercel Sandbox' }, { status: 400 });
+    }
+    const providerReadiness = validateCiExecutionProvider(body.executionProvider);
+    if (!providerReadiness.ok) {
+      return json(
+        { ok: false, error: providerReadiness.error, missing: providerReadiness.missing },
+        { status: 409 }
+      );
     }
     try {
       const policy = await setCiAutomationPolicy({

@@ -392,14 +392,16 @@ const DispatchModal = ({
 
 type AutomationProvidersProps = {
   policies: CiAutomationPolicy[];
-  vercelRunnerConfigured: boolean;
+  vercelRunnerReady: boolean;
+  vercelRunnerMissing: string[];
   savingWorkflow: CiWorkflowKey | null;
   onChange: (workflow: CiWorkflowKey, executionProvider: CiExecutionProvider, enabled: boolean) => Promise<void>;
 };
 
 const AutomationProviders = ({
   policies,
-  vercelRunnerConfigured,
+  vercelRunnerReady,
+  vercelRunnerMissing,
   savingWorkflow,
   onChange
 }: AutomationProvidersProps) => (
@@ -417,10 +419,16 @@ const AutomationProviders = ({
           The workflow stays pinned to github-actions; this chooses whether its jobs run on GitHub-hosted compute or an isolated Vercel Sandbox runner.
         </Text>
       </Box>
-      <Badge colorScheme={vercelRunnerConfigured ? 'green' : 'orange'} flex="0 0 auto">
-        {vercelRunnerConfigured ? 'Vercel runner ready' : 'Vercel runner needs setup'}
+      <Badge colorScheme={vercelRunnerReady ? 'green' : 'orange'} flex="0 0 auto">
+        {vercelRunnerReady ? 'Vercel runner ready' : 'Vercel runner needs setup'}
       </Badge>
     </Flex>
+    {!vercelRunnerReady && (
+      <Text px={4} pb={3} mt={-1} fontSize="xs" color="orange.700" overflowWrap="anywhere">
+        Setup needed: {vercelRunnerMissing.join(', ') || 'server-side Vercel provider configuration'}.
+        {' '}GitHub-hosted Actions remains active until every dependency is ready.
+      </Text>
+    )}
     <Stack spacing={0} borderTop="1px solid var(--tt-border, #e7e7eb)">
       {policies.map((policy) => {
         const saving = savingWorkflow === policy.key;
@@ -449,8 +457,8 @@ const AutomationProviders = ({
               aria-label={`${policy.title} execution provider`}
             >
               <option value="github-actions">GitHub Actions hosted</option>
-              <option value="vercel-sandbox" disabled={!policy.vercelSupported || !vercelRunnerConfigured}>
-                Vercel Workflow + Sandbox{!policy.vercelSupported ? ' (unsupported)' : !vercelRunnerConfigured ? ' (setup needed)' : ''}
+              <option value="vercel-sandbox" disabled={!policy.vercelSupported || !vercelRunnerReady}>
+                Vercel Workflow + Sandbox{!policy.vercelSupported ? ' (unsupported)' : !vercelRunnerReady ? ' (setup needed)' : ''}
               </option>
             </Select>
             <Flex align="center" justify={{ base: 'space-between', md: 'flex-end' }} gap={2} minW="116px">
@@ -762,6 +770,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
             <Badge colorScheme={integration?.githubWebhookConfigured ? 'green' : 'gray'}>GitHub webhook</Badge>
             <Badge colorScheme={integration?.vercelWebhookConfigured ? 'green' : 'gray'}>Vercel webhook</Badge>
             <Badge colorScheme={integration?.providerRouterConfigured ? 'green' : 'gray'}>Provider router</Badge>
+            <Badge colorScheme={integration?.vercelRunnerReady ? 'green' : 'gray'}>Vercel runner</Badge>
           </Flex>
           <Text textAlign={{ base: 'left', md: 'right' }} mt={1} fontSize="xs" opacity={0.5}>
             Last event {relativeTime(dashboard?.freshness.latestEventAt)}
@@ -771,9 +780,8 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 
       <AutomationProviders
         policies={policies}
-        vercelRunnerConfigured={Boolean(
-          integration?.vercelRunnerConfigured && integration?.providerRouterConfigured
-        )}
+        vercelRunnerReady={Boolean(integration?.vercelRunnerReady)}
+        vercelRunnerMissing={integration?.vercelRunnerMissing ?? []}
         savingWorkflow={savingWorkflow}
         onChange={updateAutomation}
       />

@@ -6,9 +6,9 @@ import {
 } from './automationPolicy';
 import {
   dispatchCiWorkflow,
-  githubAppConfigured,
   repositoryName
 } from './githubClient';
+import { ciProviderReadiness } from './providerReadiness';
 import {
   claimCiDispatchRoute,
   getCiAutomationPolicy,
@@ -63,14 +63,6 @@ export const parseCiProviderRouteRequest = (value: unknown, now = Date.now()): C
   return { workflow: body.workflow, deliveryKey, actorId, requestedAt, inputs };
 };
 
-const vercelEnvironmentConfigured = () =>
-  githubAppConfigured() &&
-  Boolean(
-    process.env.VERCEL_OIDC_TOKEN ||
-      process.env.VERCEL === '1' ||
-      (process.env.VERCEL_TOKEN && process.env.VERCEL_PROJECT_ID && process.env.VERCEL_TEAM_ID)
-  );
-
 export const routeCiProviderRequest = async (request: CiProviderRouteRequest) => {
   const repository = repositoryName();
   const policy = await getCiAutomationPolicy(repository, request.workflow);
@@ -80,7 +72,7 @@ export const routeCiProviderRequest = async (request: CiProviderRouteRequest) =>
   if (policy.executionProvider === 'github-actions') {
     return { execute: true as const, executionProvider: 'github-actions' as const };
   }
-  if (!policy.vercelSupported || !vercelEnvironmentConfigured()) {
+  if (!policy.vercelSupported || !ciProviderReadiness().vercelRunnerReady) {
     await recordCiEvent({
       provider: 'thingtime',
       repository,

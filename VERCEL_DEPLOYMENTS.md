@@ -200,6 +200,10 @@ Lifecycle and recovery:
   workflow YAML remains pinned to the protected `github-actions` branch.
 - Private environment values are documented in `README.md` and must be entered
   in Vercel/GitHub settings only. Never record their live values here.
+- Admin readiness is a single server-derived capability: GitHub App id,
+  installation id and private key, the provider-router secret, and Vercel
+  runtime identity must all be present. Partial setup remains visibly disabled
+  and cannot be saved through the policy API.
 - The dashboard is expected to remain empty until the GitHub App is installed,
   both webhooks are active, and an administrator runs Reconcile once.
 

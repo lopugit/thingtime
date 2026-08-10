@@ -4,6 +4,7 @@ import { start } from 'workflow/api';
 
 import type { CiWorkflowKey } from './automationPolicy';
 import { githubRequest } from './githubClient';
+import { ciProviderReadiness } from './providerReadiness';
 import { recordCiEvent, upsertCiEntity } from './store';
 
 const CONTROL_PLANE_REF = 'github-actions';
@@ -38,6 +39,12 @@ type RunnerJobSnapshot = {
   runIds: number[];
 };
 
+export type VercelRunnerJob = {
+  runId: number;
+  status: string;
+  conclusion: string | null;
+};
+
 const safeSegment = (value: string, max = 48) =>
   value.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max);
 
@@ -48,13 +55,30 @@ const repositoryPath = (repository: string) => {
   return repository;
 };
 
+export const vercelRunnerIdentity = (dispatchThingId: string) => {
+  const suffix = safeSegment(dispatchThingId.replace(/^ci-/, ''), 28);
+  if (!suffix) throw new Error('The CI dispatch id cannot identify a Vercel runner');
+  return {
+    name: `thingtime-vercel-${suffix}`,
+    label: `thingtime-vercel-${suffix}`
+  };
+};
+
+export const summarizeVercelRunnerJobs = (jobs: VercelRunnerJob[]): RunnerJobSnapshot => {
+  const failedConclusions = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure']);
+  return {
+    seen: jobs.length,
+    active: jobs.filter((job) => job.status !== 'completed').length,
+    failed: jobs.filter((job) => job.conclusion && failedConclusions.has(job.conclusion)).length,
+    runIds: [...new Set(jobs.map((job) => job.runId))]
+  };
+};
+
 const createRunner = async (input: VercelCiRunnerInput): Promise<RunnerHandle> => {
   'use step';
 
   const repository = repositoryPath(input.repository);
-  const suffix = safeSegment(input.dispatchThingId.replace(/^ci-/, ''), 28);
-  const name = `thingtime-vercel-${suffix}`;
-  const label = `thingtime-vercel-${suffix}`;
+  const { name, label } = vercelRunnerIdentity(input.dispatchThingId);
   const [registration, downloads] = await Promise.all([
     githubRequest<{ token?: string }>(`/repos/${repository}/actions/runners/registration-token`, { method: 'POST' }),
     githubRequest<Array<{ os?: string; architecture?: string; download_url?: string; filename?: string }>>(
@@ -177,7 +201,7 @@ const runnerJobs = async (input: VercelCiRunnerInput, runner: RunnerHandle): Pro
   const runs = await githubRequest<{ workflow_runs?: Array<{ id?: number }> }>(
     `/repos/${repositoryPath(input.repository)}/actions/runs?event=workflow_dispatch&created=${created}&per_page=100`
   );
-  const matched: Array<{ runId: number; status: string; conclusion: string | null }> = [];
+  const matched: VercelRunnerJob[] = [];
   for (const run of runs.workflow_runs ?? []) {
     if (!Number.isInteger(run.id)) continue;
     const jobs = await githubRequest<{
@@ -192,13 +216,7 @@ const runnerJobs = async (input: VercelCiRunnerInput, runner: RunnerHandle): Pro
       });
     }
   }
-  const failedConclusions = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure']);
-  return {
-    seen: matched.length,
-    active: matched.filter((job) => job.status !== 'completed').length,
-    failed: matched.filter((job) => job.conclusion && failedConclusions.has(job.conclusion)).length,
-    runIds: [...new Set(matched.map((job) => job.runId))]
-  };
+  return summarizeVercelRunnerJobs(matched);
 };
 
 const finishDispatch = async (
@@ -370,8 +388,4 @@ export const startCiOnVercel = async (input: VercelCiRunnerInput) => {
 };
 
 export const vercelRunnerConfigured = () =>
-  Boolean(
-    process.env.VERCEL_OIDC_TOKEN ||
-      process.env.VERCEL === '1' ||
-      (process.env.VERCEL_TOKEN && process.env.VERCEL_PROJECT_ID && process.env.VERCEL_TEAM_ID)
-  );
+  ciProviderReadiness().vercelRuntimeConfigured;

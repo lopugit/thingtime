@@ -47,6 +47,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Vercel CI readiness now fails closed across UI, API, and routing**: Admin →
+  CI Control no longer reports a runner ready merely because the page is hosted
+  by Vercel. One server-derived capability now requires the GitHub App id,
+  installation id and private key, provider-router secret, and Vercel runtime
+  identity; the badge names incomplete setup, the dropdown stays disabled, and
+  direct policy writes receive an authored 409 while existing automation keeps
+  its safe GitHub fallback. Focused tests also cover runner identity, job
+  completion/failure summaries, and configuration drift. — Codex (AI),
+  2026-08-10
 - **Worktree lint and formatting dependencies now self-heal completely**:
   validation startup probes detect incomplete transitive pnpm links even when
   every direct package looks installed, retry once with a forced relink, and

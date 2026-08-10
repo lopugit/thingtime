@@ -111,7 +111,11 @@ functions; local/non-Vercel execution may instead provide `VERCEL_TOKEN`,
 `VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`. Set
 `WORKFLOW_SEQUENTIAL_REPLAYS=1` in Vercel for deterministic durable-workflow
 replay. The Admin API reports only whether an integration is configured; it
-never returns credentials.
+never returns credentials. Admin reports **Vercel runner ready** only when the
+GitHub App credentials, provider-router secret, and Vercel runtime identity are
+all available; its API refuses to select Vercel before that complete capability
+is ready. An already-saved Vercel policy still fails over safely to GitHub if a
+dependency later disappears.
 
 After deployment and App installation, create both provider webhooks and click
 **Admin → CI Control → Reconcile** once. Reconcile imports existing branches,

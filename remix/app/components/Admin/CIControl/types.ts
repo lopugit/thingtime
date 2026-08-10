@@ -69,6 +69,8 @@ export type CiIntegration = {
   vercelWebhookConfigured: boolean;
   vercelRunnerConfigured: boolean;
   providerRouterConfigured: boolean;
+  vercelRunnerReady: boolean;
+  vercelRunnerMissing: string[];
 };
 
 export type CiControlResponse = {
