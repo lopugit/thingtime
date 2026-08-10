@@ -21,6 +21,11 @@ is fixed, and cite the checklist you ran in the PR description.
       script are present on the default `main` branch before expecting
       `pull_request_target` to run; a workflow present only on the feature PR is
       deliberately inactive.
+- [ ] On a product branch, run
+      `node remix/scripts/workflow-caller-contract.mjs` and
+      `node --test remix/scripts/vercel-config.test.mjs`: the thin listener
+      checks out the trusted controller from `main`, `.github/scripts/` is
+      empty, and every Vercel cron `(path, schedule)` pair appears exactly once.
 - [ ] Inspect an eligible PR's two runs: the `pull_request_target` dispatcher
       has no GitHub Environment/Vercel secret, checks out no code, and emits one
       bounded `repository_dispatch`; only the downstream default-branch run

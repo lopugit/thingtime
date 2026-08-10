@@ -178,6 +178,21 @@ Vercel build/output verifier, and merge-owned ESLint with 0 errors or warnings.
 The TypeScript ratchet improved to 140 errors against the inherited 143-error
 ceiling.
 
+## Parent refresh deployment repair (2026-08-10)
+
+A later `develop` refresh reintroduced two control-plane seams into this product
+branch: it duplicated the hourly attachment cleanup entry in `remix/vercel.json`
+and copied the privileged develop-preview controller into `.github/scripts/`.
+The duplicate cron made otherwise successful Vercel builds fail during deployment
+registration, while the copied controller correctly failed the product-branch
+workflow contract.
+
+The repair keeps exactly one hourly attachment cleanup schedule beside the weekly
+notification digest, adds an executable uniqueness regression for the complete
+cron list, and restores `.github/scripts/` to empty. The feature branch retains
+the secret-free develop-preview listener, whose privileged job checks out and
+runs the protected controller from the default `main` control plane.
+
 ## Remaining live verification
 
 The Vercel Custom Environment, exact develop branch matcher/domain, Sensitive

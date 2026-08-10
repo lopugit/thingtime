@@ -13,10 +13,6 @@
     {
       "path": "/api/v1/notifications/email/weekly-summary",
       "schedule": "37 21 * * 0"
-    },
-    {
-      "path": "/api/v1/attachments/cleanup",
-      "schedule": "17 * * * *"
     }
   ]
 }
