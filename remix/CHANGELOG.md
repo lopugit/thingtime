@@ -23,8 +23,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   pull-request listener now always starts, classifies the complete changed-file
   list, and assigns both stable ruleset context names to either the real
   build/API jobs or lightweight no-op companions. The historical build label
-  remains stable even though typecheck growth is warning-only, and classifier
-  failures leave the required names absent so protection fails closed. See the
+  remains stable even though typecheck growth is warning-only. Incomplete or
+  unavailable changed-file listings safely run the full suite instead of
+  stranding the required names. See the
   [PR #222 engineering note](../PRs/222-codex-typecheck-ratchet-warning-main-ci-make-typecheck-ratchet-warning-only.md).
   — Codex (AI), 2026-08-10
 - **Worktree lint and formatting dependencies now self-heal completely**:

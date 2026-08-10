@@ -26,8 +26,9 @@ files with the read-only pull-request API:
   API jobs under the exact required names.
 - Other changes run lightweight companion jobs under those same exact names;
   the expensive jobs use distinct skipped names.
-- An incomplete changed-file response runs the full suite. A classifier
-  failure emits neither required name, so protection fails closed.
+- An incomplete changed-file response or a changed-file API failure runs the
+  full suite, so a transient GitHub diff-generation error cannot strand the
+  required names.
 
 ## Validation
 
