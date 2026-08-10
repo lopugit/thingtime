@@ -29,7 +29,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   exact-version deletion keep storage private and tier accounting fail-closed.
   Custom reaction emoji now bind quota-accounted GIF/PNG/JPEG/WebP uploads
   instead of accepting new inline base64 payloads; legacy emoji remain
-  read-compatible. — Codex (AI), 2026-08-10
+  read-compatible. See the
+  [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
+  — Codex (AI), 2026-08-10
 - **Gallery-style post and profile media**: post photo links now use responsive
   preview tiles with stable multi-line URL add, deduplication, credential-free
   http(s) validation, and no-referrer previews, while private image/video/file

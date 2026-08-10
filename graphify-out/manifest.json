@@ -1527,7 +1527,7 @@
   "FUNDAMENTALS.md": {
     "mtime": 1786368673.5789838,
     "ast_hash": "fc2fde80253dd6f194e77277f2cf905a",
-    "semantic_hash": ""
+    "semantic_hash": "fc2fde80253dd6f194e77277f2cf905a"
   },
   "README.md": {
     "mtime": 1786368673.5790906,
@@ -4162,7 +4162,7 @@
   "TESTING.md": {
     "mtime": 1786368673.5791678,
     "ast_hash": "757855e6e7a25f9717fd619e67bff723",
-    "semantic_hash": ""
+    "semantic_hash": "757855e6e7a25f9717fd619e67bff723"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786245149.978798,
