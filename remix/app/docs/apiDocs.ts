@@ -95,7 +95,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             workflowRuns: [{ kind: 'ci-workflow-run', runId: 31303934385, status: 'in_progress' }],
             events: [{ kind: 'ci-event', eventType: 'workflow_run', statusTo: 'in_progress' }]
           },
-          integration: { repository: 'lopugit/thingtime', controlPlaneRef: 'github-actions', githubAppConfigured: true }
+          integration: {
+            repository: 'lopugit/thingtime',
+            controlPlaneRef: 'github-actions',
+            githubAppConfigured: true,
+            providerRouterConfigured: true,
+            vercelRunnerConfigured: true,
+            vercelRunnerReady: true,
+            vercelRunnerMissing: []
+          }
         }
       },
       { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
@@ -127,6 +135,64 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, dispatchId: 'ci-example', workflowFile: 'resolve-pr-conflicts.yml', ref: 'develop', controlPlaneRef: 'github-actions' }
       },
       { status: 502, description: 'GitHub could not accept the request.', body: { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-automations',
+    group: 'admin',
+    title: 'Set a CI automation execution provider',
+    endpoint: '/api/v1/admin/ci/automations',
+    summary: 'Enable or disable one allowlisted automation and choose GitHub-hosted Actions or Vercel Sandbox compute.',
+    detail:
+      'Stores one protected ci-automation Thing per allowlisted workflow. Vercel execution keeps the reviewed workflow definition on the protected github-actions branch and runs its Linux jobs on a short-lived Vercel Sandbox registered as a uniquely labelled GitHub self-hosted runner. Unsupported workloads remain locked to GitHub.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: ['Choose an allowlisted workflow.', 'Choose github-actions or vercel-sandbox.', 'POST the policy and inspect the resulting audit event in CI Control.'],
+    requestExamples: [
+      {
+        name: 'Run the conflict resolver on Vercel',
+        description: 'Future automatic and manual resolver runs route through Vercel Workflow and Sandbox.',
+        method: 'POST',
+        body: { workflow: 'resolve-conflicts', executionProvider: 'vercel-sandbox', enabled: true }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Policy updated.', body: { ok: true, policy: { key: 'resolve-conflicts', executionProvider: 'vercel-sandbox', enabled: true } } },
+      { status: 409, description: 'Provider unsupported for this workflow.', body: { ok: false, error: 'This automation requires a GitHub-hosted runner' } },
+      {
+        status: 409,
+        description: 'Vercel provider setup is incomplete.',
+        body: {
+          ok: false,
+          error: 'Vercel Sandbox is not ready. Complete the GitHub App, provider router, and Vercel runtime setup first.',
+          missing: ['THINGTIME_GITHUB_APP_PRIVATE_KEY']
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'integration-ci-provider-route',
+    group: 'integrations',
+    title: 'Route trusted CI work to its selected compute provider',
+    endpoint: '/api/v1/integrations/ci/route',
+    summary: 'Accept a short-lived HMAC-signed request from the protected control plane and route or continue the workflow.',
+    detail:
+      'This internal endpoint never accepts arbitrary workflow paths or runners. It validates the signed raw body, freshness window, repository configuration, workflow allowlist, and stored automation policy. Vercel failures fall back to the already-waiting GitHub run and are recorded in ci-event history.',
+    auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
+    methods: ['POST'],
+    steps: ['Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET using HMAC-SHA256.', 'POST within ten minutes of requestedAt.', 'Honor execute and executionProvider in the response.'],
+    requestExamples: [
+      {
+        name: 'Route an automatic resolver trigger',
+        description: 'The protected router job asks Thingtime whether this run should continue on GitHub or move to Vercel.',
+        method: 'POST',
+        headers: { 'X-Thingtime-CI-Signature': 'sha256=<hmac>' },
+        body: { workflow: 'resolve-conflicts', deliveryKey: '123:1:push', actorId: 'github-actions[bot]', requestedAt: '2026-08-10T01:00:00.000Z', inputs: { branch: 'develop' } }
+      }
+    ],
+    responseExamples: [
+      { status: 202, description: 'Routing decision accepted.', body: { ok: true, execute: false, executionProvider: 'vercel-sandbox', dispatchId: 'ci-example' } },
+      { status: 403, description: 'Invalid signature.', body: { ok: false, error: 'Invalid route signature' } }
     ]
   }),
   endpoint({
