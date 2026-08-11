@@ -14,3 +14,4 @@ api/index.js.map
 # pnpm-lock.yaml
 
 tmp/*
+/.swc
