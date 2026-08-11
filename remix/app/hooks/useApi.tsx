@@ -150,6 +150,11 @@ export function useApi() {
           asyncFetcher.submit(args, { action: '/api/v1/admin/ci/dispatch', errorContext: `dispatch ${args.workflow}` }),
         [asyncFetcher]
       ),
+      setCiAutomationPolicy: useCallback(
+        async (args: { workflow: string; executionProvider: string; enabled?: boolean }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/automations', errorContext: `update ${args.workflow} execution provider` }),
+        [asyncFetcher]
+      ),
       setPrConflictResolverModelWaterfall: useCallback(
 				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
         [asyncFetcher]
