@@ -84,16 +84,20 @@ they are trusted integration surfaces, not isolated sandboxes.
 Do not describe credentialed PR previews as live until all of these pass:
 
 1. Merge this PR to `main`; completed at merge commit `36aecdc3`.
-2. Merge the follow-up that replaces Vercel's external-DNS advisory gate with
-   live CNAME and post-publication HTTPS verification.
-3. Run the Develop-target checklist in `TESTING.md`, including upload/removal,
+2. Merge the follow-up
+   [controller PR #239](https://github.com/lopugit/thingtime/pull/239) to
+   `github-actions`.
+3. Merge its paired thin-listener/runbook follow-up to `develop`, then carry it
+   through the normal reviewed `develop` → `main` promotion.
+4. Run the Develop-target checklist in `TESTING.md`, including upload/removal,
    negative-origin, supersession, close, and reconciliation cases.
 
 The `main` ruleset, Environment variables, dedicated Vercel token, probe secret,
 Vercel runtime scoping, develop-only alias suffix, wildcard DNS/ACME/TLS, and
-develop bucket CORS are complete, and the controller is on `main`. Its first
-live dispatch authenticated and reached the overly strict DNS advisory gate.
-Until the follow-up and remaining live checklist succeed, no controller PR
+develop bucket CORS are complete, and the original controller is on `main`.
+Its first live dispatch authenticated and reached the overly strict DNS
+advisory gate. Until both follow-up PRs and the remaining live checklist
+succeed, no controller PR
 alias should be described as ready. Production previews remain inactive and
 must use a separate trusted controller; generic Preview receives the
 development AWS role but never the production role.

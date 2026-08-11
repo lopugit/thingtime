@@ -19,6 +19,10 @@ Live evidence showed the intended controls were healthy:
 
 ## Fix
 
+- Keep the product branch as a thin trigger/input/permission listener pinned to
+  the protected `github-actions` control plane. The paired
+  [control-plane PR #239](https://github.com/lopugit/thingtime/pull/239) owns the
+  reusable workflow and executable controller script.
 - Keep all existing project, Custom Environment, wildcard ownership,
   branch-detachment, repository, actor, PR, and exact-SHA fences.
 - Replace the advisory boolean gate with a live DNS lookup of a probe hostname
@@ -44,7 +48,11 @@ Live evidence showed the intended controls were healthy:
 
 ## Activation boundary
 
-This PR targets `develop` under Thingtime's repository policy. The controller
-loads only from the default `main` branch, so the live PR #229 canary must be
-rerun after this change is promoted to `main`. Production preview credentials
-and `*.previews.thingtime.com` remain outside this controller.
+This PR targets `develop` under Thingtime's product-branch policy and contains
+the thin listener plus product runbooks. Paired PR #239 targets
+`github-actions` and contains the reusable workflow plus executable script.
+Merge PR #239 first, then this PR; the fixed controller becomes active after
+the listener reaches default `main` through the normal reviewed `develop`
+promotion. Run the live checklist against any then-open eligible PR targeting
+`develop`. Production preview credentials and
+`*.previews.thingtime.com` remain outside this controller.
