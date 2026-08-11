@@ -44,12 +44,25 @@ The Admin → CI Control dashboard adds the external observation/operation layer
 signed GitHub and Vercel webhooks project repositories, features/stacks,
 branches, pull requests, Actions runs, deployments, previews, audited dispatches,
 and append-only status history into protected Things. The GitHub App is also
-used for explicit reconciliation and allowlisted workflow dispatch. Native
-listeners remain the automatic trigger path, so a webhook outage cannot silently
-turn off conflict resolution or CI; the dashboard makes drift and stale delivery
-state visible. Administrator dispatches enter only through the reviewed
-`develop` or `main` listener selected for that workflow; neither the UI nor API
-can load workflow YAML from an arbitrary feature branch.
+used for explicit reconciliation, allowlisted workflow dispatch, and ephemeral
+self-hosted runner registration. Native listeners remain the automatic trigger
+path, so a webhook outage cannot silently turn off conflict resolution or CI;
+the dashboard makes drift and stale delivery state visible. Administrator
+dispatches always enter the reviewed `github-actions` implementation; neither
+the UI nor API can load workflow YAML from an arbitrary feature branch.
+
+For supported automations, an administrator can choose **GitHub Actions** or
+**Vercel Sandbox** independently. The native listener first runs a tiny provider
+router on GitHub. A GitHub selection continues normally. A Vercel selection
+starts a durable Vercel Workflow, creates an ephemeral Vercel Sandbox, registers
+that Sandbox as a uniquely labelled GitHub self-hosted runner, and dispatches the
+same protected reusable workflow back onto that runner. GitHub therefore remains
+the workflow/event control plane while the expensive compute runs on Vercel. If
+the signed router, App, Workflow, or Sandbox is unavailable, the trigger records
+the fallback and continues on GitHub-hosted compute instead of dropping the
+automation. Web CI remains GitHub-only while its API test job requires a Docker
+MongoDB service; Electron release remains GitHub-only because it needs native
+platform runners.
 
 Configure the server-side integration with private environment variables only
 (never `PUBLIC_*`):
@@ -61,13 +74,16 @@ THINGTIME_GITHUB_APP_INSTALLATION_ID="12345678"
 THINGTIME_GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 THINGTIME_GITHUB_WEBHOOK_SECRET="replace-with-a-long-random-secret"
 THINGTIME_VERCEL_WEBHOOK_SECRET="secret-returned-when-the-webhook-is-created"
+THINGTIME_CI_ROUTER_SECRET="another-independent-long-random-secret"
 ```
 
 Create a repository-installed GitHub App with repository metadata read,
-Actions read/write (for workflow dispatch), Contents read (branches), Pull
-requests read, and Deployments read. Subscribe its webhook to `push`, branch
-create/delete, pull request, workflow run, workflow job, deployment, and
-deployment status events, using:
+Actions read/write (workflow dispatch and run/job observation), Administration
+read/write (short-lived self-hosted runner registration and deletion), Contents
+read (branches), Pull requests read, and Deployments read. Install it only on
+the intended repository. Subscribe its webhook to `push`, branch create/delete,
+pull request, workflow run, workflow job, deployment, and deployment status
+events, using:
 
 ```text
 https://<your-thingtime-origin>/api/v1/integrations/github/webhook
@@ -80,8 +96,32 @@ canceled/deleted events at:
 https://<your-thingtime-origin>/api/v1/integrations/vercel/webhook
 ```
 
-Store each secret directly in the deployment environment. The Admin API reports
-only whether an integration is configured; it never returns credentials.
+The signed compute-provider route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/route
+```
+
+Store each secret directly in the deployment environment. Also add the same
+`THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
+repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The
+router secret is deliberately independent of both webhook secrets. Vercel's
+system-provided OIDC identity authenticates Sandbox creation in deployed
+functions; local/non-Vercel execution may instead provide `VERCEL_TOKEN`,
+`VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`. Set
+`WORKFLOW_SEQUENTIAL_REPLAYS=1` in Vercel for deterministic durable-workflow
+replay. The Admin API reports only whether an integration is configured; it
+never returns credentials. Admin reports **Vercel runner ready** only when the
+GitHub App credentials, provider-router secret, and Vercel runtime identity are
+all available; its API refuses to select Vercel before that complete capability
+is ready. An already-saved Vercel policy still fails over safely to GitHub if a
+dependency later disappears.
+
+After deployment and App installation, create both provider webhooks and click
+**Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
+open PRs, Actions runs, deployments, and previews; subsequent webhooks keep the
+projection current. Until that first successful reconcile, an empty dashboard
+with zero counts is expected.
 
 # 💹 Donate on Indiegogo to save humanity 🩷
 
