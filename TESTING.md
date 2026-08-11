@@ -1204,6 +1204,38 @@ re-checks the whole management plane end-to-end:
       requested → accepted (or failed) with a relational event. Arbitrary
       workflow names, non-allowlisted inputs, and feature-branch entry refs
       cannot reach GitHub. Rebase/release require the UI confirmation gate.
+- [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
+      and verify the cached dashboard updates optimistically and rolls back with
+      authored copy on failure. Web CI and Electron release visibly remain
+      GitHub-only rather than accepting an unsupported provider.
+- [ ] Remove each Vercel-provider prerequisite in turn (GitHub App id,
+      installation id, private key, router secret, and Vercel runtime identity).
+      The Admin badge says setup is needed, names the missing server setting,
+      disables the Vercel option, and a direct policy POST returns the authored
+      409 without changing the prior policy. Vercel is shown ready only when all
+      prerequisites are present.
+- [ ] Send a fresh, correctly HMAC-signed provider request and verify a GitHub
+      policy returns `execute: true`; a Vercel policy creates exactly one
+      idempotent dispatch for duplicate delivery keys. Reject stale timestamps,
+      changed bodies, unknown workflows/inputs, and bad signatures without
+      starting a Workflow or writing a claim.
+- [ ] With Vercel selected, confirm the native GitHub trigger performs only its
+      provider-router job, a durable Vercel Workflow creates one uniquely
+      labelled ephemeral Sandbox runner, and the exact protected workflow
+      re-enters on that runner. Confirm completion/failure is projected and the
+      Sandbox plus GitHub runner registration are deleted afterward.
+- [ ] On Vercel's universal image, bootstrap must run GitHub's version-matched
+      `bin/installdependencies.sh` non-interactively and provide `/dev/fd` from
+      `/proc/self/fd` before registration. Make each command fail in turn and
+      verify the provisional exact runner/Sandbox is still cleaned even though
+      `createRunner()` never returns its handle to the outer Workflow.
+- [ ] Remove or invalidate each router dependency in turn (router secret, App,
+      Workflow/Sandbox auth) and verify automatic triggers fail over to
+      GitHub-hosted compute with a visible event instead of silently stopping.
+- [ ] Before the first Reconcile, the configured-but-empty dashboard explains
+      that no provider events have been imported. Run Reconcile once and verify
+      existing branches, open PRs, runs, deployments, and previews populate;
+      subsequent GitHub/Vercel deliveries advance the same records and history.
 - [ ] Desktop: search/filter feature rows, select a PR, open its GitHub and
       preview links, inspect topology, Actions runs, and the full status
       timeline. Scroll the page top-to-bottom and the sticky detail panel to its
@@ -1215,6 +1247,22 @@ re-checks the whole management plane end-to-end:
 - [ ] `node scripts/workflow-caller-contract.mjs` passes: every product-branch
       workflow has exactly one reusable call pinned to `@github-actions`, no
       runner/steps/shell behavior, and no product-branch Actions scripts.
+
+PR #220 live acceptance recorded on 2026-08-10:
+
+- [x] A human exact-PR trigger handed off to Vercel, registered one unique
+      runner, re-entered as `thingtime-ci-control[bot]`, ran the protected
+      detector successfully, and deleted the exact runner and Sandbox.
+- [x] A setup failure after the original trigger exited dispatched the same
+      protected workflow back to GitHub-hosted compute through the App.
+- [x] First authenticated Reconcile populated the CI dashboard; GitHub App,
+      webhook, provider-router, and Vercel readiness were visible together.
+- [x] Desktop and 375 px mobile acceptance covered provider persistence,
+      dispatch confirmation/cancel, PR #220 detail panel/drawer, full-page
+      scrolling, and zero horizontal overflow.
+- [x] `node scripts/workflow-caller-contract.mjs`, focused CI-control tests,
+      targeted lint, build/output verification, and Graphify integrity checks
+      passed for the published branch.
 
 ## App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`)
 
