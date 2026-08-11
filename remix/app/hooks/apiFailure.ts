@@ -19,7 +19,13 @@ export type AttachmentRetryCode =
 	| 'upload_parts_retryable'
 	| 'upload_not_ready'
 	| 'upload_unavailable'
-	| 'finalization_settling';
+	| 'finalization_settling'
+	| 'quota_exceeded'
+	| 'accounting_unavailable'
+	| 'storage_conflict'
+	| 'storage_invariant'
+	| 'storage_unconfigured'
+	| 'storage_unavailable';
 
 type ApiFailureInput = ApiFailureOptions & {
   payload?: unknown;
@@ -72,7 +78,13 @@ const ATTACHMENT_RETRY_CODES = new Set<AttachmentRetryCode>([
 	'upload_parts_retryable',
 	'upload_not_ready',
 	'upload_unavailable',
-	'finalization_settling'
+	'finalization_settling',
+	'quota_exceeded',
+	'accounting_unavailable',
+	'storage_conflict',
+	'storage_invariant',
+	'storage_unconfigured',
+	'storage_unavailable'
 ]);
 
 const attachmentRetryMetadata = (record: Record<string, unknown> | null) => {

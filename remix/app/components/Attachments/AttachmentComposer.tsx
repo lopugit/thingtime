@@ -270,7 +270,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		onSelectionError,
 		disabled === true,
 		onCleanupDeferred,
-		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes }
+		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes, remainingBytes, storageStatus }
 	);
 	const pickerDisabled = disabled || uploads.length >= boundedMaxFiles;
 	const visualUploads: ComposerAttachmentUpload[] = [];

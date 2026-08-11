@@ -17,6 +17,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Accurate attachment quota recovery**: upload preparation now preserves
+  bounded storage failure codes through the API and distinguishes a full
+  account tier from missing environment configuration, temporary private
+  storage outages, and storage-accounting reconciliation. Every shared media
+  picker uses the current account allowance as a safe fallback and tells users
+  to delete stored media or upgrade their tier instead of incorrectly claiming
+  that uploads are unavailable in the environment. Unexpected server, ledger,
+  proxy, and provider detail remains hidden. See the
+  [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
+  — Codex (AI), 2026-08-11
+
 ### Added
 
 - **Conversation media, file attachments, and S3 custom reactions**: rich

@@ -60,6 +60,12 @@ high-growth class of user media.
 - Unknown outcomes retain and retry the same immutable submission. Known
   failures show fixed Thingtime-authored recovery text and never echo provider,
   proxy, or database detail.
+- Upload preparation preserves bounded storage failure codes end-to-end. A
+  full account tier offers delete-media or upgrade-tier recovery, accounting
+  reconciliation asks the user to wait, missing S3 configuration alone uses
+  the environment guidance, and temporary storage failures remain retryable.
+  The trusted account-allowance snapshot provides a quota fallback if an
+  intermediary strips structured metadata.
 - Root storage usage refreshes after attachment creation, cancellation,
   deletion, and billable conversation cascades.
 
@@ -75,11 +81,14 @@ high-growth class of user media.
   equality;
 - nested attachment cascade reduction and exact-version deletion/refund;
 - attachment-only rich comment validation and protected schema fields;
+- safe quota/configuration/accounting failure-code propagation and fixed
+  client-authored upload recovery messages;
 - unchanged post/profile attachment lifecycle, quota, and multipart security.
 
 ## Validation
 
-- `corepack pnpm --dir remix run test:attachments` — 102/102
+- `corepack pnpm --dir remix run test:attachments` — 103/103
+- `corepack pnpm --dir remix run test:client-errors` — 47/47
 - `corepack pnpm --dir remix run test:schemas` — 51/51
 - `corepack pnpm --dir remix run test:storage` — 7/7
 - `corepack pnpm --dir remix run test:messenger` — 3/3

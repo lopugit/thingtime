@@ -37,6 +37,7 @@ import {
 	attachmentPublicProjection,
 	detectedAttachmentType
 } from './attachmentPresentation';
+import { PrivateS3ConfigError } from './config';
 import { getPrivateS3, type AttachmentObjectHead, type AttachmentS3, type AttachmentUploadedPart } from './privateS3';
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -180,7 +181,13 @@ export const validateCompletedAttachmentParts = (
 };
 
 const knownFailure = (error: unknown): AttachmentFail | null => {
-	if (error instanceof AttachmentServiceError || error instanceof StorageMutationError) {
+	if (error instanceof StorageMutationError) {
+		return fail(error.status, error.message, {
+			code: error.code,
+			retryable: error.code === 'accounting_unavailable'
+		});
+	}
+	if (error instanceof AttachmentServiceError) {
 		return fail(error.status, error.message);
 	}
 	if (error instanceof AttachmentStoreConflictError) return fail(409, 'Attachment changed — try again');
@@ -195,7 +202,16 @@ const unavailable = (operation: string, error: unknown): AttachmentFail => {
 		.replace(/[^A-Za-z0-9-]/g, '')
 		.slice(0, 80);
 	console.error(`[attachments] ${operation} failed (${name || 'Error'}${requestId ? `, request ${requestId}` : ''})`);
-	return fail(503, 'Attachment storage is temporarily unavailable');
+	if (error instanceof PrivateS3ConfigError) {
+		return fail(503, 'Private attachment storage is not configured', {
+			code: 'storage_unconfigured',
+			retryable: false
+		});
+	}
+	return fail(503, 'Attachment storage is temporarily unavailable', {
+		code: 'storage_unavailable',
+		retryable: true
+	});
 };
 
 const exactPartRequest = (value: unknown, partCount: number) => {

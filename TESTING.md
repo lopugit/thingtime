@@ -203,10 +203,14 @@ scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
       again: the stable authenticated `/api/v1/attachments/content?id=…` route
       issues fresh access. A private post's attachment fails closed for another
       account and logged-out browser.
-- [ ] Exhaust the active account tier, upload a file, and verify the fixed
-      storage-limit message. Removing the draft or deleting the post reconciles
-      usage, and `ready` / `reconciling` / `unavailable` storage labels never
-      present unknown accounting as unlimited capacity.
+- [ ] Exhaust the active account tier, then select a file larger than the
+      remaining allowance. Every post, comment, message, reply, emoji, avatar,
+      and banner picker shows the fixed account-quota message with delete-media
+      or upgrade-tier recovery; it must never call this an unavailable
+      environment or echo ledger/provider detail. Removing the draft or
+      deleting the bound content reconciles usage, and `ready` / `reconciling`
+      / `unavailable` storage labels never present unknown accounting as
+      unlimited capacity.
 - [ ] Switch Thingtime accounts during prepare, hashing, direct upload, and
       completion. Requests and XHRs cancel, local previews clear, and no draft
       attachment ID or storage content crosses into the new account.

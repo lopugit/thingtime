@@ -21,6 +21,7 @@ import {
 } from './attachmentStore';
 import type { AttachmentS3 } from './privateS3';
 import { StorageMutationError } from '../storage/storageCore';
+import { PrivateS3ConfigError } from './config';
 
 const checksum = (byte: number) => Buffer.alloc(32, byte).toString('base64');
 const now = new Date('2026-08-09T00:00:00.000Z');
@@ -154,6 +155,66 @@ test('start rejects zero-byte files before reserving quota or creating an MPU', 
 		}
 	);
 	assert.equal(touched, false);
+});
+
+test('start preserves safe quota and storage-configuration failure codes', async () => {
+	let createdMpu = false;
+	const quota = createAttachmentService({
+		store: {
+			listExpiredOwned: async () => [],
+			getById: async () => null,
+			reservePending: async () => {
+				throw new StorageMutationError(507, 'quota_exceeded', 'Private account byte counts');
+			}
+		} as any,
+		getS3: () =>
+			noopS3({
+				createMultipartUpload: async () => {
+					createdMpu = true;
+					return { uploadId: 'mpu-never' };
+				}
+			}),
+		now: () => now,
+		uuid: () => 'quota-attachment',
+		customMongoActive: () => false
+	});
+	assert.deepEqual(
+		await quota.start('user-1', {
+			filename: 'too-large-for-tier.bin',
+			contentType: 'application/octet-stream',
+			sizeBytes: 1024
+		}),
+		{
+			ok: false,
+			status: 507,
+			error: 'Private account byte counts',
+			code: 'quota_exceeded',
+			retryable: false
+		}
+	);
+	assert.equal(createdMpu, false);
+
+	const unconfigured = createAttachmentService({
+		store: {} as any,
+		getS3: () => {
+			throw new PrivateS3ConfigError();
+		},
+		customMongoActive: () => false
+	});
+	assert.deepEqual(
+		await unconfigured.start('user-1', {
+			filename: 'photo.jpg',
+			contentType: 'image/jpeg',
+			sizeBytes: 1024
+		}),
+		{
+			ok: false,
+			status: 503,
+			error: 'Private attachment storage is not configured',
+			code: 'storage_unconfigured',
+			retryable: false
+		}
+	);
 });
 
 test('profile upload purpose is home-pinned, fingerprinted, raster-only, and bounded before reservation', async () => {

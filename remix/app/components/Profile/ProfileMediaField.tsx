@@ -90,7 +90,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 		onSelectionError,
 		false,
 		onCleanupDeferred,
-		{ purpose, maxFiles: 1, imageOnly: true }
+		{ purpose, maxFiles: 1, imageOnly: true, remainingBytes, storageStatus }
 	);
 	const upload = uploads[0];
 

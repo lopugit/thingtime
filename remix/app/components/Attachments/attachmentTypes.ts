@@ -8,6 +8,8 @@ export type AttachmentUploadOptions = {
 	imageOnly?: boolean;
 	maxBytesPerFile?: number;
 	allowedContentTypes?: readonly string[];
+	remainingBytes?: number | null;
+	storageStatus?: 'ready' | 'reconciling' | 'unavailable';
 };
 
 // Stable, public attachment metadata. S3 bucket names, object keys, upload ids,

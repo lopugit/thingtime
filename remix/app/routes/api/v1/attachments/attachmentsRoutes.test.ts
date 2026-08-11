@@ -117,6 +117,28 @@ test('attachment mutation responses preserve bounded authored retry metadata', a
 		code: 'upload_parts_retryable',
 		retryable: true
 	});
+
+	const quotaHandler = createAttachmentMutationAction(
+		{
+			rateKey: 'attachments.start',
+			service: async () => ({
+				ok: false as const,
+				status: 507,
+				error: 'Account storage allowance reached',
+				code: 'quota_exceeded',
+				retryable: false
+			})
+		},
+		{ getUser: async () => user, enforceLimit: allowed as any }
+	);
+	const quotaResponse = await quotaHandler({ request: post({ filename: 'full.bin' }) });
+	assert.equal(quotaResponse.status, 507);
+	assert.deepEqual(await quotaResponse.json(), {
+		ok: false,
+		error: 'Account storage allowance reached',
+		code: 'quota_exceeded',
+		retryable: false
+	});
 });
 
 test('content loader treats service credentials as anonymous and keeps signed redirects private', async () => {

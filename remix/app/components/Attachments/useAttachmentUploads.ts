@@ -94,6 +94,14 @@ export const useAttachmentUploads = (
 		() => (options.allowedContentTypes?.length ? new Set(options.allowedContentTypes.map((value) => value.toLowerCase())) : null),
 		[options.allowedContentTypes]
 	);
+	const uploadErrorContextRef = React.useRef({
+		remainingBytes: options.remainingBytes,
+		storageStatus: options.storageStatus
+	});
+	uploadErrorContextRef.current = {
+		remainingBytes: options.remainingBytes,
+		storageStatus: options.storageStatus
+	};
 	const api = useApi();
 	const apiRef = React.useRef(api.v1.attachments);
 	apiRef.current = api.v1.attachments;
@@ -255,7 +263,10 @@ export const useAttachmentUploads = (
 				const phase = uploadId ? 'upload' : 'prepare';
 				patchUpload(localId, attempt, {
 					status: 'error',
-					error: attachmentUploadError(error, phase),
+					error: attachmentUploadError(error, phase, {
+						...uploadErrorContextRef.current,
+						fileSizeBytes: file.size
+					}),
 					failedAt: attachmentUploadFailurePhase(error, phase)
 				});
 			} finally {
