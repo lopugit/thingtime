@@ -95,13 +95,13 @@ const UploadVisualTile = React.memo(
 						right={1}
 						variant="solid"
 						background="rgba(255, 255, 255, 0.9)"
-			color={MUTED}
+						color={MUTED}
 						borderRadius="999px"
 						isDisabled={disabled}
 						onClick={() => onRemove(upload.localId)}
 					/>
 				}
-		>
+			>
 				<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={upload.file.name}>
 					{upload.file.name}
 				</Text>
@@ -115,7 +115,7 @@ const UploadVisualTile = React.memo(
 					>
 						{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
 					</Text>
-		</Flex>
+				</Flex>
 				{busy ? (
 					<Progress
 						value={upload.progress}
@@ -142,7 +142,7 @@ const UploadVisualTile = React.memo(
 					</Button>
 				) : null}
 			</MediaGalleryTile>
-	);
+		);
 	}
 );
 
@@ -150,83 +150,85 @@ UploadVisualTile.displayName = 'UploadVisualTile';
 
 const UploadFileRow = React.memo(
 	(props: { upload: ComposerAttachmentUpload; disabled?: boolean; onRetry: (localId: string) => void; onRemove: (localId: string) => void }) => {
-	const { upload, disabled, onRetry, onRemove } = props;
-	const busy = upload.status !== 'ready' && upload.status !== 'error';
-	return (
-		<Flex
-			alignItems="center"
-			columnGap={3}
-			padding={2}
+		const { upload, disabled, onRetry, onRemove } = props;
+		const busy = upload.status !== 'ready' && upload.status !== 'error';
+		return (
+			<Box
+				padding={2}
 				border={upload.status === 'error' ? '1px solid var(--tt-danger, #e5484d)' : BORDER}
-			borderRadius="var(--tt-radius-md, 12px)"
-			background="var(--tt-card, #ffffff)"
-			minWidth={0}
-		>
-				<Flex
-					alignItems="center"
-					justifyContent="center"
-					boxSize="48px"
-					border={BORDER}
-					borderRadius="var(--tt-radius-sm, 9px)"
-					background="var(--tt-surface-alt, #f5f5f7)"
-					color={MUTED}
-					flexShrink={0}
-				>
-					<FileIcon size={20} aria-hidden />
-				</Flex>
-			<Box flex="1" minWidth={0}>
-				<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={upload.file.name}>
-					{upload.file.name}
-				</Text>
-					<Flex alignItems="flex-start" columnGap={1.5} minWidth={0}>
-						{upload.status === 'ready' ? <CheckCircle2 size={12} color="var(--tt-positive, #2f9e68)" aria-hidden /> : null}
-					<Text
-						fontSize="11px"
-						color={upload.status === 'error' ? 'var(--tt-danger, #e5484d)' : MUTED}
-							role={uploadStatusRole(upload)}
-						whiteSpace="normal"
+				borderRadius="var(--tt-radius-md, 12px)"
+				background="var(--tt-card, #ffffff)"
+				minWidth={0}
+			>
+				<Flex alignItems="center" columnGap={3} minWidth={0}>
+					<Flex
+						alignItems="center"
+						justifyContent="center"
+						boxSize="48px"
+						border={BORDER}
+						borderRadius="var(--tt-radius-sm, 9px)"
+						background="var(--tt-surface-alt, #f5f5f7)"
+						color={MUTED}
+						flexShrink={0}
 					>
+						<FileIcon size={20} aria-hidden />
+					</Flex>
+					<Box flex="1" minWidth={0}>
+						<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={upload.file.name}>
+							{upload.file.name}
+						</Text>
+						{upload.status !== 'error' ? (
+							<Flex alignItems="flex-start" columnGap={1.5} minWidth={0}>
+								{upload.status === 'ready' ? <CheckCircle2 size={12} color="var(--tt-positive, #2f9e68)" aria-hidden /> : null}
+								<Text fontSize="11px" color={MUTED} role={uploadStatusRole(upload)} whiteSpace="normal">
+									{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
+								</Text>
+							</Flex>
+						) : null}
+						{busy ? (
+							<Progress
+								value={upload.progress}
+								size="xs"
+								colorScheme="purple"
+								borderRadius="999px"
+								marginTop={1.5}
+								aria-label={`Upload progress for ${upload.file.name}`}
+							/>
+						) : null}
+					</Box>
+					{upload.status === 'error' && upload.failedAt !== 'terminal' ? (
+						<IconButton
+							aria-label={`Retry ${upload.file.name}`}
+							icon={<RotateCcw size={14} />}
+							size="sm"
+							minWidth="44px"
+							height="44px"
+							variant="ghost"
+							borderRadius="999px"
+							isDisabled={disabled}
+							onClick={() => onRetry(upload.localId)}
+						/>
+					) : null}
+					<IconButton
+						aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
+						icon={<X size={14} />}
+						size="sm"
+						minWidth="44px"
+						height="44px"
+						variant="ghost"
+						color={MUTED}
+						borderRadius="999px"
+						isDisabled={disabled}
+						onClick={() => onRemove(upload.localId)}
+					/>
+				</Flex>
+				{upload.status === 'error' ? (
+					<Text fontSize="11px" lineHeight="1.5" color="var(--tt-danger, #e5484d)" role="alert" marginTop={2} whiteSpace="normal">
 						{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
 					</Text>
-				</Flex>
-					{busy ? (
-					<Progress
-						value={upload.progress}
-						size="xs"
-						colorScheme="purple"
-						borderRadius="999px"
-						marginTop={1.5}
-						aria-label={`Upload progress for ${upload.file.name}`}
-					/>
-					) : null}
-			</Box>
-				{upload.status === 'error' && upload.failedAt !== 'terminal' ? (
-				<IconButton
-					aria-label={`Retry ${upload.file.name}`}
-					icon={<RotateCcw size={14} />}
-					size="sm"
-					minWidth="44px"
-					height="44px"
-					variant="ghost"
-					borderRadius="999px"
-					isDisabled={disabled}
-						onClick={() => onRetry(upload.localId)}
-				/>
 				) : null}
-			<IconButton
-				aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
-				icon={<X size={14} />}
-				size="sm"
-				minWidth="44px"
-				height="44px"
-				variant="ghost"
-				color={MUTED}
-				borderRadius="999px"
-				isDisabled={disabled}
-					onClick={() => onRemove(upload.localId)}
-			/>
-		</Flex>
-	);
+			</Box>
+		);
 	}
 );
 
@@ -291,7 +293,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 
 	const choose = React.useCallback(
 		(files: FileList | null) => {
-		if (files?.length) addFiles(Array.from(files));
+			if (files?.length) addFiles(Array.from(files));
 		},
 		[addFiles]
 	);
@@ -355,7 +357,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 									boundedMaxFiles === 1 ? 'it' : 'them'
 							  } anywhere in this panel`
 							: `Photos, videos, or any file · up to ${boundedMaxFiles} · drop files anywhere in this panel`)}
-						</Text>
+				</Text>
 
 				{visualUploads.length > 0 || uploads.length < boundedMaxFiles ? (
 					<MediaGalleryGrid ariaLabel="Selected media uploads">
@@ -367,7 +369,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 								<Flex flexDirection="column" alignItems="center" rowGap={2}>
 									<UploadCloud size={22} aria-hidden />
 									<Box as="span">🏞️ Add Media</Box>
-				</Flex>
+								</Flex>
 							</MediaAddTile>
 						) : null}
 					</MediaGalleryGrid>
@@ -377,8 +379,8 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 					<Flex flexDirection="column" rowGap={2} paddingTop={visualUploads.length > 0 || uploads.length < boundedMaxFiles ? 2 : 0}>
 						{fileUploads.map((upload) => (
 							<UploadFileRow key={upload.localId} upload={upload} disabled={disabled} onRetry={retry} onRemove={remove} />
-					))}
-				</Flex>
+						))}
+					</Flex>
 				) : null}
 			</Box>
 		</Flex>

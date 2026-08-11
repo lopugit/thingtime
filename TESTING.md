@@ -219,9 +219,10 @@ scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
       readback completes once without duplicating the post. A first-attempt
       attachment 409 does not freeze an otherwise editable draft.
 - [ ] At desktop and narrow mobile widths, long filenames truncate without
-      horizontal overflow, controls remain at least 44px touchable, keyboard
-      users can add/retry/cancel/remove files, and progress/error updates are
-      announced without stealing focus.
+      horizontal overflow, multi-sentence errors span the available row width
+      instead of wrapping one or two words per line, controls remain at least
+      44px touchable, keyboard users can add/retry/cancel/remove files, and
+      progress/error updates are announced without stealing focus.
 - [ ] Through the local Vite proxy or a trusted reverse proxy, attachment and
       profile-media mutations succeed only when `Origin` matches the forwarded
       public host/protocol. A mismatched origin or `Sec-Fetch-Site: cross-site`

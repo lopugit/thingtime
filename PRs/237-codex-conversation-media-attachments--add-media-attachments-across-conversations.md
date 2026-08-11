@@ -66,6 +66,9 @@ high-growth class of user media.
   the environment guidance, and temporary storage failures remain retryable.
   The trusted account-allowance snapshot provides a quota fallback if an
   intermediary strips structured metadata.
+- Long file-upload failures render below the file header at the full available
+  row width, keeping their recovery text readable beside 44px retry/remove
+  controls on narrow mobile screens.
 - Root storage usage refreshes after attachment creation, cancellation,
   deletion, and billable conversation cascades.
 
@@ -102,6 +105,10 @@ high-growth class of user media.
 
 - The READY Vercel deployment rendered a nonblank Thingtime shell with Nitro
   and Mongo health available and no framework error overlay.
+- An authenticated Vercel preview selected a zero-disk sparse file larger than
+  the account's displayed allowance. The composer showed the fixed account
+  quota recovery, never showed the environment-unavailable message, retained
+  the exact 291.9 MiB balance, and kept Post disabled without uploading bytes.
 - An authenticated local stack was checked in Chrome on desktop and at
   390×844. The full comment composer rendered the shared S3 media gallery,
   progress-ready Add Media tile, and linked-image URL fallback without

@@ -25,8 +25,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   storage outages, and storage-accounting reconciliation. Every shared media
   picker uses the current account allowance as a safe fallback and tells users
   to delete stored media or upgrade their tier instead of incorrectly claiming
-  that uploads are unavailable in the environment. Unexpected server, ledger,
-  proxy, and provider detail remains hidden. See the
+  that uploads are unavailable in the environment. File-row errors now span
+  the available width on narrow screens instead of being squeezed between the
+  preview and action controls. Unexpected server, ledger, proxy, and provider
+  detail remains hidden. See the
   [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
   — Codex (AI), 2026-08-11
 
