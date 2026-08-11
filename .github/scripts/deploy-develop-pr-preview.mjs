@@ -1324,7 +1324,7 @@ const main = async () => {
 	const prNumber =
 		eventName === 'workflow_dispatch'
 			? boundedInteger(event.inputs?.pr_number, 'PR number')
-			: (dispatch?.prNumber ?? boundedInteger(event.pull_request?.number, 'PR number'));
+			: dispatch?.prNumber ?? boundedInteger(event.pull_request?.number, 'PR number');
 	const pullRequest = await getPullRequest(config.repository, prNumber);
 	const action = dispatch?.action ?? String(event.action ?? 'workflow_dispatch');
 	const classification = classifyPullRequest(pullRequest, config.repository, config.repositoryId);
