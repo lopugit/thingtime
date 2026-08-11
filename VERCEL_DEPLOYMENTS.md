@@ -197,6 +197,24 @@ Lifecycle and recovery:
   PR after fixing Vercel, DNS, CORS, or token configuration; the schedule remains
   the cleanup backstop for ineligible stale resources.
 
+## CI Control integration
+
+- Stable callback origin: `https://dev.thingtime.com`
+- GitHub webhook: `/api/v1/integrations/github/webhook`
+- Vercel project webhook: `/api/v1/integrations/vercel/webhook`
+- Signed Actions provider router: `/api/v1/integrations/ci/route`
+- The deployed app uses Vercel Workflow plus ephemeral Vercel Sandbox runners
+  for automations whose Admin policy selects `vercel-sandbox`; the exact
+  workflow YAML remains pinned to the protected `github-actions` branch.
+- Private environment values are documented in `README.md` and must be entered
+  in Vercel/GitHub settings only. Never record their live values here.
+- Admin readiness is a single server-derived capability: GitHub App id,
+  installation id and private key, the provider-router secret, and Vercel
+  runtime identity must all be present. Partial setup remains visibly disabled
+  and cannot be saved through the policy API.
+- The dashboard is expected to remain empty until the GitHub App is installed,
+  both webhooks are active, and an administrator runs Reconcile once.
+
 ## Verified PR Previews
 
 - PR #24, branch `codex/migrate-remix-to-nitro`, commit

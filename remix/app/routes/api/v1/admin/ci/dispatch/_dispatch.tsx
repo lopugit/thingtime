@@ -32,7 +32,7 @@ export const action = ({ request }: { request: Request }) =>
       return json(result, { status: 202 });
     } catch {
       return json(
-        { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' },
+        { ok: false, error: 'The workflow could not be dispatched. Check the selected compute provider and integration setup, then try again.' },
         { status: 502 }
       );
     }

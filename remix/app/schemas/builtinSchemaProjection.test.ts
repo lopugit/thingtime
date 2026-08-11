@@ -77,6 +77,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 	'service-quota': ['quotaKind', 'quotaVersion', 'key', 'dayKey', 'dailyUsed', 'permitIds', 'releasedIds'], // policy + state records → dropped
 	'migration-diagnostic': ['diagnosticVersion', 'migrationId', 'mode', 'status', 'outcome', 'summary', 'capturedAt'],
   'ci-repository': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-automation': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-feature': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-branch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-pull-request': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
