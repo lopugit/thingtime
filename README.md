@@ -679,6 +679,13 @@ OPENAI_API_KEY="<openai-api-key>"
 LOPU_PROVIDER="claude"
 ```
 
+Every Claude-backed musing reads the current Admin → AI workflow model order
+from `Thingtime.PRConflictAutoResolverModelWaterfall`; a named preference wins
+over `LOPU_CLAUDE_MODEL`. When the Admin primary is `default`,
+`LOPU_CLAUDE_MODEL` remains the Anthropic-valid provider default. OpenAI is a
+separate provider and continues to use `LOPU_OPENAI_MODEL` (or its documented
+built-in default), including when it is selected first with `LOPU_PROVIDER`.
+
 When an AI key is configured, the musing endpoint uses MongoDB to allow 10
 AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
