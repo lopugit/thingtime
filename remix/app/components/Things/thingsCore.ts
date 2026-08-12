@@ -2,6 +2,10 @@
 // localCache shape. Pure module (no React) so views/dialogs/tests can all
 // import it without dragging component code along.
 
+import { primaryKindOf } from './thingIcon';
+
+export { FILE_TYPE_ICON_RULES, THING_KIND_ICONS, fileIconForThing, primaryKindOf, thingIcon } from './thingIcon';
+
 export type ThingsAuthor = {
   id: string;
   username: string;
@@ -88,28 +92,6 @@ export const THINGS_KIND_FILTERS = [
   { id: 'comment', label: 'Comments', icon: '💬' }
 ] as const;
 export type ThingsKindFilter = (typeof THINGS_KIND_FILTERS)[number]['id'];
-
-const KIND_ICONS: Record<string, string> = {
-  folder: '📁',
-  post: '📝',
-  comment: '💬',
-  reaction: '😊',
-  share: '🔁',
-  save: '🔖',
-  data: '📦',
-  schema: '💎'
-};
-
-// primary kind for labels/icons: the most specific schema wins over 'post'
-const PRIMARY_KIND_ORDER = ['folder', 'share', 'comment', 'reaction', 'save', 'schema', 'data', 'post'];
-
-export const primaryKindOf = (thing: Pick<ThingsThing, 'thingtime'>): string =>
-  PRIMARY_KIND_ORDER.find((kind) => thing.thingtime.includes(kind)) || thing.thingtime[0] || 'data';
-
-export const thingIcon = (thing: Pick<ThingsThing, 'thingtime' | 'crystal'>): string => {
-  if (isFolder(thing) && typeof thing.crystal?.icon === 'string' && thing.crystal.icon) return thing.crystal.icon;
-  return KIND_ICONS[primaryKindOf(thing)] || '🌀';
-};
 
 const firstLine = (value: string, max = 80): string => {
   const line = value.split('\n').find((entry) => entry.trim()) || '';

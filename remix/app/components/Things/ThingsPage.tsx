@@ -60,11 +60,13 @@ const pillProps = (active: boolean) =>
     color: 'var(--tt-text, #26262b)',
     fontSize: '12px',
     fontWeight: 500,
-    height: '26px',
+    height: '28px',
+    minWidth: 'auto',
     paddingX: 3,
-    variant: 'unstyled' as const,
-    display: 'inline-flex',
-    alignItems: 'center'
+    variant: 'outline' as const,
+    _hover: {
+      background: active ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.18))' : 'var(--tt-surface-hover, #f5f5f7)'
+    }
   }) as const;
 
 const monoLabel = {
@@ -73,6 +75,13 @@ const monoLabel = {
   fontSize: '10px',
   textTransform: 'uppercase'
 } as const;
+
+const ToolbarGroup = ({ children, label, wrap = false }: { children: React.ReactNode; label: string; wrap?: boolean }) => (
+  <Flex alignItems="center" flexShrink={0} gap={2} maxWidth="100%" width="max-content" wrap={wrap ? 'wrap' : 'nowrap'}>
+    <Text {...monoLabel}>{label}</Text>
+    {children}
+  </Flex>
+);
 
 const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
   const seen = new Set<string>();
@@ -1186,74 +1195,75 @@ export const ThingsPage = () => {
             </Button>
           </Flex>
         ) : (
-          <Flex alignItems="center" gap={2} wrap="wrap">
-            <Text {...monoLabel}>view</Text>
-            <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>
-              Grid
-            </Button>
-            <Button {...pillProps(view === 'list')} leftIcon={<Rows3 size={13} />} onClick={() => setView('list')}>
-              List
-            </Button>
-            <Button {...pillProps(view === 'columns')} leftIcon={<Columns3 size={13} />} onClick={() => setView('columns')}>
-              Columns
-            </Button>
-            <Box width={2} />
-            <Text {...monoLabel}>show</Text>
-            <Button {...pillProps(displayMode === 'name')} leftIcon={<Tag size={13} />} onClick={() => setDisplayMode('name')}>
-              Names
-            </Button>
-            <Button
-              {...pillProps(displayMode === 'preview')}
-              leftIcon={<Eye size={13} />}
-              onClick={() => setDisplayMode('preview')}
-            >
-              Previews
-            </Button>
-            <Box width={2} />
-            <Text {...monoLabel}>arrange</Text>
-            <Menu placement="bottom-start">
-              <MenuButton as={Button} {...pillProps(sort !== 'newest')} leftIcon={<ArrowUpDown size={13} />}>
-                {THINGS_SORT_OPTIONS.find((option) => option.id === sort)?.label || 'Sort'}
-              </MenuButton>
-              <Portal>
-                <MenuList fontSize="13px" zIndex={10250}>
-                  {THINGS_SORT_OPTIONS.map((option) => (
-                    <MenuItem
-                      key={option.id}
-                      fontWeight={sort === option.id ? 600 : 400}
-                      onClick={() => setSort(option.id)}
-                    >
-                      {option.icon} {option.label}
-                    </MenuItem>
-                  ))}
-                </MenuList>
-              </Portal>
-            </Menu>
-            <Menu placement="bottom-start">
-              <MenuButton as={Button} {...pillProps(groupBy !== 'none')} leftIcon={<Layers size={13} />}>
-                {groupBy === 'none' ? 'Group' : THINGS_GROUP_OPTIONS.find((option) => option.id === groupBy)?.label}
-              </MenuButton>
-              <Portal>
-                <MenuList fontSize="13px" zIndex={10250}>
-                  {THINGS_GROUP_OPTIONS.map((option) => (
-                    <MenuItem
-                      key={option.id}
-                      fontWeight={groupBy === option.id ? 600 : 400}
-                      onClick={() => setGroupBy(option.id)}
-                    >
-                      {option.icon} {option.label}
-                    </MenuItem>
-                  ))}
-                </MenuList>
-              </Portal>
-            </Menu>
-            <Box width={2} />
-            <Text {...monoLabel}>kind</Text>
-            {THINGS_KIND_FILTERS.map((entry) => (
-              <Button key={entry.id} {...pillProps(kindFilter === entry.id)} onClick={() => setKindFilter(entry.id)}>
-                {entry.icon} {entry.label}
+          <Flex alignItems="center" columnGap={4} rowGap={2} wrap="wrap">
+            <ToolbarGroup label="view">
+              <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>
+                Grid
               </Button>
-            ))}
+              <Button {...pillProps(view === 'list')} leftIcon={<Rows3 size={13} />} onClick={() => setView('list')}>
+                List
+              </Button>
+              <Button {...pillProps(view === 'columns')} leftIcon={<Columns3 size={13} />} onClick={() => setView('columns')}>
+                Columns
+              </Button>
+            </ToolbarGroup>
+            <ToolbarGroup label="show">
+              <Button {...pillProps(displayMode === 'name')} leftIcon={<Tag size={13} />} onClick={() => setDisplayMode('name')}>
+                Names
+              </Button>
+              <Button
+                {...pillProps(displayMode === 'preview')}
+                leftIcon={<Eye size={13} />}
+                onClick={() => setDisplayMode('preview')}
+              >
+                Previews
+              </Button>
+            </ToolbarGroup>
+            <ToolbarGroup label="arrange">
+              <Menu placement="bottom-start">
+                <MenuButton as={Button} {...pillProps(sort !== 'newest')} leftIcon={<ArrowUpDown size={13} />}>
+                  {THINGS_SORT_OPTIONS.find((option) => option.id === sort)?.label || 'Sort'}
+                </MenuButton>
+                <Portal>
+                  <MenuList fontSize="13px" zIndex={10250}>
+                    {THINGS_SORT_OPTIONS.map((option) => (
+                      <MenuItem
+                        key={option.id}
+                        fontWeight={sort === option.id ? 600 : 400}
+                        onClick={() => setSort(option.id)}
+                      >
+                        {option.icon} {option.label}
+                      </MenuItem>
+                    ))}
+                  </MenuList>
+                </Portal>
+              </Menu>
+              <Menu placement="bottom-start">
+                <MenuButton as={Button} {...pillProps(groupBy !== 'none')} leftIcon={<Layers size={13} />}>
+                  {groupBy === 'none' ? 'Group' : THINGS_GROUP_OPTIONS.find((option) => option.id === groupBy)?.label}
+                </MenuButton>
+                <Portal>
+                  <MenuList fontSize="13px" zIndex={10250}>
+                    {THINGS_GROUP_OPTIONS.map((option) => (
+                      <MenuItem
+                        key={option.id}
+                        fontWeight={groupBy === option.id ? 600 : 400}
+                        onClick={() => setGroupBy(option.id)}
+                      >
+                        {option.icon} {option.label}
+                      </MenuItem>
+                    ))}
+                  </MenuList>
+                </Portal>
+              </Menu>
+            </ToolbarGroup>
+            <ToolbarGroup label="kind" wrap>
+              {THINGS_KIND_FILTERS.map((entry) => (
+                <Button key={entry.id} {...pillProps(kindFilter === entry.id)} onClick={() => setKindFilter(entry.id)}>
+                  {entry.icon} {entry.label}
+                </Button>
+              ))}
+            </ToolbarGroup>
             {clipboard?.ids.length ? (
               <>
                 <Box flex={1} />

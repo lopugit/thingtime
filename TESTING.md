@@ -1560,6 +1560,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       thing through the kind registry (crystal.render templates win, then
       crystal.thing, then the crystal itself) inside bounded, pointer-inert
       boxes, falling back to icon+name per item; folders always show as icons.
+- [ ] Search + browse controls: the animated rainbow search ring is flush on
+      all four sides (including after focus/resize), and every View / Show /
+      Arrange / Kind pill keeps non-zero, even inline padding around its icon
+      and label on desktop and mobile wrapping layouts.
+- [ ] Auto-icons use the ordered file-type registry: screenshot-like names win
+      over generic image MIME/extensions (`🖼️`), ordinary photos/images use
+      `🏞️`, known media/document/archive/install families are distinct, and an
+      unrecognised attachment honestly falls back to `💾` rather than `🌀`.
 - [ ] Preview modal deep link `/things?preview=<id>` opens any viewable thing
       (ThingView tree + Move/Share/Delete actions) and is what Copy link hands
       out for non-post things (posts link `/post/:id`).
