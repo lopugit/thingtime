@@ -328,6 +328,15 @@ prepare() {
   # terminal-review inside the round. First observed on #211, whose
   # control-plane conversion deletes .github/scripts/* files main had since
   # modified — every conflict was delete-shaped and the round refused them.
+  # Materialize the unmerged set BEFORE mutating the index. The loop body
+  # takes index.lock (git rm / git checkout --theirs); streaming from a live
+  # `git diff` process substitution raced it at #211 scale (1481 conflicted
+  # paths): git diff opportunistically refreshes the index, and its lock
+  # collided with the consumer's -- "Unable to create .git/index.lock: File
+  # exists" (exit 128). A completed snapshot leaves exactly one git process
+  # alive at a time.
+  unmerged_file="$RUNNER_TEMP/promotion-unmerged-paths.zlist"
+  git diff --name-only --diff-filter=U -z >"$unmerged_file"
   while IFS= read -r -d '' path; do
     unsafe_path_syntax "$path" && fail "Unsafe rebase conflict path: $path"
     grep -qxF -- "$path" "$paths_file" || fail "Rebase conflicted outside the planned source paths: $path"
@@ -344,7 +353,7 @@ prepare() {
       printf '%s\n' "$path" >>"$deterministic_file"
       note_discarded "$path" "deleted by the source patch; the base had modified it since the patch was authored"
     fi
-  done < <(git diff --name-only --diff-filter=U -z)
+  done <"$unmerged_file"
   LC_ALL=C sort -u -o "$conflict_file" "$conflict_file"
   LC_ALL=C sort -u -o "$deterministic_file" "$deterministic_file"
   emit_paths deterministic_conflict_paths "$deterministic_file"
