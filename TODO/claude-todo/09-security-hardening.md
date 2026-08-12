@@ -114,8 +114,13 @@ revive only tagged values.
 
 ## Done when
 
-- [ ] A1–A3 require auth (or are dev-gated + removed from the prod dispatcher);
-      any that remain apply visibility filtering.
+- [x] A1–A3 require auth (or are dev-gated + removed from the prod dispatcher);
+      any that remain apply visibility filtering. _(A1 raw-results + A2 populate
+      became admin-only + rate-limited fail-closed in earlier PRs; A3
+      service-account provisioning stays public by design — "anyone can
+      provision a service account, so accountKind confers no trust" — but is now
+      rate-limited fail-closed per IP (`auth.serviceAccount`), body-capped at
+      16 KiB, and field-whitelisted. 2026-07-21.)_
 - [x] Login / register / resend-verification return 429 past a per-IP (and
       per-username, for login) threshold, reusing the existing quota util.
       Login + resend already enforced the shared `enforceRateLimit`; the
@@ -136,5 +141,5 @@ revive only tagged values.
 single implementation and supplies the remaining register body cap, plus §C
 (persisted-state `eval` + CSP) and §D (Date.parse corruption).** The persist
 codec moved to `remix/app/Providers/thingtimePersistCodec.ts` (pure/React-free).
-§A (unauth admin/data endpoints — raw-results, populate, service-account)
-remains open.
+§A (unauth admin/data endpoints — raw-results, populate, service-account) closed
+separately on `develop` (2026-07-21) — see the §A note above.

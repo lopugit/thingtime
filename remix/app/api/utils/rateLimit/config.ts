@@ -139,7 +139,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // interactive action, so the budget is per-hour like app registration
   'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
   // follow/unfollow toggles (also classifies messenger requests)
-  'users.follow': { limit: 60, windowMs: 60_000, enabled: true }
+  'users.follow': { limit: 60, windowMs: 60_000, enabled: true },
+  // service-account provisioning is public self-service but each call mints a
+  // permanent bearer token + a 5 GiB-allowance account and sends a verification
+  // email — bound it tightly per IP (a legit integrator provisions a handful,
+  // ever). Enforced fail-closed at the route like mongodb.populate.
+  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
