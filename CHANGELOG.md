@@ -118,6 +118,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Added
 
+- **Reverse promotion lane**: the promoter takes `source_branch`,
+  `target_branch` and `require_path_prefix` as dispatch inputs (defaults keep
+  the standing develop → main lane untouched), `github-actions` joins the
+  promotion-base allowlist, and a lane path guard promotes only PRs whose
+  entire planned patch stays under the lane's prefixes — so main-only CI work
+  promotes onto the control plane through the same trusted chain: reservation,
+  faithful replay, review gating, and the release analysis. — Claude (AI),
+  2026-08-12
 - **Model-authored release analysis on every published promotion**: a
   deterministic step precomputes three-branch history of the promoted paths,
   pairwise branch-only commit lists, the diff stat, the source PR and recent
