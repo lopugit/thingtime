@@ -1,0 +1,88 @@
+import type {
+  BootstrapResponse,
+  CommanderAccount,
+  CommanderExtension,
+  CommanderSettings,
+  SearchHit,
+  StoreExtension,
+} from '@commander/protocol';
+
+const query = new URLSearchParams(window.location.search);
+const sessionToken = query.get('token') ?? '';
+
+export function daemonHeaders(): HeadersInit {
+  return {
+    'content-type': 'application/json',
+    'x-commander-session': sessionToken,
+  };
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    headers: { ...daemonHeaders(), ...init?.headers },
+  });
+  const body = (await response.json()) as T & { error?: string };
+  if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
+  return body;
+}
+
+export const api = {
+  bootstrap: () => request<BootstrapResponse>('/api/bootstrap'),
+  search: (value: string) => request<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(value)}`),
+  saveSettings: (settings: CommanderSettings) =>
+    request<{ settings: CommanderSettings }>('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+  execute: (itemId: string, actionId: string) =>
+    request<{ ok: true; nativeRequest?: unknown }>('/api/execute', {
+      method: 'POST',
+      body: JSON.stringify({ itemId, actionId }),
+    }),
+  listExtensions: () => request<{ extensions: CommanderExtension[] }>('/api/extensions'),
+  sideload: (path: string, allowUntrustedBuildScripts = false) =>
+    request<{
+      extension: CommanderExtension;
+      preparation: {
+        source: 'folder' | 'archive';
+        readyNoViewCommands: number;
+        diagnostics: Array<{ severity: 'info' | 'warning' | 'error'; message: string }>;
+        build: { attempted: boolean; exitCode?: number; timedOut?: boolean };
+      };
+    }>('/api/extensions/sideload', {
+      method: 'POST',
+      body: JSON.stringify({ path, allowUntrustedBuildScripts }),
+    }),
+  browseStore: (value: string) =>
+    request<{ extensions: StoreExtension[] }>(`/api/extensions/store?q=${encodeURIComponent(value)}`),
+  installStoreExtension: (extension: StoreExtension) =>
+    request<{ extension: CommanderExtension }>('/api/extensions/store/install', {
+      method: 'POST',
+      body: JSON.stringify(extension),
+    }),
+  beginLogin: () =>
+    request<{ authorizeUrl: string; state: string }>('/api/accounts/login', { method: 'POST' }),
+  completeLogin: (session: unknown) =>
+    request<{ account: CommanderAccount }>('/api/accounts/callback', {
+      method: 'POST',
+      body: JSON.stringify(session),
+    }),
+  switchAccount: (id: string) =>
+    request<{ account: CommanderAccount }>('/api/accounts/active', {
+      method: 'PUT',
+      body: JSON.stringify({ id }),
+    }),
+  removeAccount: (id: string) =>
+    request<{ ok: true }>(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  pendingCredential: () =>
+    request<{ credential: { accountId: string } | null }>('/api/accounts/credentials/pending', {
+      method: 'POST',
+    }),
+  unlockCredential: (accountId: string, token: string) =>
+    request<{ ok: true }>('/api/accounts/credentials', {
+      method: 'PUT',
+      body: JSON.stringify({ accountId, token }),
+    }),
+  sync: () => request<{ settings: CommanderSettings; syncedAt: string }>('/api/sync', { method: 'POST' }),
+};
