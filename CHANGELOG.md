@@ -21,6 +21,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **The sensitive-path deny-list is gone (owner decision, 2026-08-12)**: the
+  conflict/promotion AI rounds may now be shown any conflicted repo file —
+  `sensitive_path()` deleted, the refusal fixture flipped to prove
+  eligibility, and the contract pins the absence so a deny-list cannot
+  quietly return. Safety now lives in the mechanical shape checks (regular
+  files, coherent markers, size cap), the scope verifier, `[skip ci]` +
+  approval-required publication gating for CI-sensitive content, and the
+  model file-tool infra denies. — Claude (AI), 2026-08-12
 - **Delete-shaped promotion conflicts resolve deterministically**: the first
   unverified promotion (#211) deletes `.github/scripts/*` files `main` had
   since modified — modify/delete conflicts carry no zdiff3 markers, so the AI
