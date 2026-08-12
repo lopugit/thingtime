@@ -70,3 +70,7 @@ const store = createPrConflictResolverModelWaterfallStore({
 
 export const getPrConflictResolverModelWaterfall = store.getWaterfall;
 export const setPrConflictResolverModelWaterfall = store.setWaterfall;
+
+// Canonical runtime alias. Keep the legacy exports above for the public API,
+// Admin editor, and existing workflow consumers.
+export const getAiPreferredModelWaterfall = store.getWaterfall;
