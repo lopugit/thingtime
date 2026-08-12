@@ -21,6 +21,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **The AI round's tamper guard understands deterministic settlements**: the
+  guard recomputes the full conflict set from immutable SHAs, but the live
+  pre-model set excludes paths the worker settles deterministically — so
+  every delete-bearing promotion burned a complete model round and then
+  failed its own audit. The round now compares against the union and stages
+  deterministic paths only from the expected rebase head's exact side; model
+  output can never reach them. Stack rebases unchanged. — Claude (AI),
+  2026-08-12
 - **The sensitive-path deny-list is gone (owner decision, 2026-08-12)**: the
   conflict/promotion AI rounds may now be shown any conflicted repo file —
   `sensitive_path()` deleted, the refusal fixture flipped to prove
