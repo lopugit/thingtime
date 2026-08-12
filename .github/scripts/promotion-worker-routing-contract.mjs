@@ -76,7 +76,7 @@ assert.match(workflow, /Promotion handoff cannot carry external runner metadata/
 assert.match(workflow, /promotion_plan_b64:/);
 assert.match(
   workflow,
-  /const keys = \['base_ref','base_sha','branch','reservation_sha','source_tip_sha','source_start_sha','source_end_sha','source_lineage_status','plan_hash','title_b64','body_b64'\]/,
+  /const keys = \['base_ref','base_sha','source_ref','branch','reservation_sha','source_tip_sha','source_start_sha','source_end_sha','source_lineage_status','plan_hash','title_b64','body_b64'\]/,
 );
 assert.doesNotMatch(workflow, /promotion_base_sha:\s*\n\s*description:/);
 assert.match(workflow, /resolve-invalid-promotion-\{0\}/);
@@ -225,6 +225,15 @@ assert.match(promoter, /PRIMARY_TARGET_BRANCH/);
 assert.match(promoter, /--to-\$\{slugify\(target\)\}/);
 assert.match(promoter, /legacyPromotionBranchFor/);
 assert.match(promoter, /promotionBranchMatches/);
+// Lane-aware trusted validation: the envelope carries source_ref, the
+// validator's closed source set is develop|main, merged-into and live-tip
+// checks follow the lane, and the deterministic branch check accepts the
+// uniform --to-<target> shape plus legacy pre-uniform main-lane names.
+assert.match(workflow, /Promotion source must be develop or main/);
+assert.match(workflow, /Source PR was not merged to \$SOURCE_REF/);
+assert.match(workflow, /live_ref_sha "\$SOURCE_REF"/);
+assert.match(workflow, /--to-\$\{target_slug\}/);
+assert.match(promoter, /source_ref: CFG\.source/);
 // Deterministically settled paths are absent from the live pre-model set but
 // always present in the immutable merge-tree recompute: the round compares
 // against the union, and stages their content only from the expected rebase

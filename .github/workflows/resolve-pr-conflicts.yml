@@ -1151,7 +1151,7 @@ jobs:
           const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
           if (text.includes('\0')) throw new Error('promotion plan contains NUL');
           const value = JSON.parse(text);
-          const keys = ['base_ref','base_sha','branch','reservation_sha','source_tip_sha','source_start_sha','source_end_sha','source_lineage_status','plan_hash','title_b64','body_b64'];
+          const keys = ['base_ref','base_sha','source_ref','branch','reservation_sha','source_tip_sha','source_start_sha','source_end_sha','source_lineage_status','plan_hash','title_b64','body_b64'];
           if (!value || Array.isArray(value) || Object.keys(value).join(',') !== keys.join(',') || JSON.stringify(value) !== text) {
             throw new Error('promotion plan must be canonical JSON with the exact trusted schema');
           }
@@ -1163,6 +1163,7 @@ jobs:
           plan_file="$RUNNER_TEMP/promotion-plan.json"
           BASE_REF="$(jq -r '.base_ref' "$plan_file")"
           BASE_SHA="$(jq -r '.base_sha' "$plan_file")"
+          SOURCE_REF="$(jq -r '.source_ref' "$plan_file")"
           PROMOTION_BRANCH="$(jq -r '.branch' "$plan_file")"
           RESERVATION_SHA="$(jq -r '.reservation_sha' "$plan_file")"
           SOURCE_TIP_SHA="$(jq -r '.source_tip_sha' "$plan_file")"
@@ -1172,7 +1173,7 @@ jobs:
           PLAN_HASH="$(jq -r '.plan_hash' "$plan_file")"
           TITLE_B64="$(jq -r '.title_b64' "$plan_file")"
           BODY_B64="$(jq -r '.body_b64' "$plan_file")"
-          export BASE_REF BASE_SHA PROMOTION_BRANCH RESERVATION_SHA SOURCE_TIP_SHA \
+          export BASE_REF BASE_SHA SOURCE_REF PROMOTION_BRANCH RESERVATION_SHA SOURCE_TIP_SHA \
             SOURCE_START_SHA SOURCE_END_SHA SOURCE_LINEAGE_STATUS PLAN_HASH TITLE_B64 BODY_B64
 
           [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_base_sha must be a full SHA-1."
@@ -1197,6 +1198,11 @@ jobs:
           esac
           [[ "$PLAN_HASH" =~ ^[0-9a-f]{64}$ ]] || fail "promotion_plan_hash must be a SHA-256."
           safe_ref "$BASE_REF" || fail "Unsafe promotion base ref."
+          safe_ref "$SOURCE_REF" || fail "Unsafe promotion source ref."
+          # Lane sources are a closed set: the standing develop lane plus the
+          # main reverse lane. Anything else fails before any secret use.
+          [[ "$SOURCE_REF" = develop || "$SOURCE_REF" = main ]] \
+            || fail "Promotion source must be develop or main; got '$SOURCE_REF'."
           safe_ref "$PROMOTION_BRANCH" || fail "Unsafe promotion branch ref."
           # github-actions joined the allowlist for the reverse lane (owner
           # request, 2026-08-12): main-only CI work promotes onto the control
@@ -1233,8 +1239,8 @@ jobs:
           pr="$(gh api "repos/$REPO/pulls/$SOURCE_PR")"
           [ "$(jq -r '.state' <<<"$pr")" = closed ] && [ "$(jq -r '.merged_at // empty' <<<"$pr")" != '' ] \
             || fail "Source PR is not merged."
-          [ "$(jq -r '.base.ref' <<<"$pr")" = develop ] \
-            || fail "Source PR was not merged to develop."
+          [ "$(jq -r '.base.ref' <<<"$pr")" = "$SOURCE_REF" ] \
+            || fail "Source PR was not merged to $SOURCE_REF."
           [ "$(jq -r '.base.repo.full_name' <<<"$pr")" = "$REPO" ] \
             && [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$REPO" ] \
             || fail "Source PR must be wholly inside this repository."
@@ -1255,13 +1261,20 @@ jobs:
           process.stdout.write(`promote/pr-${process.env.SOURCE_PR}-${slug}`);
           NODE
           )"
-          [ "$PROMOTION_BRANCH" = "$expected_branch" ] \
+          target_slug="$(printf '%s' "$BASE_REF" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')"
+          # Uniform lane naming appends --to-<target>; legacy pre-uniform
+          # branches (no marker) stay valid for in-flight main-lane
+          # reservations. Both shapes derive purely from immutable source-PR
+          # metadata, so a caller still cannot route the secret worker to an
+          # arbitrary ref.
+          [ "$PROMOTION_BRANCH" = "${expected_branch}--to-${target_slug}" ] \
+            || [ "$PROMOTION_BRANCH" = "$expected_branch" ] \
             || fail "Promotion branch does not match the deterministic source-PR branch."
 
           [ "$(live_ref_sha "$BASE_REF")" = "$BASE_SHA" ] \
             || fail "Promotion base moved after the plan was created; the promoter must re-plan."
-          [ "$(live_ref_sha develop)" = "$SOURCE_TIP_SHA" ] \
-            || fail "Develop moved after the source plan was created; the promoter must re-plan."
+          [ "$(live_ref_sha "$SOURCE_REF")" = "$SOURCE_TIP_SHA" ] \
+            || fail "Source branch $SOURCE_REF moved after the source plan was created; the promoter must re-plan."
           [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$RESERVATION_SHA" ] \
             || fail "Reservation branch moved; refusing to overwrite newer work."
           reservation="$(gh api "repos/$REPO/git/commits/$RESERVATION_SHA")"
@@ -1305,7 +1318,7 @@ jobs:
           if [ "$SOURCE_LINEAGE_STATUS" = verified ]; then
             upsert_source_status "🤖 Automatic promotion conflict resolution is running for \`$PROMOTION_BRANCH\`."
           else
-            upsert_source_status "⚠️ A review-required historical promotion is running for \`$PROMOTION_BRANCH\`. The exact patch is recoverable, but current \`develop\` does not prove that it remains intended (\`$SOURCE_LINEAGE_STATUS\`). The resulting PR must be reviewed before merge."
+            upsert_source_status "⚠️ A review-required historical promotion is running for \`$PROMOTION_BRANCH\`. The exact patch is recoverable, but current \`$SOURCE_REF\` does not prove that it remains intended (\`$SOURCE_LINEAGE_STATUS\`). The resulting PR must be reviewed before merge."
           fi
           {
             echo "base_ref=$BASE_REF"
