@@ -2052,6 +2052,12 @@ jobs:
               echo 'Delete-shaped conflicts were resolved deterministically toward the source patch (no model involved — a deletion has no merged text to arbitrate):'
               printf '%s\n' "$DETERMINISTIC_PATHS" | sed '/^$/d;s/^/- `/' | sed 's/$/`/'
             fi
+            if [ -s "$RUNNER_TEMP/promotion-discarded-changes.md" ]; then
+              echo
+              echo '⚠️ **Base-side changes affected by deterministic resolutions.** The source patch predates these commits; verify each is superseded (or port it) before merging:'
+              echo
+              cat "$RUNNER_TEMP/promotion-discarded-changes.md"
+            fi
             echo
             if [ "$AI_STARTED" = true ]; then
               echo "Model waterfall: \`$MODEL_ARGS\` · Graphify refresh: \`$GRAPHIFY_MODE\` (semantic: \`$GRAPHIFY_SEMANTIC\`)."

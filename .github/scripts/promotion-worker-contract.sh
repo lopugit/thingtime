@@ -369,6 +369,11 @@ git -C "$delete_repo" show -s --format=%s HEAD \
 [[ ! -d "$(git -C "$delete_repo" rev-parse --git-dir)/rebase-merge" ]]
 [[ ! -d "$(git -C "$delete_repo" rev-parse --git-dir)/rebase-apply" ]]
 [[ -z "$(git -C "$delete_repo" status --porcelain --untracked-files=all)" ]]
+# The review comment's evidence: each deterministic resolution names the
+# base-side commits the source patch never saw.
+grep -qF -- '- `doomed.txt` — deleted by the source patch' "$delete_temp/promotion-discarded-changes.md"
+grep -qF -- '- `kept.txt` — the base deleted this file' "$delete_temp/promotion-discarded-changes.md"
+grep -qF 'base moves the other way' "$delete_temp/promotion-discarded-changes.md"
 
 : >"$GITHUB_OUTPUT"
 bash "$worker" prepare "$repo"

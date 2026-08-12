@@ -298,6 +298,24 @@ prepare() {
   git rebase --onto "$RESERVATION_SHA" "$SOURCE_START_SHA" "$synthetic_head" || rebase_status=$?
   deterministic_file="$RUNNER_TEMP/promotion-deterministic-paths.txt"
   : >"$deterministic_file"
+  # Evidence, not judgment: every deterministic resolution discards or
+  # overrides base-side work the source patch's author never saw. The machine
+  # must not decide whether that work was superseded — but it can name it, so
+  # the reviewer's release decision is informed. Listed per path in the
+  # promotion PR's review comment; commits come from this repo's own history,
+  # no model involved.
+  discarded_file="$RUNNER_TEMP/promotion-discarded-changes.md"
+  : >"$discarded_file"
+  note_discarded() {
+    local path="$1" verb="$2" base_commits
+    base_commits="$(git log --format='%h %s' -n 20 \
+      "$SOURCE_START_SHA..$BASE_SHA" -- ":(literal)$path" 2>/dev/null || true)"
+    [[ -n "$base_commits" ]] || return 0
+    {
+      printf -- '- `%s` — %s. Base-side commits affected:\n' "$path" "$verb"
+      printf '%s\n' "$base_commits" | sed 's/^/  - /'
+    } >>"$discarded_file"
+  }
   # Delete-shaped conflicts (a deletion on either side) carry no zdiff3
   # markers, so the AI round rightly refuses them — there is no merged text
   # for a model to edit. They are also the one conflict shape with a
@@ -320,9 +338,11 @@ prepare() {
       git checkout -q --theirs -- ":(literal)$path"
       git add -- ":(literal)$path"
       printf '%s\n' "$path" >>"$deterministic_file"
+      note_discarded "$path" "the base deleted this file; the source patch restores or changes it, overriding that deletion"
     else
       git rm -q -f -- ":(literal)$path"
       printf '%s\n' "$path" >>"$deterministic_file"
+      note_discarded "$path" "deleted by the source patch; the base had modified it since the patch was authored"
     fi
   done < <(git diff --name-only --diff-filter=U -z)
   LC_ALL=C sort -u -o "$conflict_file" "$conflict_file"
