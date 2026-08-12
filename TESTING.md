@@ -1615,7 +1615,9 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       persisted in the tt-things cache; a non-default arrangement eagerly
       loads the folder's remaining pages (bounded at 1000) so ordering is
       honest, and group sections show "📁 Folders · N"-style counts with
-      correct plurals ("Data", not "Datas").
+      correct plurals ("Data", not "Datas"). Exercise Group by Kind with at
+      least one loaded thing so every section resolves its canonical icon;
+      grouped rendering must not throw or show the route error boundary.
 - [ ] Drag-and-drop: dragging a selected thing drags the whole selection
       (desktop only); folder tiles/rows, tree nodes, and every breadcrumb
       (including "All things" = root) highlight with the accent inset ring on

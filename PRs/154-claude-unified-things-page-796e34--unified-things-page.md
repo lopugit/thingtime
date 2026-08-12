@@ -91,3 +91,26 @@ The `/things` visual follow-up fixes three related rough edges:
   horizontal overflow. No `Temporary space`, generated guest handle, or
   placeholder temporary email appeared; the console had only the existing
   React Router `HydrateFallback` development warning.
+
+## Follow-up: populated kind-group runtime crash
+
+- Fixed `groupThings()` using the removed `KIND_ICONS` local after the icon
+  registry moved to `THING_KIND_ICONS`. Empty spaces never evaluated the
+  section map, which is why the earlier clean-session QA did not expose the
+  production-only crash seen in a populated space with Group by Kind active.
+- Added the Things core/icon tests to the required unit suite. The regression
+  fixture includes populated folder, post, and unknown-kind sections so both
+  canonical icon lookup and the honest fallback execute at runtime.
+
+### Validation
+
+- `corepack pnpm --dir remix run test:things` — 6/6 passed, including the
+  populated kind-group fixture; the complete unit suite and Vercel production
+  build/output verification also passed.
+- Local browser QA created one temporary folder, selected Arrange → Group by
+  Kind, and verified `📁 Folders · 1` without an error boundary or app-console
+  error at 1280×800 and 390×844. Both layouts had zero horizontal overflow,
+  the mobile page reached its true bottom, and the QA folder was deleted after
+  the check. The only console warning was the existing `HydrateFallback` note.
+- The typecheck ratchet remains warning-only at 151 diagnostics versus its
+  stale 143 baseline; none of the diagnostics are in Things core or its test.

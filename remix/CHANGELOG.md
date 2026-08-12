@@ -57,6 +57,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Things kind grouping no longer crashes populated spaces**: Group by Kind
+  now reads section icons from the canonical Thing icon registry instead of a
+  removed local binding, with a populated-group runtime regression test in the
+  required unit suite. — Codex (AI), 2026-08-12
+
 - **The Thingtime AI preference now reaches the remaining Claude runtime**:
   Lopu musings resolve their Anthropic model from the current Admin waterfall
   on every Claude attempt, just like conflict resolution, rebase repair, and

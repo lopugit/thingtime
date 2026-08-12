@@ -2,7 +2,7 @@
 // localCache shape. Pure module (no React) so views/dialogs/tests can all
 // import it without dragging component code along.
 
-import { primaryKindOf } from './thingIcon';
+import { primaryKindOf, THING_KIND_ICONS } from './thingIcon';
 
 export { FILE_TYPE_ICON_RULES, THING_KIND_ICONS, fileIconForThing, primaryKindOf, thingIcon } from './thingIcon';
 
@@ -238,7 +238,7 @@ export const groupThings = (things: ThingsThing[], groupBy: ThingsGroupBy): Thin
   return orderedKinds.map((kind) => ({
     key: kind,
     label: KIND_GROUP_LABELS[kind] || `${kind.charAt(0).toUpperCase()}${kind.slice(1)}s`,
-    icon: KIND_ICONS[kind] || '🌀',
+    icon: THING_KIND_ICONS[kind] || '🌀',
     items: byKind.get(kind) || []
   }));
 };

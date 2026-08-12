@@ -1435,9 +1435,9 @@
     "semantic_hash": "8c85430dd831003405d583700a8548f4"
   },
   "remix/package.json": {
-    "mtime": 1786518262.808321,
-    "ast_hash": "d83f33c288542e0a3169f8e17b55eaa8",
-    "semantic_hash": "d83f33c288542e0a3169f8e17b55eaa8"
+    "mtime": 1786524707.9959562,
+    "ast_hash": "073c4b7dce84ef034b61b79ede6b9966",
+    "semantic_hash": "073c4b7dce84ef034b61b79ede6b9966"
   },
   "remix/public/manifest.json": {
     "mtime": 1786505470.085678,
@@ -1755,9 +1755,9 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786518231.875571,
-    "ast_hash": "6fbcdfe097b88440bb109c8256e3cbef",
-    "semantic_hash": ""
+    "mtime": 1786524725.801976,
+    "ast_hash": "23bab0db0cc334e858b6dfc175fcc3d8",
+    "semantic_hash": "23bab0db0cc334e858b6dfc175fcc3d8"
   },
   "remix/README.md": {
     "mtime": 1786505469.8931072,
@@ -4160,9 +4160,9 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786518231.8156555,
-    "ast_hash": "7dae2240ae899a3fce9178667863b7c5",
-    "semantic_hash": ""
+    "mtime": 1786524725.8014755,
+    "ast_hash": "ca8990176f5bd07b4167849c48cc1366",
+    "semantic_hash": "ca8990176f5bd07b4167849c48cc1366"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786505469.644186,
@@ -5605,9 +5605,9 @@
     "semantic_hash": "184b073af126b75215f9e7af718ae171"
   },
   "remix/app/components/Things/thingsCore.ts": {
-    "mtime": 1786506139.8096352,
-    "ast_hash": "ceecd398a95ce76eae15755c2bb90f07",
-    "semantic_hash": "ceecd398a95ce76eae15755c2bb90f07"
+    "mtime": 1786524725.8009918,
+    "ast_hash": "c864a25e2465018db962b532741d9cda",
+    "semantic_hash": "c864a25e2465018db962b532741d9cda"
   },
   "remix/app/components/Things/thingsMenuModel.ts": {
     "mtime": 1786505710.041581,
@@ -5653,5 +5653,10 @@
     "mtime": 1786517690.2224038,
     "ast_hash": "e1e56faf0a91eaf33830c123fc17fb08",
     "semantic_hash": "e1e56faf0a91eaf33830c123fc17fb08"
+  },
+  "remix/app/components/Things/thingsCore.test.ts": {
+    "mtime": 1786524707.9955769,
+    "ast_hash": "9da404d5a39974ed30e9069a37eafd7e",
+    "semantic_hash": "9da404d5a39974ed30e9069a37eafd7e"
   }
 }
