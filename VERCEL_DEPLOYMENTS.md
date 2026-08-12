@@ -37,14 +37,12 @@ Last updated: 2026-08-12
 - Generated preview URLs use `https://thingtime-<generated>-lopugits-projects.vercel.app`.
 - The `develop` branch alias is
   https://thingtime-git-develop-lopugits-projects.vercel.app.
-- https://dev.thingtime.com is intended to be a branch-specific Preview domain
-  that tracks `develop`; Vercel's built-in Development environment remains
-  local/CLI-only. Live project-domain inspection on 2026-08-12 instead reports
-  `gitBranch: null` and a non-null `customEnvironmentId`, meaning the domain is
-  attached to the Custom Environment. DNS, ownership, and HTTPS are healthy,
-  but the protected controller rejects publication until the domain is rebound
-  to `gitBranch: develop` with no `customEnvironmentId` and the Custom
-  Environment's own domain list is empty.
+- https://dev.thingtime.com is a branch-specific Preview domain that tracks
+  `develop`; Vercel's built-in Development environment remains local/CLI-only.
+  Live project-domain inspection on 2026-08-12 confirms `verified: true`,
+  `gitBranch: develop`, and `customEnvironmentId: null`. The `develop` Custom
+  Environment retains its literal branch matcher and its own domain list is
+  empty, matching the protected controller's stable-domain invariant.
   - Cloudflare DNS: `CNAME dev` to
     `b45b7349d6eb9c18.vercel-dns-017.com`, DNS only, TTL Auto.
   - If Vercel reports a pending ownership challenge, publish the exact
@@ -172,6 +170,10 @@ One-time private setup (values never belong in git):
   NS delegations from `_acme-challenge.previews.dev` to both
   `ns1.vercel-dns.com` and `ns2.vercel-dns.com` so Vercel can issue and renew
   wildcard TLS certificates.
+  Verify the delegation against either authoritative Cloudflare nameserver with
+  `+norecurse +authority`. The delegation is a referral in the authority
+  section, so recursive `dig +short NS` output can be empty even when both NS
+  records are correctly published.
   Do not move the apex nameservers or delegate a broader subtree; reserve this
   ACME subtree for the preview wildcard because the delegation can prevent
   another provider from issuing certificates there. See Vercel's official
@@ -204,11 +206,11 @@ from #239 has merged to `github-actions`, and the thin listener from #233 has
 reached `develop`. The default `main` branch still contains the previous direct
 workflow and awaits the `develop` promotion path in #188.
 
-The remaining stable-domain binding mismatch above causes the protected
-controller to fail closed at its configuration gate. After rebinding the
-domain and promoting the listener to `main`, a successful exact-SHA deployment,
-alias publication, CORS probe, and attachment upload/removal check finish
-browser verification.
+The stable-domain binding now matches the protected controller's invariant and
+no longer blocks its configuration gate. Use a fresh eligible develop-target PR
+run to prove the exact-SHA deployment, alias publication, CORS probe, and
+attachment upload/removal checks. Promotion of the thin listener to `main`
+through #188 remains the final CI-direction activation step.
 
 The shorter `*.previews.thingtime.com` namespace is reserved for a separate
 future production-preview controller. It must use an independently protected

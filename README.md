@@ -865,6 +865,10 @@ delegations from `_acme-challenge.previews.dev` to `ns1.vercel-dns.com` and
 or delegate a broader subtree. Dedicate `_acme-challenge.previews.dev` to this
 preview wildcard, because that delegation gives Vercel control of certificate
 validation for the subtree and can prevent another provider from issuing there.
+When verifying the delegation, query either authoritative Cloudflare nameserver
+with `+norecurse +authority`: delegation NS records are returned in the DNS
+referral's authority section, so a recursive `dig +short NS` can misleadingly
+print no answer even while the delegation is healthy.
 Vercel may still label this externally managed arrangement `DNS Change
 Recommended` or return `misconfigured: true`; that advisory asks to move the
 apex nameservers and is not the publication gate. The controller instead
@@ -906,15 +910,14 @@ are complete for `*.previews.dev.thingtime.com`. The protected controller from
 `develop`; the default `main` branch still has the previous direct workflow and
 is waiting for the `develop` promotion path in #188.
 
-Live Vercel inspection also reports `dev.thingtime.com` with `gitBranch: null`
-and a non-null `customEnvironmentId`. DNS, ownership, and HTTPS are healthy,
-but that binding contradicts the controller's branch-scoped stable-domain
-invariant, so the protected controller correctly fails closed at its
-configuration gate. Rebind the domain to `gitBranch: develop` with no
-`customEnvironmentId`, keep the Custom Environment's domain list empty, and
-let the thin listener reach `main`. A successful exact-SHA deployment, alias
-publication, CORS probe, and attachment upload/removal check then complete the
-activation checklist.
+Live Vercel inspection on 2026-08-12 now confirms the intended stable-domain
+invariant: `dev.thingtime.com` is verified with `gitBranch: develop` and
+`customEnvironmentId: null`; the `develop` Custom Environment retains its
+literal branch matcher and has an empty domain list. This resolves the earlier
+configuration-gate failure. Use a fresh eligible develop-target PR run to prove
+the exact-SHA deployment, alias publication, CORS probe, and attachment
+upload/removal checks against the corrected binding. The remaining CI-direction
+activation step is still promotion of the thin listener to `main` through #188.
 
 CORS is not authorization. The bucket remains private, while the development
 AWS role explicitly trusts both Thingtime's `environment:develop` and

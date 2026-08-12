@@ -53,9 +53,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   that generic Preview intentionally shares development MongoDB, JWT, cron,
   and private-S3 configuration. It also documents URI-authoritative MongoDB
   usernames and the live health checks for the canonical `thingtime` database
-  without storing credentials. The runbook now also records the remaining
-  stable-domain binding mismatch that the protected controller rejects until
-  Vercel is returned to its branch-scoped invariant. — Codex (AI), 2026-08-12
+  without storing credentials. The runbook now records the restored
+  branch-scoped `dev.thingtime.com` binding and explains how to verify the
+  healthy Cloudflare-to-Vercel ACME delegation in the authoritative DNS
+  referral instead of mistaking empty recursive short output for a missing
+  record. — Codex (AI), 2026-08-12
 - **iOS Vercel destination history is usable at full length**: the native Web
   destination drawer now keeps its controls pinned above a lazy vertical list,
   shows scroll indicators when content exceeds the viewport, and reserves the
