@@ -176,6 +176,15 @@ assert.match(workflow, /resolved deterministically toward the source patch/);
 assert.match(worker, /promotion-discarded-changes\.md/);
 assert.match(worker, /note_discarded/);
 assert.match(worker, /promotion-unmerged-paths\.zlist/);
+// Deterministically settled paths are absent from the live pre-model set but
+// always present in the immutable merge-tree recompute: the round compares
+// against the union, and stages their content only from the expected rebase
+// head — model output can never reach them.
+assert.match(action, /deterministic-conflict-paths/);
+assert.match(action, /EXPECTED_DETERMINISTIC_PATHS/);
+assert.match(action, /expected_conflicts_full/);
+assert.match(action, /git checkout-index -f -- "\$path"/);
+assert.match(workflow, /deterministic-conflict-paths: \$\{\{ steps\.prepare_promotion\.outputs\.deterministic_conflict_paths \}\}/);
 // Owner decision (2026-08-12): there is NO sensitive-path deny-list. The
 // model may be shown any conflicted repo file; safety lives in the mechanical
 // shape checks, the scope verifier, and [skip ci]+approval publication

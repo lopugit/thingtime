@@ -1704,6 +1704,7 @@ jobs:
         uses: ./trusted/.github/actions/rebase-conflict-round
         with:
           repo-path: ${{ steps.repo.outputs.repo_path }}
+          deterministic-conflict-paths: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
           pr-number: ${{ inputs.promotion_source_pr }}
           base-ref: ${{ needs.promotion_validate.outputs.base_ref }}
           head-ref: ${{ needs.promotion_validate.outputs.promotion_branch }}
