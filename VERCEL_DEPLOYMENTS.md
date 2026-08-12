@@ -207,10 +207,14 @@ reached `develop`. The default `main` branch still contains the previous direct
 workflow and awaits the `develop` promotion path in #188.
 
 The stable-domain binding now matches the protected controller's invariant and
-no longer blocks its configuration gate. Use a fresh eligible develop-target PR
-run to prove the exact-SHA deployment, alias publication, CORS probe, and
-attachment upload/removal checks. Promotion of the thin listener to `main`
-through #188 remains the final CI-direction activation step.
+no longer blocks its configuration gate. Promotion of the thin listener to
+`main` through #188 must happen before final live proof because
+`pull_request_target` loads its workflow from the default branch. Until that
+promotion, eligible PRs still run `main`'s previous direct controller, whose
+obsolete requirement for a literal `misconfigured: false` can reject healthy
+externally managed wildcard DNS before deployment. Once #188 reaches `main`, a
+fresh eligible run exercises the protected #239 implementation's exact-SHA
+deployment, alias publication, CORS probe, and attachment upload/removal checks.
 
 The shorter `*.previews.thingtime.com` namespace is reserved for a separate
 future production-preview controller. It must use an independently protected

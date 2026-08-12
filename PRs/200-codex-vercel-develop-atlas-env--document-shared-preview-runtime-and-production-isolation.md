@@ -42,10 +42,28 @@ JWT material, or environment-variable value is stored in the repository.
 The protected implementation from PR #239 lives on `github-actions`, and the
 thin listener from PR #233 lives on `develop`. The default `main` branch still
 contains the previous direct workflow; PR #188 remains the reviewed promotion
-path that brings the thin listener to the default branch. The corrected Vercel
-binding clears the controller's domain configuration gate, while a fresh
-eligible run on this PR supplies live evidence for its exact-SHA deployment,
-alias, CORS, and attachment checks.
+path that brings the thin listener to the default branch. Because
+`pull_request_target` loads its workflow from `main`, #188 must land before a
+fresh eligible PR run can exercise the current protected implementation. The
+corrected Vercel binding clears the stable-domain configuration gate; it does
+not by itself activate the newer controller path.
+
+## Fresh controller evidence — 2026-08-12
+
+[Run 31570507671](https://github.com/lopugit/thingtime/actions/runs/31570507671)
+was dispatched from this PR's refreshed head SHA. The listener handoff passed,
+the default-branch job started, and the controller self-test passed 40/40. The
+job then stopped before creating a Vercel deployment because it checked out
+`main`'s previous direct script, which rejects any wildcard-domain API result
+other than a literal `misconfigured: false`.
+
+That failure is not evidence of missing wildcard DNS. Current Vercel metadata
+reports the wildcard verified and detached, and both authoritative Cloudflare
+nameservers return the exact wildcard CNAME to `cname.vercel-dns.com`. The
+protected `github-actions` implementation replaces the obsolete advisory flag
+gate with that live CNAME verification. Promotion through #188 is therefore the
+prerequisite for rerunning the exact-SHA deployment, alias, CORS, and attachment
+checks; none of those mutation stages ran in the failed default-branch job.
 
 ## Separate Production drift
 
