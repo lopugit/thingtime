@@ -80,6 +80,7 @@ on:
         default: "50"
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
   issues: write

@@ -19,6 +19,42 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Creation-time promotion conflicts are resolved automatically**: when a
+  selected `develop` feature cannot be replayed cleanly onto its promotion base,
+  the protected per-feature promoter first positively proves its historical
+  patch is still effective at the current `develop` tip, then reserves the
+  deterministic branch and hands the immutable source/base plan to a bot-only
+  worker on the fixed `github-actions` control plane. The thin `develop`
+  listener grants the Actions permission needed for that dispatch without
+  restoring executable workflow behavior to product branches. The
+  secret-bearing provider router stays on GitHub-hosted compute and accepts only
+  authenticated, validated downstream runner metadata; promotion-plan handoffs
+  bypass external provider routing until that boundary supports the same
+  immutable plan envelope. The worker re-derives live authority, resolves only
+  mechanically proven conflict paths, treats `graphify-out/**` as derived
+  target-side output, publishes with an exact lease, opens the promotion PR, and
+  resumes dependent stack members automatically. The result
+  is labelled for review and receives evidence naming the resolver run,
+  immutable SHAs, and AI-edited paths; unchanged failed snapshots pause
+  visibly instead of requiring undocumented manual cherry-picks or repeatedly
+  spending model budget. Bot attestations, exact leases, durable stale-snapshot
+  retirement, and idempotent checkpoint/metadata recovery make retries
+  converge across API ambiguity, worker crashes, base movement, or duplicate
+  comments. A recoverable historical patch that current `develop` classifies as
+  removed or ambiguous now blocks visibly before any reservation, branch,
+  immutable promotion plan, AI worker, or promotion PR is created. Only later
+  members of its dependent promotion group wait; unrelated groups continue
+  independently. A later run can proceed only after freshly proving the patch
+  effective and creating a new verified plan; no blocked state is upgraded in
+  place. Missing objects, unreadable patches, operational Git failures, and
+  worker classification mismatches likewise stop before publication. See the
+  [PR #213 engineering note](../PRs/213-codex-auto-resolve-promotion-conflicts-automatically-resolve-promotion-creation-conflicts.md).
+  Conflict-free and AI-resolved verified-source promotions that touch
+  `.github/**` still share the same bot-authored `[skip ci]` content commit and
+  `GITHUB_TOKEN` review checkpoint, so promoted workflow changes cannot execute
+  merely from the branch push that creates their review PR. Removed or ambiguous
+  historical patches never reach that gate because no branch or PR is created.
+  — Codex (AI), 2026-08-10
 - **Required Web CI checks no longer strand non-Remix pull requests**: the
   pull-request listener now always starts, classifies the complete changed-file
   list, and assigns both stable ruleset context names to either the real
@@ -106,10 +142,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   distinguishes a normal non-ancestor result from a Git inspection error, and
   requires original ancestry or both patch-equivalent history and current-tip
   effect verification before an old change may be promoted. Later reverts and
-  removed aggregate ranges fail closed instead of being resurrected. It
-  records structured per-PR blocks instead of aborting the batch. A failed
-  standalone feature no longer prevents later independent promotions; a
-  failed stack member still defers only its dependent members. Group-local
+  removed aggregate ranges are classified instead of being mistaken for
+  current source; PR #213 visibly blocks removed or ambiguous recoverable cases
+  before any reservation, branch, worker, or promotion PR, while unrecoverable
+  authority still fails closed. It records structured per-PR blocks instead of
+  aborting the batch. A failed standalone feature no longer prevents later
+  independent promotions; a failed stack member still defers only its
+  dependent members. Group-local
   exceptions are contained through the remaining groups before failing the
   run, the partial summary is always published, reused promotion branches are
   freshly fetched and checked against an exactly reconstructed source tree and
