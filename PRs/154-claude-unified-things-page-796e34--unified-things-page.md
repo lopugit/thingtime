@@ -114,3 +114,27 @@ The `/things` visual follow-up fixes three related rough edges:
   the check. The only console warning was the existing `HydrateFallback` note.
 - The typecheck ratchet remains warning-only at 151 diagnostics versus its
   stale 143 baseline; none of the diagnostics are in Things core or its test.
+
+## Follow-up: persistent browse toolbar during selection
+
+- Selecting a Thing now adds the contextual Move / Share / Copy / Cut / Delete /
+  Clear bar beneath the browse controls instead of replacing them.
+- View, Show, Arrange, and Kind remain usable while a selection is active, so a
+  user can change view or grouping without first clearing the selected Things.
+- The permanent browse row and conditional action row both retain responsive
+  wrapping on narrow screens.
+
+### Validation
+
+- Targeted Remix ESLint passed with 0 errors and the same 7 existing
+  `ThingsPage.tsx` warnings; `corepack pnpm --dir remix run build:client`
+  passed.
+- The non-blocking typecheck ratchet still reports the existing 152 diagnostics
+  against its stale 143 baseline; none are in `ThingsPage.tsx`.
+- Local in-app browser QA at 1280×800 and 390×844 verified all View / Show /
+  Arrange / Kind controls and all six selection actions remain visible together,
+  changing Columns to List preserves the selection, Group opens while selected,
+  Escape/Clear removes the contextual row, and both sizes scroll top-to-bottom
+  without overlap or horizontal overflow. The console contained only the
+  existing React Router `HydrateFallback` development warning. The temporary QA
+  folder was deleted after verification.

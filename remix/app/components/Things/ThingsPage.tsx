@@ -1153,7 +1153,89 @@ export const ThingsPage = () => {
           </Flex>
         </Box>
 
-        {/* toolbar: selection actions replace browse pills while selecting */}
+        {/* toolbar: browse controls stay available while contextual selection actions appear below */}
+        <Flex alignItems="center" columnGap={4} rowGap={2} wrap="wrap">
+          <ToolbarGroup label="view">
+            <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>
+              Grid
+            </Button>
+            <Button {...pillProps(view === 'list')} leftIcon={<Rows3 size={13} />} onClick={() => setView('list')}>
+              List
+            </Button>
+            <Button {...pillProps(view === 'columns')} leftIcon={<Columns3 size={13} />} onClick={() => setView('columns')}>
+              Columns
+            </Button>
+          </ToolbarGroup>
+          <ToolbarGroup label="show">
+            <Button {...pillProps(displayMode === 'name')} leftIcon={<Tag size={13} />} onClick={() => setDisplayMode('name')}>
+              Names
+            </Button>
+            <Button
+              {...pillProps(displayMode === 'preview')}
+              leftIcon={<Eye size={13} />}
+              onClick={() => setDisplayMode('preview')}
+            >
+              Previews
+            </Button>
+          </ToolbarGroup>
+          <ToolbarGroup label="arrange">
+            <Menu placement="bottom-start">
+              <MenuButton as={Button} {...pillProps(sort !== 'newest')} leftIcon={<ArrowUpDown size={13} />}>
+                {THINGS_SORT_OPTIONS.find((option) => option.id === sort)?.label || 'Sort'}
+              </MenuButton>
+              <Portal>
+                <MenuList fontSize="13px" zIndex={10250}>
+                  {THINGS_SORT_OPTIONS.map((option) => (
+                    <MenuItem
+                      key={option.id}
+                      fontWeight={sort === option.id ? 600 : 400}
+                      onClick={() => setSort(option.id)}
+                    >
+                      {option.icon} {option.label}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </Portal>
+            </Menu>
+            <Menu placement="bottom-start">
+              <MenuButton as={Button} {...pillProps(groupBy !== 'none')} leftIcon={<Layers size={13} />}>
+                {groupBy === 'none' ? 'Group' : THINGS_GROUP_OPTIONS.find((option) => option.id === groupBy)?.label}
+              </MenuButton>
+              <Portal>
+                <MenuList fontSize="13px" zIndex={10250}>
+                  {THINGS_GROUP_OPTIONS.map((option) => (
+                    <MenuItem
+                      key={option.id}
+                      fontWeight={groupBy === option.id ? 600 : 400}
+                      onClick={() => setGroupBy(option.id)}
+                    >
+                      {option.icon} {option.label}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </Portal>
+            </Menu>
+          </ToolbarGroup>
+          <ToolbarGroup label="kind" wrap>
+            {THINGS_KIND_FILTERS.map((entry) => (
+              <Button key={entry.id} {...pillProps(kindFilter === entry.id)} onClick={() => setKindFilter(entry.id)}>
+                {entry.icon} {entry.label}
+              </Button>
+            ))}
+          </ToolbarGroup>
+          {clipboard?.ids.length ? (
+            <>
+              <Box flex={1} />
+              <Button {...pillProps(true)} onClick={pasteClipboard}>
+                📥 Paste {clipboard.ids.length} here
+              </Button>
+              <Button {...pillProps(false)} onClick={() => setClipboard(null)}>
+                ✕
+              </Button>
+            </>
+          ) : null}
+        </Flex>
+
         {selection.size > 0 ? (
           <Flex
             alignItems="center"
@@ -1195,89 +1277,7 @@ export const ThingsPage = () => {
               ✕ Clear
             </Button>
           </Flex>
-        ) : (
-          <Flex alignItems="center" columnGap={4} rowGap={2} wrap="wrap">
-            <ToolbarGroup label="view">
-              <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>
-                Grid
-              </Button>
-              <Button {...pillProps(view === 'list')} leftIcon={<Rows3 size={13} />} onClick={() => setView('list')}>
-                List
-              </Button>
-              <Button {...pillProps(view === 'columns')} leftIcon={<Columns3 size={13} />} onClick={() => setView('columns')}>
-                Columns
-              </Button>
-            </ToolbarGroup>
-            <ToolbarGroup label="show">
-              <Button {...pillProps(displayMode === 'name')} leftIcon={<Tag size={13} />} onClick={() => setDisplayMode('name')}>
-                Names
-              </Button>
-              <Button
-                {...pillProps(displayMode === 'preview')}
-                leftIcon={<Eye size={13} />}
-                onClick={() => setDisplayMode('preview')}
-              >
-                Previews
-              </Button>
-            </ToolbarGroup>
-            <ToolbarGroup label="arrange">
-              <Menu placement="bottom-start">
-                <MenuButton as={Button} {...pillProps(sort !== 'newest')} leftIcon={<ArrowUpDown size={13} />}>
-                  {THINGS_SORT_OPTIONS.find((option) => option.id === sort)?.label || 'Sort'}
-                </MenuButton>
-                <Portal>
-                  <MenuList fontSize="13px" zIndex={10250}>
-                    {THINGS_SORT_OPTIONS.map((option) => (
-                      <MenuItem
-                        key={option.id}
-                        fontWeight={sort === option.id ? 600 : 400}
-                        onClick={() => setSort(option.id)}
-                      >
-                        {option.icon} {option.label}
-                      </MenuItem>
-                    ))}
-                  </MenuList>
-                </Portal>
-              </Menu>
-              <Menu placement="bottom-start">
-                <MenuButton as={Button} {...pillProps(groupBy !== 'none')} leftIcon={<Layers size={13} />}>
-                  {groupBy === 'none' ? 'Group' : THINGS_GROUP_OPTIONS.find((option) => option.id === groupBy)?.label}
-                </MenuButton>
-                <Portal>
-                  <MenuList fontSize="13px" zIndex={10250}>
-                    {THINGS_GROUP_OPTIONS.map((option) => (
-                      <MenuItem
-                        key={option.id}
-                        fontWeight={groupBy === option.id ? 600 : 400}
-                        onClick={() => setGroupBy(option.id)}
-                      >
-                        {option.icon} {option.label}
-                      </MenuItem>
-                    ))}
-                  </MenuList>
-                </Portal>
-              </Menu>
-            </ToolbarGroup>
-            <ToolbarGroup label="kind" wrap>
-              {THINGS_KIND_FILTERS.map((entry) => (
-                <Button key={entry.id} {...pillProps(kindFilter === entry.id)} onClick={() => setKindFilter(entry.id)}>
-                  {entry.icon} {entry.label}
-                </Button>
-              ))}
-            </ToolbarGroup>
-            {clipboard?.ids.length ? (
-              <>
-                <Box flex={1} />
-                <Button {...pillProps(true)} onClick={pasteClipboard}>
-                  📥 Paste {clipboard.ids.length} here
-                </Button>
-                <Button {...pillProps(false)} onClick={() => setClipboard(null)}>
-                  ✕
-                </Button>
-              </>
-            ) : null}
-          </Flex>
-        )}
+        ) : null}
 
         {/* breadcrumbs — every crumb is also a drag-and-drop move target */}
         {!searchMode && (
