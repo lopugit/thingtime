@@ -19,6 +19,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **The Thingtime AI preference now reaches the remaining Claude runtime**:
+  Lopu musings resolve their Anthropic model from the current Admin waterfall
+  on every Claude attempt, just like conflict resolution, rebase repair, and
+  semantic Graphify. Named Admin choices override the old environment model;
+  the explicit `default` sentinel safely delegates to `LOPU_CLAUDE_MODEL`, and
+  the independent OpenAI fallback retains its provider-valid model. Focused
+  tests prevent warm runtimes from pinning an earlier Admin choice. — Codex
+  (AI), 2026-08-12
+
 - **Required Web CI checks no longer strand non-Remix pull requests**: the
   pull-request listener now always starts, classifies the complete changed-file
   list, and assigns both stable ruleset context names to either the real
