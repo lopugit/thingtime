@@ -5561,13 +5561,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/oauth/desktop/authorize',
     summary: 'Turn installed-app consent into a short-lived one-time code for an exact loopback callback.',
     detail:
-      'POST from the first-party consent page with clientId, redirectUri, S256 codeChallenge, state, and approved scopes. The callback must be plain HTTP on 127.0.0.1 or [::1] with an explicit unprivileged port and an allowlisted exact origin. The response contains a five-minute code and echoed state; it cannot authenticate a normal Thingtime endpoint and is consumed once at /api/v1/oauth/token.',
+      'POST { clientId, redirectUri, codeChallenge, codeChallengeMethod: "S256", state, scope?, ' +
+      'optionalScope?, extra?, scopes?, sharedThings? } from the first-party /authorize page with the ' +
+      "user's real session. redirectUri must be plain HTTP on 127.0.0.1 or [::1], carry an explicit " +
+      'unprivileged port, have no existing query/fragment/credentials, and its exact origin (including ' +
+      'port) must be registered on the app. state is required (16-512 characters) and must be generated ' +
+      'randomly by the client. The response contains redirectTo with a signed five-minute ' +
+      'authorization code plus the echoed state. The code is backed by a purpose oauth-code session, ' +
+      'cannot authenticate any normal Thingtime endpoint, and can be consumed exactly once at ' +
+      '/api/v1/oauth/token with the original PKCE verifier.',
     auth: { mode: 'session', description: "The end user's Thingtime browser session after explicit consent." },
     methods: ['POST'],
     steps: [
       'Bind the loopback listener before opening the system browser.',
-      'Open /authorize with client_id, redirect_uri, code_challenge, code_challenge_method=S256, and state.',
-      'Verify the callback state before exchanging its code.'
+      'Open /authorize with client_id, redirect_uri, code_challenge, code_challenge_method=S256, state, and scopes.',
+      'After consent, navigate to redirectTo and verify the required random callback state before exchanging its code.'
     ],
     requestExamples: [
       {
@@ -5575,7 +5583,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Commander consent with private cloud settings storage.',
         method: 'POST',
         body: {
-          clientId: 'ttapp_example',
+          clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
           redirectUri: 'http://127.0.0.1:45432/oauth/callback',
           codeChallenge: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
           codeChallengeMethod: 'S256',
@@ -5588,8 +5596,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Code issued; the consent page navigates to the local callback.',
-        body: { ok: true, redirectTo: 'http://127.0.0.1:45432/oauth/callback?code=<one-time-code>&state=opaque-request-state' }
+        description: 'Code issued; the consent page navigates to this local callback.',
+        body: {
+          ok: true,
+          redirectTo:
+            'http://127.0.0.1:45432/oauth/callback?code=%3Cone-time-signed-code%3E&state=opaque-request-state',
+          expiresAt: '2026-08-12T01:05:00.000Z'
+        }
+      },
+      {
+        status: 403,
+        description: 'The callback origin is not registered on the app.',
+        body: { ok: false, error: 'This loopback origin is not on the app’s allowlist' }
       }
     ]
   }),
@@ -5600,13 +5618,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/oauth/token',
     summary: 'Exchange a one-time desktop authorization code with its S256 verifier.',
     detail:
-      'POST { grantType: "authorization_code", clientId, redirectUri, code, codeVerifier }. Native apps are public clients: an exact callback, five-minute one-time code, and PKCE verifier replace a client secret. Success returns the existing revocable, origin-bound app token.',
+      'POST JSON { grantType: "authorization_code", clientId, redirectUri, code, codeVerifier }. Native ' +
+      'apps are public clients and do not ship a client secret: security comes from the unguessable ' +
+      'verifier, exact client + callback binding, five-minute code lifetime, and atomic one-time ' +
+      'consumption. App existence, suspension state, callback allowlist, and user existence are checked ' +
+      'again at exchange time. Success returns the same revocable, 30-day, origin-bound app Bearer token ' +
+      'used by Login with Thingtime. Keep it in the native OS credential vault, never React storage, and ' +
+      'call /api/v1/oauth/userinfo to resolve the account.',
     auth: { mode: 'none', description: 'The one-time code plus S256 verifier are the public client proof.' },
     methods: ['POST'],
     steps: [
-      'Verify callback state.',
-      'Exchange the code with the original verifier and exact callback URI.',
-      'Store accessToken in the OS credential vault.'
+      'Verify the state received by the loopback callback.',
+      'POST the code with the original verifier, clientId, and same callback URI (normalized, then path/port-bound exactly).',
+      'Store accessToken in Keychain, Windows Credential Manager, or Secret Service and call /oauth/userinfo.'
     ],
     requestExamples: [
       {
@@ -5615,18 +5639,29 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         method: 'POST',
         body: {
           grantType: 'authorization_code',
-          clientId: 'ttapp_example',
+          clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
           redirectUri: 'http://127.0.0.1:45432/oauth/callback',
-          code: '<one-time-code>',
+          code: '<one-time-signed-code>',
           codeVerifier: '<43-to-128-character-pkce-verifier>'
         }
       }
     ],
     responseExamples: [
-      { status: 200, description: 'App token minted.', body: { ok: true, accessToken: '<app-scoped-jwt>', tokenType: 'Bearer' } },
+      {
+        status: 200,
+        description: 'App token minted.',
+        body: {
+          ok: true,
+          accessToken: '<app-scoped-jwt>',
+          tokenType: 'Bearer',
+          expiresAt: '2026-09-11T01:00:00.000Z',
+          expiresIn: 2592000,
+          scopes: ['profile.username', 'app-data']
+        }
+      },
       {
         status: 400,
-        description: 'Wrong verifier, mismatch, expiry, or replay.',
+        description: 'Wrong verifier, mismatch, expiry, or replay (intentionally indistinguishable).',
         body: { ok: false, error: 'Authorization code is invalid, expired, already used, or does not match this request' }
       }
     ]

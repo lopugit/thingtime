@@ -13,9 +13,10 @@ import { parseScopeParam, sanitizeGrantedScopes, scopeCovers } from '~/api/utils
 import { sanitizeSharedThings } from '~/api/utils/apps/sharedThings';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-// Consent endpoint for installed public clients. It gives the browser only a
-// short-lived, single-use code at an RFC 8252 loopback callback; the daemon
-// must prove possession of the original S256 verifier at the token endpoint.
+// POST /api/v1/oauth/desktop/authorize — the first-party /authorize page uses
+// this after consent for installed apps. It returns a redirect containing a
+// short-lived, one-time code — never the app token. The loopback receiver must
+// exchange that code with the original S256 verifier at /api/v1/oauth/token.
 export const action = async ({ request }: { request: Request }) => {
 	const user = await getCurrentUser(request);
 	if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });

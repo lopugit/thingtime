@@ -1318,6 +1318,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Installed-app Login with Thingtime via loopback + S256 PKCE**: native
+  desktop clients can now reuse the existing consent screen without exposing an
+  app token to a WebView or custom URL scheme. The first-party page issues a
+  signed five-minute `oauth-code` session to an exact registered
+  `127.0.0.1`/`[::1]` callback; `/api/v1/oauth/token` atomically consumes it
+  with the original verifier and returns the existing 30-day, revocable,
+  namespace-fenced app token. OAuth codes are explicitly barred from all
+  full-account auth paths, and loopback validation, PKCE, callback construction,
+  API docs, and manual replay/mismatch checks are covered. — Codex (AI),
+  2026-08-12
+
 - **Trusted `develop`-target PR deployment controller**: same-repository,
   trusted-author PRs targeting `develop` can now be deployed through a
   secret-free `pull_request_target` dispatcher and provenance-checked

@@ -1694,6 +1694,60 @@ is fixed, and cite the checklist you ran in the PR description.
       unpkg compatibility policy, while `/`, `/authorize`, and ordinary app
       routes keep the strict policy without `unsafe-eval`.
 
+## Installed-app Login with Thingtime (loopback + PKCE)
+
+- [ ] Register a disposable app with the exact callback origin
+      `http://127.0.0.1:<port>`, bind a loopback receiver before opening
+      `/authorize`, and pass `redirect_uri`, a random `state`, and an S256
+      `code_challenge`. Approving redirects to the exact callback path with only
+      `code` + the original `state`; no app access token appears in the browser
+      URL, page storage, or postMessage.
+- [ ] Exchange the code once at `POST /api/v1/oauth/token` with the original
+      verifier, clientId, and the same normalized redirectUri; call
+      `/api/v1/oauth/userinfo` with the returned Bearer token and confirm the
+      selected account/scopes. Replaying the code or changing the verifier,
+      clientId, redirect URI/path/port, or registered origin must return the same
+      bounded `invalid/expired/used/mismatched` 400 and mint no app session.
+- [ ] Reject HTTPS, `localhost`, `0.0.0.0`, non-loopback hosts, missing or
+      privileged ports, callback credentials/query/fragments, `plain` PKCE, and
+      malformed verifier/challenge lengths. Cancellation redirects with
+      `error=access_denied` and the original state but no code.
+- [ ] Present an `oauth-code` JWT as an Authorization Bearer token to
+      `/api/v1/auth/me`, `/api/v1/auth/accounts`, and an account-authenticated
+      write including `/api/v1/things`: it must never resolve as a
+      browser/account credential. Delete or
+      suspend the app, remove the callback origin, or delete the user between
+      issuance and exchange; exchange must fail closed.
+
+## Commander desktop launcher
+
+- [ ] Launch the installed `~/Applications/Commander.app`, verify the signed
+      app starts its bundled Node daemon and Rust search child, then open/close
+      the launcher repeatedly with the configured global shortcut. The search
+      input must already be focused and no blank WebKit frame may flash.
+- [ ] Force-terminate the Commander host and verify its parent watchdog stops
+      the Node/Rust children and releases port 47820. A subsequent verified
+      install must start a new host-owned daemon rather than accept stale health.
+- [ ] Search `settings`, press Return, and verify the separate native Settings
+      window. Exercise every General option, record a custom shortcut, quit and
+      relaunch, and confirm hotkey/menu-bar/login-item state is restored.
+- [ ] Search apps with prefix, substring, keyword, and fuzzy queries; navigate
+      with arrows, execute with Return, open Command-K, traverse actions, and
+      dismiss actions/launcher with Escape. Long names must not clip or create
+      horizontal scroll in default or compact mode.
+- [ ] Browse the latest live Raycast Store feed, search a term, open the full
+      web catalog, and sideload a valid source folder. Malformed manifests and
+      unsupported view commands must show explicit compatibility errors; they
+      must never be reported as successfully executable.
+- [ ] Complete Thingtime PKCE login with two accounts, switch between them,
+      relaunch, and sync appearance/window preferences. Inspect the WebView and
+      loopback UI API: no Bearer token may be returned to React; Keychain items
+      must be separated by issuer, client ID, and user ID.
+- [ ] Resize Settings through its minimum and full-screen-adjacent sizes, visit
+      every tab, scroll top-to-bottom, and exercise Store, account, sync, and
+      Advanced dynamic states in light, dark, default-text, and large-text
+      modes. No content may overlap, clip, or escape the native window.
+
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
 - [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"

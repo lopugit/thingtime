@@ -147,6 +147,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/oauth/token': () => import('../../../app/routes/api/v1/oauth/token/_token'),
   'v1/oauth/scopes': () => import('../../../app/routes/api/v1/oauth/scopes/_scopes'),
   'v1/oauth/shared': () => import('../../../app/routes/api/v1/oauth/shared/_shared'),
+  'v1/oauth/token': () => import('../../../app/routes/api/v1/oauth/token/_token'),
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),

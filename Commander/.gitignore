@@ -1,0 +1,12 @@
+node_modules/
+.pnpm-store/
+dist/
+.build/
+.swiftpm/
+target/
+.DS_Store
+*.xcuserstate
+.env
+.env.local
+runtime/
+coverage/
