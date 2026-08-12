@@ -1205,10 +1205,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/auth/service-account',
     summary: 'Creates a service-owned account with a non-expiring bearer token and 5 GiB storage allowance.',
     detail:
-      'Use this endpoint to connect other apps to Thingtime backend data. The account is public self-service but must verify its email within seven days.',
+      'Use this endpoint to connect other apps to Thingtime backend data. The account is public self-service but must verify its email within seven days. Provisioning is rate limited per IP (each call mints a permanent token) and the request body is capped at 16 KiB.',
     auth: {
       mode: 'none',
-      description: 'Public endpoint. Email verification is required after creation.'
+      description: 'Public endpoint, rate limited per IP. Email verification is required after creation.'
     },
     methods: ['POST'],
     steps: [
@@ -1264,9 +1264,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 400,
         description: 'A valid email is required.',
         body: { ok: false, error: 'A valid email is required' }
+      },
+      {
+        status: 429,
+        description: 'Too many provisioning requests from this IP inside the window.',
+        body: { ok: false, error: 'Too many service accounts from this address — please wait before provisioning more 🌸' }
       }
     ],
-    notes: ['The bearer token is intentionally non-expiring; rotate it by creating a replacement service account when needed.']
+    notes: [
+      'The bearer token is intentionally non-expiring; rotate it by creating a replacement service account when needed.',
+      'Provisioning is rate limited per IP and fail-closed: if the limiter store is unreachable the route returns 503 rather than minting unmetered tokens.'
+    ]
   }),
   endpoint({
     id: 'auth-two-factor',

@@ -99,7 +99,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // /crypto password hasher: anonymous and pure (no DB), but bcrypt burns
   // ~100ms of CPU per call by design, so the budget is tight per IP — the
   // compute is the abuse surface, not the hash it returns
-  'crypto.hashPassword': { limit: 20, windowMs: 60_000, enabled: true }
+  'crypto.hashPassword': { limit: 20, windowMs: 60_000, enabled: true },
+  // service-account provisioning is public self-service but each call mints a
+  // permanent bearer token + a 5 GiB-allowance account and sends a verification
+  // email — bound it tightly per IP (a legit integrator provisions a handful,
+  // ever). Enforced fail-closed at the route like mongodb.populate.
+  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

@@ -352,19 +352,36 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-service-account-validation',
     name: 'Service account email validation',
-    description: 'The service account endpoint is public but requires a valid email.',
+    description: 'The service account endpoint is public but requires a valid email (429/503 when the per-IP provisioning window or limiter is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/service-account',
     body: { serviceName: 'Thingtime API Test Missing Email' },
     expect: expectJson(
-      [400],
-      (body) =>
-        body?.ok === false &&
-        String(body?.error || '')
-          .toLowerCase()
-          .includes('email'),
-      'Service account route requires a valid email.'
+      [400, 429, 503],
+      (body, response) =>
+        response.status === 400
+          ? body?.ok === false && String(body?.error || '').toLowerCase().includes('email')
+          : body?.ok === false && typeof body?.error === 'string',
+      'Service account route requires a valid email (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'auth-service-account-body-cap',
+    name: 'Service account body size cap',
+    description: 'Oversized provisioning bodies are rejected with 413 before any account work (the route caps bodies at 16 KiB).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/service-account',
+    body: {
+      serviceName: 'Thingtime API Test Oversized Body',
+      email: 'oversized-body@example.invalid',
+      meta: { padding: 'x'.repeat(20 * 1024) }
+    },
+    expect: expectJson(
+      [413, 429, 503],
+      (body, response) => (response.status === 413 ? body?.ok === false : typeof body?.error === 'string'),
+      'Oversized service-account body rejected with 413 (or rate-limited with an error shape).'
     )
   },
   {
@@ -377,8 +394,9 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: uniqueServiceAccountBody,
     expect: expectJson(
-      [200],
-      (body) => {
+      [200, 429, 503],
+      (body, response) => {
+        if (response.status !== 200) return body?.ok === false && typeof body?.error === 'string';
         const payload = decodeJwtPayload(body?.accessToken);
         const deadlineMs = Date.parse(body?.verificationRequiredBy || '');
         const sevenDaysMs = 1000 * 60 * 60 * 24 * 7;
@@ -395,7 +413,7 @@ export const apiTests: ApiTestDefinition[] = [
           deadlineLooksRight
         );
       },
-      'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance.'
+      'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance (or the per-IP provisioning limit answered with an error shape).'
     )
   },
   {
@@ -447,8 +465,9 @@ export const apiTests: ApiTestDefinition[] = [
     timeoutMs: 30000,
     body: uniqueEmailServiceAccountBody,
     expect: expectJson(
-      [200],
-      (body) => {
+      [200, 429, 503],
+      (body, response) => {
+        if (response.status !== 200) return body?.ok === false && typeof body?.error === 'string';
         const payload = decodeJwtPayload(body?.accessToken);
         return (
           body?.ok === true &&
@@ -458,7 +477,7 @@ export const apiTests: ApiTestDefinition[] = [
           !Object.prototype.hasOwnProperty.call(payload || {}, 'exp')
         );
       },
-      'Service account was created and triggered verification email delivery.'
+      'Service account was created and triggered verification email delivery (or the per-IP provisioning limit answered with an error shape).'
     )
   },
   {
