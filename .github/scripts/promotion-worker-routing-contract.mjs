@@ -176,6 +176,18 @@ assert.match(workflow, /resolved deterministically toward the source patch/);
 assert.match(worker, /promotion-discarded-changes\.md/);
 assert.match(worker, /note_discarded/);
 assert.match(worker, /promotion-unmerged-paths\.zlist/);
+// Owner decision (2026-08-12): there is NO sensitive-path deny-list. The
+// model may be shown any conflicted repo file; safety lives in the mechanical
+// shape checks, the scope verifier, and [skip ci]+approval publication
+// gating. These pins hold the ABSENCE, so a deny-list cannot quietly return.
+assert.doesNotMatch(prepareRound, /\bsensitive_path\b/);
+assert.doesNotMatch(prepareRound, /Sensitive configuration\/security conflict/);
+assert.doesNotMatch(worker, /\bsensitive_path\b/);
+// ci_sensitive_paths (the [skip ci]/approval publication gate) is NOT a
+// deny-list and deliberately survives; the word-boundary pins above leave it
+// alone while still catching any resurrected sensitive_path().
+assert.match(worker, /ci_sensitive_paths true/);
+assert.match(prepareRound, /deliberately NO sensitive-path deny-list/);
 assert.match(workflow, /Base-side changes affected by deterministic resolutions/);
 assert.match(worker, /Review-gated promotion source commit is missing \[skip ci\]/);
 assert.match(worker, /classify_source_lineage\(\)/);
