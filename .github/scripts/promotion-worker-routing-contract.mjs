@@ -234,6 +234,12 @@ assert.match(workflow, /Source PR was not merged to \$SOURCE_REF/);
 assert.match(workflow, /live_ref_sha "\$SOURCE_REF"/);
 assert.match(workflow, /--to-\$\{target_slug\}/);
 assert.match(promoter, /source_ref: CFG\.source/);
+assert.match(workflow, /source_ref: \$\{\{ steps\.validate\.outputs\.source_ref \}\}/);
+assert.match(workflow, /SOURCE_REF: \$\{\{ needs\.promotion_validate\.outputs\.source_ref \}\}/);
+// Class-killer: no promotion check may ever name the source branch literally
+// again — every live-tip and merged-into check follows $SOURCE_REF.
+assert.doesNotMatch(workflow, /live_ref_sha develop/);
+assert.doesNotMatch(workflow, /<<<"\$pr"\)" = develop/);
 // Deterministically settled paths are absent from the live pre-model set but
 // always present in the immutable merge-tree recompute: the round compares
 // against the union, and stages their content only from the expected rebase
