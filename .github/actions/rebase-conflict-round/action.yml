@@ -51,11 +51,26 @@ inputs:
     description: "Closed path policy: pr-rebase (default) or trusted develop promotion."
     required: false
     default: pr-rebase
+  allow-unresolved:
+    description: >-
+      When "true", scratch files still carrying conflict markers do not fail
+      this round: the action reports retry_needed=true with the unresolved
+      list, stages nothing, and leaves the checkout mid-rebase so a later
+      round re-exposes the same mechanically-derived conflict set to a fresh
+      model attempt. The final round of a chain must leave this "false".
+    required: false
+    default: "false"
 
 outputs:
   complete:
     description: Whether the full rebase completed after this round.
     value: ${{ steps.verify.outputs.complete }}
+  retry_needed:
+    description: Markers remained and the caller allows another round.
+    value: ${{ steps.verify.outputs.retry_needed }}
+  unresolved_paths:
+    description: Newline-separated scratch paths still containing markers.
+    value: ${{ steps.verify.outputs.unresolved_paths }}
   conflicted:
     description: Whether the next replayed commit stopped on another conflict set.
     value: ${{ steps.verify.outputs.conflicted }}
@@ -233,9 +248,8 @@ runs:
               incoming commit being replayed
               >>>>>>> REBASE_HEAD
 
-          For each listed file, read the whole file and preserve the semantic
-          union: keep the destination's newer intent and re-apply the incoming
-          commit's intent on top. Remove the complete conflict-marker block.
+          ${{ inputs.conflict-policy == 'promotion' && 'For each listed file, read the whole file and produce a FAITHFUL REPLAY. This is a promotion: the incoming commit is the source patch being promoted, and its intent governs every conflict. Apply the incoming side in full. Keep destination content only where the incoming commit did not touch or supersede it, and never preserve destination changes that the incoming side rewrote, replaced, or deleted.' || 'For each listed file, read the whole file and preserve the semantic union: keep the newer intent of the destination and re-apply the intent of the incoming commit on top.' }}
+          Remove the complete conflict-marker block.
           If a resolution is not high-confidence, leave its markers intact so
           verification stops for human review. A bare `=======` line outside a
           marker block can be legitimate Markdown and is not itself a conflict.
@@ -267,6 +281,7 @@ runs:
         EXPECTED_CONFLICT_PATHS: ${{ steps.prepare.outputs.conflict_paths }}
         EXPECTED_AI_CONFLICT_PATHS: ${{ steps.prepare.outputs.ai_conflict_paths }}
         EXPECTED_DETERMINISTIC_PATHS: ${{ inputs.deterministic-conflict-paths }}
+        ALLOW_UNRESOLVED: ${{ inputs.allow-unresolved }}
         GRAPHIFY_RESET: ${{ steps.prepare.outputs.graphify_reset }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
@@ -513,6 +528,36 @@ runs:
             printf '\n'
           } >>"$needles"
         done
+
+        # Retry pre-pass: if the model left conflict markers and the caller
+        # allows another round, report instead of failing. Nothing is staged
+        # and the real checkout stays mid-rebase, so the next round rebuilds
+        # the same mechanically-derived conflict baseline for a fresh attempt.
+        unresolved_scratch="$temp_dir/unresolved-scratch"
+        : >"$unresolved_scratch"
+        while IFS= read -r path; do
+          [[ -n "$path" ]] || continue
+          case "$path" in graphify-out/*) continue ;; esac
+          is_listed "$path" "$deterministic_conflicts" && continue
+          scratch_probe="$SCRATCH_ABS/$path"
+          if [[ -f "$scratch_probe" && ! -L "$scratch_probe" ]] \
+             && grep -qE '^(<{7,}|\|{7,}|>{7,})( |$)' -- "$scratch_probe"; then
+            printf '%s\n' "$path" >>"$unresolved_scratch"
+          fi
+        done <"$derived_conflicts"
+        if [[ -s "$unresolved_scratch" && "$ALLOW_UNRESOLVED" == true ]]; then
+          echo "Conflict markers remain and a later round is allowed; deferring."
+          {
+            echo "retry_needed=true"
+            echo "complete=false"
+            echo "conflicted=true"
+            echo "unresolved_paths<<TT_UNRESOLVED_EOF"
+            cat "$unresolved_scratch"
+            echo "TT_UNRESOLVED_EOF"
+          } >>"$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "retry_needed=false" >>"$GITHUB_OUTPUT"
 
         max_source_bytes=524288
         max_resolved_round_bytes=4194304
