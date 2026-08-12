@@ -1550,9 +1550,10 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       inherit-locked things as skipped, never silently changing them. Missing
       acl 400s the whole batch loudly.
 - [ ] Selection: click selects, Cmd/Ctrl toggles, Shift ranges, Cmd/Ctrl+A
-      selects all loaded, Escape clears; the contextual toolbar replaces the
-      view pills while anything is selected. Mobile: tap OPENS, checkboxes
-      select.
+      selects all loaded, Escape clears; the View / Show / Arrange / Kind
+      toolbar remains visible in its top position while the contextual toolbar
+      appears beneath it. Mobile: tap OPENS, checkboxes select; both toolbars
+      wrap without overlap or horizontal overflow.
 - [ ] Clipboard: Copy/Cut (toolbar or Cmd/Ctrl+C/X) then Paste into any folder
       (Cmd/Ctrl+V or the Paste pill); cut items dim until pasted; cut+paste
       moves, copy+paste duplicates.
