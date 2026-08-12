@@ -118,6 +118,13 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Added
 
+- **The CI promotion lanes auto-run**: after every successful default
+  develop → main promoter run, a fan-out job dispatches the
+  main → github-actions and develop → github-actions lanes with the
+  `.github/` prefix guard (dry-run passthrough, no cascade, serialized by the
+  shared concurrency group). The primary promotion namespace is pinned to
+  `main`, so every other lane's branches carry `--to-<target>` and cross-lane
+  collisions are impossible. — Claude (AI), 2026-08-12
 - **Reverse promotion lane**: the promoter takes `source_branch`,
   `target_branch` and `require_path_prefix` as dispatch inputs (defaults keep
   the standing develop → main lane untouched), `github-actions` joins the
