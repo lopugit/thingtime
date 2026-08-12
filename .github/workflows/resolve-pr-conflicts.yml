@@ -1198,8 +1198,11 @@ jobs:
           [[ "$PLAN_HASH" =~ ^[0-9a-f]{64}$ ]] || fail "promotion_plan_hash must be a SHA-256."
           safe_ref "$BASE_REF" || fail "Unsafe promotion base ref."
           safe_ref "$PROMOTION_BRANCH" || fail "Unsafe promotion branch ref."
-          [[ "$BASE_REF" = main || "$BASE_REF" = promote/pr-* ]] \
-            || fail "Promotion base must be main or a prior promotion branch."
+          # github-actions joined the allowlist for the reverse lane (owner
+          # request, 2026-08-12): main-only CI work promotes onto the control
+          # plane through this same trusted worker chain.
+          [[ "$BASE_REF" = main || "$BASE_REF" = github-actions || "$BASE_REF" = promote/pr-* ]] \
+            || fail "Promotion base must be main, github-actions, or a prior promotion branch."
 
           # Decode only to bounded runner-temp files. Canonical re-encoding
           # rejects whitespace, alternate alphabets, truncated padding, and

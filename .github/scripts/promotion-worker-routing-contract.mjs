@@ -201,6 +201,12 @@ assert.match(workflow, /Write\(\$\{\{ steps\.release_analysis_inputs\.outputs\.d
 assert.match(workflow, /commits-only-on-main\.txt/);
 assert.match(promoter, /A model-authored release analysis is posted as a comment/);
 assert.doesNotMatch(promoter, /did not ask AI to infer/);
+// Reverse lane (owner request, 2026-08-12): source/target/path-prefix are
+// dispatch inputs, github-actions is a legal promotion base, and the lane
+// guard skips any PR whose planned patch leaves the lane's prefixes.
+assert.match(workflow, /"\$BASE_REF" = github-actions/);
+assert.match(promoter, /REQUIRE_PATH_PREFIXES/);
+assert.match(promoter, /outside this lane/);
 // Deterministically settled paths are absent from the live pre-model set but
 // always present in the immutable merge-tree recompute: the round compares
 // against the union, and stages their content only from the expected rebase

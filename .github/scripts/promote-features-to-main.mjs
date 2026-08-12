@@ -100,6 +100,13 @@ const CFG = {
   lookback: Math.max(1, Math.min(100, Number(env("LOOKBACK", "50")) || 50)),
   maxNewPrs: Math.max(1, Number(env("MAX_NEW_PRS", "10")) || 10),
   requireLabel: env("REQUIRE_LABEL", ""),
+  // Lane path guard (reverse lane): when set, only PRs whose ENTIRE planned
+  // patch stays under these prefixes promote on this run. Keeps app-wide
+  // sources (a merged develop→main promotion, say) out of a CI-scoped
+  // main→github-actions lane. Skips are summary lines, not PR comments —
+  // being outside a lane is scoping, not a failure.
+  requirePathPrefixes: env("REQUIRE_PATH_PREFIXES", "")
+    .split(",").map((s) => s.trim()).filter(Boolean),
   skipLabels: env("SKIP_LABELS", "no-promote,skip-promotion")
     .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
   groupFromTitleScope: flag("GROUP_FROM_TITLE_SCOPE", true),
@@ -5801,6 +5808,22 @@ async function runPromotion(results, state) {
             );
           }
           break;
+        }
+        if (CFG.requirePathPrefixes.length && Array.isArray(plan.picks) && plan.picks.length) {
+          const planned = readPlannedPatch(plan.picks, undefined, {});
+          if (!planned.ok) {
+            results.blocked.push(...groupFailureMessages(
+              group, index, `lane path guard could not read the planned patch: ${planned.error}`,
+            ));
+            break;
+          }
+          const outside = (planned.paths || []).filter(
+            (path) => !CFG.requirePathPrefixes.some((prefix) => path.startsWith(prefix)),
+          );
+          if (outside.length) {
+            skip(pr, `outside this lane's path prefixes (${CFG.requirePathPrefixes.join(", ")}): ${outside.slice(0, 3).join(", ")}${outside.length > 3 ? ", …" : ""}`);
+            break;
+          }
         }
         if (record?.state === "OPEN") {
           if (record.baseRefName !== baseName) {
