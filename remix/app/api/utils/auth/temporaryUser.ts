@@ -4,6 +4,7 @@ import { signJwt } from './jwt';
 import { createUserAccount, type CreateUserAccountInput } from './registerUser';
 import { createSession } from './sessions';
 import type { PublicUser } from './users';
+import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 
 export const TEMPORARY_USER_STORAGE_ALLOWANCE_BYTES = 64 * 1024 * 1024;
 export const TEMPORARY_USER_SOURCE = 'things-first-land';
@@ -18,7 +19,7 @@ export const buildTemporaryUserAccountInput = (
 		username: `guest-${suffix}`,
 		password: `temporary-${credential}`,
 		email: `guest-${suffix}@temporary.thingtime.invalid`,
-		displayName: 'Temporary space',
+		displayName: ANONYMOUS_USER_NAME,
 		emailVerified: false,
 		accountKind: 'user',
 		storageAllowanceBytes: TEMPORARY_USER_STORAGE_ALLOWANCE_BYTES,

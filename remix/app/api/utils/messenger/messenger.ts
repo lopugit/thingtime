@@ -13,6 +13,7 @@ import { resolveProfiles, parseChronoCursor, chronoCursorClause } from '../thing
 import { getUsersReadReceiptsMap, getUserReadReceiptsEnabled, pushUserRecentReaction, findUserById } from '../auth/users';
 import { MAX_CHAT_MEMBERS, MAX_CHAT_MEMBERS_PER_ADD, MAX_CHAT_NAME_CHARS, MAX_CHAT_TOPIC_CHARS, MAX_CHATS_PER_COMMUNITY, MAX_MESSAGE_CHARS, MAX_NICKNAME_CHARS } from '~/schemas/registry';
 import { customReactionEmojiId, isCustomReactionToken, sanitizeChatReactionToken } from '~/utils/reactionTokens';
+import { getUserDisplayName } from '~/utils/userIdentity';
 import { followersOfSet, followingSet, isFollowing } from './follows';
 import type {
   ChatRole,
@@ -581,10 +582,9 @@ const summaryEntry = (viewerId: string, chatDoc: any, ctx: SummaryContext): Chat
       ? {
           id: String(preview.id),
           authorId: String(preview.authorId),
-          authorName:
-            ctx.profiles.get(String(preview.authorId))?.displayName ||
-            ctx.profiles.get(String(preview.authorId))?.username ||
-            null,
+          authorName: ctx.profiles.get(String(preview.authorId))
+            ? getUserDisplayName(ctx.profiles.get(String(preview.authorId))!)
+            : null,
           text: preview.deleted ? '' : String(preview.text || ''),
           deleted: !!preview.deleted,
           systemType: preview.systemType ?? null,
@@ -1007,7 +1007,7 @@ const projectMessages = async (
         ? {
             id: reply.shareId,
             authorId: String(reply.ownerId),
-            authorName: replyAuthor?.displayName || replyAuthor?.username || null,
+            authorName: replyAuthor ? getUserDisplayName(replyAuthor) : null,
             text: previewText(reply.crystal),
             deleted: !!reply.crystal?.deletedAt
           }

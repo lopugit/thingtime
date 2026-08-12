@@ -25,7 +25,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   account-switcher roster entry. The pre-paint bootstrap is idempotent,
   preserves existing signed-in users, retains ordinary ACL/quota enforcement,
   and leaves login/register reachable so the browser can add another account
-  without discarding its temporary space. — Codex (AI), 2026-08-12
+  without discarding its temporary space. Temporary sessions now retain the
+  standard logged-out `Login` navigation while every visible identity surface
+  presents `Anonymous` and `Login to claim`, never the generated guest handle
+  or placeholder email. — Codex (AI), 2026-08-12
 - **Per-automation GitHub/Vercel compute routing**: Admin → CI Control can now
   keep each supported automation on GitHub-hosted runners or move its expensive
   work to an ephemeral Vercel Sandbox with one toggle. A signed, idempotent

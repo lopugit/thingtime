@@ -4,6 +4,7 @@ import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '../Lopu/useLopu';
+import { getUserMention } from '~/utils/userIdentity';
 
 // Device-scoped mirror of the last-known roster so the switcher paints its rows
 // instantly on open instead of a "Checking accounts…" spinner (optimistic
@@ -79,7 +80,7 @@ export const useAccountSwitcher = () => {
       if (resp?.ok) {
         commitRef.current(resp.accounts || []);
         lopuRef.current({
-          title: `Switched to @${resp.user?.username || target.username} ✨`,
+          title: `Switched to ${getUserMention(resp.user || target)} ✨`,
           status: 'success',
           duration: 5000
         });
@@ -111,8 +112,8 @@ export const useAccountSwitcher = () => {
       if (resp?.ok) {
         commitRef.current(resp.accounts || []);
         lopuRef.current({
-          title: `Signed @${target.username} out 👋`,
-          description: resp.user ? `Now on @${resp.user.username}.` : undefined,
+          title: `Signed ${getUserMention(target)} out 👋`,
+          description: resp.user ? `Now on ${getUserMention(resp.user)}.` : undefined,
           status: 'success',
           duration: 5000
         });
@@ -148,7 +149,7 @@ export const useAccountSwitcher = () => {
       if (resp?.ok) {
         if (Array.isArray(resp.accounts)) commitRef.current(resp.accounts);
         lopuRef.current({
-          title: resp.user ? `Logged out — switched to @${resp.user.username} ✨` : 'Logged out',
+          title: resp.user ? `Logged out — switched to ${getUserMention(resp.user)} ✨` : 'Logged out',
           status: 'success',
           duration: 6000
         });

@@ -10,6 +10,7 @@ export type BrowseSchemaAuthor = {
   id: string;
   username: string;
   displayName: string | null;
+  temporary?: boolean;
   avatarUrl: string | null;
 } | null;
 

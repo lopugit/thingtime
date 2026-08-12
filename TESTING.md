@@ -1522,6 +1522,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       added without losing the temporary space. Existing signed-in users are
       never replaced. Once authenticated, `/things` seeds instantly from
       `tt-things-<userId>` localStorage cache and background-refetches.
+- [ ] Temporary-session identity stays visually logged out: the top navigation
+      says `Login` (never `Temporary space`), while account/profile/person
+      surfaces say `Anonymous` with `Login to claim`. Generated `guest-*`
+      usernames and placeholder `@temporary.thingtime.invalid` emails never
+      appear in normal UI. Login/register can claim or add a real account
+      without deleting the recoverable temporary roster entry.
 - [ ] Folder CRUD: New → New folder creates a `["folder"]` thing (private by
       default) inside the CURRENT folder; rename edits `crystal.name`; folders
       never combine with other schemas (`["post","folder"]` 400s).
