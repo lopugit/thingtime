@@ -118,6 +118,18 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Added
 
+- **Model-authored release analysis on every published promotion**: a
+  deterministic step precomputes three-branch history of the promoted paths,
+  pairwise branch-only commit lists, the diff stat, the source PR and recent
+  PR inventory; a model pass reads only those files and answers whether the
+  historical change still belongs, what base-only work the replay overrides
+  and whether it is superseded, and the concrete follow-up for anything that
+  is not (e.g. cherry-pick onto a branch off github-actions and open a PR
+  targeting github-actions). Posted as one advisory comment on the promotion
+  PR — continue-on-error, Write scoped to a single output file, size-capped
+  and secret-scanned; the replayed content stays deterministic. The promotion
+  body's lineage section now describes the analysis instead of disclaiming
+  it. — Claude (AI), 2026-08-12
 - **Control-plane pushes sweep every open PR, plus a `no-ai-merge` opt-out**:
   pushing the `github-actions` branch now runs a repository-wide conflict
   sweep instead of matching only PRs based on that branch, so landing a
