@@ -63,8 +63,13 @@ require_environment() {
   [[ "$SOURCE_START_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_START_SHA must be a full SHA-1."
   [[ "$SOURCE_TIP_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_TIP_SHA must be a full SHA-1."
   [[ "$SOURCE_END_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_END_SHA must be a full SHA-1."
-  [[ "$SOURCE_LINEAGE_STATUS" == verified ]] \
-    || fail "source-lineage safety block: SOURCE_LINEAGE_STATUS must be verified; refusing every replay or publication for an unproven historical patch."
+  # NEVER CANCEL (owner decision, 2026-08-12): review-required lineage is
+  # accepted and review-gates publication instead of refusing it. The set is
+  # closed; anything else still fails.
+  case "$SOURCE_LINEAGE_STATUS" in
+    verified|review-required-removed|review-required-ambiguous) ;;
+    *) fail "SOURCE_LINEAGE_STATUS must be verified, review-required-removed, or review-required-ambiguous; got '$SOURCE_LINEAGE_STATUS'." ;;
+  esac
   [[ "$PLAN_HASH" =~ ^[0-9a-f]{64}$ ]] || fail "PLAN_HASH must be a SHA-256."
 }
 
@@ -165,8 +170,10 @@ write_plan() {
     -- "${lineage_pathspecs[@]}" >"$lineage_patch_file"
   [[ -s "$lineage_patch_file" ]] || fail "Promotion lineage patch is empty."
   observed_lineage="$(classify_source_lineage "$repo" "$lineage_patch_file")"
-  [[ "$observed_lineage" == verified ]] \
-    || fail "source-lineage safety block: current develop does not prove this historical patch remains present ($observed_lineage); refusing every replay or publication."
+  # The independent re-derivation must agree with the trusted handoff exactly —
+  # both run against the immutable SOURCE_TIP_SHA, so any difference means a
+  # forged or stale plan, never honest drift. A non-verified agreement is NOT a
+  # refusal (never-cancel): it review-gates publication below instead.
   [[ "$observed_lineage" == "$SOURCE_LINEAGE_STATUS" ]] \
     || fail "Source-lineage classification differs from the trusted handoff ($observed_lineage != $SOURCE_LINEAGE_STATUS)."
 
@@ -202,7 +209,10 @@ write_plan() {
     printf 'false\n' >"$RUNNER_TEMP/promotion-workflow-paths.txt"
     emit workflow_paths false
   fi
-  if grep -q '^\.github/' "$paths_file"; then
+  # Review-gate CI-sensitive content AND any promotion whose source lineage is
+  # not proven: both publish with [skip ci] content commits and an
+  # approval-required checkpoint, so nothing unreviewed executes or ships.
+  if grep -q '^\.github/' "$paths_file" || [[ "$observed_lineage" != verified ]]; then
     printf 'true\n' >"$RUNNER_TEMP/promotion-review-gated.txt"
     emit review_gated true
   else

@@ -1180,8 +1180,21 @@ jobs:
           [[ "$SOURCE_START_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_source_start_sha must be a full SHA-1."
           [[ "$SOURCE_TIP_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_source_tip_sha must be a full SHA-1."
           [[ "$SOURCE_END_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_source_end_sha must be a full SHA-1."
-          [ "$SOURCE_LINEAGE_STATUS" = verified ] \
-            || fail "source-lineage safety block: trusted promotion workers require a historical patch proven present at current develop; no replay or publication will be attempted."
+          # NEVER CANCEL (owner decision, 2026-08-12): a non-verified source
+          # lineage is a review question, not a refusal. Everything downstream
+          # is already built for it — the promotion PR is labelled
+          # `source-lineage-unverified`, its review comment explains the exact
+          # replay and the release decision it needs, the source PR's status
+          # comment mirrors that warning, and the worker review-gates the
+          # content commits ([skip ci] + approval-required checkpoint) exactly
+          # as it does for CI-sensitive paths. Refusing here meant the promoter
+          # queued work this job then threw away: #211, #215 and #223 each
+          # produced a failed run and no promotion PR. The set stays closed so
+          # an unknown classification still fails instead of being reviewable.
+          case "$SOURCE_LINEAGE_STATUS" in
+            verified|review-required-removed|review-required-ambiguous) ;;
+            *) fail "source_lineage_status must be verified, review-required-removed, or review-required-ambiguous; got '$SOURCE_LINEAGE_STATUS'." ;;
+          esac
           [[ "$PLAN_HASH" =~ ^[0-9a-f]{64}$ ]] || fail "promotion_plan_hash must be a SHA-256."
           safe_ref "$BASE_REF" || fail "Unsafe promotion base ref."
           safe_ref "$PROMOTION_BRANCH" || fail "Unsafe promotion branch ref."
@@ -2023,6 +2036,8 @@ jobs:
               echo "⚠️ **Historical source lineage requires an explicit release decision.**"
               echo
               echo "The exact source patch was recovered and mechanically verified, but current \`develop\` does not prove that it remains intended (\`$SOURCE_LINEAGE_STATUS\`). This can represent an intentional revert/removal or overlapping later development. Merge this promotion only if restoring that historical feature is desired."
+              echo
+              echo "Under the never-cancel policy this candidate is published for an explicit human decision instead of being dropped; its content commits are review-gated and nothing merges automatically."
               echo
             fi
             if [ -n "$CONFLICT_PATHS" ]; then
