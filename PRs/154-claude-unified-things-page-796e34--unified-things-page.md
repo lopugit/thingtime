@@ -64,3 +64,30 @@ The `/things` visual follow-up fixes three related rough edges:
   checks had no horizontal overflow, clipped controls, or console errors.
 - The full typecheck ratchet remains warning-only at 152 diagnostics versus its
   stale 143 baseline; none of the reported diagnostics are in this change.
+
+## Follow-up: anonymous session presentation
+
+- Temporary users remain real, recoverable session owners underneath, but the
+  global navigation presents the standard logged-out `Login` action instead
+  of naming the temporary space.
+- New and existing temporary profiles project as `Anonymous`. Account,
+  profile, people, feed, messenger, sharing, schema, and app-data identity
+  renderers use `Login to claim` instead of exposing the generated `guest-*`
+  username or placeholder email.
+- The OAuth authorisation surface treats a temporary session as signed out, so
+  a third-party app cannot be authorised under an internal guest identity.
+
+### Validation
+
+- `corepack pnpm --dir remix run test:temporary-user` — 6/6 passed, including
+  legacy temporary-record normalization and presentation-label coverage.
+- `corepack pnpm --dir remix run test:unit` and
+  `corepack pnpm --dir remix run typecheck:ratchet` — passed.
+- Targeted Remix ESLint — 0 errors and one pre-existing Search hook dependency
+  warning; the complete Vercel production build and output verification passed.
+- Local desktop 1280×800 and mobile 390×844 browser QA verified the `Login`
+  navigation, Anonymous profile, account switcher and settings rows, both
+  `Login to claim` CTAs, login navigation, full-page scrolling, and zero
+  horizontal overflow. No `Temporary space`, generated guest handle, or
+  placeholder temporary email appeared; the console had only the existing
+  React Router `HydrateFallback` development warning.

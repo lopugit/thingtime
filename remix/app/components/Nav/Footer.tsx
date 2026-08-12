@@ -9,6 +9,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '../Lopu/useLopu';
 import { burstAtEvent } from '../Landing/confetti';
 import { motionOK, pickIncantation } from '~/eggs/eggs';
+import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName, getUserMention } from '~/utils/userIdentity';
 
 const BRANCH_NAME =
   typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
@@ -46,7 +47,7 @@ export const Footer = (props) => {
     // Switcher semantics: with other accounts signed in the next one takes
     // over — stay put and let the root revalidation swap the user.
     if (resp?.user) {
-      lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
+      lopu({ title: `Logged out — switched to ${getUserMention(resp.user)} ✨`, status: 'success', duration: 6000 });
       return;
     }
     // the fetcher submit revalidates the root loader → user clears
@@ -202,9 +203,22 @@ export const Footer = (props) => {
             color="var(--tt-muted, #9a9aa6)"
           >
             <Icon name="rainbow" size="12px" chakras={{ pr: 1 }}></Icon>
-            {user ? user.displayName || user.username : 'Account'}
+            {user ? getUserDisplayName(user) : 'Account'}
           </Flex>
-          {user ? (
+          {user?.temporary ? (
+            <>
+              <Link to="/login">
+                <Text fontSize="xs" color="var(--tt-text, #5a5a66)">
+                  {LOGIN_TO_CLAIM_LABEL}
+                </Text>
+              </Link>
+              <Link to="/register">
+                <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+                  Create account
+                </Text>
+              </Link>
+            </>
+          ) : user ? (
             <>
               <Link to="/profile">
                 <Text fontSize="xs" color="var(--tt-text, #5a5a66)">

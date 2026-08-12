@@ -43,7 +43,7 @@
     "test:settings": "node --import tsx --test app/api/utils/settings/*.test.ts",
     "test:storage": "node --import tsx --test app/api/utils/storage/*.test.ts",
     "test:storage-recovery": "node --import tsx --test app/api/utils/apps/namespaceStorageRecovery.test.ts",
-    "test:temporary-user": "node --import tsx --test app/api/utils/auth/temporaryUser.test.ts app/utils/temporaryUserBootstrap.test.ts",
+    "test:temporary-user": "node --import tsx --test app/api/utils/auth/temporaryUser.test.ts app/utils/temporaryUserBootstrap.test.ts app/utils/userIdentity.test.ts",
     "test:typecheck-ratchet": "node --test scripts/typecheck-ratchet.test.mjs",
     "test:web-ci-context": "node scripts/web-ci-required-context-contract.mjs",
     "test:workflow-callers": "node scripts/workflow-caller-contract.mjs",

@@ -20,10 +20,11 @@ import {
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
-import { FolderTree, FolderTreeProps } from './FolderTree';
+import { FolderTree } from './FolderTree';
+import type { FolderTreeProps } from './FolderTree';
 import {
-  ThingsThing,
   VISIBILITY_META,
   circleOf,
   composeAcl,
@@ -35,6 +36,7 @@ import {
   thingIcon,
   thingLink
 } from './thingsCore';
+import type { ThingsThing } from './thingsCore';
 
 const modalCard = {
   background: 'var(--tt-card, #ffffff)',
@@ -260,8 +262,11 @@ export const ShareDialog = ({
   const folderCount = things.filter(isFolder).length;
   const [circle, setCircle] = useState('private');
   const [people, setPeople] = useState<string[]>([]);
+  const [peopleLabels, setPeopleLabels] = useState<Record<string, string>>({});
   const [personQuery, setPersonQuery] = useState('');
-  const [personResults, setPersonResults] = useState<{ username: string; displayName: string | null }[]>([]);
+  const [personResults, setPersonResults] = useState<
+    Array<{ username: string; displayName: string | null; temporary?: boolean }>
+  >([]);
   const [recursive, setRecursive] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -271,6 +276,7 @@ export const ShareDialog = ({
     const initial = circleOf(first.acl);
     setCircle(initial === 'inherit' ? 'private' : initial);
     setPeople(single ? personGrantsOf(first.acl) : []);
+    setPeopleLabels({});
     setPersonQuery('');
     setPersonResults([]);
     setRecursive(false);
@@ -363,6 +369,7 @@ export const ShareDialog = ({
                       gap={2}
                       onClick={() => {
                         setPeople((prev) => (prev.includes(person.username) ? prev : [...prev, person.username]));
+                        setPeopleLabels((prev) => ({ ...prev, [person.username]: getUserIdentityDetail(person) }));
                         setPersonQuery('');
                         setPersonResults([]);
                       }}
@@ -370,10 +377,10 @@ export const ShareDialog = ({
                       paddingY={2}
                     >
                       <Text fontSize="13px" fontWeight={500}>
-                        {person.displayName || person.username}
+                        {getUserDisplayName(person)}
                       </Text>
                       <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
-                        @{person.username}
+                        {getUserIdentityDetail(person)}
                       </Text>
                     </Flex>
                   ))}
@@ -391,7 +398,7 @@ export const ShareDialog = ({
                     paddingX={2}
                     paddingY="2px"
                   >
-                    <Text fontSize="12px">@{username}</Text>
+                    <Text fontSize="12px">{peopleLabels[username] || `@${username}`}</Text>
                     <Box
                       as="button"
                       color="var(--tt-muted, #9a9aa6)"

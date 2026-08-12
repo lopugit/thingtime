@@ -14,6 +14,7 @@ import { useThingtime } from '../../Thingtime/useThingtime';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useTtTheme } from '~/hooks/useTtTheme';
+import { getUserMention } from '~/utils/userIdentity';
 import {
 	electronAutoUpdateSettingPath,
 	electronUrlSettingKey,
@@ -172,7 +173,7 @@ export const UserSettingsModal = () => {
 		// over and the modal stays open on it. Only a fully signed-out browser
 		// leaves for /login.
 		if (resp?.user) {
-			lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
+			lopu({ title: `Logged out — switched to ${getUserMention(resp.user)} ✨`, status: 'success', duration: 6000 });
 			return;
 		}
 

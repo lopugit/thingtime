@@ -3,7 +3,7 @@ import { ObjectId, type Binary } from 'mongodb';
 
 import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
-import { findUserByUsername, pushUserRecentReaction } from '../auth/users';
+import { findUserByUsername, pushUserRecentReaction, unpackSecure } from '../auth/users';
 import {
 	StorageMutationError,
 	USER_STORAGE_ACCOUNTING_VERSION,
@@ -64,6 +64,7 @@ import { resolveAppScopedAcl } from '../apps/namespace';
 import { resolveViewStats } from './views';
 import { emitNotification, emitNotificationsBulk } from '../notifications/notifications';
 import { followerIdsOf, friendIdsOf } from '../users/social';
+import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 
 // Everything in thingtime.things is a thing (see app/schemas/registry.ts):
 // one root Thing schema, sub-schemas applied via the `thingtime` array of
@@ -182,6 +183,7 @@ export type FeedAuthor = {
   id: string;
   username: string;
   displayName: string | null;
+  temporary?: boolean;
   avatarUrl: string | null;
 };
 
@@ -1179,12 +1181,16 @@ export const createPost = async (ownerId: string, input: CreatePostInput, viewer
 // Projection: batch-resolve related things (comments, reactions, shares,
 // shared originals) and authors, then map docs to the public shapes.
 
-const toFeedAuthor = (doc: any): FeedAuthor => ({
-  id: String(doc._id),
-  username: doc.username,
-  displayName: doc.displayName ?? null,
-  avatarUrl: typeof doc.avatarUrl === 'string' ? doc.avatarUrl : null
-});
+const toFeedAuthor = (doc: any): FeedAuthor => {
+  const temporary = doc.meta?.temporary === true;
+  return {
+    id: String(doc._id),
+    username: doc.username,
+    displayName: temporary ? ANONYMOUS_USER_NAME : doc.displayName ?? null,
+    temporary,
+    avatarUrl: typeof doc.avatarUrl === 'string' ? doc.avatarUrl : null
+  };
+};
 
 export const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAuthor>> => {
   const wanted = [...new Set(userIds)].filter((id) => typeof id === 'string' && id.trim());
@@ -1197,13 +1203,15 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
   const things = await getHomeThingsCollection();
   const userThings = await things
     .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
-    .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1 })
+    .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1, secure: 1 })
     .toArray();
   for (const doc of userThings as any[]) {
+    const temporary = unpackSecure(doc.secure).meta?.temporary === true;
     profiles.set(String(doc.shareId), {
       id: String(doc.shareId),
       username: doc.crystal?.username,
-      displayName: doc.crystal?.displayName ?? null,
+      displayName: temporary ? ANONYMOUS_USER_NAME : doc.crystal?.displayName ?? null,
+      temporary,
       avatarUrl: typeof doc.crystal?.avatarUrl === 'string' ? doc.crystal.avatarUrl : null
     });
   }
@@ -1213,7 +1221,7 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
     const users = await getUsersCollection();
     const docs = await users
       .find({ _id: { $in: remaining.map((id) => new ObjectId(id)) } })
-      .project({ username: 1, displayName: 1, avatarUrl: 1 })
+      .project({ username: 1, displayName: 1, avatarUrl: 1, meta: 1 })
       .toArray();
     for (const doc of docs as any[]) profiles.set(String(doc._id), toFeedAuthor(doc));
   }

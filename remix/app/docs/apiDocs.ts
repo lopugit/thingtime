@@ -1238,7 +1238,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           user: {
             id: '64f000000000000000000003',
             username: 'guest-a1b2c3d4e5f6',
-            displayName: 'Temporary space',
+            displayName: 'Anonymous',
             temporary: true
           },
           reused: false
