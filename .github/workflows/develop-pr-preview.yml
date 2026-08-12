@@ -1,0 +1,105 @@
+name: Develop S3 PR preview implementation
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: Existing open PR targeting develop
+        required: false
+        default: 0
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: develop-pr-preview-${{ github.event.pull_request.number || github.event.client_payload.pr_number || inputs.pr_number || 'reconcile' }}
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    name: Dispatch trusted default-branch controller
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Dispatch PR event without checking out PR code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SOURCE_ACTION: ${{ github.event.action }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+          SOURCE_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          node --input-type=module <<'NODE'
+          const response = await fetch(
+            `${process.env.API_URL}/repos/${process.env.REPOSITORY}/dispatches`,
+            {
+              method: 'POST',
+              headers: {
+                Accept: 'application/vnd.github+json',
+                Authorization: `Bearer ${process.env.GH_TOKEN}`,
+                'Content-Type': 'application/json',
+                'X-GitHub-Api-Version': '2022-11-28'
+              },
+              body: JSON.stringify({
+                event_type: 'develop-pr-preview-controller',
+                client_payload: {
+                  pr_number: process.env.PR_NUMBER,
+                  head_sha: process.env.PR_HEAD_SHA,
+                  action: process.env.SOURCE_ACTION,
+                  source_run_id: process.env.SOURCE_RUN_ID,
+                  actor: process.env.SOURCE_ACTOR
+                }
+              })
+            }
+          );
+          if (response.status !== 204) {
+            throw new Error(`Controller dispatch failed with HTTP ${response.status}`);
+          }
+          NODE
+
+  controller:
+    name: Publish or reconcile develop S3 preview
+    if: github.event_name != 'pull_request_target' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: vercel-develop-pr-control
+    permissions:
+      actions: read
+      contents: read
+      deployments: write
+      issues: write
+      pull-requests: write
+    env:
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+      VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+      VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
+      VERCEL_GITHUB_REPO_ID: ${{ vars.VERCEL_GITHUB_REPO_ID }}
+      VERCEL_CUSTOM_ENVIRONMENT_ID: ${{ vars.VERCEL_CUSTOM_ENVIRONMENT_ID }}
+      DEVELOP_PREVIEW_TRUSTED_ACTORS: ${{ vars.DEVELOP_PREVIEW_TRUSTED_ACTORS }}
+      PREVIEW_ALIAS_SUFFIX: ${{ vars.PREVIEW_ALIAS_SUFFIX }}
+      STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
+      DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
+    steps:
+      - name: Check out protected deployment controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify deployment controller invariants
+        run: node .github/scripts/deploy-develop-pr-preview.mjs --self-test
+
+      - name: Deploy, report, and clean up
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
+        run: node .github/scripts/deploy-develop-pr-preview.mjs
