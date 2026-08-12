@@ -4764,8 +4764,8 @@ function promotionBody(pr, groupKey, position, groupPrs, statusFor, plan = {}) {
       "",
       sourceLineageReason(status),
       "",
-      `The workflow recovered and re-applied only source PR #${pr.number}'s exact historical patch. ` +
-        "It did not ask AI to infer whether that change still belongs in the release.",
+      `The workflow recovered and re-applied source PR #${pr.number}'s exact historical patch deterministically. ` +
+        "A model-authored release analysis is posted as a comment on this promotion: it examines main, develop, and github-actions history plus the PR inventory, infers whether this change still belongs, and names any base-only work the replay would override (with recommended follow-up PRs). It is advisory — the replay content itself never comes from a model.",
       "A reviewer must compare this candidate with current product intent before merging it to `main`.",
       "",
       `Lineage status: \`${status}\` · current source tip was checked automatically.`,
