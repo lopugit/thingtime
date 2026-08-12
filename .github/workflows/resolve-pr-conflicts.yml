@@ -1039,6 +1039,7 @@ jobs:
       source_start_sha: ${{ steps.validate.outputs.source_start_sha }}
       source_end_sha: ${{ steps.validate.outputs.source_end_sha }}
       source_lineage_status: ${{ steps.validate.outputs.source_lineage_status }}
+      source_ref: ${{ steps.validate.outputs.source_ref }}
       plan_hash: ${{ steps.validate.outputs.plan_hash }}
       title_b64: ${{ steps.validate.outputs.title_b64 }}
       body_b64: ${{ steps.validate.outputs.body_b64 }}
@@ -1329,6 +1330,7 @@ jobs:
             echo "source_start_sha=$SOURCE_START_SHA"
             echo "source_end_sha=$SOURCE_END_SHA"
             echo "source_lineage_status=$SOURCE_LINEAGE_STATUS"
+            echo "source_ref=$SOURCE_REF"
             echo "plan_hash=$PLAN_HASH"
             echo "title_b64=$TITLE_B64"
             echo "body_b64=$BODY_B64"
@@ -1589,6 +1591,7 @@ jobs:
       SOURCE_TIP_SHA: ${{ needs.promotion_validate.outputs.source_tip_sha }}
       SOURCE_END_SHA: ${{ needs.promotion_validate.outputs.source_end_sha }}
       SOURCE_LINEAGE_STATUS: ${{ needs.promotion_validate.outputs.source_lineage_status }}
+      SOURCE_REF: ${{ needs.promotion_validate.outputs.source_ref }}
       PLAN_HASH: ${{ needs.promotion_validate.outputs.plan_hash }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       GIT_CONFIG_COUNT: "2"
@@ -1707,8 +1710,8 @@ jobs:
           live_ref_sha() {
             gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
           }
-          [ "$(live_ref_sha develop)" = "$SOURCE_TIP_SHA" ] \
-            || { echo "::error::Develop moved before AI started; the promoter must re-plan."; exit 1; }
+          [ "$(live_ref_sha "$SOURCE_REF")" = "$SOURCE_TIP_SHA" ] \
+            || { echo "::error::Source branch $SOURCE_REF moved before AI started; the promoter must re-plan."; exit 1; }
           [ "$(live_ref_sha "$BASE_REF")" = "$BASE_SHA" ] \
             || { echo "::error::Promotion base moved before AI started; the promoter must re-plan."; exit 1; }
           [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$RESERVATION_SHA" ] \
@@ -1875,15 +1878,15 @@ jobs:
           pr="$(GH_TOKEN="$DEFAULT_TOKEN" gh api "repos/$REPO/pulls/$SOURCE_PR")"
           [ "$(jq -r '.state' <<<"$pr")" = closed ] && [ "$(jq -r '.merged_at // empty' <<<"$pr")" != '' ] \
             || fail "Source PR is no longer merged."
-          [ "$(jq -r '.base.ref' <<<"$pr")" = develop ] \
+          [ "$(jq -r '.base.ref' <<<"$pr")" = "$SOURCE_REF" ] \
             && [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$REPO" ] \
             && [ "$(jq -r '.base.repo.full_name' <<<"$pr")" = "$REPO" ] \
             && [ "$(jq -r '.merge_commit_sha' <<<"$pr")" = "$SOURCE_END_SHA" ] \
             || fail "Source PR authority changed while the worker was running."
           [ "$(live_ref_sha "$BASE_REF")" = "$BASE_SHA" ] \
             || fail "Promotion base moved while the worker was running."
-          [ "$(live_ref_sha develop)" = "$SOURCE_TIP_SHA" ] \
-            || fail "Develop moved while the worker was running; the promoter must re-plan."
+          [ "$(live_ref_sha "$SOURCE_REF")" = "$SOURCE_TIP_SHA" ] \
+            || fail "Source branch $SOURCE_REF moved while the worker was running; the promoter must re-plan."
           [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$RESERVATION_SHA" ] \
             || fail "Reservation branch moved; refusing to overwrite newer work."
           git merge-base --is-ancestor "$RESERVATION_SHA" "$final_head" \
@@ -1914,9 +1917,9 @@ jobs:
           # The comment API work above deliberately precedes publication for
           # crash recovery, but it creates a small time window. Close it before
           # the lease push: the branch lease alone cannot detect movement of
-          # develop or the promotion base.
-          [ "$(live_ref_sha develop)" = "$SOURCE_TIP_SHA" ] \
-            || fail "Develop moved after attestation; the promoter must re-plan."
+          # the source branch or the promotion base.
+          [ "$(live_ref_sha "$SOURCE_REF")" = "$SOURCE_TIP_SHA" ] \
+            || fail "Source branch $SOURCE_REF moved after attestation; the promoter must re-plan."
           [ "$(live_ref_sha "$BASE_REF")" = "$BASE_SHA" ] \
             || fail "Promotion base moved after attestation; the promoter must re-plan."
           [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$RESERVATION_SHA" ] \
@@ -2020,8 +2023,8 @@ jobs:
             } >"$attestation_body"
             upsert_comment "$SOURCE_PR" 'thingtime-ai-promotion-attestation:v1' "$attestation_body"
 
-            [ "$(live_ref_sha develop)" = "$SOURCE_TIP_SHA" ] \
-              || fail "Develop moved before the review checkpoint; the promoter must re-plan."
+            [ "$(live_ref_sha "$SOURCE_REF")" = "$SOURCE_TIP_SHA" ] \
+              || fail "Source branch $SOURCE_REF moved before the review checkpoint; the promoter must re-plan."
             [ "$(live_ref_sha "$BASE_REF")" = "$BASE_SHA" ] \
               || fail "Promotion base moved before the review checkpoint; the promoter must re-plan."
             [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$content_head" ] \
@@ -2095,7 +2098,7 @@ jobs:
             if [ "$SOURCE_LINEAGE_STATUS" != verified ]; then
               echo "⚠️ **Historical source lineage requires an explicit release decision.**"
               echo
-              echo "The exact source patch was recovered and mechanically verified, but current \`develop\` does not prove that it remains intended (\`$SOURCE_LINEAGE_STATUS\`). This can represent an intentional revert/removal or overlapping later development. Merge this promotion only if restoring that historical feature is desired."
+              echo "The exact source patch was recovered and mechanically verified, but current \`$SOURCE_REF\` does not prove that it remains intended (\`$SOURCE_LINEAGE_STATUS\`). This can represent an intentional revert/removal or overlapping later development. Merge this promotion only if restoring that historical feature is desired."
               echo
               echo "Under the never-cancel policy this candidate is published for an explicit human decision instead of being dropped; its content commits are review-gated and nothing merges automatically."
               echo
@@ -2147,7 +2150,7 @@ jobs:
             echo "Review the exact resolved paths and immutable snapshot in the promotion PR comment. [Workflow run]($RUN_URL)."
             if [ "$SOURCE_LINEAGE_STATUS" != verified ]; then
               echo
-              echo "⚠️ Current \`develop\` does not prove this historical patch remains intended (\`$SOURCE_LINEAGE_STATUS\`); the promotion PR is labelled \`source-lineage-unverified\` and must be reviewed before merge."
+              echo "⚠️ Current \`$SOURCE_REF\` does not prove this historical patch remains intended (\`$SOURCE_LINEAGE_STATUS\`); the promotion PR is labelled \`source-lineage-unverified\` and must be reviewed before merge."
             fi
             echo
             echo "$attestation"
@@ -2226,7 +2229,7 @@ jobs:
             You are writing an ADVISORY release analysis for promotion PR
             #${{ steps.publish_promotion.outputs.promotion_pr }} (source PR
             #${{ inputs.promotion_source_pr }}), which replays a historical
-            develop change onto `${{ needs.promotion_validate.outputs.base_ref }}`.
+            ${{ needs.promotion_validate.outputs.source_ref }} change onto `${{ needs.promotion_validate.outputs.base_ref }}`.
             The replay content itself was produced deterministically and is not
             yours to change. Your job is inference, using ONLY the files under
             `release-analysis/inputs/` (branch histories for main, develop and
@@ -2353,7 +2356,7 @@ jobs:
             fi
           }
           remote_head="$(live_ref_sha "$PROMOTION_BRANCH")"
-          live_develop="$(live_ref_sha develop)"
+          live_source="$(live_ref_sha "$SOURCE_REF")"
           live_base="$(live_ref_sha "$BASE_REF")"
           repo_path="${{ steps.repo.outputs.repo_path }}"
           local_head=""
@@ -2459,7 +2462,7 @@ jobs:
                 if [ "$SOURCE_LINEAGE_STATUS" != verified ]; then
                   echo "⚠️ **Historical source lineage requires an explicit release decision.**"
                   echo
-                  echo "The exact source patch was recovered and mechanically verified, but current \`develop\` does not prove that it remains intended (\`$SOURCE_LINEAGE_STATUS\`). Merge this promotion only if restoring that historical feature is desired."
+                  echo "The exact source patch was recovered and mechanically verified, but current \`$SOURCE_REF\` does not prove that it remains intended (\`$SOURCE_LINEAGE_STATUS\`). Merge this promotion only if restoring that historical feature is desired."
                   echo
                 fi
                 if [ -n "$CONFLICT_PATHS" ]; then
@@ -2491,7 +2494,7 @@ jobs:
             fi
           fi
           stale_or_unknown=false
-          if [ -z "$live_develop" ] || [ "$live_develop" != "$SOURCE_TIP_SHA" ] \
+          if [ -z "$live_source" ] || [ "$live_source" != "$SOURCE_TIP_SHA" ] \
              || [ -z "$live_base" ] || [ "$live_base" != "$BASE_SHA" ] \
              || [ -z "$remote_head" ] \
              || { [ "$remote_head" != "$RESERVATION_SHA" ] && [ "$recoverable" != true ]; }; then
