@@ -219,6 +219,12 @@ assert.match(promoteWorkflow, /Fan out the CI promotion lanes/);
 assert.match(promoteWorkflow, /"main github-actions" "develop github-actions"/);
 assert.match(promoteWorkflow, /require_path_prefix:"\.github\/"/);
 assert.match(promoter, /PRIMARY_TARGET_BRANCH/);
+// Uniform lane naming (owner request, 2026-08-12): every promotion branch
+// carries --to-<target>; legacy unsuffixed branches stay recognized as
+// main-lane history so live promotions are never orphaned.
+assert.match(promoter, /--to-\$\{slugify\(target\)\}/);
+assert.match(promoter, /legacyPromotionBranchFor/);
+assert.match(promoter, /promotionBranchMatches/);
 // Deterministically settled paths are absent from the live pre-model set but
 // always present in the immutable merge-tree recompute: the round compares
 // against the union, and stages their content only from the expected rebase
