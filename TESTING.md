@@ -65,8 +65,10 @@ is fixed, and cite the checklist you ran in the PR description.
       DNS-only proxying, and `_acme-challenge.previews.dev` has NS delegations
       to both `ns1.vercel-dns.com` and `ns2.vercel-dns.com` without moving the
       apex nameservers or delegating a broader subtree. Confirm its Git branch
-      and Custom Environment bindings are empty, Vercel reports
-      `misconfigured: false`, and the PR alias presents a valid certificate.
+      and Custom Environment bindings are empty. Do not require Vercel's
+      external-DNS advisory to report `misconfigured: false`: independently
+      confirm a probe hostname resolves to Vercel's currently recommended
+      CNAME target and the published PR alias presents a valid certificate.
 - [ ] From that alias, sign in and upload/remove a small attachment: the direct
       S3 `PUT` preflight permits only that exact origin pattern, `PUT`, and
       `x-amz-checksum-sha256`; it exposes no headers, the bucket remains private,
@@ -1401,8 +1403,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       only reach explicit opt-ins. Throttle: >10 notification emails to one
       recipient within an hour are silently skipped (digest excluded). A
       failed/slow send never fails or delays the triggering action.
-- [ ] One-click unsubscribe: the footer link (`/api/v1/notifications/email/
-      unsubscribe?uid&token`) flips ONLY the email master off, renders the
+- [ ] One-click unsubscribe: the footer link
+      (`/api/v1/notifications/email/unsubscribe?uid&token`) flips ONLY the
+      email master off, renders the
       confirmation page (mobile viewport included), is idempotent, and rejects
       a tampered token with the 400 page. Bell/push switches are untouched;
       re-enabling from Settings works.
@@ -1490,8 +1493,8 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       admin, else earliest member.
 - [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
       kind 403s ("managed by their own endpoints"); chats/messages are 404
-      through `GET /api/v1/things?id=` for non-owners; `POST
-      /api/v1/things/react` cannot reach another member's chat message.
+      through `GET /api/v1/things?id=` for non-owners;
+      `POST /api/v1/things/react` cannot reach another member's chat message.
 
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
