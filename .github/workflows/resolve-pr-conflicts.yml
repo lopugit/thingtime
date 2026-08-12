@@ -1758,6 +1758,7 @@ jobs:
           # conflict set. Derived graphify-out/** paths are deterministic and
           # must never appear in the AI attestation.
           CONFLICT_PATHS: ${{ steps.promotion_ai_round.outputs.ai_conflict_paths }}
+          DETERMINISTIC_PATHS: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
           GRAPHIFY_MODE: ${{ steps.promotion_graphify.outputs.refreshed || 'failed' }}
           GRAPHIFY_SEMANTIC: ${{ steps.promotion_graphify.outputs.semantic || 'unavailable' }}
           MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
@@ -2046,6 +2047,11 @@ jobs:
             else
               echo 'The reconstructed synthetic patch replayed cleanly; no model-edited path remained.'
             fi
+            if [ -n "$DETERMINISTIC_PATHS" ]; then
+              echo
+              echo 'Delete-shaped conflicts were resolved deterministically toward the source patch (no model involved — a deletion has no merged text to arbitrate):'
+              printf '%s\n' "$DETERMINISTIC_PATHS" | sed '/^$/d;s/^/- `/' | sed 's/$/`/'
+            fi
             echo
             if [ "$AI_STARTED" = true ]; then
               echo "Model waterfall: \`$MODEL_ARGS\` · Graphify refresh: \`$GRAPHIFY_MODE\` (semantic: \`$GRAPHIFY_SEMANTIC\`)."
@@ -2108,6 +2114,7 @@ jobs:
           TERMINAL_REVIEW_NEEDED: ${{ steps.source_authority.outputs.terminal_review_needed == 'true' || steps.prepare_promotion.outputs.terminal_review_needed == 'true' || steps.promotion_ai_round.outputs.terminal_review_needed == 'true' || steps.promotion_publication_policy.outputs.terminal_review_needed == 'true' }}
           PUBLISH_OUTCOME: ${{ steps.publish_promotion.outcome }}
           CONFLICT_PATHS: ${{ steps.promotion_ai_round.outputs.ai_conflict_paths }}
+          DETERMINISTIC_PATHS: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
           GRAPHIFY_MODE: ${{ steps.promotion_graphify.outputs.refreshed || 'failed' }}
           GRAPHIFY_SEMANTIC: ${{ steps.promotion_graphify.outputs.semantic || 'unavailable' }}
           MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}

@@ -165,6 +165,14 @@ assert.match(worker, /verified\|review-required-removed\|review-required-ambiguo
 assert.match(worker, /"\$observed_lineage" == "\$SOURCE_LINEAGE_STATUS"/);
 assert.match(worker, /\|\| \[\[ "\$observed_lineage" != verified \]\]/);
 assert.doesNotMatch(worker, /refusing every replay or publication/);
+// Delete-shaped conflicts (no zdiff3 markers possible) resolve
+// deterministically toward the source patch — the model never sees them —
+// and the promotion PR's review comment names every path resolved that way.
+assert.match(worker, /git checkout -q --theirs -- ":\(literal\)\$path"/);
+assert.match(worker, /git rm -q -f -- ":\(literal\)\$path"/);
+assert.match(worker, /deterministic_conflict_paths/);
+assert.match(workflow, /DETERMINISTIC_PATHS: \$\{\{ steps\.prepare_promotion\.outputs\.deterministic_conflict_paths \}\}/);
+assert.match(workflow, /resolved deterministically toward the source patch/);
 assert.match(worker, /Review-gated promotion source commit is missing \[skip ci\]/);
 assert.match(worker, /classify_source_lineage\(\)/);
 assert.match(worker, /git apply --cached --check --reverse --whitespace=nowarn/);
