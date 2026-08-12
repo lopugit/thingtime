@@ -2,16 +2,17 @@ name: Web CI
 
 # One workflow for the remix/ web app (TODO 15 DX ratchet), consolidated from
 # PRs #119 / #121 / #123 / #126:
-#   build      — Vite client build + typecheck ratchet + node --test unit suites
+#   build      — Vite client build + typecheck warning + node --test unit suites
 #   api-tests  — the same suite as the interactive /tests page, run headlessly
 #                against a real dev stack (Vite + Nitro) and a real MongoDB —
 #                no mocks, per FUNDAMENTALS.md (seed and test via the real API).
+# The pull-request listener is deliberately path-filter-free: required checks
+# from a filtered-out workflow remain pending forever. A scope job gives the
+# stable required-context names to either the full jobs or lightweight
+# companions, so non-Remix PRs remain mergeable without masking real failures.
 
 on:
   pull_request:
-    paths:
-      - remix/**
-      - .github/workflows/web-ci.yml
   push:
     branches: [main]
     paths:
@@ -22,14 +23,70 @@ on:
 # CI only reads the repo — never grant the default write token.
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: web-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: Classify Web CI scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      full_web_ci: ${{ steps.scope.outputs.full_web_ci }}
+    steps:
+      - name: Inspect pull-request paths
+        id: scope
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pullRequest = context.payload.pull_request;
+            if (!pullRequest) {
+              core.setOutput('full_web_ci', 'true');
+              core.info('Non-pull-request event: running the full Web CI suite.');
+              return;
+            }
+
+            const expectedChangedFiles = Number(pullRequest.changed_files ?? 0);
+            let files;
+            try {
+              files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullRequest.number,
+                per_page: 100,
+              });
+            } catch (error) {
+              const status = error?.status ? ` (${error.status})` : '';
+              core.warning(
+                `Could not inspect pull-request files${status}; running the full Web CI suite.`
+              );
+              core.setOutput('full_web_ci', 'true');
+              return;
+            }
+            const truncated = expectedChangedFiles > files.length;
+            const touchesWebCi = files.some(({ filename }) =>
+              filename.startsWith('remix/') ||
+              filename === '.github/workflows/web-ci.yml'
+            );
+            // GitHub caps this endpoint at 3,000 files. If the list is ever
+            // incomplete, spend the CI time rather than incorrectly no-op.
+            const fullWebCi = truncated || touchesWebCi;
+            core.setOutput('full_web_ci', String(fullWebCi));
+            core.info(
+              `Web CI scope: ${fullWebCi ? 'full suite' : 'required-context companions'}; ` +
+              `${files.length}/${expectedChangedFiles} changed files inspected` +
+              `${truncated ? ' (API result truncated; failing safe)' : ''}.`
+            );
+
   build:
-    name: Build + typecheck ratchet + unit tests
+    needs: scope
+    if: needs.scope.outputs.full_web_ci == 'true'
+    # This label is a ruleset API identifier. Keep it stable even though the
+    # ratchet implementation below is intentionally warning-only.
+    name: ${{ needs.scope.outputs.full_web_ci == 'true' && 'Build + typecheck ratchet + unit tests' || 'Full Web CI build (not needed)' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -54,17 +111,18 @@ jobs:
       - name: Build client shell
         run: pnpm run build:client
 
-      # Fails only when the tsc error count grows past
-      # scripts/typecheck-baseline.json; shrinking the count is celebrated and
-      # locked in with --update-baseline.
-      - name: Typecheck ratchet
+      # Warns without failing when the tsc error count grows past the baseline;
+      # shrinking the count is celebrated and locked in with --update-baseline.
+      - name: Typecheck ratchet (warning-only)
         run: pnpm run typecheck:ratchet
 
       - name: Unit tests
         run: pnpm run test:unit
 
   api-tests:
-    name: API suite (headless /tests runner)
+    needs: scope
+    if: needs.scope.outputs.full_web_ci == 'true'
+    name: ${{ needs.scope.outputs.full_web_ci == 'true' && 'API suite (headless /tests runner)' || 'Full Web CI API suite (not needed)' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -93,12 +151,12 @@ jobs:
       - name: Start MongoDB (single-node replica set — transactions need one)
         run: |
           docker run -d --name mongodb -p 27017:27017 mongo:7 mongod --replSet rs0 --bind_ip_all
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if docker exec mongodb mongosh --quiet --eval 'db.runCommand({ping:1}).ok' >/dev/null 2>&1; then break; fi
             sleep 1
           done
           docker exec mongodb mongosh --quiet --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if [ "$(docker exec mongodb mongosh --quiet --eval 'db.hello().isWritablePrimary' 2>/dev/null)" = "true" ]; then
               echo "replica set primary ready"; exit 0
             fi
@@ -126,7 +184,7 @@ jobs:
 
       - name: Wait for the API to come up
         run: |
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             if curl -sf "http://127.0.0.1:${TT_WEB_PORT}/api/v1/mongodb/status" > /dev/null; then
               echo "API is up"; exit 0
             fi
@@ -140,3 +198,23 @@ jobs:
       - name: Dev stack logs on failure
         if: failure()
         run: tail -200 /tmp/tt-dev.log
+
+  required-build-context:
+    needs: scope
+    if: needs.scope.outputs.full_web_ci == 'false'
+    name: ${{ needs.scope.outputs.full_web_ci == 'false' && 'Build + typecheck ratchet + unit tests' || 'Build required-context companion (not needed)' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Report the non-Remix build context
+        run: echo "No Remix or Web CI workflow changes; the full build is not required."
+
+  required-api-context:
+    needs: scope
+    if: needs.scope.outputs.full_web_ci == 'false'
+    name: ${{ needs.scope.outputs.full_web_ci == 'false' && 'API suite (headless /tests runner)' || 'API required-context companion (not needed)' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Report the non-Remix API context
+        run: echo "No Remix or Web CI workflow changes; the full API suite is not required."

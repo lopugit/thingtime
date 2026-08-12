@@ -19,6 +19,58 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Required Web CI checks no longer strand non-Remix pull requests**: the
+  pull-request listener now always starts, classifies the complete changed-file
+  list, and assigns both stable ruleset context names to either the real
+  build/API jobs or lightweight no-op companions. The historical build label
+  remains stable even though typecheck growth is warning-only. Incomplete or
+  unavailable changed-file listings safely run the full suite instead of
+  stranding the required names. See the
+  [PR #222 engineering note](../PRs/222-codex-typecheck-ratchet-warning-main-ci-make-typecheck-ratchet-warning-only.md).
+  — Codex (AI), 2026-08-10
+- **Worktree lint and formatting dependencies now self-heal completely**:
+  validation startup probes detect incomplete transitive pnpm links even when
+  every direct package looks installed, retry once with a forced relink, and
+  verify ESLint plus the now-direct Prettier CLI before reporting the checkout
+  ready. — Codex (AI), 2026-08-10
+- **Generic Vercel Preview now mirrors the shared development runtime**: all 26
+  variables currently assigned to `develop` also target Preview, while the six
+  existing Preview-only filesystem/CI/webhook settings remain. The development
+  S3 role now trusts the generic `environment:preview` OIDC subject and the
+  development bucket permits Thingtime's generated Vercel Preview origins;
+  production MongoDB/JWT/S3 and the production S3 role remain excluded. The
+  trusted controller is retained for stable `*.previews.dev.thingtime.com`
+  aliases, exact-SHA status, and cleanup. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
+- **Develop and production preview hostnames are now separated**: the trusted
+  `develop` controller uses `*.previews.dev.thingtime.com`, with its protected
+  GitHub variable, detached Vercel wildcard, DNS/ACME delegation, TLS, and S3
+  CORS aligned to that origin. `*.previews.thingtime.com` is reserved for a
+  separate future production-preview controller, while ordinary Vercel
+  previews retain the development role but never the production role. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
+- **Develop-preview activation runbook now matches the live control plane**:
+  documents the no-bypass `main` ruleset, automatic no-reviewer cleanup,
+  installed project-scoped 90-day Vercel token and exact-bucket CORS-probe
+  secret, narrowed develop/production runtime scope, and authoritative/public
+  resolver verification of the wildcard CNAME. The narrow ACME NS delegation,
+  exact-bucket CORS, `main` merge, and end-to-end gates remain. Independent
+  CODEOWNER approval is recorded as optional future hardening once a second
+  trusted collaborator exists. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
+- **Every live AI conflict/rebase path now follows the current Thingtime Admin
+  model order**: merge resolution, all rebase rounds, and their semantic
+  Graphify refreshes share the validated primary model instead of letting the
+  refresh silently fall back to Sonnet. The public setting endpoint now reads
+  the home-DB singleton on every request (retaining last-known-good only for a
+  real database outage), so a successful Admin reorder is visible immediately
+  across warm serverless instances. A source contract inventories every AI
+  workflow/action and rejects new unbound runtimes or obsolete hard-coded
+  models. The deleted legacy GitHub workflow registration was also disabled.
+  — Codex (AI), 2026-08-10
 - **The complete Actions control plane is ready for atomic promotion to
   `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
   #194, #190, #199, #206, #207, and #208 are replayed together so the default
@@ -198,6 +250,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   one-time initiate). — Claude (AI), 2026-08-08
 
 ### Added
+
+- **Trusted `develop`-target PR deployment controller**: same-repository,
+  trusted-author PRs targeting `develop` can now be deployed through a
+  secret-free `pull_request_target` dispatcher and provenance-checked
+  default-branch `repository_dispatch` controller to the exact Vercel `develop`
+  Custom Environment. Neither GitHub job executes PR-head code, the detector
+  never receives the Vercel token, and generic Preview access was not broadened
+  when the controller was introduced (it was deliberately broadened later as
+  recorded above); the approved Vercel build intentionally receives the shared
+  develop runtime configuration. An explicit trusted-actor plus live write/admin permission
+  gate protects the dedicated GitHub Environment secret. Each PR gets a
+  marker-updated status comment, transient GitHub Deployment, and dedicated
+  alias under `*.previews.dev.thingtime.com`; SHA revalidation, marker-scoped
+  supersession/close cleanup, six-hour reconciliation, and bounded manual
+  recovery prevent stale builds from retaining aliases or shared develop
+  credentials. The fork-safe runbook keeps
+  `dev.thingtime.com` bound to the literal `develop` branch, stores the exact
+  Custom Environment ID only in a private GitHub variable, documents minimal
+  wildcard S3 CORS/DNS, and calls out that eligible PRs intentionally share the
+  same development data plane rather than receiving isolated sandboxes. — Codex
+  (AI), 2026-08-09. [Detailed PR #212 runbook](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
 
 - **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
   now creates the standing develop → main PR with — and re-applies on every
