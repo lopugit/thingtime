@@ -29,6 +29,7 @@
 
 ## Thingtime accounts and sync
 
+- [ ] Upgrade a state file whose `thingtimeClientId` is blank and verify Commander restores the bundled public client ID while preserving explicit non-blank overrides.
 - [ ] Start sign-in in the system browser; redirect only to the exact registered loopback callback.
 - [ ] Complete PKCE exchange and verify token exists in Keychain, not `state.json`, logs, command line, or UI storage.
 - [ ] Add two accounts, switch in both directions, restart, and verify public profiles paint immediately from local state.
@@ -37,6 +38,7 @@
 
 ## Visual QA
 
+- [ ] Open the native launcher above light and dark desktop content; only the intentional rounded launcher surface and its shadow are visible, with no larger rectangular panel/WebView background.
 - [ ] Compare launcher and settings screenshots against `design/commander-concept.png` and the three user references.
 - [ ] Inspect every settings tab and the open Actions state at native window sizes.
 - [ ] Resize Settings to its minimum and a large desktop size; no clipping, overlap, or horizontal overflow.

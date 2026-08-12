@@ -65,16 +65,15 @@ The Codex Run button is wired through `.codex/environments/environment.toml` to 
 
 Commander uses the real Thingtime API; it never reads the database directly.
 
-1. Register a Thingtime app with exact loopback origin and redirect URI for Commander:
-   `http://127.0.0.1:47820` and `http://127.0.0.1:47820/oauth/callback`.
-2. Give the app `profile.username` and `app-data` scopes.
-3. Enter the resulting public client ID in Commander’s advanced configuration (or set the development state value).
+Commander ships with its public Thingtime client registration for the exact loopback origin
+`http://127.0.0.1:47820` and callback `http://127.0.0.1:47820/oauth/callback`. The login requests
+`profile.username` and `app-data`; Advanced settings retain a client-ID override for another Thingtime deployment.
 
 The browser login uses authorization code + PKCE. Access tokens are saved only through the native credential bridge:
 Keychain on macOS, Credential Manager on Windows, and Secret Service on Linux. Sync data is stored privately under
 the app-data key `commander.settings.v1`.
 
-No real client ID, token, secret, or account value belongs in this repository.
+The bundled client ID is public by design. Tokens, passwords, and other credentials never belong in this repository.
 
 ## Verification
 

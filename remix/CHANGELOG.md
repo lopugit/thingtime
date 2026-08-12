@@ -933,6 +933,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with `private, no-store` browser headers while leaving versioned assets on the
   filesystem path. — Codex (AI), 2026-08-14
 
+- **Commander now ships ready for Thingtime sign-in and paints only its
+  rounded launcher surface**: its public production client ID is built in,
+  legacy blank settings migrate automatically, and the native WebKit canvas is
+  transparent behind the intentional card and shadow. Local verification can
+  also explicitly request ad-hoc signing when the configured development key
+  is locked, while release/default builds still require the stable Apple
+  Development identity. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-13
+
 - **Stale Vercel preview tabs recover their interactions after a redeploy**:
   preview-only startup logic compares the loaded hashed Vite entry asset with
   the branch alias's current HTML on load, foreground, and focus, then reloads

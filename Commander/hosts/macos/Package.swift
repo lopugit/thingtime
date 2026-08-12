@@ -17,5 +17,10 @@ let package = Package(
         .linkedFramework("WebKit"),
       ]
     ),
+    .testTarget(
+      name: "CommanderTests",
+      dependencies: ["Commander"],
+      path: "Tests/CommanderTests"
+    ),
   ]
 )

@@ -67,7 +67,11 @@ build_all() {
   /usr/bin/plutil -insert NSHighResolutionCapable -bool true "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert NSPrincipalClass -string NSApplication "$staged_bundle/Contents/Info.plist"
 
-  if ! /usr/bin/security find-identity -v -p codesigning | /usr/bin/grep -F "$SIGNING_IDENTITY" >/dev/null; then
+  # An explicit `COMMANDER_SIGNING_IDENTITY=-` keeps local verification usable
+  # when the developer identity is present but its private key is locked behind
+  # an interactive SecurityAgent prompt. Release/default builds still require
+  # the configured Apple Development identity.
+  if [[ "$SIGNING_IDENTITY" != "-" ]] && ! /usr/bin/security find-identity -v -p codesigning | /usr/bin/grep -F "$SIGNING_IDENTITY" >/dev/null; then
     echo "Commander signing identity is unavailable: $SIGNING_IDENTITY" >&2
     exit 1
   fi

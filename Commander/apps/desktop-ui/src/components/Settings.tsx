@@ -110,7 +110,7 @@ function AdvancedSettings({
         <SlidersHorizontal />
         <div>
           <h2>Advanced</h2>
-          <p>Connect this Commander installation to its registered Thingtime desktop app.</p>
+          <p>Commander includes its registered Thingtime app; override it only for another deployment.</p>
         </div>
       </div>
       <section className="advanced-card">
@@ -126,7 +126,7 @@ function AdvancedSettings({
           />
         </label>
         <label>
-          <span>Public client ID</span>
+          <span>Public client ID override</span>
           <input
             value={clientId}
             onChange={(event) => setClientId(event.target.value)}
@@ -143,8 +143,8 @@ function AdvancedSettings({
           <strong>Registered callback origin</strong>
           <code>http://127.0.0.1:47820</code>
           <span>
-            Commander uses Authorization Code + PKCE. The client ID is public; access tokens stay in the macOS
-            Keychain.
+            Commander ships with this public client registration and uses Authorization Code + PKCE. Access
+            tokens stay in the macOS Keychain.
           </span>
         </div>
       </div>
