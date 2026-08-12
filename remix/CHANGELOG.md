@@ -1326,8 +1326,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with the original verifier and returns the existing 30-day, revocable,
   namespace-fenced app token. OAuth codes are explicitly barred from all
   full-account auth paths, and loopback validation, PKCE, callback construction,
-  API docs, and manual replay/mismatch checks are covered. — Codex (AI),
-  2026-08-12
+  API docs, and manual replay/mismatch checks are covered. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-12
 
 - **Trusted `develop`-target PR deployment controller**: same-repository,
   trusted-author PRs targeting `develop` can now be deployed through a
