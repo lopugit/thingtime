@@ -89,9 +89,20 @@ assert.match(workflow, /Independently re-derive the source patch boundary/);
 assert.match(workflow, /--force-with-lease="refs\/heads\/\$PROMOTION_BRANCH:\$RESERVATION_SHA"/);
 assert.match(workflow, /thingtime-ai-promotion-resolved:v1/);
 assert.match(workflow, /thingtime-ai-promotion-paused:v1/);
-assert.match(workflow, /\[ "\$SOURCE_LINEAGE_STATUS" = verified \]/);
-assert.match(workflow, /source-lineage safety block: trusted promotion workers require a historical patch proven present at current develop/);
-assert.doesNotMatch(workflow, /verified\|review-required-removed\|review-required-ambiguous/);
+// NEVER CANCEL (owner decision, 2026-08-12): the refusal this contract used
+// to pin — and the tripwire that forbade the allow-list below — are retired
+// deliberately. The workflow ACCEPTS the closed review-required lineage set,
+// and what protects an unproven patch is publication posture, so pin that:
+// the closed set (unknown values still fail), the `source-lineage-unverified`
+// label, the release-decision warning on the promotion PR, and the mirrored
+// warning on the source PR. Nothing merges automatically either way.
+assert.match(workflow, /verified\|review-required-removed\|review-required-ambiguous\) ;;/);
+assert.match(workflow, /source_lineage_status must be verified, review-required-removed, or review-required-ambiguous/);
+assert.doesNotMatch(workflow, /source-lineage safety block: trusted promotion workers require/);
+assert.match(workflow, /--add-label source-lineage-unverified/);
+assert.match(workflow, /Merge this promotion only if restoring that historical feature is desired/);
+assert.match(workflow, /published for an explicit human decision instead of being dropped/);
+assert.match(workflow, /promotion PR is labelled \\\`source-lineage-unverified\\\` and must be reviewed before merge/);
 assert.match(workflow, /source_lineage_status: \$\{\{ steps\.validate\.outputs\.source_lineage_status \}\}/);
 assert.match(workflow, /SOURCE_LINEAGE_STATUS: \$\{\{ needs\.promotion_validate\.outputs\.source_lineage_status \}\}/);
 assert.match(workflow, /value\.source_lineage_status === process\.env\.SOURCE_LINEAGE_STATUS/);
@@ -145,10 +156,27 @@ assert.match(worker, /ci_sensitive_paths true/);
 assert.match(worker, /promotion-ci-sensitive-paths\.txt/);
 assert.match(worker, /review_gated true/);
 assert.match(worker, /promotion-review-gated\.txt/);
-assert.match(worker, /\[\[ "\$SOURCE_LINEAGE_STATUS" == verified \]\]/);
-assert.match(worker, /\[\[ "\$observed_lineage" == verified \]\]/);
-assert.match(worker, /source-lineage safety block: current develop does not prove this historical patch remains present/);
-assert.doesNotMatch(worker, /verified\|review-required-removed\|review-required-ambiguous/);
+// The worker accepts the same closed set; its independent re-derivation must
+// still agree with the trusted handoff EXACTLY (both classify against the
+// immutable SOURCE_TIP_SHA, so disagreement means forgery or staleness, never
+// honest drift), and any non-verified lineage review-gates publication the
+// same way CI-sensitive paths do ([skip ci] content commits, checkpoint).
+assert.match(worker, /verified\|review-required-removed\|review-required-ambiguous\) ;;/);
+assert.match(worker, /"\$observed_lineage" == "\$SOURCE_LINEAGE_STATUS"/);
+assert.match(worker, /\|\| \[\[ "\$observed_lineage" != verified \]\]/);
+assert.doesNotMatch(worker, /refusing every replay or publication/);
+// Delete-shaped conflicts (no zdiff3 markers possible) resolve
+// deterministically toward the source patch — the model never sees them —
+// and the promotion PR's review comment names every path resolved that way.
+assert.match(worker, /git checkout -q --theirs -- ":\(literal\)\$path"/);
+assert.match(worker, /git rm -q -f -- ":\(literal\)\$path"/);
+assert.match(worker, /deterministic_conflict_paths/);
+assert.match(workflow, /DETERMINISTIC_PATHS: \$\{\{ steps\.prepare_promotion\.outputs\.deterministic_conflict_paths \}\}/);
+assert.match(workflow, /resolved deterministically toward the source patch/);
+assert.match(worker, /promotion-discarded-changes\.md/);
+assert.match(worker, /note_discarded/);
+assert.match(worker, /promotion-unmerged-paths\.zlist/);
+assert.match(workflow, /Base-side changes affected by deterministic resolutions/);
 assert.match(worker, /Review-gated promotion source commit is missing \[skip ci\]/);
 assert.match(worker, /classify_source_lineage\(\)/);
 assert.match(worker, /git apply --cached --check --reverse --whitespace=nowarn/);

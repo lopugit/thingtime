@@ -251,12 +251,12 @@ function assertWorkflowSource() {
   assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock);
 }
 
-function workflowYamlFiles(directory) {
+function aiRuntimeSourceFiles(directory) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...workflowYamlFiles(path));
-    else if (entry.isFile() && /\.ya?ml$/.test(entry.name)) files.push(path);
+    if (entry.isDirectory()) files.push(...aiRuntimeSourceFiles(path));
+    else if (entry.isFile() && /\.(?:ya?ml|sh)$/.test(entry.name)) files.push(path);
   }
   return files;
 }
@@ -299,21 +299,39 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
 
   const aiRuntimePattern = /anthropics\/claude-code-action@|\bbackend=(?:"|')?claude(?:"|')?\b/;
   const actualRuntimeFiles = [
-    ...workflowYamlFiles(join(REPO_ROOT, ".github", "workflows")),
-    ...workflowYamlFiles(join(REPO_ROOT, ".github", "actions")),
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "actions")),
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "scripts")),
   ]
     .filter((path) => aiRuntimePattern.test(readFileSync(path, "utf8")))
     .map((path) => relative(REPO_ROOT, path))
     .sort();
   assert.deepEqual(actualRuntimeFiles, [
     ".github/actions/rebase-conflict-round/action.yml",
+    ".github/scripts/rebase-stack/refresh-promotion-graphify.sh",
     ".github/workflows/rebase-pr-stacks.yml",
     ".github/workflows/resolve-pr-conflicts.yml",
-  ], "new AI runtime YAML must be added to the Admin-model contract");
+  ], "new AI runtime source must be added to the Admin-model contract");
+
+  const requiredModelBindings = new Map([
+    [".github/actions/rebase-conflict-round/action.yml", "${{ inputs.model-args }}"],
+    [".github/scripts/rebase-stack/refresh-promotion-graphify.sh", 'case "${PREFERRED_MODEL:-default}"'],
+    [".github/workflows/rebase-pr-stacks.yml", 'PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}'],
+    [".github/workflows/resolve-pr-conflicts.yml", 'PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}'],
+  ]);
 
   for (const path of actualRuntimeFiles) {
-    const yaml = readFileSync(join(REPO_ROOT, path), "utf8");
-    assert.doesNotMatch(yaml, /claude-opus-4-8/, `${path}: obsolete hard-coded model`);
+    const runtime = readFileSync(join(REPO_ROOT, path), "utf8");
+    assert.ok(
+      runtime.includes(requiredModelBindings.get(path)),
+      `${path}: runtime must consume its validated Admin-model handoff`,
+    );
+    assert.doesNotMatch(runtime, /claude-opus-4-8/, `${path}: obsolete hard-coded model`);
+    assert.doesNotMatch(
+      runtime,
+      /GRAPHIFY_CLAUDE_CLI_MODEL\s*[:=]\s*["']?(?:sonnet|haiku|opus|claude-)/,
+      `${path}: Graphify model must come from the Admin handoff`,
+    );
   }
 }
 
