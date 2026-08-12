@@ -2660,9 +2660,9 @@
     "semantic_hash": "07a6039cb718e7d5f33afe822f22b279"
   },
   "remix/app/components/Nav/Drawer/UserSettingsModal.tsx": {
-    "mtime": 1786505469.9267545,
-    "ast_hash": "83cbda0242d9bd701207000da4b84b0b",
-    "semantic_hash": "83cbda0242d9bd701207000da4b84b0b"
+    "mtime": 1786509330.0741754,
+    "ast_hash": "e5ae5b8a7307085bdc0ba864f26b1e07",
+    "semantic_hash": "e5ae5b8a7307085bdc0ba864f26b1e07"
   },
   "remix/app/components/Nav/Drawer/drawerMenu.tsx": {
     "mtime": 1786505710.0395994,
@@ -2935,9 +2935,9 @@
     "semantic_hash": "ae2e6ce2f38e833ea43f9970d03134e6"
   },
   "remix/app/components/ThemeSettings/ThemeStudio.tsx": {
-    "mtime": 1786505469.9320815,
-    "ast_hash": "d382f773d4c6d3a348a2bafb428c51aa",
-    "semantic_hash": "d382f773d4c6d3a348a2bafb428c51aa"
+    "mtime": 1786509314.7955875,
+    "ast_hash": "68bca191ee643acd69acdfa57b9d486b",
+    "semantic_hash": "68bca191ee643acd69acdfa57b9d486b"
   },
   "remix/app/hooks/useTtTheme.tsx": {
     "mtime": 1786505469.9398015,
@@ -2985,9 +2985,9 @@
     "semantic_hash": "d9fa8d0e415349e6d73a91b107885d9d"
   },
   "remix/app/components/ThemeSettings/controls.tsx": {
-    "mtime": 1786505469.9321816,
-    "ast_hash": "39cd6701340352f46cc43e93a4ab5e24",
-    "semantic_hash": "39cd6701340352f46cc43e93a4ab5e24"
+    "mtime": 1786509303.4668145,
+    "ast_hash": "8779f78c3510b64f9d1052ded166d227",
+    "semantic_hash": "8779f78c3510b64f9d1052ded166d227"
   },
   "PRs/32-claude-vigilant-moser--design-refactor-theming.md": {
     "mtime": 1786505469.633391,
@@ -3085,9 +3085,9 @@
     "semantic_hash": "9671ace69364dc859fd9fbeaff97affa"
   },
   "remix/app/components/Settings/SettingsPage.tsx": {
-    "mtime": 1786505710.0405624,
-    "ast_hash": "17af2ca27ecd5c1f15fd19f730089c8d",
-    "semantic_hash": "17af2ca27ecd5c1f15fd19f730089c8d"
+    "mtime": 1786509322.481586,
+    "ast_hash": "ab982073a246335af837689f8eb79f97",
+    "semantic_hash": "ab982073a246335af837689f8eb79f97"
   },
   "remix/app/components/Settings/SettingsSection.tsx": {
     "mtime": 1786505469.9308474,
@@ -4160,8 +4160,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786506139.8109548,
-    "ast_hash": "50ab1cd23035a9e8e4d24e75b9e5e682",
+    "mtime": 1786509347.7007291,
+    "ast_hash": "92a47905ac57f0acf04d1f9b80e4e724",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -5560,9 +5560,9 @@
     "semantic_hash": "923b4a0bc344cc762c0ab4e6279a012c"
   },
   "remix/app/components/Things/ThingsPage.tsx": {
-    "mtime": 1786506426.6485496,
-    "ast_hash": "8790e7df9d27cd3f8b5ce307cc35342e",
-    "semantic_hash": "8790e7df9d27cd3f8b5ce307cc35342e"
+    "mtime": 1786509282.4934576,
+    "ast_hash": "03c2fcb619d46c498244b5e402049a77",
+    "semantic_hash": "03c2fcb619d46c498244b5e402049a77"
   },
   "remix/app/components/Things/ThingsViews.tsx": {
     "mtime": 1786505710.0413861,
@@ -5605,8 +5605,8 @@
     "semantic_hash": "184b073af126b75215f9e7af718ae171"
   },
   "PRs/154-claude-unified-things-page-796e34--unified-things-page.md": {
-    "mtime": 1786506671.6629374,
-    "ast_hash": "dc5cc8fba58623719c37a657b51e363b",
+    "mtime": 1786509353.6381266,
+    "ast_hash": "94cfd0253481f4c18e1dd61293211b99",
     "semantic_hash": ""
   }
 }
