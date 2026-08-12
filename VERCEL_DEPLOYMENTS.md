@@ -20,9 +20,17 @@ Last updated: 2026-08-10
 
 ## Production
 
+- Public domain: https://thingtime.com
 - Production alias: https://thingtime-lopugits-projects.vercel.app
 - Main branch alias: https://thingtime-git-main-lopugits-projects.vercel.app
 - Production branch: `main`
+- Promoted deployment (2026-08-10):
+  https://thingtime-sadpi5ghm-lopugits-projects.vercel.app
+  (`dpl_CEbZybxGzQT2EgatEktfGQfNsUTH`). This fresh build picked up the repaired
+  sensitive `VERCEL_API_TOKEN`; the public
+  `/api/v1/vercel/deployments?limit=50` response was verified with
+  `source: "api"`, `hasError: false`, and more than 25 branch destinations after
+  promotion.
 
 ## Preview
 
