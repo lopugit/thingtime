@@ -55,6 +55,10 @@ readers, 3 finder tracks each adversarially verified, 3 idea lenses). Every item
 below was confirmed by reading the cited code — file/line refs are load-bearing._
 
 7. **🔒 URGENT SECURITY: lock down the unauthenticated admin/data endpoints.**
+   _✅ Done 2026-07-21: raw-results and populate became admin-only + rate-limited
+   fail-closed in earlier PRs; service-account provisioning (public by design)
+   is now rate-limited fail-closed per IP, body-capped, and field-whitelisted —
+   see `claude-todo/09-security-hardening.md` §A._
 
    Three live, prod-registered endpoints have **no auth, no rate limit, no env
    gate**:
