@@ -1755,8 +1755,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786537964.4374795,
-    "ast_hash": "09bd48e1aa25efc99dc46f81ae97c98d",
+    "mtime": 1786543527.1040578,
+    "ast_hash": "19d873adc63e5cf76300817a98c3cc0e",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -4162,7 +4162,7 @@
   "TESTING.md": {
     "mtime": 1786542823.0702024,
     "ast_hash": "0e158f3952e0a1bd24ffb6d409f14955",
-    "semantic_hash": ""
+    "semantic_hash": "0e158f3952e0a1bd24ffb6d409f14955"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786536620.6188173,
@@ -5457,67 +5457,67 @@
   "Commander/ARCHITECTURE.md": {
     "mtime": 1786540480.0397592,
     "ast_hash": "9655dcdc156b9ffbb83d5436b8269d42",
-    "semantic_hash": ""
+    "semantic_hash": "9655dcdc156b9ffbb83d5436b8269d42"
   },
   "Commander/README.md": {
     "mtime": 1786542823.0705483,
     "ast_hash": "d222b70ad26d461b44008461ae974142",
-    "semantic_hash": ""
+    "semantic_hash": "d222b70ad26d461b44008461ae974142"
   },
   "Commander/apps/desktop-ui/index.html": {
     "mtime": 1786537379.9290855,
     "ast_hash": "c5e5fc3cab4d3ac802c8ce8a6ad5e3c3",
-    "semantic_hash": ""
+    "semantic_hash": "c5e5fc3cab4d3ac802c8ce8a6ad5e3c3"
   },
   "Commander/apps/desktop-ui/launcher.html": {
     "mtime": 1786539307.674792,
     "ast_hash": "c5e5fc3cab4d3ac802c8ce8a6ad5e3c3",
-    "semantic_hash": ""
+    "semantic_hash": "c5e5fc3cab4d3ac802c8ce8a6ad5e3c3"
   },
   "Commander/apps/desktop-ui/settings.html": {
     "mtime": 1786539307.675104,
     "ast_hash": "19231afe43dbe81bdc945f969c00e2ce",
-    "semantic_hash": ""
+    "semantic_hash": "19231afe43dbe81bdc945f969c00e2ce"
   },
   "Commander/crates/commander-core/README.md": {
     "mtime": 1786540480.0485861,
     "ast_hash": "b1ab1088f6cd0e952e67d4f62c1b7cac",
-    "semantic_hash": ""
+    "semantic_hash": "b1ab1088f6cd0e952e67d4f62c1b7cac"
   },
   "Commander/design/DESIGN_SYSTEM.md": {
     "mtime": 1786537288.071146,
     "ast_hash": "c1c9a24ce686e3795623339869dcb61f",
-    "semantic_hash": ""
+    "semantic_hash": "c1c9a24ce686e3795623339869dcb61f"
   },
   "Commander/docs/RAYCAST_COMPATIBILITY.md": {
     "mtime": 1786540480.0725892,
     "ast_hash": "261cad97c288c843692567a372cd96ac",
-    "semantic_hash": ""
+    "semantic_hash": "261cad97c288c843692567a372cd96ac"
   },
   "Commander/docs/TESTING.md": {
     "mtime": 1786542823.0697978,
     "ast_hash": "819a5436d4153642b8e4fb545b47e035",
-    "semantic_hash": ""
+    "semantic_hash": "819a5436d4153642b8e4fb545b47e035"
   },
   "Commander/hosts/linux/README.md": {
     "mtime": 1786538031.0013404,
     "ast_hash": "218d1b8a094719881427511fda736f69",
-    "semantic_hash": ""
+    "semantic_hash": "218d1b8a094719881427511fda736f69"
   },
   "Commander/hosts/windows/README.md": {
     "mtime": 1786539280.1206658,
     "ast_hash": "455e513d58c50c5758856744b18bb5ee",
-    "semantic_hash": ""
+    "semantic_hash": "455e513d58c50c5758856744b18bb5ee"
   },
   "Commander/pnpm-workspace.yaml": {
     "mtime": 1786537288.0694253,
     "ast_hash": "2147477c215b8b3975078ace39bca6e2",
-    "semantic_hash": ""
+    "semantic_hash": "2147477c215b8b3975078ace39bca6e2"
   },
   "Commander/design/commander-concept.png": {
     "mtime": 1786537145.0789611,
     "ast_hash": "f37a50e8c6d924f6e25dfa800e78bb88",
-    "semantic_hash": ""
+    "semantic_hash": "f37a50e8c6d924f6e25dfa800e78bb88"
   },
   "Commander/packages/raycast-compat/src/sideload.test.ts": {
     "mtime": 1786540101.136626,
@@ -5542,11 +5542,21 @@
   "Commander/design/commander-app-icon.png": {
     "mtime": 1786540128.4991813,
     "ast_hash": "f5e1e4c6d9ff6168bc7b3548d8201f42",
-    "semantic_hash": ""
+    "semantic_hash": "f5e1e4c6d9ff6168bc7b3548d8201f42"
   },
   "Commander/hosts/macos/.build/release/Commander.swiftmodule/arm64-apple-macos.abi.json": {
     "mtime": 1786542489.841289,
     "ast_hash": "0a4af882c2c2f56d36e8540ae8c40bbf",
     "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
+  },
+  "Commander/hosts/macos/.build/release/Commander.dSYM/Contents/Resources/Relocations/aarch64/Commander.yml": {
+    "mtime": 1786542490.5449903,
+    "ast_hash": "1a76c5b6f8be0e69f9fb4bd98dd56028",
+    "semantic_hash": "1a76c5b6f8be0e69f9fb4bd98dd56028"
+  },
+  "PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md": {
+    "mtime": 1786543650.642514,
+    "ast_hash": "ce7ac34359e0e2b12e5e8e060454ff56",
+    "semantic_hash": ""
   }
 }
