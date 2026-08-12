@@ -1755,8 +1755,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786543527.1040578,
-    "ast_hash": "19d873adc63e5cf76300817a98c3cc0e",
+    "mtime": 1786547129.372747,
+    "ast_hash": "ed172d0a2772c32fd9b6f9541e288dab",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -5150,9 +5150,9 @@
     "semantic_hash": "0debd0385e1565cdf3cdf469f20b2c7c"
   },
   "Commander/apps/daemon/src/services/persistence.ts": {
-    "mtime": 1786540479.8083794,
-    "ast_hash": "e5bcfc1c810348689ce96f54351ca3cb",
-    "semantic_hash": "e5bcfc1c810348689ce96f54351ca3cb"
+    "mtime": 1786547031.2278705,
+    "ast_hash": "cfbc49905423b21f575c95c0a4733511",
+    "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/search.test.ts": {
     "mtime": 1786540479.814341,
@@ -5230,9 +5230,9 @@
     "semantic_hash": "47be6e51146fe52f20cc7ed647a4b00a"
   },
   "Commander/apps/desktop-ui/src/components/Settings.tsx": {
-    "mtime": 1786540479.9331005,
-    "ast_hash": "09645f2a7c6d799cd12b5250080dfe99",
-    "semantic_hash": "09645f2a7c6d799cd12b5250080dfe99"
+    "mtime": 1786544484.834431,
+    "ast_hash": "b31ba061edc4c0953bb75ad335dff82f",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/hooks/useCommander.ts": {
     "mtime": 1786540479.938641,
@@ -5285,9 +5285,9 @@
     "semantic_hash": "2e5a5ad2a66d6697a649f98dcd8f1c38"
   },
   "Commander/hosts/macos/Package.swift": {
-    "mtime": 1786537903.572151,
-    "ast_hash": "6db796f4b59dc5cf815e6dce7869cc1e",
-    "semantic_hash": "6db796f4b59dc5cf815e6dce7869cc1e"
+    "mtime": 1786544393.2345848,
+    "ast_hash": "973d7b202a8fe704024cf3ef6bd58ce9",
+    "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/App/CommanderAppDelegate.swift": {
     "mtime": 1786541136.12628,
@@ -5330,9 +5330,9 @@
     "semantic_hash": "da2c71601940452f196e3f93f3b751c3"
   },
   "Commander/hosts/macos/Sources/Commander/Windows/CommanderWebView.swift": {
-    "mtime": 1786542451.583594,
-    "ast_hash": "a4b0cc47d9f7f1bd2d6bc0f5e0bbf70f",
-    "semantic_hash": "a4b0cc47d9f7f1bd2d6bc0f5e0bbf70f"
+    "mtime": 1786544541.3055017,
+    "ast_hash": "d59932128b2e675ed7fa3aa5a73f77cb",
+    "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Windows/LauncherPanelController.swift": {
     "mtime": 1786540185.2833028,
@@ -5365,9 +5365,9 @@
     "semantic_hash": "0ce06d40e2d7a57e255d7ef9279abd74"
   },
   "Commander/packages/protocol/src/index.ts": {
-    "mtime": 1786540243.0513747,
-    "ast_hash": "c678861ad311bfb1e0c68e4359e457c5",
-    "semantic_hash": "c678861ad311bfb1e0c68e4359e457c5"
+    "mtime": 1786544484.8330114,
+    "ast_hash": "8bfb900105678d812f704899a0687471",
+    "semantic_hash": ""
   },
   "Commander/packages/protocol/tsconfig.json": {
     "mtime": 1786537288.0705836,
@@ -5415,9 +5415,9 @@
     "semantic_hash": "c22ab7d26d7e1eb3818cef99711f7a45"
   },
   "Commander/script/build_and_run.sh": {
-    "mtime": 1786541897.3374581,
-    "ast_hash": "ff6fd640d0538f4711db7300e6d7478e",
-    "semantic_hash": "ff6fd640d0538f4711db7300e6d7478e"
+    "mtime": 1786545977.7984862,
+    "ast_hash": "d05f74a17ac5ad093b98b2f7dc43c658",
+    "semantic_hash": ""
   },
   "Commander/tsconfig.base.json": {
     "mtime": 1786537288.0695753,
@@ -5460,9 +5460,9 @@
     "semantic_hash": "9655dcdc156b9ffbb83d5436b8269d42"
   },
   "Commander/README.md": {
-    "mtime": 1786542823.0705483,
-    "ast_hash": "d222b70ad26d461b44008461ae974142",
-    "semantic_hash": "d222b70ad26d461b44008461ae974142"
+    "mtime": 1786544484.8348055,
+    "ast_hash": "8789f2dcd3499ddfe40a638c7aa3215a",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/index.html": {
     "mtime": 1786537379.9290855,
@@ -5495,9 +5495,9 @@
     "semantic_hash": "261cad97c288c843692567a372cd96ac"
   },
   "Commander/docs/TESTING.md": {
-    "mtime": 1786542823.0697978,
-    "ast_hash": "819a5436d4153642b8e4fb545b47e035",
-    "semantic_hash": "819a5436d4153642b8e4fb545b47e035"
+    "mtime": 1786544484.835154,
+    "ast_hash": "af9c2dbceb01118becad7ee70b7acc61",
+    "semantic_hash": ""
   },
   "Commander/hosts/linux/README.md": {
     "mtime": 1786538031.0013404,
@@ -5555,8 +5555,18 @@
     "semantic_hash": "1a76c5b6f8be0e69f9fb4bd98dd56028"
   },
   "PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md": {
-    "mtime": 1786543650.642514,
-    "ast_hash": "ce7ac34359e0e2b12e5e8e060454ff56",
+    "mtime": 1786547284.3365853,
+    "ast_hash": "9065eea1b4c88638e629a98eadd3e447",
+    "semantic_hash": ""
+  },
+  "Commander/hosts/macos/Tests/CommanderTests/CommanderWebViewTests.swift": {
+    "mtime": 1786544541.3058307,
+    "ast_hash": "df7972d9560ea1e7ccd5d5051df847b5",
+    "semantic_hash": ""
+  },
+  "Commander/apps/daemon/src/services/persistence.test.ts": {
+    "mtime": 1786547031.2360294,
+    "ast_hash": "2caa87b7280733503646b43c91b57c0c",
     "semantic_hash": ""
   }
 }

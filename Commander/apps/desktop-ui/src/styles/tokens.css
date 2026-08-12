@@ -70,6 +70,7 @@ body,
   margin: 0;
   overflow: hidden;
   overscroll-behavior: none;
+  background: transparent;
 }
 body {
   position: fixed;

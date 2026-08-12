@@ -74,15 +74,36 @@ Production login requires the new routes to be deployed and Commander's exact
 loopback callback/client registration to be added to the intended Thingtime
 environment.
 
+## Built-in registration and launcher follow-up
+
+- Commander now ships with its production public client ID. The matching
+  Thingtime app is owned by the verified `commander-app` service account at
+  `commander@thingtime.com` and permits only the loopback origin
+  `http://127.0.0.1:47820`.
+- Legacy state files whose client ID is blank migrate to the bundled ID. An
+  explicit non-blank Advanced override remains supported for other Thingtime
+  deployments.
+- The launcher WebKit canvas is transparent at the native view, under-page,
+  backing-layer, and document-root levels. This removes the rectangular outer
+  backing while preserving Commander's intentional rounded surface and shadow.
+- The service-account password remains outside the repository and app bundle
+  in user-only local storage. No password, service token, or OAuth access token
+  is tracked.
+- The follow-up QA install used the script's explicit ad-hoc signing override
+  because macOS held the Apple Development private key behind SecurityAgent;
+  the default/release path still requires the configured stable identity.
+
 ## Verification
 
-- Commander TypeScript: 28 tests passed across UI, daemon, and compatibility
+- Commander TypeScript: 30 tests passed across UI, daemon, and compatibility
   packages; typecheck, ESLint, Prettier, and package builds passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
   Clippy with warnings denied passed.
-- Swift: release build passed with warnings treated as errors.
-- `Commander/script/build_and_run.sh --verify` built, signed, installed, and
-  launched the exact app at `~/Applications/Commander.app`.
+- Swift: the WebKit transparency regression passed; release build passed with
+  warnings treated as errors.
+- `COMMANDER_SIGNING_IDENTITY=- Commander/script/build_and_run.sh --verify`
+  built, ad-hoc signed, installed, and launched the exact follow-up app at
+  `~/Applications/Commander.app`; the default identity remains unchanged.
 - The installed signature, stable designated requirement, Node JIT
   entitlements, process ancestry, daemon health, and bundled executable paths
   were verified.

@@ -3,6 +3,8 @@ import WebKit
 
 @MainActor
 final class CommanderWebView: WKWebView, WKNavigationDelegate {
+  override var isOpaque: Bool { false }
+
   var firstPresentationReady: (() -> Void)? {
     didSet {
       if presentationReady { firstPresentationReady?() }
@@ -22,7 +24,7 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate {
     super.init(frame: .zero, configuration: configuration)
     bridge.webView = self
     navigationDelegate = self
-    setValue(false, forKey: "drawsBackground")
+    Self.makeCanvasTransparent(self)
     allowsMagnification = false
     let url = URL(string: "\(ready.url)/\(surface).html?token=\(ready.sessionToken)")!
     load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10))
@@ -52,6 +54,15 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate {
     firstPresentationReady = nil
     navigationDelegate = nil
     configuration.userContentController.removeScriptMessageHandler(forName: "commander")
+  }
+
+  private static func makeCanvasTransparent(_ webView: WKWebView) {
+    // WebKit can otherwise composite its rectangular page canvas behind the
+    // rounded launcher surface even when the containing NSPanel is clear.
+    webView.underPageBackgroundColor = .clear
+    webView.setValue(false, forKey: "drawsBackground")
+    webView.wantsLayer = true
+    webView.layer?.backgroundColor = NSColor.clear.cgColor
   }
 }
 

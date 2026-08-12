@@ -13,6 +13,15 @@ interface PersistentState {
 
 const statePath = () => path.join(commanderDataDirectory(), 'state.json');
 
+function normalizedSettings(settings: Partial<CommanderSettings> | undefined): CommanderSettings {
+  const merged = { ...DEFAULT_SETTINGS, ...settings, version: 1 } as CommanderSettings;
+  const clientId = typeof merged.thingtimeClientId === 'string' ? merged.thingtimeClientId.trim() : '';
+  return {
+    ...merged,
+    thingtimeClientId: clientId || DEFAULT_SETTINGS.thingtimeClientId,
+  };
+}
+
 function initialState(): PersistentState {
   return { version: 1, settings: { ...DEFAULT_SETTINGS }, accounts: [], extensions: [] };
 }
@@ -24,12 +33,15 @@ export class PersistentStore {
   async load(): Promise<void> {
     try {
       const parsed = JSON.parse(await readFile(statePath(), 'utf8')) as Partial<PersistentState>;
+      const settings = normalizedSettings(parsed.settings);
+      const clientIdNeedsMigration = parsed.settings?.thingtimeClientId !== settings.thingtimeClientId;
       this.#state = {
         version: 1,
-        settings: { ...DEFAULT_SETTINGS, ...parsed.settings, version: 1 },
+        settings,
         accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
         extensions: Array.isArray(parsed.extensions) ? parsed.extensions : [],
       };
+      if (clientIdNeedsMigration) await this.#persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
@@ -51,9 +63,7 @@ export class PersistentStore {
       previous.showFavouritesInCompactMode !== settings.showFavouritesInCompactMode;
     const markCloudChanges = options.markCloudChanges ?? true;
     this.#state.settings = {
-      ...DEFAULT_SETTINGS,
-      ...settings,
-      version: 1,
+      ...normalizedSettings(settings),
       syncDirty: settings.syncDirty || (markCloudChanges && cloudChanged),
     };
     await this.#persist();

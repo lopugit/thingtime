@@ -1,4 +1,5 @@
 export const PROTOCOL_VERSION = 1 as const;
+export const COMMANDER_THINGTIME_CLIENT_ID = 'ttapp_fb2f7fc9-32c8-47ea-bd08-863728de69f1';
 
 export type Platform = 'macos' | 'windows' | 'linux';
 export type Appearance = 'light' | 'dark' | 'system';
@@ -193,7 +194,7 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   hotkey: 'Command+Space',
   activeAccountId: null,
   thingtimeBaseUrl: 'https://thingtime.com',
-  thingtimeClientId: '',
+  thingtimeClientId: COMMANDER_THINGTIME_CLIENT_ID,
   syncRevision: 0,
   syncUpdatedAt: null,
   syncDirty: false,
