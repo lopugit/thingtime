@@ -17,6 +17,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **One GitHub Actions control plane + Admin CI dashboard**: executable CI,
+  promotion, sync, release, rebase, and AI conflict-resolution behavior now
+  lives on the protected `github-actions` branch. `main`/`develop` retain only
+  GitHub-required trigger/input/permission callers pinned to that branch, with
+  a regression contract that rejects runner steps or local Actions scripts.
+  Admin → CI Control renders cached feature/branch/PR/run/deployment/preview
+  topology, signed GitHub/Vercel webhook freshness, relational status history,
+  GitHub App reconciliation, and allowlisted audited dispatch controls across
+  desktop and mobile. All current projections and append-only events are
+  protected, system-owned, non-billable Things. Fork-safe App/webhook setup and
+  failure-preserving verification are documented in README/TESTING. Reconcile
+  pagination covers repositories with more than 100 branches, and administrator
+  dispatches can enter only through the reviewed `develop`/`main` listeners. —
+  Codex (AI), 2026-08-09
+
 ### Fixed
 
 - **Required Web CI checks no longer strand non-Remix pull requests**: the
