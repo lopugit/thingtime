@@ -66,58 +66,15 @@ unsafe_path_syntax() {
   [[ "$path" =~ [[:cntrl:]] ]]
 }
 
-sensitive_path() {
-  local path="$1"
-  local base="${path##*/}"
-  local lower
-  lower="$(tr '[:upper:]' '[:lower:]' <<<"$path")"
-  # Credential-bearing names remain closed everywhere in promotion mode, not
-  # only under .github/. Keep the legacy PR-rebase policy unchanged. Word-like
-  # boundaries avoid false positives such as keyboard.ts while catching
-  # secrets/, api-key.*, and private_token.*.
-  if [[ "$CONFLICT_POLICY" == promotion \
-        && "$lower" =~ (^|[/_.-])(secret|secrets|credential|credentials|token|tokens|password|passwords|passwd|key|keys|private)([/_.-]|$) ]]; then
-    return 0
-  fi
-  case "$path" in
-    .github/*|*/.github/*)
-      if [[ "$CONFLICT_POLICY" != promotion ]]; then
-        return 0
-      fi
-      # Promotion mode is reachable only from the fixed develop control plane
-      # and replays code already merged there. It may resolve workflow/action
-      # conflicts, but path names that plausibly carry credentials remain
-      # outside the model even in that mode.
-      ;;
-  esac
-  case "$path" in
-    .gitattributes|*/.gitattributes|.gitmodules|*/.gitmodules|\
-    .claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.claude.json|*/.claude.json|\
-    CLAUDE.md|*/CLAUDE.md|CLAUDE.local.md|*/CLAUDE.local.md|\
-    AGENTS.md|*/AGENTS.md|AGENTS.override.md|*/AGENTS.override.md|AI_ALL.md|*/AI_ALL.md|\
-    .ripgreprc|*/.ripgreprc|.husky/*|*/.husky/*|\
-    .env|.env.*|*/.env|*/.env.*|\
-    .npmrc|*/.npmrc|.yarnrc|.yarnrc.*|*/.yarnrc|*/.yarnrc.*|\
-    package.json|*/package.json|package-lock.json|*/package-lock.json|\
-    pnpm-lock.yaml|*/pnpm-lock.yaml|pnpm-workspace.yaml|*/pnpm-workspace.yaml|\
-    yarn.lock|*/yarn.lock|bun.lock|*/bun.lock|bun.lockb|*/bun.lockb|\
-    Dockerfile|*/Dockerfile|Dockerfile.*|*/Dockerfile.*|\
-    docker-compose.yml|*/docker-compose.yml|docker-compose.yaml|*/docker-compose.yaml|\
-    compose.yml|*/compose.yml|compose.yaml|*/compose.yaml|\
-    Makefile|*/Makefile|GNUmakefile|*/GNUmakefile|justfile|*/justfile|\
-    *.pem|*.key|*.p12|*.pfx|CODEOWNERS|*/CODEOWNERS)
-      return 0
-      ;;
-  esac
-  case "$base" in
-    vite.config.*|nitro.config.*|next.config.*|remix.config.*|\
-    webpack.config.*|rollup.config.*|babel.config.*|postcss.config.*|\
-    tailwind.config.*|eslint.config.*|jest.config.*|vitest.config.*)
-      return 0
-      ;;
-  esac
-  return 1
-}
+# There is deliberately NO sensitive-path deny-list here. Owner decision
+# (2026-08-12): the model may be shown any conflicted repo file. What still
+# constrains a resolution: mechanical shape checks below (regular files,
+# coherent markers, the size cap), the scope verifier (only recomputed
+# conflicted paths may change), and publication gating — CI-sensitive and
+# review-gated content ships [skip ci] with approval-required checks, so
+# model-authored content in CI-executing files does not run before a human
+# approves it. Do not reintroduce a path deny-list; the contract pins its
+# absence.
 
 has_coherent_zdiff3_markers() {
   # A bare ======= outside an active conflict is intentionally ignored: it is
@@ -165,10 +122,6 @@ assert_safe_regular_text_conflict() {
 
   if unsafe_path_syntax "$path"; then
     echo "::error::Unsafe conflict path syntax: $path"
-    return "$TERMINAL_REVIEW_EXIT"
-  fi
-  if sensitive_path "$path"; then
-    echo "::error::Sensitive configuration/security conflict requires human review: $path"
     return "$TERMINAL_REVIEW_EXIT"
   fi
   if [[ ! -f "$path" || -L "$path" ]]; then
@@ -271,29 +224,10 @@ clear_scratch() {
 }
 
 if [[ "${1:-}" == --self-test-policy ]]; then
-  expect_sensitive() {
-    sensitive_path "$1" || { echo "expected sensitive: $1" >&2; exit 1; }
-  }
-  expect_allowed() {
-    ! sensitive_path "$1" || { echo "expected allowed: $1" >&2; exit 1; }
-  }
-  CONFLICT_POLICY=pr-rebase
-  expect_sensitive .github/workflows/resolve-pr-conflicts.yml
-  expect_sensitive package.json
-  expect_allowed remix/private-key.ts
-  expect_allowed remix/app/routes/example.tsx
-  CONFLICT_POLICY=promotion
-  expect_allowed .github/workflows/resolve-pr-conflicts.yml
-  expect_allowed .github/actions/example/action.yml
-  expect_sensitive .github/workflows/token-rotation.yml
-  expect_sensitive .github/credentials/example.yml
-  expect_sensitive config/secrets.json
-  expect_sensitive remix/private-key.ts
-  expect_sensitive .gitattributes
-  expect_sensitive AGENTS.md
-  expect_sensitive package.json
-  expect_allowed remix/app/routes/example.tsx
-  echo "prepare-round promotion path policy: self-test OK"
+  # The path deny-list was retired by owner decision (2026-08-12); there is no
+  # path policy left to exercise. Green stub so any caller pinned to this flag
+  # keeps passing.
+  echo "prepare-round promotion path policy: retired (no deny-list)"
   exit 0
 fi
 

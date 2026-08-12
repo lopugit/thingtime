@@ -559,9 +559,9 @@ fi
   [[ ! -s "$lineage_output" ]]
 )
 
-# Closed-policy rejections must survive errexit as the explicit terminal-review
-# classification consumed by the retry controller, rather than looking like a
-# transient bootstrap failure.
+# Owner decision (2026-08-12): no sensitive-path deny-list. A credential-named
+# workflow conflict — the exact shape the old policy refused — must now be
+# ELIGIBLE for the model round like any other coherent content conflict.
 policy_repo="$run_temp/policy-repo"
 policy_workspace="$run_temp/policy-workspace"
 policy_round="$run_temp/policy-round"
@@ -586,17 +586,14 @@ if git -C "$policy_repo" rebase --onto HEAD "$policy_root" "$policy_source" >/de
   echo 'terminal policy fixture unexpectedly rebased cleanly' >&2
   exit 1
 fi
-policy_status=0
+: >"$root/policy-output"
 AI_REBASE_CONFLICT_POLICY=promotion \
 GITHUB_WORKSPACE="$policy_workspace" \
 GITHUB_OUTPUT="$root/policy-output" \
 RUNNER_TEMP="$run_temp" \
-  bash "$prepare_round" "$policy_repo" "$policy_workspace" "$policy_round" \
-  >/dev/null 2>&1 || policy_status=$?
-if (( policy_status != 78 )); then
-  echo "sensitive promotion policy returned $policy_status instead of terminal-review 78" >&2
-  exit 1
-fi
+  bash "$prepare_round" "$policy_repo" "$policy_workspace" "$policy_round"
+grep -qx 'needs_ai=true' "$root/policy-output"
+grep -q '^<<<<<<<' "$policy_workspace/.github/workflows/token-rotation.yml"
 
 bash "$refresh_graphify" --self-test-history-boundary
 
