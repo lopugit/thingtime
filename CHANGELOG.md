@@ -21,6 +21,16 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Promotion rounds prompt for a faithful replay, retry, and settle the
+  provably superseded**: the round prompt taught the model stack semantics
+  ("keep the destination's newer intent", "leave markers when unsure") inside
+  promotions, producing base-side resolutions, emptied commits, and leftover
+  markers — each correctly refused by a verify layer. Promotion mode now
+  prompts that the source patch's intent governs; leftover markers defer to
+  bounded retry rounds (chained like the stack flow, final round strict); and
+  a conflict whose base-side blob already exists in the source history
+  settles deterministically with evidence naming the containing commit.
+  — Claude (AI), 2026-08-12
 - **The AI round's tamper guard understands deterministic settlements**: the
   guard recomputes the full conflict set from immutable SHAs, but the live
   pre-model set excludes paths the worker settles deterministically — so
