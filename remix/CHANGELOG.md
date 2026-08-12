@@ -17,8 +17,58 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **Per-automation GitHub/Vercel compute routing**: Admin → CI Control can now
+  keep each supported automation on GitHub-hosted runners or move its expensive
+  work to an ephemeral Vercel Sandbox with one toggle. A signed, idempotent
+  provider route starts a durable Vercel Workflow, registers a uniquely labelled
+  self-hosted runner, dispatches the exact protected `github-actions` workflow,
+  projects its status history, and removes the runner/Sandbox afterward. Native
+  trigger routing fails over to GitHub compute when the external path is not
+  configured or is unavailable; Docker-backed Web CI and native Electron builds
+  remain explicitly GitHub-only. Fork-safe App permissions, secrets, bootstrap,
+  first-Reconcile behavior, and regression checks are documented in
+  README/TESTING. — Codex (AI), 2026-08-10
+- **One GitHub Actions control plane + Admin CI dashboard**: executable CI,
+  promotion, sync, release, rebase, and AI conflict-resolution behavior now
+  lives on the protected `github-actions` branch. `main`/`develop` retain only
+  GitHub-required trigger/input/permission callers pinned to that branch, with
+  a regression contract that rejects runner steps or local Actions scripts.
+  Admin → CI Control renders cached feature/branch/PR/run/deployment/preview
+  topology, signed GitHub/Vercel webhook freshness, relational status history,
+  GitHub App reconciliation, and allowlisted audited dispatch controls across
+  desktop and mobile. All current projections and append-only events are
+  protected, system-owned, non-billable Things. Fork-safe App/webhook setup and
+  failure-preserving verification are documented in README/TESTING. Reconcile
+  pagination covers repositories with more than 100 branches, and administrator
+  dispatches can enter only through the reviewed `develop`/`main` listeners. —
+  Codex (AI), 2026-08-09
+
 ### Fixed
 
+- **Vercel's universal image now boots and tears down GitHub runners reliably**:
+  ephemeral CI setup runs GitHub's version-matched dependency installer,
+  provides the conventional `/dev/fd` link required by Bash process
+  substitution, and establishes a provisional cleanup handle immediately after
+  Sandbox creation. ICU or later bootstrap failures can no longer strand an
+  offline runner/Sandbox, and the same exact cleanup is preserved after a
+  registered job succeeds or fails. Three live canaries proved registration,
+  App-authored protected-workflow re-entry, GitHub fallback, successful Vercel
+  execution, and final resource deletion. — Codex (AI), 2026-08-10
+- **Vercel CI readiness now fails closed across UI, API, and routing**: Admin →
+  CI Control no longer reports a runner ready merely because the page is hosted
+  by Vercel. One server-derived capability now requires the GitHub App id,
+  installation id and private key, provider-router secret, and Vercel runtime
+  identity; the badge names incomplete setup, the dropdown stays disabled, and
+  direct policy writes receive an authored 409 while existing automation keeps
+  its safe GitHub fallback. Focused tests also cover runner identity, job
+  completion/failure summaries, and configuration drift. — Codex (AI),
+  2026-08-10
+- **Develop-preview automation no longer breaks product-branch CI**: the thin
+  workflow-caller contract now permits exactly the approved
+  `deploy-develop-pr-preview.mjs` controller introduced on `main`, while still
+  rejecting every other local Actions script. — Codex (AI), 2026-08-10
 - **Required Web CI checks no longer strand non-Remix pull requests**: the
   pull-request listener now always starts, classifies the complete changed-file
   list, and assigns both stable ruleset context names to either the real
