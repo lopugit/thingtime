@@ -47,6 +47,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Develop PR preview DNS publication now tests the live path**: externally
+  managed wildcard DNS can remain labelled `misconfigured` by Vercel while the
+  required Cloudflare CNAME, delegated ACME validation, and wildcard TLS are
+  healthy. The executable controller and reusable workflow now live on the
+  protected `github-actions` control plane behind a thin product-branch
+  listener. The controller verifies the actual probe CNAME against Vercel's
+  recommended target, verifies the assigned alias over HTTPS, and no
+  longer claims generic Preview is credential-free when it intentionally uses
+  the shared development runtime. The runbook also records the controller's
+  team-scoped token boundary accurately. See the
+  [PR #233 engineering note](../PRs/233-codex-fix-develop-preview-dns-gate.md)
+  and paired [control-plane PR #239](https://github.com/lopugit/thingtime/pull/239).
+  — Codex (AI), 2026-08-10
 - **Vercel's universal image now boots and tears down GitHub runners reliably**:
   ephemeral CI setup runs GitHub's version-matched dependency installer,
   provides the conventional `/dev/fd` link required by Bash process
@@ -65,10 +78,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   its safe GitHub fallback. Focused tests also cover runner identity, job
   completion/failure summaries, and configuration drift. — Codex (AI),
   2026-08-10
-- **Develop-preview automation no longer breaks product-branch CI**: the thin
-  workflow-caller contract now permits exactly the approved
-  `deploy-develop-pr-preview.mjs` controller introduced on `main`, while still
-  rejecting every other local Actions script. — Codex (AI), 2026-08-10
+- **Develop-preview automation no longer breaks product-branch CI**: the
+  develop-preview listener now delegates to the protected `github-actions`
+  implementation, and the thin workflow-caller contract rejects every local
+  Actions script on product branches. — Codex (AI), 2026-08-10
 - **Required Web CI checks no longer strand non-Remix pull requests**: the
   stable product-branch listener is now path-filter-free and grants only the
   read access needed by the protected classifier, which always starts and
@@ -141,7 +154,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   — Codex (AI), 2026-08-10
 - **Develop-preview activation runbook now matches the live control plane**:
   documents the no-bypass `main` ruleset, automatic no-reviewer cleanup,
-  installed project-scoped 90-day Vercel token and exact-bucket CORS-probe
+  installed team-scoped 90-day Vercel token and exact-bucket CORS-probe
   secret, narrowed develop/production runtime scope, and authoritative/public
   resolver verification of the wildcard CNAME. The narrow ACME NS delegation,
   exact-bucket CORS, `main` merge, and end-to-end gates remain. Independent

@@ -45,7 +45,10 @@ they are trusted integration surfaces, not isolated sandboxes.
 - The develop PR wildcard is registered and verified in Vercel while remaining
   detached from both a Git branch and a Custom Environment. Its DNS-only
   wildcard CNAME and narrow ACME nameserver delegation resolve publicly;
-  Vercel reports `misconfigured: false`, and wildcard TLS verifies.
+  wildcard TLS verifies. Vercel's external-DNS advisory still reports
+  `misconfigured: true` because Cloudflare remains authoritative, so a
+  [follow-up](233-codex-fix-develop-preview-dns-gate.md) replaces that advisory
+  gate with live CNAME and HTTPS checks.
 - The protected GitHub Environment and its non-secret controller variables
   exist and allow only `main`.
 - The active `main` `Basic Protection` ruleset has no bypass, requires pull
@@ -56,8 +59,10 @@ they are trusted integration surfaces, not isolated sandboxes.
   approval is optional future hardening once a second trusted collaborator can
   review controller changes.
 - A previously used Vercel admin token was rotated and revoked during the final
-  security audit. A fresh project-scoped 90-day controller token is installed
-  only as the masked `VERCEL_DEVELOP_DEPLOY_TOKEN` Environment secret.
+  security audit. A fresh team-scoped 90-day controller token is installed
+  only as the masked `VERCEL_DEVELOP_DEPLOY_TOKEN` Environment secret. The
+  protected Environment and exact controller project/team checks narrow its
+  use because Vercel does not offer a project-scoped PAT for this API surface.
 - The masked `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` Environment secret is
   installed with the unsigned exact-bucket probe URL; its value remains absent
   from tracked files and logs.
@@ -78,18 +83,24 @@ they are trusted integration surfaces, not isolated sandboxes.
 
 Do not describe credentialed PR previews as live until all of these pass:
 
-1. Merge this PR to `main`; `pull_request_target` cannot activate from the
-   feature branch that introduces it.
-2. Run the Develop-target checklist in `TESTING.md`, including upload/removal,
+1. Merge this PR to `main`; completed at merge commit `36aecdc3`.
+2. Merge the follow-up
+   [controller PR #239](https://github.com/lopugit/thingtime/pull/239) to
+   `github-actions`.
+3. Merge its paired thin-listener/runbook follow-up to `develop`, then carry it
+   through the normal reviewed `develop` → `main` promotion.
+4. Run the Develop-target checklist in `TESTING.md`, including upload/removal,
    negative-origin, supersession, close, and reconciliation cases.
 
 The `main` ruleset, Environment variables, dedicated Vercel token, probe secret,
 Vercel runtime scoping, develop-only alias suffix, wildcard DNS/ACME/TLS, and
-develop bucket CORS are complete. The controller merge and live checklist
-remain. Until that final sequence succeeds, the controller is not active and no
-PR alias should be described as ready. Production previews remain inactive and
-must use a separate trusted controller; generic Preview receives the development
-AWS role but never the production role.
+develop bucket CORS are complete, and the original controller is on `main`.
+Its first live dispatch authenticated and reached the overly strict DNS
+advisory gate. Until both follow-up PRs and the remaining live checklist
+succeed, no controller PR
+alias should be described as ready. Production previews remain inactive and
+must use a separate trusted controller; generic Preview receives the
+development AWS role but never the production role.
 
 ## Verification completed
 
