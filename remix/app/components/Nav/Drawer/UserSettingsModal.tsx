@@ -9,7 +9,7 @@ import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT,
 import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { useLopu } from '../../Lopu/useLopu';
-import { ColorControl } from '../../ThemeSettings/controls';
+import { ColorControl, ThingsBadgePaddingControl } from '../../ThemeSettings/controls';
 import { useThingtime } from '../../Thingtime/useThingtime';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -75,8 +75,12 @@ export const UserSettingsModal = () => {
 	const api = useApi();
 	const navigate = useNavigate();
 	const lopu = useLopu();
-	const { theme, preset, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } =
+	const { theme, preset, overrides, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } =
 		useTtTheme();
+	const thingsBadgeCustomPadding =
+		typeof overrides.general?.thingsBadgeCustomPadding === 'string'
+			? overrides.general.thingsBadgeCustomPadding
+			: theme.general.thingsBadgeCustomPadding;
 	const { thingtime, setThingtime } = useThingtime();
 	const topLevelLimitValue = typeof topLevelLimit === 'number' ? topLevelLimit : DRAWER_TOP_LEVEL_DEFAULT_LIMIT;
 
@@ -754,6 +758,17 @@ export const UserSettingsModal = () => {
 						</Button>
 					</Flex>,
 					'Soft blur or hard offset'
+				)}
+
+				{settingRow(
+					'Things badge padding',
+					<ThingsBadgePaddingControl
+						value={theme.general.thingsBadgePadding}
+						customValue={thingsBadgeCustomPadding}
+						onValueChange={(value) => setGeneral('thingsBadgePadding', value)}
+						onCustomValueChange={(value) => setGeneral('thingsBadgeCustomPadding', value)}
+					/>,
+					'View / Show / Arrange / Kind controls'
 				)}
 
 				{settingRow(

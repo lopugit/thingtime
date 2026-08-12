@@ -1564,6 +1564,11 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       all four sides (including after focus/resize), and every View / Show /
       Arrange / Kind pill keeps non-zero, even inline padding around its icon
       and label on desktop and mobile wrapping layouts.
+- [ ] Things badge density: Theme Studio and both Appearance quick-settings
+      surfaces switch the View / Show / Arrange / Kind pills live between
+      Small / Medium / Large; Custom accepts safe 1–4-value CSS padding
+      shorthand, persists after navigation/reload, and invalid CSS cannot
+      escape into another declaration. Small is the compact default.
 - [ ] Auto-icons use the ordered file-type registry: screenshot-like names win
       over generic image MIME/extensions (`🖼️`), ordinary photos/images use
       `🏞️`, known media/document/archive/install families are distinct, and an

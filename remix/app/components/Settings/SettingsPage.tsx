@@ -11,7 +11,7 @@ import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { ConnectedAppsSection } from '~/components/Apps/ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
-import { ColorControl } from '~/components/ThemeSettings/controls';
+import { ColorControl, ThingsBadgePaddingControl } from '~/components/ThemeSettings/controls';
 import { CurrentUser, useCurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
@@ -241,7 +241,11 @@ export const SettingsPage = () => {
     resetOrdering
   } = useDrawer();
 
-	const { theme, preset, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } = useTtTheme();
+	const { theme, preset, overrides, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } = useTtTheme();
+	const thingsBadgeCustomPadding =
+		typeof overrides.general?.thingsBadgeCustomPadding === 'string'
+			? overrides.general.thingsBadgeCustomPadding
+			: theme.general.thingsBadgeCustomPadding;
 
   const [loggingOut, setLoggingOut] = React.useState(false);
   const topLevelLimitValue = typeof topLevelLimit === 'number' ? topLevelLimit : DRAWER_TOP_LEVEL_DEFAULT_LIMIT;
@@ -532,6 +536,15 @@ export const SettingsPage = () => {
                 </Button>
               </Flex>
             </SettingRow>
+
+			<SettingRow label="Things badge padding" hint="View / Show / Arrange / Kind controls">
+				<ThingsBadgePaddingControl
+					value={theme.general.thingsBadgePadding}
+					customValue={thingsBadgeCustomPadding}
+					onValueChange={(value) => setGeneral('thingsBadgePadding', value)}
+					onCustomValueChange={(value) => setGeneral('thingsBadgeCustomPadding', value)}
+				/>
+			</SettingRow>
 
             <SettingRow label="Motion" hint="Rainbow + decorative animation">
               <Switch isChecked={theme.general.motion} onChange={(e) => setGeneral('motion', e.target.checked)}></Switch>

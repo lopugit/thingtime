@@ -60,9 +60,10 @@ const pillProps = (active: boolean) =>
     color: 'var(--tt-text, #26262b)',
     fontSize: '12px',
     fontWeight: 500,
-    height: '28px',
+    height: 'auto',
+    minHeight: '26px',
     minWidth: 'auto',
-    paddingX: 3,
+    padding: 'var(--tt-things-badge-padding, 3px 8px)',
     variant: 'outline' as const,
     _hover: {
       background: active ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.18))' : 'var(--tt-surface-hover, #f5f5f7)'

@@ -15,10 +15,15 @@ The `/things` visual follow-up fixes three related rough edges:
   registry for Thing kinds and file families. Screenshot-like names take
   precedence over image MIME data (`🖼️`), photos use `🏞️`, recognised file
   families receive distinct icons, and unknown files use `💾`.
+- Make the browse-control pills more compact by default and expose their
+  padding as a theme token with Small / Medium / Large presets plus a safe
+  custom CSS-padding shorthand. The control is available in Theme Studio and
+  both Appearance quick-settings surfaces, and saved themes carry the choice.
 
 ## Validation
 
 - `corepack pnpm --dir remix exec node --import tsx --test app/components/Things/thingIcon.test.ts` — 5/5 passed.
+- `corepack pnpm --dir remix exec node --import tsx --test app/theme/tokens.test.ts` — badge padding preset/custom sanitisation coverage.
 - Targeted Remix ESLint — 0 errors; 8 pre-existing warnings in `Rainbow.tsx`
   and `ThingsPage.tsx`.
 - `corepack pnpm --dir remix run build:client` — passed.
@@ -27,4 +32,3 @@ The `/things` visual follow-up fixes three related rough edges:
   and horizontal overflow. The search wrapper and rainbow overlay had matching
   bounds; every pill measured 12 px inline padding; app-origin console logs
   were empty.
-
