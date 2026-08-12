@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Recoverable first-session Things space**: a fresh browser can land on
+  `/things` and immediately receive the real Things UI through a rate-limited
+  temporary user Thing, bounded subscription, normal browser session, and
+  account-switcher roster entry. The pre-paint bootstrap is idempotent,
+  preserves existing signed-in users, retains ordinary ACL/quota enforcement,
+  and leaves login/register reachable so the browser can add another account
+  without discarding its temporary space. — Codex (AI), 2026-08-12
 - **Per-automation GitHub/Vercel compute routing**: Admin → CI Control can now
   keep each supported automation on GitHub-hosted runners or move its expensive
   work to an ephemeral Vercel Sandbox with one toggle. A signed, idempotent

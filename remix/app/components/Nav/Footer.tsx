@@ -216,7 +216,7 @@ export const Footer = (props) => {
                   Log out
                 </Text>
               </Box>
-              {!user.emailVerified && (
+              {!user.emailVerified && !user.temporary && (
                 <Text fontSize="10px" color="var(--tt-muted, #9a9aa6)">
                   ✉️ email unverified
                 </Text>

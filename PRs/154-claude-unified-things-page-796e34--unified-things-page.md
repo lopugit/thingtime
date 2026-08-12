@@ -32,3 +32,35 @@ The `/things` visual follow-up fixes three related rough edges:
   and horizontal overflow. The search wrapper and rainbow overlay had matching
   bounds; every pill measured 12 px inline padding; app-origin console logs
   were empty.
+
+## Follow-up: recoverable first-session Things space
+
+- A fresh `/things` landing now creates a rate-limited temporary user through
+  the canonical user-Thing, subscription, session, JWT, and account-roster
+  paths before the route paints. The Things UI therefore has a real owner and
+  all ordinary ACL/quota rules apply; there is no anonymous write bypass.
+- The bootstrap is idempotent for an existing session, marks the public user
+  as temporary, bounds it to a 64 MiB allowance, and keeps login/register
+  reachable so another account can be added while the browser roster retains
+  the temporary space.
+- Temporary identities are labelled as browser-saved in the account switcher
+  and do not show a misleading email-verification warning for their internal
+  placeholder address.
+
+### Validation
+
+- `corepack pnpm --dir remix run test:temporary-user` — 3/3 passed, covering
+  generated-account constraints, exact `/things` routing, proxy-aware
+  same-origin acceptance, and foreign-origin rejection.
+- Targeted Remix ESLint passed with 0 warnings/errors; the complete Vercel
+  production build and static-shell verification passed.
+- Direct runtime calls returned `201 reused:false` for the first bootstrap and
+  `200 reused:true` with the same user id for the second, with `temporary:true`
+  and the 64 MiB allowance in the public projection.
+- A clean in-app browser session landed on `/things` as “Temporary space”,
+  created a private folder through the real Things UI, retained it after
+  reload, reached both `/login` and `/register` without redirecting, then
+  deleted the QA folder. Desktop 1280×800 and mobile 390×844 top-to-bottom
+  checks had no horizontal overflow, clipped controls, or console errors.
+- The full typecheck ratchet remains warning-only at 152 diagnostics versus its
+  stale 143 baseline; none of the reported diagnostics are in this change.

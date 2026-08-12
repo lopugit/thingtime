@@ -17,6 +17,7 @@ export type SwitcherAccountUser = {
   displayName?: string | null;
   email?: string;
   emailVerified?: boolean;
+  temporary?: boolean;
   avatarUrl?: string | null;
 };
 

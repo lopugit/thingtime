@@ -1204,6 +1204,59 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-temporary',
+    group: 'auth',
+    title: 'Temporary browser user',
+    endpoint: '/api/v1/auth/temporary',
+    summary: 'Creates or reuses a recoverable temporary browser session user.',
+    detail:
+      'This is the first-session bootstrap used by /things. A genuinely anonymous browser receives a normal, private user Thing, bounded storage subscription, browser session, and account-switcher roster entry. Repeating the request with that live session is idempotent and returns the same user; the endpoint never bypasses ordinary Thing ownership or ACL checks.',
+    auth: {
+      mode: 'optional',
+      description: 'A live cookie session is reused. Without one, the same-origin POST may create a rate-limited temporary account.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST once from a same-origin first-page loader; no body is required.',
+      'Keep the returned httpOnly auth and account-roster cookies so the temporary space survives reloads and later account additions.',
+      'Treat user.temporary as the signal that this is a browser-scoped temporary identity.',
+      'All Thing reads and writes continue through the ordinary authenticated API paths.'
+    ],
+    requestExamples: [
+      {
+        name: 'Start or recover a temporary space',
+        description: 'Idempotently resolve the browser session used by /things.',
+        method: 'POST'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 201,
+        description: 'A temporary account and browser session were created.',
+        body: {
+          ok: true,
+          user: {
+            id: '64f000000000000000000003',
+            username: 'guest-a1b2c3d4e5f6',
+            displayName: 'Temporary space',
+            temporary: true
+          },
+          reused: false
+        }
+      },
+      {
+        status: 200,
+        description: 'The browser already had a live user session.',
+        body: { ok: true, user: { id: '64f000000000000000000003', temporary: true }, reused: true }
+      },
+      {
+        status: 429,
+        description: 'The per-IP temporary-account creation budget was exhausted.',
+        body: { ok: false, error: 'Could not start another temporary space yet — please try again later' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-password-reset',
     group: 'auth',
     title: 'Password reset request',

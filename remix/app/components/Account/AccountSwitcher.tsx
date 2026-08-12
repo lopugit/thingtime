@@ -210,7 +210,9 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
                 </Text>
                 <Text fontSize="xs" opacity={0.6} noOfLines={1}>
                   @{account.user.username}
-                  {account.active && account.user.email
+                  {account.active && account.user.temporary
+                    ? ' · temporary · saved in this browser'
+                    : account.active && account.user.email
                     ? ` · ${account.user.email} ${account.user.emailVerified ? '✅' : '· ✉️ unverified'}`
                     : ''}
                 </Text>

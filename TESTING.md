@@ -1514,9 +1514,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
-- [ ] `/things` seeds instantly from `tt-things-<userId>` localStorage cache
-      (no skeleton flash when prior state exists) and background-refetches;
-      logged-out visitors get the sign-in hero, never a spinner.
+- [ ] A fresh browser landing directly on `/things` blocks first paint only
+      long enough to create one temporary session user, then serves the real
+      Things UI (never the logged-out sign-in hero). Reload and navigation
+      reuse the same user/roster entry without creating duplicates; direct
+      `/login` and `/register` remain reachable so another account can be
+      added without losing the temporary space. Existing signed-in users are
+      never replaced. Once authenticated, `/things` seeds instantly from
+      `tt-things-<userId>` localStorage cache and background-refetches.
 - [ ] Folder CRUD: New → New folder creates a `["folder"]` thing (private by
       default) inside the CURRENT folder; rename edits `crystal.name`; folders
       never combine with other schemas (`["post","folder"]` 400s).

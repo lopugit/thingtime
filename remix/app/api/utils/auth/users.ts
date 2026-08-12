@@ -69,6 +69,7 @@ export type PublicUser = {
   createdAt: string;
   accountKind: 'user' | 'service';
   emailVerificationRequiredBy: string | null;
+  temporary?: boolean;
   storageAllowanceBytes: number | null;
   storageUsedBytes: number | null;
 	storageRemainingBytes: number | null;
@@ -127,6 +128,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
   createdAt: new Date(user.createdAt).toISOString(),
   accountKind: user.accountKind === 'service' ? 'service' : 'user',
   emailVerificationRequiredBy: user.emailVerificationRequiredBy ? new Date(user.emailVerificationRequiredBy).toISOString() : null,
+		temporary: user.meta?.temporary === true,
 		// Compatibility aliases now derive from the canonical nested projection.
 		// The old secure-blob fields are deliberately never read here.
 		storageAllowanceBytes: storage.allowanceBytes,
