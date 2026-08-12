@@ -63,8 +63,13 @@ require_environment() {
   [[ "$SOURCE_START_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_START_SHA must be a full SHA-1."
   [[ "$SOURCE_TIP_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_TIP_SHA must be a full SHA-1."
   [[ "$SOURCE_END_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_END_SHA must be a full SHA-1."
-  [[ "$SOURCE_LINEAGE_STATUS" == verified ]] \
-    || fail "source-lineage safety block: SOURCE_LINEAGE_STATUS must be verified; refusing every replay or publication for an unproven historical patch."
+  # NEVER CANCEL (owner decision, 2026-08-12): review-required lineage is
+  # accepted and review-gates publication instead of refusing it. The set is
+  # closed; anything else still fails.
+  case "$SOURCE_LINEAGE_STATUS" in
+    verified|review-required-removed|review-required-ambiguous) ;;
+    *) fail "SOURCE_LINEAGE_STATUS must be verified, review-required-removed, or review-required-ambiguous; got '$SOURCE_LINEAGE_STATUS'." ;;
+  esac
   [[ "$PLAN_HASH" =~ ^[0-9a-f]{64}$ ]] || fail "PLAN_HASH must be a SHA-256."
 }
 
@@ -165,8 +170,10 @@ write_plan() {
     -- "${lineage_pathspecs[@]}" >"$lineage_patch_file"
   [[ -s "$lineage_patch_file" ]] || fail "Promotion lineage patch is empty."
   observed_lineage="$(classify_source_lineage "$repo" "$lineage_patch_file")"
-  [[ "$observed_lineage" == verified ]] \
-    || fail "source-lineage safety block: current develop does not prove this historical patch remains present ($observed_lineage); refusing every replay or publication."
+  # The independent re-derivation must agree with the trusted handoff exactly —
+  # both run against the immutable SOURCE_TIP_SHA, so any difference means a
+  # forged or stale plan, never honest drift. A non-verified agreement is NOT a
+  # refusal (never-cancel): it review-gates publication below instead.
   [[ "$observed_lineage" == "$SOURCE_LINEAGE_STATUS" ]] \
     || fail "Source-lineage classification differs from the trusted handoff ($observed_lineage != $SOURCE_LINEAGE_STATUS)."
 
@@ -202,7 +209,10 @@ write_plan() {
     printf 'false\n' >"$RUNNER_TEMP/promotion-workflow-paths.txt"
     emit workflow_paths false
   fi
-  if grep -q '^\.github/' "$paths_file"; then
+  # Review-gate CI-sensitive content AND any promotion whose source lineage is
+  # not proven: both publish with [skip ci] content commits and an
+  # approval-required checkpoint, so nothing unreviewed executes or ships.
+  if grep -q '^\.github/' "$paths_file" || [[ "$observed_lineage" != verified ]]; then
     printf 'true\n' >"$RUNNER_TEMP/promotion-review-gated.txt"
     emit review_gated true
   else
@@ -286,12 +296,67 @@ prepare() {
   git config merge.conflictStyle zdiff3
   rebase_status=0
   git rebase --onto "$RESERVATION_SHA" "$SOURCE_START_SHA" "$synthetic_head" || rebase_status=$?
+  deterministic_file="$RUNNER_TEMP/promotion-deterministic-paths.txt"
+  : >"$deterministic_file"
+  # Evidence, not judgment: every deterministic resolution discards or
+  # overrides base-side work the source patch's author never saw. The machine
+  # must not decide whether that work was superseded — but it can name it, so
+  # the reviewer's release decision is informed. Listed per path in the
+  # promotion PR's review comment; commits come from this repo's own history,
+  # no model involved.
+  discarded_file="$RUNNER_TEMP/promotion-discarded-changes.md"
+  : >"$discarded_file"
+  note_discarded() {
+    local path="$1" verb="$2" base_commits
+    base_commits="$(git log --format='%h %s' -n 20 \
+      "$SOURCE_START_SHA..$BASE_SHA" -- ":(literal)$path" 2>/dev/null || true)"
+    [[ -n "$base_commits" ]] || return 0
+    {
+      printf -- '- `%s` — %s. Base-side commits affected:\n' "$path" "$verb"
+      printf '%s\n' "$base_commits" | sed 's/^/  - /'
+    } >>"$discarded_file"
+  }
+  # Delete-shaped conflicts (a deletion on either side) carry no zdiff3
+  # markers, so the AI round rightly refuses them — there is no merged text
+  # for a model to edit. They are also the one conflict shape with a
+  # deterministic answer: a promotion replays the source patch, so the
+  # patch's intent wins. Where the patch deleted a file the base modified,
+  # the file goes; where the base deleted a file the patch still changes,
+  # the patch's content stays. During this rebase THEIRS is the synthetic
+  # source commit. Two-sided content conflicts still go to the model, and
+  # shapes neither rule covers (symlink or mode conflicts) still
+  # terminal-review inside the round. First observed on #211, whose
+  # control-plane conversion deletes .github/scripts/* files main had since
+  # modified — every conflict was delete-shaped and the round refused them.
+  # Materialize the unmerged set BEFORE mutating the index. The loop body
+  # takes index.lock (git rm / git checkout --theirs); streaming from a live
+  # `git diff` process substitution raced it at #211 scale (1481 conflicted
+  # paths): git diff opportunistically refreshes the index, and its lock
+  # collided with the consumer's -- "Unable to create .git/index.lock: File
+  # exists" (exit 128). A completed snapshot leaves exactly one git process
+  # alive at a time.
+  unmerged_file="$RUNNER_TEMP/promotion-unmerged-paths.zlist"
+  git diff --name-only --diff-filter=U -z >"$unmerged_file"
   while IFS= read -r -d '' path; do
     unsafe_path_syntax "$path" && fail "Unsafe rebase conflict path: $path"
     grep -qxF -- "$path" "$paths_file" || fail "Rebase conflicted outside the planned source paths: $path"
-    printf '%s\n' "$path" >>"$conflict_file"
-  done < <(git diff --name-only --diff-filter=U -z)
+    stages="$(git ls-files -u -- ":(literal)$path" | awk '{ print $3 }' | LC_ALL=C sort -u | tr '\n' ' ')"
+    if [[ "$stages" == *3* && "$stages" == *2* ]]; then
+      printf '%s\n' "$path" >>"$conflict_file"
+    elif [[ "$stages" == *3* ]]; then
+      git checkout -q --theirs -- ":(literal)$path"
+      git add -- ":(literal)$path"
+      printf '%s\n' "$path" >>"$deterministic_file"
+      note_discarded "$path" "the base deleted this file; the source patch restores or changes it, overriding that deletion"
+    else
+      git rm -q -f -- ":(literal)$path"
+      printf '%s\n' "$path" >>"$deterministic_file"
+      note_discarded "$path" "deleted by the source patch; the base had modified it since the patch was authored"
+    fi
+  done <"$unmerged_file"
   LC_ALL=C sort -u -o "$conflict_file" "$conflict_file"
+  LC_ALL=C sort -u -o "$deterministic_file" "$deterministic_file"
+  emit_paths deterministic_conflict_paths "$deterministic_file"
 
   if (( rebase_status == 0 )); then
     [[ ! -s "$conflict_file" ]] || fail "Rebase succeeded while leaving unresolved paths."
@@ -301,9 +366,24 @@ prepare() {
     emit_paths conflict_paths "$conflict_file"
     return 0
   fi
-  [[ -s "$conflict_file" ]] || fail "Synthetic rebase failed without a conflict set (exit $rebase_status)."
+  if [[ ! -s "$conflict_file" ]] && [[ ! -s "$deterministic_file" ]]; then
+    fail "Synthetic rebase failed without a conflict set (exit $rebase_status)."
+  fi
   git rev-parse --verify --quiet 'REBASE_HEAD^{commit}' >/dev/null \
     || fail "Synthetic rebase conflict lacks REBASE_HEAD."
+  if [[ ! -s "$conflict_file" ]]; then
+    # Every conflict was delete-shaped; nothing needs a model. Finish the
+    # replay here so the run publishes without an AI round at all.
+    git rebase --continue >/dev/null \
+      || fail "Deterministically resolved rebase could not continue."
+    [[ ! -d "$(git rev-parse --git-dir)/rebase-merge" && ! -d "$(git rev-parse --git-dir)/rebase-apply" ]] \
+      || fail "Rebase sequencer still active after deterministic resolution."
+    emit conflicted false
+    emit complete true
+    emit head_sha "$(git rev-parse HEAD)"
+    emit_paths conflict_paths "$conflict_file"
+    return 0
+  fi
   emit conflicted true
   emit complete false
   emit head_sha "$(git rev-parse HEAD)"
