@@ -175,6 +175,7 @@ assert.match(workflow, /DETERMINISTIC_PATHS: \$\{\{ steps\.prepare_promotion\.ou
 assert.match(workflow, /resolved deterministically toward the source patch/);
 assert.match(worker, /promotion-discarded-changes\.md/);
 assert.match(worker, /note_discarded/);
+assert.match(worker, /promotion-unmerged-paths\.zlist/);
 assert.match(workflow, /Base-side changes affected by deterministic resolutions/);
 assert.match(worker, /Review-gated promotion source commit is missing \[skip ci\]/);
 assert.match(worker, /classify_source_lineage\(\)/);
