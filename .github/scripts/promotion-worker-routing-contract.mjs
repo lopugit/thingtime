@@ -188,6 +188,19 @@ assert.match(workflow, /id: promotion_ai_round_2/);
 assert.match(workflow, /id: promotion_ai_round_3/);
 assert.match(workflow, /steps\.promotion_ai_round_2\.outputs\.retry_needed == 'true'/);
 assert.match(worker, /already contained in the source history/);
+// The advisory release analysis (owner request, 2026-08-12): a model pass
+// over precomputed three-branch history + PR inventory, posted on the
+// promotion PR under one marker. Advisory by construction: continue-on-error,
+// Write scoped to its single output file, the runner temp tree denied, and
+// the deterministic post step size-caps and secret-scans before commenting.
+assert.match(workflow, /id: release_analysis_inputs/);
+assert.match(workflow, /id: release_analysis\n/);
+assert.match(workflow, /thingtime-ai-release-analysis:v1/);
+assert.match(workflow, /Model-authored release analysis \(advisory\)/);
+assert.match(workflow, /Write\(\$\{\{ steps\.release_analysis_inputs\.outputs\.dir \}\}\/out\/\*\*\)/);
+assert.match(workflow, /commits-only-on-main\.txt/);
+assert.match(promoter, /A model-authored release analysis is posted as a comment/);
+assert.doesNotMatch(promoter, /did not ask AI to infer/);
 // Deterministically settled paths are absent from the live pre-model set but
 // always present in the immutable merge-tree recompute: the round compares
 // against the union, and stages their content only from the expected rebase
