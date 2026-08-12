@@ -1,0 +1,5 @@
+# Security-sensitive deployment controller. Pair this with a branch ruleset
+# that requires CODEOWNER review before changes can reach this control-plane branch.
+/.github/CODEOWNERS @lopugit
+/.github/workflows/develop-pr-preview.yml @lopugit
+/.github/scripts/deploy-develop-pr-preview.mjs @lopugit
