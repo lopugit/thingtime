@@ -570,8 +570,16 @@ is fixed, and cite the checklist you ran in the PR description.
       confirm Graphify leaves its backend default unforced. Run
       `node remix/scripts/workflow-caller-contract.mjs --self-test` in the
       product branch and `node .github/scripts/workflow-control-plane-contract.mjs
---self-test` in the `github-actions` control plane to prove both the
+      --self-test` in the `github-actions` control plane to prove both the
       delegated callers and every AI runtime remain bound to the contract.
+- [ ] Request an AI-backed Lopu musing with an Anthropic key and confirm its
+      Anthropic request uses the same current Admin primary. Reorder from Opus
+      to Fable without restarting the app; the next musing must use Fable.
+- [ ] Put `default` first and request an Anthropic-backed Lopu musing. It must
+      use the provider-valid `LOPU_CLAUDE_MODEL` fallback, never send the
+      literal Claude Code `default` sentinel to Anthropic. With OpenAI first,
+      the OpenAI call must retain `LOPU_OPENAI_MODEL`; if it falls through to
+      Claude, that Claude call must still resolve the current Admin preference.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently
