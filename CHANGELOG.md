@@ -21,6 +21,17 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Delete-shaped promotion conflicts resolve deterministically**: the first
+  unverified promotion (#211) deletes `.github/scripts/*` files `main` had
+  since modified — modify/delete conflicts carry no zdiff3 markers, so the AI
+  round refused every one and the run failed after the never-cancel gate had
+  already opened. The worker now settles any conflict with a deletion on
+  either side toward the source patch's intent (`git rm` where the patch
+  deleted; keep the patch's content where the base deleted) before the AI
+  round, finishes the replay itself when nothing needs a model, and the
+  promotion PR's review comment names every path resolved this way. Content
+  conflicts still go to the model; symlink/mode shapes still terminal-review.
+  — Claude (AI), 2026-08-12
 - **Unverified-lineage promotions publish for review instead of failing the
   worker**: the promoter queued them (never-cancel), but the trusted worker
   chain still refused at three layers — validate gate, worker environment
