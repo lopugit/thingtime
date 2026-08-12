@@ -225,3 +225,40 @@ jobs:
           PROMOTION_LABEL: "promotion"
           DRY_RUN: ${{ inputs.dry_run == true && '1' || '' }}
         run: node workflow-control/.github/scripts/promote-features-to-main.mjs
+
+  # Additional promotion lanes (owner request, 2026-08-12): after every
+  # default develop→main run, fan out the CI lanes so main-only and
+  # develop-only .github/** work flows onto the control plane automatically.
+  # Lane runs carry source/target inputs, so their own lanes job skips —
+  # no cascade. The shared concurrency group serializes the queue.
+  lanes:
+    name: Fan out the CI promotion lanes
+    needs: promote
+    if: >-
+      needs.promote.result == 'success'
+      && inputs.source_branch == ''
+      && inputs.target_branch == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the CI lanes at the control plane
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run == true && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          for lane in "main github-actions" "develop github-actions"; do
+            read -r source target <<<"$lane"
+            jq -n --arg source "$source" --arg target "$target" --argjson dry "$DRY_RUN" '
+              {ref:"github-actions", inputs:{
+                dry_run:$dry, lookback:"50",
+                source_branch:$source, target_branch:$target,
+                require_path_prefix:".github/"}}' \
+              | gh api --method POST \
+                  "repos/$REPO/actions/workflows/promote-features-to-main.yml/dispatches" \
+                  --input -
+            echo "Dispatched the $source -> $target lane."
+          done

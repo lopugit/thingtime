@@ -78,10 +78,13 @@ const flag = (key, fallback) => {
 const CFG = {
   source: env("SOURCE_BRANCH", "develop"),
   target: env("TARGET_BRANCH", "main"),
-  // The primary target never changes; `target` is swapped per pass when
-  // several targets are configured, and branch naming keys off this so the
-  // primary pass keeps its historical names.
-  primaryTarget: env("TARGET_BRANCH", "main"),
+  // The primary namespace is `main`, permanently: every lane whose target is
+  // not main gets `--to-<target>` suffixed promotion branches (the #231
+  // multi-target machinery), so a develop PR promoted on both the
+  // develop→main lane and a develop→github-actions lane can never collide on
+  // one branch name. Following TARGET_BRANCH here (the old behavior) made a
+  // lane's own names unsuffixed and cross-lane collisions possible.
+  primaryTarget: env("PRIMARY_TARGET_BRANCH", "main"),
   // Multi-target promotion. One merged source PR can legitimately owe changes
   // to more than one branch: #211 converts `main` to thin listeners AND carries
   // the executable implementation those listeners call, which may only live on
