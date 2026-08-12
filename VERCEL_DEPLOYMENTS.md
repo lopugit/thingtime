@@ -1,6 +1,6 @@
 # Vercel Deployments
 
-Last updated: 2026-08-10
+Last updated: 2026-08-12
 
 ## Project
 
@@ -37,21 +37,46 @@ Last updated: 2026-08-10
 - Generated preview URLs use `https://thingtime-<generated>-lopugits-projects.vercel.app`.
 - The `develop` branch alias is
   https://thingtime-git-develop-lopugits-projects.vercel.app.
-- https://dev.thingtime.com is configured as a branch-specific Preview domain
-  that tracks `develop`. This deliberately preserves the existing
-  `develop`-scoped Preview environment variables; Vercel's built-in
-  Development environment remains local/CLI-only.
+- https://dev.thingtime.com is intended to be a branch-specific Preview domain
+  that tracks `develop`; Vercel's built-in Development environment remains
+  local/CLI-only. Live project-domain inspection on 2026-08-12 instead reports
+  `gitBranch: null` and a non-null `customEnvironmentId`, meaning the domain is
+  attached to the Custom Environment. DNS, ownership, and HTTPS are healthy,
+  but the protected controller rejects publication until the domain is rebound
+  to `gitBranch: develop` with no `customEnvironmentId` and the Custom
+  Environment's own domain list is empty.
   - Cloudflare DNS: `CNAME dev` to
     `b45b7349d6eb9c18.vercel-dns-017.com`, DNS only, TTL Auto.
   - If Vercel reports a pending ownership challenge, publish the exact
     `_vercel` TXT value returned by the Vercel project-domain inspector; do
     not record the rotating verification value in this repository.
-  - Vercel assignment was configured on 2026-08-07. DNS, ownership
-    verification, and TLS remain pending until the Cloudflare records are
-    published.
+  - Vercel assignment was configured on 2026-08-07. The public CNAME resolves,
+    and Vercel ownership plus HTTPS are verified as of 2026-08-12. Recheck the
+    records and live hostname after any domain or branch-binding change.
 - The `staging` branch alias is https://thingtime-git-staging-lopugits-projects.vercel.app.
 - For feature branches, use the Vercel PR status URL or deployment URL from
   the GitHub PR checks.
+
+### Development data and auth scope
+
+The `develop` Custom Environment and generic Preview deliberately share the
+same development runtime. The shared scope includes `APP_URL`, `CRON_SECRET`,
+the JWT key/issuer values, `MONGODB_CONNECTION_STRING`, `MONGO_PASS`, and the
+private-S3 bucket/region/role values. Production MongoDB, JWT, and S3 records
+remain separately scoped and must never be copied into Preview.
+
+The database user embedded in `MONGODB_CONNECTION_STRING` is authoritative;
+`MONGO_USER` is informational metadata and is not read by the application. The
+home API explicitly opens the canonical `thingtime` database even when the
+Atlas URI has an empty database path.
+
+Live verification on 2026-08-12 returned HTTP 200, `connected: true`, host
+`thingtime-develop.ymezxh8.mongodb.net`, and `dbName: "thingtime"` from
+`https://dev.thingtime.com/api/v1/health/mongodb`, with no
+`x-thingtime-api-fallback` response header. The Production endpoint also
+returned HTTP 200 and `connected: true`, but reported the distinct
+`thingtime.4ekjigs.mongodb.net` host. Passwords, JWT material, bucket names,
+role ARNs, and other private values remain outside this repository.
 
 ### Develop-target PR previews
 
@@ -169,17 +194,21 @@ One-time private setup (values never belong in git):
   `environment:develop` and `environment:preview`; the production role remains
   excluded from generic Preview.
 
-Activation status as of 2026-08-11: the no-bypass `main` ruleset, protected
+Activation status as of 2026-08-12: the no-bypass `main` ruleset, protected
 Environment, all controller variables, dedicated 90-day Vercel token, masked
 `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
 scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
 wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
-are complete for `*.previews.dev.thingtime.com`. The first live dispatch
-authenticated successfully and exposed the external-DNS advisory mismatch.
-The corrected implementation must merge to `github-actions`, and the thin
-listener must reach `main` through `develop`; a successful post-fix exact-SHA
-deployment, alias publication, CORS probe, and attachment upload/removal check
-then finish browser verification.
+are complete for `*.previews.dev.thingtime.com`. The protected implementation
+from #239 has merged to `github-actions`, and the thin listener from #233 has
+reached `develop`. The default `main` branch still contains the previous direct
+workflow and awaits the `develop` promotion path in #188.
+
+The remaining stable-domain binding mismatch above causes the protected
+controller to fail closed at its configuration gate. After rebinding the
+domain and promoting the listener to `main`, a successful exact-SHA deployment,
+alias publication, CORS probe, and attachment upload/removal check finish
+browser verification.
 
 The shorter `*.previews.thingtime.com` namespace is reserved for a separate
 future production-preview controller. It must use an independently protected

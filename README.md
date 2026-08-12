@@ -406,6 +406,30 @@ placeholder:
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
 
+### Hosted `develop` and Preview data plane
+
+`https://dev.thingtime.com` and generic Vercel Preview deployments deliberately
+share one development data/auth plane. Assign the current development MongoDB,
+JWT, `APP_URL`, cron, and private-S3 values to both the `develop` Custom
+Environment and generic Preview. Keep Production MongoDB, JWT, and S3 values
+separately scoped; never reuse or document their secrets. Treat every branch
+that Vercel may build for this project as trusted development code with access
+to shared, disposable development data.
+
+For Atlas, the username inside `MONGODB_CONNECTION_STRING` is authoritative.
+The runtime reads `MONGO_PASS` only when replacing the literal
+`<db_password>` placeholder; `MONGO_USER` may remain operator metadata but is
+not read by the application. The home API explicitly selects the canonical
+`thingtime` database, so the hosted URI may leave its database path empty.
+
+After changing the hosted database configuration, redeploy `develop` and check
+`GET https://dev.thingtime.com/api/v1/health/mongodb`. It must return HTTP 200,
+`connected: true`, the expected development Atlas host, `dbName: "thingtime"`,
+and no `x-thingtime-api-fallback` response header. Compare the same endpoint on
+`https://thingtime.com` and confirm that Production reports a different Atlas
+host. The current Thingtime hostnames and deployment state are recorded in
+`VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
+
 ## Admin access
 
 Schema-version migrations (`/api/v1/admin/migrations*`), the migrations panel on
@@ -872,17 +896,25 @@ bucket stays private:
 ]
 ```
 
-Activation status as of 2026-08-11: the no-bypass `main` ruleset, protected
+Activation status as of 2026-08-12: the no-bypass `main` ruleset, protected
 Environment, nine controller variables, dedicated 90-day Vercel token, masked
 `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
 scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
 wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
-are complete for `*.previews.dev.thingtime.com`. The first live dispatch
-authenticated successfully and exposed the external-DNS advisory mismatch.
-The corrected implementation must merge to `github-actions`, and this thin
-listener must reach `main` through `develop`; a successful post-fix exact-SHA
-deployment, alias publication, CORS probe, and attachment upload/removal check
-then complete the activation checklist.
+are complete for `*.previews.dev.thingtime.com`. The protected controller from
+#239 is now on `github-actions`, and the thin listener from #233 is on
+`develop`; the default `main` branch still has the previous direct workflow and
+is waiting for the `develop` promotion path in #188.
+
+Live Vercel inspection also reports `dev.thingtime.com` with `gitBranch: null`
+and a non-null `customEnvironmentId`. DNS, ownership, and HTTPS are healthy,
+but that binding contradicts the controller's branch-scoped stable-domain
+invariant, so the protected controller correctly fails closed at its
+configuration gate. Rebind the domain to `gitBranch: develop` with no
+`customEnvironmentId`, keep the Custom Environment's domain list empty, and
+let the thin listener reach `main`. A successful exact-SHA deployment, alias
+publication, CORS probe, and attachment upload/removal check then complete the
+activation checklist.
 
 CORS is not authorization. The bucket remains private, while the development
 AWS role explicitly trusts both Thingtime's `environment:develop` and
