@@ -76,6 +76,9 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
 	'service-quota': ['quotaKind', 'quotaVersion', 'key', 'dayKey', 'dailyUsed', 'permitIds', 'releasedIds'], // policy + state records → dropped
 	'migration-diagnostic': ['diagnosticVersion', 'migrationId', 'mode', 'status', 'outcome', 'summary', 'capturedAt'],
+  follow: ['follow'],
+  friend: ['status', 'friendKey'],
+  notification: ['type', 'actorId', 'actorName', 'postId', 'preview'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
