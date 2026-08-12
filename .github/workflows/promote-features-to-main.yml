@@ -107,6 +107,28 @@ on:
         description: "How many recently merged develop PRs to scan (max 100)"
         required: false
         default: "50"
+      # The reverse lane (owner request, 2026-08-12): one source, one target,
+      # per dispatch. Defaults preserve the standing develop → main lane for
+      # every push/schedule/listener run; a manual dispatch may promote
+      # main-only CI work onto the control plane with
+      # source_branch=main target_branch=github-actions
+      # require_path_prefix=.github/ — the prefix guard keeps app-wide PRs
+      # (e.g. a merged develop → main promotion) out of a CI-scoped lane.
+      source_branch:
+        description: "Branch whose merged PRs are promoted (default develop)"
+        required: false
+        default: ""
+        type: string
+      target_branch:
+        description: "Branch the promotion PRs target (default main)"
+        required: false
+        default: ""
+        type: string
+      require_path_prefix:
+        description: "Comma-separated path prefixes; PRs touching anything outside them are skipped on this lane"
+        required: false
+        default: ""
+        type: string
       execution_provider:
         description: "Internal: hosted compute selected by Thingtime CI Control"
         required: false
@@ -180,8 +202,9 @@ jobs:
           # github-actions[bot]. Keep this token separate from the PAT used for
           # branch and PR writes.
           ACTIONS_TOKEN: ${{ github.token }}
-          SOURCE_BRANCH: develop
-          TARGET_BRANCH: main
+          SOURCE_BRANCH: ${{ inputs.source_branch || 'develop' }}
+          TARGET_BRANCH: ${{ inputs.target_branch || 'main' }}
+          REQUIRE_PATH_PREFIXES: ${{ inputs.require_path_prefix || '' }}
           # Additional promotion targets, comma-separated. One merged source PR
           # can owe changes to more than one branch — #211 converts `main` to
           # thin listeners AND carries the implementation those listeners call,
