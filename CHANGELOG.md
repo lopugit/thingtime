@@ -21,6 +21,20 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Unverified-lineage promotions publish for review instead of failing the
+  worker**: the promoter queued them (never-cancel), but the trusted worker
+  chain still refused at three layers — validate gate, worker environment
+  check, and the worker's independent lineage re-derivation — so #211, #215
+  and #223 each produced a failed run and no promotion PR. All three now
+  accept the closed review-required set; the `observed == declared`
+  consistency check stays (both classify against the immutable source tip,
+  so disagreement means forgery or staleness); and a non-verified lineage
+  review-gates publication like CI-sensitive paths (`[skip ci]` content
+  commits, approval-required checkpoint, `source-lineage-unverified` label,
+  release-decision warnings on both the promotion and source PRs). The
+  contract tripwire that forbade this allow-list was retired deliberately
+  with owner authorization and now pins the new posture instead. Nothing is
+  ever auto-merged. — Claude (AI), 2026-08-12
 - **AI conflict resolution runs again (every worker was silently skipped)**:
   adding the promotion validator to `model_config`'s `needs` made GitHub apply
   that job's ordinary-mode skip to the whole downstream chain, so both the
