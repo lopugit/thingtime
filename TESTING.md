@@ -102,6 +102,22 @@ is fixed, and cite the checklist you ran in the PR description.
       deployments and the stable `develop` branch deployment. Manually dispatch
       one PR number and verify the bounded per-PR recovery path separately.
 
+## iOS web destination drawer
+
+- [ ] Confirm `https://thingtime.com/api/v1/vercel/deployments?limit=50` reports
+      `source: "api"`, `hasError: false`, and more than the production `main`
+      deployment before testing the native picker. A tokenless response or
+      `Vercel API returned 403` means the Vercel project token must be repaired
+      and a fresh deployment built before the app can discover previews.
+- [ ] Launch the iOS app with at least twelve returned destinations, open the
+      left-edge Web destination drawer, and scroll from the first row to the
+      final row and back. The header, refresh, and close controls stay pinned;
+      rows do not clip or overlap the home indicator in portrait or landscape.
+- [ ] Drag vertically over a destination row and confirm the list scrolls
+      without dismissing the drawer. Then swipe predominantly left and confirm
+      the drawer closes; reopen it, select an off-screen preview, and confirm
+      the web view loads that exact URL.
+
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
 - [ ] In a fresh linked worktree with no copied `node_modules`, run
