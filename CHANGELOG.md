@@ -21,6 +21,15 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **The trusted promotion validator is lane-aware**: the reverse lane's first
+  real run failed on "Source PR was not merged to develop" — the promoter was
+  lane-parameterized but the validator still assumed the develop lane. The
+  plan envelope now carries `source_ref` (closed to `develop|main`), the
+  merged-into and live-tip checks follow the lane, and the deterministic
+  branch check accepts the uniform `--to-<target>` shape plus legacy
+  unsuffixed main-lane names — closing a near-miss where every post-uniform
+  promotion, develop→main included, would have failed its next cycle.
+  — Claude (AI), 2026-08-13
 - **Promotion rounds prompt for a faithful replay, retry, and settle the
   provably superseded**: the round prompt taught the model stack semantics
   ("keep the destination's newer intent", "leave markers when unsure") inside
