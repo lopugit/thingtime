@@ -110,7 +110,7 @@ assert.match(workflow, /source_lineage_status:\$source_lineage_status/);
 assert.match(workflow, /actions\/workflows\/promote-features-to-main\.yml\/dispatches/);
 assert.match(workflow, /paused_label=.*ai-promotion-paused/);
 assert.match(workflow, /\[ "\$paused" = true \] && \[ "\$paused_label" = true \]/);
-assert.match(workflow, /CONFLICT_PATHS: \$\{\{ steps\.promotion_ai_round\.outputs\.ai_conflict_paths \}\}/);
+assert.match(workflow, /CONFLICT_PATHS: \$\{\{ steps\.promotion_ai_round_3\.outputs\.ai_conflict_paths \|\| steps\.promotion_ai_round_2\.outputs\.ai_conflict_paths \|\| steps\.promotion_ai_round\.outputs\.ai_conflict_paths \}\}/);
 assert.doesNotMatch(workflow, /CONFLICT_PATHS: \$\{\{ steps\.prepare_promotion\.outputs\.conflict_paths \}\}/);
 assert.match(workflow, /CI_SENSITIVE_PATHS: \$\{\{ steps\.prepare_promotion\.outputs\.ci_sensitive_paths \}\}/);
 assert.match(workflow, /REVIEW_GATED: \$\{\{ steps\.prepare_promotion\.outputs\.review_gated \}\}/);
@@ -176,6 +176,18 @@ assert.match(workflow, /resolved deterministically toward the source patch/);
 assert.match(worker, /promotion-discarded-changes\.md/);
 assert.match(worker, /note_discarded/);
 assert.match(worker, /promotion-unmerged-paths\.zlist/);
+// Replay rounds (owner decision, 2026-08-12): the promotion chain keeps the
+// model with bounded retries, prompts it for a FAITHFUL REPLAY (never the
+// stack flow's semantic-union framing), and settles provably-superseded
+// content deterministically. The final round must stay strict.
+assert.match(action, /allow-unresolved/);
+assert.match(action, /retry_needed=true/);
+assert.match(action, /FAITHFUL REPLAY/);
+assert.match(action, /preserve the semantic\n? *union/);
+assert.match(workflow, /id: promotion_ai_round_2/);
+assert.match(workflow, /id: promotion_ai_round_3/);
+assert.match(workflow, /steps\.promotion_ai_round_2\.outputs\.retry_needed == 'true'/);
+assert.match(worker, /already contained in the source history/);
 // Deterministically settled paths are absent from the live pre-model set but
 // always present in the immutable merge-tree recompute: the round compares
 // against the union, and stages their content only from the expected rebase

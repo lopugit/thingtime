@@ -1711,6 +1711,46 @@ jobs:
           run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           round: "1"
           conflict-policy: promotion
+          allow-unresolved: "true"
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github-token: ${{ github.token }}
+          allowed-bots: github-actions
+          model-args: ${{ needs.model_config.outputs.model_args }}
+
+      - name: Retry the synthetic promotion conflict (round 2)
+        id: promotion_ai_round_2
+        if: steps.promotion_ai_round.outcome == 'success' && steps.promotion_ai_round.outputs.retry_needed == 'true'
+        uses: ./trusted/.github/actions/rebase-conflict-round
+        with:
+          repo-path: ${{ steps.repo.outputs.repo_path }}
+          deterministic-conflict-paths: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
+          pr-number: ${{ inputs.promotion_source_pr }}
+          base-ref: ${{ needs.promotion_validate.outputs.base_ref }}
+          head-ref: ${{ needs.promotion_validate.outputs.promotion_branch }}
+          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          round: "2"
+          conflict-policy: promotion
+          allow-unresolved: "true"
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github-token: ${{ github.token }}
+          allowed-bots: github-actions
+          model-args: ${{ needs.model_config.outputs.model_args }}
+
+      - name: Retry the synthetic promotion conflict (round 3)
+        id: promotion_ai_round_3
+        if: steps.promotion_ai_round_2.outcome == 'success' && steps.promotion_ai_round_2.outputs.retry_needed == 'true'
+        uses: ./trusted/.github/actions/rebase-conflict-round
+        with:
+          repo-path: ${{ steps.repo.outputs.repo_path }}
+          deterministic-conflict-paths: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
+          pr-number: ${{ inputs.promotion_source_pr }}
+          base-ref: ${{ needs.promotion_validate.outputs.base_ref }}
+          head-ref: ${{ needs.promotion_validate.outputs.promotion_branch }}
+          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          round: "3"
+          conflict-policy: promotion
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github-token: ${{ github.token }}
@@ -1722,6 +1762,8 @@ jobs:
         if: >-
           steps.prepare_promotion.outputs.complete == 'true'
           || steps.promotion_ai_round.outputs.complete == 'true'
+          || steps.promotion_ai_round_2.outputs.complete == 'true'
+          || steps.promotion_ai_round_3.outputs.complete == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1758,7 +1800,7 @@ jobs:
           # This is the exact model-edit allowlist, not the full original
           # conflict set. Derived graphify-out/** paths are deterministic and
           # must never appear in the AI attestation.
-          CONFLICT_PATHS: ${{ steps.promotion_ai_round.outputs.ai_conflict_paths }}
+          CONFLICT_PATHS: ${{ steps.promotion_ai_round_3.outputs.ai_conflict_paths || steps.promotion_ai_round_2.outputs.ai_conflict_paths || steps.promotion_ai_round.outputs.ai_conflict_paths }}
           DETERMINISTIC_PATHS: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
           GRAPHIFY_MODE: ${{ steps.promotion_graphify.outputs.refreshed || 'failed' }}
           GRAPHIFY_SEMANTIC: ${{ steps.promotion_graphify.outputs.semantic || 'unavailable' }}
@@ -2118,9 +2160,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AI_STARTED: ${{ steps.promotion_ai_round.outputs.ai_started }}
-          TERMINAL_REVIEW_NEEDED: ${{ steps.source_authority.outputs.terminal_review_needed == 'true' || steps.prepare_promotion.outputs.terminal_review_needed == 'true' || steps.promotion_ai_round.outputs.terminal_review_needed == 'true' || steps.promotion_publication_policy.outputs.terminal_review_needed == 'true' }}
+          TERMINAL_REVIEW_NEEDED: ${{ steps.source_authority.outputs.terminal_review_needed == 'true' || steps.prepare_promotion.outputs.terminal_review_needed == 'true' || steps.promotion_ai_round.outputs.terminal_review_needed == 'true' || steps.promotion_ai_round_2.outputs.terminal_review_needed == 'true' || steps.promotion_ai_round_3.outputs.terminal_review_needed == 'true' || steps.promotion_publication_policy.outputs.terminal_review_needed == 'true' }}
           PUBLISH_OUTCOME: ${{ steps.publish_promotion.outcome }}
-          CONFLICT_PATHS: ${{ steps.promotion_ai_round.outputs.ai_conflict_paths }}
+          CONFLICT_PATHS: ${{ steps.promotion_ai_round_3.outputs.ai_conflict_paths || steps.promotion_ai_round_2.outputs.ai_conflict_paths || steps.promotion_ai_round.outputs.ai_conflict_paths }}
           DETERMINISTIC_PATHS: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
           GRAPHIFY_MODE: ${{ steps.promotion_graphify.outputs.refreshed || 'failed' }}
           GRAPHIFY_SEMANTIC: ${{ steps.promotion_graphify.outputs.semantic || 'unavailable' }}
