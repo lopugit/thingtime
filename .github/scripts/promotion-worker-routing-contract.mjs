@@ -17,6 +17,10 @@ const worker = readFileSync(
   new URL("./rebase-stack/promotion-worker.sh", import.meta.url),
   "utf8",
 );
+const sensitiveShared = readFileSync(
+  new URL("./rebase-stack/sensitive-paths.sh", import.meta.url),
+  "utf8",
+);
 const prepareRound = readFileSync(
   new URL("./rebase-stack/prepare-round.sh", import.meta.url),
   "utf8",
@@ -176,6 +180,18 @@ assert.match(workflow, /resolved deterministically toward the source patch/);
 assert.match(worker, /promotion-discarded-changes\.md/);
 assert.match(worker, /note_discarded/);
 assert.match(worker, /promotion-unmerged-paths\.zlist/);
+// One deny-list: both the round and the worker source sensitive-paths.sh.
+// The worker settles sensitive promotion conflicts byte-exactly to the source
+// patch before the round, so the model is never shown them; the round keeps
+// refusing any that arrive. Neither file may grow its own inline copy.
+assert.match(worker, /source "\$\{BASH_SOURCE\[0\]%\/\*\}\/sensitive-paths\.sh"/);
+assert.match(prepareRound, /source "\$\{BASH_SOURCE\[0\]%\/\*\}\/sensitive-paths\.sh"/);
+assert.doesNotMatch(prepareRound, /^sensitive_path\(\) \{/m);
+assert.doesNotMatch(worker, /^sensitive_path\(\) \{/m);
+assert.match(worker, /sensitive path settled byte-exactly to the source patch/);
+assert.match(sensitiveShared, /package\.json/);
+assert.match(sensitiveShared, /pnpm-lock\.yaml/);
+assert.match(sensitiveShared, /CODEOWNERS/);
 assert.match(workflow, /Base-side changes affected by deterministic resolutions/);
 assert.match(worker, /Review-gated promotion source commit is missing \[skip ci\]/);
 assert.match(worker, /classify_source_lineage\(\)/);

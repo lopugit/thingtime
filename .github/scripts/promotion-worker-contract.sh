@@ -296,25 +296,29 @@ git -C "$delete_repo" config user.name fixture
 git -C "$delete_repo" config user.email fixture@example.invalid
 printf 'doomed v0\n' >"$delete_repo/doomed.txt"
 printf 'kept v0\n' >"$delete_repo/kept.txt"
-git -C "$delete_repo" add doomed.txt kept.txt
+mkdir -p "$delete_repo/remix"
+printf '{"v":0}\n' >"$delete_repo/remix/package.json"
+git -C "$delete_repo" add doomed.txt kept.txt remix/package.json
 git -C "$delete_repo" commit -qm root
 delete_start="$(git -C "$delete_repo" rev-parse HEAD)"
 git -C "$delete_repo" switch -qc source
 git -C "$delete_repo" rm -q doomed.txt
 printf 'kept by the patch\n' >"$delete_repo/kept.txt"
-git -C "$delete_repo" add kept.txt
+printf '{"v":"patch"}\n' >"$delete_repo/remix/package.json"
+git -C "$delete_repo" add kept.txt remix/package.json
 git -C "$delete_repo" commit -qm 'delete doomed, rewrite kept'
 delete_end="$(git -C "$delete_repo" rev-parse HEAD)"
 git -C "$delete_repo" switch -qC delete-main "$delete_start"
 printf 'doomed but modified on base\n' >"$delete_repo/doomed.txt"
 git -C "$delete_repo" rm -q kept.txt
-git -C "$delete_repo" add doomed.txt
+printf '{"v":"base"}\n' >"$delete_repo/remix/package.json"
+git -C "$delete_repo" add doomed.txt remix/package.json
 git -C "$delete_repo" commit -qm 'base moves the other way'
 delete_base="$(git -C "$delete_repo" rev-parse HEAD)"
-delete_paths_json='["doomed.txt","kept.txt"]'
+delete_paths_json='["doomed.txt","kept.txt","remix/package.json"]'
 delete_patch="$root/delete-shape.patch"
 git -C "$delete_repo" diff --binary --full-index "$delete_start" "$delete_end" -- \
-  ':(literal)doomed.txt' ':(literal)kept.txt' >"$delete_patch"
+  ':(literal)doomed.txt' ':(literal)kept.txt' ':(literal)remix/package.json' >"$delete_patch"
 delete_patch_id="$(git -C "$delete_repo" patch-id --stable <"$delete_patch" | awk 'NR == 1 { print $1 }')"
 delete_plan_hash="$(
   SOURCE_PR="$source_pr" BASE_REF=delete-main BASE_SHA="$delete_base" BRANCH="$branch" \
@@ -362,8 +366,10 @@ grep -qx 'complete=true' "$delete_output"
 grep -qx 'review_gated=false' "$delete_output"
 [[ "$(git -C "$delete_repo" rev-parse HEAD^1)" == "$delete_reservation" ]]
 git -C "$delete_repo" diff --name-status "$delete_reservation" HEAD | LC_ALL=C sort >"$root/delete-shape-diff"
-printf 'A\tkept.txt\nD\tdoomed.txt\n' | diff -u - "$root/delete-shape-diff"
+printf 'A\tkept.txt\nD\tdoomed.txt\nM\tremix/package.json\n' | diff -u - "$root/delete-shape-diff"
 [[ "$(git -C "$delete_repo" show HEAD:kept.txt)" == 'kept by the patch' ]]
+# The sensitive content conflict settled to the patch byte-exactly, model-free.
+[[ "$(git -C "$delete_repo" show HEAD:remix/package.json)" == '{"v":"patch"}' ]]
 git -C "$delete_repo" show -s --format=%s HEAD \
   | grep -qx "Promote source PR #$source_pr onto delete-main"
 [[ ! -d "$(git -C "$delete_repo" rev-parse --git-dir)/rebase-merge" ]]
@@ -374,6 +380,7 @@ git -C "$delete_repo" show -s --format=%s HEAD \
 grep -qF -- '- `doomed.txt` — deleted by the source patch' "$delete_temp/promotion-discarded-changes.md"
 grep -qF -- '- `kept.txt` — the base deleted this file' "$delete_temp/promotion-discarded-changes.md"
 grep -qF 'base moves the other way' "$delete_temp/promotion-discarded-changes.md"
+grep -qF -- '- `remix/package.json` — sensitive path settled byte-exactly' "$delete_temp/promotion-discarded-changes.md"
 
 : >"$GITHUB_OUTPUT"
 bash "$worker" prepare "$repo"

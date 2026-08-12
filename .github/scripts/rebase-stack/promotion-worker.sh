@@ -5,6 +5,11 @@
 # and verifies one exact aggregate source patch in an isolated real checkout.
 
 set -euo pipefail
+
+# Shared sensitive-path deny-list (see sensitive-paths.sh). This worker runs
+# promotion replays only.
+source "${BASH_SOURCE[0]%/*}/sensitive-paths.sh"
+CONFLICT_POLICY=promotion
 IFS=$'\n\t'
 
 emit() {
@@ -342,7 +347,21 @@ prepare() {
     grep -qxF -- "$path" "$paths_file" || fail "Rebase conflicted outside the planned source paths: $path"
     stages="$(git ls-files -u -- ":(literal)$path" | awk '{ print $3 }' | LC_ALL=C sort -u | tr '\n' ' ')"
     if [[ "$stages" == *3* && "$stages" == *2* ]]; then
-      printf '%s\n' "$path" >>"$conflict_file"
+      if sensitive_path "$path"; then
+        # The deny-list exists so no MODEL-AUTHORED content lands in these
+        # files. A byte-exact copy of the source patch's version is not
+        # model-authored: settle it deterministically and record the evidence,
+        # so the round never receives the path and the reviewer sees exactly
+        # which base-side commits the patch overrides. Without this, every
+        # promotion whose conflicts touch package.json or a lockfile
+        # terminal-reviewed forever (first observed on #211).
+        git checkout -q --theirs -- ":(literal)$path"
+        git add -- ":(literal)$path"
+        printf '%s\n' "$path" >>"$deterministic_file"
+        note_discarded "$path" "sensitive path settled byte-exactly to the source patch (never shown to the model); the base had modified it"
+      else
+        printf '%s\n' "$path" >>"$conflict_file"
+      fi
     elif [[ "$stages" == *3* ]]; then
       git checkout -q --theirs -- ":(literal)$path"
       git add -- ":(literal)$path"

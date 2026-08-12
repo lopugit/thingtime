@@ -66,58 +66,11 @@ unsafe_path_syntax() {
   [[ "$path" =~ [[:cntrl:]] ]]
 }
 
-sensitive_path() {
-  local path="$1"
-  local base="${path##*/}"
-  local lower
-  lower="$(tr '[:upper:]' '[:lower:]' <<<"$path")"
-  # Credential-bearing names remain closed everywhere in promotion mode, not
-  # only under .github/. Keep the legacy PR-rebase policy unchanged. Word-like
-  # boundaries avoid false positives such as keyboard.ts while catching
-  # secrets/, api-key.*, and private_token.*.
-  if [[ "$CONFLICT_POLICY" == promotion \
-        && "$lower" =~ (^|[/_.-])(secret|secrets|credential|credentials|token|tokens|password|passwords|passwd|key|keys|private)([/_.-]|$) ]]; then
-    return 0
-  fi
-  case "$path" in
-    .github/*|*/.github/*)
-      if [[ "$CONFLICT_POLICY" != promotion ]]; then
-        return 0
-      fi
-      # Promotion mode is reachable only from the fixed develop control plane
-      # and replays code already merged there. It may resolve workflow/action
-      # conflicts, but path names that plausibly carry credentials remain
-      # outside the model even in that mode.
-      ;;
-  esac
-  case "$path" in
-    .gitattributes|*/.gitattributes|.gitmodules|*/.gitmodules|\
-    .claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.claude.json|*/.claude.json|\
-    CLAUDE.md|*/CLAUDE.md|CLAUDE.local.md|*/CLAUDE.local.md|\
-    AGENTS.md|*/AGENTS.md|AGENTS.override.md|*/AGENTS.override.md|AI_ALL.md|*/AI_ALL.md|\
-    .ripgreprc|*/.ripgreprc|.husky/*|*/.husky/*|\
-    .env|.env.*|*/.env|*/.env.*|\
-    .npmrc|*/.npmrc|.yarnrc|.yarnrc.*|*/.yarnrc|*/.yarnrc.*|\
-    package.json|*/package.json|package-lock.json|*/package-lock.json|\
-    pnpm-lock.yaml|*/pnpm-lock.yaml|pnpm-workspace.yaml|*/pnpm-workspace.yaml|\
-    yarn.lock|*/yarn.lock|bun.lock|*/bun.lock|bun.lockb|*/bun.lockb|\
-    Dockerfile|*/Dockerfile|Dockerfile.*|*/Dockerfile.*|\
-    docker-compose.yml|*/docker-compose.yml|docker-compose.yaml|*/docker-compose.yaml|\
-    compose.yml|*/compose.yml|compose.yaml|*/compose.yaml|\
-    Makefile|*/Makefile|GNUmakefile|*/GNUmakefile|justfile|*/justfile|\
-    *.pem|*.key|*.p12|*.pfx|CODEOWNERS|*/CODEOWNERS)
-      return 0
-      ;;
-  esac
-  case "$base" in
-    vite.config.*|nitro.config.*|next.config.*|remix.config.*|\
-    webpack.config.*|rollup.config.*|babel.config.*|postcss.config.*|\
-    tailwind.config.*|eslint.config.*|jest.config.*|vitest.config.*)
-      return 0
-      ;;
-  esac
-  return 1
-}
+# sensitive_path() lives in sensitive-paths.sh, shared with the promotion
+# worker so exactly one deny-list exists: the worker settles sensitive
+# promotion conflicts byte-exactly to the source patch before this round,
+# and this round refuses any that still arrive.
+source "${BASH_SOURCE[0]%/*}/sensitive-paths.sh"
 
 has_coherent_zdiff3_markers() {
   # A bare ======= outside an active conflict is intentionally ignored: it is
