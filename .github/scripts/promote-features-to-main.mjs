@@ -1399,6 +1399,10 @@ export function buildPromotionDispatchRequest(repo, context, reservationSha, tit
   const promotionPlan = {
     base_ref: context.baseRef,
     base_sha: context.baseSha,
+    // The lane's source branch travels in the envelope so the trusted
+    // validator can verify "merged into <source>" and "live <source> tip"
+    // without assuming the develop lane.
+    source_ref: CFG.source,
     branch: context.branch,
     reservation_sha: reservationSha,
     source_tip_sha: context.sourceTipSha,
@@ -3481,6 +3485,7 @@ async function selfTest() {
   assert.deepEqual(Object.keys(decodedDispatchPlan), [
     "base_ref",
     "base_sha",
+    "source_ref",
     "branch",
     "reservation_sha",
     "source_tip_sha",
@@ -3492,6 +3497,7 @@ async function selfTest() {
     "body_b64",
   ]);
   assert.equal(decodedDispatchPlan.source_tip_sha, dispatchContext.sourceTipSha);
+  assert.equal(decodedDispatchPlan.source_ref, "develop");
   assert.equal(
     decodedDispatchPlan.source_lineage_status,
     dispatchContext.sourceLineageStatus,
