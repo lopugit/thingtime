@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **iOS Vercel destination history is usable at full length**: the native Web
+  destination drawer now keeps its controls pinned above a lazy vertical list,
+  shows scroll indicators when content exceeds the viewport, and reserves the
+  swipe-to-close gesture for predominantly horizontal drags so vertical row
+  scrolling remains responsive. TestFlight build 13 includes the fix. — Codex
+  (AI), 2026-08-10
 - **Required Web CI checks no longer strand non-Remix pull requests**: the
   pull-request listener now always starts, classifies the complete changed-file
   list, and assigns both stable ruleset context names to either the real
