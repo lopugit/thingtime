@@ -13,6 +13,7 @@ const actions = resolve(githubRoot, "actions");
 const scripts = resolve(githubRoot, "scripts");
 
 const IMPLEMENTATIONS = [
+  "develop-pr-preview.yml",
   "electron-release.yml",
   "promote-develop-to-main.yml",
   "promote-features-to-main.yml",
@@ -385,6 +386,28 @@ export function assertControlPlaneContract() {
     assert.match(source, /\non:\n(?:[\s\S]*?\n)?  workflow_call:/, `${name}: exposes workflow_call`);
     assert.match(source, /\njobs:\n/, `${name}: contains implementation jobs`);
   }
+
+  const developPreview = readWorkflow("develop-pr-preview.yml");
+  assert.doesNotMatch(
+    developPreview,
+    /^  (?:pull_request_target|repository_dispatch|schedule|workflow_dispatch):/mu,
+    "develop preview implementation is reusable only",
+  );
+  assert.match(
+    developPreview,
+    /^          ref: github-actions$/mu,
+    "develop preview controller checks out the protected control plane",
+  );
+  assert.doesNotMatch(
+    developPreview,
+    /^          ref: main$/mu,
+    "develop preview controller never loads executable behavior from a product branch",
+  );
+  assert.match(
+    developPreview,
+    /node \.github\/scripts\/deploy-develop-pr-preview\.mjs --self-test/u,
+    "develop preview controller verifies its local invariants before mutation",
+  );
 
   const providerRouter = readWorkflow("ci-provider-router.yml");
   assertRoutingProofContract(providerRouter);
