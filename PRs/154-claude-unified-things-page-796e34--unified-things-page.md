@@ -138,3 +138,26 @@ The `/things` visual follow-up fixes three related rough edges:
   without overlap or horizontal overflow. The console contained only the
   existing React Router `HydrateFallback` development warning. The temporary QA
   folder was deleted after verification.
+
+## Follow-up: stale preview interaction recovery and PR consolidation
+
+- The apparently inert mobile UI was an older Vercel branch-alias document:
+  the captured error build loaded `index-CsNTJUhp.js`, while PR #154's current
+  deployment loads `index-BzJD4WWi.js` and contains the populated-kind fix.
+- Vercel preview tabs now compare their loaded hashed entry asset with the live
+  alias HTML on first load, foreground return, and focus. If the alias moved,
+  the stale tab reloads outside React, so the guard still runs after a route
+  render failure. The check is preview-only and fails open when offline.
+- A repository-wide open-PR/file-path audit found exactly one open PR touching
+  the `/things` route, Things UI, or temporary Things-session support: this PR.
+  Older `/things` work is already merged, and unrelated generic Things API PRs
+  were deliberately left open rather than closed by a title keyword match.
+
+### Validation
+
+- `corepack pnpm --dir remix run test:preview-build` covers host scoping, entry
+  extraction, and exact stale/current decisions.
+- Current Vercel preview interaction smoke at mobile width opened Feed Filters,
+  opened/closed the composer, focused and typed in the global search input,
+  opened Things New, and changed Grid to List. Hit testing landed on the real
+  controls and app-origin logs contained no interaction exception.

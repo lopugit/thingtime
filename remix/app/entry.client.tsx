@@ -9,6 +9,7 @@ import {
 } from './Providers/Chakra/createEmotionCache';
 import { ClientStyleContext } from './Providers/Chakra/emotionContext';
 import { router } from './routes';
+import { installPreviewBuildFreshness } from './utils/previewBuildFreshness';
 
 try {
   window.process = window.process || ({ env: {} } as any);
@@ -36,6 +37,8 @@ const root = document.getElementById('root');
 if (!root) {
   throw new Error('Thingtime root element was not found.');
 }
+
+installPreviewBuildFreshness();
 
 createRoot(root).render(
   <React.StrictMode>

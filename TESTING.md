@@ -1593,6 +1593,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       over generic image MIME/extensions (`🖼️`), ordinary photos/images use
       `🏞️`, known media/document/archive/install families are distinct, and an
       unrecognised attachment honestly falls back to `💾` rather than `🌀`.
+- [ ] On a moving Vercel branch alias, leave the preview open on mobile, deploy
+      a client change, then foreground/focus the old tab. It fetches the live
+      alias HTML without cache and reloads only when the hashed `index-*.js`
+      entry differs. The refreshed Feed Filters/composer/search input and
+      Things New/View/Arrange controls all respond; production-domain tabs do
+      not run this preview freshness check.
 - [ ] Preview modal deep link `/things?preview=<id>` opens any viewable thing
       (ThingView tree + Move/Share/Delete actions) and is what Copy link hands
       out for non-post things (posts link `/post/:id`).

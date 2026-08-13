@@ -57,6 +57,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Stale Vercel preview tabs recover their interactions after a redeploy**:
+  preview-only startup logic compares the loaded hashed Vite entry asset with
+  the branch alias's current HTML on load, foreground, and focus, then reloads
+  only when the alias has moved. A tab holding the pre-fix Things bundle can no
+  longer remain visually rendered but inert after the repaired deployment is
+  available; production-domain behavior is unchanged. — Codex (AI), 2026-08-13
+
 - **Things kind grouping no longer crashes populated spaces**: Group by Kind
   now reads section icons from the canonical Thing icon registry instead of a
   removed local binding, with a populated-group runtime regression test in the
