@@ -5,6 +5,7 @@
 - [ ] Global shortcut opens the launcher over the active application without moving focus elsewhere first.
 - [ ] The first visible frame contains rendered UI; there is no white, transparent, or stale flash.
 - [ ] Type `settings`; Settings / Commander Settings is first and Return opens the separate settings window.
+- [ ] With text in the search field, Command-A selects the complete query and typing replaces it; on Windows/Linux shells, repeat with Control-A.
 - [ ] Up/Down selection stays visible through the complete result list. Return runs the selected primary action.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
 - [ ] Open an application, reveal it in Finder, and copy its path through Actions.

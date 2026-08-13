@@ -85,6 +85,33 @@ describe('Launcher keyboard navigation', () => {
     expect(commander.setActionsOpen).toHaveBeenCalledWith(true);
   });
 
+  it.each([
+    ['Command-A on macOS', bootstrap, { metaKey: true }],
+    ['Control-A on Windows', { ...bootstrap, platform: 'windows' as const }, { ctrlKey: true }],
+  ])('selects the complete focused search query with %s', (_shortcut, platformBootstrap, modifier) => {
+    render(<Launcher state={state({ bootstrap: platformBootstrap })} />);
+    const input = screen.getByRole('textbox', { name: 'Search apps and commands' }) as HTMLInputElement;
+    input.focus();
+    input.setSelectionRange(2, 5);
+
+    fireEvent.keyDown(input, { key: 'a', ...modifier });
+
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(input.value.length);
+  });
+
+  it('preserves the standard macOS Control-A editing shortcut', () => {
+    render(<Launcher state={state()} />);
+    const input = screen.getByRole('textbox', { name: 'Search apps and commands' }) as HTMLInputElement;
+    input.focus();
+    input.setSelectionRange(2, 5);
+
+    fireEvent.keyDown(input, { key: 'a', ctrlKey: true });
+
+    expect(input.selectionStart).toBe(2);
+    expect(input.selectionEnd).toBe(5);
+  });
+
   it('runs the selected primary action with Return', async () => {
     render(<Launcher state={state({ selectedIndex: 1 })} />);
     fireEvent.keyDown(window, { key: 'Enter' });

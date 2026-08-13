@@ -90,6 +90,13 @@ export function Launcher({ state }: { state: CommanderState }) {
             placeholder="Search for apps and commands…"
             value={state.query}
             onChange={(event) => state.setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              const selectsAll = event.metaKey || (event.ctrlKey && state.bootstrap?.platform !== 'macos');
+              if (event.key.toLowerCase() === 'a' && selectsAll) {
+                event.preventDefault();
+                event.currentTarget.select();
+              }
+            }}
           />
           <span className="search-hint">Actions</span>
           <kbd>⌘ K</kbd>
