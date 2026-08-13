@@ -936,10 +936,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Commander now ships ready for Thingtime sign-in and paints only its
   rounded launcher surface**: its public production client ID is built in,
   legacy blank settings migrate automatically, and the native WebKit canvas is
-  transparent behind the intentional card and shadow. Local verification can
-  also explicitly request ad-hoc signing when the configured development key
-  is locked, while release/default builds still require the stable Apple
-  Development identity. See the
+  transparent behind the intentional card and shadow. Command-A now selects
+  the complete focused launcher query even though the accessory host has no
+  conventional Edit menu. Local verification can also explicitly request
+  ad-hoc signing when the configured development key is locked, while
+  release/default builds still require the stable Apple Development identity.
+  See the
   [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
   — Codex (AI), 2026-08-13
 

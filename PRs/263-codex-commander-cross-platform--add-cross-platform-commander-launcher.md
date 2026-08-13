@@ -86,6 +86,10 @@ environment.
 - The launcher WebKit canvas is transparent at the native view, under-page,
   backing-layer, and document-root levels. This removes the rectangular outer
   backing while preserving Commander's intentional rounded surface and shadow.
+- The focused launcher search field handles Command-A directly on macOS and
+  Control-A on other platforms, restoring full-query selection even though the
+  accessory AppKit host intentionally has no conventional Edit menu while
+  preserving macOS's standard Control-A editing behavior.
 - The service-account password remains outside the repository and app bundle
   in user-only local storage. No password, service token, or OAuth access token
   is tracked.
@@ -95,7 +99,7 @@ environment.
 
 ## Verification
 
-- Commander TypeScript: 30 tests passed across UI, daemon, and compatibility
+- Commander TypeScript: 33 tests passed across UI, daemon, and compatibility
   packages; typecheck, ESLint, Prettier, and package builds passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
   Clippy with warnings denied passed.
@@ -108,8 +112,9 @@ environment.
   entitlements, process ancestry, daemon health, and bundled executable paths
   were verified.
 - Native macOS QA covered global custom-hotkey activation, search ranking,
-  separate Settings presentation, Command-K action navigation/execution, menu
-  focus, and daemon exit after a forced host termination.
+  full-query Command-A selection, separate Settings presentation, Command-K
+  action navigation/execution, menu focus, and daemon exit after a forced host
+  termination.
 - Remix desktop OAuth tests passed 6/6; schema tests passed 25/25; targeted lint
   passed; the typecheck ratchet improved from 143 to 138; the production/Vercel
   build passed.
