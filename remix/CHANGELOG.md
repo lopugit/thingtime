@@ -57,6 +57,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Legacy Thingtime function state no longer disables interactive editors**:
+  persisted anonymous, arrow, named, method, and scoped functions now revive
+  only after Flatted has reconstructed their complete object graph. The parser
+  also removes the old saved no-op recovery function so current defaults can
+  repair poisoned browser state instead of carrying it into Feed composer and
+  other input sessions. — Codex (AI), 2026-08-15
+
 - **Safari-restored Vercel previews now force a real HTML navigation before the
   app can remain inert**: an inline Vite preview freshness bootstrap runs before
   the React application graph, refreshes every preview restored from Safari's

@@ -174,3 +174,24 @@ The `/things` visual follow-up fixes three related rough edges:
 - Generated Vercel root, direct-index, and SPA-fallback routes stamp the HTML
   shell `private, no-store, max-age=0, must-revalidate` plus legacy no-cache
   headers. Filesystem assets remain outside those HTML routes.
+
+## Follow-up: persisted Thingtime function recovery
+
+- Lopu-account mobile reproduction exposed `Function statements require a
+  function name` during Thingtime hydration before the Feed composer opened.
+  The stored function reviver evaluated anonymous function source as a
+  statement, attempted scoped revival before Flatted had populated the scope,
+  and saved its own no-op fallback back into browser state.
+- Function revival now runs after the complete circular graph is restored,
+  treats function source as an expression, reconstructs validated lexical
+  scope, supports object-method syntax, and removes the legacy poisoned no-op
+  so canonical defaults refill the missing property.
+
+### Validation
+
+- `corepack pnpm --dir remix run test:autosave` covers anonymous, named, arrow,
+  object-method, scoped, circular, invalid, and legacy-fallback state.
+- Targeted provider lint and the production client build pass. Mobile Feed QA
+  opens the composer, focuses and edits Editor.js, switches to Photos, closes
+  the composer, and verifies adjacent Feed controls remain interactive without
+  the persisted-function exception.

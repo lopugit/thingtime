@@ -1606,6 +1606,11 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       `/things` returns `Cache-Control: private, no-store, max-age=0,
       must-revalidate`, while `/assets/*` remains outside the HTML no-store
       route.
+- [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
+      and the old `Function could not be revived` fallback values, reload Feed
+      and open “What's on your mind?”. Hydration reports no function syntax
+      exception; the composer focuses and edits, Photos opens, close restores
+      the collapsed composer, and Latest / Filters / navigation still respond.
 - [ ] Preview modal deep link `/things?preview=<id>` opens any viewable thing
       (ThingView tree + Move/Share/Delete actions) and is what Copy link hands
       out for non-post things (posts link `/post/:id`).
