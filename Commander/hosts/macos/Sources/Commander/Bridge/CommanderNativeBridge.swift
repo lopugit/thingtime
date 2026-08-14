@@ -107,6 +107,8 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
       let result: Any?
       switch request.method {
       case "launcher.hide": hideLauncher(); result = nil
+      case "launcher.show": showLauncher(); result = nil
+      case "application.quit": result = ["terminating": true]
       case "settings.open": showSettings(); result = nil
       case "application.open":
         guard let raw = request.params?["path"]?.string else { throw BridgeError.missing("path") }
@@ -158,6 +160,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
       default: throw BridgeError.unknownMethod(request.method)
       }
       reply(id: request.id, ok: true, result: result, error: nil)
+      if request.method == "application.quit" { NSApp.terminate(nil) }
     } catch {
       reply(id: request.id, ok: false, result: nil, error: error.localizedDescription)
     }

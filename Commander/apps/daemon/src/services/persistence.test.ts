@@ -56,4 +56,34 @@ describe('PersistentStore Thingtime defaults', () => {
       await rm(temporary, { recursive: true, force: true });
     }
   });
+
+  it('persists deduplicated recent searches across daemon restarts', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
+    vi.stubEnv('COMMANDER_DATA_DIR', path.join(temporary, 'data'));
+
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      await store.addRecentSearch(' settings ');
+      await store.addRecentSearch('SETTINGS');
+      for (let index = 0; index < 10; index += 1) await store.addRecentSearch(`search ${index}`);
+
+      expect(store.snapshot().recentSearches).toEqual([
+        'search 9',
+        'search 8',
+        'search 7',
+        'search 6',
+        'search 5',
+        'search 4',
+        'search 3',
+        'search 2',
+      ]);
+
+      const reloaded = new PersistentStore();
+      await reloaded.load();
+      expect(reloaded.snapshot().recentSearches).toEqual(store.snapshot().recentSearches);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
 });

@@ -92,10 +92,17 @@ environment.
   Control-A on other platforms, restoring full-query selection even though the
   accessory AppKit host intentionally has no conventional Edit menu while
   preserving macOS's standard Control-A editing behavior.
-- The built-in Raycast-shaped Commander extension exposes a native no-view
-  `Close Commander` command with close, exit, quit, dismiss, and hide search
-  keywords. It appears in Installed extensions and returns a native launcher
-  hide request when executed.
+- The built-in Raycast-shaped Commander extension exposes separate native
+  no-view `Close Commander`, `Close Commander Window`, and `Open Commander`
+  commands. Close Commander terminates the host and its supervised daemon/Rust
+  children; the window command only hides the launcher; Open Commander presents
+  and focuses it.
+- Reopening the floating launcher clears its query before presentation. The
+  previous non-empty query is de-duplicated into a bounded, device-local History
+  section that appears before Suggestions and persists across full relaunches.
+- The repository's existing Raycast extension adds a real no-view Open Commander
+  command that opens the installed app by bundle identifier, including after a
+  complete Commander quit.
 - Launcher and Settings title chrome now starts an exact-origin native AppKit
   drag operation while leaving inputs and buttons interactive. Shortcut
   recording captures at the window level and resolves physical key codes, so
@@ -104,30 +111,35 @@ environment.
 - The service-account password remains outside the repository and app bundle
   in user-only local storage. No password, service token, or OAuth access token
   is tracked.
-- The follow-up QA install used the script's explicit ad-hoc signing override
-  because macOS held the Apple Development private key behind SecurityAgent;
-  the default/release path still requires the configured stable identity.
+- The latest follow-up QA install used the configured Apple Development
+  identity and preserved the stable bundle identifier and designated
+  requirement.
 
 ## Verification
 
-- Commander TypeScript: 38 tests passed across UI, daemon, and compatibility
+- Commander TypeScript: 43 tests passed across UI, daemon, and compatibility
   packages; typecheck, ESLint, Prettier, and package builds passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
   Clippy with warnings denied passed.
 - Swift: two WebKit/panel transparency and compositor-mask regressions passed;
   the release build passed with warnings treated as errors.
-- `COMMANDER_SIGNING_IDENTITY=- Commander/script/build_and_run.sh --verify`
-  built, ad-hoc signed, installed, and launched the exact follow-up app at
-  `~/Applications/Commander.app`; the default identity remains unchanged.
+- `Commander/script/build_and_run.sh --verify` built, Apple Development signed,
+  installed, and launched the exact follow-up app at
+  `~/Applications/Commander.app`.
 - The installed signature, stable designated requirement, Node JIT
   entitlements, process ancestry, daemon health, and bundled executable paths
   were verified.
 - Native macOS QA covered physical-key custom-hotkey recording and restoration,
-  built-in extension visibility, `exit` search and Close Commander execution,
+  all three built-in lifecycle commands, complete quit versus window-only hide,
+  empty-query reopen, persistent History, and Raycast-driven app relaunch,
   native launcher/Settings drag gestures, search ranking,
   full-query Command-A selection, separate Settings presentation, Command-K
   action navigation/execution, menu focus, and daemon exit after a forced host
   termination.
+- The existing root Raycast extension built with its pinned pnpm 8 lockfile,
+  imported in Raycast development mode, and its Open Commander command
+  relaunched the fully quit installed app with persisted History and an empty
+  focused query.
 - Remix desktop OAuth tests passed 6/6; schema tests passed 25/25; targeted lint
   passed; the typecheck ratchet improved from 143 to 138; the production/Vercel
   build passed.

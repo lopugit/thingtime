@@ -71,6 +71,7 @@ describe('Commander daemon HTTP trust boundaries', () => {
         protocolVersion: 1,
         settings: { version: 1 },
         accounts: [],
+        recentSearches: [],
         extensions: [
           {
             id: 'builtin:commander',
@@ -81,8 +82,20 @@ describe('Commander daemon HTTP trust boundaries', () => {
               {
                 name: 'close-commander',
                 title: 'Close Commander',
-                description: 'Close the Commander launcher window.',
-                keywords: expect.arrayContaining(['exit', 'quit', 'hide']),
+                description: 'Quit the Commander app and stop its background service.',
+                keywords: expect.arrayContaining(['exit', 'quit', 'terminate']),
+              },
+              {
+                name: 'close-commander-window',
+                title: 'Close Commander Window',
+                description: 'Hide the floating Commander window without quitting the app.',
+                keywords: expect.arrayContaining(['close window', 'dismiss', 'hide']),
+              },
+              {
+                name: 'open-commander',
+                title: 'Open Commander',
+                description: 'Open and focus the floating Commander window.',
+                keywords: expect.arrayContaining(['open', 'launch', 'show']),
               },
             ],
           },
@@ -128,8 +141,59 @@ describe('Commander daemon HTTP trust boundaries', () => {
       expect(closeCommander.status).toBe(200);
       expect(await closeCommander.json()).toEqual({
         ok: true,
+        nativeRequest: { method: 'application.quit' },
+      });
+
+      const closeWindow = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({
+          itemId: 'extension:builtin:commander:close-commander-window',
+          actionId: 'run',
+        }),
+      });
+      expect(closeWindow.status).toBe(200);
+      expect(await closeWindow.json()).toEqual({
+        ok: true,
         nativeRequest: { method: 'launcher.hide' },
       });
+
+      const openCommander = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({
+          itemId: 'extension:builtin:commander:open-commander',
+          actionId: 'run',
+        }),
+      });
+      expect(openCommander.status).toBe(200);
+      expect(await openCommander.json()).toEqual({
+        ok: true,
+        nativeRequest: { method: 'launcher.show' },
+      });
+
+      const rememberedSearch = await fetch(`${server.url}/api/history`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({ query: '1password' }),
+      });
+      expect(rememberedSearch.status).toBe(200);
+      expect(await rememberedSearch.json()).toEqual({ recentSearches: ['1password'] });
+
+      const historyBootstrap = await fetch(`${server.url}/api/bootstrap`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(historyBootstrap.status).toBe(200);
+      expect(await historyBootstrap.json()).toMatchObject({ recentSearches: ['1password'] });
 
       const missingClaim = await fetch(`${server.url}/api/native/credentials/claim`, {
         method: 'POST',

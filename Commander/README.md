@@ -10,8 +10,9 @@ portable from day one.
 - application and command search with deterministic Rust fuzzy-search process plus TypeScript fallback;
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
 - a searchable Commander Settings command and separate native settings window;
-- a Raycast-shaped built-in Commander extension whose `Close Commander` command is discoverable by close, exit,
-  quit, dismiss, and hide;
+- a Raycast-shaped built-in Commander extension with separate quit, hide-window, and open-window commands;
+- launcher queries clear on every reopen while private, device-local recent searches remain available in a first
+  History section;
 - launch-at-login, menu-bar icon, favourites-in-compact-mode, window mode, appearance, and text-size preferences;
 - draggable native launcher and Settings chrome plus physical-key shortcut recording for modified macOS keys;
 - installed extension management, safe folder/ZIP sideloading with opt-in source builds, and live Store browsing;
@@ -77,6 +78,22 @@ Keychain on macOS, Credential Manager on Windows, and Secret Service on Linux. S
 the app-data key `commander.settings.v1`.
 
 The bundled client ID is public by design. Tokens, passwords, and other credentials never belong in this repository.
+
+## Raycast companion command
+
+The existing root `raycast/` extension includes an `Open Commander` no-view command. Build it with its pinned pnpm
+8 toolchain, then run the development command once to import it into Raycast:
+
+```bash
+corepack pnpm@8.15.9 --dir raycast install --frozen-lockfile
+corepack pnpm@8.15.9 --dir raycast build
+corepack pnpm@8.15.9 --dir raycast dev
+```
+
+After Raycast imports the extension, the development process can stop and the command remains available. It opens
+the installed app by bundle identifier, so it can relaunch Commander after `Close Commander` has quit the host and
+daemon. Recent launcher searches stay local to Commander's daemon state and are intentionally excluded from cloud
+settings sync.
 
 ## Verification
 

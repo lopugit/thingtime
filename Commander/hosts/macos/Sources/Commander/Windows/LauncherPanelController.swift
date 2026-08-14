@@ -19,10 +19,14 @@ enum LauncherWindowMode: String, Sendable {
 
 @MainActor
 final class LauncherPanelController: NSObject, NSWindowDelegate {
+  private static let launcherOpenedScript =
+    "window.dispatchEvent(new CustomEvent('commander:launcher-opened'))"
   private let panel: NSPanel
   private let webView: CommanderWebView
   private var contentReady = false
   private var pendingShow = false
+  private var showPending = false
+  private var showRequestID: UInt = 0
   private var windowMode = LauncherWindowMode.standard
 
   init(ready: DaemonReady, bridge: CommanderNativeBridge) {
@@ -61,6 +65,21 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   func show() {
     guard contentReady else { pendingShow = true; return }
+    pendingShow = false
+    showPending = true
+    showRequestID &+= 1
+    let requestID = showRequestID
+    Task { [weak self] in
+      guard let self else { return }
+      _ = try? await self.webView.evaluateJavaScript(Self.launcherOpenedScript)
+      await Task.yield()
+      guard self.showPending, self.showRequestID == requestID else { return }
+      self.showPending = false
+      self.present()
+    }
+  }
+
+  private func present() {
     centerOnActiveScreen()
     NSApp.activate(ignoringOtherApps: true)
     panel.makeKeyAndOrderFront(nil)
@@ -68,8 +87,13 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     webView.evaluateJavaScript("document.querySelector('input')?.focus()")
   }
 
-  func hide() { panel.orderOut(nil) }
-  func toggle() { panel.isVisible ? hide() : show() }
+  func hide() {
+    pendingShow = false
+    showPending = false
+    showRequestID &+= 1
+    panel.orderOut(nil)
+  }
+  func toggle() { panel.isVisible || pendingShow || showPending ? hide() : show() }
 
   func setWindowMode(_ mode: LauncherWindowMode) {
     guard mode != windowMode else { return }
@@ -93,16 +117,16 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   func shutdown() {
-    pendingShow = false
+    hide()
     webView.firstPresentationReady = nil
     webView.shutdown()
     panel.delegate = nil
-    panel.orderOut(nil)
   }
 
   func windowDidResignKey(_ notification: Notification) { hide() }
 
   var panelForTesting: NSPanel { panel }
+  static var launcherOpenedScriptForTesting: String { launcherOpenedScript }
 
   private func centerOnActiveScreen() {
     let mouse = NSEvent.mouseLocation

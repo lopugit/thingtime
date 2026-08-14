@@ -24,10 +24,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   legacy blank settings migrate automatically, and the native WebKit canvas is
   transparent and compositor-masked behind the intentional card and shadow.
   Its windows are draggable, Option-modified physical keys now record as real
-  global shortcuts, and a built-in Raycast-shaped Commander extension adds an
-  exit-searchable Close Commander command. Command-A now selects the complete
-  focused launcher query even though the accessory host has no conventional
-  Edit menu. Local verification can also explicitly request
+  global shortcuts, and a built-in Raycast-shaped Commander extension now
+  separates whole-app Close Commander, Close Commander Window, and Open
+  Commander lifecycle commands. Every floating-window reopen starts with an
+  empty query while device-local recent searches remain first in a persistent
+  History section, and the existing Raycast extension can relaunch Commander
+  through its own no-view Open Commander command. Command-A now selects the
+  complete focused launcher query even though the accessory host has no
+  conventional Edit menu. Local verification can also explicitly request
   ad-hoc signing when the configured development key is locked, while
   release/default builds still require the stable Apple Development identity.
   See the

@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileCode2,
   FolderOpen,
+  History,
   Link,
   Settings,
   Sparkles,
@@ -30,18 +31,20 @@ export function CommanderIcon({
           ? Cloud
           : key === 'sideload'
             ? FolderOpen
-            : key === 'application'
-              ? AppWindow
-              : key === 'quicklink'
-                ? Link
-                : key === 'command'
-                  ? TerminalSquare
-                  : key === 'external'
-                    ? ExternalLink
-                    : key === 'file'
-                      ? FileCode2
-                      : key === 'sparkles'
-                        ? Sparkles
-                        : Command;
+            : key === 'history'
+              ? History
+              : key === 'application'
+                ? AppWindow
+                : key === 'quicklink'
+                  ? Link
+                  : key === 'command'
+                    ? TerminalSquare
+                    : key === 'external'
+                      ? ExternalLink
+                      : key === 'file'
+                        ? FileCode2
+                        : key === 'sparkles'
+                          ? Sparkles
+                          : Command;
   return <Icon aria-hidden="true" strokeWidth={1.8} />;
 }

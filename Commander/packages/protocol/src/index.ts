@@ -1,5 +1,27 @@
 export const PROTOCOL_VERSION = 1 as const;
 export const COMMANDER_THINGTIME_CLIENT_ID = 'ttapp_fb2f7fc9-32c8-47ea-bd08-863728de69f1';
+export const RECENT_SEARCH_LIMIT = 8;
+export const RECENT_SEARCH_MAX_LENGTH = 256;
+
+export function normalizeRecentSearches(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const searches: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of value) {
+    if (typeof candidate !== 'string') continue;
+    const query = candidate.trim().slice(0, RECENT_SEARCH_MAX_LENGTH);
+    const key = query.toLowerCase();
+    if (!query || seen.has(key)) continue;
+    seen.add(key);
+    searches.push(query);
+    if (searches.length === RECENT_SEARCH_LIMIT) break;
+  }
+  return searches;
+}
+
+export function addRecentSearch(searches: readonly string[], value: string): string[] {
+  return normalizeRecentSearches([value, ...searches]);
+}
 
 export type Platform = 'macos' | 'windows' | 'linux';
 export type Appearance = 'light' | 'dark' | 'system';
@@ -125,6 +147,7 @@ export interface BootstrapResponse {
   settings: CommanderSettings;
   accounts: CommanderAccount[];
   extensions: CommanderExtension[];
+  recentSearches: string[];
   capabilities: {
     nativeBridge: boolean;
     globalHotkey: boolean;
@@ -138,6 +161,8 @@ export interface NativeRequest<T = unknown> {
   id: string;
   method:
     | 'launcher.hide'
+    | 'launcher.show'
+    | 'application.quit'
     | 'window.beginDrag'
     | 'settings.open'
     | 'application.open'

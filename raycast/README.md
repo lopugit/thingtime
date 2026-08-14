@@ -1,5 +1,11 @@
 # Image Modification
 
+## Commander control
+
+The extension also includes an **Open Commander** no-view command. It launches or focuses the installed
+`com.thingtime.Commander` macOS app, making it possible to reopen Commander directly from Raycast after Commander's
+own Close Commander command has quit the native host and daemon.
+
 Apply filters and transformations to various image formats, and convert between them. Create new images by specifying their dimensions, colors, and patterns. Operate on selected files or on images in the clipboard.
 
 ## Features
