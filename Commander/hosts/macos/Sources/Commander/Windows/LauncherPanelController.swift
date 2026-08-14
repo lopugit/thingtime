@@ -40,13 +40,18 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
     panel.isOpaque = false
     panel.backgroundColor = .clear
-    panel.hasShadow = false
+    panel.hasShadow = true
     panel.isMovableByWindowBackground = true
     panel.hidesOnDeactivate = true
     panel.animationBehavior = .utilityWindow
     panel.contentView = webView
+    panel.contentView?.wantsLayer = true
+    panel.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
+    panel.contentView?.superview?.wantsLayer = true
+    panel.contentView?.superview?.layer?.backgroundColor = NSColor.clear.cgColor
     webView.frame = NSRect(origin: .zero, size: LauncherWindowMode.standard.size)
     webView.autoresizingMask = [.width, .height]
+    webView.maskToSurface(inset: 18, cornerRadius: 19)
     webView.firstPresentationReady = { [weak self] in
       guard let self else { return }
       self.contentReady = true
@@ -69,9 +74,11 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   func setWindowMode(_ mode: LauncherWindowMode) {
     guard mode != windowMode else { return }
     windowMode = mode
+    webView.maskToSurface(inset: mode == .compact ? 12 : 18, cornerRadius: 19)
     let size = mode.size
     guard panel.isVisible else {
       panel.setContentSize(size)
+      panel.invalidateShadow()
       return
     }
     let oldFrame = panel.frame
@@ -82,6 +89,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
       height: size.height
     )
     panel.animator().setFrame(frame, display: true)
+    panel.invalidateShadow()
   }
 
   func shutdown() {
@@ -94,6 +102,8 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   func windowDidResignKey(_ notification: Notification) { hide() }
 
+  var panelForTesting: NSPanel { panel }
+
   private func centerOnActiveScreen() {
     let mouse = NSEvent.mouseLocation
     let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
@@ -101,5 +111,6 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     let size = panel.frame.size
     let origin = NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - min(100, visible.height * 0.12))
     panel.setFrameOrigin(origin)
+    panel.invalidateShadow()
   }
 }

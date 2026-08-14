@@ -19,6 +19,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     window.title = "Commander Settings"
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
+    window.isMovableByWindowBackground = true
     window.isReleasedWhenClosed = false
     window.minSize = NSSize(width: 760, height: 520)
     window.contentView = webView

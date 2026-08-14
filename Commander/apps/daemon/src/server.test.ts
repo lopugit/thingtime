@@ -71,7 +71,22 @@ describe('Commander daemon HTTP trust boundaries', () => {
         protocolVersion: 1,
         settings: { version: 1 },
         accounts: [],
-        extensions: [],
+        extensions: [
+          {
+            id: 'builtin:commander',
+            name: 'commander',
+            source: 'builtin',
+            compatibility: 'native',
+            commands: [
+              {
+                name: 'close-commander',
+                title: 'Close Commander',
+                description: 'Close the Commander launcher window.',
+                keywords: expect.arrayContaining(['exit', 'quit', 'hide']),
+              },
+            ],
+          },
+        ],
         capabilities: { secureCredentialStore: true },
       });
 
@@ -84,6 +99,36 @@ describe('Commander daemon HTTP trust boundaries', () => {
         id: 'builtin:settings',
         title: 'Settings',
         subtitle: 'Commander Settings',
+      });
+
+      const exitSearch = await fetch(`${server.url}/api/search?q=exit`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(exitSearch.status).toBe(200);
+      const exitResults = (await exitSearch.json()) as { hits: Array<{ id: string }> };
+      expect(exitResults.hits[0]).toMatchObject({
+        id: 'extension:builtin:commander:close-commander',
+        title: 'Close Commander',
+        subtitle: 'Commander',
+        extensionId: 'builtin:commander',
+        commandName: 'close-commander',
+      });
+
+      const closeCommander = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({
+          itemId: 'extension:builtin:commander:close-commander',
+          actionId: 'run',
+        }),
+      });
+      expect(closeCommander.status).toBe(200);
+      expect(await closeCommander.json()).toEqual({
+        ok: true,
+        nativeRequest: { method: 'launcher.hide' },
       });
 
       const missingClaim = await fetch(`${server.url}/api/native/credentials/claim`, {

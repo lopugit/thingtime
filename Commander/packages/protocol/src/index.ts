@@ -138,6 +138,7 @@ export interface NativeRequest<T = unknown> {
   id: string;
   method:
     | 'launcher.hide'
+    | 'window.beginDrag'
     | 'settings.open'
     | 'application.open'
     | 'filesystem.reveal'

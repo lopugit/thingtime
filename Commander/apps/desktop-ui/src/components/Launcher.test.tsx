@@ -6,10 +6,12 @@ import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { api } from '../lib/api.js';
+import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 import { Launcher } from './Launcher.js';
 
 vi.mock('../lib/api.js', () => ({ api: { execute: vi.fn(async () => ({ ok: true })) } }));
 vi.mock('../lib/nativeBridge.js', () => ({
+  beginWindowDrag: vi.fn(),
   hideLauncher: vi.fn(async () => undefined),
   nativeRequest: vi.fn(async () => undefined),
 }));
@@ -85,6 +87,13 @@ describe('Launcher keyboard navigation', () => {
     expect(commander.setActionsOpen).toHaveBeenCalledWith(true);
   });
 
+  it('routes launcher chrome mouse-down events to the native drag handler', () => {
+    render(<Launcher state={state()} />);
+    const launcher = screen.getByLabelText('Commander');
+    fireEvent.mouseDown(launcher.querySelector('.commander-mark')!, { button: 0 });
+    expect(beginWindowDrag).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ['Command-A on macOS', bootstrap, { metaKey: true }],
     ['Control-A on Windows', { ...bootstrap, platform: 'windows' as const }, { ctrlKey: true }],
@@ -117,6 +126,30 @@ describe('Launcher keyboard navigation', () => {
     fireEvent.keyDown(window, { key: 'Enter' });
     await waitFor(() => expect(api.execute).toHaveBeenCalledWith('app:notes', 'open'));
     expect(screen.getByRole('option', { name: /Notes/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('runs the built-in Close Commander extension through the native hide request', async () => {
+    const close = {
+      ...hits[0]!,
+      id: 'extension:builtin:commander:close-commander',
+      title: 'Close Commander',
+      subtitle: 'Commander',
+      kind: 'extension' as const,
+      extensionId: 'builtin:commander',
+      commandName: 'close-commander',
+      actions: [{ id: 'run', title: 'Run Close Commander' }],
+    };
+    vi.mocked(api.execute).mockResolvedValueOnce({
+      ok: true,
+      nativeRequest: { method: 'launcher.hide' },
+    });
+    render(<Launcher state={state({ hits: [close], selectedIndex: 0 })} />);
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await waitFor(() => expect(api.execute).toHaveBeenCalledWith(close.id, 'run'));
+    expect(nativeRequest).toHaveBeenCalledWith('launcher.hide', undefined);
+    expect(hideLauncher).not.toHaveBeenCalled();
   });
 
   it('navigates and executes the Command-K action selector', async () => {

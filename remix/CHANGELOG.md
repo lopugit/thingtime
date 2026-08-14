@@ -22,14 +22,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Commander now ships ready for Thingtime sign-in and paints only its
   rounded launcher surface**: its public production client ID is built in,
   legacy blank settings migrate automatically, and the native WebKit canvas is
-  transparent behind the intentional card and shadow. Command-A now selects
-  the complete focused launcher query even though the accessory host has no
-  conventional Edit menu. Local verification can also explicitly request
+  transparent and compositor-masked behind the intentional card and shadow.
+  Its windows are draggable, Option-modified physical keys now record as real
+  global shortcuts, and a built-in Raycast-shaped Commander extension adds an
+  exit-searchable Close Commander command. Command-A now selects the complete
+  focused launcher query even though the accessory host has no conventional
+  Edit menu. Local verification can also explicitly request
   ad-hoc signing when the configured development key is locked, while
   release/default builds still require the stable Apple Development identity.
   See the
   [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
-  — Codex (AI), 2026-08-13
+  — Codex (AI), 2026-08-14
 - **Required Web CI checks no longer strand non-Remix pull requests**: the
   pull-request listener now always starts, classifies the complete changed-file
   list, and assigns both stable ruleset context names to either the real

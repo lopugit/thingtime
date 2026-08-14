@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { ArrowRight, Command, CornerDownLeft, Search } from 'lucide-react';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { api } from '../lib/api.js';
-import { hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
+import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 import { ActionsPanel } from './ActionsPanel.js';
 import { CommanderIcon } from './CommanderIcon.js';
 
@@ -21,6 +21,7 @@ export function Launcher({ state }: { state: CommanderState }) {
     async (actionId: string) => {
       try {
         if (!selected) return;
+        let nativeRequestMethod: string | undefined;
         if (actionId === 'open-settings') {
           await nativeRequest('settings.open');
           state.setActionsOpen(false);
@@ -29,9 +30,16 @@ export function Launcher({ state }: { state: CommanderState }) {
         const response = await api.execute(selected.id, actionId);
         if (response.nativeRequest && typeof response.nativeRequest === 'object') {
           const request = response.nativeRequest as {
-            method: 'application.open' | 'filesystem.reveal' | 'clipboard.write' | 'extension.choose';
+            method:
+              | 'launcher.hide'
+              | 'settings.open'
+              | 'application.open'
+              | 'filesystem.reveal'
+              | 'clipboard.write'
+              | 'extension.choose';
             params?: unknown;
           };
+          nativeRequestMethod = request.method;
           const nativeResult = await nativeRequest<{ path?: string; allowUntrustedBuildScripts?: boolean }>(
             request.method,
             request.params,
@@ -41,7 +49,8 @@ export function Launcher({ state }: { state: CommanderState }) {
             await state.refresh();
           }
         }
-        if (actionId === 'open' || actionId === 'run') await hideLauncher();
+        if ((actionId === 'open' || actionId === 'run') && nativeRequestMethod !== 'launcher.hide')
+          await hideLauncher();
         state.reportError(null);
       } catch (error) {
         state.reportError(error instanceof Error ? error.message : 'Command failed');
@@ -78,7 +87,7 @@ export function Launcher({ state }: { state: CommanderState }) {
   return (
     <main className="launcher-shell">
       <section className="launcher-panel" aria-label="Commander">
-        <header className="search-bar">
+        <header className="search-bar" onMouseDown={beginWindowDrag}>
           <span className="commander-mark" aria-hidden="true">
             ›_
           </span>

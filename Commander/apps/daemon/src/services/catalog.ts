@@ -1,5 +1,36 @@
 import type { CommanderExtension, SearchItem } from '@commander/protocol';
 
+export const closeCommanderCommandName = 'close-commander';
+
+export const commanderExtension: CommanderExtension = {
+  id: 'builtin:commander',
+  name: 'commander',
+  title: 'Commander',
+  description: 'Commands for controlling Commander itself.',
+  version: '0.1.0',
+  author: 'Thingtime',
+  source: 'builtin',
+  enabled: true,
+  compatibility: 'native',
+  commands: [
+    {
+      name: closeCommanderCommandName,
+      title: 'Close Commander',
+      description: 'Close the Commander launcher window.',
+      mode: 'no-view',
+      keywords: ['close', 'exit', 'quit', 'dismiss', 'hide'],
+      disabled: false,
+    },
+  ],
+};
+
+export const builtinExtensions = [commanderExtension] satisfies CommanderExtension[];
+
+export function availableExtensions(installed: CommanderExtension[]): CommanderExtension[] {
+  const builtinIDs = new Set(builtinExtensions.map((extension) => extension.id));
+  return [...builtinExtensions, ...installed.filter((extension) => !builtinIDs.has(extension.id))];
+}
+
 export const builtins: SearchItem[] = [
   {
     id: 'builtin:settings',

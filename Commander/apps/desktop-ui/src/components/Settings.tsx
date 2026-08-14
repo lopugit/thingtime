@@ -6,6 +6,7 @@ import { AccountSettings } from './AccountSettings.js';
 import { CloudSyncSettings } from './CloudSyncSettings.js';
 import { ExtensionsSettings } from './ExtensionsSettings.js';
 import { GeneralSettings } from './GeneralSettings.js';
+import { beginWindowDrag } from '../lib/nativeBridge.js';
 
 type Tab = 'general' | 'extensions' | 'sync' | 'account' | 'advanced' | 'about';
 
@@ -24,7 +25,7 @@ export function Settings({ state }: { state: CommanderState }) {
 
   return (
     <main className="settings-shell">
-      <header className="settings-titlebar">
+      <header className="settings-titlebar" onMouseDown={beginWindowDrag}>
         <span className="commander-mark small" aria-hidden="true">
           ›_
         </span>
