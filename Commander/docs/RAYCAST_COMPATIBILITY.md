@@ -44,3 +44,11 @@ Official sources:
 - https://developers.raycast.com/information/developer-tools/cli
 - https://github.com/raycast/extensions
 - https://www.raycast.com/blog/how-raycast-api-extensions-work
+
+## Commander-owned lifecycle commands
+
+Commander's built-in extension uses Raycast-shaped `no-view` manifests for Close Commander, Close Commander Window,
+and Open Commander, then maps those trusted built-ins to the native lifecycle bridge. The repository's existing
+`raycast/` extension also ships a real Raycast `Open Commander` no-view command that launches the installed macOS app
+by bundle identifier. These Commander-owned commands do not expand the compatibility claims for third-party
+extensions in the matrix above.

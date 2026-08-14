@@ -22,6 +22,7 @@ const bootstrap: BootstrapResponse = {
   settings: DEFAULT_SETTINGS,
   accounts: [],
   extensions: [],
+  recentSearches: [],
   capabilities: {
     nativeBridge: true,
     globalHotkey: true,
@@ -61,12 +62,14 @@ function state(overrides: Partial<CommanderState> = {}): CommanderState {
     bootstrap,
     query: 'settings',
     hits,
+    recentSearches: [],
     selectedIndex: 0,
     actionsOpen: false,
     error: null,
     setQuery: vi.fn(),
     setSelectedIndex: vi.fn(),
     setActionsOpen: vi.fn(),
+    rememberRecentSearch: vi.fn(async () => undefined),
     reportError: vi.fn(),
     saveSettings: vi.fn(),
     refresh: vi.fn(),
@@ -122,34 +125,53 @@ describe('Launcher keyboard navigation', () => {
   });
 
   it('runs the selected primary action with Return', async () => {
-    render(<Launcher state={state({ selectedIndex: 1 })} />);
+    const commander = state({ selectedIndex: 1 });
+    render(<Launcher state={commander} />);
     fireEvent.keyDown(window, { key: 'Enter' });
     await waitFor(() => expect(api.execute).toHaveBeenCalledWith('app:notes', 'open'));
+    expect(commander.rememberRecentSearch).toHaveBeenCalledWith('settings');
     expect(screen.getByRole('option', { name: /Notes/ })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('runs the built-in Close Commander extension through the native hide request', async () => {
-    const close = {
+  it.each([
+    ['Close Commander', 'close-commander', 'application.quit' as const],
+    ['Close Commander Window', 'close-commander-window', 'launcher.hide' as const],
+    ['Open Commander', 'open-commander', 'launcher.show' as const],
+  ])('runs %s through its native lifecycle request', async (title, commandName, method) => {
+    const item = {
       ...hits[0]!,
-      id: 'extension:builtin:commander:close-commander',
-      title: 'Close Commander',
+      id: `extension:builtin:commander:${commandName}`,
+      title,
       subtitle: 'Commander',
       kind: 'extension' as const,
       extensionId: 'builtin:commander',
-      commandName: 'close-commander',
-      actions: [{ id: 'run', title: 'Run Close Commander' }],
+      commandName,
+      actions: [{ id: 'run', title: `Run ${title}` }],
     };
-    vi.mocked(api.execute).mockResolvedValueOnce({
-      ok: true,
-      nativeRequest: { method: 'launcher.hide' },
-    });
-    render(<Launcher state={state({ hits: [close], selectedIndex: 0 })} />);
+    vi.mocked(api.execute).mockResolvedValueOnce({ ok: true, nativeRequest: { method } });
+    render(<Launcher state={state({ hits: [item], selectedIndex: 0 })} />);
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    await waitFor(() => expect(api.execute).toHaveBeenCalledWith(close.id, 'run'));
-    expect(nativeRequest).toHaveBeenCalledWith('launcher.hide', undefined);
+    await waitFor(() => expect(api.execute).toHaveBeenCalledWith(item.id, 'run'));
+    expect(nativeRequest).toHaveBeenCalledWith(method, undefined);
     expect(hideLauncher).not.toHaveBeenCalled();
+  });
+
+  it('shows recent searches before suggestions and restores one with Return', () => {
+    const commander = state({ query: '', recentSearches: ['1password', 'settings'] });
+    render(<Launcher state={commander} />);
+
+    expect(screen.getByRole('heading', { name: /History/ })).toBeVisible();
+    expect(screen.getByRole('heading', { name: /Suggestions/ })).toBeVisible();
+    const options = screen.getAllByRole('option');
+    expect(options[0]).toHaveTextContent('1password');
+    expect(options[2]).toHaveTextContent('Commander Settings');
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    expect(commander.setQuery).toHaveBeenCalledWith('1password');
+    expect(api.execute).not.toHaveBeenCalled();
   });
 
   it('navigates and executes the Command-K action selector', async () => {

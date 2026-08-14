@@ -5,7 +5,9 @@
 - [ ] Global shortcut opens the launcher over the active application without moving focus elsewhere first.
 - [ ] The first visible frame contains rendered UI; there is no white, transparent, or stale flash.
 - [ ] Type `settings`; Settings / Commander Settings is first and Return opens the separate settings window.
-- [ ] Type `exit`; the built-in Commander extension's Close Commander command is first and Return hides the launcher.
+- [ ] Type `exit`; the built-in Commander extension's Close Commander command is first and Return quits the host, daemon, and Rust child, releasing port 47820.
+- [ ] Reopen Commander, type `hide window`, run Close Commander Window, and verify the launcher disappears while the host and daemon remain alive; use the global shortcut to reopen it.
+- [ ] Type a unique query, hide and reopen with the global shortcut, and verify the input is blank while that query appears first under History. Press Return on it to restore the query, quit/relaunch Commander, and verify History persists.
 - [ ] With text in the search field, Command-A selects the complete query and typing replaces it; on Windows/Linux shells, repeat with Control-A.
 - [ ] Up/Down selection stays visible through the complete result list. Return runs the selected primary action.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
@@ -30,7 +32,8 @@
 - [ ] Try an invalid folder; the error is visible and the installed list is unchanged.
 - [ ] Search Store, open the live Raycast catalog, and verify Commander does not pretend an uninstalled result is installed.
 - [ ] Execute a compatible prebuilt no-view command and confirm a worker crash cannot terminate the daemon.
-- [ ] Verify Installed contains the enabled built-in Commander extension with one native command.
+- [ ] Verify Installed contains the enabled built-in Commander extension with Close Commander, Close Commander Window, and Open Commander native commands.
+- [ ] Import the root `raycast/` extension, run its no-view Open Commander command from Raycast after Commander has quit, and verify the installed app relaunches with a focused, empty query.
 
 ## Thingtime accounts and sync
 

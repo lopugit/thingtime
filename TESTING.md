@@ -1735,6 +1735,14 @@ is fixed, and cite the checklist you ran in the PR description.
       with arrows, execute with Return, open Command-K, traverse actions, and
       dismiss actions/launcher with Escape. Long names must not clip or create
       horizontal scroll in default or compact mode.
+- [ ] Type a unique launcher query, hide and reopen with the global shortcut,
+      and verify the field clears while the query is the first row in the
+      first History section. Return restores that query, and History survives
+      a complete quit/relaunch without entering cloud-synced settings.
+- [ ] Run Close Commander Window and verify only the floating launcher hides;
+      then run Close Commander and verify the native host, daemon, and Rust
+      child exit and release port 47820. From Raycast, run the root extension's
+      Open Commander no-view command and verify it relaunches the installed app.
 - [ ] Browse the latest live Raycast Store feed, search a term, open the full
       web catalog, and sideload a valid source folder. Malformed manifests and
       unsupported view commands must show explicit compatibility errors; they

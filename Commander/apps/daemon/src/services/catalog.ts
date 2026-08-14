@@ -1,13 +1,15 @@
 import type { CommanderExtension, SearchItem } from '@commander/protocol';
 
 export const closeCommanderCommandName = 'close-commander';
+export const closeCommanderWindowCommandName = 'close-commander-window';
+export const openCommanderCommandName = 'open-commander';
 
 export const commanderExtension: CommanderExtension = {
   id: 'builtin:commander',
   name: 'commander',
   title: 'Commander',
   description: 'Commands for controlling Commander itself.',
-  version: '0.1.0',
+  version: '0.2.0',
   author: 'Thingtime',
   source: 'builtin',
   enabled: true,
@@ -16,9 +18,25 @@ export const commanderExtension: CommanderExtension = {
     {
       name: closeCommanderCommandName,
       title: 'Close Commander',
-      description: 'Close the Commander launcher window.',
+      description: 'Quit the Commander app and stop its background service.',
       mode: 'no-view',
-      keywords: ['close', 'exit', 'quit', 'dismiss', 'hide'],
+      keywords: ['close', 'exit', 'quit', 'terminate', 'shutdown', 'stop'],
+      disabled: false,
+    },
+    {
+      name: closeCommanderWindowCommandName,
+      title: 'Close Commander Window',
+      description: 'Hide the floating Commander window without quitting the app.',
+      mode: 'no-view',
+      keywords: ['close window', 'hide window', 'dismiss', 'hide', 'launcher', 'search window'],
+      disabled: false,
+    },
+    {
+      name: openCommanderCommandName,
+      title: 'Open Commander',
+      description: 'Open and focus the floating Commander window.',
+      mode: 'no-view',
+      keywords: ['open', 'launch', 'show', 'focus', 'commander window', 'search'],
       disabled: false,
     },
   ],

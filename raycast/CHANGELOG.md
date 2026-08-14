@@ -1,5 +1,9 @@
 # Image Modification Changelog
 
+## [Commander Control] - 2026-08-14
+
+- Added an Open Commander no-view command that launches or focuses the installed Commander macOS app.
+
 ## [Strip EXIF Data] - 2024-01-28
 
 - Added "Strip EXIF Data" command

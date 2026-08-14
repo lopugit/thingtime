@@ -23,8 +23,10 @@ import {
   availableExtensions,
   builtins,
   closeCommanderCommandName,
+  closeCommanderWindowCommandName,
   commanderExtension,
   extensionItems,
+  openCommanderCommandName,
 } from './services/catalog.js';
 import { PersistentStore } from './services/persistence.js';
 import { SearchService } from './services/search.js';
@@ -106,6 +108,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         settings: state.settings,
         accounts: state.accounts,
         extensions: extensionsForState,
+        recentSearches: state.recentSearches,
         capabilities: {
           nativeBridge: true,
           globalHotkey: process.platform === 'darwin',
@@ -127,6 +130,12 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         hits = hits.filter((hit) => hit.favourite);
       }
       return json(response, 200, { hits });
+    }
+    if (request.method === 'POST' && url.pathname === '/api/history') {
+      const { query } = await readBody<{ query?: string }>(request);
+      if (typeof query !== 'string' || !query.trim())
+        return json(response, 400, { error: 'query is required' });
+      return json(response, 200, { recentSearches: await store.addRecentSearch(query) });
     }
     if (request.method === 'PUT' && url.pathname === '/api/settings')
       return json(response, 200, {
@@ -217,7 +226,19 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         if (extension.id === commanderExtension.id && item.commandName === closeCommanderCommandName) {
           return json(response, 200, {
             ok: true,
+            nativeRequest: { method: 'application.quit' } satisfies Omit<NativeRequest, 'id'>,
+          });
+        }
+        if (extension.id === commanderExtension.id && item.commandName === closeCommanderWindowCommandName) {
+          return json(response, 200, {
+            ok: true,
             nativeRequest: { method: 'launcher.hide' } satisfies Omit<NativeRequest, 'id'>,
+          });
+        }
+        if (extension.id === commanderExtension.id && item.commandName === openCommanderCommandName) {
+          return json(response, 200, {
+            ok: true,
+            nativeRequest: { method: 'launcher.show' } satisfies Omit<NativeRequest, 'id'>,
           });
         }
         if (extension.source === 'builtin')

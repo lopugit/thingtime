@@ -86,6 +86,11 @@
   font-size: 0.84rem;
   font-weight: 600;
 }
+.result-section-heading {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
 .result-list {
   display: flex;
   min-height: 0;
@@ -135,6 +140,9 @@
   color: white;
   border-color: transparent;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+.result-icon.kind-history {
+  color: var(--muted);
 }
 .result-copy {
   display: flex;

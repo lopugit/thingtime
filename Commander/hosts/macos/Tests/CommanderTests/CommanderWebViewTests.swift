@@ -83,6 +83,9 @@ final class CommanderWebViewTests: XCTestCase {
     webView.layoutSubtreeIfNeeded()
     let maskBounds = (webView.layer?.mask as? CAShapeLayer)?.path?.boundingBox
     XCTAssertEqual(maskBounds, webView.bounds.insetBy(dx: 18, dy: 18))
+    XCTAssertTrue(
+      LauncherPanelController.launcherOpenedScriptForTesting.contains("commander:launcher-opened")
+    )
     controller.shutdown()
   }
 

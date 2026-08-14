@@ -20,6 +20,8 @@ type ExtensionPreferences = {
 declare type Preferences = ExtensionPreferences
 
 declare namespace Preferences {
+  /** Preferences accessible in the `openCommander` command */
+  export type OpenCommander = ExtensionPreferences & {}
   /** Preferences accessible in the `commander` command */
   export type Commander = ExtensionPreferences & {
   /** Name of Command to run - The name of the command/function to run */
@@ -102,6 +104,8 @@ declare namespace Preferences {
 }
 
 declare namespace Arguments {
+  /** Arguments passed to the `openCommander` command */
+  export type OpenCommander = {}
   /** Arguments passed to the `commander` command */
   export type Commander = {}
   /** Arguments passed to the `commanderOpenNewFinderWindow` command */

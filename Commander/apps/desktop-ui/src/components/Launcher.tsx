@@ -8,7 +8,14 @@ import { CommanderIcon } from './CommanderIcon.js';
 
 export function Launcher({ state }: { state: CommanderState }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const selected = state.hits[state.selectedIndex];
+  const historyVisible = !state.query.trim() && state.recentSearches.length > 0;
+  const historyCount = historyVisible ? state.recentSearches.length : 0;
+  const totalRows = historyCount + state.hits.length;
+  const selectedHistory =
+    historyVisible && state.selectedIndex < historyCount
+      ? state.recentSearches[state.selectedIndex]
+      : undefined;
+  const selected = selectedHistory === undefined ? state.hits[state.selectedIndex - historyCount] : undefined;
 
   useEffect(() => inputRef.current?.focus(), []);
 
@@ -21,6 +28,7 @@ export function Launcher({ state }: { state: CommanderState }) {
     async (actionId: string) => {
       try {
         if (!selected) return;
+        await state.rememberRecentSearch(state.query);
         let nativeRequestMethod: string | undefined;
         if (actionId === 'open-settings') {
           await nativeRequest('settings.open');
@@ -28,17 +36,8 @@ export function Launcher({ state }: { state: CommanderState }) {
           return;
         }
         const response = await api.execute(selected.id, actionId);
-        if (response.nativeRequest && typeof response.nativeRequest === 'object') {
-          const request = response.nativeRequest as {
-            method:
-              | 'launcher.hide'
-              | 'settings.open'
-              | 'application.open'
-              | 'filesystem.reveal'
-              | 'clipboard.write'
-              | 'extension.choose';
-            params?: unknown;
-          };
+        if (response.nativeRequest) {
+          const request = response.nativeRequest;
           nativeRequestMethod = request.method;
           const nativeResult = await nativeRequest<{ path?: string; allowUntrustedBuildScripts?: boolean }>(
             request.method,
@@ -49,8 +48,11 @@ export function Launcher({ state }: { state: CommanderState }) {
             await state.refresh();
           }
         }
-        if ((actionId === 'open' || actionId === 'run') && nativeRequestMethod !== 'launcher.hide')
-          await hideLauncher();
+        const nativeOwnsLauncherLifecycle =
+          nativeRequestMethod === 'launcher.hide' ||
+          nativeRequestMethod === 'launcher.show' ||
+          nativeRequestMethod === 'application.quit';
+        if ((actionId === 'open' || actionId === 'run') && !nativeOwnsLauncherLifecycle) await hideLauncher();
         state.reportError(null);
       } catch (error) {
         state.reportError(error instanceof Error ? error.message : 'Command failed');
@@ -59,30 +61,45 @@ export function Launcher({ state }: { state: CommanderState }) {
     [selected, state],
   );
 
+  const runSelected = useCallback(() => {
+    if (selectedHistory !== undefined) {
+      state.setQuery(selectedHistory);
+      window.requestAnimationFrame(() => inputRef.current?.focus());
+      return;
+    }
+    if (selected) void runAction(selected.actions[0]?.id ?? 'open');
+  }, [runAction, selected, selectedHistory, state]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (state.actionsOpen && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
       if (event.key === 'ArrowDown') {
         event.preventDefault();
-        state.setSelectedIndex(Math.min(state.hits.length - 1, state.selectedIndex + 1));
+        state.setSelectedIndex(Math.min(Math.max(0, totalRows - 1), state.selectedIndex + 1));
       } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         state.setSelectedIndex(Math.max(0, state.selectedIndex - 1));
-      } else if (event.key === 'Enter' && selected) {
+      } else if (event.key === 'Enter' && (selected || selectedHistory !== undefined)) {
         event.preventDefault();
-        void runAction(selected.actions[0]?.id ?? 'open');
-      } else if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
+        runSelected();
+      } else if (selected && event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         state.setActionsOpen(!state.actionsOpen);
       } else if (event.key === 'Escape') {
         event.preventDefault();
         if (state.actionsOpen) state.setActionsOpen(false);
-        else void hideLauncher();
+        else
+          void state
+            .rememberRecentSearch(state.query)
+            .then(hideLauncher)
+            .catch((error: unknown) =>
+              state.reportError(error instanceof Error ? error.message : 'Could not close Commander'),
+            );
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [runAction, selected, state]);
+  }, [runSelected, selected, selectedHistory, state, totalRows]);
 
   return (
     <main className="launcher-shell">
@@ -112,40 +129,79 @@ export function Launcher({ state }: { state: CommanderState }) {
         </header>
 
         <div className="result-region">
-          <div className="section-heading">
-            <span>{state.query ? 'Results' : 'Suggestions'}</span>
-            <span>{state.hits.length}</span>
+          <div className="section-heading" role="heading" aria-level={2}>
+            <span>{state.query ? 'Results' : historyVisible ? 'History' : 'Suggestions'}</span>
+            <span>{historyVisible ? historyCount : state.hits.length}</span>
           </div>
           <div className="result-list" role="listbox" aria-label="Search results">
-            {state.hits.map((hit, index) => (
-              <button
-                type="button"
-                role="option"
-                aria-selected={index === state.selectedIndex}
-                className={index === state.selectedIndex ? 'result-row selected' : 'result-row'}
-                key={hit.id}
-                onMouseEnter={() => state.setSelectedIndex(index)}
-                onDoubleClick={() => void runAction(hit.actions[0]?.id ?? 'open')}
-              >
-                <span className={`result-icon kind-${hit.kind}`}>
-                  <CommanderIcon name={hit.icon} kind={hit.kind} />
-                </span>
-                <span className="result-copy">
-                  <span className="result-title">{hit.title}</span>
-                  {hit.subtitle ? <span className="result-subtitle">{hit.subtitle}</span> : null}
-                </span>
-                <span className="result-kind">{hit.kind === 'builtin' ? 'Command' : hit.kind}</span>
-                {index === state.selectedIndex ? (
-                  <span className="result-enter">
-                    <span>Open</span>
-                    <CornerDownLeft />
+            {historyVisible
+              ? state.recentSearches.map((query, index) => (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={index === state.selectedIndex}
+                    className={index === state.selectedIndex ? 'result-row selected' : 'result-row'}
+                    key={`history:${query.toLowerCase()}`}
+                    onMouseEnter={() => state.setSelectedIndex(index)}
+                    onDoubleClick={() => state.setQuery(query)}
+                  >
+                    <span className="result-icon kind-history">
+                      <CommanderIcon name="history" kind="command" />
+                    </span>
+                    <span className="result-copy">
+                      <span className="result-title">{query}</span>
+                      <span className="result-subtitle">Recent search</span>
+                    </span>
+                    <span className="result-kind">History</span>
+                    {index === state.selectedIndex ? (
+                      <span className="result-enter">
+                        <span>Search</span>
+                        <CornerDownLeft />
+                      </span>
+                    ) : (
+                      <ArrowRight className="row-chevron" />
+                    )}
+                  </button>
+                ))
+              : null}
+            {historyVisible ? (
+              <div className="section-heading result-section-heading" role="heading" aria-level={2}>
+                <span>Suggestions</span>
+                <span>{state.hits.length}</span>
+              </div>
+            ) : null}
+            {state.hits.map((hit, index) => {
+              const rowIndex = historyCount + index;
+              return (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={rowIndex === state.selectedIndex}
+                  className={rowIndex === state.selectedIndex ? 'result-row selected' : 'result-row'}
+                  key={hit.id}
+                  onMouseEnter={() => state.setSelectedIndex(rowIndex)}
+                  onDoubleClick={() => void runAction(hit.actions[0]?.id ?? 'open')}
+                >
+                  <span className={`result-icon kind-${hit.kind}`}>
+                    <CommanderIcon name={hit.icon} kind={hit.kind} />
                   </span>
-                ) : (
-                  <ArrowRight className="row-chevron" />
-                )}
-              </button>
-            ))}
-            {!state.hits.length ? (
+                  <span className="result-copy">
+                    <span className="result-title">{hit.title}</span>
+                    {hit.subtitle ? <span className="result-subtitle">{hit.subtitle}</span> : null}
+                  </span>
+                  <span className="result-kind">{hit.kind === 'builtin' ? 'Command' : hit.kind}</span>
+                  {rowIndex === state.selectedIndex ? (
+                    <span className="result-enter">
+                      <span>Open</span>
+                      <CornerDownLeft />
+                    </span>
+                  ) : (
+                    <ArrowRight className="row-chevron" />
+                  )}
+                </button>
+              );
+            })}
+            {!totalRows ? (
               <div className="empty-state">
                 <Command />
                 <strong>No commands found</strong>

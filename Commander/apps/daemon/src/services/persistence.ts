@@ -1,7 +1,11 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CommanderAccount, CommanderExtension, CommanderSettings } from '@commander/protocol';
-import { DEFAULT_SETTINGS } from '@commander/protocol';
+import {
+  addRecentSearch as prependRecentSearch,
+  DEFAULT_SETTINGS,
+  normalizeRecentSearches,
+} from '@commander/protocol';
 import { commanderDataDirectory } from './config.js';
 
 interface PersistentState {
@@ -9,6 +13,7 @@ interface PersistentState {
   settings: CommanderSettings;
   accounts: CommanderAccount[];
   extensions: CommanderExtension[];
+  recentSearches: string[];
 }
 
 const statePath = () => path.join(commanderDataDirectory(), 'state.json');
@@ -23,7 +28,13 @@ function normalizedSettings(settings: Partial<CommanderSettings> | undefined): C
 }
 
 function initialState(): PersistentState {
-  return { version: 1, settings: { ...DEFAULT_SETTINGS }, accounts: [], extensions: [] };
+  return {
+    version: 1,
+    settings: { ...DEFAULT_SETTINGS },
+    accounts: [],
+    extensions: [],
+    recentSearches: [],
+  };
 }
 
 export class PersistentStore {
@@ -40,6 +51,7 @@ export class PersistentStore {
         settings,
         accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
         extensions: Array.isArray(parsed.extensions) ? parsed.extensions : [],
+        recentSearches: normalizeRecentSearches(parsed.recentSearches),
       };
       if (clientIdNeedsMigration) await this.#persist();
     } catch (error) {
@@ -97,6 +109,18 @@ export class PersistentStore {
       ...this.#state.extensions.filter((item) => item.id !== extension.id),
     ];
     await this.#persist();
+  }
+
+  async addRecentSearch(query: string): Promise<string[]> {
+    const recentSearches = prependRecentSearch(this.#state.recentSearches, query);
+    const unchanged =
+      recentSearches.length === this.#state.recentSearches.length &&
+      recentSearches.every((value, index) => value === this.#state.recentSearches[index]);
+    if (!unchanged) {
+      this.#state.recentSearches = recentSearches;
+      await this.#persist();
+    }
+    return structuredClone(this.#state.recentSearches);
   }
 
   async #persist(): Promise<void> {
