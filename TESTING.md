@@ -1599,6 +1599,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       entry differs. The refreshed Feed Filters/composer/search input and
       Things New/View/Arrange controls all respond; production-domain tabs do
       not run this preview freshness check.
+- [ ] On iOS Safari, navigate away from a Vercel preview and return with Back.
+      The inline preview recovery bootstrap loads before the main application
+      entry and a `pageshow.persisted` restore immediately replaces the page
+      with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
+      `/things` returns `Cache-Control: private, no-store, max-age=0,
+      must-revalidate`, while `/assets/*` remains outside the HTML no-store
+      route.
 - [ ] Preview modal deep link `/things?preview=<id>` opens any viewable thing
       (ThingView tree + Move/Share/Delete actions) and is what Copy link hands
       out for non-post things (posts link `/post/:id`).

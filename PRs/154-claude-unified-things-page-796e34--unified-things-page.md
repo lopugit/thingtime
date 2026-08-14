@@ -161,3 +161,16 @@ The `/things` visual follow-up fixes three related rough edges:
   opened/closed the composer, focused and typed in the global search input,
   opened Things New, and changed Grid to List. Hit testing landed on the real
   controls and app-origin logs contained no interaction exception.
+
+## Follow-up: Safari page-cache and pre-React recovery hardening
+
+- The first recovery ran from `entry.client.tsx`, but ES module dependencies
+  evaluate before an entry module's body. A startup/import failure could
+  therefore prevent the recovery installer from running at all.
+- Preview recovery now has an independent inline Vite bootstrap ordered before
+  the main app. It forces a cache-busted navigation whenever Safari restores
+  the page from its back/forward cache and performs one session-guarded retry
+  for an asset runtime error, without creating a permanent reload loop.
+- Generated Vercel root, direct-index, and SPA-fallback routes stamp the HTML
+  shell `private, no-store, max-age=0, must-revalidate` plus legacy no-cache
+  headers. Filesystem assets remain outside those HTML routes.

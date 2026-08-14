@@ -57,6 +57,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Safari-restored Vercel previews now force a real HTML navigation before the
+  app can remain inert**: an inline Vite preview freshness bootstrap runs before
+  the React application graph, refreshes every preview restored from Safari's
+  back/forward page cache, and permits one guarded recovery after a same-build
+  asset runtime error. Generated Vercel routes now return the SPA HTML shell
+  with `private, no-store` browser headers while leaving versioned assets on the
+  filesystem path. — Codex (AI), 2026-08-14
+
 - **Stale Vercel preview tabs recover their interactions after a redeploy**:
   preview-only startup logic compares the loaded hashed Vite entry asset with
   the branch alias's current HTML on load, foreground, and focus, then reloads
