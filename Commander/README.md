@@ -10,7 +10,10 @@ portable from day one.
 - application and command search with deterministic Rust fuzzy-search process plus TypeScript fallback;
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
 - a searchable Commander Settings command and separate native settings window;
+- a Raycast-shaped built-in Commander extension whose `Close Commander` command is discoverable by close, exit,
+  quit, dismiss, and hide;
 - launch-at-login, menu-bar icon, favourites-in-compact-mode, window mode, appearance, and text-size preferences;
+- draggable native launcher and Settings chrome plus physical-key shortcut recording for modified macOS keys;
 - installed extension management, safe folder/ZIP sideloading with opt-in source builds, and live Store browsing;
 - timeout- and memory-bounded extension workers plus an explicit Raycast compatibility capability registry;
 - Thingtime desktop OAuth/PKCE, multi-account UI, Keychain token storage, account switching, and private app-data

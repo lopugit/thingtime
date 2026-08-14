@@ -19,7 +19,13 @@ import {
 } from '@commander/raycast-compat';
 import { commanderCacheDirectory, currentPlatform, type RuntimeOptions } from './services/config.js';
 import { discoverApplications } from './services/applications.js';
-import { builtins, extensionItems } from './services/catalog.js';
+import {
+  availableExtensions,
+  builtins,
+  closeCommanderCommandName,
+  commanderExtension,
+  extensionItems,
+} from './services/catalog.js';
 import { PersistentStore } from './services/persistence.js';
 import { SearchService } from './services/search.js';
 import { ThingtimeService } from './services/thingtime.js';
@@ -55,7 +61,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
 
   const refreshCatalog = () => {
     const state = store.snapshot();
-    search.setItems([...builtins, ...extensionItems(state.extensions), ...applications]);
+    search.setItems([...builtins, ...extensionItems(availableExtensions(state.extensions)), ...applications]);
   };
   refreshCatalog();
 
@@ -92,13 +98,14 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
 
   async function routeApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
     const state = store.snapshot();
+    const extensionsForState = availableExtensions(state.extensions);
     if (request.method === 'GET' && url.pathname === '/api/bootstrap') {
       const body: BootstrapResponse = {
         protocolVersion: PROTOCOL_VERSION,
         platform: currentPlatform(),
         settings: state.settings,
         accounts: state.accounts,
-        extensions: state.extensions,
+        extensions: extensionsForState,
         capabilities: {
           nativeBridge: true,
           globalHotkey: process.platform === 'darwin',
@@ -126,7 +133,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         settings: await store.setSettings(await readBody<CommanderSettings>(request)),
       });
     if (request.method === 'GET' && url.pathname === '/api/extensions')
-      return json(response, 200, { extensions: state.extensions });
+      return json(response, 200, { extensions: extensionsForState });
     if (request.method === 'POST' && url.pathname === '/api/extensions/sideload') {
       const { path: extensionPath, allowUntrustedBuildScripts = false } = await readBody<{
         path?: string;
@@ -153,7 +160,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       });
     }
     if (request.method === 'GET' && url.pathname === '/api/extensions/store') {
-      const current = new Set(state.extensions.map((extension) => extension.name));
+      const current = new Set(extensionsForState.map((extension) => extension.name));
       const catalog = await browseRaycastStore(url.searchParams.get('q') ?? '');
       return json(response, 200, {
         extensions: catalog.map((extension) => ({ ...extension, installed: current.has(extension.name) })),
@@ -205,8 +212,16 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
           nativeRequest: { method: 'application.open', params: { path: item.path } },
         });
       if (item.extensionId && item.commandName) {
-        const extension = state.extensions.find((candidate) => candidate.id === item.extensionId);
+        const extension = extensionsForState.find((candidate) => candidate.id === item.extensionId);
         if (!extension) return json(response, 404, { error: 'Extension not found' });
+        if (extension.id === commanderExtension.id && item.commandName === closeCommanderCommandName) {
+          return json(response, 200, {
+            ok: true,
+            nativeRequest: { method: 'launcher.hide' } satisfies Omit<NativeRequest, 'id'>,
+          });
+        }
+        if (extension.source === 'builtin')
+          return json(response, 409, { error: 'This built-in command is not available' });
         await extensions.execute(extension, item.commandName);
         return json(response, 200, { ok: true });
       }

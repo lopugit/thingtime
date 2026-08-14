@@ -43,11 +43,13 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
 
   if (!state.bootstrap) {
     return (
-      <main className="loading-shell" role="status">
-        <span className="commander-mark" aria-hidden="true">
-          ›_
-        </span>
-        <span>{state.error ?? 'Starting Commander…'}</span>
+      <main className={`loading-shell ${surface}-loading-shell`} role="status">
+        <section className="loading-card">
+          <span className="commander-mark" aria-hidden="true">
+            ›_
+          </span>
+          <span>{state.error ?? 'Starting Commander…'}</span>
+        </section>
       </main>
     );
   }

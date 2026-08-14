@@ -84,12 +84,23 @@ environment.
   explicit non-blank Advanced override remains supported for other Thingtime
   deployments.
 - The launcher WebKit canvas is transparent at the native view, under-page,
-  backing-layer, and document-root levels. This removes the rectangular outer
-  backing while preserving Commander's intentional rounded surface and shadow.
+  backing-layer, document-root, and cold-start surface levels. The native host
+  also shape-masks WebKit to the exact inset rounded Commander surface, so a
+  backing tile cannot paint the outer rectangle; the window shadow follows the
+  masked alpha shape.
 - The focused launcher search field handles Command-A directly on macOS and
   Control-A on other platforms, restoring full-query selection even though the
   accessory AppKit host intentionally has no conventional Edit menu while
   preserving macOS's standard Control-A editing behavior.
+- The built-in Raycast-shaped Commander extension exposes a native no-view
+  `Close Commander` command with close, exit, quit, dismiss, and hide search
+  keywords. It appears in Installed extensions and returns a native launcher
+  hide request when executed.
+- Launcher and Settings title chrome now starts an exact-origin native AppKit
+  drag operation while leaving inputs and buttons interactive. Shortcut
+  recording captures at the window level and resolves physical key codes, so
+  Option-modified keys persist as their intended key instead of symbols such as
+  `∆`.
 - The service-account password remains outside the repository and app bundle
   in user-only local storage. No password, service token, or OAuth access token
   is tracked.
@@ -99,19 +110,21 @@ environment.
 
 ## Verification
 
-- Commander TypeScript: 33 tests passed across UI, daemon, and compatibility
+- Commander TypeScript: 38 tests passed across UI, daemon, and compatibility
   packages; typecheck, ESLint, Prettier, and package builds passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
   Clippy with warnings denied passed.
-- Swift: the WebKit transparency regression passed; release build passed with
-  warnings treated as errors.
+- Swift: two WebKit/panel transparency and compositor-mask regressions passed;
+  the release build passed with warnings treated as errors.
 - `COMMANDER_SIGNING_IDENTITY=- Commander/script/build_and_run.sh --verify`
   built, ad-hoc signed, installed, and launched the exact follow-up app at
   `~/Applications/Commander.app`; the default identity remains unchanged.
 - The installed signature, stable designated requirement, Node JIT
   entitlements, process ancestry, daemon health, and bundled executable paths
   were verified.
-- Native macOS QA covered global custom-hotkey activation, search ranking,
+- Native macOS QA covered physical-key custom-hotkey recording and restoration,
+  built-in extension visibility, `exit` search and Close Commander execution,
+  native launcher/Settings drag gestures, search ranking,
   full-query Command-A selection, separate Settings presentation, Command-K
   action navigation/execution, menu focus, and daemon exit after a forced host
   termination.

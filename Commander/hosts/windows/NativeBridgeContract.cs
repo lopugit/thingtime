@@ -8,6 +8,7 @@ public sealed record CredentialKey(string Issuer, string ClientId, string Accoun
 public interface INativeBridge
 {
     Task HideLauncherAsync();
+    Task BeginWindowDragAsync();
     Task OpenSettingsAsync();
     Task OpenApplicationAsync(string pathOrUrl);
     Task RevealAsync(string path);

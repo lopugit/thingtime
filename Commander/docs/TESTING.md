@@ -5,17 +5,20 @@
 - [ ] Global shortcut opens the launcher over the active application without moving focus elsewhere first.
 - [ ] The first visible frame contains rendered UI; there is no white, transparent, or stale flash.
 - [ ] Type `settings`; Settings / Commander Settings is first and Return opens the separate settings window.
+- [ ] Type `exit`; the built-in Commander extension's Close Commander command is first and Return hides the launcher.
 - [ ] With text in the search field, Command-A selects the complete query and typing replaces it; on Windows/Linux shells, repeat with Control-A.
 - [ ] Up/Down selection stays visible through the complete result list. Return runs the selected primary action.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
 - [ ] Open an application, reveal it in Finder, and copy its path through Actions.
 - [ ] Verify default and compact modes; expansion never shows an unrendered blank region.
 - [ ] Force-terminate the native host once; its parent watchdog must stop the daemon and Rust child and release port 47820 before relaunch.
+- [ ] Drag the launcher by its icon/header chrome; the window follows the pointer without moving focus into the search field.
 
 ## Settings
 
 - [ ] Toggle launch at login and verify `SMAppService.mainApp.status` changes after relaunch.
-- [ ] Record a non-conflicting shortcut, close Settings, and verify the new shortcut opens Commander.
+- [ ] Record a non-conflicting shortcut containing Option (for example Command-Option-J), verify the physical key is retained instead of its generated symbol, close Settings, and verify the new shortcut opens Commander.
+- [ ] Drag Settings by its centered title-bar chrome and verify buttons and fields remain independently clickable.
 - [ ] Toggle menu-bar visibility and verify exactly one Commander item exists when enabled.
 - [ ] Verify light, dark, and system appearance plus default/large text size without clipping.
 - [ ] Verify favourites-in-compact-mode is disabled unless Compact is selected.
@@ -27,6 +30,7 @@
 - [ ] Try an invalid folder; the error is visible and the installed list is unchanged.
 - [ ] Search Store, open the live Raycast catalog, and verify Commander does not pretend an uninstalled result is installed.
 - [ ] Execute a compatible prebuilt no-view command and confirm a worker crash cannot terminate the daemon.
+- [ ] Verify Installed contains the enabled built-in Commander extension with one native command.
 
 ## Thingtime accounts and sync
 
@@ -39,7 +43,7 @@
 
 ## Visual QA
 
-- [ ] Open the native launcher above light and dark desktop content; only the intentional rounded launcher surface and its shadow are visible, with no larger rectangular panel/WebView background.
+- [ ] Open the native launcher above light and dark desktop content; only the compositor-masked rounded launcher surface and its shadow are visible, with no larger rectangular panel/WebView background at first paint or after search/actions updates.
 - [ ] Compare launcher and settings screenshots against `design/commander-concept.png` and the three user references.
 - [ ] Inspect every settings tab and the open Actions state at native window sizes.
 - [ ] Resize Settings to its minimum and a large desktop size; no clipping, overlap, or horizontal overflow.

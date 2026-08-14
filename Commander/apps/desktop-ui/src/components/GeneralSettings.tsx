@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CommanderSettings } from '@commander/protocol';
 import { Laptop, Moon, Sun } from 'lucide-react';
 import { nativeRequest } from '../lib/nativeBridge.js';
@@ -31,6 +31,31 @@ export function GeneralSettings({
     }
   };
 
+  useEffect(() => {
+    if (!recordingHotkey) return;
+    const captureShortcut = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') {
+        setRecordingHotkey(false);
+        return;
+      }
+      const shortcut = shortcutFromKeyboardEvent(event);
+      if (!shortcut) return;
+      setRecordingHotkey(false);
+      void nativeRequest('hotkey.update', { shortcut })
+        .then(() => {
+          onChange({ ...settings, hotkey: shortcut });
+          onError(null);
+        })
+        .catch((error: unknown) => {
+          onError(error instanceof Error ? error.message : 'Could not register that shortcut');
+        });
+    };
+    window.addEventListener('keydown', captureShortcut, true);
+    return () => window.removeEventListener('keydown', captureShortcut, true);
+  }, [recordingHotkey, settings, onChange, onError]);
+
   return (
     <div className="settings-page general-settings">
       <section className="settings-group">
@@ -45,36 +70,9 @@ export function GeneralSettings({
           <button
             className={recordingHotkey ? 'hotkey-recorder recording' : 'hotkey-recorder'}
             type="button"
-            onClick={() => setRecordingHotkey(true)}
-            onBlur={() => setRecordingHotkey(false)}
-            onKeyDown={(event) => {
-              if (!recordingHotkey) return;
-              event.preventDefault();
-              event.stopPropagation();
-              if (event.key === 'Escape') {
-                setRecordingHotkey(false);
-                return;
-              }
-              const modifiers = [
-                event.metaKey ? 'Command' : '',
-                event.ctrlKey ? 'Control' : '',
-                event.altKey ? 'Option' : '',
-                event.shiftKey ? 'Shift' : '',
-              ].filter(Boolean);
-              const key =
-                event.code === 'Space' ? 'Space' : event.key.length === 1 ? event.key.toUpperCase() : '';
-              if (!key || !modifiers.length) return;
-              const shortcut = [...modifiers, key].join('+');
-              void nativeRequest('hotkey.update', { shortcut })
-                .then(() => {
-                  update('hotkey', shortcut);
-                  onError(null);
-                  setRecordingHotkey(false);
-                })
-                .catch((error: unknown) => {
-                  onError(error instanceof Error ? error.message : 'Could not register that shortcut');
-                });
-            }}
+            aria-label={recordingHotkey ? 'Recording a new shortcut' : 'Record new shortcut'}
+            aria-pressed={recordingHotkey}
+            onClick={() => setRecordingHotkey((current) => !current)}
           >
             {recordingHotkey
               ? 'Press a shortcut…'
@@ -164,6 +162,56 @@ export function GeneralSettings({
       </section>
     </div>
   );
+}
+
+function shortcutFromKeyboardEvent(event: KeyboardEvent): string | null {
+  const modifiers = [
+    event.metaKey ? 'Command' : '',
+    event.ctrlKey ? 'Control' : '',
+    event.altKey ? 'Option' : '',
+    event.shiftKey ? 'Shift' : '',
+  ].filter(Boolean);
+  if (!modifiers.length) return null;
+
+  const codeKeys: Record<string, string> = {
+    Space: 'Space',
+    Enter: 'Return',
+    NumpadEnter: 'Return',
+    Tab: 'Tab',
+    Backspace: 'Delete',
+    Delete: 'ForwardDelete',
+    ArrowLeft: 'Left',
+    ArrowRight: 'Right',
+    ArrowUp: 'Up',
+    ArrowDown: 'Down',
+    Home: 'Home',
+    End: 'End',
+    PageUp: 'PageUp',
+    PageDown: 'PageDown',
+    Minus: '-',
+    Equal: '=',
+    BracketLeft: '[',
+    BracketRight: ']',
+    Backslash: '\\',
+    Semicolon: ';',
+    Quote: "'",
+    Backquote: '`',
+    Comma: ',',
+    Period: '.',
+    Slash: '/',
+  };
+  const key =
+    codeKeys[event.code] ??
+    (/^Key[A-Z]$/.test(event.code)
+      ? event.code.slice(3)
+      : /^Digit\d$/.test(event.code)
+        ? event.code.slice(5)
+        : /^F(?:[1-9]|1\d|20)$/.test(event.code)
+          ? event.code
+          : event.key.length === 1
+            ? event.key.toUpperCase()
+            : '');
+  return key ? [...modifiers, key].join('+') : null;
 }
 
 function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {

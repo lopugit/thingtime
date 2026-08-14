@@ -81,10 +81,25 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     }
     do {
       let request = try JSONDecoder().decode(BridgeRequest.self, from: data)
+      if request.method == "window.beginDrag" {
+        beginWindowDrag(requestID: request.id)
+        return
+      }
       Task { @MainActor in await self.handle(request) }
     } catch {
       replyIfPossible(id: requestID, error: "The native request is malformed: \(error.localizedDescription)")
     }
+  }
+
+  private func beginWindowDrag(requestID: String) {
+    guard let window = webView?.window,
+          let event = NSApp.currentEvent,
+          event.type == .leftMouseDown else {
+      reply(id: requestID, ok: false, result: nil, error: "The Commander window cannot begin dragging from this event.")
+      return
+    }
+    reply(id: requestID, ok: true, result: nil, error: nil)
+    window.performDrag(with: event)
   }
 
   private func handle(_ request: BridgeRequest) async {
