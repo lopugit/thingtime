@@ -420,7 +420,7 @@
     "semantic_hash": "97a9ebb78794cc672d2bac8198b9c70a"
   },
   "iOS/Thingtime/Web/WebView.swift": {
-    "mtime": 1786505469.8186848,
+    "mtime": 1786771367.2401211,
     "ast_hash": "9baaf49b730a3024679fd453e0ad34ff",
     "semantic_hash": "9baaf49b730a3024679fd453e0ad34ff"
   },
@@ -1730,9 +1730,9 @@
     "semantic_hash": "38a74a715168968f164df649dab425f6"
   },
   "remix/app/components/Commander/CommanderV2.tsx": {
-    "mtime": 1786505710.036266,
-    "ast_hash": "326f9d1fc0a544856f18f8f190a5d03a",
-    "semantic_hash": "326f9d1fc0a544856f18f8f190a5d03a"
+    "mtime": 1786771774.2408044,
+    "ast_hash": "307431601787d40994dd1d69b44182e5",
+    "semantic_hash": ""
   },
   "remix/app/components/DevKit/DevKit.tsx": {
     "mtime": 1786516882.2167592,
@@ -1750,9 +1750,9 @@
     "semantic_hash": "67d6ccacbf662a9d7ee03996610cc6fd"
   },
   "remix/app/components/Editor/LongTextEditor.tsx": {
-    "mtime": 1786505469.917207,
-    "ast_hash": "7cbb12bd9977f1098aad5c031b60f75c",
-    "semantic_hash": "7cbb12bd9977f1098aad5c031b60f75c"
+    "mtime": 1786770948.099003,
+    "ast_hash": "78849141975686c9454b99f1930b486a",
+    "semantic_hash": "78849141975686c9454b99f1930b486a"
   },
   "remix/app/components/Editor/StyleTune.ts": {
     "mtime": 1786505469.9173062,
@@ -4200,8 +4200,8 @@
     "semantic_hash": "3ee9e0c9d98402760b8ead84cbadaded"
   },
   "PRs/154-claude-unified-things-page-796e34--unified-things-page.md": {
-    "mtime": 1786766150.0450711,
-    "ast_hash": "bfdcce4b0f4d9ac786328a27ad97a192",
+    "mtime": 1786771123.2277796,
+    "ast_hash": "8bcdd99f7be9c955669ad400e6c73bad",
     "semantic_hash": ""
   },
   "PRs/16-resolve-main-into-thingtime-dev-branch.md": {
@@ -4420,8 +4420,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786766150.043906,
-    "ast_hash": "fe0f2400914b9968b8001d548a566741",
+    "mtime": 1786771123.2274015,
+    "ast_hash": "3a531fafb91ebabe21d6d0bd481d694b",
     "semantic_hash": ""
   },
   "TODO/TODO.md": {
@@ -4760,7 +4760,7 @@
     "semantic_hash": "e9065834cd91a8cb309ba920944ff112"
   },
   "iOS/project.yml": {
-    "mtime": 1786722054.8324609,
+    "mtime": 1786771367.2408335,
     "ast_hash": "e20b212ad55c3d68359b1aaeaf4fc10b",
     "semantic_hash": "e20b212ad55c3d68359b1aaeaf4fc10b"
   },
@@ -4785,8 +4785,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786766150.0445795,
-    "ast_hash": "9070729bdf179b9afb41fe4bbc2f9549",
+    "mtime": 1786771123.2267575,
+    "ast_hash": "e276cdf8e0360c67e624cb2f3d51e857",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -5668,5 +5668,25 @@
     "mtime": 1786505470.0938504,
     "ast_hash": "6eb815f0cfbe5e0c76790ee42833aa81",
     "semantic_hash": "6eb815f0cfbe5e0c76790ee42833aa81"
+  },
+  "remix/app/components/Commander/commanderClickAway.test.ts": {
+    "mtime": 1786770143.8040402,
+    "ast_hash": "0b6731668c703eeed4e2ef7360750710",
+    "semantic_hash": "0b6731668c703eeed4e2ef7360750710"
+  },
+  "remix/app/components/Commander/commanderClickAway.ts": {
+    "mtime": 1786771766.93599,
+    "ast_hash": "04ebee3567865a755d94561a0cc2069f",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/editorJsTouchFocus.test.ts": {
+    "mtime": 1786770948.0981772,
+    "ast_hash": "beae9d818f8e802d4b57bb31a0fb81dc",
+    "semantic_hash": "beae9d818f8e802d4b57bb31a0fb81dc"
+  },
+  "remix/app/components/Editor/editorJsTouchFocus.ts": {
+    "mtime": 1786770948.0977957,
+    "ast_hash": "52e23a4c7ef0eccbfa7c9ddd4f59b2d0",
+    "semantic_hash": "52e23a4c7ef0eccbfa7c9ddd4f59b2d0"
   }
 }
