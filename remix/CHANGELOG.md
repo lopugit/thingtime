@@ -57,6 +57,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Mobile Safari Feed controls receive their click and focus events**: the
+  global Commander no longer changes Thingtime state from a document-level
+  `touchend` before Safari can synthesize the touched control's click. Its
+  click-away behavior now waits for `click` / `focusin` and is a no-op while
+  Commander is already closed. Editor.js also restores contenteditable focus
+  synchronously on a genuine touch release, so the Feed composer opens, accepts
+  typing, and leaves adjacent buttons and native inputs interactive in retained
+  account sessions. — Codex (AI), 2026-08-15
+
 - **A legacy Lopu browser snapshot is repaired before Feed becomes
   interactive**: Thingtime hydration now reports and removes invalid saved
   functions, commits the repaired snapshot before completing the first load,

@@ -1617,6 +1617,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       and open “What's on your mind?”. Hydration reports no function syntax
       exception; the composer focuses and edits, Photos opens, close restores
       the collapsed composer, and Latest / Filters / navigation still respond.
+- [ ] In Mobile Safari with a retained signed-in session and Commander closed,
+      physically tap the collapsed “What's on your mind?” control immediately
+      after a fresh Feed navigation. The composer opens on that first tap;
+      tapping its Editor.js placeholder opens the keyboard and retains typed
+      text; Photos opens; and the Tags input focuses and retains typing. The
+      document has no Commander `touchend` click-away listener, and opening
+      Commander then clicking or focusing outside still closes it without
+      consuming the target control's action.
 - [ ] Preview modal deep link `/things?preview=<id>` opens any viewable thing
       (ThingView tree + Move/Share/Delete actions) and is what Copy link hands
       out for non-post things (posts link `/post/:id`).

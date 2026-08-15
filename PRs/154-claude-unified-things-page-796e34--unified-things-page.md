@@ -216,3 +216,29 @@ The `/things` visual follow-up fixes three related rough edges:
   QA covers a fresh real pointer into the collapsed composer, Editor.js focus
   and typing, global search, Latest, Filters, Photos, close/reopen, and full-page
   scrolling on desktop/mobile Chromium plus an iPhone WebKit simulator.
+
+## Follow-up: Mobile Safari compatibility-click recovery
+
+- A native XCUITest tap reached the exact collapsed composer button with an
+  unprevented `pointerdown` / `touchstart` / `pointerup` / `touchend`, but
+  Safari emitted no compatibility click. The remaining document `touchend`
+  listener came from Commander's click-away wrapper and wrote global Thingtime
+  state even when Commander was closed, replacing the touched React tree before
+  Safari could finish the gesture.
+- Commander now owns a small click-away listener that waits for `click` or
+  keyboard `focusin`, ignores connected targets inside its host, and performs
+  no state write unless Commander is actually active. Editor.js receives a
+  touch-only synchronous focus fallback because its toolbar work during
+  `touchstart` can independently suppress native contenteditable focus in
+  Mobile Safari.
+
+### Validation
+
+- Focused Node regression tests cover the absence of a Commander `touchend`
+  listener, outside-target classification, and touch-only Editor.js focus
+  targeting; targeted ESLint passes with only Commander's six pre-existing
+  hook-dependency warnings.
+- A real Mobile Safari XCUITest on an iPhone 16 Pro simulator performs a fresh
+  retained-Lopu Feed navigation, opens the collapsed composer on its first
+  physical tap, opens the software keyboard from Editor.js, types and verifies
+  text, opens Photos, then focuses, types, and verifies the native Tags input.
