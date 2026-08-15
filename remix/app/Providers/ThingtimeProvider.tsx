@@ -10,7 +10,13 @@ import { safeJoin } from '~/utils';
 import { createLatestRevisionAutosave } from './latestRevisionAutosave';
 import type { LatestRevisionAutosaveCoordinator } from './latestRevisionAutosave';
 import { drainThingtimeMutationQueue } from './thingtimeMutationQueue';
-import { parseThingtime, stringifyThingtime } from './thingtimeSerialization';
+import {
+	hasPersistedThingtimeRuntimeMethods,
+	parseThingtime,
+	parseThingtimeWithDiagnostics,
+	stringifyThingtime,
+	stringifyThingtimeForStorage
+} from './thingtimeSerialization';
 export interface ThingtimeTypes {
 	thingtime: any;
 	set: any;
@@ -71,7 +77,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			debounceMs: 350,
 			maxWaitMs: 2_000,
 			serialize: (value) => {
-				const serialized = stringifyThingtime(value);
+				const serialized = stringifyThingtimeForStorage(value);
 				if (!serialized) throw new Error('Thingtime autosave could not serialize the current value');
 				return serialized;
 			},
@@ -113,7 +119,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				newThingtime.Content = thingtimeDefaults.Content;
 			}
 
-			setThingtimeObjectWrapper(newThingtime);
+			return setThingtimeObjectWrapper(newThingtime);
 		},
 		[setThingtimeObjectWrapper]
 	);
@@ -334,7 +340,11 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				if (cancelled) return;
 
 				if (localStorageThingtime) {
-					const parsed = typeof localStorageThingtime === 'string' ? parseThingtime(localStorageThingtime) : localStorageThingtime;
+					const parseResult =
+						typeof localStorageThingtime === 'string'
+							? parseThingtimeWithDiagnostics(localStorageThingtime)
+							: { value: localStorageThingtime, repaired: false, removedFunctionCount: 0 };
+					const parsed = parseResult.value;
 
 					if (parsed) {
 						const localIsUptoDateVersion = !parsed.version || parsed.version >= thingtimeMinimumValues.version;
@@ -356,7 +366,18 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 							overwriteAll: true
 						});
 
-						restoreThingtime(newThingtime);
+						const restoredThingtime = restoreThingtime(newThingtime);
+
+						// Older blobs contain either an invalid fallback function or the
+						// provider's root set/get closures. Both are runtime-only state. Commit
+						// the repaired snapshot before exposing the hydrated UI so this very
+						// first load is also the last load that can see the poisoned blob.
+						if (parseResult.repaired || hasPersistedThingtimeRuntimeMethods(parsed)) {
+							const repairedSerialized = stringifyThingtimeForStorage(restoredThingtime);
+							if (!repairedSerialized) throw new Error('Repaired Thingtime value could not be serialized');
+							await localforage.setItem('thingtime', repairedSerialized);
+							if (cancelled) return;
+						}
 					} else {
 						throw new Error('Stored Thingtime value could not be parsed');
 					}

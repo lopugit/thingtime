@@ -11,6 +11,12 @@ type SerializedThingtimeFunction = {
 	ttScope?: Record<string, unknown>;
 };
 
+export type ParsedThingtime = {
+	value: any;
+	repaired: boolean;
+	removedFunctionCount: number;
+};
+
 const UNREVIVABLE_FUNCTION = Symbol('thingtime-unrevivable-function');
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const RESERVED_IDENTIFIERS = new Set([
@@ -112,7 +118,11 @@ const compileFunction = (code: string, scope: Record<string, unknown>): Thingtim
 	return revivedFunction;
 };
 
-const revivePersistedValue = (value: any, seen = new WeakMap<object, unknown>()): any => {
+const revivePersistedValue = (
+	value: any,
+	diagnostics: { removedFunctionCount: number },
+	seen = new WeakMap<object, unknown>()
+): any => {
 	if (typeof value === 'string' && !isNaN(Date.parse(value))) {
 		return new Date(value);
 	}
@@ -124,8 +134,12 @@ const revivePersistedValue = (value: any, seen = new WeakMap<object, unknown>())
 			const revived = compileFunction(serialized.code, scope);
 			seen.set(value, revived);
 			return revived;
-		} catch (error) {
-			console.error('There was an error evaluating persisted Thingtime function code:', error);
+		} catch {
+			// A previous serializer stored an executable no-op whenever a function
+			// could not be revived. Invalid persisted source is recoverable browser
+			// data: remove it so current defaults can refill the property, then let
+			// hydration atomically commit the repaired snapshot.
+			diagnostics.removedFunctionCount += 1;
 			return UNREVIVABLE_FUNCTION;
 		}
 	}
@@ -135,7 +149,7 @@ const revivePersistedValue = (value: any, seen = new WeakMap<object, unknown>())
 	seen.set(value, value);
 
 	for (const key of Reflect.ownKeys(value)) {
-		const revivedChild = revivePersistedValue((value as Record<PropertyKey, unknown>)[key], seen);
+		const revivedChild = revivePersistedValue((value as Record<PropertyKey, unknown>)[key], diagnostics, seen);
 		if (revivedChild === UNREVIVABLE_FUNCTION) {
 			delete (value as Record<PropertyKey, unknown>)[key];
 		} else {
@@ -162,15 +176,30 @@ const replacer = (_key: string, value: any): any => {
 	return value;
 };
 
-export const parseThingtime = (text: string): any => {
+const ROOT_RUNTIME_METHODS = new Set<PropertyKey>(['set', 'get']);
+
+export const hasPersistedThingtimeRuntimeMethods = (value: unknown): boolean => {
+	return isRecord(value) && [...ROOT_RUNTIME_METHODS].some((key) => Object.prototype.hasOwnProperty.call(value, key));
+};
+
+export const parseThingtimeWithDiagnostics = (text: string): ParsedThingtime => {
+	const diagnostics = { removedFunctionCount: 0 };
 	try {
 		const parsed = parseAux(text);
-		const revived = revivePersistedValue(parsed);
-		return revived === UNREVIVABLE_FUNCTION ? null : revived;
+		const revived = revivePersistedValue(parsed, diagnostics);
+		return {
+			value: revived === UNREVIVABLE_FUNCTION ? null : revived,
+			repaired: diagnostics.removedFunctionCount > 0,
+			removedFunctionCount: diagnostics.removedFunctionCount
+		};
 	} catch (error) {
 		console.error('There was an error parsing the thingtime data:', error);
-		return null;
+		return { value: null, repaired: false, removedFunctionCount: 0 };
 	}
+};
+
+export const parseThingtime = (text: string): any => {
+	return parseThingtimeWithDiagnostics(text).value;
 };
 
 export const stringifyThingtime = (data: any): string => {
@@ -178,6 +207,20 @@ export const stringifyThingtime = (data: any): string => {
 		return stringifyAux(data, replacer);
 	} catch (error) {
 		console.error('There was an error stringifying the thingtime data:', error);
+		return '';
+	}
+};
+
+export const stringifyThingtimeForStorage = (data: any): string => {
+	try {
+		return stringifyAux(data, function (key, value) {
+			// set/get are live React closures attached to the Thingtime root for its
+			// in-memory API. Nested user properties with those names remain data.
+			if (this === data && ROOT_RUNTIME_METHODS.has(key)) return undefined;
+			return replacer(key, value);
+		});
+	} catch (error) {
+		console.error('There was an error stringifying the thingtime data for storage:', error);
 		return '';
 	}
 };

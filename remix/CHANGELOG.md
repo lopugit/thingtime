@@ -57,6 +57,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **A legacy Lopu browser snapshot is repaired before Feed becomes
+  interactive**: Thingtime hydration now reports and removes invalid saved
+  functions, commits the repaired snapshot before completing the first load,
+  and never persists the provider's live root `set` / `get` React closures.
+  Nested user data with those names is preserved. This removes the one-load
+  poisoned-state window that could make “What's on your mind?” and adjacent
+  inputs appear inert until another tab or reload. — Codex (AI), 2026-08-15
+
 - **Legacy Thingtime function state no longer disables interactive editors**:
   persisted anonymous, arrow, named, method, and scoped functions now revive
   only after Flatted has reconstructed their complete object graph. The parser

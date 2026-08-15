@@ -195,3 +195,24 @@ The `/things` visual follow-up fixes three related rough edges:
   opens the composer, focuses and edits Editor.js, switches to Photos, closes
   the composer, and verifies adjacent Feed controls remain interactive without
   the persisted-function exception.
+
+## Follow-up: atomic first-load Feed input recovery
+
+- The legacy fallback was removed in memory, but the clean value waited for the
+  provider's ordinary post-render autosave. The same first render could still
+  mount against the transition state, while the next tab was clean — matching
+  the retained Lopu-session reproduction.
+- Hydration now records whether function repair occurred and commits the merged,
+  repaired snapshot before it marks the provider ready. The persistence codec
+  also omits only the root runtime `set` / `get` closures so future autosaves do
+  not recreate executable browser-state debris; nested user keys are unchanged.
+
+### Validation
+
+- `corepack pnpm --dir remix run test:autosave` covers one-pass cleanup,
+  root-only runtime-method omission, nested `set` / `get` preservation, circular
+  aliases, and a clean second parse.
+- Targeted provider lint and the production client build pass. Browser/device
+  QA covers a fresh real pointer into the collapsed composer, Editor.js focus
+  and typing, global search, Latest, Filters, Photos, close/reopen, and full-page
+  scrolling on desktop/mobile Chromium plus an iPhone WebKit simulator.

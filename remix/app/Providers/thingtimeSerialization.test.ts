@@ -4,7 +4,13 @@ import test from 'node:test';
 import { stringify as stringifyAux } from 'flatted';
 
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
-import { parseThingtime, stringifyThingtime } from './thingtimeSerialization.ts';
+import {
+	hasPersistedThingtimeRuntimeMethods,
+	parseThingtime,
+	parseThingtimeWithDiagnostics,
+	stringifyThingtime,
+	stringifyThingtimeForStorage
+} from './thingtimeSerialization.ts';
 
 declare const offset: number;
 
@@ -68,18 +74,11 @@ test('removes an invalid persisted function so defaults can repair its property'
 			ttScope: {}
 		}
 	});
-	const originalConsoleError = console.error;
-	const errors: unknown[][] = [];
-	console.error = (...args: unknown[]) => errors.push(args);
-
-	try {
-		const revived = parseThingtime(serialized);
-		assert.equal(revived.keep, 'healthy');
-		assert.equal(Object.prototype.hasOwnProperty.call(revived, 'broken'), false);
-		assert.equal(errors.length, 1);
-	} finally {
-		console.error = originalConsoleError;
-	}
+	const parsed = parseThingtimeWithDiagnostics(serialized);
+	assert.equal(parsed.value.keep, 'healthy');
+	assert.equal(Object.prototype.hasOwnProperty.call(parsed.value, 'broken'), false);
+	assert.equal(parsed.repaired, true);
+	assert.equal(parsed.removedFunctionCount, 1);
 });
 
 test('removes the legacy saved no-op instead of hydrating poisoned behavior', () => {
@@ -120,4 +119,58 @@ test('rejects unsafe scope keys without executing persisted source', () => {
 	} finally {
 		console.error = originalConsoleError;
 	}
+});
+
+test('storage snapshots omit only root runtime methods and preserve circular aliases', () => {
+	const root: Record<string, any> = {
+		keep: 'healthy',
+		set: () => 'runtime set',
+		get: () => 'runtime get',
+		nested: {
+			set: 'user set value',
+			get: 'user get value'
+		}
+	};
+	root.tt = root;
+	root.thingtime = root;
+
+	assert.equal(hasPersistedThingtimeRuntimeMethods(root), true);
+	const revived = parseThingtime(stringifyThingtimeForStorage(root));
+	assert.equal(Object.prototype.hasOwnProperty.call(revived, 'set'), false);
+	assert.equal(Object.prototype.hasOwnProperty.call(revived, 'get'), false);
+	assert.equal(revived.nested.set, 'user set value');
+	assert.equal(revived.nested.get, 'user get value');
+	assert.equal(revived.tt, revived);
+	assert.equal(revived.thingtime, revived);
+	assert.equal(hasPersistedThingtimeRuntimeMethods(revived), false);
+});
+
+test('a cleaned legacy snapshot stays clean on its very next parse', () => {
+	const poisoned = stringifyAux({
+		keep: 'healthy',
+		set: {
+			ttype: 'function',
+			code: `function () {
+				console.warn('Function could not be revived:', value.code);
+			}`,
+			ttScope: {}
+		},
+		get: {
+			ttype: 'function',
+			code: '() => "stale runtime getter"',
+			ttScope: {}
+		}
+	});
+
+	const firstParse = parseThingtimeWithDiagnostics(poisoned);
+	assert.equal(firstParse.repaired, true);
+	assert.equal(firstParse.removedFunctionCount, 1);
+	assert.equal(hasPersistedThingtimeRuntimeMethods(firstParse.value), true);
+
+	const cleanSnapshot = stringifyThingtimeForStorage(firstParse.value);
+	const secondParse = parseThingtimeWithDiagnostics(cleanSnapshot);
+	assert.equal(secondParse.repaired, false);
+	assert.equal(secondParse.removedFunctionCount, 0);
+	assert.equal(hasPersistedThingtimeRuntimeMethods(secondParse.value), false);
+	assert.equal(secondParse.value.keep, 'healthy');
 });
