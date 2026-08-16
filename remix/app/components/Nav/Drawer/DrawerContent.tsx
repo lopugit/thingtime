@@ -12,6 +12,7 @@ import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDra
 import { useDrawer, useIsMobileViewport } from './useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerUnreadBadge } from '../../Messenger/MessengerNotifications';
+import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName } from '~/utils/userIdentity';
 
 // Shared drawer inner content, used by both the pinned NavDrawer panel and
 // the desktop hover popup.
@@ -32,7 +33,7 @@ export const UserAvatarCircle = (props: { size?: string; fontSize?: string }) =>
 		return (
 			<Image
 				src={user.avatarUrl}
-				alt={user.displayName || user.username}
+				alt={getUserDisplayName(user)}
 				width={props?.size || '28px'}
 				height={props?.size || '28px'}
 				borderRadius="999px"
@@ -43,7 +44,7 @@ export const UserAvatarCircle = (props: { size?: string; fontSize?: string }) =>
 		);
 	}
 
-	const initial = (user?.displayName || user?.username || '?').trim().charAt(0).toUpperCase();
+	const initial = user ? getUserDisplayName(user).trim().charAt(0).toUpperCase() : '?';
 
 	return (
 		<Center
@@ -561,7 +562,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				<UserAvatarCircle></UserAvatarCircle>
 				{!isMobile && (
 					<Text fontSize="xs" fontWeight={600} noOfLines={1}>
-						{user ? user.displayName || user.username : 'Log in'}
+						{user ? (user.temporary ? LOGIN_TO_CLAIM_LABEL : getUserDisplayName(user)) : 'Log in'}
 					</Text>
 				)}
 				<Box marginLeft="auto" opacity={0.4} display="inline-flex">

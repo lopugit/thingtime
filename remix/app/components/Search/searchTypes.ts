@@ -6,6 +6,7 @@ export type SearchAuthor = {
   id: string;
   username: string;
   displayName: string | null;
+  temporary?: boolean;
   avatarUrl: string | null;
 };
 
@@ -40,6 +41,7 @@ export type SearchPerson = {
   id: string;
   username: string;
   displayName: string | null;
+  temporary?: boolean;
   bio: string | null;
   avatarUrl: string | null;
 };
