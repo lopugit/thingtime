@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **AI resolvers get a full 100-turn budget and stale labels no longer fail
+  silently**: every protected Claude conflict/rebase/advisory invocation now
+  declares `--max-turns 100`. The stack detector retries label deletion,
+  verifies the live PR after every attempt, falls back to the configured
+  resolver PAT when the run token is refused, surfaces sanitized API errors,
+  and fails closed instead of leaving pause labels behind in a green scan.
+  — Codex (AI), 2026-08-17
+
 - **One merged PR can promote to several branches**: the promoter had exactly
   one target, so a source PR owing changes to two branches — #211 converts
   `main` to thin listeners *and* carries the implementation those listeners

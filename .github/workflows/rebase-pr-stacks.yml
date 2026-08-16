@@ -32,7 +32,7 @@
 #   only when a non-graphify conflict actually reaches the AI).
 # - CONFLICT_RESOLVER_PAT is optional. GITHUB_TOKEN is sufficient unless the
 #   rewritten history changes .github/workflows/. A PAT used here needs
-#   contents/pull-request/workflow access appropriate to this repository.
+#   contents/pull-request/issues/workflow access appropriate to this repository.
 
 name: Rebase PRs and stacks (AI)
 
@@ -370,6 +370,10 @@ jobs:
         id: scan
         env:
           GH_TOKEN: ${{ github.token }}
+          # GITHUB_TOKEN remains least-privilege primary. The existing resolver
+          # PAT is a bounded fallback for repositories whose Actions token can
+          # read labels but is refused when removing them.
+          LABEL_WRITE_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT }}
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           PUSHED_REF: ${{ github.ref_name }}
@@ -557,6 +561,7 @@ jobs:
 
           blocked='[]'
           barriers='[]'
+          label_cleanup_failed=false
           add_barrier() {
             local barrier
             barrier="$(jq -cn \
@@ -567,31 +572,89 @@ jobs:
             barriers="$(jq -c --argjson barrier "$barrier" \
               '. + [$barrier]' <<<"$barriers")"
           }
+          remove_label_verified() {
+            local label="$1" encoded_label endpoint error_file
+            local token_name token issue_json absent attempt token_index
+            local delete_succeeded verify_attempt
+            local -a tokens=("$GH_TOKEN") token_names=("GITHUB_TOKEN")
+            if [ -n "${LABEL_WRITE_TOKEN:-}" ] \
+               && [ "$LABEL_WRITE_TOKEN" != "$GH_TOKEN" ]; then
+              tokens+=("$LABEL_WRITE_TOKEN")
+              token_names+=("CONFLICT_RESOLVER_PAT")
+            fi
+            encoded_label="$(jq -rn --arg value "$label" '$value | @uri')"
+            endpoint="repos/$REPO/issues/$number/labels/$encoded_label"
+            error_file="$(mktemp "$RUNNER_TEMP/thingtime-label-cleanup.XXXXXX")"
+
+            for token_index in "${!tokens[@]}"; do
+              token="${tokens[$token_index]}"
+              token_name="${token_names[$token_index]}"
+              for attempt in 1 2 3; do
+                : >"$error_file"
+                delete_succeeded=false
+                if GH_TOKEN="$token" gh api --method DELETE "$endpoint" \
+                  --silent 2>"$error_file"; then
+                  delete_succeeded=true
+                fi
+                # A successful DELETE is issued only once. Polling its result
+                # avoids deleting a fresh same-name hold that another worker
+                # could apply while GitHub's issue response catches up.
+                for verify_attempt in 1 2 3; do
+                  issue_json="$(GH_TOKEN="$token" gh api \
+                    "repos/$REPO/issues/$number" 2>>"$error_file" || true)"
+                  absent="$(jq -r --arg label "$label" '
+                      if type == "object" and (.labels | type) == "array"
+                      then ([.labels[].name] | index($label) == null)
+                      else false
+                      end
+                    ' <<<"$issue_json" 2>>"$error_file" || true)"
+                  if [ "$absent" = true ]; then
+                    rm -f -- "$error_file"
+                    if [ "$attempt" -gt 1 ] \
+                       || [ "$token_name" != GITHUB_TOKEN ]; then
+                      echo "Removed $label from #$number with $token_name on attempt $attempt."
+                    fi
+                    return 0
+                  fi
+                  [ "$delete_succeeded" = true ] \
+                    && [ "$verify_attempt" -lt 3 ] \
+                    || break
+                  sleep "$verify_attempt"
+                done
+
+                echo "::warning::Label cleanup attempt $attempt/3 with $token_name did not remove $label from #$number."
+                if [ -s "$error_file" ]; then
+                  sed -E \
+                    's/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})/[redacted-token]/g' \
+                    "$error_file" >&2
+                fi
+                if [ "$delete_succeeded" = true ]; then
+                  echo "::warning::The label remained or was re-applied after a successful DELETE; refusing another DELETE that could erase a newer hold."
+                  rm -f -- "$error_file"
+                  return 1
+                fi
+                # Authentication/authorization failures are deterministic for
+                # this token; move directly to the configured fallback.
+                if grep -Eqi \
+                  'HTTP (401|403)|Resource not accessible by integration' \
+                  "$error_file"; then
+                  break
+                fi
+                [ "$attempt" -eq 3 ] || sleep "$attempt"
+              done
+            done
+
+            rm -f -- "$error_file"
+            echo "::error::Could not remove stale $label from #$number after bounded retries and verification."
+            return 1
+          }
           release_recovered_lock() {
             [ "${stale_lock:-false}" = true ] || return 0
-            if ! gh api --method DELETE \
-                   "repos/$REPO/issues/$number/labels/ai-rebase-in-progress" \
-                   >/dev/null 2>&1; then
-              lock_gone="$(gh api "repos/$REPO/issues/$number" \
-                --jq '[.labels[].name] | index("ai-rebase-in-progress") == null')"
-              [ "$lock_gone" = true ] || {
-                echo "::error::Could not release stale AI rebase lock on #$number."
-                return 1
-              }
-            fi
-            echo "Released recovered ai-rebase-in-progress lock on #$number."
-          }
-          remove_label_verified() {
-            local label="$1"
-            gh api --method DELETE \
-              "repos/$REPO/issues/$number/labels/$label" \
-              >/dev/null 2>&1 || true
-            absent="$(gh api "repos/$REPO/issues/$number" \
-              --jq "[.labels[].name] | index(\"$label\") == null")"
-            if [ "$absent" != true ]; then
-              echo "::error::Could not remove stale $label from #$number."
+            remove_label_verified ai-rebase-in-progress || {
+              echo "::error::Could not release stale AI rebase lock on #$number."
               return 1
-            fi
+            }
+            echo "Released recovered ai-rebase-in-progress lock on #$number."
           }
           decode_base64url() {
             local value="$1"
@@ -730,6 +793,7 @@ jobs:
               release_recovered_lock
               if [ "$rebase_paused" = true ] \
                  && ! remove_label_verified ai-rebase-paused; then
+                label_cleanup_failed=true
                 [ "$stack_member" != true ] || add_barrier
                 continue
               fi
@@ -742,8 +806,14 @@ jobs:
             if [ "$rebase_owned" != true ]; then
               echo "#$number: no automatic merge or rebase operation is needed."
               release_recovered_lock
-              [ "$rebase_paused" != true ] || remove_label_verified ai-rebase-paused || true
-              [ "$merge_paused" != true ] || remove_label_verified ai-merge-paused || true
+              if [ "$rebase_paused" = true ] \
+                 && ! remove_label_verified ai-rebase-paused; then
+                label_cleanup_failed=true
+              fi
+              if [ "$merge_paused" = true ] \
+                 && ! remove_label_verified ai-merge-paused; then
+                label_cleanup_failed=true
+              fi
               if [ "$stack_member" = true ] && [ "$no_ai_rebase" = true ] \
                  && [ "$rebaseable" = false ]; then
                 add_barrier
@@ -756,6 +826,7 @@ jobs:
             # a stale merge hold cannot survive a successful rebase.
             if [ "$merge_paused" = true ] \
                && ! remove_label_verified ai-merge-paused; then
+              label_cleanup_failed=true
               add_barrier
               continue
             fi
@@ -802,6 +873,7 @@ jobs:
               fi
               echo "#$number: ai-rebase-paused snapshot is stale; retrying the current rebase-owned state."
               if ! remove_label_verified ai-rebase-paused; then
+                label_cleanup_failed=true
                 release_recovered_lock
                 add_barrier
                 continue
@@ -822,6 +894,11 @@ jobs:
                 cascade:$cascade, manual:$manual, stale_lock:$stale_lock}')"
             blocked="$(jq -c --argjson target "$target" '. + [$target]' <<<"$blocked")"
           done < <(jq -r '.[] | @base64' <<<"$candidates")
+
+          if [ "$label_cleanup_failed" = true ]; then
+            echo "::error::One or more stale resolver labels remain after cleanup; refusing to dispatch against ambiguous ownership state."
+            exit 1
+          fi
 
           # Bottom-up ordering: dispatch a blocked PR only when it has no
           # blocked or temporarily non-runnable ancestor. The recursive walk

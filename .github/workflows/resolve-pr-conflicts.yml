@@ -2256,7 +2256,7 @@ jobs:
           claude_args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
-            --max-turns 40
+            --max-turns 100
             --tools "Read,Grep,Glob,Write"
             --allowedTools "Read,Grep,Glob,Write(${{ steps.release_analysis_inputs.outputs.dir }}/out/**)"
             --disallowedTools "WebFetch,WebSearch,Bash,Read(.git/**),Edit(.git/**),Write(.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/sys/**),Edit(/sys/**),Write(/sys/**),Read(/dev/**),Edit(/dev/**),Write(/dev/**),Read(/etc/**),Edit(/etc/**),Write(/etc/**),Read(/run/secrets/**),Edit(/run/secrets/**),Write(/run/secrets/**),Read(/var/run/secrets/**),Edit(/var/run/secrets/**),Write(/var/run/secrets/**),Read(/github/**),Edit(/github/**),Write(/github/**),Read(/home/runner/work/_actions/**),Edit(/home/runner/work/_actions/**),Write(/home/runner/work/_actions/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.*),Edit(/home/runner/.*),Write(/home/runner/.*),Read(/home/runner/.*/**),Edit(/home/runner/.*/**),Write(/home/runner/.*/**),Read(/home/runner/.claude/**),Edit(/home/runner/.claude/**),Write(/home/runner/.claude/**),Read(/home/runner/.claude.json),Edit(/home/runner/.claude.json),Write(/home/runner/.claude.json),Read(/home/runner/.local/**),Edit(/home/runner/.local/**),Write(/home/runner/.cache/**),Read(/home/runner/.config/**),Edit(/home/runner/.config/**),Write(/home/runner/.config/**),Read(/home/runner/.ssh/**),Edit(/home/runner/.ssh/**),Write(/home/runner/.ssh/**),Read(/home/runner/.aws/**),Edit(/home/runner/.aws/**),Write(/home/runner/.aws/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Read(/home/runner/.npmrc),Edit(/home/runner/.npmrc),Write(/home/runner/.npmrc),Read(/home/runner/.netrc),Edit(/home/runner/.netrc),Write(/home/runner/.netrc)"
@@ -3008,7 +3008,7 @@ jobs:
           claude_args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
-            --max-turns 80
+            --max-turns 100
             --allowedTools "Read,Grep,Glob,Edit,Write"
             --disallowedTools "WebFetch,WebSearch,Bash,Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
 

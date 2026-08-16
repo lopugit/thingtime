@@ -378,6 +378,80 @@ function assertAdminModelRouting(resolver, rebase) {
       `${path}: contains no hardcoded Graphify shell model assignment`,
     );
   }
+
+  const claudeActionCount = runtimeFiles.reduce((count, path) => {
+    const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
+    return count +
+      (source.match(/uses:\s*anthropics\/claude-code-action@/gu)?.length ?? 0);
+  }, 0);
+  const turnBudgets = runtimeFiles.flatMap((path) => {
+    const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
+    return [...source.matchAll(/--max-turns\s+(\d+)/gu)].map((match) => ({
+      path,
+      value: Number(match[1]),
+    }));
+  });
+  assert.equal(
+    turnBudgets.length,
+    claudeActionCount,
+    "every Claude action declares an explicit bounded turn budget",
+  );
+  for (const budget of turnBudgets) {
+    assert.equal(
+      budget.value,
+      100,
+      `${budget.path}: Claude turn budget remains 100`,
+    );
+  }
+}
+
+function assertObservableLabelCleanup(rebase) {
+  const scan = workflowBlock(
+    rebase,
+    "      - name: Scan open same-repository PRs via the API\n",
+    "  handoff:\n",
+    "rebase detector label cleanup",
+  );
+  assert.match(
+    scan,
+    /LABEL_WRITE_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \}\}/u,
+    "rebase detector label cleanup: has a configured write-token fallback",
+  );
+  assert.match(
+    scan,
+    /for attempt in 1 2 3/u,
+    "rebase detector label cleanup: retries transient API failures",
+  );
+  assert.match(
+    scan,
+    /GH_TOKEN="\$token" gh api --method DELETE/u,
+    "rebase detector label cleanup: switches credentials without exposing them",
+  );
+  assert.match(
+    scan,
+    /\[redacted-token\]/u,
+    "rebase detector label cleanup: sanitizes surfaced API errors",
+  );
+  assert.match(
+    scan,
+    /refusing another DELETE that could erase a newer hold/u,
+    "rebase detector label cleanup: never retries a successful mutation",
+  );
+  assert.match(
+    scan,
+    /label_cleanup_failed=true/u,
+    "rebase detector label cleanup: records failures instead of swallowing them",
+  );
+  assert.match(
+    scan,
+    /One or more stale resolver labels remain after cleanup/u,
+    "rebase detector label cleanup: fails closed before dispatch",
+  );
+  assert.doesNotMatch(
+    scan,
+    /remove_label_verified ai-(?:rebase|merge)-paused \|\| true/u,
+    "rebase detector label cleanup: never reports success after a failed removal",
+  );
 }
 
 export function assertControlPlaneContract() {
@@ -530,6 +604,7 @@ export function assertControlPlaneContract() {
   }
 
   assertAdminModelRouting(resolver, rebase);
+  assertObservableLabelCleanup(rebase);
 
   console.log("workflow control-plane contract: self-test OK");
 }

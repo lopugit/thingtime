@@ -416,6 +416,11 @@ is fixed, and cite the checklist you ran in the PR description.
       Confirm a still-conflicting PR is recovered into a new exact dispatch,
       while a now-clean PR has the orphaned lock removed without a rewrite. A
       manual clean retry should also clear a stale `ai-rebase-paused` label.
+- [ ] Reject the detector's first stale-label DELETE with the run token, then
+      allow it with `CONFLICT_RESOLVER_PAT`; confirm the API error is visible
+      without credentials, the fallback is verified, and the scan succeeds.
+      Reject every bounded attempt and confirm the detector fails before it
+      dispatches work or reports a healthy stale-label cleanup.
 - [ ] While a run is resolving, push another commit to the PR head. The exact
       force-with-lease must reject the stale rewrite; no partial rebase may
       reach the remote branch and the concurrent commit must remain intact.
