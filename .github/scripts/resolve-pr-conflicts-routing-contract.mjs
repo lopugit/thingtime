@@ -208,6 +208,10 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
   assert.ok(source.includes('${{ needs.model_config.outputs.model_args }}'));
   assert.ok(rebaseActionSource.includes('${{ inputs.model-args }}'));
   assert.doesNotMatch(rebaseActionSource, /--model\s+claude-/, "composite action must not choose its own model");
+  const rebaseRoundCount = rebaseSource.match(/uses: \.\/trusted\/\.github\/actions\/rebase-conflict-round/g)?.length || 0;
+  const rebaseModelArgsCount = rebaseSource.match(/model-args: \$\{\{ steps\.models\.outputs\.model_args \}\}/g)?.length || 0;
+  assert.equal(rebaseRoundCount, 10, "expected ten bounded rebase conflict rounds");
+  assert.equal(rebaseModelArgsCount, rebaseRoundCount, "every rebase round must receive the Admin waterfall");
 
   const aiRuntimePattern = /anthropics\/claude-code-action@|\bbackend=(?:"|')?claude(?:"|')?\b/;
   const actualRuntimeFiles = [
