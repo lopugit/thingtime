@@ -26,10 +26,6 @@ inputs:
   run-url:
     description: Current workflow run URL used for model context and audit messages.
     required: true
-  round:
-    description: One-based bounded conflict-round number.
-    required: false
-    default: "1"
   anthropic-api-key:
     description: Anthropic API key, when API-key authentication is configured.
     required: false
@@ -57,7 +53,7 @@ inputs:
       this round: the action reports retry_needed=true with the unresolved
       list, stages nothing, and leaves the checkout mid-rebase so a later
       round re-exposes the same mechanically-derived conflict set to a fresh
-      model attempt. The final round of a chain must leave this "false".
+      model attempt. The caller enforces the final 500-round ceiling.
     required: false
     default: "false"
 
@@ -161,8 +157,27 @@ runs:
           echo "::error::Trusted round copy does not match the parsed local action."
           exit 1
         }
+        previous_round="${THINGTIME_AI_REBASE_ROUND:-0}"
+        [[ "$previous_round" =~ ^[0-9]+$ ]] || {
+          echo "::error::Invalid inherited AI rebase round counter."
+          exit 1
+        }
+        round_number=$((previous_round + 1))
+        (( round_number <= 500 )) || {
+          echo "::error::The 500-round resolver ceiling was exceeded."
+          exit 1
+        }
+        if (( round_number == 1 )); then
+          {
+            echo "THINGTIME_AI_REBASE_COMPLETE=false"
+            echo "THINGTIME_AI_REBASE_STARTED=false"
+            echo "THINGTIME_AI_REBASE_TERMINAL_REVIEW_NEEDED=false"
+          } >>"$GITHUB_ENV"
+        fi
+        echo "THINGTIME_AI_REBASE_ROUND=$round_number" >>"$GITHUB_ENV"
         {
           echo "round_abs=$round_abs"
+          echo "round_number=$round_number"
           echo "safe_trusted_abs=$safe_trusted"
           echo "trusted_sha256=$safe_hash"
         } >>"$GITHUB_OUTPUT"
@@ -188,10 +203,25 @@ runs:
           "$REAL_REPO_PATH" "$WORKSPACE_PATH" "$ROUND_PATH" || prepare_status=$?
         if [[ $prepare_status -eq 78 ]]; then
           echo "terminal_review_needed=true" >>"$GITHUB_OUTPUT"
+          echo "THINGTIME_AI_REBASE_TERMINAL_REVIEW_NEEDED=true" >>"$GITHUB_ENV"
         else
           echo "terminal_review_needed=false" >>"$GITHUB_OUTPUT"
         fi
         (( prepare_status == 0 )) || exit "$prepare_status"
+
+    - name: Record this mechanically-derived conflict set for the caller
+      if: steps.prepare.outcome == 'success'
+      shell: bash
+      env:
+        AI_CONFLICT_PATHS: ${{ steps.prepare.outputs.ai_conflict_paths }}
+      run: |
+        set -euo pipefail
+        delimiter="THINGTIME_AI_PATHS_${RANDOM}_$$_$(date +%s)"
+        {
+          echo "THINGTIME_AI_REBASE_CONFLICT_PATHS<<$delimiter"
+          printf '%s\n' "$AI_CONFLICT_PATHS"
+          echo "$delimiter"
+        } >>"$GITHUB_ENV"
 
     - name: Require an AI credential
       if: steps.prepare.outputs.needs_ai == 'true'
@@ -209,7 +239,9 @@ runs:
       id: attempt
       if: steps.prepare.outputs.needs_ai == 'true'
       shell: bash
-      run: echo "started=true" >>"$GITHUB_OUTPUT"
+      run: |
+        echo "started=true" >>"$GITHUB_OUTPUT"
+        echo "THINGTIME_AI_REBASE_STARTED=true" >>"$GITHUB_ENV"
 
     - name: Resolve this rebase conflict set with Claude in scratch
       if: steps.prepare.outputs.needs_ai == 'true'
@@ -221,8 +253,9 @@ runs:
         github_token: ${{ inputs.github-token }}
         allowed_bots: ${{ inputs.allowed-bots }}
         prompt: |
-          You are resolving round ${{ inputs.round }} of git rebase conflicts for
-          PR #${{ inputs.pr-number }} (`${{ inputs.head-ref }}` onto `${{ inputs.base-ref }}`).
+          You are resolving bounded git rebase conflict round
+          ${{ steps.bootstrap.outputs.round_number }} of at most 500 for PR
+          #${{ inputs.pr-number }} (`${{ inputs.head-ref }}` onto `${{ inputs.base-ref }}`).
           The audit run is ${{ inputs.run-url }}.
 
           The current workspace is a disposable, REPO-LESS scratch directory.
@@ -256,7 +289,7 @@ runs:
         claude_args: |
           ${{ inputs.model-args }}
           --effort max
-          --max-turns 100
+          --max-turns 500
           --tools "Read,Edit,Write"
           --allowedTools "Read,Edit,Write"
           --disallowedTools "WebFetch,WebSearch,Bash,Read(.git/**),Edit(.git/**),Write(.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/sys/**),Edit(/sys/**),Write(/sys/**),Read(/dev/**),Edit(/dev/**),Write(/dev/**),Read(/etc/**),Edit(/etc/**),Write(/etc/**),Read(/run/secrets/**),Edit(/run/secrets/**),Write(/run/secrets/**),Read(/var/run/secrets/**),Edit(/var/run/secrets/**),Write(/var/run/secrets/**),Read(/github/**),Edit(/github/**),Write(/github/**),Read(/home/runner/work/_actions/**),Edit(/home/runner/work/_actions/**),Write(/home/runner/work/_actions/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(${{ steps.prepare.outputs.repo_abs }}/**),Edit(${{ steps.prepare.outputs.repo_abs }}/**),Write(${{ steps.prepare.outputs.repo_abs }}/**),Read(/home/runner/.*),Edit(/home/runner/.*),Write(/home/runner/.*),Read(/home/runner/.*/**),Edit(/home/runner/.*/**),Write(/home/runner/.*/**),Read(/home/runner/.claude/**),Edit(/home/runner/.claude/**),Write(/home/runner/.claude/**),Read(/home/runner/.claude.json),Edit(/home/runner/.claude.json),Write(/home/runner/.claude.json),Read(/home/runner/.local/**),Edit(/home/runner/.local/**),Write(/home/runner/.local/**),Read(/home/runner/.cache/**),Edit(/home/runner/.cache/**),Write(/home/runner/.cache/**),Read(/home/runner/.config/**),Edit(/home/runner/.config/**),Write(/home/runner/.config/**),Read(/home/runner/.ssh/**),Edit(/home/runner/.ssh/**),Write(/home/runner/.ssh/**),Read(/home/runner/.aws/**),Edit(/home/runner/.aws/**),Write(/home/runner/.aws/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Read(/home/runner/.npmrc),Edit(/home/runner/.npmrc),Write(/home/runner/.npmrc),Read(/home/runner/.netrc),Edit(/home/runner/.netrc),Write(/home/runner/.netrc)"
@@ -665,8 +698,8 @@ runs:
         LC_ALL=C sort -u -o "$next_conflicts" "$next_conflicts"
         next_conflict_count="$(wc -l <"$next_conflicts")"
         next_conflict_path_bytes="$(wc -c <"$next_conflicts")"
-        if (( next_conflict_count > 200 \
-              || next_conflict_path_bytes > 16384 )); then
+        if (( next_conflict_count > 500 \
+              || next_conflict_path_bytes > 65536 )); then
           echo "::error::Next conflict path set exceeds the safe workflow-output cap ($next_conflict_count files, $next_conflict_path_bytes bytes)."
           exit 1
         fi
@@ -679,6 +712,7 @@ runs:
           emit complete true
           emit conflicted false
           emit_paths conflict_paths "$next_conflicts"
+          echo "THINGTIME_AI_REBASE_COMPLETE=true" >>"$GITHUB_ENV"
           exit 0
         fi
         if [[ -s "$next_conflicts" ]] \

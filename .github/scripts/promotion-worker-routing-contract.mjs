@@ -114,7 +114,7 @@ assert.match(workflow, /source_lineage_status:\$source_lineage_status/);
 assert.match(workflow, /actions\/workflows\/promote-features-to-main\.yml\/dispatches/);
 assert.match(workflow, /paused_label=.*ai-promotion-paused/);
 assert.match(workflow, /\[ "\$paused" = true \] && \[ "\$paused_label" = true \]/);
-assert.match(workflow, /CONFLICT_PATHS: \$\{\{ steps\.promotion_ai_round_3\.outputs\.ai_conflict_paths \|\| steps\.promotion_ai_round_2\.outputs\.ai_conflict_paths \|\| steps\.promotion_ai_round\.outputs\.ai_conflict_paths \}\}/);
+assert.match(workflow, /CONFLICT_PATHS: \$\{\{ env\.THINGTIME_AI_REBASE_CONFLICT_PATHS \}\}/);
 assert.doesNotMatch(workflow, /CONFLICT_PATHS: \$\{\{ steps\.prepare_promotion\.outputs\.conflict_paths \}\}/);
 assert.match(workflow, /CI_SENSITIVE_PATHS: \$\{\{ steps\.prepare_promotion\.outputs\.ci_sensitive_paths \}\}/);
 assert.match(workflow, /REVIEW_GATED: \$\{\{ steps\.prepare_promotion\.outputs\.review_gated \}\}/);
@@ -145,7 +145,7 @@ assert.match(workflow, /retry_without_pause=true/);
 assert.match(workflow, /TERMINAL_REVIEW_NEEDED:/);
 
 const aiBlock = workflow.slice(
-  workflow.indexOf("      - name: Resolve the synthetic promotion conflict in repo-less scratch"),
+  workflow.indexOf("      - name: Resolve synthetic promotion conflicts (round 1 of up to 500)"),
   workflow.indexOf("      - name: Verify the complete resolved source patch"),
 );
 assert.doesNotMatch(aiBlock, /CONFLICT_RESOLVER_PAT|PUSH_PAT|PROMOTION_PAT/);
@@ -183,14 +183,31 @@ assert.match(worker, /promotion-unmerged-paths\.zlist/);
 // Replay rounds (owner decision, 2026-08-12): the promotion chain keeps the
 // model with bounded retries, prompts it for a FAITHFUL REPLAY (never the
 // stack flow's semantic-union framing), and settles provably-superseded
-// content deterministically. The final round must stay strict.
+// content deterministically. The caller enforces the final 500-round stop.
 assert.match(action, /allow-unresolved/);
 assert.match(action, /retry_needed=true/);
 assert.match(action, /FAITHFUL REPLAY/);
 assert.match(action, /preserve the semantic\n? *union/);
-assert.match(workflow, /id: promotion_ai_round_2/);
-assert.match(workflow, /id: promotion_ai_round_3/);
-assert.match(workflow, /steps\.promotion_ai_round_2\.outputs\.retry_needed == 'true'/);
+assert.match(workflow, /&thingtime_promotion_conflict_round_action/);
+assert.match(workflow, /&thingtime_promotion_conflict_round_inputs/);
+assert.match(workflow, /&thingtime_promotion_conflict_retry/);
+assert.match(workflow, /uses: \*thingtime_promotion_conflict_round_action/);
+const promotionRoundAliasCount =
+  workflow.match(/^\s{6}- \*thingtime_promotion_conflict_retry$/gmu)?.length || 0;
+assert.equal(2 + promotionRoundAliasCount, 500, "promotion exposes 500 bounded AI rounds");
+assert.match(workflow, /Enforce the 500-round promotion ceiling/);
+assert.match(workflow, /env\.THINGTIME_AI_REBASE_COMPLETE != 'true'/);
+assert.match(action, /THINGTIME_AI_REBASE_ROUND/);
+assert.match(action, /THINGTIME_AI_REBASE_COMPLETE=true/);
+assert.match(action, /THINGTIME_AI_REBASE_STARTED=true/);
+assert.match(action, /THINGTIME_AI_REBASE_TERMINAL_REVIEW_NEEDED=true/);
+assert.match(action, /--max-turns 500/);
+assert.match(action, /next_conflict_count > 500/);
+assert.match(action, /next_conflict_path_bytes > 65536/);
+assert.match(prepareRound, /AI_REBASE_MAX_CONFLICT_FILES:-500/);
+assert.match(prepareRound, /AI_REBASE_MAX_TOTAL_CONFLICT_FILES:-500/);
+assert.match(prepareRound, /AI_REBASE_MAX_CONFLICT_PATH_BYTES:-65536/);
+assert.match(worker, /path_count <= 500 && path_bytes <= 65536/);
 assert.match(worker, /already contained in the source history/);
 // The advisory release analysis (owner request, 2026-08-12): a model pass
 // over precomputed three-branch history + PR inventory, posted on the

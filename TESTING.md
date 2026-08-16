@@ -421,6 +421,12 @@ is fixed, and cite the checklist you ran in the PR description.
       without credentials, the fallback is verified, and the scan succeeds.
       Reject every bounded attempt and confirm the detector fails before it
       dispatches work or reports a healthy stale-label cleanup.
+- [ ] Exercise both the stack-rebase and promotion replay chains past their old
+      10- and 3-round ceilings. Confirm the aliased steps increment the trusted
+      round counter, stop immediately after completion, and fail only after the
+      500th unresolved round. A 500-file conflict set must pass count/path
+      intake while byte, scope, secret, symlink, and exact-ref guards remain
+      enforced.
 - [ ] While a run is resolving, push another commit to the PR head. The exact
       force-with-lease must reject the stale rewrite; no partial rebase may
       reach the remote branch and the concurrent commit must remain intact.

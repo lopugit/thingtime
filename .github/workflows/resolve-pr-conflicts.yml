@@ -1574,7 +1574,7 @@ jobs:
       && inputs.pr_number == ''
       && inputs.branch == ''
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 360
     permissions:
       actions: write
       contents: write
@@ -1717,18 +1717,19 @@ jobs:
           [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$RESERVATION_SHA" ] \
             || { echo "::error::Reservation branch moved before AI started; refusing to overwrite it."; exit 1; }
 
-      - name: Resolve the synthetic promotion conflict in repo-less scratch
-        id: promotion_ai_round
+      # The first invocation plus 499 YAML-alias retries expand to 500
+      # sequential promotion-resolution rounds. The shared composite action
+      # records its round number and completion state through GITHUB_ENV.
+      - name: Resolve synthetic promotion conflicts (round 1 of up to 500)
         if: steps.prepare_promotion.outputs.conflicted == 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
+        uses: &thingtime_promotion_conflict_round_action ./trusted/.github/actions/rebase-conflict-round
+        with: &thingtime_promotion_conflict_round_inputs
           repo-path: ${{ steps.repo.outputs.repo_path }}
           deterministic-conflict-paths: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
           pr-number: ${{ inputs.promotion_source_pr }}
           base-ref: ${{ needs.promotion_validate.outputs.base_ref }}
           head-ref: ${{ needs.promotion_validate.outputs.promotion_branch }}
           run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          round: "1"
           conflict-policy: promotion
           allow-unresolved: "true"
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -1737,52 +1738,522 @@ jobs:
           allowed-bots: github-actions
           model-args: ${{ needs.model_config.outputs.model_args }}
 
-      - name: Retry the synthetic promotion conflict (round 2)
-        id: promotion_ai_round_2
-        if: steps.promotion_ai_round.outcome == 'success' && steps.promotion_ai_round.outputs.retry_needed == 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ steps.repo.outputs.repo_path }}
-          deterministic-conflict-paths: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
-          pr-number: ${{ inputs.promotion_source_pr }}
-          base-ref: ${{ needs.promotion_validate.outputs.base_ref }}
-          head-ref: ${{ needs.promotion_validate.outputs.promotion_branch }}
-          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          round: "2"
-          conflict-policy: promotion
-          allow-unresolved: "true"
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          allowed-bots: github-actions
-          model-args: ${{ needs.model_config.outputs.model_args }}
+      - &thingtime_promotion_conflict_retry
+        name: Continue synthetic promotion conflict resolution (up to round 500)
+        if: steps.prepare_promotion.outputs.conflicted == 'true' && env.THINGTIME_AI_REBASE_COMPLETE != 'true' && success()
+        uses: *thingtime_promotion_conflict_round_action
+        with: *thingtime_promotion_conflict_round_inputs
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
+      - *thingtime_promotion_conflict_retry
 
-      - name: Retry the synthetic promotion conflict (round 3)
-        id: promotion_ai_round_3
-        if: steps.promotion_ai_round_2.outcome == 'success' && steps.promotion_ai_round_2.outputs.retry_needed == 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ steps.repo.outputs.repo_path }}
-          deterministic-conflict-paths: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
-          pr-number: ${{ inputs.promotion_source_pr }}
-          base-ref: ${{ needs.promotion_validate.outputs.base_ref }}
-          head-ref: ${{ needs.promotion_validate.outputs.promotion_branch }}
-          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          round: "3"
-          conflict-policy: promotion
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          allowed-bots: github-actions
-          model-args: ${{ needs.model_config.outputs.model_args }}
+      - name: Enforce the 500-round promotion ceiling
+        if: steps.prepare_promotion.outputs.conflicted == 'true' && env.THINGTIME_AI_REBASE_COMPLETE != 'true' && success()
+        shell: bash
+        run: |
+          echo "::error::Promotion conflict-round cap reached after 500 model attempts."
+          exit 1
 
       - name: Verify the complete resolved source patch
         id: verify_promotion
         if: >-
           steps.prepare_promotion.outputs.complete == 'true'
-          || steps.promotion_ai_round.outputs.complete == 'true'
-          || steps.promotion_ai_round_2.outputs.complete == 'true'
-          || steps.promotion_ai_round_3.outputs.complete == 'true'
+          || env.THINGTIME_AI_REBASE_COMPLETE == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1794,7 +2265,7 @@ jobs:
       - name: Refresh derived Graphify outputs from the promotion-base side
         id: promotion_graphify
         if: steps.verify_promotion.outputs.verified == 'true'
-        timeout-minutes: 25
+        timeout-minutes: 360
         shell: bash
         env:
           GRAPHIFY_VERSION: "0.9.4"
@@ -1819,7 +2290,7 @@ jobs:
           # This is the exact model-edit allowlist, not the full original
           # conflict set. Derived graphify-out/** paths are deterministic and
           # must never appear in the AI attestation.
-          CONFLICT_PATHS: ${{ steps.promotion_ai_round_3.outputs.ai_conflict_paths || steps.promotion_ai_round_2.outputs.ai_conflict_paths || steps.promotion_ai_round.outputs.ai_conflict_paths }}
+          CONFLICT_PATHS: ${{ env.THINGTIME_AI_REBASE_CONFLICT_PATHS }}
           DETERMINISTIC_PATHS: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
           GRAPHIFY_MODE: ${{ steps.promotion_graphify.outputs.refreshed || 'failed' }}
           GRAPHIFY_SEMANTIC: ${{ steps.promotion_graphify.outputs.semantic || 'unavailable' }}
@@ -1827,7 +2298,7 @@ jobs:
           WORKFLOW_PATHS: ${{ steps.prepare_promotion.outputs.workflow_paths }}
           CI_SENSITIVE_PATHS: ${{ steps.prepare_promotion.outputs.ci_sensitive_paths }}
           REVIEW_GATED: ${{ steps.prepare_promotion.outputs.review_gated }}
-          AI_STARTED: ${{ steps.promotion_ai_round.outputs.ai_started == 'true' }}
+          AI_STARTED: ${{ env.THINGTIME_AI_REBASE_STARTED == 'true' }}
         run: |
           set -euo pipefail
           repo_path="${{ steps.repo.outputs.repo_path }}"
@@ -2256,7 +2727,7 @@ jobs:
           claude_args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
-            --max-turns 100
+            --max-turns 500
             --tools "Read,Grep,Glob,Write"
             --allowedTools "Read,Grep,Glob,Write(${{ steps.release_analysis_inputs.outputs.dir }}/out/**)"
             --disallowedTools "WebFetch,WebSearch,Bash,Read(.git/**),Edit(.git/**),Write(.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/sys/**),Edit(/sys/**),Write(/sys/**),Read(/dev/**),Edit(/dev/**),Write(/dev/**),Read(/etc/**),Edit(/etc/**),Write(/etc/**),Read(/run/secrets/**),Edit(/run/secrets/**),Write(/run/secrets/**),Read(/var/run/secrets/**),Edit(/var/run/secrets/**),Write(/var/run/secrets/**),Read(/github/**),Edit(/github/**),Write(/github/**),Read(/home/runner/work/_actions/**),Edit(/home/runner/work/_actions/**),Write(/home/runner/work/_actions/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.*),Edit(/home/runner/.*),Write(/home/runner/.*),Read(/home/runner/.*/**),Edit(/home/runner/.*/**),Write(/home/runner/.*/**),Read(/home/runner/.claude/**),Edit(/home/runner/.claude/**),Write(/home/runner/.claude/**),Read(/home/runner/.claude.json),Edit(/home/runner/.claude.json),Write(/home/runner/.claude.json),Read(/home/runner/.local/**),Edit(/home/runner/.local/**),Write(/home/runner/.cache/**),Read(/home/runner/.config/**),Edit(/home/runner/.config/**),Write(/home/runner/.config/**),Read(/home/runner/.ssh/**),Edit(/home/runner/.ssh/**),Write(/home/runner/.ssh/**),Read(/home/runner/.aws/**),Edit(/home/runner/.aws/**),Write(/home/runner/.aws/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Read(/home/runner/.npmrc),Edit(/home/runner/.npmrc),Write(/home/runner/.npmrc),Read(/home/runner/.netrc),Edit(/home/runner/.netrc),Write(/home/runner/.netrc)"
@@ -2329,10 +2800,10 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          AI_STARTED: ${{ steps.promotion_ai_round.outputs.ai_started }}
-          TERMINAL_REVIEW_NEEDED: ${{ steps.source_authority.outputs.terminal_review_needed == 'true' || steps.prepare_promotion.outputs.terminal_review_needed == 'true' || steps.promotion_ai_round.outputs.terminal_review_needed == 'true' || steps.promotion_ai_round_2.outputs.terminal_review_needed == 'true' || steps.promotion_ai_round_3.outputs.terminal_review_needed == 'true' || steps.promotion_publication_policy.outputs.terminal_review_needed == 'true' }}
+          AI_STARTED: ${{ env.THINGTIME_AI_REBASE_STARTED }}
+          TERMINAL_REVIEW_NEEDED: ${{ steps.source_authority.outputs.terminal_review_needed == 'true' || steps.prepare_promotion.outputs.terminal_review_needed == 'true' || env.THINGTIME_AI_REBASE_TERMINAL_REVIEW_NEEDED == 'true' || steps.promotion_publication_policy.outputs.terminal_review_needed == 'true' }}
           PUBLISH_OUTCOME: ${{ steps.publish_promotion.outcome }}
-          CONFLICT_PATHS: ${{ steps.promotion_ai_round_3.outputs.ai_conflict_paths || steps.promotion_ai_round_2.outputs.ai_conflict_paths || steps.promotion_ai_round.outputs.ai_conflict_paths }}
+          CONFLICT_PATHS: ${{ env.THINGTIME_AI_REBASE_CONFLICT_PATHS }}
           DETERMINISTIC_PATHS: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
           GRAPHIFY_MODE: ${{ steps.promotion_graphify.outputs.refreshed || 'failed' }}
           GRAPHIFY_SEMANTIC: ${{ steps.promotion_graphify.outputs.semantic || 'unavailable' }}
@@ -2602,7 +3073,7 @@ jobs:
       && inputs.pr_number != ''
       && inputs.branch == ''
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    timeout-minutes: 360
     permissions:
       actions: write
       contents: write
@@ -2665,7 +3136,7 @@ jobs:
             body="$RUNNER_TEMP/resolve-start-comment.md"
             {
               printf '🤖 **Auto-resolve running** — the conflict resolver started working on this PR at %s.\n\n' "$started"
-              printf 'Expected to finish around **%s** (resolutions typically land in 3-8 minutes; the job times out at 30). ' "$eta"
+              printf 'Expected to finish around **%s** (most resolutions still land in 3-8 minutes; the hosted-runner ceiling is 360). ' "$eta"
               printf 'On success a merge commit resolving the conflicts is pushed to this branch and a result comment follows — no manual action is needed meanwhile.\n\n'
               printf '[Live status](%s)\n\n%s\n' "$RUN_URL" "$marker"
             } > "$body"
@@ -3008,7 +3479,7 @@ jobs:
           claude_args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
-            --max-turns 100
+            --max-turns 500
             --allowedTools "Read,Grep,Glob,Edit,Write"
             --disallowedTools "WebFetch,WebSearch,Bash,Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
 
@@ -3199,7 +3670,7 @@ jobs:
         # any failure here must not skip the push step below, which is what
         # actually publishes the merge commit.
         continue-on-error: true
-        timeout-minutes: 25
+        timeout-minutes: 360
         env:
           # Pinned: the AST cache is version-namespaced and untracked, so CI
           # always re-extracts. An unpinned upgrade whose output format drifted

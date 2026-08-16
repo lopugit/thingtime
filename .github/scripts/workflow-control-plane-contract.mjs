@@ -327,18 +327,23 @@ function assertAdminModelRouting(resolver, rebase) {
     rebaseAction.includes("${{ inputs.model-args }}"),
     "rebase Claude action: uses the validated Admin waterfall passed by the workflow",
   );
-  const rebaseActionCalls = rebase.match(
-    /uses: \.\/trusted\/\.github\/actions\/rebase-conflict-round/gu,
-  ) ?? [];
+  assert.match(
+    rebase,
+    /uses: &thingtime_rebase_conflict_round_action \.\/trusted\/\.github\/actions\/rebase-conflict-round/u,
+    "rebase workflow: anchors the trusted conflict action",
+  );
+  assert.match(
+    rebase,
+    /uses: \*thingtime_rebase_conflict_round_action/u,
+    "rebase workflow: reuses the trusted conflict action anchor",
+  );
+  const rebaseActionCalls = 2 +
+    (rebase.match(/^\s{6}- \*thingtime_rebase_conflict_retry$/gmu)?.length ?? 0);
   const rebaseModelInputs = rebase.match(
     /model-args: \$\{\{ steps\.models\.outputs\.model_args \}\}/gu,
   ) ?? [];
-  assert.ok(rebaseActionCalls.length > 0, "rebase workflow: invokes conflict action");
-  assert.equal(
-    rebaseModelInputs.length,
-    rebaseActionCalls.length,
-    "rebase workflow: every conflict round receives the Admin waterfall",
-  );
+  assert.equal(rebaseActionCalls, 500, "rebase workflow: exposes 500 conflict rounds");
+  assert.equal(rebaseModelInputs.length, 1, "rebase workflow: aliased rounds share the Admin waterfall");
 
   const runtimeFiles = [...yamlFiles(workflows), ...yamlFiles(actions)]
     .filter((path) => {
@@ -399,8 +404,8 @@ function assertAdminModelRouting(resolver, rebase) {
   for (const budget of turnBudgets) {
     assert.equal(
       budget.value,
-      100,
-      `${budget.path}: Claude turn budget remains 100`,
+      500,
+      `${budget.path}: Claude turn budget remains 500`,
     );
   }
 }
