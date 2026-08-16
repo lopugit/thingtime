@@ -48,6 +48,7 @@ export type PostComment = {
   type: PostType;
   text: string;
   images: string[];
+	attachments: PublicAttachment[];
   listing: MarketplaceListing | null;
   thing: Record<string, any> | null;
   tags: string[];

@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Button, Flex, Image, Menu, MenuButton, MenuItem, MenuList, Portal } from '@chakra-ui/react';
 
 import { ReactionControl } from '../Feed/ReactionControl';
+import { PostAttachments } from '../Attachments/PostAttachments';
 import { timeAgo } from '../Feed/feedTypes';
 import { REACTION_EMOJIS } from '~/schemas/registry';
 import { CustomEmojiImage, renderTextWithEmojis } from './CustomEmojiImage';
@@ -23,7 +24,9 @@ const AVATAR_SIZE = 30;
 const Avatar = ({ profile, size = AVATAR_SIZE }: { profile: ChatMessage['author']; size?: number }) => {
   const letter = (profile?.displayName || profile?.username || '?').slice(0, 1).toUpperCase();
   if (profile?.avatarUrl) {
-    return <Image src={profile.avatarUrl} alt={letter} width={`${size}px`} height={`${size}px`} borderRadius="full" objectFit="cover" flexShrink={0} />;
+		return (
+			<Image src={profile.avatarUrl} alt={letter} width={`${size}px`} height={`${size}px`} borderRadius="full" objectFit="cover" flexShrink={0} />
+		);
   }
   return (
     <Flex
@@ -149,19 +152,20 @@ export const MessageRow = (props: MessageRowProps) => {
           props.onReact(message, token);
           close();
         }}
-        onUploadRequest={props.onUploadEmoji ? () => { close(); props.onUploadEmoji!(); } : undefined}
+				onUploadRequest={
+					props.onUploadEmoji
+						? () => {
+								close();
+								props.onUploadEmoji!();
+						  }
+						: undefined
+				}
       />
     </Box>
   );
 
   const toolbar = message.deleted ? null : (
-    <Flex
-      gap={0}
-      opacity={{ base: 1, md: hovered ? 1 : 0 }}
-      transition="opacity 0.12s ease"
-      align="center"
-      flexShrink={0}
-    >
+		<Flex gap={0} opacity={{ base: 1, md: hovered ? 1 : 0 }} transition="opacity 0.12s ease" align="center" flexShrink={0}>
       <ReactionControl
         trigger={
           <Button size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)" title="React">
@@ -214,7 +218,7 @@ export const MessageRow = (props: MessageRowProps) => {
       <Box as="span" fontWeight={600}>
         {message.replyTo.authorName || 'Someone'}
       </Box>{' '}
-      {message.replyTo.deleted ? 'Deleted message' : message.replyTo.text || '…'}
+			{message.replyTo.deleted ? 'Deleted message' : message.replyTo.text || (message.replyTo.attachmentCount ? '📎 Attachment' : '…')}
     </Box>
   ) : null;
 
@@ -265,7 +269,14 @@ export const MessageRow = (props: MessageRowProps) => {
                 overflowWrap="anywhere"
                 title={`${new Date(message.createdAt).toLocaleString()}${message.editedAt ? ' · edited' : ''}`}
               >
-                {message.deleted ? deletedBody : bodyText}
+								{message.deleted ? (
+									deletedBody
+								) : (
+									<Flex flexDirection="column" rowGap={message.text ? 2 : 0}>
+										<PostAttachments attachments={message.attachments} compact ariaLabel="Message attachments" />
+										{bodyText}
+									</Flex>
+								)}
                 {message.editedAt && !message.deleted ? (
                   <Box as="span" fontSize="10px" opacity={0.7} marginLeft={1}>
                     (edited)
@@ -273,13 +284,7 @@ export const MessageRow = (props: MessageRowProps) => {
                 ) : null}
               </Box>
               {reactionEntries.length ? (
-                <Flex
-                  position="absolute"
-                  bottom="-11px"
-                  right={isMine ? 'auto' : '6px'}
-                  left={isMine ? '6px' : 'auto'}
-                  gap="2px"
-                >
+								<Flex position="absolute" bottom="-11px" right={isMine ? 'auto' : '6px'} left={isMine ? '6px' : 'auto'} gap="2px">
                   {reactionEntries.map(reactionChip)}
                 </Flex>
               ) : null}
@@ -328,6 +333,11 @@ export const MessageRow = (props: MessageRowProps) => {
               </Box>
             ) : null}
           </Box>
+					{!message.deleted && message.attachments.length ? (
+						<Box marginTop={message.text ? 2 : 0} maxWidth="560px">
+							<PostAttachments attachments={message.attachments} compact ariaLabel="Message attachments" />
+						</Box>
+					) : null}
           {reactionEntries.length ? (
             <Flex gap="4px" marginTop="4px" wrap="wrap">
               {reactionEntries.map(reactionChip)}

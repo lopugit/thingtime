@@ -8,7 +8,15 @@ import type { PublicAttachment } from './attachmentTypes';
 const BORDER = '1px solid var(--tt-border, #ececef)';
 const MUTED = 'var(--tt-muted, #9a9aa6)';
 
-export const PostAttachments = ({ attachments, compact }: { attachments?: PublicAttachment[]; compact?: boolean }) => {
+export const PostAttachments = ({
+	attachments,
+	compact,
+	ariaLabel = 'Attachments'
+}: {
+	attachments?: PublicAttachment[];
+	compact?: boolean;
+	ariaLabel?: string;
+}) => {
 	const normalized = (attachments || []).flatMap((attachment) => {
 		const value = normalizePublicAttachment(attachment);
 		return value ? [value] : [];
@@ -17,10 +25,12 @@ export const PostAttachments = ({ attachments, compact }: { attachments?: Public
 
 	const images = normalized.filter((attachment) => attachment.mediaKind === 'image');
 	const videos = normalized.filter((attachment) => attachment.mediaKind === 'video');
+	// The public normalizer deliberately maps audio to the generic file kind so
+	// it stays a safe download row rather than an autoplay-capable player.
 	const files = normalized.filter((attachment) => attachment.mediaKind === 'file');
 
 	return (
-		<Flex flexDirection="column" rowGap={compact ? 2 : 3} aria-label="Post attachments">
+		<Flex flexDirection="column" rowGap={compact ? 2 : 3} aria-label={ariaLabel}>
 			{images.length > 0 && (
 				<Grid templateColumns={images.length === 1 ? '1fr' : 'repeat(2, minmax(0, 1fr))'} gap={1.5}>
 					{images.map((attachment, index) => (

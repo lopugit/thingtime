@@ -6,8 +6,9 @@ export type PostAttachmentRequest =
 const hasOwn = (value: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 
 // `attachmentIds` is a server feature flag on the generic things body, not a
-// generic Thing field. Keep its routing rules pure and explicit so no caller
-// can smuggle attachment context into comments, shares, upserts, or updates.
+// generic Thing field. This helper deliberately covers only generic/legacy
+// post creation; the dedicated comment and Messenger routes apply their own
+// purpose-bound attachment contracts. Shares, upserts and updates stay closed.
 export const postAttachmentRequest = (method: string, body: unknown, isUnified: boolean): PostAttachmentRequest => {
 	if (!body || typeof body !== 'object' || Array.isArray(body)) return { ok: true, present: false };
 	const input = body as Record<string, unknown>;

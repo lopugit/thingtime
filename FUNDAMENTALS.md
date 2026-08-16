@@ -51,7 +51,7 @@ then everything below the current version can safely be deleted. Runbook and
 edge cases live in `api/utils/migrations/migrations.ts`.
 
 | Collection                                                                                                                                 | Holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `things`                                                                                                                                   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `attachment`, `data`; messenger kinds (dedicated endpoints only, membership-gated, invisible to generic reads: see `api/utils/messenger/`): `chat`, `chat-member`, `chat-message`, `chat-section`, `community`, `community-member`, `community-invite`, `custom-emoji`, `follow`; control-plane kinds: `app` (registered client identity, origin allowlist, and aggregate app-byte ledger), `subscription-tier` (immutable versioned catalog revisions with live/draft/archived lifecycle, pricing, inclusions, and quota defaults), `subscription` (an exact tier-revision/quota snapshot plus the authoritative account-byte ledger per user — app plans live atomically on app Things), `app-storage` (protected per-app-user usage + optional sub-tier), `service-quota` (protected operational admission state), `account-link` (owned accounts + app co-managers, many-to-many), `migration-diagnostic` (short-lived, private admin migration error reports), and the protected CI family (`ci-repository`, `ci-feature`, `ci-branch`, `ci-pull-request`, `ci-workflow-run`, `ci-deployment`, `ci-preview`, `ci-dispatch`, `ci-event`). Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
 | `sessions`                                                                                                                                 | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `rosters`                                                                                                                                  | account-switcher rosters (TTL-reaped)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -114,7 +114,7 @@ System-kind rules (never bypass):
 ### Appended/child data is relational — never an unbounded embedded array
 
 Data that accumulates on a parent (post **reactions**, post **comments**, and
-post **attachments**) is stored as its OWN atomic `things` doc
+protected **attachments**) is stored as its OWN atomic `things` doc
 (`thingtime: ['reaction']`, `thingtime: ['comment']`, …) and aggregated back on
 read. The canonical v2 child relation is root `targetId`, containing the
 parent's stable `shareId`; `parentId` is legacy compatibility only. NEVER append
@@ -130,7 +130,16 @@ How (see `api/utils/things/things.ts`):
 
 - Canonical child records are full Things with a stable `shareId`, `ownerId`,
   their `thingtime` discriminator, server-validated root `targetId`, and payload.
-  Protected attachment binding sets `targetId` server-side. A child without a
+  Protected attachment binding sets `targetId` server-side. Post attachments
+  carry server-owned purpose `post` and inherit the exact post ACL; comment and
+  reply attachments carry purpose `comment` and walk the complete parent chain
+  to that root ACL. Message/thread attachments carry purpose `message` and
+  authorize against the exact live message plus current chat membership.
+  Custom emoji images carry purpose `emoji` and bind to the exact owner/scope.
+  Profile attachments carry server-owned purpose `profile` plus exact `avatar`
+  or `banner` slot; the user root stores the current attachment id and content
+  authorization rechecks that exact slot reference. No purpose can be replayed
+  into another surface. A child without a
   `shareId`, or any child using `kind`/`parentId` instead of
   `thingtime`/`targetId`, is legacy compatibility data, not the shape for new
   writers.
@@ -143,9 +152,11 @@ How (see `api/utils/things/things.ts`):
   product limits, not structural safety rails.
 - Legacy embedded data folds in on read and migrates to children on first write.
 - Deleting a parent drains the complete transitive attachment graph
-  (`targetId` plus legacy `parentId`) child-first in bounded transactions; the
-  parent remains a retry anchor until no comments/replies/reactions/saves can
-  survive it.
+  (`targetId` plus legacy `parentId`) child-first in bounded transactions. Each
+  protected attachment's exact S3 version is permanently deleted before its
+  Mongo row and quota reservation can disappear; the parent remains a retry
+  anchor until no comments/replies/reactions/saves/attachment bytes can survive
+  it.
 
 ### Account storage is one exact, transactional ledger
 
@@ -164,6 +175,13 @@ Uploads reserve the complete logical allocation transactionally before S3
 accepts data, and deletion refunds it only after the private object is confirmed
 inaccessible. Ordinary user-authored Things cannot supply the protected root
 envelope or opt themselves into or out of object-byte accounting.
+
+User Things remain non-billable identity/control-plane records. Managed avatar
+and banner objects are still ordinary billable protected attachment Things:
+their server-owned root references do not move object bytes into the user
+crystal or hide them from the account ledger. An external profile image URL is
+only bounded metadata and never causes Thingtime to fetch or store the remote
+image bytes.
 
 `currentContentStorageSizeBytes()` is the shared proof used by every
 incremental writer: current schema + array `thingtime` + current content stamp

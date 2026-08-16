@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
 
 import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
@@ -15,8 +16,10 @@ import {
 } from '../storage/storageCore';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { userSubscriptionLedgerMatch } from '../subscriptions/subscriptionIdentity';
-import { toAttachmentPublicMetadata, type AttachmentPublicMetadata } from '../attachments/attachmentCore';
+import { attachmentCascadeCleanupTargets } from '../attachments/attachmentCascadeCore';
+import { toAttachmentPublicMetadata, type AttachmentPublicMetadata, type AttachmentPurpose } from '../attachments/attachmentCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
+import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
   ACL_ALL,
   ACL_FAMILY,
@@ -147,12 +150,19 @@ export type ThingDoc = {
 	objectKey?: string;
 	objectVersionId?: string;
 	attachmentRequestFingerprint?: string;
+	attachmentPurpose?: AttachmentPurpose;
+	attachmentProfileSlot?: 'avatar' | 'banner';
 	attachmentFinalizationLeaseId?: string;
 	attachmentPartsIssuedAt?: Date;
 	attachmentObjectlessDelete?: true;
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
+	// Protected current managed-profile references. They live at the user root,
+	// never in its public crystal; projections derive same-origin content paths.
+	avatarAttachmentId?: string;
+	bannerAttachmentId?: string;
+	emojiAttachmentId?: string;
   sandboxExpiresAt?: Date;
   sandboxSpace?: string;
   // System kinds only (user/theme/feed-algorithm/waitlist — the collections
@@ -206,6 +216,7 @@ export type PublicComment = {
   type: PostType;
   text: string;
   images: string[];
+	attachments: AttachmentPublicMetadata[];
   listing: MarketplaceListing | null;
   thing: Record<string, any> | null;
   tags: string[];
@@ -1141,7 +1152,7 @@ const toFeedAuthor = (doc: any): FeedAuthor => ({
   id: String(doc._id),
   username: doc.username,
   displayName: doc.displayName ?? null,
-  avatarUrl: typeof doc.avatarUrl === 'string' ? doc.avatarUrl : null
+	avatarUrl: effectiveProfileMediaUrl(doc, 'avatar')
 });
 
 export const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAuthor>> => {
@@ -1155,14 +1166,14 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
   const things = await getHomeThingsCollection();
   const userThings = await things
     .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
-    .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1 })
+		.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1, avatarAttachmentId: 1 })
     .toArray();
   for (const doc of userThings as any[]) {
     profiles.set(String(doc.shareId), {
       id: String(doc.shareId),
       username: doc.crystal?.username,
       displayName: doc.crystal?.displayName ?? null,
-      avatarUrl: typeof doc.crystal?.avatarUrl === 'string' ? doc.crystal.avatarUrl : null
+			avatarUrl: effectiveProfileMediaUrl(doc, 'avatar')
     });
   }
 
@@ -1171,7 +1182,7 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
     const users = await getUsersCollection();
     const docs = await users
       .find({ _id: { $in: remaining.map((id) => new ObjectId(id)) } })
-      .project({ username: 1, displayName: 1, avatarUrl: 1 })
+			.project({ username: 1, displayName: 1, avatarUrl: 1, avatarAttachmentId: 1 })
       .toArray();
     for (const doc of docs as any[]) profiles.set(String(doc._id), toFeedAuthor(doc));
   }
@@ -1332,20 +1343,33 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
 // Attachments are relational protected Things. Resolve one bounded query for
 // the whole post page (including shared originals), and project only stable
 // metadata; private object keys/upload ids never leave this module boundary.
-const resolvePostAttachments = async (postIds: string[]): Promise<Map<string, AttachmentPublicMetadata[]>> => {
+const resolvePostAttachments = async (
+	postIds: string[],
+	expectedTargets?: ReadonlyMap<string, { ownerId: string; purpose: 'post' | 'comment' }>
+): Promise<Map<string, AttachmentPublicMetadata[]>> => {
 	const ids = [...new Set(postIds)].filter(Boolean);
 	const byTarget = new Map<string, AttachmentPublicMetadata[]>();
 	if (!ids.length) return byTarget;
 	const things = await getThingsCollection();
 	const docs = (await things
 		.find({ thingtime: 'attachment', targetId: { $in: ids }, attachmentState: 'ready' } as any)
-		.project({ shareId: 1, targetId: 1, crystal: 1, createdAt: 1 })
+		.project({ shareId: 1, targetId: 1, ownerId: 1, attachmentPurpose: 1, crystal: 1, createdAt: 1 })
 		.sort({ createdAt: 1, shareId: 1 })
 		.toArray()) as any[];
 	for (const doc of docs) {
 		const targetId = typeof doc.targetId === 'string' ? doc.targetId : '';
+		const expected = expectedTargets?.get(targetId);
 		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
-		if (!targetId || !attachment) continue;
+		if (
+			!targetId ||
+			!attachment ||
+			(expected &&
+				(String(doc.ownerId) !== expected.ownerId ||
+					(expected.purpose === 'post'
+						? doc.attachmentPurpose !== undefined && doc.attachmentPurpose !== 'post'
+						: doc.attachmentPurpose !== 'comment')))
+		)
+			continue;
 		const current = byTarget.get(targetId) ?? [];
 		current.push(attachment);
 		byTarget.set(targetId, current);
@@ -1445,12 +1469,24 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   // One batched pass each: interactions, whole-thread comment totals,
   // protected attachment metadata, and public view stats. Run them together
   // so neither attachments nor views add serial read latency.
-  const [related, threadCounts, attachmentsByTarget, viewStats] = await Promise.all([
+	const [related, threadCounts, viewStats] = await Promise.all([
     resolveRelated(allDocs),
     resolveThreadCounts(allDocs.map((doc) => doc.shareId)),
-    resolvePostAttachments(allDocs.map((doc) => doc.shareId)),
     resolveViewStats(allDocs.map((doc) => doc.shareId))
   ]);
+	const attachmentTargetIds = [
+		...allDocs.map((doc) => doc.shareId),
+		...Array.from(related.commentsByTarget.values()).flatMap((entries) => entries.flatMap((entry) => (entry.doc ? [entry.doc.shareId] : [])))
+	];
+	const expectedAttachmentTargets = new Map<string, { ownerId: string; purpose: 'post' | 'comment' }>(
+		allDocs.map((doc) => [doc.shareId, { ownerId: String(doc.ownerId), purpose: 'post' as const }] as const)
+	);
+	for (const entries of related.commentsByTarget.values()) {
+		for (const entry of entries) {
+			if (entry.doc) expectedAttachmentTargets.set(entry.doc.shareId, { ownerId: String(entry.doc.ownerId), purpose: 'comment' });
+		}
+	}
+	const attachmentsByTarget = await resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets);
 
   const userIds: string[] = [];
   [...docs, ...originals].forEach((doc) => {
@@ -1478,6 +1514,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       type: (commentCrystal.type as PostType) || 'text',
       text: comment.text,
       images: (commentCrystal.images as string[]) || [],
+			attachments: attachmentsByTarget.get(comment.id) || [],
       listing: (commentCrystal.listing as MarketplaceListing) || null,
       thing:
         commentCrystal.thing && typeof commentCrystal.thing === 'object' && !Array.isArray(commentCrystal.thing)
@@ -2528,13 +2565,32 @@ export type AddCommentInput =
       listing?: unknown;
       thing?: unknown;
       tags?: unknown;
+			shareId?: unknown;
+	  };
+
+export type AddCommentOptions = {
+	attachments?: AttachmentPublicMetadata[];
+	attachmentIds?: readonly string[];
+	createHooks?: CreateThingHooks;
+};
+
+const sameStringSet = (left: readonly string[], right: readonly string[]): boolean => {
+	if (left.length !== right.length) return false;
+	const expected = [...right].sort();
+	return [...left].sort().every((entry, index) => entry === expected[index]);
     };
+
+const transactionOutcomeUnknown = (error: unknown): boolean =>
+	Array.isArray((error as { errorLabels?: unknown } | null)?.errorLabels) &&
+	((error as { errorLabels: unknown[] }).errorLabels.includes('UnknownTransactionCommitResult') ||
+		(error as { errorLabels: unknown[] }).errorLabels.includes('TransientTransactionError'));
 
 export const addComment = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: AddCommentInput,
-  app: AppLens = null
+	app: AppLens = null,
+	options: AddCommentOptions = {}
 ): Promise<Fail | { ok: true; comment: PublicComment; commentCount: number }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
@@ -2555,25 +2611,84 @@ export const addComment = async (
   const body = typeof input === 'string' ? { text: input } : input && typeof input === 'object' ? input : {};
   // comments share the post schema — post fields upgrade the comment to a
   // ["post","comment"] thing (validated by the post crystal sanitizer)
-  const rich = body.type !== undefined || body.images !== undefined || body.listing !== undefined || body.thing !== undefined;
+	const rich =
+		body.type !== undefined ||
+		body.images !== undefined ||
+		body.listing !== undefined ||
+		body.thing !== undefined ||
+		options.createHooks?.postAttachments?.hasAny === true;
 
-  const created = await createThing(
-    viewerId,
-    rich
+	const createInput: CreateThingInput = rich
       ? {
           thingtime: ['post', 'comment'],
           crystal: { type: body.type ?? 'text', text: body.text, images: body.images, listing: body.listing, thing: body.thing },
           tags: body.tags,
+				shareId: body.shareId,
           targetId: target.shareId
         }
       : {
           thingtime: ['comment'],
           crystal: { text: body.text },
+				shareId: body.shareId,
           targetId: target.shareId
-        },
-    viewer,
-    app
-  );
+		  };
+
+	const reconcileCommittedComment = async (): Promise<ThingDoc | null> => {
+		if (typeof body.shareId !== 'string' || !body.shareId.trim()) return null;
+		const things = await getThingsCollection();
+		const existing = (await things.findOne({ shareId: body.shareId.trim() } as any)) as ThingDoc | null;
+		if (
+			!existing ||
+			String(existing.ownerId) !== viewerId ||
+			targetIdOf(existing) !== target.shareId ||
+			!isDeepStrictEqual(thingtimeOf(existing), createInput.thingtime)
+		) {
+			return null;
+		}
+
+		const validated = validateThingtimeCrystal(createInput.thingtime, createInput.crystal, {
+			postAttachments: options.createHooks?.postAttachments
+		});
+		if (isFail(validated) || !isDeepStrictEqual(crystalOf(existing), validated.crystal)) return null;
+		const tags = sanitizeTags(createInput.tags);
+		if (isFail(tags)) return null;
+		const listing = validated.thingtime.includes('post') ? (validated.crystal.listing as MarketplaceListing | null | undefined) : null;
+		const expectedTags = [...tags, ...(listing?.category ? [listing.category] : [])].filter((tag, index, all) => all.indexOf(tag) === index);
+		if (!isDeepStrictEqual(existing.tags || [], expectedTags) || !isDeepStrictEqual(aclOf(existing), [ACL_INHERIT])) return null;
+
+		const attachmentDocs = await things
+			.find(
+				{
+					thingtime: 'attachment',
+					targetId: existing.shareId,
+					ownerId: viewerId,
+					attachmentState: 'ready',
+					attachmentPurpose: 'comment'
+				} as any,
+				{ projection: { shareId: 1 } }
+			)
+			.toArray();
+		return sameStringSet(
+			attachmentDocs.map((doc: any) => String(doc.shareId)),
+			options.attachmentIds || []
+		)
+			? existing
+			: null;
+	};
+
+	let created: CreateThingResult;
+	try {
+		created = await createThing(viewerId, createInput, viewer, app, options.createHooks);
+	} catch (error) {
+		if (!transactionOutcomeUnknown(error)) throw error;
+		const committed = await reconcileCommittedComment();
+		if (!committed) throw error;
+		created = { ok: true, doc: committed };
+	}
+	if (isFail(created) && created.status === 409) {
+		const committed = await reconcileCommittedComment();
+		if (committed) created = { ok: true, doc: committed };
+	}
   if (isFail(created)) return created;
 
   const doc = created.doc;
@@ -2586,6 +2701,7 @@ export const addComment = async (
     type: (crystal.type as PostType) || 'text',
     text: String(crystal.text || ''),
     images: (crystal.images as string[]) || [],
+		attachments: options.attachments || [],
     listing: (crystal.listing as MarketplaceListing) || null,
     thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
     tags: doc.tags || [],
@@ -3057,6 +3173,20 @@ export const deleteThing = async (
 				return oldRootStillExists ? fail(409, 'Thing changed while it was being deleted — try again') : { ok: true };
 			}
 			const descendants = await discoverCascadeDescendants(anchoredRoot);
+			const attachmentTargets = attachmentCascadeCleanupTargets(descendants);
+			if (attachmentTargets.length) {
+				if (!hooks.beforeCascade) {
+					return fail(409, 'Attachment cleanup must finish before this Thing can be deleted');
+				}
+				// Comment/reply attachments can be deeper than the requested root. Remove
+				// every exact S3 version before allowing Mongo cascade accounting to see
+				// its protected attachment row, then re-walk the now-changed closure.
+				for (const target of attachmentTargets) {
+					const prepared = await hooks.beforeCascade(target as ThingDoc);
+					if (prepared.ok === false) return prepared;
+				}
+				continue;
+			}
 			let rewalk = false;
 			for (const batch of cascadeDeletionBatches(descendants)) {
 				const result = await deleteCascadeBatchAtomically(batch, (initial as any)._id);

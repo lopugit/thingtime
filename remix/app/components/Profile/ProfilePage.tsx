@@ -62,15 +62,9 @@ export const ProfileBanner = (props: { bannerUrl: string | null; height: string 
       flexShrink={0}
     >
       {src ? (
-        <Box as="img" src={src} alt="" width="100%" height="100%" objectFit="cover" display="block" />
+				<Box as="img" src={src} alt="" referrerPolicy="no-referrer" width="100%" height="100%" objectFit="cover" display="block" />
       ) : (
-        <Box
-          width="100%"
-          height="100%"
-          background={RAINBOW}
-          backgroundSize="calc(100px + 200%)"
-          sx={{ animation: RAINBOW_ANIM }}
-        />
+				<Box width="100%" height="100%" background={RAINBOW} backgroundSize="calc(100px + 200%)" sx={{ animation: RAINBOW_ANIM }} />
       )}
     </Box>
   );
@@ -78,13 +72,7 @@ export const ProfileBanner = (props: { bannerUrl: string | null; height: string 
 
 // Avatar circle: image when a URL is set, rainbow initial otherwise (the
 // UserAvatarCircle idiom, sized). Shared with EditProfileModal's live preview.
-export const ProfileAvatarCircle = (props: {
-  avatarUrl: string | null;
-  name: string;
-  size: string;
-  fontSize?: string;
-  borderWidth?: string;
-}) => {
+export const ProfileAvatarCircle = (props: { avatarUrl: string | null; name: string; size: string; fontSize?: string; borderWidth?: string }) => {
   const src = (props.avatarUrl || '').trim();
   const initial = (props.name || '?').trim().charAt(0).toUpperCase() || '?';
 
@@ -102,20 +90,13 @@ export const ProfileAvatarCircle = (props: {
       fontWeight={700}
       fontSize={props.fontSize || '2xl'}
     >
-      {src ? <Box as="img" src={src} alt="" width="100%" height="100%" objectFit="cover" display="block" /> : initial}
+			{src ? <Box as="img" src={src} alt="" referrerPolicy="no-referrer" width="100%" height="100%" objectFit="cover" display="block" /> : initial}
     </Center>
   );
 };
 
 const Eyebrow = (props: { children: React.ReactNode }) => (
-  <Text
-    fontFamily="mono"
-    fontSize="10px"
-    fontWeight={600}
-    letterSpacing="0.08em"
-    textTransform="uppercase"
-    color="var(--tt-muted, #9a9aa6)"
-  >
+	<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)">
     {props.children}
   </Text>
 );
@@ -193,12 +174,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
   const appliedAdvanced = advancedFilters.applied;
 
   const loadPage = React.useCallback(
-    async (
-      targetUsername: string,
-      cursor: string | null,
-      generation: number,
-      advancedState: AdvancedFiltersState | null
-    ) => {
+		async (targetUsername: string, cursor: string | null, generation: number, advancedState: AdvancedFiltersState | null) => {
       if (loadingRef.current) return;
       loadingRef.current = true;
       // stamp the START — responses snapshotted before a reaction tap that
@@ -345,23 +321,8 @@ export const ProfilePage = (props: ProfilePageProps) => {
   // previous routes/profile.tsx
   if (!user && !username) {
     return (
-      <Flex
-        minHeight="100vh"
-        width="100%"
-        align="center"
-        justify="center"
-        direction="column"
-        gap={4}
-        background="var(--tt-surface, #fafafb)"
-      >
-        <Box
-          fontFamily="heading"
-          fontSize="xs"
-          fontWeight="600"
-          letterSpacing="0.14em"
-          textTransform="uppercase"
-          color="var(--tt-muted, #9a9aa6)"
-        >
+			<Flex minHeight="100vh" width="100%" align="center" justify="center" direction="column" gap={4} background="var(--tt-surface, #fafafb)">
+				<Box fontFamily="heading" fontSize="xs" fontWeight="600" letterSpacing="0.14em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)">
           Thingtime · Profile
         </Box>
         <Box
@@ -459,12 +420,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
   if (!isSelf && remote.status !== 'loaded') {
     return pageShell(
       <>
-        <Box
-          width="100%"
-          height={['140px', '220px']}
-          borderRadius="var(--tt-radius-lg, 16px)"
-          background="var(--tt-surface-alt, #f5f5f7)"
-        />
+				<Box width="100%" height={['140px', '220px']} borderRadius="var(--tt-radius-lg, 16px)" background="var(--tt-surface-alt, #f5f5f7)" />
         <Text mt={4} px={[4, 6]} fontSize="sm" color="var(--tt-muted, #9a9aa6)">
           Loading profile ⏳
         </Text>
@@ -500,12 +456,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
       <ProfileBanner bannerUrl={profile.bannerUrl} height={['140px', '220px']} />
 
       <Flex px={[4, 6]} marginTop="-48px" position="relative" zIndex={1}>
-        <ProfileAvatarCircle
-          avatarUrl={profile.avatarUrl}
-          name={profile.displayName || profile.username}
-          size="96px"
-          borderWidth="4px"
-        />
+				<ProfileAvatarCircle avatarUrl={profile.avatarUrl} name={profile.displayName || profile.username} size="96px" borderWidth="4px" />
       </Flex>
 
       <Box px={[4, 6]} pt={3} whiteSpace="normal">
@@ -629,9 +580,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
           hasMore={Boolean(nextCursor)}
           onLoadMore={handleLoadMore}
           onPostChanged={handlePostChanged}
-          emptyLabel={
-            appliedAdvanced ? 'Nothing matched — loosen a filter, or try plain words ✨' : 'No posts yet 📭'
-          }
+					emptyLabel={appliedAdvanced ? 'Nothing matched — loosen a filter, or try plain words ✨' : 'No posts yet 📭'}
         />
       </Box>
 

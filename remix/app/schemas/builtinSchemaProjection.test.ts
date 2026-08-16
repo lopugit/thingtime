@@ -119,6 +119,18 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.equal(isProtectedThingtime(['migration-diagnostic']), true);
 	assert.equal(isProtectedThingtime(['ci-workflow-run']), true);
 	assert.equal(isProtectedThingtime(['data', 'app']), true);
+	assert.equal(isProtectedThingtime(['user']), true);
+});
+
+test('managed attachment purpose, profile slot, user references, and emoji reference are closed server-owned root fields', () => {
+	const root = thingtimeSchemas.find((schema) => schema.id === 'thing')!;
+	const fields = new Map(root.fields.map((field) => [field.name, field]));
+	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'avatarAttachmentId', 'bannerAttachmentId', 'emojiAttachmentId']) {
+		assert.equal(fields.get(name)?.system, true, name);
+		assert.equal(fields.get(name)?.required, false, name);
+	}
+	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji']);
+	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
 });
 
 test('attachment metadata is normalized but its Thingtime kind remains protected from generic CRUD', () => {
@@ -164,14 +176,41 @@ test('post attachment preflight allows attachment-only posts without weakening o
   );
 });
 
-test('post attachment preflight never enables attachment-only rich comments', () => {
+test('server attachment preflight enables attachment-only rich comments', () => {
   const emptyComment = { type: 'text', text: '', images: [], listing: null, thing: null };
   assert.equal(
     validateThingtimeCrystal(['post', 'comment'], emptyComment, {
       postAttachments: { hasAny: true, hasVisual: true }
     }).ok,
-    false
+		true
   );
+});
+
+test('post image URLs require parsed credential-free absolute http(s) URLs', () => {
+	const validateImage = (url: string) =>
+		validateThingtimeCrystal(['post'], {
+			type: 'image',
+			text: '',
+			images: [url],
+			listing: null,
+			thing: null
+		});
+	assert.equal(validateImage('https://images.example/photo.jpg').ok, true);
+	assert.equal(validateImage('http://localhost:9999/photo.jpg').ok, true);
+	for (const unsafe of [
+		'https://user:secret@images.example/photo.jpg',
+		'https://images.example/a b.jpg',
+		'https://images.example/a\u202Eb.jpg',
+		'https:\\images.example\\photo.jpg',
+		'https://',
+		'//images.example/photo.jpg',
+		'data:image/png;base64,AAAA',
+		['java', 'script:alert(1)'].join('')
+	]) {
+		const result = validateImage(unsafe);
+		assert.equal(result.ok, false, unsafe);
+		if (!result.ok) assert.equal(result.error, 'Images must be http(s) URLs');
+	}
 });
 
 for (const schema of crystalSchemas) {

@@ -4,6 +4,14 @@ export const ATTACHMENT_ENVELOPE_VERSION = 1 as const;
 export const ATTACHMENT_STATES = ['pending', 'finalizing', 'ready', 'deleting'] as const;
 export type AttachmentState = (typeof ATTACHMENT_STATES)[number];
 
+// A purpose is stamped before any upload URL is issued and never changes.
+// That keeps a private draft created for one surface from being replayed into
+// a different audience (for example, a DM attachment becoming a public post).
+export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji'] as const;
+export type AttachmentPurpose = (typeof ATTACHMENT_PURPOSES)[number];
+export const ATTACHMENT_PROFILE_SLOTS = ['avatar', 'banner'] as const;
+export type ProfileAttachmentSlot = (typeof ATTACHMENT_PROFILE_SLOTS)[number];
+
 export const ATTACHMENT_MEDIA_KINDS = ['image', 'video', 'audio', 'file'] as const;
 export type AttachmentMediaKind = (typeof ATTACHMENT_MEDIA_KINDS)[number];
 
@@ -34,6 +42,8 @@ export type AttachmentPrivateObjectFields = {
 	objectKey: string;
 	objectVersionId?: string;
 	attachmentRequestFingerprint?: string;
+	attachmentPurpose?: AttachmentPurpose;
+	attachmentProfileSlot?: ProfileAttachmentSlot;
 	attachmentFinalizationLeaseId?: string;
 	attachmentPartsIssuedAt?: Date;
 	attachmentObjectlessDelete?: true;
@@ -51,6 +61,8 @@ export type AttachmentStorageCandidate = {
 	objectKey?: unknown;
 	objectVersionId?: unknown;
 	attachmentRequestFingerprint?: unknown;
+	attachmentPurpose?: unknown;
+	attachmentProfileSlot?: unknown;
 	attachmentFinalizationLeaseId?: unknown;
 	attachmentPartsIssuedAt?: unknown;
 	attachmentObjectlessDelete?: unknown;
@@ -152,6 +164,12 @@ export const isAttachmentThing = (doc: { thingtime?: unknown }): boolean =>
 export const isAttachmentState = (value: unknown): value is AttachmentState =>
 	typeof value === 'string' && (ATTACHMENT_STATES as readonly string[]).includes(value);
 
+export const isAttachmentPurpose = (value: unknown): value is AttachmentPurpose =>
+	typeof value === 'string' && (ATTACHMENT_PURPOSES as readonly string[]).includes(value);
+
+export const isAttachmentProfileSlot = (value: unknown): value is ProfileAttachmentSlot =>
+	typeof value === 'string' && (ATTACHMENT_PROFILE_SLOTS as readonly string[]).includes(value);
+
 export const isAttachmentObjectVersionId = (value: unknown): value is string =>
 	typeof value === 'string' && !!value && value.length <= MAX_ATTACHMENT_OBJECT_VERSION_ID_CHARS && !hasAsciiControlChar(value);
 
@@ -202,6 +220,18 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 		doc.attachmentRequestFingerprint !== undefined &&
 		(typeof doc.attachmentRequestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(doc.attachmentRequestFingerprint))
 	) {
+		return null;
+	}
+	// Pre-purpose post attachments remain accountable for a safe rollout, but
+	// every stamped row is a closed union: non-profile purposes have no profile
+	// slot; profile has exactly one bounded slot. Corrupt purpose/slot
+	// combinations fail closed so they cannot participate in binding or quota
+	// mutation as a canonical row.
+	if (doc.attachmentPurpose !== undefined && !isAttachmentPurpose(doc.attachmentPurpose)) return null;
+	if (doc.attachmentProfileSlot !== undefined && !isAttachmentProfileSlot(doc.attachmentProfileSlot)) return null;
+	if (doc.attachmentPurpose === 'profile') {
+		if (!isAttachmentProfileSlot(doc.attachmentProfileSlot)) return null;
+	} else if (doc.attachmentProfileSlot !== undefined) {
 		return null;
 	}
 	if (

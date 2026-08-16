@@ -18,6 +18,8 @@ import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTok
 import {
 	ATTACHMENT_ENVELOPE_VERSION,
 	ATTACHMENT_MEDIA_KINDS,
+	ATTACHMENT_PROFILE_SLOTS,
+	ATTACHMENT_PURPOSES,
 	ATTACHMENT_STATES,
 	ATTACHMENT_THINGTIME,
 	MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
@@ -483,6 +485,22 @@ const rootThingSchema: ThingtimeSchema = {
 			description: 'Private server-derived fingerprint that makes upload-start retries idempotent without exposing request metadata.'
 		},
 		{
+			name: 'attachmentPurpose',
+			type: 'enum',
+			required: false,
+			values: [...ATTACHMENT_PURPOSES],
+			system: true,
+			description: 'Server-owned immutable binding domain: post, comment, message, profile, or custom-emoji media.'
+		},
+		{
+			name: 'attachmentProfileSlot',
+			type: 'enum',
+			required: false,
+			values: [...ATTACHMENT_PROFILE_SLOTS],
+			system: true,
+			description: 'Server-owned avatar/banner slot, present exactly when attachmentPurpose is profile.'
+		},
+		{
 			name: 'attachmentFinalizationLeaseId',
 			type: 'string',
 			required: false,
@@ -530,6 +548,27 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			system: true,
 			description: 'Optional server-owned retention deadline for protected operational Things.'
+		},
+		{
+			name: 'avatarAttachmentId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Protected current managed-avatar attachment reference on a canonical user Thing.'
+		},
+		{
+			name: 'bannerAttachmentId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Protected current managed-banner attachment reference on a canonical user Thing.'
+		},
+		{
+			name: 'emojiAttachmentId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Protected exact S3 attachment reference on a custom-emoji Thing.'
 		},
     { name: 'createdAt', type: 'date', required: true, system: true, description: 'Creation time.' },
     { name: 'updatedAt', type: 'date', required: true, system: true, description: 'Last mutation time.' }
@@ -621,8 +660,9 @@ const attachmentSchema: ThingtimeSchema = {
 	detail:
 		'Attachment Things are created only through the dedicated upload endpoints. Their crystal contains ' +
 		'stable, safe public metadata; object keys, multipart ids, lifecycle state, and verified object bytes ' +
-		'are server-owned root fields. A ready attachment points at its post through targetId and inherits that ' +
-		'post’s audience. Pending/finalizing/deleting rows remain billable source records until cleanup confirms ' +
+		'are server-owned root fields. A ready post attachment points at its post through targetId and inherits that ' +
+		'post’s audience; managed profile media points at the exact public user and avatar/banner slot that references it. ' +
+		'Pending/finalizing/deleting rows remain billable source records until cleanup confirms ' +
 		'the object is inaccessible, preventing quota oversubscription and refund races.',
 	createdVia: 'POST /api/v1/attachments/uploads',
 	fields: [
@@ -1188,11 +1228,7 @@ const migrationDiagnosticSchema: ThingtimeSchema = {
 	}
 };
 
-const ciEntitySchema = (
-  id: Exclude<(typeof CI_CONTROL_THINGTIME)[number], 'ci-event'>,
-  title: string,
-  summary: string
-): ThingtimeSchema => ({
+const ciEntitySchema = (id: Exclude<(typeof CI_CONTROL_THINGTIME)[number], 'ci-event'>, title: string, summary: string): ThingtimeSchema => ({
   id,
   version: 1,
   kind: 'crystal',
@@ -1326,9 +1362,7 @@ const followThingSchema: ThingtimeSchema = {
     '/api/v1/users/connections. The generic things CRUD refuses this kind.',
   requiresTarget: true,
   createdVia: 'POST /api/v1/users/follow',
-  fields: [
-    { name: 'follow', type: 'boolean', required: true, description: 'Always true — dedup index marker.' }
-  ],
+	fields: [{ name: 'follow', type: 'boolean', required: true, description: 'Always true — dedup index marker.' }],
   example: { follow: true }
 };
 
@@ -1401,9 +1435,7 @@ export type NormalizedNotificationPrefs = {
 // agree on what absent keys mean. Also accepts an already-normalized matrix
 // (nested push object) so the wire shape round-trips: normalize(normalize(x))
 // === normalize(x), which lets the client cache the GET response as-is.
-export const normalizeNotificationPrefs = (
-  stored: Record<string, any> | null | undefined
-): NormalizedNotificationPrefs => {
+export const normalizeNotificationPrefs = (stored: Record<string, any> | null | undefined): NormalizedNotificationPrefs => {
   const source = stored && typeof stored === 'object' ? stored : {};
   const emailStored = source.email && typeof source.email === 'object' ? source.email : {};
   const mastersStored = source.masters && typeof source.masters === 'object' ? source.masters : {};
@@ -1412,9 +1444,7 @@ export const normalizeNotificationPrefs = (
   for (const type of NOTIFICATION_TYPES) push[type] = pushStored[type] !== false;
   const email: Record<string, boolean> = {};
   for (const type of EMAIL_NOTIFICATION_TYPES) {
-    email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type)
-      ? emailStored[type] === true
-      : emailStored[type] !== false;
+		email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type) ? emailStored[type] === true : emailStored[type] !== false;
   }
   return {
     push,
@@ -1434,7 +1464,7 @@ const notificationThingSchema: ThingtimeSchema = {
     'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
     'comments, replies, reacts, shares, or (fan-out, capped) posts while you follow them. ' +
     'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
-    'flips when read. Listed via GET /api/v1/notifications (filtered by the recipient\'s ' +
+		"flips when read. Listed via GET /api/v1/notifications (filtered by the recipient's " +
     'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +
     '["tt:user"]; the generic things CRUD refuses this kind.',
   createdVia: 'server-side emission (social/engagement events)',
@@ -1765,7 +1795,7 @@ const communityMemberSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Community member',
-  summary: 'One user\'s membership of one community (relational child doc).',
+	summary: "One user's membership of one community (relational child doc).",
   detail:
     'targetId = the community shareId, ownerId = the member. Uniqueness rides the single ' +
     'crystal.memberKey field (`<communityId>:<userId>`, partial unique index) — the reaction-index ' +
@@ -1831,12 +1861,24 @@ const chatSchema: ThingtimeSchema = {
     'join) or private (admins add).',
   createdVia: 'POST /api/v1/chats',
   fields: [
-    { name: 'name', type: 'string', required: false, max: MAX_CHAT_NAME_CHARS, description: 'Chat name (null for DMs — the UI shows the other member).' },
+		{
+			name: 'name',
+			type: 'string',
+			required: false,
+			max: MAX_CHAT_NAME_CHARS,
+			description: 'Chat name (null for DMs — the UI shows the other member).'
+		},
     { name: 'topic', type: 'string', required: false, max: MAX_CHAT_TOPIC_CHARS, description: 'Channel topic line.' },
     { name: 'chatType', type: 'enum', required: true, values: ['channel', 'group', 'dm'], description: 'Conversation shape.' },
     { name: 'communityId', type: 'id', required: false, description: 'Owning community shareId (channels only).' },
     { name: 'sectionId', type: 'id', required: false, description: 'Sidebar section shareId (channels only).' },
-    { name: 'channelVisibility', type: 'enum', required: false, values: ['public', 'private'], description: 'Channel joinability within its community (channels only, default public).' },
+		{
+			name: 'channelVisibility',
+			type: 'enum',
+			required: false,
+			values: ['public', 'private'],
+			description: 'Channel joinability within its community (channels only, default public).'
+		},
     { name: 'dmKey', type: 'string', required: false, description: 'Sorted participant-id pair key deduping DMs.' }
   ],
   example: { name: 'general', topic: 'Anything goes', chatType: 'channel', channelVisibility: 'public' }
@@ -1848,7 +1890,7 @@ const chatMemberSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Chat member',
-  summary: 'One user\'s membership of one chat — role, nickname, request state and read receipt.',
+	summary: "One user's membership of one chat — role, nickname, request state and read receipt.",
   detail:
     'targetId = the chat shareId, ownerId = the member. Unique per (chat, user) via ' +
     'crystal.memberKey. state tracks the Messenger request flow: active, pending (message ' +
@@ -1860,7 +1902,13 @@ const chatMemberSchema: ThingtimeSchema = {
     { name: 'memberKey', type: 'string', required: true, description: 'Unique `<chatId>:<userId>` pair key.' },
     { name: 'role', type: 'enum', required: true, values: ['owner', 'admin', 'member'], description: 'Chat role.' },
     { name: 'nickname', type: 'string', required: false, max: MAX_NICKNAME_CHARS, description: 'Per-chat nickname (Messenger style).' },
-    { name: 'state', type: 'enum', required: true, values: ['active', 'pending', 'left', 'declined'], description: 'Membership lifecycle / message-request state.' },
+		{
+			name: 'state',
+			type: 'enum',
+			required: true,
+			values: ['active', 'pending', 'left', 'declined'],
+			description: 'Membership lifecycle / message-request state.'
+		},
     { name: 'requestOrigin', type: 'enum', required: false, values: ['follower', 'unknown'], description: 'Message-request bucket while pending.' },
     { name: 'lastReadMessageId', type: 'id', required: false, description: 'Newest message this member has read.' },
     { name: 'lastReadAt', type: 'string', required: false, description: 'ISO timestamp of that read (drives unread counts + seen-by).' },
@@ -1885,12 +1933,24 @@ const chatMessageSchema: ThingtimeSchema = {
     'standard reaction things targeting the message, including custom `custom:<emoji id>` tokens.',
   createdVia: 'POST /api/v1/chats/messages',
   fields: [
-    { name: 'text', type: 'string', required: true, max: MAX_MESSAGE_CHARS, description: `Message text, max ${MAX_MESSAGE_CHARS} chars. :name: tokens render as custom emojis.` },
+		{
+			name: 'text',
+			type: 'string',
+			required: false,
+			max: MAX_MESSAGE_CHARS,
+			description: `Optional message text, max ${MAX_MESSAGE_CHARS} chars. A message may instead contain one or more bound attachments. :name: tokens render as custom emojis.`
+		},
     { name: 'threadRootId', type: 'id', required: false, description: 'Root message shareId when this is a thread reply.' },
     { name: 'replyToId', type: 'id', required: false, description: 'Quoted message shareId (inline reply).' },
     { name: 'editedAt', type: 'string', required: false, description: 'ISO timestamp of the last edit.' },
     { name: 'deletedAt', type: 'string', required: false, description: 'ISO soft-delete timestamp (text is cleared).' },
-    { name: 'systemType', type: 'enum', required: false, values: ['member-added', 'member-left', 'member-removed', 'chat-renamed', 'chat-created', 'topic-changed'], description: 'Set on system event messages.' },
+		{
+			name: 'systemType',
+			type: 'enum',
+			required: false,
+			values: ['member-added', 'member-left', 'member-removed', 'chat-renamed', 'chat-created', 'topic-changed'],
+			description: 'Set on system event messages.'
+		},
     { name: 'systemMeta', type: 'record', required: false, description: 'Event payload for system messages ({ subjectId, value… }).' }
   ],
   example: { text: 'hello from the messenger 👋' }
@@ -1905,8 +1965,8 @@ const customEmojiSchema: ThingtimeSchema = {
   summary: 'An uploaded emoji/gif usable in chat reactions and messages.',
   detail:
     'One thing per emoji (relational, FUNDAMENTALS §3 — never an array on the community). The ' +
-    'image is an inline base64 data URI (gif/webp/png/apng/jpeg, ≤' +
-    `${Math.round(MAX_EMOJI_DATA_URI_CHARS / 1024)}K chars), the avatar-storage pattern. Scope is ` +
+		'image is a protected, quota-accounted S3 attachment (gif/webp/png/jpeg, ≤512 KiB); legacy ' +
+		'inline data-URI rows remain read-compatible. Scope is ' +
     'a community (targetId set) or personal (targetId null); names are unique per scope via ' +
     'crystal.emojiKey. Reaction tokens reference emojis by id (`custom:<shareId>`), so renames ' +
     'never orphan reactions.',
@@ -1914,10 +1974,10 @@ const customEmojiSchema: ThingtimeSchema = {
   fields: [
     { name: 'name', type: 'string', required: true, max: MAX_EMOJI_NAME_CHARS, description: 'Lowercase [a-z0-9_-] name, rendered as :name:.' },
     { name: 'emojiKey', type: 'string', required: true, description: 'Unique `<scope>:<name>` key (scope = communityId or user:<userId>).' },
-    { name: 'image', type: 'string', required: true, description: 'Inline data:image/... base64 URI.' },
-    { name: 'animated', type: 'boolean', required: false, description: 'True for gif/apng uploads.' }
+		{ name: 'image', type: 'string', required: false, description: 'Legacy inline data:image/... base64 URI; never written for new emojis.' },
+		{ name: 'animated', type: 'boolean', required: false, description: 'True for new GIF uploads or a compatible legacy animated row.' }
   ],
-  example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', image: 'data:image/gif;base64,R0lGOD…', animated: true }
+	example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', animated: true }
 };
 
 const followSchema: ThingtimeSchema = {
@@ -1928,14 +1988,12 @@ const followSchema: ThingtimeSchema = {
   title: 'Follow',
   summary: 'One user following another (the start of the relationship graph).',
   detail:
-    'ownerId = the follower, targetId = the followed user\'s shareId; unique per pair via ' +
+		"ownerId = the follower, targetId = the followed user's shareId; unique per pair via " +
     'crystal.followKey. Powers the messenger request buckets (a DM from someone you follow ' +
     'lands normally; from a follower it queues as a "follower" request; otherwise "unknown"). ' +
     'The acl circle entries (tt:userFriends…) are designed to plug into this graph later.',
   createdVia: 'POST /api/v1/users/follow',
-  fields: [
-    { name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }
-  ],
+	fields: [{ name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }],
   example: { followKey: '5eed…:c0ffee…' }
 };
 
@@ -2158,7 +2216,16 @@ type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
 const isFail = <T extends { ok: boolean }>(value: T | Fail): value is Fail => value.ok === false;
 
-const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
+const UNSAFE_HTTP_URL_CHAR_RE = /[\p{Cc}\p{Cf}\p{Cs}\s]/u;
+const isHttpUrl = (value: string): boolean => {
+	if (!/^https?:\/\//i.test(value) || UNSAFE_HTTP_URL_CHAR_RE.test(value) || value.includes('\\')) return false;
+	try {
+		const parsed = new URL(value);
+		return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !!parsed.hostname && !parsed.username && !parsed.password;
+	} catch {
+		return false;
+	}
+};
 
 const sanitizeAttachmentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
 	const sanitized = sanitizeAttachmentPublicMetadata(input);
@@ -2183,12 +2250,12 @@ const sanitizePostCrystal = (
   // share things render the shared original, so their post payload may be
   // an empty caption regardless of type
   const isShare = appliedIds.includes('share');
-	// Comment attachments are intentionally not shipping in this change. Rich
-	// comments still pass through the post sanitizer, so never let a post-level
-	// attachment preflight relax their existing body rules.
-	const isComment = appliedIds.includes('comment');
-	const hasAnyAttachment = !isComment && options.postAttachments?.hasAny === true;
-	const hasVisualAttachment = !isComment && options.postAttachments?.hasVisual === true;
+	// This context is server-only and arrives only after the attachment store
+	// verifies the exact owner, purpose, ready state and unbound expiry. It may
+	// therefore satisfy the same body rules for a top-level post or a rich
+	// ['post', 'comment'] Thing without opening those rules to generic input.
+	const hasAnyAttachment = options.postAttachments?.hasAny === true;
+	const hasVisualAttachment = options.postAttachments?.hasVisual === true;
 
   const text = typeof input.text === 'string' ? input.text.trim() : '';
   if (text.length > MAX_TEXT_CHARS) return fail(400, `Post text is too long (max ${MAX_TEXT_CHARS})`);

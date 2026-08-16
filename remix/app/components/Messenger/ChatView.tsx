@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Button, Flex, Input, Spinner } from '@chakra-ui/react';
 
 import { useLopu } from '../Lopu/useLopu';
+import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { Composer } from './Composer';
 import { EmojiUploadModal } from './EmojiUploadModal';
@@ -18,6 +19,7 @@ import {
   type MessengerMode
 } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
+import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
 
 const ACTIVE_POLL_MS = 4000;
 
@@ -86,10 +88,12 @@ export const ChatView = (props: ChatViewProps) => {
       setCustomEmojis(mergeEmojiMap(userId, payload.customEmojis || {}));
       setMessages((prev) => {
         const pending = prev.filter((m) => m.id.startsWith('pending-'));
-        const merged = replace
-          ? dedupeNewestFirst([pending, payload.messages, prev])
-          : dedupeNewestFirst([pending, prev, payload.messages]);
-        writeMessages(userId, chatId, merged.filter((m) => !m.id.startsWith('pending-')));
+				const merged = replace ? dedupeNewestFirst([pending, payload.messages, prev]) : dedupeNewestFirst([pending, prev, payload.messages]);
+				writeMessages(
+					userId,
+					chatId,
+					merged.filter((m) => !m.id.startsWith('pending-'))
+				);
         return merged;
       });
     },
@@ -156,7 +160,10 @@ export const ChatView = (props: ChatViewProps) => {
     if (!newest || readMarkRef.current === newest.id) return;
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
     readMarkRef.current = newest.id;
-    api.markRead({ chatId, messageId: newest.id }).then(() => props.onChatsChanged()).catch(() => {});
+		api
+			.markRead({ chatId, messageId: newest.id })
+			.then(() => props.onChatsChanged())
+			.catch(() => {});
   }, [api, chatId, messages, pendingRequest, props]);
 
   // reaction chips reference emojis by id with { name, animated } only —
@@ -193,24 +200,33 @@ export const ChatView = (props: ChatViewProps) => {
     setLoadingMore(false);
   };
 
-  const send = async (text: string): Promise<boolean> => {
+	const send = async (submission: {
+		text: string;
+		requestId: string;
+		attachmentIds: string[];
+		attachments: PublicAttachment[];
+	}): Promise<boolean> => {
+		const { text, requestId, attachmentIds, attachments } = submission;
     if (editing) {
       const target = editing;
-      setEditing(null);
       const prevText = target.text;
       setMessages((prev) => prev.map((m) => (m.id === target.id ? { ...m, text } : m)));
       try {
         const payload = await api.editMessage({ id: target.id, text });
         setMessages((prev) => prev.map((m) => (m.id === target.id ? payload.message : m)));
+				setEditing((current) => (current?.id === target.id ? null : current));
         return true;
       } catch (err: any) {
         setMessages((prev) => prev.map((m) => (m.id === target.id ? { ...m, text: prevText } : m)));
-        lopu({ title: err?.error || 'Edit failed 😞', status: 'error' });
+				if (hasUnknownMutationOutcome(err)) {
+					lopu({ title: 'That edit may already have saved. Retry safely to confirm it.', status: 'info' });
+					throw err;
+				}
+				lopu({ title: 'Thingtime could not save that edit. Please try again.', status: 'error' });
         return false;
       }
     }
     const reply = replyTo;
-    setReplyTo(null);
     const localId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const optimistic: ChatMessage = {
       id: localId,
@@ -218,6 +234,7 @@ export const ChatView = (props: ChatViewProps) => {
       authorId: userId || '',
       author: user ? { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl } : null,
       text,
+			attachments,
       deleted: false,
       editedAt: null,
       threadRootId: null,
@@ -228,7 +245,8 @@ export const ChatView = (props: ChatViewProps) => {
             authorId: reply.authorId,
             authorName: reply.author?.displayName || reply.author?.username || null,
             text: reply.text.slice(0, 140),
-            deleted: reply.deleted
+						deleted: reply.deleted,
+						attachmentCount: reply.attachments.length
           }
         : null,
       systemType: null,
@@ -241,18 +259,33 @@ export const ChatView = (props: ChatViewProps) => {
     };
     setMessages((prev) => [optimistic, ...prev]);
     try {
-      const payload = await api.sendMessage({ chatId, text, ...(reply ? { replyToId: reply.id } : {}) });
+			const payload = await api.sendMessage({
+				chatId,
+				text,
+				requestId,
+				attachmentIds,
+				...(reply ? { replyToId: reply.id } : {})
+			});
       setMessages((prev) => {
         const next = prev.map((m) => (m.id === localId ? payload.message : m));
-        writeMessages(userId, chatId, next.filter((m) => !m.id.startsWith('pending-')));
+				writeMessages(
+					userId,
+					chatId,
+					next.filter((m) => !m.id.startsWith('pending-'))
+				);
         return next;
       });
+			if (reply) setReplyTo((current) => (current?.id === reply.id ? null : current));
       props.onChatsChanged();
       emitMessengerRefresh();
       return true;
     } catch (err: any) {
       setMessages((prev) => prev.filter((m) => m.id !== localId));
-      lopu({ title: err?.error || 'Message did not send 😞', status: 'error' });
+			if (hasUnknownMutationOutcome(err)) {
+				lopu({ title: 'That message may already have sent. Retry safely to confirm it.', status: 'info' });
+				throw err;
+			}
+			lopu({ title: 'Thingtime could not send that message. Please try again.', status: 'error' });
       return false;
     }
   };
@@ -276,11 +309,7 @@ export const ChatView = (props: ChatViewProps) => {
     try {
       const payload = await api.react({ messageId: message.id, emoji: token });
       setMessages((prev) =>
-        prev.map((m) =>
-          m.id === message.id
-            ? { ...m, reactionCounts: payload.reactionCounts, viewerReactions: payload.viewerReactions }
-            : m
-        )
+				prev.map((m) => (m.id === message.id ? { ...m, reactionCounts: payload.reactionCounts, viewerReactions: payload.viewerReactions } : m))
       );
       setCustomEmojis(mergeEmojiMap(userId, payload.customEmojis || {}));
       if (token.startsWith('custom:') && !had) {
@@ -294,9 +323,12 @@ export const ChatView = (props: ChatViewProps) => {
 
   const remove = async (message: ChatMessage) => {
     const prev = messagesRef.current;
-    setMessages((current) => current.map((m) => (m.id === message.id ? { ...m, deleted: true, text: '', reactionCounts: {}, viewerReactions: [] } : m)));
+		setMessages((current) =>
+			current.map((m) => (m.id === message.id ? { ...m, deleted: true, text: '', attachments: [], reactionCounts: {}, viewerReactions: [] } : m))
+		);
     try {
       await api.deleteMessage({ id: message.id });
+			window.dispatchEvent(new Event('thingtime:root-data-refresh'));
     } catch (err: any) {
       setMessages(prev);
       lopu({ title: err?.error || 'Delete failed 😞', status: 'error' });
@@ -320,14 +352,7 @@ export const ChatView = (props: ChatViewProps) => {
   return (
     <Flex direction="column" height="100%" minWidth={0} flex={1}>
       {/* header */}
-      <Flex
-        align="center"
-        gap={2}
-        paddingX={3}
-        paddingY={2}
-        borderBottom="1px solid var(--tt-border-light, #f3f3f5)"
-        flexShrink={0}
-      >
+			<Flex align="center" gap={2} paddingX={3} paddingY={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)" flexShrink={0}>
         {props.onBack ? (
           <Button size="sm" variant="ghost" onClick={props.onBack} aria-label="Back">
             ←
@@ -524,21 +549,38 @@ const ThreadPanel = ({
     );
     try {
       const payload = await api.react({ messageId: message.id, emoji: token });
-      setReplies((prev) => prev.map((m) => (m.id === message.id ? { ...m, reactionCounts: payload.reactionCounts, viewerReactions: payload.viewerReactions } : m)));
+			setReplies((prev) =>
+				prev.map((m) => (m.id === message.id ? { ...m, reactionCounts: payload.reactionCounts, viewerReactions: payload.viewerReactions } : m))
+			);
     } catch (err: any) {
       setReplies((prev) => prev.map((m) => (m.id === message.id ? message : m)));
       lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
     }
   };
 
-  const sendReply = async (text: string): Promise<boolean> => {
+	const sendReply = async (submission: {
+		text: string;
+		requestId: string;
+		attachmentIds: string[];
+		attachments: PublicAttachment[];
+	}): Promise<boolean> => {
     try {
-      const payload = await api.sendMessage({ chatId, text, threadRootId: root.id });
+			const payload = await api.sendMessage({
+				chatId,
+				text: submission.text,
+				requestId: submission.requestId,
+				attachmentIds: submission.attachmentIds,
+				threadRootId: root.id
+			});
       setReplies((prev) => [payload.message, ...prev]);
       onSent();
       return true;
     } catch (err: any) {
-      lopu({ title: err?.error || 'Reply did not send 😞', status: 'error' });
+			if (hasUnknownMutationOutcome(err)) {
+				lopu({ title: 'That reply may already have sent. Retry safely to confirm it.', status: 'info' });
+				throw err;
+			}
+			lopu({ title: 'Thingtime could not send that reply. Please try again.', status: 'error' });
       return false;
     }
   };

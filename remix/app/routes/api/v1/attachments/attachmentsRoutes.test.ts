@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createAttachmentMutationAction } from '~/api/utils/attachments/attachmentResponses';
+import { createAttachmentMutationAction, isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
 import { createAttachmentCleanupLoader } from './cleanup/_cleanup';
 import { createAttachmentContentLoader } from './content/_content';
 
@@ -20,6 +20,36 @@ const post = (body: unknown, headers: Record<string, string> = {}) =>
 		headers: { Origin: 'https://thingtime.example', 'Content-Type': 'application/json', ...headers },
 		body: typeof body === 'string' ? body : JSON.stringify(body)
 	});
+
+test('same-origin mutations honor the proxy-owned public origin and still fail closed for cross-site browsers', () => {
+	const localProxyHeaders = {
+		Origin: 'http://127.0.0.1:18280',
+		'X-Forwarded-Host': '127.0.0.1:18280',
+		'X-Forwarded-Proto': 'http'
+	};
+	assert.equal(isSameOriginAttachmentRequest(new Request('http://127.0.0.1:18282/api/v1/attachments/uploads', { headers: localProxyHeaders })), true);
+	assert.equal(
+		isSameOriginAttachmentRequest(
+			new Request('http://127.0.0.1:18282/api/v1/attachments/uploads', {
+				headers: { ...localProxyHeaders, Origin: 'https://attacker.example' }
+			})
+		),
+		false
+	);
+	assert.equal(
+		isSameOriginAttachmentRequest(
+			new Request('http://127.0.0.1:18282/api/v1/attachments/uploads', {
+				headers: {
+					Origin: 'https://attacker.example',
+					'X-Forwarded-Host': 'attacker.example',
+					'X-Forwarded-Proto': 'https',
+					'Sec-Fetch-Site': 'cross-site'
+				}
+			})
+		),
+		false
+	);
+});
 
 test('attachment mutations enforce same-origin JSON, full users, caps, and private responses', async () => {
 	let serviceCalls = 0;
@@ -86,6 +116,28 @@ test('attachment mutation responses preserve bounded authored retry metadata', a
 		error: 'Upload parts are incomplete',
 		code: 'upload_parts_retryable',
 		retryable: true
+	});
+
+	const quotaHandler = createAttachmentMutationAction(
+		{
+			rateKey: 'attachments.start',
+			service: async () => ({
+				ok: false as const,
+				status: 507,
+				error: 'Account storage allowance reached',
+				code: 'quota_exceeded',
+				retryable: false
+			})
+		},
+		{ getUser: async () => user, enforceLimit: allowed as any }
+	);
+	const quotaResponse = await quotaHandler({ request: post({ filename: 'full.bin' }) });
+	assert.equal(quotaResponse.status, 507);
+	assert.deepEqual(await quotaResponse.json(), {
+		ok: false,
+		error: 'Account storage allowance reached',
+		code: 'quota_exceeded',
+		retryable: false
 	});
 });
 

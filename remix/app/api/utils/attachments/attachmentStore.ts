@@ -9,6 +9,8 @@ import {
 	isAttachmentFinalizationLeaseId,
 	isAttachmentObjectVersionId,
 	type AttachmentCrystal,
+	type AttachmentPurpose,
+	type ProfileAttachmentSlot,
 	type AttachmentState
 } from './attachmentCore';
 
@@ -22,6 +24,9 @@ export const ATTACHMENT_UPLOAD_INITIALIZATION_LEASE_MS = 15 * 60 * 1000;
 // lifecycle window before repeated Abort/ListParts/HEAD can authorize refund.
 export const ATTACHMENT_MPU_SETTLEMENT_MS = 8 * 24 * 60 * 60 * 1000;
 export const ATTACHMENT_MPU_EMPTY_RECHECK_MS = 60 * 60 * 1000;
+export const MAX_PROFILE_ATTACHMENT_BYTES = 64 * 1024 * 1024;
+export const PROFILE_ATTACHMENT_CONTENT_TYPES = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
+export type { AttachmentPurpose, ProfileAttachmentSlot } from './attachmentCore';
 export const attachmentDeletingRetryAt = (now = new Date()): Date => new Date(now.getTime() + ATTACHMENT_DELETING_RETRY_DELAY_MS);
 export const attachmentMpuSettlementAt = (now = new Date()): Date => new Date(now.getTime() + ATTACHMENT_MPU_SETTLEMENT_MS);
 export const attachmentDeletingRetryUpdate = (retryAt: Date, updatedAt = new Date()) => ({
@@ -49,6 +54,8 @@ export type AttachmentDoc = {
 	objectKey: string;
 	objectVersionId?: string;
 	attachmentRequestFingerprint?: string;
+	attachmentPurpose?: AttachmentPurpose;
+	attachmentProfileSlot?: ProfileAttachmentSlot;
 	attachmentFinalizationLeaseId?: string;
 	attachmentPartsIssuedAt?: Date;
 	attachmentObjectlessDelete?: true;
@@ -65,6 +72,8 @@ type PendingInput = {
 	crystal: AttachmentCrystal;
 	objectKey: string;
 	requestFingerprint: string;
+	purpose: AttachmentPurpose;
+	profileSlot?: ProfileAttachmentSlot;
 	expiresAt: Date;
 };
 
@@ -167,7 +176,7 @@ export const expiredAttachmentDraftFilter = (
 });
 
 export const attachmentStore: AttachmentStore = {
-	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, expiresAt }) {
+	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt }) {
 		const now = new Date();
 		const unstamped = {
 			shareId: id,
@@ -185,6 +194,8 @@ export const attachmentStore: AttachmentStore = {
 			objectSizeBytes: crystal.size,
 			objectKey,
 			attachmentRequestFingerprint: requestFingerprint,
+			attachmentPurpose: purpose,
+			...(profileSlot ? { attachmentProfileSlot: profileSlot } : {}),
 			attachmentExpiresAt: expiresAt,
 			createdAt: now,
 			updatedAt: now
@@ -628,14 +639,26 @@ export const attachmentStore: AttachmentStore = {
 	}
 };
 
-// Called by the post writer inside the SAME home-Mongo transaction as post
-// creation. This is the only supported transition from a private unattached
-// object to a relational child inheriting the post's audience.
-export const bindReadyAttachmentsToTarget = async (
+type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile'>;
+
+const attachmentPurposeLabel: Record<BindableAttachmentPurpose, string> = {
+	post: 'post',
+	comment: 'comment',
+	message: 'message',
+	emoji: 'custom emoji'
+};
+
+// Called by each content writer inside the SAME home-Mongo transaction as its
+// target creation. This is the only supported transition from a private,
+// unbound object to a relational child. Purpose is immutable: an upload plan
+// minted for a DM cannot be replayed into a public post or custom emoji.
+const bindReadyAttachmentsForPurpose = async (
 	ownerId: string,
 	attachmentIds: readonly string[],
 	targetId: string,
-	session: any
+	session: any,
+	purpose: BindableAttachmentPurpose,
+	maxAttachments = MAX_ATTACHMENTS_PER_TARGET
 ): Promise<void> => {
 	if (isCustomMongoEndpointActive()) {
 		throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
@@ -648,14 +671,19 @@ export const bindReadyAttachmentsToTarget = async (
 				.filter(Boolean)
 		)
 	];
-	if (ids.length !== attachmentIds.length || ids.length > MAX_ATTACHMENTS_PER_TARGET) {
-		throw new AttachmentBindingError(400, `A post can contain at most ${MAX_ATTACHMENTS_PER_TARGET} unique attachments`);
+	if (ids.length !== attachmentIds.length || ids.length > maxAttachments) {
+		throw new AttachmentBindingError(
+			400,
+			`A ${attachmentPurposeLabel[purpose]} can contain at most ${maxAttachments} unique attachment${maxAttachments === 1 ? '' : 's'}`
+		);
 	}
 	if (!ids.length) return;
 	if (!targetId.trim()) throw new AttachmentBindingError(400, 'Attachment target is required');
 
 	const things = await getHomeThingsCollection();
 	const now = new Date();
+	const purposeFence =
+		purpose === 'post' ? { $or: [{ attachmentPurpose: 'post' }, { attachmentPurpose: { $exists: false } }] } : { attachmentPurpose: purpose };
 	const candidates = (await things
 		.find(
 			{
@@ -663,9 +691,15 @@ export const bindReadyAttachmentsToTarget = async (
 				ownerId,
 				thingtime: ATTACHMENT_THINGTIME,
 				attachmentState: 'ready',
+				$and: [
+					purposeFence,
+					{ attachmentProfileSlot: { $exists: false } },
+					{
 				$or: [
 					{ targetId, attachmentExpiresAt: { $exists: false } },
 					{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
+				]
+					}
 				]
 			} as any,
 			{ session, projection: { shareId: 1, targetId: 1 } }
@@ -682,15 +716,213 @@ export const bindReadyAttachmentsToTarget = async (
 			ownerId,
 			thingtime: ATTACHMENT_THINGTIME,
 			attachmentState: 'ready',
+			$and: [
+				purposeFence,
+				{ attachmentProfileSlot: { $exists: false } },
+				{
 			$or: [
 				{ targetId, attachmentExpiresAt: { $exists: false } },
 				{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
 			]
+				}
+			]
 		} as any,
-		{ $set: { targetId, acl: [ACL_INHERIT], updatedAt: now }, $unset: { attachmentExpiresAt: '' } },
+		{
+			$set: { targetId, acl: [ACL_INHERIT], attachmentPurpose: purpose, updatedAt: now },
+			$unset: { attachmentExpiresAt: '', attachmentProfileSlot: '' }
+		},
 		{ session }
 	);
 	if (write.matchedCount !== ids.length) {
-		throw new AttachmentBindingError(409, 'One or more attachments changed while the post was being created');
+		throw new AttachmentBindingError(409, `One or more attachments changed while the ${attachmentPurposeLabel[purpose]} was being created`);
 	}
 };
+
+export const bindReadyAttachmentsToTarget = async (
+	ownerId: string,
+	attachmentIds: readonly string[],
+	targetId: string,
+	session: any
+): Promise<void> => bindReadyAttachmentsForPurpose(ownerId, attachmentIds, targetId, session, 'post');
+
+export const bindReadyCommentAttachmentsToTarget = async (
+	ownerId: string,
+	attachmentIds: readonly string[],
+	targetId: string,
+	session: any
+): Promise<void> => bindReadyAttachmentsForPurpose(ownerId, attachmentIds, targetId, session, 'comment');
+
+export const bindReadyMessageAttachmentsToTarget = async (
+	ownerId: string,
+	attachmentIds: readonly string[],
+	targetId: string,
+	session: any
+): Promise<void> => bindReadyAttachmentsForPurpose(ownerId, attachmentIds, targetId, session, 'message');
+
+export const bindReadyEmojiAttachmentToTarget = async (
+	ownerId: string,
+	attachmentIds: readonly string[],
+	targetId: string,
+	session: any
+): Promise<void> => bindReadyAttachmentsForPurpose(ownerId, attachmentIds, targetId, session, 'emoji', 1);
+
+export type ProfileAttachmentRefs = Record<ProfileAttachmentSlot, string | null>;
+
+const exactAcl = (value: unknown, expected: string): boolean => Array.isArray(value) && value.length === 1 && value[0] === expected;
+
+export const isBindableProfileAttachment = (
+	doc: AttachmentDoc | null | undefined,
+	ownerId: string,
+	targetId: string,
+	slot: ProfileAttachmentSlot,
+	now: Date
+): boolean => {
+	if (
+		!doc ||
+		doc.ownerId !== ownerId ||
+		ownerId !== targetId ||
+		doc.attachmentState !== 'ready' ||
+		doc.attachmentPurpose !== 'profile' ||
+		doc.attachmentProfileSlot !== slot ||
+		doc.crystal.mediaKind !== 'image' ||
+		!PROFILE_ATTACHMENT_CONTENT_TYPES.has(doc.crystal.contentType) ||
+		doc.crystal.size !== doc.objectSizeBytes ||
+		doc.objectSizeBytes < 1 ||
+		doc.objectSizeBytes > MAX_PROFILE_ATTACHMENT_BYTES ||
+		!isAttachmentObjectVersionId(doc.objectVersionId)
+	) {
+		return false;
+	}
+
+	if (doc.targetId === targetId) {
+		return doc.attachmentExpiresAt === undefined && exactAcl(doc.acl, ACL_INHERIT);
+	}
+	return doc.targetId === undefined && doc.attachmentExpiresAt instanceof Date && doc.attachmentExpiresAt > now && exactAcl(doc.acl, ACL_OWNER);
+};
+
+type ProfileAttachmentReconcilerDependencies = {
+	getThings: typeof getHomeThingsCollection;
+};
+
+export const createProfileAttachmentReconciler = (overrides: Partial<ProfileAttachmentReconcilerDependencies> = {}) => {
+	const dependencies: ProfileAttachmentReconcilerDependencies = {
+		getThings: getHomeThingsCollection,
+		...overrides
+	};
+
+	return async (input: {
+		ownerId: string;
+		targetId: string;
+		current: ProfileAttachmentRefs;
+		desired: ProfileAttachmentRefs;
+		now: Date;
+		session: any;
+	}): Promise<void> => {
+		const { ownerId, targetId, current, desired, now, session } = input;
+		if (!ownerId || ownerId !== targetId) {
+			throw new AttachmentBindingError(409, 'Profile attachments must belong to the profile owner');
+		}
+		if (desired.avatar && desired.avatar === desired.banner) {
+			throw new AttachmentBindingError(400, 'Avatar and banner must use different attachments');
+		}
+
+		const ids = [...new Set([...Object.values(current), ...Object.values(desired)].filter((id): id is string => !!id))];
+		if (!ids.length) return;
+		const things = await dependencies.getThings();
+		const docs = (await things
+			.find({ shareId: { $in: ids }, ownerId, thingtime: ATTACHMENT_THINGTIME } as any, { session })
+			.toArray()) as AttachmentDoc[];
+		const byId = new Map(docs.map((doc) => [doc.shareId, doc]));
+
+		for (const slot of ['avatar', 'banner'] as const) {
+			const id = desired[slot];
+			if (!id) continue;
+			const doc = byId.get(id);
+			if (!isBindableProfileAttachment(doc, ownerId, targetId, slot, now)) {
+				throw new AttachmentBindingError(409, `The selected ${slot} attachment is unavailable`);
+			}
+		}
+
+		for (const slot of ['avatar', 'banner'] as const) {
+			const id = desired[slot];
+			if (!id) continue;
+			const before = byId.get(id)!;
+			const identity = before._id === undefined ? { shareId: before.shareId } : { _id: before._id };
+			const write = await things.updateOne(
+				{
+					...identity,
+					ownerId,
+					thingtime: ATTACHMENT_THINGTIME,
+					attachmentState: 'ready',
+					attachmentPurpose: 'profile',
+					attachmentProfileSlot: slot,
+					updatedAt: before.updatedAt,
+					$or: [
+						{ targetId, attachmentExpiresAt: { $exists: false }, acl: [ACL_INHERIT] },
+						{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now }, acl: [ACL_OWNER] }
+					]
+				} as any,
+				{
+					$set: {
+						targetId,
+						acl: [ACL_INHERIT],
+						attachmentPurpose: 'profile',
+						attachmentProfileSlot: slot,
+						updatedAt: now
+					},
+					$unset: { attachmentExpiresAt: '' }
+				},
+				{ session }
+			);
+			if (write.matchedCount !== 1) {
+				throw new AttachmentBindingError(409, `The selected ${slot} attachment changed while the profile was being updated`);
+			}
+		}
+
+		const desiredIds = new Set(Object.values(desired).filter((id): id is string => !!id));
+		const released = new Set<string>();
+		for (const slot of ['avatar', 'banner'] as const) {
+			const id = current[slot];
+			if (!id || desiredIds.has(id) || released.has(id)) continue;
+			released.add(id);
+			const before = byId.get(id);
+			// A missing object row is already inaccessible and carries no storage row
+			// to release. Clear the stale user reference without touching another row.
+			if (!before) continue;
+			if (
+				before.ownerId !== ownerId ||
+				before.targetId !== targetId ||
+				before.attachmentState !== 'ready' ||
+				before.attachmentPurpose !== 'profile' ||
+				before.attachmentProfileSlot !== slot ||
+				!exactAcl(before.acl, ACL_INHERIT)
+			) {
+				throw new AttachmentBindingError(409, `The current ${slot} attachment cannot be safely released`);
+			}
+			const identity = before._id === undefined ? { shareId: before.shareId } : { _id: before._id };
+			const write = await things.updateOne(
+				{
+					...identity,
+					ownerId,
+					targetId,
+					thingtime: ATTACHMENT_THINGTIME,
+					attachmentState: 'ready',
+					attachmentPurpose: 'profile',
+					attachmentProfileSlot: slot,
+					acl: [ACL_INHERIT],
+					updatedAt: before.updatedAt
+				} as any,
+				{
+					$set: { acl: [ACL_OWNER], attachmentExpiresAt: now, updatedAt: now },
+					$unset: { targetId: '' }
+				},
+				{ session }
+			);
+			if (write.matchedCount !== 1) {
+				throw new AttachmentBindingError(409, `The current ${slot} attachment changed while the profile was being updated`);
+			}
+		}
+	};
+};
+
+export const reconcileReadyProfileAttachmentsToUser = createProfileAttachmentReconciler();

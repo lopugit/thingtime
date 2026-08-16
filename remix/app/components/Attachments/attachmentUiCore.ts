@@ -71,20 +71,51 @@ export const formatAttachmentBytes = (bytes: number): string => {
 	return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${unit}`;
 };
 
-export const attachmentUploadError = (error: unknown, phase: 'prepare' | 'upload' | 'complete' | 'cleanup'): string => {
+export type AttachmentUploadErrorContext = {
+	fileSizeBytes?: number;
+	remainingBytes?: number | null;
+	storageStatus?: 'ready' | 'reconciling' | 'unavailable';
+};
+
+const ATTACHMENT_QUOTA_ERROR =
+	'This account’s storage quota is full for this file. Delete stored media or upgrade the account’s storage tier, then retry.';
+
+export const attachmentUploadError = (
+	error: unknown,
+	phase: 'prepare' | 'upload' | 'complete' | 'cleanup',
+	context: AttachmentUploadErrorContext = {}
+): string => {
 	const status = Number((error as { status?: unknown } | null)?.status);
+	const code = String((error as { code?: unknown } | null)?.code || '');
+	const snapshotShowsQuota =
+		phase === 'prepare' &&
+		context.storageStatus === 'ready' &&
+		Number.isSafeInteger(context.fileSizeBytes) &&
+		Number(context.fileSizeBytes) > 0 &&
+		Number.isSafeInteger(context.remainingBytes) &&
+		Number(context.remainingBytes) >= 0 &&
+		Number(context.fileSizeBytes) > Number(context.remainingBytes);
 	if (status === 401) return 'Your session expired. Log in again before uploading this file.';
 	if (status === 403) return 'This account is not allowed to upload that file.';
 	if (status === 413) return 'This file is larger than Thingtime can accept.';
 	if (status === 429) return 'Uploads are moving too quickly. Wait a moment, then retry this file.';
-	if (status === 507) return 'This account does not have enough storage remaining for this file.';
-	if (status === 410 || (error as { code?: unknown } | null)?.code === 'upload_unavailable') {
+	if (status === 507 || code === 'quota_exceeded' || snapshotShowsQuota) return ATTACHMENT_QUOTA_ERROR;
+	if (code === 'storage_unconfigured') {
+		return 'Private uploads are unavailable in this environment. For images, use the public image URL option instead.';
+	}
+	if (code === 'accounting_unavailable' || code === 'storage_conflict' || code === 'storage_invariant') {
+		return 'Thingtime is verifying this account’s storage balance. Wait a moment, then retry this file.';
+	}
+	if (code === 'storage_unavailable' || (status === 503 && phase === 'prepare')) {
+		return 'Private storage is temporarily unavailable. Wait a moment, then retry this file.';
+	}
+	if (status === 410 || code === 'upload_unavailable') {
 		return 'This upload can no longer resume. Remove the file, then add it again.';
 	}
 	if (
 		status === 409 &&
 		(error as { retryable?: unknown; code?: unknown } | null)?.retryable === true &&
-		['upload_parts_retryable', 'upload_not_ready'].includes(String((error as { code?: unknown }).code))
+		['upload_parts_retryable', 'upload_not_ready'].includes(code)
 	) {
 		return 'One or more file parts need uploading again. Retry to resume this secure upload.';
 	}
@@ -115,6 +146,26 @@ export const attachmentSnapshot = (uploads: ComposerAttachmentUpload[]): Attachm
 		blocking: uploads.some((upload) => upload.status !== 'ready'),
 		hasSelection: uploads.length > 0
 	};
+};
+
+export const sameAttachmentSnapshot = (left: AttachmentComposerSnapshot, right: AttachmentComposerSnapshot): boolean => {
+	if (left.blocking !== right.blocking || left.hasSelection !== right.hasSelection) return false;
+	if (left.attachments.length !== right.attachments.length || left.attachmentIds.length !== right.attachmentIds.length) return false;
+	for (let index = 0; index < left.attachments.length; index += 1) {
+		const leftAttachment = left.attachments[index];
+		const rightAttachment = right.attachments[index];
+		if (
+			left.attachmentIds[index] !== right.attachmentIds[index] ||
+			leftAttachment.id !== rightAttachment.id ||
+			leftAttachment.name !== rightAttachment.name ||
+			leftAttachment.size !== rightAttachment.size ||
+			leftAttachment.contentType !== rightAttachment.contentType ||
+			leftAttachment.mediaKind !== rightAttachment.mediaKind
+		) {
+			return false;
+		}
+	}
+	return true;
 };
 
 export type AttachmentCleanupAction = { kind: 'delete'; attachmentId: string } | { kind: 'abort'; uploadId: string } | null;

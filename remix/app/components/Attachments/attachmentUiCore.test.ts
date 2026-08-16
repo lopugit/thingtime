@@ -15,6 +15,7 @@ import {
 	MAX_POST_ATTACHMENTS,
 	multipartPartRange,
 	normalizePublicAttachment,
+	sameAttachmentSnapshot,
 	safeAttachmentMediaKind,
 	shouldFreezeAmbiguousPostSubmission
 } from './attachmentUiCore.ts';
@@ -64,8 +65,26 @@ test('content links are stable same-origin routes derived only from attachment i
 test('upload errors are fixed client-authored messages', () => {
 	const hostile = { status: 507, error: 'secret upstream response' };
 	const message = attachmentUploadError(hostile, 'prepare');
-	assert.match(message, /enough storage/i);
+	assert.match(message, /storage quota is full/i);
+	assert.match(message, /delete stored media|upgrade/i);
 	assert.doesNotMatch(message, /secret|upstream/i);
+	assert.match(attachmentUploadError({ status: 503, code: 'quota_exceeded', error: 'private ledger detail' }, 'prepare'), /storage quota is full/i);
+	assert.match(
+		attachmentUploadError({ status: 503, error: 'ambiguous private failure' }, 'prepare', {
+			fileSizeBytes: 11,
+			remainingBytes: 10,
+			storageStatus: 'ready'
+		}),
+		/storage quota is full/i
+	);
+	assert.match(
+		attachmentUploadError({ status: 503, code: 'accounting_unavailable', error: 'private ledger detail' }, 'prepare'),
+		/verifying this account’s storage balance/i
+	);
+	assert.match(
+		attachmentUploadError({ status: 409, code: 'storage_conflict', error: 'private migration detail' }, 'prepare'),
+		/verifying this account’s storage balance/i
+	);
 	assert.match(attachmentUploadError({ status: 500, error: 'proxy stack' }, 'upload'), /could not reach storage/i);
 	assert.match(
 		attachmentUploadError({ status: 409, code: 'upload_parts_retryable', retryable: true, error: 'private server detail' }, 'complete'),
@@ -77,6 +96,17 @@ test('upload errors are fixed client-authored messages', () => {
 	assert.equal(attachmentCompleteRetryPhase({ status: 503 }), 'complete');
 	assert.equal(attachmentCompleteRetryPhase({ status: 410, code: 'upload_unavailable', retryable: false }), 'terminal');
 	assert.equal(attachmentUploadFailurePhase({ status: 410, code: 'upload_unavailable' }, 'upload'), 'terminal');
+	const unavailable = attachmentUploadError(
+		{ status: 503, code: 'storage_unconfigured', error: 'missing private bucket private-example-bucket account 1234' },
+		'prepare'
+	);
+	assert.match(unavailable, /unavailable in this environment/i);
+	assert.match(unavailable, /public image URL/i);
+	assert.doesNotMatch(unavailable, /private-example-bucket|bucket|account|1234|missing private/i);
+	const temporary = attachmentUploadError({ status: 503, error: 'private runtime detail' }, 'prepare');
+	assert.match(temporary, /temporarily unavailable/i);
+	assert.doesNotMatch(temporary, /environment|private runtime/i);
+	assert.equal(attachmentUploadError({ status: 503 }, 'upload'), 'The file could not reach storage. Check your connection and retry.');
 });
 
 test('composer stays blocked until every selected upload is ready', () => {
@@ -99,6 +129,17 @@ test('composer stays blocked until every selected upload is ready', () => {
 		kind: 'abort',
 		uploadId: 'local'
 	});
+});
+
+test('progress-only upload changes do not emit a new composer snapshot', () => {
+	const file = { name: 'photo.jpg', size: 10, lastModified: 1, type: 'image/jpeg' } as File;
+	const base = { localId: 'local', file, previewUrl: 'blob:preview', uploadId: 'upload', attachment: null, error: null, failedAt: null };
+	const first = attachmentSnapshot([{ ...base, status: 'uploading', progress: 10 }]);
+	const progressed = attachmentSnapshot([{ ...base, status: 'uploading', progress: 90 }]);
+	assert.equal(sameAttachmentSnapshot(first, progressed), true);
+	const attachment = { id: 'att', name: 'photo.jpg', size: 10, contentType: 'image/jpeg', mediaKind: 'image' as const };
+	const ready = attachmentSnapshot([{ ...base, status: 'ready', progress: 100, attachment }]);
+	assert.equal(sameAttachmentSnapshot(first, ready), false);
 });
 
 test('formats bytes and computes exact multipart slices', () => {
