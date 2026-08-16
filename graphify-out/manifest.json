@@ -1755,8 +1755,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786892452.3221543,
-    "ast_hash": "295db0fd2a9141cb7ee46576f31eca1a",
+    "mtime": 1786893930.1976142,
+    "ast_hash": "3060355fbf5602e5f0be315eb07c6c43",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -4160,8 +4160,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786892452.321795,
-    "ast_hash": "4f88b991f7da8b82530a9028447deb8a",
+    "mtime": 1786893930.1937718,
+    "ast_hash": "f3998fc17fe8d234453e35bac6bb6c81",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -4245,8 +4245,8 @@
     "semantic_hash": "505fca8e81926065aff3be4ea340c700"
   },
   ".github/workflows/resolve-pr-conflicts.yml": {
-    "mtime": 1786892452.321335,
-    "ast_hash": "fc6c7e53702b6744c0b274dfda64803a",
+    "mtime": 1786893809.0551515,
+    "ast_hash": "3f4b48f46a7084a397689d86669747ce",
     "semantic_hash": ""
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/canopy.svg": {
@@ -4845,14 +4845,14 @@
     "semantic_hash": "8161980932ed6089f39d049025d92e39"
   },
   ".github/scripts/rebase-stack/prepare-round.sh": {
-    "mtime": 1786888965.8168793,
-    "ast_hash": "3c73275a9b638d13a0661e8a4963bf54",
+    "mtime": 1786893705.6521711,
+    "ast_hash": "b2f93e7b358894b663fffb97e611b113",
     "semantic_hash": ""
   },
   ".github/scripts/rebase-stack/start.sh": {
-    "mtime": 1786888965.8172534,
-    "ast_hash": "63acc592b66cd9b193102392d651bc2c",
-    "semantic_hash": "63acc592b66cd9b193102392d651bc2c"
+    "mtime": 1786893705.651927,
+    "ast_hash": "5b89811647b98ecb526948859518d445",
+    "semantic_hash": ""
   },
   "PRs/170-app-data-quota-allowances-app-owner-storage-manager.md": {
     "mtime": 1786888965.8222907,
@@ -4875,13 +4875,13 @@
     "semantic_hash": "21c290e907d4b49a899a7e3c033c71b8"
   },
   ".github/actions/rebase-conflict-round/action.yml": {
-    "mtime": 1786892452.3199024,
-    "ast_hash": "a3f41bcd11b464d8700dcc27f49927e7",
+    "mtime": 1786893809.0541523,
+    "ast_hash": "a0ffa514d41ba6a307e807b8d3600e5d",
     "semantic_hash": ""
   },
   ".github/workflows/rebase-pr-stacks.yml": {
-    "mtime": 1786892452.3208106,
-    "ast_hash": "658a5e4867356f19b6c9663f74e1e373",
+    "mtime": 1786893809.0545554,
+    "ast_hash": "9dafdbe139d28012415f9db45c5a7fa5",
     "semantic_hash": ""
   },
   "PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md": {
@@ -5375,8 +5375,8 @@
     "semantic_hash": "1bac091f31b99443dbeafa2d037a005b"
   },
   ".github/scripts/resolve-pr-conflicts-routing-contract.mjs": {
-    "mtime": 1786889022.1154845,
-    "ast_hash": "d97ce5cd63f2a675e7f5bf06ef6e7e80",
+    "mtime": 1786893842.5773754,
+    "ast_hash": "139fb0d0d7bea5f3cad3c8c73c78f728",
     "semantic_hash": ""
   },
   ".github/workflows/promote-features-to-main.yml": {
@@ -5400,8 +5400,8 @@
     "semantic_hash": "33e30dbe292704371a290961e581066b"
   },
   ".github/scripts/workflow-control-plane-contract.mjs": {
-    "mtime": 1786892452.3201745,
-    "ast_hash": "f8bf2f1f6eb0a3633e9bb53b5ed797bf",
+    "mtime": 1786893868.1608248,
+    "ast_hash": "cddb9184fafeee468d643b554663a2ef",
     "semantic_hash": ""
   },
   ".github/workflows/control-plane-ci.yml": {
@@ -5420,13 +5420,13 @@
     "semantic_hash": ""
   },
   ".github/scripts/promotion-worker-routing-contract.mjs": {
-    "mtime": 1786888965.8166986,
-    "ast_hash": "bd61c2e55b9592a95960315ea3752c4e",
+    "mtime": 1786893930.1934729,
+    "ast_hash": "8adc037c1d65c0aa28a65c5806d648d8",
     "semantic_hash": ""
   },
   ".github/scripts/rebase-stack/promotion-worker.sh": {
-    "mtime": 1786888965.8170264,
-    "ast_hash": "9e04f7f1ed9f4332d197b3b10afd2da7",
+    "mtime": 1786893705.6525555,
+    "ast_hash": "ab7e6c6be2df77871289acb06f620773",
     "semantic_hash": ""
   },
   ".github/scripts/rebase-stack/refresh-promotion-graphify.sh": {
@@ -5457,6 +5457,11 @@
   ".github/workflows/develop-pr-preview.yml": {
     "mtime": 1786888965.818035,
     "ast_hash": "68c60034d090730492de6b8304998dcf",
+    "semantic_hash": ""
+  },
+  "PRs/269-codex-ai-turn-budget-label-cleanup-give-ai-resolvers-500-turns.md": {
+    "mtime": 1786894504.2674468,
+    "ast_hash": "b33875c7930cbaf785d79d4fea2adc81",
     "semantic_hash": ""
   }
 }
