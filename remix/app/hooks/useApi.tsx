@@ -292,6 +292,7 @@ export function useApi() {
             `/api/v1/things${toQuery({
               target: args?.target,
               thingtime: args?.thingtime,
+              folder: args?.folder,
               cursor: args?.cursor,
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
@@ -309,9 +310,28 @@ export function useApi() {
               acl: args?.acl,
               visibility: args?.visibility,
               tags: args?.tags,
-              tokenAcl: args?.tokenAcl
+              tokenAcl: args?.tokenAcl,
+              // move support — only send folderId when the caller provides it
+              // (undefined must stay "leave it where it is", null = root)
+              ...(args && 'folderId' in args ? { folderId: args.folderId } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }
+          ),
+        [asyncFetcher]
+      ),
+      // multi-select move/copy/delete/share — see /docs/api things-bulk
+      bulk: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            {
+              op: args?.op,
+              ids: args?.ids,
+              folderId: args?.folderId ?? null,
+              // share op only — omitted entirely for move/copy/delete
+              ...(args && 'acl' in args ? { acl: args.acl } : {}),
+              ...(args?.recursive ? { recursive: true } : {})
+            },
+            { action: '/api/v1/things/bulk' }
           ),
         [asyncFetcher]
       ),
@@ -335,10 +355,10 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-          const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags, tokenAcl } = args;
+          const { type, text, images, listing, thing, thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl } = args;
           // unified shape when thingtime is given, legacy post shape otherwise
           const payload = Array.isArray(thingtime)
-            ? { thingtime, crystal, targetId, acl, visibility, tags, tokenAcl }
+            ? { thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl }
             : { type, text, images, listing, thing, acl, visibility, tags };
           return asyncFetcher.submit(payload, { action: '/api/v1/things' });
         },

@@ -10,12 +10,14 @@ import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { ConnectedAppsSection } from '~/components/Apps/ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
-import { ColorControl } from '~/components/ThemeSettings/controls';
-import { CurrentUser, useCurrentUser } from '~/hooks/useCurrentUser';
+import { ColorControl, ThingsBadgePaddingControl } from '~/components/ThemeSettings/controls';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import type { CurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
+import { LOGIN_TO_CLAIM_LABEL, getUserMention } from '~/utils/userIdentity';
 
 // The dedicated /settings page: account, profile, feed algorithms, appearance
 // and drawer preferences in stacked section cards. Fully usable logged out
@@ -240,7 +242,11 @@ export const SettingsPage = () => {
     resetOrdering
   } = useDrawer();
 
-	const { theme, preset, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } = useTtTheme();
+	const { theme, preset, overrides, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } = useTtTheme();
+	const thingsBadgeCustomPadding =
+		typeof overrides.general?.thingsBadgeCustomPadding === 'string'
+			? overrides.general.thingsBadgeCustomPadding
+			: theme.general.thingsBadgeCustomPadding;
 
   const [loggingOut, setLoggingOut] = React.useState(false);
   const topLevelLimitValue = typeof topLevelLimit === 'number' ? topLevelLimit : DRAWER_TOP_LEVEL_DEFAULT_LIMIT;
@@ -272,7 +278,7 @@ export const SettingsPage = () => {
     // over and settings re-renders on it. Only a fully signed-out browser
     // leaves for /login.
     if (resp?.user) {
-      lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
+      lopu({ title: `Logged out — switched to ${getUserMention(resp.user)} ✨`, status: 'success', duration: 6000 });
       return;
     }
     lopu({ title: 'Logged out', status: 'success', duration: 6000 });
@@ -422,16 +428,24 @@ export const SettingsPage = () => {
 						<Flex flexDirection="column" rowGap={3} width="100%">
 							<AccountStorageSummary user={user} />
             <Flex columnGap={2} rowGap={2} flexWrap="wrap">
-              <Button size="xs" variant="outline" onClick={() => navigate('/profile')}>
-                Profile 👤
-              </Button>
-              <Button size="xs" variant="outline" isLoading={loggingOut} onClick={handleLogout}>
-                Log out 🗝️
-              </Button>
-              {!user.emailVerified && (
-                <Button size="xs" variant="outline" onClick={handleResendVerification}>
-                  Resend verification 📬
+              {user.temporary ? (
+                <Button size="xs" variant="outline" onClick={() => navigate('/login')}>
+                  {LOGIN_TO_CLAIM_LABEL}
                 </Button>
+              ) : (
+                <>
+                  <Button size="xs" variant="outline" onClick={() => navigate('/profile')}>
+                    Profile 👤
+                  </Button>
+                  <Button size="xs" variant="outline" isLoading={loggingOut} onClick={handleLogout}>
+                    Log out 🗝️
+                  </Button>
+                  {!user.emailVerified && (
+                    <Button size="xs" variant="outline" onClick={handleResendVerification}>
+                      Resend verification 📬
+                    </Button>
+                  )}
+                </>
               )}
             </Flex>
 						</Flex>
@@ -439,7 +453,7 @@ export const SettingsPage = () => {
         </SettingsSection>
 
         {/* security (auth only) — email 2FA + the reset flow's home */}
-        {user && (
+        {user && !user.temporary && (
           <SettingsSection eyebrow="Security" description="Extra checks between a password and a session.">
             <Flex flexDirection="column">
               <SettingRow
@@ -528,6 +542,15 @@ export const SettingsPage = () => {
                 </Button>
               </Flex>
             </SettingRow>
+
+			<SettingRow label="Things badge padding" hint="View / Show / Arrange / Kind controls">
+				<ThingsBadgePaddingControl
+					value={theme.general.thingsBadgePadding}
+					customValue={thingsBadgeCustomPadding}
+					onValueChange={(value) => setGeneral('thingsBadgePadding', value)}
+					onCustomValueChange={(value) => setGeneral('thingsBadgeCustomPadding', value)}
+				/>
+			</SettingRow>
 
             <SettingRow label="Motion" hint="Rainbow + decorative animation">
               <Switch isChecked={theme.general.motion} onChange={(e) => setGeneral('motion', e.target.checked)}></Switch>

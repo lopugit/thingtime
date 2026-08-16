@@ -10,6 +10,7 @@ import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '../Lopu/useLopu';
 import { motionOK, partyConfetti } from '~/eggs/eggs';
+import { getUserDisplayName } from '~/utils/userIdentity';
 
 // 🥚 Easter egg: rapid 7-click streak on the nav 🦄 makes it gallop.
 const GALLOP_STREAK = 7;
@@ -47,6 +48,7 @@ export const Nav = (props) => {
 	const { thingtime } = useThingtime();
 
 	const user = useCurrentUser();
+	const claimedUser = user?.temporary ? null : user;
 
 	const { loading, open, toggleOpen, direction, openSearch } = useDrawer();
 	const { width: drawerWidth, resizing } = useDrawerLiveWidth();
@@ -278,11 +280,11 @@ export const Nav = (props) => {
 							</Center>
 						)}
 						<Center cursor="pointer">
-							{user ? (
+							{claimedUser ? (
 								<Link to="/profile">
 									<Flex flexDir={'row'} gap={2} alignItems="center">
 										<Box fontSize="xs" fontWeight="600">
-											{user.displayName || user.username}
+											{getUserDisplayName(claimedUser)}
 										</Box>
 										<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
 									</Flex>

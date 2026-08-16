@@ -1,5 +1,4 @@
 import React from 'react';
-import ClickAwayListener from 'react-click-away-listener';
 import { Center, Flex, Input } from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router';
 import Fuse from 'fuse.js';
@@ -13,6 +12,7 @@ import { sanitise } from '~/functions/sanitise';
 import { usePath } from '~/hooks/usePath';
 import { getParentPath } from '~/smarts';
 import { SECRET_WORDS, partyMode, rainbowFlash, pickSparkle } from '~/eggs/eggs';
+import { CommanderClickAwayBoundary } from './commanderClickAway';
 
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
@@ -78,7 +78,9 @@ export const CommanderV2 = (props) => {
 		if (commanderActive) {
 			inputRef?.current?.focus?.();
 		} else {
-			document.activeElement.blur();
+			// Closing Commander after an outside focus must not blur the input the
+			// user just reached. Only release Commander's own input.
+			if (document.activeElement === inputRef.current) inputRef.current?.blur?.();
 
 			if (thingtimeRef?.current?.settings?.commander?.[commanderId]?.clearCommanderOnToggle) {
 				setInputValue('');
@@ -245,17 +247,10 @@ export const CommanderV2 = (props) => {
 
 	const closeCommander = React.useCallback(
 		(e?: any) => {
-			console.log('Closing commander if conditions met');
-			if (!e?.defaultPrevented) {
-				console.log('Event default not prevented, closing commander. commanderId:', commanderId);
-				setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
-				// if (thingtime?.settings?.commander?.[commanderId]?.commanderActive) {
-				// }
-			} else {
-				console.log('Event default prevented, not closing commander');
-			}
+			if (e?.defaultPrevented || !commanderActive) return;
+			setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
 		},
-		[setThingtime, commanderId, commanderSettings?.commanderActive, thingtime?.settings?.commander]
+		[setThingtime, commanderId, commanderActive]
 	);
 
 	const toggleCommander = React.useCallback(() => {
@@ -437,7 +432,18 @@ export const CommanderV2 = (props) => {
 				}
 			}
 		},
-		[closeCommander, toggleCommander, hoveredSuggestion, suggestions, suggestionRowCount, showSuggestions, thingtime, thingtimeRef, commanderActive, executeCommand]
+		[
+			closeCommander,
+			toggleCommander,
+			hoveredSuggestion,
+			suggestions,
+			suggestionRowCount,
+			showSuggestions,
+			thingtime,
+			thingtimeRef,
+			commanderActive,
+			executeCommand
+		]
 	);
 
 	React.useEffect(() => {
@@ -481,7 +487,7 @@ export const CommanderV2 = (props) => {
 	);
 
 	return (
-		<ClickAwayListener onClickAway={closeCommander}>
+		<CommanderClickAwayBoundary onClickAway={closeCommander}>
 			<Flex
 				className="commanderHost"
 				data-commander-active={commanderActive ? 'true' : 'false'}
@@ -707,6 +713,6 @@ export const CommanderV2 = (props) => {
 					)}
 				</Center>
 			</Flex>
-		</ClickAwayListener>
+		</CommanderClickAwayBoundary>
 	);
 };

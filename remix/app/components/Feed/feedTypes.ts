@@ -6,6 +6,7 @@ export type PublicProfile = {
   id: string;
   username: string;
   displayName: string | null;
+  temporary?: boolean;
   bio: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
@@ -18,6 +19,7 @@ export type FeedAuthor = {
   id: string;
   username: string;
   displayName: string | null;
+  temporary?: boolean;
   avatarUrl: string | null;
 };
 

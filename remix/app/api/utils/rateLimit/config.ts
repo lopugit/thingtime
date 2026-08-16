@@ -88,6 +88,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
   'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
+  // First-session /things bootstrap: every success creates a durable user,
+  // session, roster entry, and subscription ledger. Reuse is checked before
+  // this bucket, so five creations per IP/day is generous for cookie loss and
+  // deliberately tight against anonymous account farming. Fail-closed route.
+  'auth.temporary': { limit: 5, windowMs: 24 * 60 * 60_000, enabled: true },
   // personal-access-token minting (POST /api/v1/tokens) — session-authed, but
   // each mint writes a session doc, so bound accumulation beyond the per-user
   // token cap

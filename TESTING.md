@@ -119,6 +119,12 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
+- [ ] Seed the `thingtime` LocalForage value with a legacy unrevivable function
+      plus root `set` / `get` runtime methods, then load `/feed` ONCE: the
+      collapsed “What's on your mind?” control opens, Editor.js accepts focus
+      and typing, Latest / Filters and the global search remain interactive,
+      and the repaired stored snapshot already contains neither runtime method
+      nor the legacy fallback before a second navigation.
 - [ ] Open the feed composer → Thingtime tab: the editor shows exactly ONE
       root property, `New Thing`, with no default children (no `name`).
 - [ ] The draft path is session-scoped (`tmp.<sessionId>.New Thing`): add a
@@ -1163,3 +1169,148 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       cost, so a burst past the limit 429s with the hashing message. The
       intent stays ANONYMOUS on purpose — being locked out is the reason to
       reach for it — and never reads or writes the database.
+
+## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
+
+- [ ] A fresh browser landing directly on `/things` blocks first paint only
+      long enough to create one temporary session user, then serves the real
+      Things UI (never the logged-out sign-in hero). Reload and navigation
+      reuse the same user/roster entry without creating duplicates; direct
+      `/login` and `/register` remain reachable so another account can be
+      added without losing the temporary space. Existing signed-in users are
+      never replaced. Once authenticated, `/things` seeds instantly from
+      `tt-things-<userId>` localStorage cache and background-refetches.
+- [ ] Temporary-session identity stays visually logged out: the top navigation
+      says `Login` (never `Temporary space`), while account/profile/person
+      surfaces say `Anonymous` with `Login to claim`. Generated `guest-*`
+      usernames and placeholder `@temporary.thingtime.invalid` emails never
+      appear in normal UI. Login/register can claim or add a real account
+      without deleting the recoverable temporary roster entry.
+- [ ] Folder CRUD: New → New folder creates a `["folder"]` thing (private by
+      default) inside the CURRENT folder; rename edits `crystal.name`; folders
+      never combine with other schemas (`["post","folder"]` 400s).
+- [ ] Containment is a `folderId` pointer on the child: move = PATCH
+      `{ id, folderId }` (null = root); a folder can never move into itself or
+      its own subtree (400, cycle-safe ancestor walk); reactions/saves refuse
+      folderId; deleting a folder RE-PARENTS its contents to the folder's
+      parent instead of deleting them.
+- [ ] `GET /api/v1/things?folder=root|<id>` lists only that folder level for
+      the owner; v1/pre-folder docs read as root; `folderId` is a searchable
+      root field on /search conditions.
+- [ ] Bulk ops (`POST /api/v1/things/bulk`, ≤100 ids): move/copy/delete/share
+      run the SAME single-item paths (updateThing/createThing/deleteThing)
+      with per-item ok/error results — one bad id never fails the batch, and
+      the toast reports "N done, M skipped" honestly. Copy refuses
+      comment/reaction/save/share things and mints fresh shareIds ("Copy of"
+      name hint on data things and folders).
+- [ ] Recursive folder copy: copying a FOLDER duplicates its whole subtree
+      through the same per-item create path (snapshot-first, so copying a
+      folder into itself terminates), skips uncopyable kinds with honest
+      copied/skipped counts, and refuses trees over 500 things BEFORE copying
+      anything (never a half-copied tree).
+- [ ] Bulk share (`op: 'share'` + acl/visibility): applies the audience per
+      item via updateThing; `recursive: true` flows a folder's audience to
+      everything inside (same 500 bound, refused past it), counting
+      inherit-locked things as skipped, never silently changing them. Missing
+      acl 400s the whole batch loudly.
+- [ ] Selection: click selects, Cmd/Ctrl toggles, Shift ranges, Cmd/Ctrl+A
+      selects all loaded, Escape clears; the View / Show / Arrange / Kind
+      toolbar remains visible in its top position while the contextual toolbar
+      appears beneath it. Mobile: tap OPENS, checkboxes select; both toolbars
+      wrap without overlap or horizontal overflow.
+- [ ] Clipboard: Copy/Cut (toolbar or Cmd/Ctrl+C/X) then Paste into any folder
+      (Cmd/Ctrl+V or the Paste pill); cut items dim until pasted; cut+paste
+      moves, copy+paste duplicates.
+- [ ] Delete always confirms first (permanent — cascade note; folder
+      re-parenting note when folders are selected); optimistic removal
+      reconciles by refetch.
+- [ ] Views: grid / list (name-kind-audience-tags-updated columns) / Miller
+      columns (click folder opens next column, path highlighted). The
+      Names/Previews toggle applies to ALL views: previews live-render each
+      thing through the kind registry (crystal.render templates win, then
+      crystal.thing, then the crystal itself) inside bounded, pointer-inert
+      boxes, falling back to icon+name per item; folders always show as icons.
+- [ ] Search + browse controls: the animated rainbow search ring is flush on
+      all four sides (including after focus/resize), and every View / Show /
+      Arrange / Kind pill keeps non-zero, even inline padding around its icon
+      and label on desktop and mobile wrapping layouts.
+- [ ] Things badge density: Theme Studio and both Appearance quick-settings
+      surfaces switch the View / Show / Arrange / Kind pills live between
+      Small / Medium / Large; Custom accepts safe 1–4-value CSS padding
+      shorthand, persists after navigation/reload, and invalid CSS cannot
+      escape into another declaration. Small is the compact default.
+- [ ] Auto-icons use the ordered file-type registry: screenshot-like names win
+      over generic image MIME/extensions (`🖼️`), ordinary photos/images use
+      `🏞️`, known media/document/archive/install families are distinct, and an
+      unrecognised attachment honestly falls back to `💾` rather than `🌀`.
+- [ ] On a moving Vercel branch alias, leave the preview open on mobile, deploy
+      a client change, then foreground/focus the old tab. It fetches the live
+      alias HTML without cache and reloads only when the hashed `index-*.js`
+      entry differs. The refreshed Feed Filters/composer/search input and
+      Things New/View/Arrange controls all respond; production-domain tabs do
+      not run this preview freshness check.
+- [ ] On iOS Safari, navigate away from a Vercel preview and return with Back.
+      The inline preview recovery bootstrap loads before the main application
+      entry and a `pageshow.persisted` restore immediately replaces the page
+      with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
+      `/things` returns `Cache-Control: private, no-store, max-age=0,
+      must-revalidate`, while `/assets/*` remains outside the HTML no-store
+      route.
+- [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
+      and the old `Function could not be revived` fallback values, reload Feed
+      and open “What's on your mind?”. Hydration reports no function syntax
+      exception; the composer focuses and edits, Photos opens, close restores
+      the collapsed composer, and Latest / Filters / navigation still respond.
+- [ ] In Mobile Safari with a retained signed-in session and Commander closed,
+      physically tap the collapsed “What's on your mind?” control immediately
+      after a fresh Feed navigation. The composer opens on that first tap;
+      tapping its Editor.js placeholder opens the keyboard and retains typed
+      text; Photos opens; and the Tags input focuses and retains typing. The
+      document has no Commander `touchend` click-away listener, and opening
+      Commander then clicking or focusing outside still closes it without
+      consuming the target control's action.
+- [ ] Preview modal deep link `/things?preview=<id>` opens any viewable thing
+      (ThingView tree + Move/Share/Delete actions) and is what Copy link hands
+      out for non-post things (posts link `/post/:id`).
+- [ ] Share dialog: audience select initialises from the thing's acl; person
+      grants add `tt:user/<username>` entries via people search;
+      inherit-locked (attached) things are warned about and skipped, not
+      silently changed. Selecting folders reveals the "Also apply to
+      everything inside" checkbox (off by default) — applying with it on
+      updates deep descendants' acls and toasts the applied/skipped counts.
+- [ ] Right-click context menus (the design-system Thing Context Menu):
+      right-clicking a thing selects it (Finder semantics) and opens
+      Open/Copy link · Rename/Move/Share · Copy/Cut/Paste-into-folder ·
+      Delete, acting on the whole selection when the target is part of one
+      ("Copy 4 things"); right-clicking empty canvas opens New folder / Paste
+      / Sort by / Group by / View / Select all with radio-checked current
+      states. Text selections and editable fields keep the BROWSER menu; any
+      outside press closes the surface; page keyboard shortcuts pause while a
+      menu is open.
+- [ ] Sort (Newest/Oldest/Name A–Z/Z–A/Kind) and Group by (None/Kind) apply
+      across grid+list (columns stays hierarchical), folders always first,
+      persisted in the tt-things cache; a non-default arrangement eagerly
+      loads the folder's remaining pages (bounded at 1000) so ordering is
+      honest, and group sections show "📁 Folders · N"-style counts with
+      correct plurals ("Data", not "Datas"). Exercise Group by Kind with at
+      least one loaded thing so every section resolves its canonical icon;
+      grouped rendering must not throw or show the route error boundary.
+- [ ] Drag-and-drop: dragging a selected thing drags the whole selection
+      (desktop only); folder tiles/rows, tree nodes, and every breadcrumb
+      (including "All things" = root) highlight with the accent inset ring on
+      dragover, clear on dragleave, and drop = the same bulk move path as
+      Move to… (server still cycle-checks); a folder can't be dropped onto
+      itself.
+- [ ] Schema render-template previews: in Previews mode, data things stamped
+      with crystal.schemaId render through that schema's crystal.render tree
+      with `{field}` tokens interpolated from the data thing's crystal —
+      always through the sanitising Chakra/Html allowlist renderers
+      (interpolation runs BEFORE the gates, so injected values can't bypass
+      URL/CSS screening); schemas are fetched once each and cached (null
+      cached for schemas without templates); everything else keeps the
+      existing kind-registry preview with per-item icon+name fallback.
+- [ ] Deep search (top input) queries /api/v1/things/search scoped to the
+      viewer's username across ALL folders, debounced, with kind-filter
+      composition; browse mode filters kinds client-side over loaded pages.
+- [ ] Columns-view folder loading happens in an effect, never during render
+      (React "setState while rendering" stays fixed).

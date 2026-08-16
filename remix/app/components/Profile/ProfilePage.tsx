@@ -19,6 +19,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
 import type { PostChange, PublicPost, PublicProfile } from '~/components/Feed/feedTypes';
+import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName, getUserIdentityDetail, getUserMention } from '~/utils/userIdentity';
 
 // Full profile page. SELF mode (no username param, or the param is the logged-in
 // user) shows email/verification + edit/logout controls; PUBLIC mode fetches the
@@ -323,7 +324,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
     // Switcher semantics: with other accounts signed in the next one takes
     // over — stay put and let the page re-render on it.
     if (resp?.user) {
-      lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
+      lopu({ title: `Logged out — switched to ${getUserMention(resp.user)} ✨`, status: 'success', duration: 6000 });
       return;
     }
     navigate('/login');
@@ -476,6 +477,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
       ? {
           username: user.username,
           displayName: user.displayName,
+          temporary: user.temporary,
           bio: user.bio,
           avatarUrl: user.avatarUrl,
           bannerUrl: user.bannerUrl,
@@ -486,6 +488,8 @@ export const ProfilePage = (props: ProfilePageProps) => {
         : null;
 
   if (!profile) return null;
+
+  const temporaryProfile = profile.temporary === true;
 
   const joinedLabel = formatJoined(profile.createdAt);
   const shownPostCount = postCount ?? (remote.status === 'loaded' ? remote.postCount : null);
@@ -501,7 +505,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
       <Flex px={[4, 6]} marginTop="-48px" position="relative" zIndex={1}>
         <ProfileAvatarCircle
           avatarUrl={profile.avatarUrl}
-          name={profile.displayName || profile.username}
+          name={getUserDisplayName(profile)}
           size="96px"
           borderWidth="4px"
         />
@@ -509,12 +513,12 @@ export const ProfilePage = (props: ProfilePageProps) => {
 
       <Box px={[4, 6]} pt={3} whiteSpace="normal">
         <Text fontFamily="heading" fontSize="2xl" fontWeight={700} letterSpacing="-0.02em" color="var(--tt-ink, #16161a)">
-          {profile.displayName || profile.username}
+          {getUserDisplayName(profile)}
         </Text>
         <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
-          @{profile.username}
+          {getUserIdentityDetail(profile)}
         </Text>
-        {isSelf && user && (
+        {isSelf && user && !temporaryProfile && (
           <Text mt={1} fontSize="sm" color="var(--tt-text, #5a5a66)">
             {user.email} {user.emailVerified ? '✅' : '· ✉️ unverified'}
           </Text>
@@ -524,7 +528,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
           <Text mt={3} fontSize="sm" color="var(--tt-text, #5a5a66)" whiteSpace="pre-wrap">
             {profile.bio}
           </Text>
-        ) : isSelf ? (
+        ) : isSelf && !temporaryProfile ? (
           <Text mt={3} fontSize="sm" color="var(--tt-muted, #9a9aa6)">
             No bio yet ✍️
           </Text>
@@ -536,7 +540,36 @@ export const ProfilePage = (props: ProfilePageProps) => {
           </Text>
         )}
 
-        {isSelf && user ? (
+        {isSelf && user?.temporary ? (
+          <Flex mt={4} columnGap={2} rowGap={2} flexWrap="wrap">
+            <Link to="/login">
+              <Button
+                size="sm"
+                color="white"
+                fontFamily="heading"
+                fontWeight="600"
+                background={RAINBOW}
+                backgroundSize="calc(100px + 200%)"
+                sx={{ animation: RAINBOW_ANIM }}
+                _hover={{ opacity: 0.9 }}
+                borderRadius="var(--tt-radius-md, 12px)"
+              >
+                {LOGIN_TO_CLAIM_LABEL}
+              </Button>
+            </Link>
+            <Link to="/register">
+              <Button
+                size="sm"
+                variant="outline"
+                borderColor="var(--tt-border, #ececef)"
+                _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
+                borderRadius="var(--tt-radius-md, 12px)"
+              >
+                Create account
+              </Button>
+            </Link>
+          </Flex>
+        ) : isSelf && user ? (
           <Flex mt={4} columnGap={2} rowGap={2} flexWrap="wrap">
             <Button
               size="sm"
@@ -562,7 +595,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
             >
               Log out 🗝️
             </Button>
-            {!user.emailVerified && (
+            {!user.emailVerified && !user.temporary && (
               <Button
                 size="sm"
                 variant="outline"
@@ -586,24 +619,26 @@ export const ProfilePage = (props: ProfilePageProps) => {
       <Box mt={8}>
         <Flex mb={3} px={[4, 6]} alignItems="center" columnGap={2}>
           <Eyebrow>Posts</Eyebrow>
-          <Button
-            size="xs"
-            variant="outline"
-            marginLeft="auto"
-            fontWeight={600}
-            color={advancedFilters.open || appliedAdvanced ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
-            borderColor="var(--tt-border, #ececef)"
-            borderRadius="var(--tt-radius-md, 12px)"
-            background={advancedFilters.open ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-card, #ffffff)'}
-            _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
-            leftIcon={<SlidersHorizontal size={12} />}
-            onClick={() => advancedFilters.toggle()}
-          >
-            {appliedAdvanced ? 'Advanced · on 🔬' : 'Advanced 🔬'}
-          </Button>
+          {!temporaryProfile && (
+            <Button
+              size="xs"
+              variant="outline"
+              marginLeft="auto"
+              fontWeight={600}
+              color={advancedFilters.open || appliedAdvanced ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
+              borderColor="var(--tt-border, #ececef)"
+              borderRadius="var(--tt-radius-md, 12px)"
+              background={advancedFilters.open ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-card, #ffffff)'}
+              _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+              leftIcon={<SlidersHorizontal size={12} />}
+              onClick={() => advancedFilters.toggle()}
+            >
+              {appliedAdvanced ? 'Advanced · on 🔬' : 'Advanced 🔬'}
+            </Button>
+          )}
         </Flex>
 
-        {advancedFilters.open && (
+        {!temporaryProfile && advancedFilters.open && (
           <Box mb={4}>
             <AdvancedFilters
               value={advancedFilters.draft}
@@ -634,7 +669,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
         />
       </Box>
 
-      {isSelf && user && <EditProfileModal open={editOpen} onClose={() => setEditOpen(false)} />}
+      {isSelf && user && !temporaryProfile && <EditProfileModal open={editOpen} onClose={() => setEditOpen(false)} />}
     </>
   );
 };

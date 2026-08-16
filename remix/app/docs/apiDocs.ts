@@ -1030,6 +1030,59 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-temporary',
+    group: 'auth',
+    title: 'Temporary browser user',
+    endpoint: '/api/v1/auth/temporary',
+    summary: 'Creates or reuses a recoverable temporary browser session user.',
+    detail:
+      'This is the first-session bootstrap used by /things. A genuinely anonymous browser receives a normal, private user Thing, bounded storage subscription, browser session, and account-switcher roster entry. Repeating the request with that live session is idempotent and returns the same user; the endpoint never bypasses ordinary Thing ownership or ACL checks.',
+    auth: {
+      mode: 'optional',
+      description: 'A live cookie session is reused. Without one, the same-origin POST may create a rate-limited temporary account.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST once from a same-origin first-page loader; no body is required.',
+      'Keep the returned httpOnly auth and account-roster cookies so the temporary space survives reloads and later account additions.',
+      'Treat user.temporary as the signal that this is a browser-scoped temporary identity.',
+      'All Thing reads and writes continue through the ordinary authenticated API paths.'
+    ],
+    requestExamples: [
+      {
+        name: 'Start or recover a temporary space',
+        description: 'Idempotently resolve the browser session used by /things.',
+        method: 'POST'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 201,
+        description: 'A temporary account and browser session were created.',
+        body: {
+          ok: true,
+          user: {
+            id: '64f000000000000000000003',
+            username: 'guest-a1b2c3d4e5f6',
+            displayName: 'Anonymous',
+            temporary: true
+          },
+          reused: false
+        }
+      },
+      {
+        status: 200,
+        description: 'The browser already had a live user session.',
+        body: { ok: true, user: { id: '64f000000000000000000003', temporary: true }, reused: true }
+      },
+      {
+        status: 429,
+        description: 'The per-IP temporary-account creation budget was exhausted.',
+        body: { ok: false, error: 'Could not start another temporary space yet — please try again later' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-password-reset',
     group: 'auth',
     title: 'Password reset request',
@@ -3946,6 +3999,84 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Post deleted.',
         body: { ok: true }
       }
+    ]
+  }),
+  endpoint({
+    id: 'things-bulk',
+    group: 'things',
+    title: 'Bulk move / copy / delete / share',
+    endpoint: '/api/v1/things/bulk',
+    summary: 'Multi-select operations for /things: move, copy, delete, or share up to 100 owned things in one request.',
+    detail:
+      'Each id runs through the exact single-item path the dedicated endpoints use (updateThing, createThing, deleteThing), so every ownership, protected-kind, folder, and validation rule applies identically — bulk is a loop, never a second code path. move rewrites each thing’s folderId (folderId null or omitted = the /things root; the destination must be one of YOUR folder things). copy mints brand-new things through the real create path (fresh shareId, storage accounting, acl preserved) — comment/reaction/save/share things can’t be copied; copying a FOLDER copies its whole subtree (bounded at 500 things), skipping uncopyable kinds with per-item copied/skipped counts. delete cascades like the single delete (attached comments/reactions/saves go with each thing; deleting a folder re-parents its contents to the folder’s parent instead of deleting them). share applies an acl (or legacy visibility circle) to each thing; with recursive true, folders also apply it to everything inside (same 500-thing bound) — inherit-locked things are counted as skipped, never silently changed. Results are per-item: one bad id never fails the batch.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST op (move, copy, delete, or share), ids (1–100 shareIds you own), and folderId for move/copy destinations.',
+      'share additionally takes acl (or legacy visibility) and optional recursive: true to flow a folder’s audience to everything inside.',
+      'Read the per-item results list — each entry carries ok plus error (failures), newId (copies), and copied/applied/skipped counts for recursive folder ops.',
+      'succeeded and failed counts summarise the batch.',
+      'Handle 401 unauthenticated, 400 malformed batches, and 404 for an unknown destination folder.'
+    ],
+    requestExamples: [
+      {
+        name: 'Move things into a folder',
+        description: 'File two things inside an owned folder thing.',
+        method: 'POST',
+        body: { op: 'move', ids: ['thing_1', 'thing_2'], folderId: 'folder_abc' }
+      },
+      {
+        name: 'Copy a folder (recursive)',
+        description: 'Duplicate a folder and everything inside it at the root.',
+        method: 'POST',
+        body: { op: 'copy', ids: ['folder_abc'] }
+      },
+      {
+        name: 'Share a folder and its contents',
+        description: 'Make a folder and everything inside it friends-visible.',
+        method: 'POST',
+        body: { op: 'share', ids: ['folder_abc'], acl: ['-tt:all', 'tt:userFriends', 'tt:user'], recursive: true }
+      },
+      {
+        name: 'Bulk delete',
+        description: 'Delete a selection of owned things.',
+        method: 'POST',
+        body: { op: 'delete', ids: ['thing_1', 'thing_2'] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Batch processed (per-item results).',
+        body: {
+          ok: true,
+          op: 'move',
+          results: [
+            { id: 'thing_1', ok: true },
+            { id: 'thing_2', ok: false, error: 'Thing not found' }
+          ],
+          succeeded: 1,
+          failed: 1
+        }
+      },
+      {
+        status: 200,
+        description: 'Recursive folder copy (copied/skipped count the subtree).',
+        body: {
+          ok: true,
+          op: 'copy',
+          results: [{ id: 'folder_abc', ok: true, newId: 'thing_xyz', copied: 12, skipped: 1 }],
+          succeeded: 1,
+          failed: 0
+        }
+      }
+    ],
+    notes: [
+      'Throttled on the things.write rate limit (things.write.service for service accounts) — one token per batch.',
+      'Folders organise /things: create one via POST /api/v1/things with thingtime ["folder"] and crystal { name, icon?, description? }; move a single thing with PATCH /api/v1/things { id, folderId }.'
     ]
   }),
   endpoint({

@@ -402,6 +402,9 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // /things folder browsing: one owner's direct children of one folder,
+    // newest first — fully index-provided including the page sort
+    col.createIndex({ ownerId: 1, folderId: 1, createdAt: -1, shareId: 1 }),
     // Canonical account-storage reconciliation: content allocations are
     // grouped by owner and summed from their exact versioned byte stamps.
     // Control-plane Things never enter this partial index.

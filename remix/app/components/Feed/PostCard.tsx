@@ -35,6 +35,7 @@ import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { sanitizeReactionToken, splitEmojis } from '~/utils/reactionTokens';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
@@ -186,8 +187,7 @@ export type PostCardProps = {
   defaultCommentsOpen?: boolean;
 };
 
-const authorName = (author: FeedAuthor | null) =>
-  author?.displayName || author?.username || 'Anonymous 👻';
+const authorName = (author: FeedAuthor | null) => (author ? getUserDisplayName(author) : 'Anonymous 👻');
 
 // Every post/comment timestamp is a permalink to its /post/:id page, the way
 // timestamps work on every major platform.
@@ -202,7 +202,7 @@ const TimestampLink = ({ id, createdAt, fontSize = 'xs' }: { id: string; created
 export const AuthorAvatar = (props: { author: FeedAuthor | null; size?: string; fontSize?: string }) => {
   const { author, size = '36px', fontSize = 'sm' } = props;
 
-  const initial = (author?.displayName || author?.username || '?').trim().charAt(0).toUpperCase();
+  const initial = author ? getUserDisplayName(author).trim().charAt(0).toUpperCase() : '?';
 
   const circle = author?.avatarUrl ? (
     <Image
@@ -1431,7 +1431,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 </Text>
               )}
               <Text as="span" fontSize="xs" color={MUTED}>
-                {post.author?.username ? `@${post.author.username} · ` : ''}
+                {post.author ? `${getUserIdentityDetail(post.author)} · ` : ''}
               </Text>
               <TimestampLink id={post.id} createdAt={post.createdAt} />
               <Tooltip label={`${circle.label} — ${circle.hint}`} fontSize="xs" borderRadius="8px" hasArrow>
