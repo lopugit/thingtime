@@ -19,6 +19,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Recoverable first-session Things space**: a fresh browser can land on
+  `/things` and immediately receive the real Things UI through a rate-limited
+  temporary user Thing, bounded subscription, normal browser session, and
+  account-switcher roster entry. The pre-paint bootstrap is idempotent,
+  preserves existing signed-in users, retains ordinary ACL/quota enforcement,
+  and leaves login/register reachable so the browser can add another account
+  without discarding its temporary space. Temporary sessions now retain the
+  standard logged-out `Login` navigation while every visible identity surface
+  presents `Anonymous` and `Login to claim`, never the generated guest handle
+  or placeholder email. — Codex (AI), 2026-08-12
 - **Per-automation GitHub/Vercel compute routing**: Admin → CI Control can now
   keep each supported automation on GitHub-hosted runners or move its expensive
   work to an ephemeral Vercel Sandbox with one toggle. A signed, idempotent
@@ -46,6 +56,50 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Codex (AI), 2026-08-09
 
 ### Fixed
+
+- **Mobile Safari Feed controls receive their click and focus events**: the
+  global Commander no longer changes Thingtime state from a document-level
+  `touchend` before Safari can synthesize the touched control's click. Its
+  click-away behavior now waits for `click` / `focusin` and is a no-op while
+  Commander is already closed. Editor.js also restores contenteditable focus
+  synchronously on a genuine touch release, so the Feed composer opens, accepts
+  typing, and leaves adjacent buttons and native inputs interactive in retained
+  account sessions. — Codex (AI), 2026-08-15
+
+- **A legacy Lopu browser snapshot is repaired before Feed becomes
+  interactive**: Thingtime hydration now reports and removes invalid saved
+  functions, commits the repaired snapshot before completing the first load,
+  and never persists the provider's live root `set` / `get` React closures.
+  Nested user data with those names is preserved. This removes the one-load
+  poisoned-state window that could make “What's on your mind?” and adjacent
+  inputs appear inert until another tab or reload. — Codex (AI), 2026-08-15
+
+- **Legacy Thingtime function state no longer disables interactive editors**:
+  persisted anonymous, arrow, named, method, and scoped functions now revive
+  only after Flatted has reconstructed their complete object graph. The parser
+  also removes the old saved no-op recovery function so current defaults can
+  repair poisoned browser state instead of carrying it into Feed composer and
+  other input sessions. — Codex (AI), 2026-08-15
+
+- **Safari-restored Vercel previews now force a real HTML navigation before the
+  app can remain inert**: an inline Vite preview freshness bootstrap runs before
+  the React application graph, refreshes every preview restored from Safari's
+  back/forward page cache, and permits one guarded recovery after a same-build
+  asset runtime error. Generated Vercel routes now return the SPA HTML shell
+  with `private, no-store` browser headers while leaving versioned assets on the
+  filesystem path. — Codex (AI), 2026-08-14
+
+- **Stale Vercel preview tabs recover their interactions after a redeploy**:
+  preview-only startup logic compares the loaded hashed Vite entry asset with
+  the branch alias's current HTML on load, foreground, and focus, then reloads
+  only when the alias has moved. A tab holding the pre-fix Things bundle can no
+  longer remain visually rendered but inert after the repaired deployment is
+  available; production-domain behavior is unchanged. — Codex (AI), 2026-08-13
+
+- **Things kind grouping no longer crashes populated spaces**: Group by Kind
+  now reads section icons from the canonical Thing icon registry instead of a
+  removed local binding, with a populated-group runtime regression test in the
+  required unit suite. — Codex (AI), 2026-08-12
 
 - **Hosted development isolation docs now match the shared Preview runtime**:
   the runbook records verified `dev.thingtime.com` DNS/ownership/HTTPS and the

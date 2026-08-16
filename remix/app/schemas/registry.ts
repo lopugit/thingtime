@@ -1304,6 +1304,40 @@ const notificationThingSchema: ThingtimeSchema = {
   example: { type: 'new-follower', actorId: '664f1c2a9d3e5b0012345678', actorName: 'Rick Deckard' }
 };
 
+// Folders: the Drive-style organization kind behind /things. A folder is an
+// ordinary thing (thingtime ["folder"]) whose crystal names it; containment is
+// a `folderId` pointer ON THE CHILD (FUNDAMENTALS §3 — never an embedded list
+// of childIds on the folder), so a folder holds any number of things without
+// its own doc growing. Folders nest by carrying a folderId themselves; the
+// move path cycle-checks the ancestor chain. Organization is personal:
+// folderId only ever points at a folder the SAME owner holds, and folders
+// default private (organization structure is not content).
+export const MAX_FOLDER_NAME_CHARS = 120;
+export const MAX_FOLDER_ICON_CHARS = 32;
+export const MAX_FOLDER_DESCRIPTION_CHARS = 500;
+
+const folderSchema: ThingtimeSchema = {
+  id: 'folder',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Folder',
+  summary: 'A Drive-style folder for organising your things on /things.',
+  detail:
+    'Folders organise the /things page: any of your things (posts, data, schemas, other ' +
+    'folders) can carry a folderId pointing at one of YOUR folder things — moving is just ' +
+    'rewriting that pointer (PATCH /api/v1/things { id, folderId } or POST /api/v1/things/bulk). ' +
+    'Folders nest; moves cycle-check the chain. Deleting a folder never deletes its contents — ' +
+    'they re-parent to the deleted folder’s parent. Folders default private (acl ["tt:user"]): ' +
+    'how you organise your things is yours even when the things themselves are public.',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: MAX_FOLDER_NAME_CHARS, description: 'Folder display name.' },
+    { name: 'icon', type: 'string', required: false, max: MAX_FOLDER_ICON_CHARS, description: 'Optional emoji shown instead of the default 📁.' },
+    { name: 'description', type: 'string', required: false, max: MAX_FOLDER_DESCRIPTION_CHARS, description: 'Optional note about what lives here.' }
+  ],
+  example: { name: 'Recipes', icon: '🍜', description: 'Everything I want to cook someday.' }
+};
+
 const sessionSchema: ThingtimeSchema = {
   id: 'session',
   version: COLLECTION_SCHEMA_VERSIONS.sessions,
@@ -1960,6 +1994,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   dataSchema,
   schemaThingSchema,
   saveThingSchema,
+  folderSchema,
   appSchema,
   appDataSchema,
   // admin-plane kinds (PROTECTED: written only through admin endpoints)
@@ -2117,7 +2152,7 @@ export const KEY_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
 // components) so the two can't drift — a root field the server searches but the
 // client never suggests (shareId was exactly this) is the drift this prevents.
 // Root fields are searchable by bare name; anything else auto-prefixes to crystal.
-export const SEARCHABLE_ROOT_FIELDS = ['tags', 'thingtime', 'createdAt', 'updatedAt', 'shareId', 'targetId'] as const;
+export const SEARCHABLE_ROOT_FIELDS = ['tags', 'thingtime', 'createdAt', 'updatedAt', 'shareId', 'targetId', 'folderId'] as const;
 // Friendly datatype names offered by the `type` operator (mapped to Mongo $type
 // aliases server-side — 'boolean' → 'bool', the rest are identity).
 export const SEARCH_DATATYPES = ['string', 'number', 'boolean', 'date', 'array', 'object', 'null'] as const;
@@ -2833,11 +2868,32 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
   };
 };
 
+const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  if (!name) return fail(400, 'Folder name is required');
+  if (name.length > MAX_FOLDER_NAME_CHARS) return fail(400, `Folder name is too long (max ${MAX_FOLDER_NAME_CHARS})`);
+  const crystal: Record<string, unknown> = { name };
+  if (input.icon !== undefined && input.icon !== null) {
+    if (typeof input.icon !== 'string' || input.icon.trim().length > MAX_FOLDER_ICON_CHARS) {
+      return fail(400, `Folder icon must be a short emoji (max ${MAX_FOLDER_ICON_CHARS} chars)`);
+    }
+    if (input.icon.trim()) crystal.icon = input.icon.trim();
+  }
+  if (input.description !== undefined && input.description !== null) {
+    if (typeof input.description !== 'string' || input.description.trim().length > MAX_FOLDER_DESCRIPTION_CHARS) {
+      return fail(400, `Folder description is too long (max ${MAX_FOLDER_DESCRIPTION_CHARS})`);
+    }
+    if (input.description.trim()) crystal.description = input.description.trim();
+  }
+  return { ok: true, crystal };
+};
+
 const crystalSanitizers: Record<
   string,
   (input: Record<string, unknown>, appliedIds: string[]) => { ok: true; crystal: Record<string, unknown> } | Fail
 > = {
   post: sanitizePostCrystal,
+  folder: sanitizeFolderCrystal,
   comment: sanitizeCommentCrystal,
   reaction: sanitizeReactionCrystal,
   share: () => ({ ok: true, crystal: {} }),
@@ -2884,6 +2940,13 @@ export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): 
   // open shape and the closed shapes never share one thing.
   if (ids.includes('data') && ids.length > 1) {
     return fail(400, 'data crystals stand alone — publish a separate data thing and link it via targetId or tags');
+  }
+
+  // Folders are pure organization: combining them with a content schema would
+  // make a doc that is both a container and content (and would let e.g.
+  // ["post","folder"] ride the folder sanitizer past the post whitelist).
+  if (ids.includes('folder') && ids.length > 1) {
+    return fail(400, 'folder things stand alone — put content IN the folder via folderId instead');
   }
 
   const input = crystal && typeof crystal === 'object' && !Array.isArray(crystal) ? (crystal as Record<string, unknown>) : {};
