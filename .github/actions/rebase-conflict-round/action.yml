@@ -5,6 +5,15 @@ inputs:
   repo-path:
     description: Real stopped-rebase checkout under RUNNER_TEMP and outside GITHUB_WORKSPACE.
     required: true
+  deterministic-conflict-paths:
+    description: >-
+      Newline-separated conflict paths the caller settled deterministically to
+      the synthetic source side BEFORE this round (delete-shaped promotion
+      conflicts). They are unioned into the recompute comparison, and their
+      only accepted content is the expected rebase head's exact side — never
+      model output.
+    required: false
+    default: ""
   pr-number:
     description: Pull request number used only for model context.
     required: true
@@ -42,11 +51,26 @@ inputs:
     description: "Closed path policy: pr-rebase (default) or trusted develop promotion."
     required: false
     default: pr-rebase
+  allow-unresolved:
+    description: >-
+      When "true", scratch files still carrying conflict markers do not fail
+      this round: the action reports retry_needed=true with the unresolved
+      list, stages nothing, and leaves the checkout mid-rebase so a later
+      round re-exposes the same mechanically-derived conflict set to a fresh
+      model attempt. The final round of a chain must leave this "false".
+    required: false
+    default: "false"
 
 outputs:
   complete:
     description: Whether the full rebase completed after this round.
     value: ${{ steps.verify.outputs.complete }}
+  retry_needed:
+    description: Markers remained and the caller allows another round.
+    value: ${{ steps.verify.outputs.retry_needed }}
+  unresolved_paths:
+    description: Newline-separated scratch paths still containing markers.
+    value: ${{ steps.verify.outputs.unresolved_paths }}
   conflicted:
     description: Whether the next replayed commit stopped on another conflict set.
     value: ${{ steps.verify.outputs.conflicted }}
@@ -224,9 +248,8 @@ runs:
               incoming commit being replayed
               >>>>>>> REBASE_HEAD
 
-          For each listed file, read the whole file and preserve the semantic
-          union: keep the destination's newer intent and re-apply the incoming
-          commit's intent on top. Remove the complete conflict-marker block.
+          ${{ inputs.conflict-policy == 'promotion' && 'For each listed file, read the whole file and produce a FAITHFUL REPLAY. This is a promotion: the incoming commit is the source patch being promoted, and its intent governs every conflict. Apply the incoming side in full. Keep destination content only where the incoming commit did not touch or supersede it, and never preserve destination changes that the incoming side rewrote, replaced, or deleted.' || 'For each listed file, read the whole file and preserve the semantic union: keep the newer intent of the destination and re-apply the intent of the incoming commit on top.' }}
+          Remove the complete conflict-marker block.
           If a resolution is not high-confidence, leave its markers intact so
           verification stops for human review. A bare `=======` line outside a
           marker block can be legitimate Markdown and is not itself a conflict.
@@ -257,6 +280,8 @@ runs:
         EXPECTED_REBASE_STATE_SHA256: ${{ steps.prepare.outputs.rebase_state_sha256 }}
         EXPECTED_CONFLICT_PATHS: ${{ steps.prepare.outputs.conflict_paths }}
         EXPECTED_AI_CONFLICT_PATHS: ${{ steps.prepare.outputs.ai_conflict_paths }}
+        EXPECTED_DETERMINISTIC_PATHS: ${{ inputs.deterministic-conflict-paths }}
+        ALLOW_UNRESOLVED: ${{ inputs.allow-unresolved }}
         GRAPHIFY_RESET: ${{ steps.prepare.outputs.graphify_reset }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
@@ -350,6 +375,15 @@ runs:
         next_conflicts="$temp_dir/next-conflicts"
         printf '%s\n' "$EXPECTED_CONFLICT_PATHS" | sed '/^$/d' | LC_ALL=C sort -u >"$expected_conflicts"
         printf '%s\n' "$EXPECTED_AI_CONFLICT_PATHS" | sed '/^$/d' | LC_ALL=C sort -u >"$expected_ai_files"
+        # Paths the caller settled deterministically before this round. The
+        # live conflict enumeration no longer contains them, but the immutable
+        # merge-tree recompute below always will: the trusted comparison is
+        # therefore against the union, and their staged content is verified
+        # against the expected rebase head, never against model output.
+        deterministic_conflicts="$temp_dir/deterministic-conflicts"
+        printf '%s\n' "$EXPECTED_DETERMINISTIC_PATHS" | sed '/^$/d' | LC_ALL=C sort -u >"$deterministic_conflicts"
+        expected_conflicts_full="$temp_dir/expected-conflicts-full"
+        LC_ALL=C sort -u -- "$expected_conflicts" "$deterministic_conflicts" >"$expected_conflicts_full"
         : >"$expected_dirs"
 
         while IFS= read -r path; do
@@ -479,8 +513,8 @@ runs:
           echo "::error::Recomputed rebase auto-merge did not produce a tree."; exit 1;
         }
         printf '%s\n' "$merge_out" | tail -n +2 | sed -n '/^$/q;p' | LC_ALL=C sort -u >"$derived_conflicts"
-        cmp -s -- "$expected_conflicts" "$derived_conflicts" || {
-          echo "::error::Recomputed conflict set differs from the trusted pre-model set."
+        cmp -s -- "$expected_conflicts_full" "$derived_conflicts" || {
+          echo "::error::Recomputed conflict set differs from the trusted pre-model set (model-listed + deterministic)."
           exit 1
         }
 
@@ -495,12 +529,59 @@ runs:
           } >>"$needles"
         done
 
+        # Retry pre-pass: if the model left conflict markers and the caller
+        # allows another round, report instead of failing. Nothing is staged
+        # and the real checkout stays mid-rebase, so the next round rebuilds
+        # the same mechanically-derived conflict baseline for a fresh attempt.
+        unresolved_scratch="$temp_dir/unresolved-scratch"
+        : >"$unresolved_scratch"
+        while IFS= read -r path; do
+          [[ -n "$path" ]] || continue
+          case "$path" in graphify-out/*) continue ;; esac
+          is_listed "$path" "$deterministic_conflicts" && continue
+          scratch_probe="$SCRATCH_ABS/$path"
+          if [[ -f "$scratch_probe" && ! -L "$scratch_probe" ]] \
+             && grep -qE '^(<{7,}|\|{7,}|>{7,})( |$)' -- "$scratch_probe"; then
+            printf '%s\n' "$path" >>"$unresolved_scratch"
+          fi
+        done <"$derived_conflicts"
+        if [[ -s "$unresolved_scratch" && "$ALLOW_UNRESOLVED" == true ]]; then
+          echo "Conflict markers remain and a later round is allowed; deferring."
+          {
+            echo "retry_needed=true"
+            echo "complete=false"
+            echo "conflicted=true"
+            echo "unresolved_paths<<TT_UNRESOLVED_EOF"
+            cat "$unresolved_scratch"
+            echo "TT_UNRESOLVED_EOF"
+          } >>"$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "retry_needed=false" >>"$GITHUB_OUTPUT"
+
         max_source_bytes=524288
         max_resolved_round_bytes=4194304
         resolved_round_bytes=0
         while IFS= read -r path; do
           [[ -n "$path" ]] || continue
           case "$path" in graphify-out/*) continue ;; esac
+          if is_listed "$path" "$deterministic_conflicts"; then
+            # Deterministically settled before the round. The only valid
+            # content is the synthetic source side from the immutable expected
+            # rebase head: present there -> that exact blob and mode; absent
+            # there -> removal. Model output can never reach these paths.
+            entry="$(git ls-tree "$EXPECTED_REBASE_HEAD_SHA" -- "$path" | head -1)"
+            if [[ -z "$entry" ]]; then
+              git update-index --force-remove -- "$path"
+              rm -f -- "$REPO_ABS/$path"
+            else
+              det_mode="$(awk '{ print $1 }' <<<"$entry")"
+              det_oid="$(awk '{ print $3 }' <<<"$entry")"
+              git update-index --add --cacheinfo "$det_mode" "$det_oid" "$path"
+              git checkout-index -f -- "$path"
+            fi
+            continue
+          fi
           is_listed "$path" "$expected_ai_files" || {
             echo "::error::Recomputed non-generated conflict was not exposed in scratch: $path"
             exit 1
@@ -549,7 +630,7 @@ runs:
         fi
         index_tree="$(git write-tree)"
         while IFS= read -r -d '' path; do
-          if ! is_listed "$path" "$expected_conflicts"; then
+          if ! is_listed "$path" "$expected_conflicts_full"; then
             case "$path" in
               graphify-out/*) [[ "$GRAPHIFY_RESET" == true ]] && continue ;;
             esac

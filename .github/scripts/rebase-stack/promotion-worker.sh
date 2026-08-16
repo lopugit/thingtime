@@ -342,7 +342,29 @@ prepare() {
     grep -qxF -- "$path" "$paths_file" || fail "Rebase conflicted outside the planned source paths: $path"
     stages="$(git ls-files -u -- ":(literal)$path" | awk '{ print $3 }' | LC_ALL=C sort -u | tr '\n' ' ')"
     if [[ "$stages" == *3* && "$stages" == *2* ]]; then
-      printf '%s\n' "$path" >>"$conflict_file"
+      # Superseded-content test: when the base side's exact blob already
+      # appears in the source history of this path, the source patch has
+      # provably seen and evolved past it — nothing needs merging, the replay
+      # side IS the resolution. Bounded scan; any miss goes to the model.
+      ours_oid="$(git ls-files -u -- ":(literal)$path" | awk '$3 == 2 { print $2 }' | head -1)"
+      superseded=""
+      if [[ -n "$ours_oid" ]]; then
+        while IFS= read -r rev; do
+          [[ -n "$rev" ]] || continue
+          if [[ "$(git rev-parse -q --verify "$rev:$path" 2>/dev/null || true)" == "$ours_oid" ]]; then
+            superseded="$rev"
+            break
+          fi
+        done < <(git log --format='%H' -n 200 "$SOURCE_START_SHA..$SOURCE_END_SHA" -- ":(literal)$path")
+      fi
+      if [[ -n "$superseded" ]]; then
+        git checkout -q --theirs -- ":(literal)$path"
+        git add -- ":(literal)$path"
+        printf '%s\n' "$path" >>"$deterministic_file"
+        note_discarded "$path" "the base side is already contained in the source history (commit ${superseded:0:12}); the source patch supersedes it"
+      else
+        printf '%s\n' "$path" >>"$conflict_file"
+      fi
     elif [[ "$stages" == *3* ]]; then
       git checkout -q --theirs -- ":(literal)$path"
       git add -- ":(literal)$path"

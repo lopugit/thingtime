@@ -78,10 +78,10 @@ const flag = (key, fallback) => {
 const CFG = {
   source: env("SOURCE_BRANCH", "develop"),
   target: env("TARGET_BRANCH", "main"),
-  // The primary target never changes; `target` is swapped per pass when
-  // several targets are configured, and branch naming keys off this so the
-  // primary pass keeps its historical names.
-  primaryTarget: env("TARGET_BRANCH", "main"),
+  // With uniform lane naming every branch carries --to-<target>; this now
+  // exists only to (a) claim legacy pre-uniform branches for the main lane
+  // and (b) restore CFG.target after a multi-target pass loop.
+  primaryTarget: env("PRIMARY_TARGET_BRANCH", "main"),
   // Multi-target promotion. One merged source PR can legitimately owe changes
   // to more than one branch: #211 converts `main` to thin listeners AND carries
   // the executable implementation those listeners call, which may only live on
@@ -100,6 +100,13 @@ const CFG = {
   lookback: Math.max(1, Math.min(100, Number(env("LOOKBACK", "50")) || 50)),
   maxNewPrs: Math.max(1, Number(env("MAX_NEW_PRS", "10")) || 10),
   requireLabel: env("REQUIRE_LABEL", ""),
+  // Lane path guard (reverse lane): when set, only PRs whose ENTIRE planned
+  // patch stays under these prefixes promote on this run. Keeps app-wide
+  // sources (a merged develop→main promotion, say) out of a CI-scoped
+  // main→github-actions lane. Skips are summary lines, not PR comments —
+  // being outside a lane is scoping, not a failure.
+  requirePathPrefixes: env("REQUIRE_PATH_PREFIXES", "")
+    .split(",").map((s) => s.trim()).filter(Boolean),
   skipLabels: env("SKIP_LABELS", "no-promote,skip-promotion")
     .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
   groupFromTitleScope: flag("GROUP_FROM_TITLE_SCOPE", true),
@@ -512,21 +519,34 @@ export function slugify(text, maxLen = 40) {
 
 const STRIP_PREFIXES = ["claude", "codex", "feature", "feat", "fix", "chore", "promote"];
 
-export function promotionBranchFor(pr, target = CFG.target, primaryTarget = CFG.primaryTarget || CFG.target) {
+function promotionBranchSlug(pr) {
   const segments = (pr.headRefName || "").split("/").filter(Boolean);
   while (segments.length > 1 && STRIP_PREFIXES.includes(segments[0].toLowerCase())) {
     segments.shift();
   }
-  const base = segments.join("-") || pr.title || `pr-${pr.number}`;
-  // The primary target keeps the historical name so every promotion branch and
-  // record already in flight still matches. Additional targets are suffixed, so
-  // two promotions of one source can never collide on a branch name.
-  // `--to-` (double dash) is deliberate: slugify collapses runs of separators,
-  // so a slugified head ref can never contain it. A single dash would make the
-  // primary promotion of a branch literally named `foo-to-github-actions`
-  // indistinguishable from a github-actions-targeted promotion.
-  const suffix = target && target !== primaryTarget ? `--to-${slugify(target)}` : "";
-  return `promote/pr-${pr.number}-${slugify(base)}${suffix}`;
+  return slugify(segments.join("-") || pr.title || `pr-${pr.number}`);
+}
+
+// Uniform lane naming (owner request, 2026-08-12): EVERY promotion branch
+// names its target — promote/pr-N-<slug>--to-<target> — with no privileged
+// unsuffixed namespace. `--to-` (double dash) is deliberate: slugify collapses
+// separator runs, so a slugified head ref can never contain it, and a branch
+// literally named `foo-to-github-actions` cannot forge a lane marker.
+export function promotionBranchFor(pr, target = CFG.target) {
+  return `promote/pr-${pr.number}-${promotionBranchSlug(pr)}--to-${slugify(target)}`;
+}
+
+// Pre-uniform history: branches created before uniform naming carry no --to-
+// marker and are main-lane artifacts. They stay recognized forever — renaming
+// live promotion branches would orphan every open promotion PR.
+export function legacyPromotionBranchFor(pr) {
+  return `promote/pr-${pr.number}-${promotionBranchSlug(pr)}`;
+}
+
+export function promotionBranchMatches(sourcePr, head, target = CFG.target) {
+  if (head === promotionBranchFor(sourcePr, target)) return true;
+  return target === (CFG.primaryTarget || "main")
+    && head === legacyPromotionBranchFor(sourcePr);
 }
 
 // Whether a promotion PR belongs to the pass currently running. The primary
@@ -535,14 +555,11 @@ export function promotionBranchFor(pr, target = CFG.target, primaryTarget = CFG.
 // branches suffixed for it.
 export function promotionBelongsToPass(promotion, cfg = CFG) {
   const head = String(promotion?.headRefName || "");
-  const primary = cfg.primaryTarget || cfg.target;
-  const suffix = `--to-${slugify(cfg.target)}`;
-  if (cfg.target === primary) {
-    return !promotionTargets(cfg)
-      .filter((target) => target !== primary)
-      .some((target) => head.endsWith(`--to-${slugify(target)}`));
-  }
-  return head.endsWith(suffix);
+  if (head.endsWith(`--to-${slugify(cfg.target)}`)) return true;
+  // Legacy pre-uniform branches carry no --to- marker and are main-lane
+  // history. The marker is double-dash, which slugify never emits, so a
+  // source branch that merely reads like "-to-x" cannot false-positive.
+  return cfg.target === (cfg.primaryTarget || "main") && !/--to-[a-z0-9-]+$/.test(head);
 }
 
 // The configured promotion targets, in order, always beginning with the
@@ -1057,7 +1074,7 @@ function findBotPromotionRetirement(promotion, sourcePr, comments) {
   if (
     promotion?.state !== "CLOSED" ||
     promotionSourceNumber(promotion) !== sourcePr?.number ||
-    promotion.headRefName !== promotionBranchFor(sourcePr)
+    !promotionBranchMatches(sourcePr, promotion.headRefName)
   ) {
     return null;
   }
@@ -1382,6 +1399,10 @@ export function buildPromotionDispatchRequest(repo, context, reservationSha, tit
   const promotionPlan = {
     base_ref: context.baseRef,
     base_sha: context.baseSha,
+    // The lane's source branch travels in the envelope so the trusted
+    // validator can verify "merged into <source>" and "live <source> tip"
+    // without assuming the develop lane.
+    source_ref: CFG.source,
     branch: context.branch,
     reservation_sha: reservationSha,
     source_tip_sha: context.sourceTipSha,
@@ -3089,19 +3110,24 @@ async function selfTest() {
   );
 
   const pr = { number: 7, headRefName: "claude/search-index-abc123", title: "feat: add search" };
-  assert.equal(promotionBranchFor(pr), "promote/pr-7-search-index-abc123");
-
-  // Multi-target promotion: the primary target keeps its historical branch
-  // name so promotions already in flight still match, and every additional
-  // target gets its own suffixed branch so two promotions of one source can
-  // never collide.
+  // Uniform lane naming: every branch names its target; legacy unsuffixed
+  // names stay recognized as main-lane history.
+  assert.equal(promotionBranchFor(pr), "promote/pr-7-search-index-abc123--to-main");
   assert.equal(
-    promotionBranchFor(pr, "main", "main"),
-    "promote/pr-7-search-index-abc123",
+    promotionBranchFor(pr, "github-actions"),
+    "promote/pr-7-search-index-abc123--to-github-actions",
+  );
+  assert.equal(legacyPromotionBranchFor(pr), "promote/pr-7-search-index-abc123");
+  assert.equal(promotionBranchMatches(pr, "promote/pr-7-search-index-abc123--to-main", "main"), true);
+  assert.equal(
+    promotionBranchMatches(pr, "promote/pr-7-search-index-abc123", "main"),
+    true,
+    "legacy unsuffixed names still match on the main lane",
   );
   assert.equal(
-    promotionBranchFor(pr, "github-actions", "main"),
-    "promote/pr-7-search-index-abc123--to-github-actions",
+    promotionBranchMatches(pr, "promote/pr-7-search-index-abc123", "github-actions"),
+    false,
+    "legacy unsuffixed names never match another lane",
   );
   const multiCfg = { source: "develop", target: "main", primaryTarget: "main", targets: ["github-actions", "main", "develop", "", "bad ref", "--evil"] };
   assert.deepEqual(
@@ -3114,7 +3140,7 @@ async function selfTest() {
   // and an additional target must see only its own.
   const primaryPass = { ...multiCfg, target: "main" };
   const secondPass = { ...multiCfg, target: "github-actions" };
-  const mainPromotion = { headRefName: "promote/pr-7-search-index-abc123" };
+  const mainPromotion = { headRefName: "promote/pr-7-search-index-abc123--to-main" };
   const gaPromotion = { headRefName: "promote/pr-7-search-index-abc123--to-github-actions" };
   assert.equal(promotionBelongsToPass(mainPromotion, primaryPass), true);
   assert.equal(promotionBelongsToPass(gaPromotion, primaryPass), false);
@@ -3123,18 +3149,28 @@ async function selfTest() {
   assert.equal(
     promotionBelongsToPass({ headRefName: "promote/pr-9-legacy" }, primaryPass),
     true,
-    "promotions from before multi-target existed belong to the primary pass",
+    "legacy pre-uniform branches belong to the main lane",
+  );
+  assert.equal(
+    promotionBelongsToPass({ headRefName: "promote/pr-9-legacy" }, secondPass),
+    false,
+    "legacy pre-uniform branches never join another lane",
   );
   assert.equal(
     promotionBelongsToPass(
-      { headRefName: promotionBranchFor({ number: 5, headRefName: "codex/foo-to-github-actions", title: "t" }, "main", "main") },
+      { headRefName: promotionBranchFor({ number: 5, headRefName: "codex/foo-to-github-actions", title: "t" }, "main") },
       primaryPass,
     ),
     true,
-    "a source branch that merely reads like a target suffix stays in the primary pass",
+    "a source branch that merely reads like a lane marker stays on its lane",
+  );
+  assert.equal(
+    promotionBelongsToPass({ headRefName: "promote/pr-5-foo-to-github-actions" }, secondPass),
+    false,
+    "a single-dash -to- lookalike is legacy main-lane history, not a lane marker",
   );
   assert.equal(promotionBranchFor({ number: 8, headRefName: "", title: "Fix: A thing" }),
-    "promote/pr-8-fix-a-thing");
+    "promote/pr-8-fix-a-thing--to-main");
   const retiredSource = {
     number: 8,
     headRefName: "",
@@ -3449,6 +3485,7 @@ async function selfTest() {
   assert.deepEqual(Object.keys(decodedDispatchPlan), [
     "base_ref",
     "base_sha",
+    "source_ref",
     "branch",
     "reservation_sha",
     "source_tip_sha",
@@ -3460,6 +3497,7 @@ async function selfTest() {
     "body_b64",
   ]);
   assert.equal(decodedDispatchPlan.source_tip_sha, dispatchContext.sourceTipSha);
+  assert.equal(decodedDispatchPlan.source_ref, "develop");
   assert.equal(
     decodedDispatchPlan.source_lineage_status,
     dispatchContext.sourceLineageStatus,
@@ -3861,7 +3899,9 @@ function validateReusablePromotionForRun({
   const contextResult = baseShaResult.ok
     ? buildPromotionPlanContext({
         sourcePr,
-        branch: promotionBranchFor(sourcePr),
+        // The branch under validation, verbatim: re-deriving would break every
+        // legacy pre-uniform reservation the moment naming changed.
+        branch: actualBranchName || promotionBranchFor(sourcePr),
         baseRef: expectedBaseName,
         baseSha: baseShaResult.out,
         sourceTipSha,
@@ -4764,8 +4804,8 @@ function promotionBody(pr, groupKey, position, groupPrs, statusFor, plan = {}) {
       "",
       sourceLineageReason(status),
       "",
-      `The workflow recovered and re-applied only source PR #${pr.number}'s exact historical patch. ` +
-        "It did not ask AI to infer whether that change still belongs in the release.",
+      `The workflow recovered and re-applied source PR #${pr.number}'s exact historical patch deterministically. ` +
+        "A model-authored release analysis is posted as a comment on this promotion: it examines main, develop, and github-actions history plus the PR inventory, infers whether this change still belongs, and names any base-only work the replay would override (with recommended follow-up PRs). It is advisory — the replay content itself never comes from a model.",
       "A reviewer must compare this candidate with current product intent before merging it to `main`.",
       "",
       `Lineage status: \`${status}\` · current source tip was checked automatically.`,
@@ -5801,6 +5841,22 @@ async function runPromotion(results, state) {
             );
           }
           break;
+        }
+        if (CFG.requirePathPrefixes.length && Array.isArray(plan.picks) && plan.picks.length) {
+          const planned = readPlannedPatch(plan.picks, undefined, {});
+          if (!planned.ok) {
+            results.blocked.push(...groupFailureMessages(
+              group, index, `lane path guard could not read the planned patch: ${planned.error}`,
+            ));
+            break;
+          }
+          const outside = (planned.paths || []).filter(
+            (path) => !CFG.requirePathPrefixes.some((prefix) => path.startsWith(prefix)),
+          );
+          if (outside.length) {
+            skip(pr, `outside this lane's path prefixes (${CFG.requirePathPrefixes.join(", ")}): ${outside.slice(0, 3).join(", ")}${outside.length > 3 ? ", …" : ""}`);
+            break;
+          }
         }
         if (record?.state === "OPEN") {
           if (record.baseRefName !== baseName) {
