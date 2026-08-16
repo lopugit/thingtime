@@ -17,8 +17,36 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Accurate attachment quota recovery**: upload preparation now preserves
+  bounded storage failure codes through the API and distinguishes a full
+  account tier from missing environment configuration, temporary private
+  storage outages, and storage-accounting reconciliation. Every shared media
+  picker uses the current account allowance as a safe fallback and tells users
+  to delete stored media or upgrade their tier instead of incorrectly claiming
+  that uploads are unavailable in the environment. File-row errors now span
+  the available width on narrow screens instead of being squeezed between the
+  preview and action controls. Unexpected server, ledger, proxy, and provider
+  detail remains hidden. See the
+  [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
+  — Codex (AI), 2026-08-11
+
 ### Added
 
+- **Conversation media, file attachments, and S3 custom reactions**: rich
+  comments and replies now use the same gallery-style linked-media and private
+  upload UI as posts, while DMs, groups, requests, community channels, inline
+  replies, and Slack-style threads can send image, video, audio, or generic
+  files—including attachment-only messages. Stable owner-scoped request ids,
+  atomic purpose/target binding, exact lost-response reconciliation, inherited
+  comment ACLs, current-chat membership checks, nested cascade cleanup, and
+  exact-version deletion keep storage private and tier accounting fail-closed.
+  Custom reaction emoji now bind quota-accounted GIF/PNG/JPEG/WebP uploads
+  instead of accepting new inline base64 payloads; legacy emoji remain
+  read-compatible. See the
+  [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
+  — Codex (AI), 2026-08-10
 - **Gallery-style post and profile media**: post photo links now use responsive
   preview tiles with stable multi-line URL add, deduplication, credential-free
   http(s) validation, and no-referrer previews, while private image/video/file

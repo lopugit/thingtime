@@ -4,7 +4,10 @@ export const ATTACHMENT_ENVELOPE_VERSION = 1 as const;
 export const ATTACHMENT_STATES = ['pending', 'finalizing', 'ready', 'deleting'] as const;
 export type AttachmentState = (typeof ATTACHMENT_STATES)[number];
 
-export const ATTACHMENT_PURPOSES = ['post', 'profile'] as const;
+// A purpose is stamped before any upload URL is issued and never changes.
+// That keeps a private draft created for one surface from being replayed into
+// a different audience (for example, a DM attachment becoming a public post).
+export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji'] as const;
 export type AttachmentPurpose = (typeof ATTACHMENT_PURPOSES)[number];
 export const ATTACHMENT_PROFILE_SLOTS = ['avatar', 'banner'] as const;
 export type ProfileAttachmentSlot = (typeof ATTACHMENT_PROFILE_SLOTS)[number];
@@ -220,9 +223,10 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 		return null;
 	}
 	// Pre-purpose post attachments remain accountable for a safe rollout, but
-	// every stamped row is a closed union: post has no profile slot; profile has
-	// exactly one bounded slot. Corrupt purpose/slot combinations fail closed so
-	// they cannot participate in binding or quota mutation as a canonical row.
+	// every stamped row is a closed union: non-profile purposes have no profile
+	// slot; profile has exactly one bounded slot. Corrupt purpose/slot
+	// combinations fail closed so they cannot participate in binding or quota
+	// mutation as a canonical row.
 	if (doc.attachmentPurpose !== undefined && !isAttachmentPurpose(doc.attachmentPurpose)) return null;
 	if (doc.attachmentProfileSlot !== undefined && !isAttachmentProfileSlot(doc.attachmentProfileSlot)) return null;
 	if (doc.attachmentPurpose === 'profile') {

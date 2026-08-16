@@ -56,6 +56,22 @@ test('only allowlisted attachment retry metadata survives normalization', () => 
 	assert.equal(retryable.code, 'upload_parts_retryable');
 	assert.equal(retryable.retryable, true);
 
+	const quota = createApiFailure({
+		payload: { ok: false, error: 'Private byte counts', code: 'quota_exceeded', retryable: false },
+		status: 503,
+		method: 'POST'
+	});
+	assert.equal(quota.code, 'quota_exceeded');
+	assert.equal(quota.retryable, false);
+
+	const unconfigured = createApiFailure({
+		payload: { ok: false, error: 'Private configuration detail', code: 'storage_unconfigured', retryable: false },
+		status: 503,
+		method: 'POST'
+	});
+	assert.equal(unconfigured.code, 'storage_unconfigured');
+	assert.equal(unconfigured.retryable, false);
+
 	const hostile = createApiFailure({
 		payload: { ok: false, error: 'No', code: 'private_internal_state', retryable: true },
 		status: 409,

@@ -21,6 +21,7 @@ import {
 } from './attachmentStore';
 import type { AttachmentS3 } from './privateS3';
 import { StorageMutationError } from '../storage/storageCore';
+import { PrivateS3ConfigError } from './config';
 
 const checksum = (byte: number) => Buffer.alloc(32, byte).toString('base64');
 const now = new Date('2026-08-09T00:00:00.000Z');
@@ -154,6 +155,66 @@ test('start rejects zero-byte files before reserving quota or creating an MPU', 
 		}
 	);
 	assert.equal(touched, false);
+});
+
+test('start preserves safe quota and storage-configuration failure codes', async () => {
+	let createdMpu = false;
+	const quota = createAttachmentService({
+		store: {
+			listExpiredOwned: async () => [],
+			getById: async () => null,
+			reservePending: async () => {
+				throw new StorageMutationError(507, 'quota_exceeded', 'Private account byte counts');
+			}
+		} as any,
+		getS3: () =>
+			noopS3({
+				createMultipartUpload: async () => {
+					createdMpu = true;
+					return { uploadId: 'mpu-never' };
+				}
+			}),
+		now: () => now,
+		uuid: () => 'quota-attachment',
+		customMongoActive: () => false
+	});
+	assert.deepEqual(
+		await quota.start('user-1', {
+			filename: 'too-large-for-tier.bin',
+			contentType: 'application/octet-stream',
+			sizeBytes: 1024
+		}),
+		{
+			ok: false,
+			status: 507,
+			error: 'Private account byte counts',
+			code: 'quota_exceeded',
+			retryable: false
+		}
+	);
+	assert.equal(createdMpu, false);
+
+	const unconfigured = createAttachmentService({
+		store: {} as any,
+		getS3: () => {
+			throw new PrivateS3ConfigError();
+		},
+		customMongoActive: () => false
+	});
+	assert.deepEqual(
+		await unconfigured.start('user-1', {
+			filename: 'photo.jpg',
+			contentType: 'image/jpeg',
+			sizeBytes: 1024
+		}),
+		{
+			ok: false,
+			status: 503,
+			error: 'Private attachment storage is not configured',
+			code: 'storage_unconfigured',
+			retryable: false
+		}
+	);
 });
 
 test('profile upload purpose is home-pinned, fingerprinted, raster-only, and bounded before reservation', async () => {
@@ -797,6 +858,78 @@ test('post preflight is owner-bound, ready, unexpired and unattached, then atomi
 		hasVisual: true
 	});
 	assert.equal(requestedOwner, 'user-1');
+});
+
+test('conversation attachment preflight is purpose-bound and accepts only one consistent draft or idempotent target state', async () => {
+	let docs: AttachmentDoc[] = [
+		attachmentDoc({
+			attachmentState: 'ready',
+			attachmentPurpose: 'comment',
+			uploadId: undefined,
+			crystal: { name: 'comment.png', size: 10, contentType: 'image/png', mediaKind: 'image' }
+		})
+	];
+	const service = createAttachmentService({
+		store: { getOwnedMany: async () => docs } as any,
+		now: () => now,
+		customMongoActive: () => false
+	});
+
+	const draft = await service.inspectForComment('user-1', ['attachment-1'], 'comment-1');
+	assert.equal(draft.ok, true);
+	if (draft.ok)
+		assert.deepEqual(
+			draft.attachments.map((attachment) => attachment.id),
+			['attachment-1']
+		);
+
+	docs = docs.map((doc) => ({ ...doc, targetId: 'comment-1', attachmentExpiresAt: undefined }));
+	assert.equal((await service.inspectForComment('user-1', ['attachment-1'], 'comment-1')).ok, true);
+	assert.deepEqual(await service.inspectForComment('user-1', ['attachment-1'], 'other-comment'), {
+		ok: false,
+		status: 409,
+		error: 'One or more attachments are unavailable or already attached'
+	});
+
+	docs = [
+		...docs,
+		attachmentDoc({
+			shareId: 'attachment-2',
+			attachmentState: 'ready',
+			attachmentPurpose: 'comment',
+			uploadId: undefined
+		})
+	];
+	assert.equal((await service.inspectForComment('user-1', ['attachment-1', 'attachment-2'], 'comment-1')).ok, false);
+	docs = [attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'message', uploadId: undefined })];
+	assert.equal((await service.inspectForComment('user-1', ['attachment-1'], 'comment-1')).ok, false);
+});
+
+test('message and custom emoji retries may re-inspect only their exact already-bound target', async () => {
+	let doc = attachmentDoc({
+		attachmentState: 'ready',
+		attachmentPurpose: 'message',
+		targetId: 'message-1',
+		attachmentExpiresAt: undefined,
+		uploadId: undefined
+	});
+	const service = createAttachmentService({
+		store: { getOwnedMany: async () => [doc] } as any,
+		now: () => now,
+		customMongoActive: () => false
+	});
+	assert.equal((await service.inspectForMessage('user-1', ['attachment-1'], 'message-1')).ok, true);
+	assert.equal((await service.inspectForMessage('user-1', ['attachment-1'])).ok, false);
+
+	doc = {
+		...doc,
+		attachmentPurpose: 'emoji',
+		targetId: 'emoji-1',
+		objectSizeBytes: 10,
+		crystal: { name: 'party.gif', size: 10, contentType: 'image/gif', mediaKind: 'image' }
+	};
+	assert.equal((await service.inspectForEmoji('user-1', ['attachment-1'], 'emoji-1')).ok, true);
+	assert.equal((await service.inspectForEmoji('user-1', ['attachment-1'], 'emoji-2')).ok, false);
 });
 
 test('post insert hook binds the stable created shareId in-session and binding failures are authored storage errors', async () => {

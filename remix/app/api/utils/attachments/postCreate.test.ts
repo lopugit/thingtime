@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { attachmentPostActorAllowed, bodyHasAttachmentIds, postAttachmentRequest, postBodyWithoutAttachmentIds } from './postCreate';
 
-test('attachmentIds are accepted only on POST top-level post creation', () => {
+test('generic Things accept attachmentIds only on POST top-level post creation', () => {
 	assert.deepEqual(
 		postAttachmentRequest('POST', { thingtime: ['post'], crystal: { type: 'text', text: '' }, attachmentIds: ['attachment-1'] }, true),
 		{ ok: true, present: true, attachmentIds: ['attachment-1'] }
@@ -14,7 +14,7 @@ test('attachmentIds are accepted only on POST top-level post creation', () => {
 	assert.equal(postAttachmentRequest('POST', { type: 'text', attachmentIds: 'not-a-list' }, false).ok, false);
 });
 
-test('attachmentIds key detection is presence-based and cannot be supplied to comment routes', () => {
+test('attachmentIds key detection is presence-based for dedicated attachment-aware routes', () => {
 	assert.equal(bodyHasAttachmentIds({ attachmentIds: undefined }), true);
 	assert.equal(bodyHasAttachmentIds({ text: 'no attachments' }), false);
 	const legacy = postAttachmentRequest('POST', { type: 'text', attachmentIds: [] }, false);

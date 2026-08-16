@@ -88,6 +88,20 @@ export const useAttachmentUploads = (
 		? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Number(options.maxFiles)))
 		: MAX_POST_ATTACHMENTS;
 	const imageOnly = options.imageOnly === true;
+	const maxBytesPerFile =
+		Number.isSafeInteger(options.maxBytesPerFile) && Number(options.maxBytesPerFile) > 0 ? Number(options.maxBytesPerFile) : null;
+	const allowedContentTypes = React.useMemo(
+		() => (options.allowedContentTypes?.length ? new Set(options.allowedContentTypes.map((value) => value.toLowerCase())) : null),
+		[options.allowedContentTypes]
+	);
+	const uploadErrorContextRef = React.useRef({
+		remainingBytes: options.remainingBytes,
+		storageStatus: options.storageStatus
+	});
+	uploadErrorContextRef.current = {
+		remainingBytes: options.remainingBytes,
+		storageStatus: options.storageStatus
+	};
 	const api = useApi();
 	const apiRef = React.useRef(api.v1.attachments);
 	apiRef.current = api.v1.attachments;
@@ -249,7 +263,10 @@ export const useAttachmentUploads = (
 				const phase = uploadId ? 'upload' : 'prepare';
 				patchUpload(localId, attempt, {
 					status: 'error',
-					error: attachmentUploadError(error, phase),
+					error: attachmentUploadError(error, phase, {
+						...uploadErrorContextRef.current,
+						fileSizeBytes: file.size
+					}),
 					failedAt: attachmentUploadFailurePhase(error, phase)
 				});
 			} finally {
@@ -279,9 +296,18 @@ export const useAttachmentUploads = (
 	const addFilesInternal = React.useCallback(
 		(files: File[], replaceExisting: boolean) => {
 			const current = replaceExisting ? [] : uploadsRef.current;
-			const eligible = imageOnly ? files.filter((file) => localFileMediaKind(file) === 'image') : files;
+			const eligible = files.filter(
+				(file) =>
+					(!imageOnly || localFileMediaKind(file) === 'image') &&
+					(!allowedContentTypes || allowedContentTypes.has(file.type.toLowerCase())) &&
+					(!maxBytesPerFile || file.size <= maxBytesPerFile)
+			);
 			if (eligible.length < files.length) {
-				onSelectionError?.('Choose a JPEG, PNG, GIF, WebP, or AVIF image.');
+				onSelectionError?.(
+					maxBytesPerFile
+						? `Choose a supported image no larger than ${Math.round(maxBytesPerFile / 1024)} KiB.`
+						: 'Choose a JPEG, PNG, GIF, WebP, or AVIF image.'
+				);
 			}
 			const unique = dedupeSelectedFiles(current, eligible);
 			const availableSlots = Math.max(0, maxFiles - current.length);
@@ -332,7 +358,7 @@ export const useAttachmentUploads = (
 			setUploads(nextUploads);
 			for (const upload of next) enqueue({ localId: upload.localId, file: upload.file, attempt: 1 });
 		},
-		[cleanupUpload, enqueue, imageOnly, maxFiles, onCleanupDeferred, onCleanupError, onSelectionError]
+		[allowedContentTypes, cleanupUpload, enqueue, imageOnly, maxBytesPerFile, maxFiles, onCleanupDeferred, onCleanupError, onSelectionError]
 	);
 
 	const addFiles = React.useCallback((files: File[]) => addFilesInternal(files, false), [addFilesInternal]);

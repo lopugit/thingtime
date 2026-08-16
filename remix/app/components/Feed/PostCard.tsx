@@ -524,6 +524,7 @@ const buildPendingComment = (user: any, targetId: string, text: string): PostCom
   type: 'text',
   text,
   images: [],
+	attachments: [],
   listing: null,
   thing: null,
   tags: [],
@@ -928,7 +929,7 @@ const CommentRow = (props: {
                   <TimestampLink id={comment.id} createdAt={comment.createdAt} fontSize="10px" />
                 </Box>
               </Flex>
-              <PostBody post={comment} compact />
+							<PostBody post={comment} compact attachments={comment.attachments} />
             </Box>
             {/* icon-only actions (no labels): reply toggles the inline input,
             and the merged react control sits right beside it */}

@@ -5,7 +5,7 @@ import { CheckCircle2, File as FileIcon, Image as ImageIcon, RotateCcw, UploadCl
 import { useLopu } from '~/components/Lopu/useLopu';
 import { MediaAddTile, MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
 import { formatAttachmentBytes, localFileMediaKind, MAX_POST_ATTACHMENTS, sameAttachmentSnapshot } from './attachmentUiCore';
-import type { AttachmentComposerSnapshot, ComposerAttachmentUpload } from './attachmentTypes';
+import type { AttachmentComposerSnapshot, AttachmentUploadPurpose, ComposerAttachmentUpload } from './attachmentTypes';
 import { useAttachmentUploads } from './useAttachmentUploads';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -17,6 +17,13 @@ export type AttachmentComposerProps = {
 	remainingBytes?: number | null;
 	storageStatus?: 'ready' | 'reconciling' | 'unavailable';
 	onChange: (snapshot: AttachmentComposerSnapshot) => void;
+	purpose?: AttachmentUploadPurpose;
+	maxFiles?: number;
+	imageOnly?: boolean;
+	maxBytesPerFile?: number;
+	allowedContentTypes?: readonly string[];
+	ariaLabel?: string;
+	helperText?: string;
 };
 
 export type AttachmentComposerHandle = {
@@ -88,13 +95,13 @@ const UploadVisualTile = React.memo(
 						right={1}
 						variant="solid"
 						background="rgba(255, 255, 255, 0.9)"
-			color={MUTED}
+						color={MUTED}
 						borderRadius="999px"
 						isDisabled={disabled}
 						onClick={() => onRemove(upload.localId)}
 					/>
 				}
-		>
+			>
 				<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={upload.file.name}>
 					{upload.file.name}
 				</Text>
@@ -108,7 +115,7 @@ const UploadVisualTile = React.memo(
 					>
 						{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
 					</Text>
-		</Flex>
+				</Flex>
 				{busy ? (
 					<Progress
 						value={upload.progress}
@@ -135,7 +142,7 @@ const UploadVisualTile = React.memo(
 					</Button>
 				) : null}
 			</MediaGalleryTile>
-	);
+		);
 	}
 );
 
@@ -143,90 +150,106 @@ UploadVisualTile.displayName = 'UploadVisualTile';
 
 const UploadFileRow = React.memo(
 	(props: { upload: ComposerAttachmentUpload; disabled?: boolean; onRetry: (localId: string) => void; onRemove: (localId: string) => void }) => {
-	const { upload, disabled, onRetry, onRemove } = props;
-	const busy = upload.status !== 'ready' && upload.status !== 'error';
-	return (
-		<Flex
-			alignItems="center"
-			columnGap={3}
-			padding={2}
+		const { upload, disabled, onRetry, onRemove } = props;
+		const busy = upload.status !== 'ready' && upload.status !== 'error';
+		return (
+			<Box
+				padding={2}
 				border={upload.status === 'error' ? '1px solid var(--tt-danger, #e5484d)' : BORDER}
-			borderRadius="var(--tt-radius-md, 12px)"
-			background="var(--tt-card, #ffffff)"
-			minWidth={0}
-		>
-				<Flex
-					alignItems="center"
-					justifyContent="center"
-					boxSize="48px"
-					border={BORDER}
-					borderRadius="var(--tt-radius-sm, 9px)"
-					background="var(--tt-surface-alt, #f5f5f7)"
-					color={MUTED}
-					flexShrink={0}
-				>
-					<FileIcon size={20} aria-hidden />
-				</Flex>
-			<Box flex="1" minWidth={0}>
-				<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={upload.file.name}>
-					{upload.file.name}
-				</Text>
-					<Flex alignItems="flex-start" columnGap={1.5} minWidth={0}>
-						{upload.status === 'ready' ? <CheckCircle2 size={12} color="var(--tt-positive, #2f9e68)" aria-hidden /> : null}
-					<Text
-						fontSize="11px"
-						color={upload.status === 'error' ? 'var(--tt-danger, #e5484d)' : MUTED}
-							role={uploadStatusRole(upload)}
-						whiteSpace="normal"
+				borderRadius="var(--tt-radius-md, 12px)"
+				background="var(--tt-card, #ffffff)"
+				minWidth={0}
+			>
+				<Flex alignItems="center" columnGap={3} minWidth={0}>
+					<Flex
+						alignItems="center"
+						justifyContent="center"
+						boxSize="48px"
+						border={BORDER}
+						borderRadius="var(--tt-radius-sm, 9px)"
+						background="var(--tt-surface-alt, #f5f5f7)"
+						color={MUTED}
+						flexShrink={0}
 					>
+						<FileIcon size={20} aria-hidden />
+					</Flex>
+					<Box flex="1" minWidth={0}>
+						<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={upload.file.name}>
+							{upload.file.name}
+						</Text>
+						{upload.status !== 'error' ? (
+							<Flex alignItems="flex-start" columnGap={1.5} minWidth={0}>
+								{upload.status === 'ready' ? <CheckCircle2 size={12} color="var(--tt-positive, #2f9e68)" aria-hidden /> : null}
+								<Text fontSize="11px" color={MUTED} role={uploadStatusRole(upload)} whiteSpace="normal">
+									{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
+								</Text>
+							</Flex>
+						) : null}
+						{busy ? (
+							<Progress
+								value={upload.progress}
+								size="xs"
+								colorScheme="purple"
+								borderRadius="999px"
+								marginTop={1.5}
+								aria-label={`Upload progress for ${upload.file.name}`}
+							/>
+						) : null}
+					</Box>
+					{upload.status === 'error' && upload.failedAt !== 'terminal' ? (
+						<IconButton
+							aria-label={`Retry ${upload.file.name}`}
+							icon={<RotateCcw size={14} />}
+							size="sm"
+							minWidth="44px"
+							height="44px"
+							variant="ghost"
+							borderRadius="999px"
+							isDisabled={disabled}
+							onClick={() => onRetry(upload.localId)}
+						/>
+					) : null}
+					<IconButton
+						aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
+						icon={<X size={14} />}
+						size="sm"
+						minWidth="44px"
+						height="44px"
+						variant="ghost"
+						color={MUTED}
+						borderRadius="999px"
+						isDisabled={disabled}
+						onClick={() => onRemove(upload.localId)}
+					/>
+				</Flex>
+				{upload.status === 'error' ? (
+					<Text fontSize="11px" lineHeight="1.5" color="var(--tt-danger, #e5484d)" role="alert" marginTop={2} whiteSpace="normal">
 						{formatAttachmentBytes(upload.file.size)} · {statusLabel(upload)}
 					</Text>
-				</Flex>
-					{busy ? (
-					<Progress
-						value={upload.progress}
-						size="xs"
-						colorScheme="purple"
-						borderRadius="999px"
-						marginTop={1.5}
-						aria-label={`Upload progress for ${upload.file.name}`}
-					/>
-					) : null}
-			</Box>
-				{upload.status === 'error' && upload.failedAt !== 'terminal' ? (
-				<IconButton
-					aria-label={`Retry ${upload.file.name}`}
-					icon={<RotateCcw size={14} />}
-					size="sm"
-					minWidth="44px"
-					height="44px"
-					variant="ghost"
-					borderRadius="999px"
-					isDisabled={disabled}
-						onClick={() => onRetry(upload.localId)}
-				/>
 				) : null}
-			<IconButton
-				aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
-				icon={<X size={14} />}
-				size="sm"
-				minWidth="44px"
-				height="44px"
-				variant="ghost"
-				color={MUTED}
-				borderRadius="999px"
-				isDisabled={disabled}
-					onClick={() => onRemove(upload.localId)}
-			/>
-		</Flex>
-	);
+			</Box>
+		);
 	}
 );
 
 UploadFileRow.displayName = 'UploadFileRow';
 
 const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, AttachmentComposerProps>((props, ref) => {
-	const { ownerId, disabled, remainingBytes, storageStatus, onChange } = props;
+	const {
+		ownerId,
+		disabled,
+		remainingBytes,
+		storageStatus,
+		onChange,
+		purpose = 'post',
+		maxFiles = MAX_POST_ATTACHMENTS,
+		imageOnly = false,
+		maxBytesPerFile,
+		allowedContentTypes,
+		ariaLabel = 'Post attachments',
+		helperText
+	} = props;
+	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
 	const lopu = useLopu();
 	const [dragging, setDragging] = React.useState(false);
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -248,9 +271,10 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		onCleanupError,
 		onSelectionError,
 		disabled === true,
-		onCleanupDeferred
+		onCleanupDeferred,
+		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes, remainingBytes, storageStatus }
 	);
-	const pickerDisabled = disabled || uploads.length >= MAX_POST_ATTACHMENTS;
+	const pickerDisabled = disabled || uploads.length >= boundedMaxFiles;
 	const visualUploads: ComposerAttachmentUpload[] = [];
 	const fileUploads: ComposerAttachmentUpload[] = [];
 	for (const upload of uploads) {
@@ -269,7 +293,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 
 	const choose = React.useCallback(
 		(files: FileList | null) => {
-		if (files?.length) addFiles(Array.from(files));
+			if (files?.length) addFiles(Array.from(files));
 		},
 		[addFiles]
 	);
@@ -284,7 +308,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			: `${formatAttachmentBytes(remainingBytes)} available on this account.`;
 
 	return (
-		<Flex flexDirection="column" rowGap={2} role="group" aria-label="Post attachments">
+		<Flex flexDirection="column" rowGap={2} role="group" aria-label={ariaLabel}>
 			<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap">
 				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
 					Media & files 📎
@@ -317,7 +341,8 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 				<input
 					ref={inputRef}
 					type="file"
-					multiple
+					multiple={boundedMaxFiles > 1}
+					accept={allowedContentTypes?.join(',') || (imageOnly ? 'image/gif,image/jpeg,image/png,image/webp' : undefined)}
 					hidden
 					disabled={pickerDisabled}
 					onChange={(event) => {
@@ -326,31 +351,36 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 					}}
 				/>
 				<Text fontSize="11px" color={MUTED} paddingBottom={2} whiteSpace="normal">
-					Photos, videos, or any file · up to 25 · drop files anywhere in this panel
-						</Text>
+					{helperText ||
+						(imageOnly
+							? `${boundedMaxFiles === 1 ? 'One image' : `Up to ${boundedMaxFiles} images`} · drop ${
+									boundedMaxFiles === 1 ? 'it' : 'them'
+							  } anywhere in this panel`
+							: `Photos, videos, or any file · up to ${boundedMaxFiles} · drop files anywhere in this panel`)}
+				</Text>
 
-				{visualUploads.length > 0 || uploads.length < MAX_POST_ATTACHMENTS ? (
+				{visualUploads.length > 0 || uploads.length < boundedMaxFiles ? (
 					<MediaGalleryGrid ariaLabel="Selected media uploads">
 						{visualUploads.map((upload) => (
 							<UploadVisualTile key={upload.localId} upload={upload} disabled={disabled} onRetry={retry} onRemove={remove} />
 						))}
-						{uploads.length < MAX_POST_ATTACHMENTS ? (
+						{uploads.length < boundedMaxFiles ? (
 							<MediaAddTile ariaLabel="Add media files" disabled={pickerDisabled} onClick={() => inputRef.current?.click()}>
 								<Flex flexDirection="column" alignItems="center" rowGap={2}>
 									<UploadCloud size={22} aria-hidden />
 									<Box as="span">🏞️ Add Media</Box>
-				</Flex>
+								</Flex>
 							</MediaAddTile>
 						) : null}
 					</MediaGalleryGrid>
 				) : null}
 
 				{fileUploads.length > 0 ? (
-					<Flex flexDirection="column" rowGap={2} paddingTop={visualUploads.length > 0 || uploads.length < MAX_POST_ATTACHMENTS ? 2 : 0}>
+					<Flex flexDirection="column" rowGap={2} paddingTop={visualUploads.length > 0 || uploads.length < boundedMaxFiles ? 2 : 0}>
 						{fileUploads.map((upload) => (
 							<UploadFileRow key={upload.localId} upload={upload} disabled={disabled} onRetry={retry} onRemove={remove} />
-					))}
-				</Flex>
+						))}
+					</Flex>
 				) : null}
 			</Box>
 		</Flex>

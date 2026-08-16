@@ -490,7 +490,7 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			values: [...ATTACHMENT_PURPOSES],
 			system: true,
-			description: 'Server-owned binding domain: ordinary post media or managed profile media.'
+			description: 'Server-owned immutable binding domain: post, comment, message, profile, or custom-emoji media.'
 		},
 		{
 			name: 'attachmentProfileSlot',
@@ -562,6 +562,13 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			system: true,
 			description: 'Protected current managed-banner attachment reference on a canonical user Thing.'
+		},
+		{
+			name: 'emojiAttachmentId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Protected exact S3 attachment reference on a custom-emoji Thing.'
 		},
     { name: 'createdAt', type: 'date', required: true, system: true, description: 'Creation time.' },
     { name: 'updatedAt', type: 'date', required: true, system: true, description: 'Last mutation time.' }
@@ -1221,11 +1228,7 @@ const migrationDiagnosticSchema: ThingtimeSchema = {
 	}
 };
 
-const ciEntitySchema = (
-  id: Exclude<(typeof CI_CONTROL_THINGTIME)[number], 'ci-event'>,
-  title: string,
-  summary: string
-): ThingtimeSchema => ({
+const ciEntitySchema = (id: Exclude<(typeof CI_CONTROL_THINGTIME)[number], 'ci-event'>, title: string, summary: string): ThingtimeSchema => ({
   id,
   version: 1,
   kind: 'crystal',
@@ -1933,9 +1936,9 @@ const chatMessageSchema: ThingtimeSchema = {
 		{
 			name: 'text',
 			type: 'string',
-			required: true,
+			required: false,
 			max: MAX_MESSAGE_CHARS,
-			description: `Message text, max ${MAX_MESSAGE_CHARS} chars. :name: tokens render as custom emojis.`
+			description: `Optional message text, max ${MAX_MESSAGE_CHARS} chars. A message may instead contain one or more bound attachments. :name: tokens render as custom emojis.`
 		},
     { name: 'threadRootId', type: 'id', required: false, description: 'Root message shareId when this is a thread reply.' },
     { name: 'replyToId', type: 'id', required: false, description: 'Quoted message shareId (inline reply).' },
@@ -1962,8 +1965,8 @@ const customEmojiSchema: ThingtimeSchema = {
   summary: 'An uploaded emoji/gif usable in chat reactions and messages.',
   detail:
     'One thing per emoji (relational, FUNDAMENTALS §3 — never an array on the community). The ' +
-    'image is an inline base64 data URI (gif/webp/png/apng/jpeg, ≤' +
-    `${Math.round(MAX_EMOJI_DATA_URI_CHARS / 1024)}K chars), the avatar-storage pattern. Scope is ` +
+		'image is a protected, quota-accounted S3 attachment (gif/webp/png/jpeg, ≤512 KiB); legacy ' +
+		'inline data-URI rows remain read-compatible. Scope is ' +
     'a community (targetId set) or personal (targetId null); names are unique per scope via ' +
     'crystal.emojiKey. Reaction tokens reference emojis by id (`custom:<shareId>`), so renames ' +
     'never orphan reactions.',
@@ -1971,10 +1974,10 @@ const customEmojiSchema: ThingtimeSchema = {
   fields: [
     { name: 'name', type: 'string', required: true, max: MAX_EMOJI_NAME_CHARS, description: 'Lowercase [a-z0-9_-] name, rendered as :name:.' },
     { name: 'emojiKey', type: 'string', required: true, description: 'Unique `<scope>:<name>` key (scope = communityId or user:<userId>).' },
-    { name: 'image', type: 'string', required: true, description: 'Inline data:image/... base64 URI.' },
-    { name: 'animated', type: 'boolean', required: false, description: 'True for gif/apng uploads.' }
+		{ name: 'image', type: 'string', required: false, description: 'Legacy inline data:image/... base64 URI; never written for new emojis.' },
+		{ name: 'animated', type: 'boolean', required: false, description: 'True for new GIF uploads or a compatible legacy animated row.' }
   ],
-  example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', image: 'data:image/gif;base64,R0lGOD…', animated: true }
+	example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', animated: true }
 };
 
 const followSchema: ThingtimeSchema = {
@@ -2247,12 +2250,12 @@ const sanitizePostCrystal = (
   // share things render the shared original, so their post payload may be
   // an empty caption regardless of type
   const isShare = appliedIds.includes('share');
-	// Comment attachments are intentionally not shipping in this change. Rich
-	// comments still pass through the post sanitizer, so never let a post-level
-	// attachment preflight relax their existing body rules.
-	const isComment = appliedIds.includes('comment');
-	const hasAnyAttachment = !isComment && options.postAttachments?.hasAny === true;
-	const hasVisualAttachment = !isComment && options.postAttachments?.hasVisual === true;
+	// This context is server-only and arrives only after the attachment store
+	// verifies the exact owner, purpose, ready state and unbound expiry. It may
+	// therefore satisfy the same body rules for a top-level post or a rich
+	// ['post', 'comment'] Thing without opening those rules to generic input.
+	const hasAnyAttachment = options.postAttachments?.hasAny === true;
+	const hasVisualAttachment = options.postAttachments?.hasVisual === true;
 
   const text = typeof input.text === 'string' ? input.text.trim() : '';
   if (text.length > MAX_TEXT_CHARS) return fail(400, `Post text is too long (max ${MAX_TEXT_CHARS})`);

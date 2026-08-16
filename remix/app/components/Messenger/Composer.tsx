@@ -1,6 +1,9 @@
 import React from 'react';
-import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Textarea } from '@chakra-ui/react';
+import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Text, Textarea } from '@chakra-ui/react';
 
+import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
+import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerEmojiPicker } from './MessengerEmojiPicker';
 import { CUSTOM_TOKEN_PREFIX, customTokenId, isCustomToken, type ChatMessage, type CustomEmoji } from './messengerTypes';
 
@@ -11,20 +14,36 @@ export type ComposerProps = {
   onCancelReply: () => void;
   editing: ChatMessage | null;
   onCancelEdit: () => void;
-  onSend: (text: string) => Promise<boolean>;
+	onSend: (submission: { text: string; requestId: string; attachmentIds: string[]; attachments: PublicAttachment[] }) => Promise<boolean>;
   onUploadEmoji?: () => void;
   disabled?: boolean;
   disabledLabel?: string;
 };
 
+const EMPTY_ATTACHMENTS: AttachmentComposerSnapshot = {
+	attachmentIds: [],
+	attachments: [],
+	blocking: false,
+	hasSelection: false
+};
+
+type MessageSubmission = Parameters<ComposerProps['onSend']>[0];
+
 // The message box: Enter sends, Shift+Enter breaks the line, the emoji button
 // inserts unicode emojis or `:name:` custom tokens inline, and the same
 // surface flips into edit / reply mode with a small context strip on top.
 export const Composer = (props: ComposerProps) => {
+	const user = useCurrentUser();
   const [text, setText] = React.useState('');
   const [sending, setSending] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
+	const [attachmentOpen, setAttachmentOpen] = React.useState(false);
+	const [attachmentSession, setAttachmentSession] = React.useState(0);
+	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENTS);
+	const [submissionUncertain, setSubmissionUncertain] = React.useState(false);
   const areaRef = React.useRef<HTMLTextAreaElement | null>(null);
+	const attachmentRef = React.useRef<AttachmentComposerHandle | null>(null);
+	const pendingSubmissionRef = React.useRef<MessageSubmission | null>(null);
   const emojiNameById = React.useMemo(() => new Map(props.pickerEmojis.map((e) => [e.id, e.name])), [props.pickerEmojis]);
 
   React.useEffect(() => {
@@ -39,13 +58,45 @@ export const Composer = (props: ComposerProps) => {
   }, [props.replyTo]);
 
   const send = async () => {
-    const trimmed = text.trim();
-    if (!trimmed || sending || props.disabled) return;
+		const submission =
+			pendingSubmissionRef.current ||
+			({
+				text: text.trim(),
+				requestId: crypto.randomUUID(),
+				attachmentIds: [...attachmentSnapshot.attachmentIds],
+				attachments: [...attachmentSnapshot.attachments]
+			} satisfies MessageSubmission);
+		if (
+			(!submission.text && !submission.attachments.length) ||
+			(!pendingSubmissionRef.current && attachmentSnapshot.blocking) ||
+			sending ||
+			props.disabled
+		)
+			return;
+		pendingSubmissionRef.current = submission;
     setSending(true);
-    const okSend = await props.onSend(trimmed);
+		try {
+			const okSend = await props.onSend(submission);
+			if (okSend) {
+				attachmentRef.current?.markCommitted(submission.attachmentIds);
+				pendingSubmissionRef.current = null;
+				setSubmissionUncertain(false);
+				setText('');
+				setAttachmentSnapshot(EMPTY_ATTACHMENTS);
+				setAttachmentSession((session) => session + 1);
+				setAttachmentOpen(false);
+			} else {
+				pendingSubmissionRef.current = null;
+				setSubmissionUncertain(false);
+			}
+		} catch {
+			// The server may have committed before the response was lost. Freeze the
+			// exact caption, request id, and attachment set so retry is idempotent.
+			setSubmissionUncertain(true);
+		} finally {
     setSending(false);
-    if (okSend) setText('');
     areaRef.current?.focus();
+		}
   };
 
   const insertToken = (token: string) => {
@@ -67,14 +118,16 @@ export const Composer = (props: ComposerProps) => {
     });
   };
 
+	const composerLocked = sending || submissionUncertain;
   const contextStrip = props.editing ? (
-    <ContextStrip label={`Editing message`} onCancel={props.onCancelEdit} />
+		<ContextStrip label="Editing message" onCancel={props.onCancelEdit} disabled={composerLocked} />
   ) : props.replyTo ? (
     <ContextStrip
       label={`Replying to ${props.replyTo.author?.displayName || props.replyTo.author?.username || 'someone'}: ${
         props.replyTo.text.slice(0, 60) || '…'
       }`}
       onCancel={props.onCancelReply}
+			disabled={composerLocked}
     />
   ) : null;
 
@@ -98,17 +151,13 @@ export const Composer = (props: ComposerProps) => {
         padding="6px 8px"
         _focusWithin={{ borderColor: 'var(--tt-accent, #a855f7)' }}
       >
-        <Popover
-          isOpen={pickerOpen}
-          onClose={() => setPickerOpen(false)}
-          placement="top-start"
-          isLazy
-        >
+				<Popover isOpen={pickerOpen} onClose={() => setPickerOpen(false)} placement="top-start" isLazy>
           <PopoverTrigger>
             <Button
               size="sm"
               variant="ghost"
               flexShrink={0}
+							isDisabled={composerLocked}
               onClick={(event) => {
                 // controlled Popover: block PopoverTrigger's own onToggle or an
                 // open picker closes and instantly reopens
@@ -140,16 +189,31 @@ export const Composer = (props: ComposerProps) => {
             </PopoverContent>
           </Portal>
         </Popover>
+				{!props.editing ? (
+					<Button
+						size="sm"
+						variant={attachmentOpen || attachmentSnapshot.hasSelection ? 'solid' : 'ghost'}
+						flexShrink={0}
+						isDisabled={composerLocked}
+						onClick={() => setAttachmentOpen((open) => !open)}
+						title="Add media or files"
+						aria-label="Add media or files"
+						aria-expanded={attachmentOpen}
+					>
+						📎
+					</Button>
+				) : null}
         <Textarea
           ref={areaRef}
           value={text}
           onChange={(event) => setText(event.target.value)}
+					isDisabled={composerLocked}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
               void send();
             }
-            if (event.key === 'Escape') {
+						if (event.key === 'Escape' && !composerLocked) {
               if (props.editing) props.onCancelEdit();
               if (props.replyTo) props.onCancelReply();
             }
@@ -169,22 +233,44 @@ export const Composer = (props: ComposerProps) => {
           size="sm"
           onClick={send}
           isLoading={sending}
-          isDisabled={!text.trim()}
+					isDisabled={
+						(!submissionUncertain && !text.trim() && !attachmentSnapshot.attachments.length) || (!submissionUncertain && attachmentSnapshot.blocking)
+					}
           flexShrink={0}
           background="var(--tt-accent, #a855f7)"
           color="white"
           _hover={{ opacity: 0.9 }}
           borderRadius="var(--tt-radius-pill, 999px)"
-          title={props.editing ? 'Save edit' : 'Send'}
+					title={submissionUncertain ? 'Retry safely' : props.editing ? 'Save edit' : 'Send'}
         >
-          {props.editing ? '✓' : '➤'}
+					{submissionUncertain ? '↻' : props.editing ? '✓' : '➤'}
         </Button>
       </Flex>
+			{submissionUncertain ? (
+				<Text role="status" aria-live="polite" fontSize="12px" color="var(--tt-muted, #70707a)" paddingX={2} paddingTop={2} whiteSpace="normal">
+					Thingtime may already have sent this. Retry safely to confirm it without creating a duplicate.
+				</Text>
+			) : null}
+			{user && !props.editing && (attachmentOpen || attachmentSnapshot.hasSelection) ? (
+				<Box paddingTop={2}>
+					<AttachmentComposer
+						ref={attachmentRef}
+						key={`message-attachments-${user.id}-${attachmentSession}`}
+						ownerId={user.id}
+						purpose="message"
+						ariaLabel="Message attachments"
+						disabled={composerLocked}
+						remainingBytes={user.storage.remainingBytes}
+						storageStatus={user.storage.status}
+						onChange={setAttachmentSnapshot}
+					/>
+				</Box>
+			) : null}
     </Box>
   );
 };
 
-const ContextStrip = ({ label, onCancel }: { label: string; onCancel: () => void }) => (
+const ContextStrip = ({ label, onCancel, disabled }: { label: string; onCancel: () => void; disabled?: boolean }) => (
   <Flex
     align="center"
     justify="space-between"
@@ -200,7 +286,7 @@ const ContextStrip = ({ label, onCancel }: { label: string; onCancel: () => void
     <Box overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
       {label}
     </Box>
-    <Button size="xs" variant="ghost" onClick={onCancel} flexShrink={0}>
+		<Button size="xs" variant="ghost" onClick={onCancel} flexShrink={0} isDisabled={disabled}>
       ✕
     </Button>
   </Flex>

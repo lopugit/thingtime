@@ -7,7 +7,8 @@ import {
 	isAttachmentObjectVersionId,
 	sanitizeAttachmentPublicMetadata,
 	toAttachmentPublicMetadata,
-	type AttachmentCrystal
+	type AttachmentCrystal,
+	type AttachmentPublicMetadata
 } from './attachmentCore';
 import { canViewHomeAttachmentTarget, type AttachmentAccessViewer } from './attachmentAccess';
 import {
@@ -21,6 +22,9 @@ import {
 	PROFILE_ATTACHMENT_CONTENT_TYPES,
 	attachmentMpuSettlementAt,
 	attachmentStore,
+	bindReadyCommentAttachmentsToTarget,
+	bindReadyEmojiAttachmentToTarget,
+	bindReadyMessageAttachmentsToTarget,
 	bindReadyAttachmentsToTarget,
 	type AttachmentDoc,
 	type AttachmentPurpose,
@@ -33,6 +37,7 @@ import {
 	attachmentPublicProjection,
 	detectedAttachmentType
 } from './attachmentPresentation';
+import { PrivateS3ConfigError } from './config';
 import { getPrivateS3, type AttachmentObjectHead, type AttachmentS3, type AttachmentUploadedPart } from './privateS3';
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -45,8 +50,10 @@ export const MAX_EXPIRED_ATTACHMENTS_PER_REAP = 1000;
 export const ATTACHMENT_REAP_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_REAP_CONCURRENCY = 5;
 export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
-export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'profile-avatar', 'profile-banner'] as const;
+export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji'] as const;
 export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
+export const MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES = 512 * 1024;
+export const CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);
 
 type AttachmentFail = {
 	ok: false;
@@ -111,8 +118,11 @@ const attachmentUploadIntent = (
 	value: unknown
 ): { requestPurpose: AttachmentUploadPurpose; purpose: AttachmentPurpose; profileSlot?: ProfileAttachmentSlot } | null => {
 	if (value === undefined || value === 'post') return { requestPurpose: 'post', purpose: 'post' };
+	if (value === 'comment') return { requestPurpose: value, purpose: 'comment' };
+	if (value === 'message') return { requestPurpose: value, purpose: 'message' };
 	if (value === 'profile-avatar') return { requestPurpose: value, purpose: 'profile', profileSlot: 'avatar' };
 	if (value === 'profile-banner') return { requestPurpose: value, purpose: 'profile', profileSlot: 'banner' };
+	if (value === 'custom-emoji') return { requestPurpose: value, purpose: 'emoji' };
 	return null;
 };
 
@@ -171,7 +181,13 @@ export const validateCompletedAttachmentParts = (
 };
 
 const knownFailure = (error: unknown): AttachmentFail | null => {
-	if (error instanceof AttachmentServiceError || error instanceof StorageMutationError) {
+	if (error instanceof StorageMutationError) {
+		return fail(error.status, error.message, {
+			code: error.code,
+			retryable: error.code === 'accounting_unavailable'
+		});
+	}
+	if (error instanceof AttachmentServiceError) {
 		return fail(error.status, error.message);
 	}
 	if (error instanceof AttachmentStoreConflictError) return fail(409, 'Attachment changed — try again');
@@ -186,7 +202,16 @@ const unavailable = (operation: string, error: unknown): AttachmentFail => {
 		.replace(/[^A-Za-z0-9-]/g, '')
 		.slice(0, 80);
 	console.error(`[attachments] ${operation} failed (${name || 'Error'}${requestId ? `, request ${requestId}` : ''})`);
-	return fail(503, 'Attachment storage is temporarily unavailable');
+	if (error instanceof PrivateS3ConfigError) {
+		return fail(503, 'Private attachment storage is not configured', {
+			code: 'storage_unconfigured',
+			retryable: false
+		});
+	}
+	return fail(503, 'Attachment storage is temporarily unavailable', {
+		code: 'storage_unavailable',
+		retryable: true
+	});
 };
 
 const exactPartRequest = (value: unknown, partCount: number) => {
@@ -522,8 +547,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			const intent = attachmentUploadIntent(raw.purpose);
 			if (!intent) return fail(400, 'Invalid attachment upload purpose');
-			if (intent.purpose === 'post' && dependencies.customMongoActive()) {
-				return fail(400, 'Private post attachments are unavailable with a custom MongoDB endpoint');
+			if (intent.purpose !== 'profile' && dependencies.customMongoActive()) {
+				return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 			}
 			const requestedId = raw.requestId === undefined ? null : normalizeId(raw.requestId);
 			if (raw.requestId !== undefined && !requestedId) return fail(400, 'Invalid attachment request id');
@@ -543,6 +568,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				}
 				if (!PROFILE_ATTACHMENT_CONTENT_TYPES.has(sanitized.crystal.contentType)) {
 					return fail(400, 'Profile attachments must be a supported raster image');
+				}
+			}
+			if (intent.purpose === 'emoji') {
+				if (sizeBytes > MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES) {
+					return fail(400, `Custom emoji images can contain at most ${MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES} bytes`);
+				}
+				if (!CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES.has(sanitized.crystal.contentType)) {
+					return fail(400, 'Custom emojis must be a GIF, PNG, JPEG, or WebP image');
 				}
 			}
 			const crystal: AttachmentCrystal = {
@@ -572,7 +605,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				doc.attachmentRequestFingerprint === requestFingerprint &&
 				(intent.purpose === 'post'
 					? (doc.attachmentPurpose === undefined || doc.attachmentPurpose === 'post') && doc.attachmentProfileSlot === undefined
-					: doc.attachmentPurpose === 'profile' && doc.attachmentProfileSlot === intent.profileSlot);
+					: doc.attachmentPurpose === intent.purpose && doc.attachmentProfileSlot === intent.profileSlot);
 
 			let ownsInitialization = false;
 			let reserved = requestedId ? await dependencies.store.getById(id) : null;
@@ -1035,46 +1068,102 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const inspectForPost = async (
+	type ContentAttachmentPurpose = Extract<AttachmentPurpose, 'post' | 'comment' | 'message' | 'emoji'>;
+	type InspectedAttachments = {
+		hasAny: boolean;
+		hasVisual: boolean;
+		attachments: AttachmentPublicMetadata[];
+	};
+
+	const inspectForPurpose = async (
 		ownerId: string,
-		attachmentIds: readonly unknown[]
-	): Promise<AttachmentResult<{ hasAny: boolean; hasVisual: boolean }>> => {
+		attachmentIds: readonly unknown[],
+		purpose: ContentAttachmentPurpose,
+		maxAttachments = MAX_ATTACHMENTS_PER_TARGET,
+		expectedTargetId?: unknown
+	): Promise<AttachmentResult<InspectedAttachments>> => {
 		try {
 			if (dependencies.customMongoActive()) {
 				return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 			}
 			const ids = attachmentIds.map(normalizeId);
 			if (ids.some((id) => !id)) return fail(400, 'Invalid attachment id');
+			const normalizedExpectedTargetId = expectedTargetId === undefined ? undefined : normalizeId(expectedTargetId);
+			if (expectedTargetId !== undefined && !normalizedExpectedTargetId) return fail(400, 'Invalid attachment target id');
 			const normalized = ids as string[];
-			if (new Set(normalized).size !== normalized.length || normalized.length > MAX_ATTACHMENTS_PER_TARGET) {
-				return fail(400, `A post can contain at most ${MAX_ATTACHMENTS_PER_TARGET} unique attachments`);
+			if (new Set(normalized).size !== normalized.length || normalized.length > maxAttachments) {
+				return fail(400, `This ${purpose === 'emoji' ? 'custom emoji' : purpose} has too many attachments`);
 			}
-			if (!normalized.length) return { ok: true, hasAny: false, hasVisual: false };
+			if (!normalized.length) return { ok: true, hasAny: false, hasVisual: false, attachments: [] };
 			const docs = await dependencies.store.getOwnedMany(ownerId, normalized);
 			const now = dependencies.now().getTime();
+			const byId = new Map(docs.map((doc) => [doc.shareId, doc]));
+			const ordered = normalized.map((id) => byId.get(id)).filter((doc): doc is AttachmentDoc => !!doc);
+			const bindingStates = new Set<'draft' | 'bound'>();
 			if (
-				docs.length !== normalized.length ||
-				docs.some(
-					(doc) =>
+				ordered.length !== normalized.length ||
+				ordered.some((doc) => {
+					const draft = !doc.targetId && !!doc.attachmentExpiresAt && doc.attachmentExpiresAt.getTime() > now;
+					const idempotentlyBound =
+						!!normalizedExpectedTargetId && doc.targetId === normalizedExpectedTargetId && doc.attachmentExpiresAt === undefined;
+					if (draft) bindingStates.add('draft');
+					if (idempotentlyBound) bindingStates.add('bound');
+					return (
 						doc.attachmentState !== 'ready' ||
-						(doc.attachmentPurpose !== undefined && doc.attachmentPurpose !== 'post') ||
+						(purpose === 'post' ? doc.attachmentPurpose !== undefined && doc.attachmentPurpose !== 'post' : doc.attachmentPurpose !== purpose) ||
 						doc.attachmentProfileSlot !== undefined ||
-						!!doc.targetId ||
-						!doc.attachmentExpiresAt ||
-						doc.attachmentExpiresAt.getTime() <= now ||
+						(!draft && !idempotentlyBound) ||
 						!toAttachmentPublicMetadata(doc.shareId, doc.crystal)
-				)
+					);
+				}) ||
+				bindingStates.size > 1
 			) {
 				return fail(409, 'One or more attachments are unavailable or already attached');
 			}
+			const projected = ordered.map((doc) => toAttachmentPublicMetadata(doc.shareId, doc.crystal));
+			if (projected.some((attachment) => !attachment)) {
+				return fail(409, 'One or more attachments failed metadata validation');
+			}
+			const attachments = projected as AttachmentPublicMetadata[];
 			return {
 				ok: true,
 				hasAny: true,
-				hasVisual: docs.some((doc) => doc.crystal.mediaKind === 'image' || doc.crystal.mediaKind === 'video')
+				hasVisual: ordered.some((doc) => doc.crystal.mediaKind === 'image' || doc.crystal.mediaKind === 'video'),
+				attachments
 			};
 		} catch (error) {
 			return knownFailure(error) || unavailable('inspect', error);
 		}
+	};
+
+	const inspectForPost = async (
+		ownerId: string,
+		attachmentIds: readonly unknown[]
+	): Promise<AttachmentResult<{ hasAny: boolean; hasVisual: boolean }>> => {
+		const inspected = await inspectForPurpose(ownerId, attachmentIds, 'post');
+		return inspected.ok ? { ok: true, hasAny: inspected.hasAny, hasVisual: inspected.hasVisual } : inspected;
+	};
+
+	const inspectForComment = (ownerId: string, attachmentIds: readonly unknown[], expectedTargetId?: unknown) =>
+		inspectForPurpose(ownerId, attachmentIds, 'comment', MAX_ATTACHMENTS_PER_TARGET, expectedTargetId);
+
+	const inspectForMessage = (ownerId: string, attachmentIds: readonly unknown[], expectedTargetId?: unknown) =>
+		inspectForPurpose(ownerId, attachmentIds, 'message', MAX_ATTACHMENTS_PER_TARGET, expectedTargetId);
+
+	const inspectForEmoji = async (ownerId: string, attachmentIds: readonly unknown[], expectedTargetId?: unknown) => {
+		if (attachmentIds.length !== 1) return fail(400, 'Choose exactly one custom emoji image');
+		const inspected = await inspectForPurpose(ownerId, attachmentIds, 'emoji', 1, expectedTargetId);
+		if (!inspected.ok) return inspected;
+		const attachment = inspected.attachments[0];
+		if (
+			!attachment ||
+			attachment.mediaKind !== 'image' ||
+			attachment.size > MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES ||
+			!CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES.has(attachment.contentType)
+		) {
+			return fail(400, 'Custom emojis must be a GIF, PNG, JPEG, or WebP image up to 512 KiB');
+		}
+		return inspected;
 	};
 
 	const beforeCascade = async (root: { shareId: string; ownerId: string }): Promise<AttachmentResult> => {
@@ -1112,6 +1201,9 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		remove,
 		download,
 		inspectForPost,
+		inspectForComment,
+		inspectForMessage,
+		inspectForEmoji,
 		beforeCascade,
 		beforeSessionReplacement,
 		reapExpired
@@ -1127,6 +1219,9 @@ export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;
+export const inspectReadyAttachmentsForComment = service.inspectForComment;
+export const inspectReadyAttachmentsForMessage = service.inspectForMessage;
+export const inspectReadyAttachmentForEmoji = service.inspectForEmoji;
 export const prepareAttachmentCascadeForThing = service.beforeCascade;
 export const prepareUnboundAttachmentCleanupForSessionReplacement = service.beforeSessionReplacement;
 export const reapExpiredAttachments = service.reapExpired;
@@ -1136,3 +1231,18 @@ export const createReadyAttachmentPostInsertHook =
 	async (doc: { shareId: string; ownerId: string }, session: any) => {
 		await bind(doc.ownerId, attachmentIds, doc.shareId, session);
 	};
+
+const createReadyAttachmentInsertHook =
+	(attachmentIds: readonly string[], bind: typeof bindReadyAttachmentsToTarget) =>
+	async (doc: { shareId: string; ownerId: string }, session: any) => {
+		await bind(doc.ownerId, attachmentIds, doc.shareId, session);
+	};
+
+export const createReadyAttachmentCommentInsertHook = (attachmentIds: readonly string[]) =>
+	createReadyAttachmentInsertHook(attachmentIds, bindReadyCommentAttachmentsToTarget);
+
+export const createReadyAttachmentMessageInsertHook = (attachmentIds: readonly string[]) =>
+	createReadyAttachmentInsertHook(attachmentIds, bindReadyMessageAttachmentsToTarget);
+
+export const createReadyAttachmentEmojiInsertHook = (attachmentIds: readonly string[]) =>
+	createReadyAttachmentInsertHook(attachmentIds, bindReadyEmojiAttachmentToTarget);

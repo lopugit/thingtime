@@ -13,7 +13,7 @@ import {
   thingStorageSizeBytes
 } from './storageCore.ts';
 // @ts-ignore Node's direct TypeScript runner requires the extension.
-import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry.ts';
+import { COLLECTION_SCHEMA_VERSIONS, MESSENGER_THINGTIME } from '../../../schemas/registry.ts';
 
 test('thingStorageSizeBytes is exact UTF-8 JSON bytes for the canonical payload', () => {
   const payload = {
@@ -37,10 +37,7 @@ test('protected attachment envelopes add exact object bytes without changing ord
     extended: null,
     tags: []
   };
-  const payloadBytes = Buffer.byteLength(
-    JSON.stringify({ crystal: ordinary.crystal, extended: ordinary.extended, tags: ordinary.tags }),
-    'utf8'
-  );
+	const payloadBytes = Buffer.byteLength(JSON.stringify({ crystal: ordinary.crystal, extended: ordinary.extended, tags: ordinary.tags }), 'utf8');
   assert.equal(thingStorageSizeBytes(ordinary), payloadBytes);
   assert.equal(
     thingStorageSizeBytes({
@@ -148,6 +145,18 @@ test('billable policy defaults user content on and excludes control-plane and sa
 			isBillableStorageThing({ ownerId: 'u1', thingtime: [thingtime], crystal: {} }),
 			false,
 			`${thingtime} is protected server plumbing, not user-billable content`
+		);
+	}
+	for (const thingtime of MESSENGER_THINGTIME) {
+		assert.equal(
+			(CONTROL_PLANE_STORAGE_THINGTIMES as readonly string[]).includes(thingtime),
+			true,
+			`${thingtime} must be excluded from user-content reconciliation`
+		);
+		assert.equal(
+			isBillableStorageThing({ ownerId: 'u1', thingtime: [thingtime], crystal: {} }),
+			false,
+			`${thingtime} is Messenger relationship/index plumbing; uploaded bytes remain billed as attachment Things`
 		);
 	}
 	assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['migration-diagnostic'], crystal: {} }), false);
