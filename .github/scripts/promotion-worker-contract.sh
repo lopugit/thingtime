@@ -296,25 +296,30 @@ git -C "$delete_repo" config user.name fixture
 git -C "$delete_repo" config user.email fixture@example.invalid
 printf 'doomed v0\n' >"$delete_repo/doomed.txt"
 printf 'kept v0\n' >"$delete_repo/kept.txt"
-git -C "$delete_repo" add doomed.txt kept.txt
+printf 'super v0\n' >"$delete_repo/super.txt"
+git -C "$delete_repo" add doomed.txt kept.txt super.txt
 git -C "$delete_repo" commit -qm root
 delete_start="$(git -C "$delete_repo" rev-parse HEAD)"
 git -C "$delete_repo" switch -qc source
 git -C "$delete_repo" rm -q doomed.txt
 printf 'kept by the patch\n' >"$delete_repo/kept.txt"
-git -C "$delete_repo" add kept.txt
-git -C "$delete_repo" commit -qm 'delete doomed, rewrite kept'
+printf 'super v1\n' >"$delete_repo/super.txt"
+git -C "$delete_repo" add kept.txt super.txt
+git -C "$delete_repo" commit -qm 'delete doomed, rewrite kept, evolve super'
+printf 'super v2 final\n' >"$delete_repo/super.txt"
+git -C "$delete_repo" commit -qam 'super evolves past the base state'
 delete_end="$(git -C "$delete_repo" rev-parse HEAD)"
 git -C "$delete_repo" switch -qC delete-main "$delete_start"
 printf 'doomed but modified on base\n' >"$delete_repo/doomed.txt"
 git -C "$delete_repo" rm -q kept.txt
-git -C "$delete_repo" add doomed.txt
+printf 'super v1\n' >"$delete_repo/super.txt"
+git -C "$delete_repo" add doomed.txt super.txt
 git -C "$delete_repo" commit -qm 'base moves the other way'
 delete_base="$(git -C "$delete_repo" rev-parse HEAD)"
-delete_paths_json='["doomed.txt","kept.txt"]'
+delete_paths_json='["doomed.txt","kept.txt","super.txt"]'
 delete_patch="$root/delete-shape.patch"
 git -C "$delete_repo" diff --binary --full-index "$delete_start" "$delete_end" -- \
-  ':(literal)doomed.txt' ':(literal)kept.txt' >"$delete_patch"
+  ':(literal)doomed.txt' ':(literal)kept.txt' ':(literal)super.txt' >"$delete_patch"
 delete_patch_id="$(git -C "$delete_repo" patch-id --stable <"$delete_patch" | awk 'NR == 1 { print $1 }')"
 delete_plan_hash="$(
   SOURCE_PR="$source_pr" BASE_REF=delete-main BASE_SHA="$delete_base" BRANCH="$branch" \
@@ -362,8 +367,10 @@ grep -qx 'complete=true' "$delete_output"
 grep -qx 'review_gated=false' "$delete_output"
 [[ "$(git -C "$delete_repo" rev-parse HEAD^1)" == "$delete_reservation" ]]
 git -C "$delete_repo" diff --name-status "$delete_reservation" HEAD | LC_ALL=C sort >"$root/delete-shape-diff"
-printf 'A\tkept.txt\nD\tdoomed.txt\n' | diff -u - "$root/delete-shape-diff"
+printf 'A\tkept.txt\nD\tdoomed.txt\nM\tsuper.txt\n' | diff -u - "$root/delete-shape-diff"
 [[ "$(git -C "$delete_repo" show HEAD:kept.txt)" == 'kept by the patch' ]]
+# The superseded content conflict settled to the patch side without a model.
+[[ "$(git -C "$delete_repo" show HEAD:super.txt)" == 'super v2 final' ]]
 git -C "$delete_repo" show -s --format=%s HEAD \
   | grep -qx "Promote source PR #$source_pr onto delete-main"
 [[ ! -d "$(git -C "$delete_repo" rev-parse --git-dir)/rebase-merge" ]]
@@ -374,6 +381,7 @@ git -C "$delete_repo" show -s --format=%s HEAD \
 grep -qF -- '- `doomed.txt` — deleted by the source patch' "$delete_temp/promotion-discarded-changes.md"
 grep -qF -- '- `kept.txt` — the base deleted this file' "$delete_temp/promotion-discarded-changes.md"
 grep -qF 'base moves the other way' "$delete_temp/promotion-discarded-changes.md"
+grep -qF 'already contained in the source history' "$delete_temp/promotion-discarded-changes.md"
 
 : >"$GITHUB_OUTPUT"
 bash "$worker" prepare "$repo"
@@ -559,9 +567,9 @@ fi
   [[ ! -s "$lineage_output" ]]
 )
 
-# Closed-policy rejections must survive errexit as the explicit terminal-review
-# classification consumed by the retry controller, rather than looking like a
-# transient bootstrap failure.
+# Owner decision (2026-08-12): no sensitive-path deny-list. A credential-named
+# workflow conflict — the exact shape the old policy refused — must now be
+# ELIGIBLE for the model round like any other coherent content conflict.
 policy_repo="$run_temp/policy-repo"
 policy_workspace="$run_temp/policy-workspace"
 policy_round="$run_temp/policy-round"
@@ -586,17 +594,14 @@ if git -C "$policy_repo" rebase --onto HEAD "$policy_root" "$policy_source" >/de
   echo 'terminal policy fixture unexpectedly rebased cleanly' >&2
   exit 1
 fi
-policy_status=0
+: >"$root/policy-output"
 AI_REBASE_CONFLICT_POLICY=promotion \
 GITHUB_WORKSPACE="$policy_workspace" \
 GITHUB_OUTPUT="$root/policy-output" \
 RUNNER_TEMP="$run_temp" \
-  bash "$prepare_round" "$policy_repo" "$policy_workspace" "$policy_round" \
-  >/dev/null 2>&1 || policy_status=$?
-if (( policy_status != 78 )); then
-  echo "sensitive promotion policy returned $policy_status instead of terminal-review 78" >&2
-  exit 1
-fi
+  bash "$prepare_round" "$policy_repo" "$policy_workspace" "$policy_round"
+grep -qx 'needs_ai=true' "$root/policy-output"
+grep -q '^<<<<<<<' "$policy_workspace/.github/workflows/token-rotation.yml"
 
 bash "$refresh_graphify" --self-test-history-boundary
 

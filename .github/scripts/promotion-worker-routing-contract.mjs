@@ -17,6 +17,10 @@ const worker = readFileSync(
   new URL("./rebase-stack/promotion-worker.sh", import.meta.url),
   "utf8",
 );
+const promoteWorkflow = readFileSync(
+  new URL("../workflows/promote-features-to-main.yml", import.meta.url),
+  "utf8",
+);
 const prepareRound = readFileSync(
   new URL("./rebase-stack/prepare-round.sh", import.meta.url),
   "utf8",
@@ -72,7 +76,7 @@ assert.match(workflow, /Promotion handoff cannot carry external runner metadata/
 assert.match(workflow, /promotion_plan_b64:/);
 assert.match(
   workflow,
-  /const keys = \['base_ref','base_sha','branch','reservation_sha','source_tip_sha','source_start_sha','source_end_sha','source_lineage_status','plan_hash','title_b64','body_b64'\]/,
+  /const keys = \['base_ref','base_sha','source_ref','branch','reservation_sha','source_tip_sha','source_start_sha','source_end_sha','source_lineage_status','plan_hash','title_b64','body_b64'\]/,
 );
 assert.doesNotMatch(workflow, /promotion_base_sha:\s*\n\s*description:/);
 assert.match(workflow, /resolve-invalid-promotion-\{0\}/);
@@ -110,7 +114,7 @@ assert.match(workflow, /source_lineage_status:\$source_lineage_status/);
 assert.match(workflow, /actions\/workflows\/promote-features-to-main\.yml\/dispatches/);
 assert.match(workflow, /paused_label=.*ai-promotion-paused/);
 assert.match(workflow, /\[ "\$paused" = true \] && \[ "\$paused_label" = true \]/);
-assert.match(workflow, /CONFLICT_PATHS: \$\{\{ steps\.promotion_ai_round\.outputs\.ai_conflict_paths \}\}/);
+assert.match(workflow, /CONFLICT_PATHS: \$\{\{ steps\.promotion_ai_round_3\.outputs\.ai_conflict_paths \|\| steps\.promotion_ai_round_2\.outputs\.ai_conflict_paths \|\| steps\.promotion_ai_round\.outputs\.ai_conflict_paths \}\}/);
 assert.doesNotMatch(workflow, /CONFLICT_PATHS: \$\{\{ steps\.prepare_promotion\.outputs\.conflict_paths \}\}/);
 assert.match(workflow, /CI_SENSITIVE_PATHS: \$\{\{ steps\.prepare_promotion\.outputs\.ci_sensitive_paths \}\}/);
 assert.match(workflow, /REVIEW_GATED: \$\{\{ steps\.prepare_promotion\.outputs\.review_gated \}\}/);
@@ -176,6 +180,87 @@ assert.match(workflow, /resolved deterministically toward the source patch/);
 assert.match(worker, /promotion-discarded-changes\.md/);
 assert.match(worker, /note_discarded/);
 assert.match(worker, /promotion-unmerged-paths\.zlist/);
+// Replay rounds (owner decision, 2026-08-12): the promotion chain keeps the
+// model with bounded retries, prompts it for a FAITHFUL REPLAY (never the
+// stack flow's semantic-union framing), and settles provably-superseded
+// content deterministically. The final round must stay strict.
+assert.match(action, /allow-unresolved/);
+assert.match(action, /retry_needed=true/);
+assert.match(action, /FAITHFUL REPLAY/);
+assert.match(action, /preserve the semantic\n? *union/);
+assert.match(workflow, /id: promotion_ai_round_2/);
+assert.match(workflow, /id: promotion_ai_round_3/);
+assert.match(workflow, /steps\.promotion_ai_round_2\.outputs\.retry_needed == 'true'/);
+assert.match(worker, /already contained in the source history/);
+// The advisory release analysis (owner request, 2026-08-12): a model pass
+// over precomputed three-branch history + PR inventory, posted on the
+// promotion PR under one marker. Advisory by construction: continue-on-error,
+// Write scoped to its single output file, the runner temp tree denied, and
+// the deterministic post step size-caps and secret-scans before commenting.
+assert.match(workflow, /id: release_analysis_inputs/);
+assert.match(workflow, /id: release_analysis\n/);
+assert.match(workflow, /thingtime-ai-release-analysis:v1/);
+assert.match(workflow, /Model-authored release analysis \(advisory\)/);
+assert.match(workflow, /Write\(\$\{\{ steps\.release_analysis_inputs\.outputs\.dir \}\}\/out\/\*\*\)/);
+assert.match(workflow, /commits-only-on-main\.txt/);
+assert.match(promoter, /A model-authored release analysis is posted as a comment/);
+assert.doesNotMatch(promoter, /did not ask AI to infer/);
+// Reverse lane (owner request, 2026-08-12): source/target/path-prefix are
+// dispatch inputs, github-actions is a legal promotion base, and the lane
+// guard skips any PR whose planned patch leaves the lane's prefixes.
+assert.match(workflow, /"\$BASE_REF" = github-actions/);
+assert.match(promoter, /REQUIRE_PATH_PREFIXES/);
+assert.match(promoter, /outside this lane/);
+// Auto lanes: every default develop→main run fans out the two CI lanes
+// (main→github-actions, develop→github-actions) with the .github/ prefix
+// guard, and lane branch names always suffix --to-<target> because the
+// primary namespace is pinned to main.
+assert.match(promoteWorkflow, /Fan out the CI promotion lanes/);
+assert.match(promoteWorkflow, /"main github-actions" "develop github-actions"/);
+assert.match(promoteWorkflow, /require_path_prefix:"\.github\/"/);
+assert.match(promoter, /PRIMARY_TARGET_BRANCH/);
+// Uniform lane naming (owner request, 2026-08-12): every promotion branch
+// carries --to-<target>; legacy unsuffixed branches stay recognized as
+// main-lane history so live promotions are never orphaned.
+assert.match(promoter, /--to-\$\{slugify\(target\)\}/);
+assert.match(promoter, /legacyPromotionBranchFor/);
+assert.match(promoter, /promotionBranchMatches/);
+// Lane-aware trusted validation: the envelope carries source_ref, the
+// validator's closed source set is develop|main, merged-into and live-tip
+// checks follow the lane, and the deterministic branch check accepts the
+// uniform --to-<target> shape plus legacy pre-uniform main-lane names.
+assert.match(workflow, /Promotion source must be develop or main/);
+assert.match(workflow, /Source PR was not merged to \$SOURCE_REF/);
+assert.match(workflow, /live_ref_sha "\$SOURCE_REF"/);
+assert.match(workflow, /--to-\$\{target_slug\}/);
+assert.match(promoter, /source_ref: CFG\.source/);
+assert.match(workflow, /source_ref: \$\{\{ steps\.validate\.outputs\.source_ref \}\}/);
+assert.match(workflow, /SOURCE_REF: \$\{\{ needs\.promotion_validate\.outputs\.source_ref \}\}/);
+// Class-killer: no promotion check may ever name the source branch literally
+// again — every live-tip and merged-into check follows $SOURCE_REF.
+assert.doesNotMatch(workflow, /live_ref_sha develop/);
+assert.doesNotMatch(workflow, /<<<"\$pr"\)" = develop/);
+// Deterministically settled paths are absent from the live pre-model set but
+// always present in the immutable merge-tree recompute: the round compares
+// against the union, and stages their content only from the expected rebase
+// head — model output can never reach them.
+assert.match(action, /deterministic-conflict-paths/);
+assert.match(action, /EXPECTED_DETERMINISTIC_PATHS/);
+assert.match(action, /expected_conflicts_full/);
+assert.match(action, /git checkout-index -f -- "\$path"/);
+assert.match(workflow, /deterministic-conflict-paths: \$\{\{ steps\.prepare_promotion\.outputs\.deterministic_conflict_paths \}\}/);
+// Owner decision (2026-08-12): there is NO sensitive-path deny-list. The
+// model may be shown any conflicted repo file; safety lives in the mechanical
+// shape checks, the scope verifier, and [skip ci]+approval publication
+// gating. These pins hold the ABSENCE, so a deny-list cannot quietly return.
+assert.doesNotMatch(prepareRound, /\bsensitive_path\b/);
+assert.doesNotMatch(prepareRound, /Sensitive configuration\/security conflict/);
+assert.doesNotMatch(worker, /\bsensitive_path\b/);
+// ci_sensitive_paths (the [skip ci]/approval publication gate) is NOT a
+// deny-list and deliberately survives; the word-boundary pins above leave it
+// alone while still catching any resurrected sensitive_path().
+assert.match(worker, /ci_sensitive_paths true/);
+assert.match(prepareRound, /deliberately NO sensitive-path deny-list/);
 assert.match(workflow, /Base-side changes affected by deterministic resolutions/);
 assert.match(worker, /Review-gated promotion source commit is missing \[skip ci\]/);
 assert.match(worker, /classify_source_lineage\(\)/);
