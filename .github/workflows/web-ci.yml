@@ -2,7 +2,7 @@ name: Web CI
 
 # One workflow for the remix/ web app (TODO 15 DX ratchet), consolidated from
 # PRs #119 / #121 / #123 / #126:
-#   build      — Vite client build + typecheck ratchet + node --test unit suites
+#   build      — Vite client build + typecheck warning + node --test unit suites
 #   api-tests  — the same suite as the interactive /tests page, run headlessly
 #                against a real dev stack (Vite + Nitro) and a real MongoDB —
 #                no mocks, per FUNDAMENTALS.md (seed and test via the real API).
@@ -85,7 +85,7 @@ jobs:
   build:
     needs: scope
     if: needs.scope.outputs.full_web_ci == 'true'
-    # This label is a ruleset API identifier. Keep it stable even when the
+    # This label is a ruleset API identifier. Keep it stable even though the
     # checked-out product branch makes the ratchet implementation warning-only.
     name: ${{ needs.scope.outputs.full_web_ci == 'true' && 'Build + typecheck ratchet + unit tests' || 'Full Web CI build (not needed)' }}
     runs-on: ubuntu-latest
@@ -112,10 +112,9 @@ jobs:
       - name: Build client shell
         run: pnpm run build:client
 
-      # Fails only when the tsc error count grows past
-      # scripts/typecheck-baseline.json; shrinking the count is celebrated and
-      # locked in with --update-baseline.
-      - name: Typecheck ratchet
+      # Warns without failing when the tsc error count grows past the baseline;
+      # shrinking the count is celebrated and locked in with --update-baseline.
+      - name: Typecheck ratchet (warning-only)
         run: pnpm run typecheck:ratchet
 
       - name: Unit tests
