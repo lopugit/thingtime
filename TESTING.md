@@ -90,8 +90,10 @@ is fixed, and cite the checklist you ran in the PR description.
       DNS-only proxying, and `_acme-challenge.previews.dev` has NS delegations
       to both `ns1.vercel-dns.com` and `ns2.vercel-dns.com` without moving the
       apex nameservers or delegating a broader subtree. Confirm its Git branch
-      and Custom Environment bindings are empty, Vercel reports
-      `misconfigured: false`, and the PR alias presents a valid certificate.
+      and Custom Environment bindings are empty. Do not require Vercel's
+      external-DNS advisory to report `misconfigured: false`: independently
+      confirm a probe hostname resolves to Vercel's currently recommended
+      CNAME target and the published PR alias presents a valid certificate.
 - [ ] From that alias, sign in and upload/remove a small attachment: the direct
       S3 `PUT` preflight permits only that exact origin pattern, `PUT`, and
       `x-amz-checksum-sha256`; it exposes no headers, the bucket remains private,

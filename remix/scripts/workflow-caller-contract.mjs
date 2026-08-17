@@ -8,6 +8,7 @@ const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
+  'develop-pr-preview.yml',
   'electron-release.yml',
   'web-ci.yml',
   'promote-develop-to-main.yml',
@@ -28,6 +29,17 @@ for (const filename of callers) {
   assert.equal((source.match(/^\s+uses:/gm) ?? []).length, 1, `${filename} must contain exactly one reusable-workflow call`);
 }
 
+const promotionCaller = readFileSync(
+  resolve(workflowsRoot, 'promote-features-to-main.yml'),
+  'utf8'
+);
+const promotionPermissionsStart = promotionCaller.indexOf('\npermissions:\n');
+const promotionJobsStart = promotionCaller.indexOf('\njobs:\n');
+assert.ok(
+  promotionPermissionsStart >= 0 && promotionJobsStart > promotionPermissionsStart,
+  'promote-features-to-main.yml must retain a top-level permissions block'
+);
+
 const filesUnder = (root) => {
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
@@ -37,6 +49,10 @@ const filesUnder = (root) => {
 };
 
 assert.deepEqual(filesUnder(resolve(repositoryRoot, '.github', 'actions')), [], 'product branches must not retain local Actions behavior');
-assert.deepEqual(filesUnder(resolve(repositoryRoot, '.github', 'scripts')), [], 'product branches must not retain workflow scripts');
+assert.deepEqual(
+  filesUnder(resolve(repositoryRoot, '.github', 'scripts')).sort(),
+  [],
+  'product branches must not retain local Actions scripts; the develop-preview controller lives on github-actions'
+);
 
 console.log(`workflow caller contract: ${callers.length} thin listeners pinned to github-actions`);
