@@ -153,6 +153,10 @@ git -C "$merge_repo" commit -qm develop
 merge_first_parent="$(git -C "$merge_repo" rev-parse HEAD)"
 git -C "$merge_repo" merge -q --no-ff feature -m 'merge feature'
 merge_endpoint="$(git -C "$merge_repo" rev-parse HEAD)"
+# True merge endpoints do not need live PR commit/file metadata: their
+# independently reproducible patch boundary is always the first parent.
+printf '[]\n' >"$run_temp/pr-commits.json"
+printf '[]\n' >"$run_temp/pr-files.json"
 : >"$GITHUB_OUTPUT"
 SOURCE_START_SHA="$merge_first_parent" SOURCE_END_SHA="$merge_endpoint" \
   bash "$authority" "$merge_repo" "$run_temp/pr-commits.json" "$run_temp/pr-files.json"
