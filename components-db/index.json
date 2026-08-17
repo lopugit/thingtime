@@ -1,6 +1,6 @@
 {
-	"target": 1360,
-	"count": 1360,
+	"target": 1480,
+	"count": 1480,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -35,18 +35,21 @@
 		"date-time",
 		"commerce",
 		"profile-social",
-		"data-viz"
+		"data-viz",
+		"file-manager",
+		"onboarding",
+		"window-chrome"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 170,
-		"bootstrap": 170,
-		"mui": 170,
-		"shadcn": 170,
-		"untitled": 170,
-		"daisyui": 170,
-		"reactflow": 170,
-		"thingtime": 170
+		"antd": 185,
+		"bootstrap": 185,
+		"mui": 185,
+		"shadcn": 185,
+		"untitled": 185,
+		"daisyui": 185,
+		"reactflow": 185,
+		"thingtime": 185
 	},
-	"hash": "456ccf82bff02d28"
+	"hash": "179083a2b9fde04e"
 }

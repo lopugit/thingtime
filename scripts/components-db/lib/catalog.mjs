@@ -48,7 +48,10 @@ export const ARCHETYPE_ORDER = [
 	'date-time',
 	'commerce',
 	'profile-social',
-	'data-viz'
+	'data-viz',
+	'file-manager',
+	'onboarding',
+	'window-chrome'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;
