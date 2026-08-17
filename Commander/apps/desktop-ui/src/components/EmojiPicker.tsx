@@ -18,6 +18,12 @@ import {
   type EmojiTone,
   unicodeNotation,
 } from './emojiData.js';
+import {
+  learnedEmojiCounts,
+  loadEmojiLearning,
+  recordEmojiChoice,
+  saveEmojiLearning,
+} from './emojiLearning.js';
 
 const RECENT_STORAGE_KEY = 'commander-emoji-recents-v1';
 const TONE_STORAGE_KEY = 'commander-emoji-tone-v1';
@@ -30,10 +36,12 @@ const COMMAND_ITEM_ID = extensionCommandItemId('builtin:emoji-symbols', 'search-
 export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Platform }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const lastPointerPosition = useRef<{ x: number; y: number } | null>(null);
+  const learnedSelectionID = useRef<string | null>(null);
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const [category, setCategory] = useState<EmojiCategory>('all');
   const [recentIDs, setRecentIDs] = useState<string[]>(loadRecentIDs);
+  const [learning, setLearning] = useState(loadEmojiLearning);
   const [tone, setTone] = useState<EmojiTone>(loadTone);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_LIMIT);
@@ -41,9 +49,10 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
   const [targetApplication, setTargetApplication] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
+  const learnedCounts = useMemo(() => learnedEmojiCounts(learning, deferredQuery), [deferredQuery, learning]);
   const results = useMemo(
-    () => findEmojiEntries(deferredQuery, category, recentIDs),
-    [category, deferredQuery, recentIDs],
+    () => findEmojiEntries(deferredQuery, category, recentIDs, learnedCounts),
+    [category, deferredQuery, learnedCounts, recentIDs],
   );
   const visible = useMemo(() => results.slice(0, visibleLimit), [results, visibleLimit]);
   const selected = visible[selectedIndex] ?? visible[0];
@@ -63,11 +72,21 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
     setActionsOpen(false);
   }, [category, deferredQuery]);
 
+  useEffect(() => saveEmojiLearning(learning), [learning]);
+
   useEffect(() => {
     const selectedCell = document.querySelector<HTMLElement>('.emoji-cell.selected');
     if (typeof selectedCell?.scrollIntoView === 'function')
       selectedCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [selectedIndex]);
+
+  useEffect(() => {
+    const emojiID = learnedSelectionID.current;
+    if (!emojiID) return;
+    const nextIndex = visible.findIndex((entry) => entry.id === emojiID);
+    if (nextIndex >= 0) setSelectedIndex(nextIndex);
+    learnedSelectionID.current = null;
+  }, [visible]);
 
   const remember = useCallback((entry: EmojiEntry) => {
     setRecentIDs((current) => {
@@ -77,11 +96,21 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
     });
   }, []);
 
+  const learn = useCallback(
+    (entry: EmojiEntry) => {
+      if (!query.trim()) return;
+      learnedSelectionID.current = entry.id;
+      setLearning((current) => recordEmojiChoice(current, query, entry.id));
+    },
+    [query],
+  );
+
   const runAction = useCallback(
     async (actionID: string, target: EmojiEntry | undefined = selected) => {
       if (!target) return;
       const value = emojiValue(target, tone);
       remember(target);
+      learn(target);
       setActionsOpen(false);
       try {
         if (actionID === 'copy-unicode') {
@@ -109,7 +138,7 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
         setStatus(error instanceof Error ? error.message : 'Could not use that emoji');
       }
     },
-    [remember, selected, tone],
+    [learn, remember, selected, tone],
   );
 
   useEffect(() => {
@@ -193,8 +222,11 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
             <input
               ref={inputRef}
               aria-label="Search emoji and symbols"
+              autoCapitalize="none"
               autoComplete="off"
+              autoCorrect="off"
               placeholder="Search emoji and symbols…"
+              spellCheck={false}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => {
@@ -350,8 +382,12 @@ function loadRecentIDs(): string[] {
 }
 
 function loadTone(): EmojiTone {
-  const value = Number(window.localStorage.getItem(TONE_STORAGE_KEY) ?? '0');
-  return value >= 0 && value <= 5 ? (value as EmojiTone) : 0;
+  try {
+    const value = Number(window.localStorage.getItem(TONE_STORAGE_KEY) ?? '0');
+    return value >= 0 && value <= 5 ? (value as EmojiTone) : 0;
+  } catch {
+    return 0;
+  }
 }
 
 function saveLocal(key: string, value: string): void {

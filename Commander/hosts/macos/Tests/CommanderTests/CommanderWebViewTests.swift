@@ -29,6 +29,7 @@ final class CommanderWebViewTests: XCTestCase {
     let webView = CommanderWebView(ready: ready, surface: "launcher", bridge: bridge)
 
     XCTAssertFalse(webView.isOpaque)
+    XCTAssertTrue(webView.configuration.websiteDataStore.isPersistent)
     XCTAssertEqual(webView.underPageBackgroundColor?.alphaComponent, 0)
     XCTAssertEqual(webView.value(forKey: "drawsBackground") as? Bool, false)
     XCTAssertTrue(webView.wantsLayer)

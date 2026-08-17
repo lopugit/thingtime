@@ -20,7 +20,11 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource 
   init(ready: DaemonReady, surface: String, bridge: CommanderNativeBridge) {
     self.allowedOrigin = URL(string: ready.url)!.commanderOrigin
     let configuration = WKWebViewConfiguration()
-    configuration.websiteDataStore = .nonPersistent()
+    // Commander's renderer stores only bounded emoji recents, tone, and query
+    // learning. A persistent store lets those device-local preferences survive
+    // a complete app restart; credentials continue to live exclusively in the
+    // native Keychain bridge.
+    configuration.websiteDataStore = .default()
     configuration.preferences.isElementFullscreenEnabled = false
     configuration.defaultWebpagePreferences.allowsContentJavaScript = true
     configuration.userContentController.add(bridge, name: "commander")
