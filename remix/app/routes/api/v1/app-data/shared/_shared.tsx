@@ -2,6 +2,7 @@ import { json } from '~/api/http';
 
 import { listSharedAppData } from '~/api/utils/apps/appData';
 import { resolveAppRequest } from '~/api/utils/apps/appRequest';
+import { thirdPartyProfileMediaUrl } from '~/api/utils/apps/profileMedia';
 import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
 import { scopeCovers } from '~/api/utils/apps/scopes';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -23,10 +24,7 @@ export const loader = async ({ request }: { request: Request }) => {
   const limit = await enforceRateLimit(request, 'oauth.read', `user:${ctx.user.id}:app:${ctx.clientId}`);
   if (!limit.allowed) {
     const init = rateLimitedResponseInit(limit);
-    return json(
-      { ok: false, error: 'Reading too fast — take a breather 🌸' },
-      { ...init, headers: { ...init.headers, ...cors } }
-    );
+		return json({ ok: false, error: 'Reading too fast — take a breather 🌸' }, { ...init, headers: { ...init.headers, ...cors } });
   }
 
   const url = new URL(request.url);
@@ -51,7 +49,7 @@ export const loader = async ({ request }: { request: Request }) => {
               id: ctx.user.id,
               username: ctx.user.username,
               ...(scopeCovers(ctx.scopes, 'profile.displayName') ? { displayName: ctx.user.displayName } : {}),
-              ...(scopeCovers(ctx.scopes, 'profile.avatar') ? { avatarUrl: ctx.user.avatarUrl } : {})
+							...(scopeCovers(ctx.scopes, 'profile.avatar') ? { avatarUrl: thirdPartyProfileMediaUrl(ctx.user.avatarUrl) } : {})
             }
           }
         }
@@ -70,8 +68,5 @@ export const action = async ({ request }: { request: Request }) => {
   const preflight = appDataPreflight(request, 'GET, OPTIONS');
   if (preflight) return preflight;
 
-  return json(
-    { ok: false, error: 'Method not allowed' },
-    { status: 405, headers: appCorsHeaders(request.headers.get('Origin')) }
-  );
+	return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: appCorsHeaders(request.headers.get('Origin')) });
 };

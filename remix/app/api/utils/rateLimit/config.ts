@@ -10,6 +10,14 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  // Private attachment storage: start and completion mutate both S3 and the
+  // quota ledger; part-signing is batched (<=20 URLs/request), and reads issue
+  // short-lived private redirects. Every surface stays bounded per account/IP.
+  'attachments.start': { limit: 30, windowMs: 3_600_000, enabled: true },
+  'attachments.parts': { limit: 600, windowMs: 60_000, enabled: true },
+  'attachments.complete': { limit: 60, windowMs: 60_000, enabled: true },
+  'attachments.delete': { limit: 120, windowMs: 60_000, enabled: true },
+  'attachments.read': { limit: 600, windowMs: 60_000, enabled: true },
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },
   'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
   // library save toggles (POST /api/v1/things/save) — same shape as reactions
@@ -114,6 +122,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // keeps retries from re-running the index battery too. Keyed by IP; roomy
   // enough for a human fumbling taken usernames, tight for account farming.
   'auth.register': { limit: 10, windowMs: 15 * 60_000, enabled: true },
+  // First-session /things bootstrap: every success creates a durable user,
+  // session, roster entry, and subscription ledger. Reuse is checked before
+  // this bucket, so five creations per IP/day is generous for cookie loss and
+  // deliberately tight against anonymous account farming. Fail-closed route.
+  'auth.temporary': { limit: 5, windowMs: 24 * 60 * 60_000, enabled: true },
   // personal-access-token minting (POST /api/v1/tokens) — session-authed, but
   // each mint writes a session doc, so bound accumulation beyond the per-user
   // token cap
@@ -138,8 +151,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
   // interactive action, so the budget is per-hour like app registration
   'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
-  // follow/unfollow toggles (also classifies messenger requests)
-  'users.follow': { limit: 60, windowMs: 60_000, enabled: true },
+  // service-account provisioning is public self-service but each call mints a
+  // permanent bearer token + a 5 GiB-allowance account and sends a verification
+  // email — bound it tightly per IP (a legit integrator provisions a handful,
+  // ever). Enforced fail-closed at the route like mongodb.populate.
+  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true },
   // token introspection (POST /api/v1/auth/introspect) — read-only status
   // checks by external platforms; two cheap DB reads per call, keyed by IP for
   // anonymous callers, bounded like the other public reads
