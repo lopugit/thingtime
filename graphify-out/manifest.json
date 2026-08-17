@@ -415,9 +415,9 @@
     "semantic_hash": "7a9487375978d8001acd93869df362b0"
   },
   "package.json": {
-    "mtime": 1786941273.5310867,
-    "ast_hash": "d4b3a4a5116d75a628dcf68265e7733d",
-    "semantic_hash": "d4b3a4a5116d75a628dcf68265e7733d"
+    "mtime": 1786943933.9275112,
+    "ast_hash": "a2a90d2ac430ad3ca7831e5528c07012",
+    "semantic_hash": "a2a90d2ac430ad3ca7831e5528c07012"
   },
   "raycast/.eslintrc.json": {
     "mtime": 1786936588.9963148,
@@ -1190,9 +1190,9 @@
     "semantic_hash": "c4054b1dfdb64ee989f94d84a82f34b0"
   },
   "remix/app/root-data.server.ts": {
-    "mtime": 1786936589.1408572,
-    "ast_hash": "689aa489ed73d14667a3a4c2d3428fb4",
-    "semantic_hash": "689aa489ed73d14667a3a4c2d3428fb4"
+    "mtime": 1786943919.542751,
+    "ast_hash": "27d61c4176764237c0da2a28bdebd0e2",
+    "semantic_hash": "27d61c4176764237c0da2a28bdebd0e2"
   },
   "remix/app/root.tsx": {
     "mtime": 1786936589.1409605,
@@ -1435,9 +1435,9 @@
     "semantic_hash": "829580533674af55b849c25c5a518ae8"
   },
   "remix/package.json": {
-    "mtime": 1786941273.5315008,
-    "ast_hash": "478b0d8717a44e73c4db16f6ec168f2e",
-    "semantic_hash": "478b0d8717a44e73c4db16f6ec168f2e"
+    "mtime": 1786943919.5479372,
+    "ast_hash": "d0d5a53401b5973060cfd7816f40264b",
+    "semantic_hash": "d0d5a53401b5973060cfd7816f40264b"
   },
   "remix/public/manifest.json": {
     "mtime": 1786936589.2861164,
@@ -1525,14 +1525,14 @@
     "semantic_hash": "757bdd4a88e907e83e8a133ce1b8bbfe"
   },
   "README.md": {
-    "mtime": 1786941201.941305,
-    "ast_hash": "ee33e99bd66cf3b1b8825ab9cfb9f1fb",
+    "mtime": 1786943919.5340831,
+    "ast_hash": "3b7facbf7ce65470ee84b1553778747e",
     "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1786941190.263301,
     "ast_hash": "2f275b52b049e45fc51a57c2a17e581d",
-    "semantic_hash": ""
+    "semantic_hash": "2f275b52b049e45fc51a57c2a17e581d"
   },
   "docs/Use Cases/car.md": {
     "mtime": 1786936588.6549,
@@ -1750,8 +1750,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786941146.3038962,
-    "ast_hash": "4e2ccfddc715538f09e5c7cbe8bf9b91",
+    "mtime": 1786944012.3193152,
+    "ast_hash": "2f9801f0c274d5b51cd2e36b903ac2ac",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -4157,7 +4157,7 @@
   "TESTING.md": {
     "mtime": 1786941273.5322375,
     "ast_hash": "b795253b57da96bd7c66cf232426b7b7",
-    "semantic_hash": ""
+    "semantic_hash": "b795253b57da96bd7c66cf232426b7b7"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786936588.6510725,
@@ -5155,13 +5155,18 @@
     "semantic_hash": "c360e3ea5afc17e23f18bc3242a5b19a"
   },
   "scripts/vercel-root-flow.test.mjs": {
-    "mtime": 1786941216.0944102,
-    "ast_hash": "231f6e1055d2a2bffd66f7e475138138",
-    "semantic_hash": "231f6e1055d2a2bffd66f7e475138138"
+    "mtime": 1786943933.9280586,
+    "ast_hash": "3317dd977dc053f5bcb3768b01bc4f4d",
+    "semantic_hash": "3317dd977dc053f5bcb3768b01bc4f4d"
   },
   "vercel.json": {
     "mtime": 1786941216.0975344,
     "ast_hash": "6d34e448b4e7cb5ffd6fcc15da626663",
     "semantic_hash": "6d34e448b4e7cb5ffd6fcc15da626663"
+  },
+  "remix/app/root-data.server.test.ts": {
+    "mtime": 1786943919.5420744,
+    "ast_hash": "ff99f08d922f402144eebf2cd5b40342",
+    "semantic_hash": "ff99f08d922f402144eebf2cd5b40342"
   }
 }
