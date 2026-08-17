@@ -7,11 +7,16 @@ const scriptPath = fileURLToPath(import.meta.url);
 
 export function getVercelIgnoreDecision(environment = process.env) {
 	const branch = environment.VERCEL_GIT_COMMIT_REF?.trim();
+	const targetEnvironment = environment.VERCEL_TARGET_ENV?.trim();
 	const commitSha = environment.VERCEL_GIT_COMMIT_SHA?.trim();
 	const previousSha = environment.VERCEL_GIT_PREVIOUS_SHA?.trim();
 
 	if (branch === 'github-actions') {
 		return { skip: true, reason: 'the github-actions control plane does not deploy' };
+	}
+
+	if (targetEnvironment === 'develop') {
+		return { skip: false, reason: 'the develop custom environment requires an isolated build' };
 	}
 
 	if (commitSha && previousSha && commitSha === previousSha) {
