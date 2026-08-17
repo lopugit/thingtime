@@ -1522,17 +1522,17 @@
   "FUNDAMENTALS.md": {
     "mtime": 1786946498.5112422,
     "ast_hash": "fc2fde80253dd6f194e77277f2cf905a",
-    "semantic_hash": ""
+    "semantic_hash": "fc2fde80253dd6f194e77277f2cf905a"
   },
   "README.md": {
     "mtime": 1786947146.9805639,
     "ast_hash": "9ef60f057970efb09073efef2fb36768",
-    "semantic_hash": ""
+    "semantic_hash": "9ef60f057970efb09073efef2fb36768"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1786947146.982283,
     "ast_hash": "d6e1e9aea95e59db5e7c6d384de17135",
-    "semantic_hash": ""
+    "semantic_hash": "d6e1e9aea95e59db5e7c6d384de17135"
   },
   "docs/Use Cases/car.md": {
     "mtime": 1786946498.532266,
@@ -1717,7 +1717,7 @@
   "iOS/README.md": {
     "mtime": 1786946498.7587366,
     "ast_hash": "cc0a5d6f21a095b57cb6b9f563d83180",
-    "semantic_hash": ""
+    "semantic_hash": "cc0a5d6f21a095b57cb6b9f563d83180"
   },
   "iOS/fastlane/README.md": {
     "mtime": 1786946498.7617037,
@@ -1727,7 +1727,7 @@
   "iOS/project.yml": {
     "mtime": 1786946498.7618265,
     "ast_hash": "e20b212ad55c3d68359b1aaeaf4fc10b",
-    "semantic_hash": ""
+    "semantic_hash": "e20b212ad55c3d68359b1aaeaf4fc10b"
   },
   "raycast/CHANGELOG.md": {
     "mtime": 1786946498.7697573,
@@ -1750,8 +1750,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786947147.083244,
-    "ast_hash": "a83f2425558bb0df53880e7e19a9e33d",
+    "mtime": 1786947908.4532127,
+    "ast_hash": "4d24ba23bd193c056f6175eec1818792",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2822,7 +2822,7 @@
   "TODO/TODO.md": {
     "mtime": 1786946498.5239112,
     "ast_hash": "0922164ec5b07af095bface50935e306",
-    "semantic_hash": ""
+    "semantic_hash": "0922164ec5b07af095bface50935e306"
   },
   "TODO/claude-todo/01-mongodb-connection-status.md": {
     "mtime": 1786946498.5243526,
@@ -3257,7 +3257,7 @@
   "TODO/claude-todo/09-security-hardening.md": {
     "mtime": 1786946498.5254064,
     "ast_hash": "2489b64e784334db90e45661be7e633a",
-    "semantic_hash": ""
+    "semantic_hash": "2489b64e784334db90e45661be7e633a"
   },
   "TODO/claude-todo/10-delight-and-growth-ideas.md": {
     "mtime": 1786946498.5255566,
@@ -4157,7 +4157,7 @@
   "TESTING.md": {
     "mtime": 1786947146.9818516,
     "ast_hash": "c76d512fa8092d5d3e84afd8e2bf46e4",
-    "semantic_hash": ""
+    "semantic_hash": "c76d512fa8092d5d3e84afd8e2bf46e4"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786946498.5275607,
@@ -4367,7 +4367,7 @@
   "AI_ALL.md": {
     "mtime": 1786946498.5092976,
     "ast_hash": "14d35af8428488f574b554e2da5c0445",
-    "semantic_hash": ""
+    "semantic_hash": "14d35af8428488f574b554e2da5c0445"
   },
   "PRs/162-codex-fix-pr159-index-retry-docs--fix-index-bootstrap-retries-after-prs-159-and-161.md": {
     "mtime": 1786946498.512715,
@@ -4477,7 +4477,7 @@
   ".github/workflows/web-ci.yml": {
     "mtime": 1786946498.5076776,
     "ast_hash": "82ea98f71aabf2c39fee26c72ad2be4d",
-    "semantic_hash": ""
+    "semantic_hash": "82ea98f71aabf2c39fee26c72ad2be4d"
   },
   "PRs/178-codex-use-fable-5-max-conflict-resolver--configurable-pr-conflict-resolver-model-waterfall.md": {
     "mtime": 1786946498.5148668,
@@ -5007,7 +5007,7 @@
   ".github/workflows/promote-features-to-main.yml": {
     "mtime": 1786946498.506858,
     "ast_hash": "d512f645ebef69275bd6e3aff47c2ca7",
-    "semantic_hash": ""
+    "semantic_hash": "d512f645ebef69275bd6e3aff47c2ca7"
   },
   "PRs/190-claude-github-action-pr-promotion-c65173-per-feature-develop-main-promotion-prs-with-stacks.md": {
     "mtime": 1786946498.5158546,
@@ -5037,12 +5037,12 @@
   ".github/workflows/develop-pr-preview.yml": {
     "mtime": 1786946498.506452,
     "ast_hash": "449ec8918ab9c4509c6a8b0554569570",
-    "semantic_hash": ""
+    "semantic_hash": "449ec8918ab9c4509c6a8b0554569570"
   },
   "PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md": {
     "mtime": 1786946498.5172281,
     "ast_hash": "4359fd2a2ac76295c76d87b76b9022b5",
-    "semantic_hash": ""
+    "semantic_hash": "4359fd2a2ac76295c76d87b76b9022b5"
   },
   "remix/scripts/ensure-dependencies.test.js": {
     "mtime": 1786946499.1339395,
@@ -5155,9 +5155,9 @@
     "semantic_hash": "7566e1bb8196b94263a83ddf10ea4e2d"
   },
   "vercel.json": {
-    "mtime": 1786947147.0866458,
-    "ast_hash": "6d34e448b4e7cb5ffd6fcc15da626663",
-    "semantic_hash": "6d34e448b4e7cb5ffd6fcc15da626663"
+    "mtime": 1786947889.7017028,
+    "ast_hash": "f12045617030342f7f49429334086b95",
+    "semantic_hash": "f12045617030342f7f49429334086b95"
   },
   "remix/app/root-data.server.test.ts": {
     "mtime": 1786946498.936706,
@@ -5287,7 +5287,7 @@
   "remix/app/api/utils/auth/users.profile.test.ts": {
     "mtime": 1786946588.6863453,
     "ast_hash": "43e84ff383701a8456d5d4d24580a572",
-    "semantic_hash": ""
+    "semantic_hash": "43e84ff383701a8456d5d4d24580a572"
   },
   "remix/app/api/utils/ciControl/automationPolicy.test.ts": {
     "mtime": 1786946498.8740814,
@@ -5940,9 +5940,9 @@
     "semantic_hash": "2785a47e40eed6774c83f4fd0f9ddff7"
   },
   "remix/scripts/vercel-config.test.mjs": {
-    "mtime": 1786946499.1350913,
-    "ast_hash": "acda88233433ad178fb017cf254d6e12",
-    "semantic_hash": "acda88233433ad178fb017cf254d6e12"
+    "mtime": 1786947889.7021277,
+    "ast_hash": "59e22661cf560e455d502b9e520a1aca",
+    "semantic_hash": "59e22661cf560e455d502b9e520a1aca"
   },
   "remix/scripts/verify-messenger.mjs": {
     "mtime": 1786946499.1356366,
@@ -5952,51 +5952,51 @@
   "PRs/154-claude-unified-things-page-796e34--unified-things-page.md": {
     "mtime": 1786946498.5119848,
     "ast_hash": "8bcdd99f7be9c955669ad400e6c73bad",
-    "semantic_hash": ""
+    "semantic_hash": "8bcdd99f7be9c955669ad400e6c73bad"
   },
   "PRs/172-followers-friends-notifications-views-4fcfcf-followers-friends-notifications-views.md": {
     "mtime": 1786946498.5139072,
     "ast_hash": "1bac091f31b99443dbeafa2d037a005b",
-    "semantic_hash": ""
+    "semantic_hash": "1bac091f31b99443dbeafa2d037a005b"
   },
   "PRs/174-thingtime-messenger-platform-thingtime-messenger-spaces-chats.md": {
     "mtime": 1786946498.5144746,
     "ast_hash": "5466b020efecbcd76be02bc5f148ba5d",
-    "semantic_hash": ""
+    "semantic_hash": "5466b020efecbcd76be02bc5f148ba5d"
   },
   "PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md": {
     "mtime": 1786946498.5164137,
     "ast_hash": "252329bdec651c6279679c9dd35ea9db",
-    "semantic_hash": ""
+    "semantic_hash": "252329bdec651c6279679c9dd35ea9db"
   },
   "PRs/213-codex-auto-resolve-promotion-conflicts-automatically-resolve-promotion-creation-conflicts.md": {
     "mtime": 1786946498.517413,
     "ast_hash": "3faea0cfa3a917dfc025bb2c2ba7c250",
-    "semantic_hash": ""
+    "semantic_hash": "3faea0cfa3a917dfc025bb2c2ba7c250"
   },
   "PRs/220-codex-ci-execution-provider-routing--ci-provider-control-plane-and-vercel-runners.md": {
     "mtime": 1786946498.5175571,
     "ast_hash": "ba24f7077aacee78eb72f7d21843c8f1",
-    "semantic_hash": ""
+    "semantic_hash": "ba24f7077aacee78eb72f7d21843c8f1"
   },
   "PRs/229-codex-web-ci-required-context-develop-ci-keep-develop-web-ci-required-contexts-reportable.md": {
     "mtime": 1786946498.5177865,
     "ast_hash": "3da7e4aa3d2221b2b498d61bc2831bda",
-    "semantic_hash": ""
+    "semantic_hash": "3da7e4aa3d2221b2b498d61bc2831bda"
   },
   "PRs/232-codex-media-gallery-profile-attachments--add-media-galleries-and-managed-profile-attachments.md": {
     "mtime": 1786946498.5179267,
     "ast_hash": "b59b6b60541297f64e8dd0d70d690899",
-    "semantic_hash": ""
+    "semantic_hash": "b59b6b60541297f64e8dd0d70d690899"
   },
   "PRs/233-codex-fix-develop-preview-dns-gate.md": {
     "mtime": 1786946498.5180364,
     "ast_hash": "30c1b3dee38c0d1b2714198650e6a395",
-    "semantic_hash": ""
+    "semantic_hash": "30c1b3dee38c0d1b2714198650e6a395"
   },
   "PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md": {
     "mtime": 1786946498.5184045,
     "ast_hash": "312e45e3553f82519b95887568571bc5",
-    "semantic_hash": ""
+    "semantic_hash": "312e45e3553f82519b95887568571bc5"
   }
 }
