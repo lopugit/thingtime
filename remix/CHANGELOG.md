@@ -44,6 +44,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Root bootstrap no longer exposes server secrets**: browser-visible loader
+  configuration is now built from an explicit status-origin allowlist instead
+  of every `THINGTIME_*` variable, and `/api/root-data` is private, no-store,
+  and cookie-varying. Regression coverage seeds representative CI, webhook, and
+  email HMAC values and proves none cross the server/client boundary. — Codex
+  (AI), 2026-08-17
+
 - **Thin Web CI promotion no longer blocks on topology contracts**: the stale
   product-branch copy of the develop-preview controller was removed, the two
   workflow/topology contract commands were removed from the required unit-test
