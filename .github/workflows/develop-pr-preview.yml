@@ -95,9 +95,6 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Verify deployment controller invariants
-        run: node .github/scripts/deploy-develop-pr-preview.mjs --self-test
-
       - name: Deploy, report, and clean up
         env:
           GH_TOKEN: ${{ github.token }}

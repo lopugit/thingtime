@@ -296,10 +296,32 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
   assert.ok(source.includes('${{ needs.model_config.outputs.model_args }}'));
   assert.ok(rebaseActionSource.includes('${{ inputs.model-args }}'));
   assert.doesNotMatch(rebaseActionSource, /--model\s+claude-/, "composite action must not choose its own model");
-  const rebaseRoundCount = rebaseSource.match(/uses: \.\/trusted\/\.github\/actions\/rebase-conflict-round/g)?.length || 0;
+  assert.match(
+    rebaseSource,
+    /uses: &thingtime_rebase_conflict_round_action \.\/trusted\/\.github\/actions\/rebase-conflict-round/,
+    "rebase chain anchors the trusted local action",
+  );
+  assert.match(
+    rebaseSource,
+    /uses: \*thingtime_rebase_conflict_round_action/,
+    "rebase retry step reuses the trusted local action anchor",
+  );
+  const rebaseRoundAliasCount =
+    rebaseSource.match(/^\s{6}- \*thingtime_rebase_conflict_retry$/gmu)?.length || 0;
+  const rebaseRoundCount = 2 + rebaseRoundAliasCount;
   const rebaseModelArgsCount = rebaseSource.match(/model-args: \$\{\{ steps\.models\.outputs\.model_args \}\}/g)?.length || 0;
-  assert.equal(rebaseRoundCount, 10, "expected ten bounded rebase conflict rounds");
-  assert.equal(rebaseModelArgsCount, rebaseRoundCount, "every rebase round must receive the Admin waterfall");
+  assert.equal(rebaseRoundCount, 500, "expected 500 bounded rebase conflict rounds");
+  assert.equal(rebaseModelArgsCount, 1, "the aliased rebase input map receives the Admin waterfall");
+  assert.match(
+    rebaseSource,
+    /env\.THINGTIME_AI_REBASE_COMPLETE != 'true'/,
+    "later aliases stop after the composite records completion",
+  );
+  assert.match(
+    rebaseActionSource,
+    /round_number <= 500/,
+    "the composite independently enforces the 500-round ceiling",
+  );
 
   const aiRuntimePattern = /anthropics\/claude-code-action@|\bbackend=(?:"|')?claude(?:"|')?\b/;
   const actualRuntimeFiles = [

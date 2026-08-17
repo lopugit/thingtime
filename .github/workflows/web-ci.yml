@@ -21,10 +21,11 @@ on:
       - .github/workflows/web-ci.yml
   workflow_dispatch:
 
-# CI only reads the repo — never grant the default write token.
+# Build/test jobs only read the repo. Pull-request write is used solely by the
+# no-checkout comment job that reports deterministic contract advisories.
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
 
 concurrency:
   group: web-ci-${{ github.ref }}
@@ -81,6 +82,160 @@ jobs:
               `${files.length}/${expectedChangedFiles} changed files inspected` +
               `${truncated ? ' (API result truncated; failing safe)' : ''}.`
             );
+
+  product-contract-advisories:
+    name: Product contract advisories (non-blocking)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      warnings: ${{ steps.contracts.outputs.warnings }}
+      report_b64: ${{ steps.contracts.outputs.report_b64 }}
+    steps:
+      - name: Check out the pull-request snapshot for read-only advisories
+        id: contract_checkout
+        continue-on-error: true
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Collect product contract advisory results
+        id: contracts
+        if: always()
+        shell: bash
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.contract_checkout.outcome }}
+        run: |
+          set -uo pipefail
+          report="$RUNNER_TEMP/product-contract-advisories.md"
+          warnings=false
+          : >"$report"
+
+          escape_log() {
+            sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+          }
+          run_contract_if_present() {
+            local label="$1" script="$2"
+            local log status=0
+            if [ ! -f "$script" ]; then
+              printf -- '- ℹ️ %s is not present on this historical branch.\n' "$label" >>"$report"
+              return
+            fi
+            log="$(mktemp "$RUNNER_TEMP/product-contract.XXXXXX")"
+            timeout 120 node "$script" >"$log" 2>&1 || status=$?
+            if (( status == 0 )); then
+              printf -- '- ✅ %s\n' "$label" >>"$report"
+            else
+              warnings=true
+              printf -- '- ⚠️ %s (exit %s)\n' "$label" "$status" >>"$report"
+              {
+                echo '<details><summary>Sanitized tail</summary>'
+                echo
+                echo '<pre>'
+                tail -n 30 "$log" | head -c 12000 | escape_log
+                echo '</pre>'
+                echo '</details>'
+              } >>"$report"
+            fi
+            rm -f -- "$log"
+          }
+
+          if [ "$CHECKOUT_OUTCOME" != success ]; then
+            warnings=true
+            echo '- ⚠️ The advisory checkout was unavailable; no product contract examples ran.' >>"$report"
+          else
+            run_contract_if_present \
+              'Web CI required-context examples' \
+              remix/scripts/web-ci-required-context-contract.mjs
+            run_contract_if_present \
+              'Thin-listener topology examples' \
+              remix/scripts/workflow-caller-contract.mjs
+          fi
+
+          echo "warnings=$warnings" >>"$GITHUB_OUTPUT"
+          printf 'report_b64=' >>"$GITHUB_OUTPUT"
+          base64 -w0 <"$report" >>"$GITHUB_OUTPUT"
+          echo >>"$GITHUB_OUTPUT"
+          if [ "$warnings" = true ]; then
+            echo '::warning::One or more product contract advisories need review; required CI remains unaffected.'
+          fi
+          {
+            echo '## Product contract advisories'
+            echo
+            cat "$report"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  comment-product-contract-advisories:
+    name: Comment product contract advisories (non-blocking)
+    needs: product-contract-advisories
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Upsert or clear the advisory comment
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HAS_WARNINGS: ${{ needs.product-contract-advisories.outputs.warnings }}
+          REPORT_B64: ${{ needs.product-contract-advisories.outputs.report_b64 }}
+        with:
+          script: |
+            const marker = '<!-- thingtime-product-contract-advisories:v1 -->';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = [...comments].reverse().find(
+              ({ body, user }) => user?.login === 'github-actions[bot]' && body?.includes(marker)
+            );
+            if (process.env.HAS_WARNINGS !== 'true') {
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                });
+              }
+              return;
+            }
+            let report = '';
+            try {
+              report = Buffer.from(process.env.REPORT_B64 || '', 'base64').toString('utf8');
+            } catch {
+              report = '- ⚠️ The advisory report could not be decoded.';
+            }
+            report = report.slice(0, 50000);
+            const body = [
+              '⚠️ **Deterministic product contract advisory**',
+              '',
+              'These examples are warning-only. They do not fail the build/API contexts or block this PR.',
+              '',
+              report,
+              '',
+              marker,
+            ].join('\n');
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
 
   build:
     needs: scope

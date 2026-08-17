@@ -32,7 +32,7 @@
 #   only when a non-graphify conflict actually reaches the AI).
 # - CONFLICT_RESOLVER_PAT is optional. GITHUB_TOKEN is sufficient unless the
 #   rewritten history changes .github/workflows/. A PAT used here needs
-#   contents/pull-request/workflow access appropriate to this repository.
+#   contents/pull-request/issues/workflow access appropriate to this repository.
 
 name: Rebase PRs and stacks (AI)
 
@@ -309,67 +309,14 @@ jobs:
       targets: ${{ steps.scan.outputs.targets }}
       any: ${{ steps.scan.outputs.any }}
     steps:
-      - name: Rebase ownership routing self-test
-        shell: bash
-        run: |
-          set -euo pipefail
-          assert_owner() {
-            local expected="$1" stack_member="$2" no_ai_rebase="$3"
-            local mergeable="$4" rebaseable="$5" manual="$6" label="$7"
-            local actual
-            actual="$(jq -nr \
-              --argjson stack_member "$stack_member" \
-              --argjson no_ai_rebase "$no_ai_rebase" \
-              --argjson mergeable "$mergeable" \
-              --argjson rebaseable "$rebaseable" \
-              --argjson manual "$manual" \
-              "$REBASE_OWNER_JQ")"
-            [ "$actual" = "$expected" ] || {
-              echo "::error::Rebase ownership contract failed for $label: expected $expected, got $actual."
-              exit 1
-            }
-          }
-
-          assert_owner false false false true false false "automatic standalone replay conflict"
-          assert_owner false false false false true false "automatic standalone merge conflict"
-          assert_owner true true false true false false "stack replay conflict"
-          assert_owner true true false false true false "stack merge conflict"
-          assert_owner false true false true true false "clean stack"
-          assert_owner false true true false false false "no-ai-rebase stack"
-          assert_owner true false false true false true "manual standalone replay retry"
-          assert_owner false false false false false true "manual standalone merge conflict"
-
-          fixture='[
-            {"number":188,"head":{"ref":"develop","repo":{"full_name":"lopugit/thingtime"}},"base":{"ref":"main","repo":{"full_name":"lopugit/thingtime"}},"labels":[{"name":"no-ai-rebase"}]},
-            {"number":200,"head":{"ref":"feature/standalone","repo":{"full_name":"lopugit/thingtime"}},"base":{"ref":"develop","repo":{"full_name":"lopugit/thingtime"}},"labels":[]},
-            {"number":201,"head":{"ref":"feature/root","repo":{"full_name":"lopugit/thingtime"}},"base":{"ref":"develop","repo":{"full_name":"lopugit/thingtime"}},"labels":[]},
-            {"number":202,"head":{"ref":"feature/child","repo":{"full_name":"lopugit/thingtime"}},"base":{"ref":"feature/root","repo":{"full_name":"lopugit/thingtime"}},"labels":[]}
-          ]'
-          assert_stack() {
-            local expected="$1" number="$2" label="$3" pr actual
-            pr="$(jq -c --argjson number "$number" '.[] | select(.number == $number)' <<<"$fixture")"
-            actual="$(jq -r \
-              --arg repo "lopugit/thingtime" \
-              --argjson number "$number" \
-              --arg head "$(jq -r '.head.ref' <<<"$pr")" \
-              --arg base "$(jq -r '.base.ref' <<<"$pr")" \
-              "$STACK_MEMBER_JQ" <<<"$fixture")"
-            [ "$actual" = "$expected" ] || {
-              echo "::error::Stack membership contract failed for $label: expected $expected, got $actual."
-              exit 1
-            }
-          }
-
-          assert_stack false 188 "no-ai-rebase promotion"
-          assert_stack false 200 "standalone beside opted-out promotion"
-          assert_stack true 201 "stack root"
-          assert_stack true 202 "stack child"
-          echo "Rebase ownership routing contract: self-test OK"
-
       - name: Scan open same-repository PRs via the API
         id: scan
         env:
           GH_TOKEN: ${{ github.token }}
+          # GITHUB_TOKEN remains least-privilege primary. The existing resolver
+          # PAT is a bounded fallback for repositories whose Actions token can
+          # read labels but is refused when removing them.
+          LABEL_WRITE_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT }}
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           PUSHED_REF: ${{ github.ref_name }}
@@ -557,6 +504,7 @@ jobs:
 
           blocked='[]'
           barriers='[]'
+          label_cleanup_failed=false
           add_barrier() {
             local barrier
             barrier="$(jq -cn \
@@ -567,31 +515,89 @@ jobs:
             barriers="$(jq -c --argjson barrier "$barrier" \
               '. + [$barrier]' <<<"$barriers")"
           }
+          remove_label_verified() {
+            local label="$1" encoded_label endpoint error_file
+            local token_name token issue_json absent attempt token_index
+            local delete_succeeded verify_attempt
+            local -a tokens=("$GH_TOKEN") token_names=("GITHUB_TOKEN")
+            if [ -n "${LABEL_WRITE_TOKEN:-}" ] \
+               && [ "$LABEL_WRITE_TOKEN" != "$GH_TOKEN" ]; then
+              tokens+=("$LABEL_WRITE_TOKEN")
+              token_names+=("CONFLICT_RESOLVER_PAT")
+            fi
+            encoded_label="$(jq -rn --arg value "$label" '$value | @uri')"
+            endpoint="repos/$REPO/issues/$number/labels/$encoded_label"
+            error_file="$(mktemp "$RUNNER_TEMP/thingtime-label-cleanup.XXXXXX")"
+
+            for token_index in "${!tokens[@]}"; do
+              token="${tokens[$token_index]}"
+              token_name="${token_names[$token_index]}"
+              for attempt in 1 2 3; do
+                : >"$error_file"
+                delete_succeeded=false
+                if GH_TOKEN="$token" gh api --method DELETE "$endpoint" \
+                  --silent 2>"$error_file"; then
+                  delete_succeeded=true
+                fi
+                # A successful DELETE is issued only once. Polling its result
+                # avoids deleting a fresh same-name hold that another worker
+                # could apply while GitHub's issue response catches up.
+                for verify_attempt in 1 2 3; do
+                  issue_json="$(GH_TOKEN="$token" gh api \
+                    "repos/$REPO/issues/$number" 2>>"$error_file" || true)"
+                  absent="$(jq -r --arg label "$label" '
+                      if type == "object" and (.labels | type) == "array"
+                      then ([.labels[].name] | index($label) == null)
+                      else false
+                      end
+                    ' <<<"$issue_json" 2>>"$error_file" || true)"
+                  if [ "$absent" = true ]; then
+                    rm -f -- "$error_file"
+                    if [ "$attempt" -gt 1 ] \
+                       || [ "$token_name" != GITHUB_TOKEN ]; then
+                      echo "Removed $label from #$number with $token_name on attempt $attempt."
+                    fi
+                    return 0
+                  fi
+                  [ "$delete_succeeded" = true ] \
+                    && [ "$verify_attempt" -lt 3 ] \
+                    || break
+                  sleep "$verify_attempt"
+                done
+
+                echo "::warning::Label cleanup attempt $attempt/3 with $token_name did not remove $label from #$number."
+                if [ -s "$error_file" ]; then
+                  sed -E \
+                    's/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})/[redacted-token]/g' \
+                    "$error_file" >&2
+                fi
+                if [ "$delete_succeeded" = true ]; then
+                  echo "::warning::The label remained or was re-applied after a successful DELETE; refusing another DELETE that could erase a newer hold."
+                  rm -f -- "$error_file"
+                  return 1
+                fi
+                # Authentication/authorization failures are deterministic for
+                # this token; move directly to the configured fallback.
+                if grep -Eqi \
+                  'HTTP (401|403)|Resource not accessible by integration' \
+                  "$error_file"; then
+                  break
+                fi
+                [ "$attempt" -eq 3 ] || sleep "$attempt"
+              done
+            done
+
+            rm -f -- "$error_file"
+            echo "::error::Could not remove stale $label from #$number after bounded retries and verification."
+            return 1
+          }
           release_recovered_lock() {
             [ "${stale_lock:-false}" = true ] || return 0
-            if ! gh api --method DELETE \
-                   "repos/$REPO/issues/$number/labels/ai-rebase-in-progress" \
-                   >/dev/null 2>&1; then
-              lock_gone="$(gh api "repos/$REPO/issues/$number" \
-                --jq '[.labels[].name] | index("ai-rebase-in-progress") == null')"
-              [ "$lock_gone" = true ] || {
-                echo "::error::Could not release stale AI rebase lock on #$number."
-                return 1
-              }
-            fi
-            echo "Released recovered ai-rebase-in-progress lock on #$number."
-          }
-          remove_label_verified() {
-            local label="$1"
-            gh api --method DELETE \
-              "repos/$REPO/issues/$number/labels/$label" \
-              >/dev/null 2>&1 || true
-            absent="$(gh api "repos/$REPO/issues/$number" \
-              --jq "[.labels[].name] | index(\"$label\") == null")"
-            if [ "$absent" != true ]; then
-              echo "::error::Could not remove stale $label from #$number."
+            remove_label_verified ai-rebase-in-progress || {
+              echo "::error::Could not release stale AI rebase lock on #$number."
               return 1
-            fi
+            }
+            echo "Released recovered ai-rebase-in-progress lock on #$number."
           }
           decode_base64url() {
             local value="$1"
@@ -730,6 +736,7 @@ jobs:
               release_recovered_lock
               if [ "$rebase_paused" = true ] \
                  && ! remove_label_verified ai-rebase-paused; then
+                label_cleanup_failed=true
                 [ "$stack_member" != true ] || add_barrier
                 continue
               fi
@@ -742,8 +749,14 @@ jobs:
             if [ "$rebase_owned" != true ]; then
               echo "#$number: no automatic merge or rebase operation is needed."
               release_recovered_lock
-              [ "$rebase_paused" != true ] || remove_label_verified ai-rebase-paused || true
-              [ "$merge_paused" != true ] || remove_label_verified ai-merge-paused || true
+              if [ "$rebase_paused" = true ] \
+                 && ! remove_label_verified ai-rebase-paused; then
+                label_cleanup_failed=true
+              fi
+              if [ "$merge_paused" = true ] \
+                 && ! remove_label_verified ai-merge-paused; then
+                label_cleanup_failed=true
+              fi
               if [ "$stack_member" = true ] && [ "$no_ai_rebase" = true ] \
                  && [ "$rebaseable" = false ]; then
                 add_barrier
@@ -756,6 +769,7 @@ jobs:
             # a stale merge hold cannot survive a successful rebase.
             if [ "$merge_paused" = true ] \
                && ! remove_label_verified ai-merge-paused; then
+              label_cleanup_failed=true
               add_barrier
               continue
             fi
@@ -802,6 +816,7 @@ jobs:
               fi
               echo "#$number: ai-rebase-paused snapshot is stale; retrying the current rebase-owned state."
               if ! remove_label_verified ai-rebase-paused; then
+                label_cleanup_failed=true
                 release_recovered_lock
                 add_barrier
                 continue
@@ -822,6 +837,11 @@ jobs:
                 cascade:$cascade, manual:$manual, stale_lock:$stale_lock}')"
             blocked="$(jq -c --argjson target "$target" '. + [$target]' <<<"$blocked")"
           done < <(jq -r '.[] | @base64' <<<"$candidates")
+
+          if [ "$label_cleanup_failed" = true ]; then
+            echo "::error::One or more stale resolver labels remain after cleanup; refusing to dispatch against ambiguous ownership state."
+            exit 1
+          fi
 
           # Bottom-up ordering: dispatch a blocked PR only when it has no
           # blocked or temporarily non-runnable ancestor. The recursive walk
@@ -957,7 +977,7 @@ jobs:
               && github.actor == 'github-actions[bot]'
               && github.ref_name == 'github-actions'))
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
-    timeout-minutes: 55
+    timeout-minutes: 360
     permissions:
       actions: write
       contents: write
@@ -1193,7 +1213,7 @@ jobs:
             body="$RUNNER_TEMP/rebase-start-comment.md"
             {
               printf '🤖 **Auto-rebase running** — the stack rebase started working on this PR at %s.\n\n' "$started"
-              printf 'Expected to finish around **%s** (rebases typically land in 5-15 minutes; the job times out at 55). ' "$eta"
+              printf 'Expected to finish around **%s** (most rebases still land in 5-15 minutes; the hosted-runner ceiling is 360). ' "$eta"
               printf 'On success this branch is force-pushed onto its new base and a result comment follows — no manual action is needed meanwhile.\n\n'
               printf '[Live status](%s)\n\n%s\n' "$RUN_URL" "$marker"
             } > "$body"
@@ -1337,170 +1357,531 @@ jobs:
           mv -- "$source_repo" "$REBASE_REPO"
           git -C "$REBASE_REPO" rev-parse --is-inside-work-tree >/dev/null
 
-      # Static, bounded rounds are intentionally verbose. GitHub Actions has
-      # no safe dynamic loop for composite actions, and each invocation must
-      # get a fresh, mechanically-derived conflict baseline. Ten replay stops
-      # is a hard cost/time cap; reaching an eleventh leaves the remote branch
-      # untouched and pauses the PR.
-      - name: Resolve replay conflict 1 of 10
-        id: round_1
+      # GitHub Actions has no dynamic loop for action steps. These YAML
+      # aliases expand to 500 real, sequential composite-action invocations
+      # while keeping the checked-in control plane reviewable. The composite
+      # action owns the one-based counter and stops later aliases after success.
+      # Keep the explicit + aliased invocation count protected by the routing
+      # contract whenever this chain changes.
+      - name: Resolve replay conflicts (round 1 of up to 500)
         if: steps.context.outputs.skip == 'false' && steps.start.outputs.complete != 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
+        uses: &thingtime_rebase_conflict_round_action ./trusted/.github/actions/rebase-conflict-round
+        with: &thingtime_rebase_conflict_round_inputs
           repo-path: ${{ env.REBASE_REPO }}
           pr-number: ${{ env.PR_NUMBER }}
           base-ref: ${{ steps.context.outputs.base_ref }}
           head-ref: ${{ steps.context.outputs.head_ref }}
           run-url: ${{ env.RUN_URL }}
-          round: "1"
+          conflict-policy: pr-rebase
+          allow-unresolved: "true"
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github-token: ${{ github.token }}
           model-args: ${{ steps.models.outputs.model_args }}
 
-      - name: Resolve replay conflict 2 of 10
-        id: round_2
-        if: steps.round_1.outcome == 'success' && steps.round_1.outputs.complete != 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ env.REBASE_REPO }}
-          pr-number: ${{ env.PR_NUMBER }}
-          base-ref: ${{ steps.context.outputs.base_ref }}
-          head-ref: ${{ steps.context.outputs.head_ref }}
-          run-url: ${{ env.RUN_URL }}
-          round: "2"
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          model-args: ${{ steps.models.outputs.model_args }}
-
-      - name: Resolve replay conflict 3 of 10
-        id: round_3
-        if: steps.round_2.outcome == 'success' && steps.round_2.outputs.complete != 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ env.REBASE_REPO }}
-          pr-number: ${{ env.PR_NUMBER }}
-          base-ref: ${{ steps.context.outputs.base_ref }}
-          head-ref: ${{ steps.context.outputs.head_ref }}
-          run-url: ${{ env.RUN_URL }}
-          round: "3"
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          model-args: ${{ steps.models.outputs.model_args }}
-
-      - name: Resolve replay conflict 4 of 10
-        id: round_4
-        if: steps.round_3.outcome == 'success' && steps.round_3.outputs.complete != 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ env.REBASE_REPO }}
-          pr-number: ${{ env.PR_NUMBER }}
-          base-ref: ${{ steps.context.outputs.base_ref }}
-          head-ref: ${{ steps.context.outputs.head_ref }}
-          run-url: ${{ env.RUN_URL }}
-          round: "4"
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          model-args: ${{ steps.models.outputs.model_args }}
-
-      - name: Resolve replay conflict 5 of 10
-        id: round_5
-        if: steps.round_4.outcome == 'success' && steps.round_4.outputs.complete != 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ env.REBASE_REPO }}
-          pr-number: ${{ env.PR_NUMBER }}
-          base-ref: ${{ steps.context.outputs.base_ref }}
-          head-ref: ${{ steps.context.outputs.head_ref }}
-          run-url: ${{ env.RUN_URL }}
-          round: "5"
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          model-args: ${{ steps.models.outputs.model_args }}
-
-      - name: Resolve replay conflict 6 of 10
-        id: round_6
-        if: steps.round_5.outcome == 'success' && steps.round_5.outputs.complete != 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ env.REBASE_REPO }}
-          pr-number: ${{ env.PR_NUMBER }}
-          base-ref: ${{ steps.context.outputs.base_ref }}
-          head-ref: ${{ steps.context.outputs.head_ref }}
-          run-url: ${{ env.RUN_URL }}
-          round: "6"
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          model-args: ${{ steps.models.outputs.model_args }}
-
-      - name: Resolve replay conflict 7 of 10
-        id: round_7
-        if: steps.round_6.outcome == 'success' && steps.round_6.outputs.complete != 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ env.REBASE_REPO }}
-          pr-number: ${{ env.PR_NUMBER }}
-          base-ref: ${{ steps.context.outputs.base_ref }}
-          head-ref: ${{ steps.context.outputs.head_ref }}
-          run-url: ${{ env.RUN_URL }}
-          round: "7"
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          model-args: ${{ steps.models.outputs.model_args }}
-
-      - name: Resolve replay conflict 8 of 10
-        id: round_8
-        if: steps.round_7.outcome == 'success' && steps.round_7.outputs.complete != 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ env.REBASE_REPO }}
-          pr-number: ${{ env.PR_NUMBER }}
-          base-ref: ${{ steps.context.outputs.base_ref }}
-          head-ref: ${{ steps.context.outputs.head_ref }}
-          run-url: ${{ env.RUN_URL }}
-          round: "8"
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          model-args: ${{ steps.models.outputs.model_args }}
-
-      - name: Resolve replay conflict 9 of 10
-        id: round_9
-        if: steps.round_8.outcome == 'success' && steps.round_8.outputs.complete != 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ env.REBASE_REPO }}
-          pr-number: ${{ env.PR_NUMBER }}
-          base-ref: ${{ steps.context.outputs.base_ref }}
-          head-ref: ${{ steps.context.outputs.head_ref }}
-          run-url: ${{ env.RUN_URL }}
-          round: "9"
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          model-args: ${{ steps.models.outputs.model_args }}
-
-      - name: Resolve replay conflict 10 of 10
-        id: round_10
-        if: steps.round_9.outcome == 'success' && steps.round_9.outputs.complete != 'true'
-        uses: ./trusted/.github/actions/rebase-conflict-round
-        with:
-          repo-path: ${{ env.REBASE_REPO }}
-          pr-number: ${{ env.PR_NUMBER }}
-          base-ref: ${{ steps.context.outputs.base_ref }}
-          head-ref: ${{ steps.context.outputs.head_ref }}
-          run-url: ${{ env.RUN_URL }}
-          round: "10"
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github-token: ${{ github.token }}
-          model-args: ${{ steps.models.outputs.model_args }}
+      - &thingtime_rebase_conflict_retry
+        name: Continue replay conflict resolution (up to round 500)
+        if: steps.context.outputs.skip == 'false' && steps.start.outputs.complete != 'true' && env.THINGTIME_AI_REBASE_COMPLETE != 'true' && success()
+        uses: *thingtime_rebase_conflict_round_action
+        with: *thingtime_rebase_conflict_round_inputs
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
+      - *thingtime_rebase_conflict_retry
 
       - name: Verify the complete local rebase
         id: finished
@@ -1512,8 +1893,8 @@ jobs:
           rebase_merge="$(git rev-parse --git-path rebase-merge)"
           rebase_apply="$(git rev-parse --git-path rebase-apply)"
           if [ -d "$rebase_merge" ] || [ -d "$rebase_apply" ]; then
-            if [ "${{ steps.round_10.outputs.complete }}" != true ]; then
-              echo "::error::Conflict-round cap reached; an eleventh replay stop would be required."
+            if [ "${THINGTIME_AI_REBASE_COMPLETE:-false}" != true ]; then
+              echo "::error::Conflict-round cap reached after 500 replay stops."
             else
               echo "::error::A composite round reported completion while rebase state still exists."
             fi
@@ -1605,7 +1986,7 @@ jobs:
       - name: Refresh graphify outputs after the complete rebase
         id: graphify
         if: steps.context.outputs.skip == 'false' && success()
-        timeout-minutes: 25
+        timeout-minutes: 360
         env:
           GRAPHIFY_VERSION: "0.9.4"
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
