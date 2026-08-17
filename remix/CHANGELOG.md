@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Develop PR previews no longer scan the project's entire Vercel history**:
+  controller deployment queries now apply the workflow ownership marker and
+  PR number at Vercel before paginating, so a busy project cannot exhaust the
+  2,000-deployment safety bound before a new preview is created. The protected
+  dispatcher also ignores PR events that neither target nor were retargeted
+  from `develop`, preserving cleanup while avoiding unrelated `main` PR runs.
+  — Codex (AI), 2026-08-17
+
 - **Each resolver run now owns one visible status comment**: the conflict
   resolver's hidden marker now includes the immutable GitHub workflow run ID,
   so a distinct run creates a fresh timeline entry instead of silently editing
