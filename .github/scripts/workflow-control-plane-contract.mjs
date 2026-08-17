@@ -328,18 +328,23 @@ function assertAdminModelRouting(resolver, rebase) {
     rebaseAction.includes("${{ inputs.model-args }}"),
     "rebase Claude action: uses the validated Admin waterfall passed by the workflow",
   );
-  const rebaseActionCalls = rebase.match(
-    /uses: \.\/trusted\/\.github\/actions\/rebase-conflict-round/gu,
-  ) ?? [];
+  assert.match(
+    rebase,
+    /uses: &thingtime_rebase_conflict_round_action \.\/trusted\/\.github\/actions\/rebase-conflict-round/u,
+    "rebase workflow: anchors the trusted conflict action",
+  );
+  assert.match(
+    rebase,
+    /uses: \*thingtime_rebase_conflict_round_action/u,
+    "rebase workflow: reuses the trusted conflict action anchor",
+  );
+  const rebaseActionCalls = 2 +
+    (rebase.match(/^\s{6}- \*thingtime_rebase_conflict_retry$/gmu)?.length ?? 0);
   const rebaseModelInputs = rebase.match(
     /model-args: \$\{\{ steps\.models\.outputs\.model_args \}\}/gu,
   ) ?? [];
-  assert.ok(rebaseActionCalls.length > 0, "rebase workflow: invokes conflict action");
-  assert.equal(
-    rebaseModelInputs.length,
-    rebaseActionCalls.length,
-    "rebase workflow: every conflict round receives the Admin waterfall",
-  );
+  assert.equal(rebaseActionCalls, 500, "rebase workflow: exposes 500 conflict rounds");
+  assert.equal(rebaseModelInputs.length, 1, "rebase workflow: aliased rounds share the Admin waterfall");
 
   const runtimeFiles = [...yamlFiles(workflows), ...yamlFiles(actions)]
     .filter((path) => {
@@ -379,6 +384,97 @@ function assertAdminModelRouting(resolver, rebase) {
       `${path}: contains no hardcoded Graphify shell model assignment`,
     );
   }
+
+  const claudeActionCount = runtimeFiles.reduce((count, path) => {
+    const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
+    return count +
+      (source.match(/uses:\s*anthropics\/claude-code-action@/gu)?.length ?? 0);
+  }, 0);
+  const turnBudgets = runtimeFiles.flatMap((path) => {
+    const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
+    return [...source.matchAll(/--max-turns\s+(\d+)/gu)].map((match) => ({
+      path,
+      value: Number(match[1]),
+    }));
+  });
+  assert.ok(
+    turnBudgets.length >= claudeActionCount,
+    "every Claude action and exact-session continuation declares a turn budget",
+  );
+  for (const budget of turnBudgets) {
+    assert.equal(
+      budget.value,
+      500,
+      `${budget.path}: Claude turn budget remains 500`,
+    );
+  }
+  const runtimeSource = runtimeFiles
+    .map((path) => readFileSync(resolve(githubRoot, "..", path), "utf8"))
+    .join("\n");
+  assert.equal(
+    runtimeSource.match(/steps\.[A-Za-z0-9_]+\.outcome == 'failure'/gu)?.length,
+    claudeActionCount,
+    "each Claude action classifies its failed result before continuation",
+  );
+  assert.ok(
+    (runtimeSource.match(/RESULT_SUBTYPE[^\n]+error_max_turns/gu)?.length ?? 0) >=
+      claudeActionCount,
+    "only error_max_turns can enter exact-session continuation",
+  );
+  assert.equal(
+    runtimeSource.match(/claude --resume "\$session_id" --print/gu)?.length,
+    claudeActionCount,
+    "every Claude action has an exact --resume continuation path",
+  );
+}
+
+function assertObservableLabelCleanup(rebase) {
+  const scan = workflowBlock(
+    rebase,
+    "      - name: Scan open same-repository PRs via the API\n",
+    "  handoff:\n",
+    "rebase detector label cleanup",
+  );
+  assert.match(
+    scan,
+    /LABEL_WRITE_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \}\}/u,
+    "rebase detector label cleanup: has a configured write-token fallback",
+  );
+  assert.match(
+    scan,
+    /for attempt in 1 2 3/u,
+    "rebase detector label cleanup: retries transient API failures",
+  );
+  assert.match(
+    scan,
+    /GH_TOKEN="\$token" gh api --method DELETE/u,
+    "rebase detector label cleanup: switches credentials without exposing them",
+  );
+  assert.match(
+    scan,
+    /\[redacted-token\]/u,
+    "rebase detector label cleanup: sanitizes surfaced API errors",
+  );
+  assert.match(
+    scan,
+    /refusing another DELETE that could erase a newer hold/u,
+    "rebase detector label cleanup: never retries a successful mutation",
+  );
+  assert.match(
+    scan,
+    /label_cleanup_failed=true/u,
+    "rebase detector label cleanup: records failures instead of swallowing them",
+  );
+  assert.match(
+    scan,
+    /One or more stale resolver labels remain after cleanup/u,
+    "rebase detector label cleanup: fails closed before dispatch",
+  );
+  assert.doesNotMatch(
+    scan,
+    /remove_label_verified ai-(?:rebase|merge)-paused \|\| true/u,
+    "rebase detector label cleanup: never reports success after a failed removal",
+  );
 }
 
 export function assertControlPlaneContract() {
@@ -404,10 +500,10 @@ export function assertControlPlaneContract() {
     /^          ref: main$/mu,
     "develop preview controller never loads executable behavior from a product branch",
   );
-  assert.match(
+  assert.doesNotMatch(
     developPreview,
-    /node \.github\/scripts\/deploy-develop-pr-preview\.mjs --self-test/u,
-    "develop preview controller verifies its local invariants before mutation",
+    /deploy-develop-pr-preview\.mjs --self-test/u,
+    "develop preview contract examples never block the live controller",
   );
 
   const providerRouter = readWorkflow("ci-provider-router.yml");
@@ -457,6 +553,11 @@ export function assertControlPlaneContract() {
   const promotions = readWorkflow("promote-features-to-main.yml");
   assert.match(promotions, /ref: github-actions/);
   assert.match(promotions, /workflow-control\/\.github\/scripts\/promote-features-to-main\.mjs/);
+  assert.doesNotMatch(
+    promotions,
+    /promote-features-to-main\.mjs --self-test/u,
+    "promoter contract examples never block a live promotion",
+  );
   assert.match(promotions, /^  actions: write$/m);
   assert.match(promotions, /ACTIONS_TOKEN: \$\{\{ github\.token \}\}/);
   const promoter = readFileSync(
@@ -472,6 +573,16 @@ export function assertControlPlaneContract() {
     /pull_request:\n\s+branches: \[github-actions\]/,
   );
   assert.doesNotMatch(controlPlaneCi, /^\s+secrets:/m);
+  assert.match(
+    controlPlaneCi,
+    /Contract advisories \(non-blocking\)/u,
+    "automation contracts run in their advisory-only lane",
+  );
+  assert.match(
+    controlPlaneCi,
+    /thingtime-control-plane-contract-advisories:v1/u,
+    "automation contract warnings are surfaced through one PR comment",
+  );
 
   const omnibus = readWorkflow("promote-develop-to-main.yml");
   assert.match(omnibus, /ref: github-actions/);
@@ -481,6 +592,11 @@ export function assertControlPlaneContract() {
   assert.match(rebase, /ref: github-actions/);
   assert.match(rebase, /origin\/github-actions/);
   assert.doesNotMatch(rebase, /ref: \$\{\{ github\.sha \}\}/);
+  assert.doesNotMatch(
+    rebase,
+    /Rebase ownership routing self-test/u,
+    "rebase ownership examples never block live target detection",
+  );
   assert.match(rebase, /routing_proof: \$\{\{ inputs\.routing_proof/);
   assert.match(rebase, /routing_proof_issued_at: \$\{\{ inputs\.routing_proof_issued_at/);
   assert.match(rebase, /internal_worker: >-/);
@@ -531,6 +647,7 @@ export function assertControlPlaneContract() {
   }
 
   assertAdminModelRouting(resolver, rebase);
+  assertObservableLabelCleanup(rebase);
   assertBareControlPlaneTree();
   // Cover the assertion itself, so it is verified even where the checkout is
   // not the control plane.
