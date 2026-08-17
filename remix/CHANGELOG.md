@@ -19,6 +19,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **True-union pnpm lock conflicts now finish deterministically after AI**:
+  when Claude resolves every source conflict but deliberately leaves one
+  pinned `pnpm-lock.yaml` because its adjacent `package.json` needed both
+  branches' dependency changes, a trusted post-model step now starts from the
+  base-side lockfile and regenerates it with `pnpm@10.12.1 --lockfile-only
+  --ignore-scripts --ignore-pnpmfile`. The subprocess receives an empty
+  credential-free environment, a frozen second pass proves the result, and
+  byte/status snapshots reject any non-lockfile change before the existing
+  object-store verifier stages, commits, and pushes it. The model prompt calls
+  this an intentional successful handoff, while failure comments now report
+  only paths that actually remain conflicted instead of the entire pre-AI
+  merge list. See the [PR #271 implementation and replay note](../PRs/271-codex-deterministic-lockfile-conflict-recovery-ai-resolver-deterministically-finish-true-union-pnpm-lock-conflicts.md).
+  — Codex (AI), 2026-08-17
+
 - **Resolver max-turn results continue and CI contracts no longer block work**:
   an exact `error_max_turns` result now resumes the same Claude session in
   another 500-turn request, repeating inside the existing 360-minute job
