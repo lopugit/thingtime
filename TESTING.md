@@ -19,8 +19,10 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
       build, the nested config is absent, ordinary product commits build,
-      `github-actions` and duplicate SHAs skip, a valid Nitro artifact is
-      staged at root, and invalid source output preserves the prior artifact.
+      `github-actions` and generic Preview duplicate SHAs skip, the `develop`
+      Custom Environment still rebuilds an already-previewed SHA, a valid Nitro
+      artifact is staged at root, and invalid source output preserves the prior
+      artifact.
 - [ ] Run `npm run build:vercel` from the repository root. Confirm both the
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
@@ -90,6 +92,10 @@ is fixed, and cite the checklist you ran in the PR description.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] For an exact SHA that already has a READY generic Preview, run the
+      controller again and confirm its `develop` Custom Environment deployment
+      builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
+      marker comment must reach the ready state for that exact SHA.
 - [ ] Confirm the wildcard Vercel domain is verified and detached, its
       Cloudflare `*.previews.dev` CNAME targets `cname.vercel-dns.com` with
       DNS-only proxying, and `_acme-challenge.previews.dev` has NS delegations
