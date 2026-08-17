@@ -1,6 +1,7 @@
 // Client-side mirrors of the /api/v1/chats family wire shapes plus the small
 // pure helpers the messenger components share.
 
+import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import { getUserDisplayName } from '~/utils/userIdentity';
 
 export type ChatType = 'channel' | 'group' | 'dm';
@@ -36,6 +37,7 @@ export type MessagePreview = {
   text: string;
   deleted: boolean;
   systemType: string | null;
+	attachmentCount: number;
   createdAt: string;
 };
 
@@ -63,11 +65,12 @@ export type ChatMessage = {
   authorId: string;
   author: MessengerProfile | null;
   text: string;
+	attachments: PublicAttachment[];
   deleted: boolean;
   editedAt: string | null;
   threadRootId: string | null;
   replyToId: string | null;
-  replyTo: { id: string; authorId: string; authorName: string | null; text: string; deleted: boolean } | null;
+	replyTo: { id: string; authorId: string; authorName: string | null; text: string; deleted: boolean; attachmentCount: number } | null;
   systemType: string | null;
   systemMeta: Record<string, unknown> | null;
   reactionCounts: Record<string, number>;
@@ -136,8 +139,7 @@ export const chatDisplayName = (chat: ChatSummary, viewerId: string | null): str
 };
 
 export const systemMessageText = (message: ChatMessage, members: ChatMember[]): string => {
-  const nameOf = (userId: unknown) =>
-    memberDisplayName(members.find((m) => m.userId === userId)) || 'Someone';
+	const nameOf = (userId: unknown) => memberDisplayName(members.find((m) => m.userId === userId)) || 'Someone';
   const actor = nameOf(message.authorId);
   const subjectIds = Array.isArray(message.systemMeta?.subjectIds) ? (message.systemMeta!.subjectIds as unknown[]) : null;
   const subject = subjectIds?.length

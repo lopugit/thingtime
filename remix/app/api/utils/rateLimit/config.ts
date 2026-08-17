@@ -10,6 +10,14 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  // Private attachment storage: start and completion mutate both S3 and the
+  // quota ledger; part-signing is batched (<=20 URLs/request), and reads issue
+  // short-lived private redirects. Every surface stays bounded per account/IP.
+  'attachments.start': { limit: 30, windowMs: 3_600_000, enabled: true },
+  'attachments.parts': { limit: 600, windowMs: 60_000, enabled: true },
+  'attachments.complete': { limit: 60, windowMs: 60_000, enabled: true },
+  'attachments.delete': { limit: 120, windowMs: 60_000, enabled: true },
+  'attachments.read': { limit: 600, windowMs: 60_000, enabled: true },
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },
   'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
   // library save toggles (POST /api/v1/things/save) — same shape as reactions
@@ -143,8 +151,6 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
   // interactive action, so the budget is per-hour like app registration
   'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
-  // follow/unfollow toggles (also classifies messenger requests)
-  'users.follow': { limit: 60, windowMs: 60_000, enabled: true },
   // service-account provisioning is public self-service but each call mints a
   // permanent bearer token + a 5 GiB-allowance account and sends a verification
   // email — bound it tightly per IP (a legit integrator provisions a handful,

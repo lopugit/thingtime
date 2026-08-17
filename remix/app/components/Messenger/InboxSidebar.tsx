@@ -11,7 +11,16 @@ const StackedAvatars = ({ chat, viewerId }: { chat: ChatSummary; viewerId: strin
   const shown = others.slice(0, 2);
   if (!shown.length) {
     return (
-      <Flex width="42px" height="42px" borderRadius="full" align="center" justify="center" background="var(--tt-surface-alt, #f2f2f5)" fontSize="18px" flexShrink={0}>
+			<Flex
+				width="42px"
+				height="42px"
+				borderRadius="full"
+				align="center"
+				justify="center"
+				background="var(--tt-surface-alt, #f2f2f5)"
+				fontSize="18px"
+				flexShrink={0}
+			>
         {chat.chatType === 'channel' ? '#' : '💬'}
       </Flex>
     );
@@ -136,8 +145,21 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
                 props.onStartDm(person);
               }}
             >
-              <Flex width="28px" height="28px" borderRadius="full" align="center" justify="center" background="var(--tt-surface-alt, #f2f2f5)" overflow="hidden" flexShrink={0}>
-                {person.avatarUrl ? <Image src={person.avatarUrl} width="28px" height="28px" objectFit="cover" /> : getUserDisplayName(person).slice(0, 1).toUpperCase()}
+							<Flex
+								width="28px"
+								height="28px"
+								borderRadius="full"
+								align="center"
+								justify="center"
+								background="var(--tt-surface-alt, #f2f2f5)"
+								overflow="hidden"
+								flexShrink={0}
+							>
+								{person.avatarUrl ? (
+									<Image src={person.avatarUrl} width="28px" height="28px" objectFit="cover" />
+								) : (
+									getUserDisplayName(person).slice(0, 1).toUpperCase()
+								)}
               </Flex>
               <Box fontSize="13px">
                 <Box fontWeight={600}>{getUserDisplayName(person)}</Box>
@@ -163,14 +185,31 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
           _hover={{ background: 'var(--tt-surface-hover, #f7f7f9)' }}
           onClick={props.onOpenRequests}
         >
-          <Flex width="42px" height="42px" borderRadius="full" align="center" justify="center" background="var(--tt-surface-alt, #f2f2f5)" fontSize="18px" flexShrink={0}>
+					<Flex
+						width="42px"
+						height="42px"
+						borderRadius="full"
+						align="center"
+						justify="center"
+						background="var(--tt-surface-alt, #f2f2f5)"
+						fontSize="18px"
+						flexShrink={0}
+					>
             💌
           </Flex>
           <Box flex={1} fontSize="13.5px" fontWeight={600}>
             Message requests
           </Box>
           {props.requestsCount > 0 ? (
-            <Box background="var(--tt-accent, #a855f7)" color="white" fontSize="10px" fontWeight={700} borderRadius="var(--tt-radius-pill, 999px)" paddingX="6px" paddingY="1px">
+						<Box
+							background="var(--tt-accent, #a855f7)"
+							color="white"
+							fontSize="10px"
+							fontWeight={700}
+							borderRadius="var(--tt-radius-pill, 999px)"
+							paddingX="6px"
+							paddingY="1px"
+						>
               {props.requestsCount}
             </Box>
           ) : null}
@@ -190,7 +229,7 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
               ? 'Message deleted'
               : last.systemType
                 ? '· activity ·'
-                : `${lastAuthor ? `${lastAuthor}: ` : ''}${last.text || '…'}`
+							: `${lastAuthor ? `${lastAuthor}: ` : ''}${last.text || (last.attachmentCount ? '📎 Attachment' : '…')}`
             : 'Say hi 👋';
           return (
             <Flex
@@ -211,14 +250,7 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
               <StackedAvatars chat={chat} viewerId={props.viewerId} />
               <Box flex={1} minWidth={0}>
                 <Flex align="baseline" gap={2}>
-                  <Box
-                    fontSize="13.5px"
-                    fontWeight={unread ? 800 : 600}
-                    overflow="hidden"
-                    textOverflow="ellipsis"
-                    whiteSpace="nowrap"
-                    flex={1}
-                  >
+									<Box fontSize="13.5px" fontWeight={unread ? 800 : 600} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" flex={1}>
                     {chat.chatType === 'group' && !chat.name ? '👥 ' : ''}
                     {chatDisplayName(chat, props.viewerId)}
                   </Box>
