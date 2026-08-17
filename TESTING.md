@@ -304,6 +304,18 @@ is fixed, and cite the checklist you ran in the PR description.
       verifier. An auth, permission, malformed-output, or model error must not
       enter the continuation loop, and private execution JSON/stderr must not
       appear in logs.
+- [ ] Reproduce a PR #201-shaped merge where `remix/package.json` needs a true
+      dependency union and `remix/pnpm-lock.yaml` is the only marker-bearing
+      path after the model edits. Confirm the model calls this a successful
+      handoff; the next step starts from merge stage 3, runs pinned
+      `pnpm@10.12.1 --lockfile-only --ignore-scripts --ignore-pnpmfile` under an
+      empty credential-free environment, proves a frozen rerun, changes no
+      non-lockfile content/status, and reaches the existing verifier/commit/
+      push path with no markers.
+- [ ] Leave one source conflict unresolved, and separately fail a safety check
+      after all markers are gone. Confirm the PR failure comment lists only the
+      actual residual marker-bearing path in the first case and lists no old
+      pre-model conflict paths in the second.
 
 ## Per-feature develop → main promoter (`.github/scripts/promote-features-to-main.mjs`)
 

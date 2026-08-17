@@ -477,6 +477,62 @@ function assertObservableLabelCleanup(rebase) {
   );
 }
 
+function assertResolverLockfileRecovery(resolver) {
+  const prompt = workflowBlock(
+    resolver,
+    "      - name: Resolve conflicts with Claude\n",
+    "      - name: Continue the exact conflict-resolution session until it finishes\n",
+    "resolver model prompt",
+  );
+  assert.match(
+    prompt,
+    /SUCCESSFUL HANDOFF, not a manual-/u,
+    "resolver prompt: a true-union pinned pnpm lockfile is a successful deterministic handoff",
+  );
+  assert.match(
+    prompt,
+    /--lockfile-only, --ignore-scripts, and\n\s+--ignore-pnpmfile/u,
+    "resolver prompt: tells the model exactly how the trusted next step completes the lockfile",
+  );
+
+  const recovery = workflowBlock(
+    resolver,
+    "      - name: Regenerate a lone pinned pnpm lockfile without credentials\n",
+    "      - name: Verify resolution and commit\n",
+    "resolver lockfile recovery",
+  );
+  assert.match(recovery, /env -i "\$\{clean_env\[@\]\}"/u);
+  assert.match(recovery, /pnpm@10\.12\.1/u);
+  assert.match(recovery, /--lockfile-only/u);
+  assert.match(recovery, /--ignore-scripts/u);
+  assert.match(recovery, /--ignore-pnpmfile/u);
+  assert.match(recovery, /--frozen-lockfile/u);
+  assert.match(recovery, /git show ":3:\$lockfile" >"\$lockfile"/u);
+  assert.match(recovery, /cmp -s "\$before_patch" "\$after_patch"/u);
+  assert.match(recovery, /cmp -s "\$before_status" "\$after_status"/u);
+  assert.doesNotMatch(
+    recovery,
+    /\$\{\{\s*(?:secrets\.|github\.token)|\bGH_TOKEN:|\bGITHUB_TOKEN:/u,
+    "resolver lockfile recovery: receives no AI or repository-write credential expression",
+  );
+  assert.doesNotMatch(
+    recovery,
+    /\bgit (?:add|commit|push)\b/u,
+    "resolver lockfile recovery: leaves all staging, commit, and publication to the existing verifier",
+  );
+
+  const commentStart = resolver.indexOf("      - name: Comment on PR (needs attention)\n");
+  assert.notEqual(commentStart, -1, "resolver failure comment exists");
+  const comment = resolver.slice(commentStart);
+  assert.match(comment, /residual-conflicts\.txt/u);
+  assert.match(comment, /Residual conflicted files:/u);
+  assert.doesNotMatch(
+    comment,
+    /conflicted-derived\.txt|conflicted\.txt/u,
+    "resolver failure comment: never falls back to the pre-model conflict list",
+  );
+}
+
 export function assertControlPlaneContract() {
   for (const name of IMPLEMENTATIONS) {
     const source = readWorkflow(name);
@@ -647,6 +703,7 @@ export function assertControlPlaneContract() {
   }
 
   assertAdminModelRouting(resolver, rebase);
+  assertResolverLockfileRecovery(resolver);
   assertObservableLabelCleanup(rebase);
   assertBareControlPlaneTree();
   // Cover the assertion itself, so it is verified even where the checkout is
