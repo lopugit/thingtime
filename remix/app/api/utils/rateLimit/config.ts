@@ -122,6 +122,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // keeps retries from re-running the index battery too. Keyed by IP; roomy
   // enough for a human fumbling taken usernames, tight for account farming.
   'auth.register': { limit: 10, windowMs: 15 * 60_000, enabled: true },
+  // First-session /things bootstrap: every success creates a durable user,
+  // session, roster entry, and subscription ledger. Reuse is checked before
+  // this bucket, so five creations per IP/day is generous for cookie loss and
+  // deliberately tight against anonymous account farming. Fail-closed route.
+  'auth.temporary': { limit: 5, windowMs: 24 * 60 * 60_000, enabled: true },
   // personal-access-token minting (POST /api/v1/tokens) — session-authed, but
   // each mint writes a session doc, so bound accumulation beyond the per-user
   // token cap
@@ -145,7 +150,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'chats.read': { limit: 240, windowMs: 60_000, enabled: true },
   // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
   // interactive action, so the budget is per-hour like app registration
-  'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true }
+  'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
+  // service-account provisioning is public self-service but each call mints a
+  // permanent bearer token + a 5 GiB-allowance account and sends a verification
+  // email — bound it tightly per IP (a legit integrator provisions a handful,
+  // ever). Enforced fail-closed at the route like mongodb.populate.
+  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

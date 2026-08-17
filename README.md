@@ -44,12 +44,25 @@ The Admin → CI Control dashboard adds the external observation/operation layer
 signed GitHub and Vercel webhooks project repositories, features/stacks,
 branches, pull requests, Actions runs, deployments, previews, audited dispatches,
 and append-only status history into protected Things. The GitHub App is also
-used for explicit reconciliation and allowlisted workflow dispatch. Native
-listeners remain the automatic trigger path, so a webhook outage cannot silently
-turn off conflict resolution or CI; the dashboard makes drift and stale delivery
-state visible. Administrator dispatches enter only through the reviewed
-`develop` or `main` listener selected for that workflow; neither the UI nor API
-can load workflow YAML from an arbitrary feature branch.
+used for explicit reconciliation, allowlisted workflow dispatch, and ephemeral
+self-hosted runner registration. Native listeners remain the automatic trigger
+path, so a webhook outage cannot silently turn off conflict resolution or CI;
+the dashboard makes drift and stale delivery state visible. Administrator
+dispatches always enter the reviewed `github-actions` implementation; neither
+the UI nor API can load workflow YAML from an arbitrary feature branch.
+
+For supported automations, an administrator can choose **GitHub Actions** or
+**Vercel Sandbox** independently. The native listener first runs a tiny provider
+router on GitHub. A GitHub selection continues normally. A Vercel selection
+starts a durable Vercel Workflow, creates an ephemeral Vercel Sandbox, registers
+that Sandbox as a uniquely labelled GitHub self-hosted runner, and dispatches the
+same protected reusable workflow back onto that runner. GitHub therefore remains
+the workflow/event control plane while the expensive compute runs on Vercel. If
+the signed router, App, Workflow, or Sandbox is unavailable, the trigger records
+the fallback and continues on GitHub-hosted compute instead of dropping the
+automation. Web CI remains GitHub-only while its API test job requires a Docker
+MongoDB service; Electron release remains GitHub-only because it needs native
+platform runners.
 
 Configure the server-side integration with private environment variables only
 (never `PUBLIC_*`):
@@ -61,13 +74,16 @@ THINGTIME_GITHUB_APP_INSTALLATION_ID="12345678"
 THINGTIME_GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 THINGTIME_GITHUB_WEBHOOK_SECRET="replace-with-a-long-random-secret"
 THINGTIME_VERCEL_WEBHOOK_SECRET="secret-returned-when-the-webhook-is-created"
+THINGTIME_CI_ROUTER_SECRET="another-independent-long-random-secret"
 ```
 
 Create a repository-installed GitHub App with repository metadata read,
-Actions read/write (for workflow dispatch), Contents read (branches), Pull
-requests read, and Deployments read. Subscribe its webhook to `push`, branch
-create/delete, pull request, workflow run, workflow job, deployment, and
-deployment status events, using:
+Actions read/write (workflow dispatch and run/job observation), Administration
+read/write (short-lived self-hosted runner registration and deletion), Contents
+read (branches), Pull requests read, and Deployments read. Install it only on
+the intended repository. Subscribe its webhook to `push`, branch create/delete,
+pull request, workflow run, workflow job, deployment, and deployment status
+events, using:
 
 ```text
 https://<your-thingtime-origin>/api/v1/integrations/github/webhook
@@ -80,8 +96,32 @@ canceled/deleted events at:
 https://<your-thingtime-origin>/api/v1/integrations/vercel/webhook
 ```
 
-Store each secret directly in the deployment environment. The Admin API reports
-only whether an integration is configured; it never returns credentials.
+The signed compute-provider route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/route
+```
+
+Store each secret directly in the deployment environment. Also add the same
+`THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
+repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The
+router secret is deliberately independent of both webhook secrets. Vercel's
+system-provided OIDC identity authenticates Sandbox creation in deployed
+functions; local/non-Vercel execution may instead provide `VERCEL_TOKEN`,
+`VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`. Set
+`WORKFLOW_SEQUENTIAL_REPLAYS=1` in Vercel for deterministic durable-workflow
+replay. The Admin API reports only whether an integration is configured; it
+never returns credentials. Admin reports **Vercel runner ready** only when the
+GitHub App credentials, provider-router secret, and Vercel runtime identity are
+all available; its API refuses to select Vercel before that complete capability
+is ready. An already-saved Vercel policy still fails over safely to GitHub if a
+dependency later disappears.
+
+After deployment and App installation, create both provider webhooks and click
+**Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
+open PRs, Actions runs, deployments, and previews; subsequent webhooks keep the
+projection current. Until that first successful reconcile, an empty dashboard
+with zero counts is expected.
 
 # 💹 Donate on Indiegogo to save humanity 🩷
 
@@ -860,6 +900,13 @@ OPENAI_API_KEY="<openai-api-key>"
 LOPU_PROVIDER="claude"
 ```
 
+Every Claude-backed musing reads the current Admin → AI workflow model order
+from `Thingtime.PRConflictAutoResolverModelWaterfall`; a named preference wins
+over `LOPU_CLAUDE_MODEL`. When the Admin primary is `default`,
+`LOPU_CLAUDE_MODEL` remains the Anthropic-valid provider default. OpenAI is a
+separate provider and continues to use `LOPU_OPENAI_MODEL` (or its documented
+built-in default), including when it is selected first with `LOPU_PROVIDER`.
+
 When an AI key is configured, the musing endpoint uses MongoDB to allow 10
 AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
@@ -951,10 +998,13 @@ the controller. The controller remains responsible for the stable
 `pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
 comment, and marker-scoped cleanup.
 
-The workflow deliberately uses two stages. Its `pull_request_target` job has no
-environment or Vercel secret, checks out no code, and emits only a bounded
-`repository_dispatch` payload. The privileged dispatch job runs the controller
-from `main` behind the `vercel-develop-pr-control` environment. It proves the
+The workflow deliberately uses two stages. The product branches retain only a
+thin event listener pinned to the reusable implementation on the protected
+`github-actions` branch. Its `pull_request_target` job has no environment or
+Vercel secret, checks out no code, and emits only a bounded
+`repository_dispatch` payload. The privileged dispatch job runs in the trusted
+default-branch event context behind the `vercel-develop-pr-control` environment
+while checking out the controller from `github-actions`. It proves the
 source workflow path/run, repository, same-repository PR, head SHA, action, and
 triggering actor through GitHub's API, then re-reads the live PR. Both the PR
 author and triggering actor must be explicitly allowlisted, currently hold
@@ -962,10 +1012,12 @@ write/admin permission, and the non-draft PR must still target `develop`.
 Neither GitHub job checks out or executes PR-head code; Vercel performs the
 remote build only after those gates pass.
 
-The workflow and its controller script must first be merged to the repository's
-default `main` branch. `pull_request_target` loads trusted workflow code from
-the default branch, so merely adding the files to a feature branch does not
-activate the controller. Thingtime's active `main` `Basic Protection` ruleset
+The reusable implementation and controller script must first merge to the
+protected `github-actions` branch. The thin listener must then reach the
+repository's default `main` branch through the normal `develop` promotion path.
+`pull_request_target` loads the listener from the default branch, so merely
+adding it to a feature branch does not activate the controller. Thingtime's
+active `main` `Basic Protection` ruleset
 has no bypass: it requires a pull request, resolved review threads, strict Web
 CI and CodeQL status checks, and blocks branch deletion and force-pushes. The
 tracked CODEOWNERS file requests owner review, but independent CODEOWNER
@@ -976,13 +1028,15 @@ scheduled reconciliation instead of letting them run automatically.
 
 Thingtime's protected GitHub Environment `vercel-develop-pr-control` allows only
 the `main` deployment branch. It contains the nine controller variables and a
-dedicated project-scoped 90-day Vercel token. The masked unsigned S3 CORS probe
-secret is also installed. The secret-free `pull_request_target` stage hands off
-to a `repository_dispatch` run in the default-branch context; scheduled runs
-also use the default branch, and the workflow refuses a manual dispatch from
-any other ref. Forks must use values from their own Vercel project; the examples
-are placeholders and must not be committed with live credentials or
-identifiers:
+dedicated 90-day Vercel token scoped to the owning team. Vercel does not offer
+a project-scoped PAT for this API surface, so the protected Environment and the
+controller's exact project/team checks are the project boundary. The masked
+unsigned S3 CORS probe secret is also installed. The secret-free
+`pull_request_target` stage hands off to a `repository_dispatch` run in the
+default-branch context; scheduled runs also use the default branch, and the
+workflow refuses a manual dispatch from any other ref. Forks must use values
+from their own Vercel project; the examples are placeholders and must not be
+committed with live credentials or identifiers:
 
 ```sh
 # GitHub Environment secrets
@@ -1039,6 +1093,14 @@ delegations from `_acme-challenge.previews.dev` to `ns1.vercel-dns.com` and
 or delegate a broader subtree. Dedicate `_acme-challenge.previews.dev` to this
 preview wildcard, because that delegation gives Vercel control of certificate
 validation for the subtree and can prevent another provider from issuing there.
+Vercel may still label this externally managed arrangement `DNS Change
+Recommended` or return `misconfigured: true`; that advisory asks to move the
+apex nameservers and is not the publication gate. The controller instead
+requires the live probe hostname to resolve to Vercel's currently recommended
+CNAME target, then verifies HTTPS on the exact alias after assigning it.
+Making Vercel authoritative for the domain would normally remove the advisory,
+but Thingtime intentionally keeps Cloudflare authoritative and delegates only
+the two narrow ACME validation subtrees.
 See Vercel's official
 [wildcard-without-Vercel-nameservers guide](https://vercel.com/kb/guide/wildcard-domain-without-vercel-nameservers).
 Forks should first add their own wildcard to Vercel and copy every CNAME or
@@ -1062,16 +1124,17 @@ bucket stays private:
 ]
 ```
 
-Activation status as of 2026-08-10: the no-bypass `main` ruleset, protected
+Activation status as of 2026-08-11: the no-bypass `main` ruleset, protected
 Environment, nine controller variables, dedicated 90-day Vercel token, masked
 `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
 scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
 wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
-are complete for
-`*.previews.dev.thingtime.com`. Merge of this controller to `main` and the live
-end-to-end checklist remain pending. The installed secrets do not make the
-controller live while its workflow is absent from `main`. Do not describe a PR
-alias as ready before every remaining gate passes.
+are complete for `*.previews.dev.thingtime.com`. The first live dispatch
+authenticated successfully and exposed the external-DNS advisory mismatch.
+The corrected implementation must merge to `github-actions`, and this thin
+listener must reach `main` through `develop`; a successful post-fix exact-SHA
+deployment, alias publication, CORS probe, and attachment upload/removal check
+then complete the activation checklist.
 
 CORS is not authorization. The bucket remains private, while the development
 AWS role explicitly trusts both Thingtime's `environment:develop` and

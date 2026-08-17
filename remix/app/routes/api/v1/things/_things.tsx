@@ -76,8 +76,9 @@ const csv = (value: string | null): string[] =>
 // for post things).
 // GET /api/v1/things?target=<shareId>&thingtime=comment&cursor=&limit= — list
 // things attached to a viewable thing (its comments/reactions).
-// GET /api/v1/things?thingtime=&cursor=&limit= — list your own things
-// (session auth may add appId=<clientId> to browse ONE app's namespace).
+// GET /api/v1/things?thingtime=&folder=&cursor=&limit= — list your own things
+// (folder=root for unfiled things, folder=<folder shareId> for its children;
+// session auth may add appId=<clientId> to browse ONE app's namespace).
 //
 // App-scoped tokens ("Login with Thingtime") work here too: every read is
 // fenced to the app's own namespace (root appId stamp + audience acl +
@@ -124,6 +125,7 @@ export const loader = async ({ request }: { request: Request }) => {
     {
       thingtime: csv(params.get('thingtime')),
       targetId: (params.get('target') || '').trim() || null,
+      folder: (params.get('folder') || '').trim() || null,
       cursor: params.get('cursor'),
       limit: Number(params.get('limit')) || undefined,
       appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null

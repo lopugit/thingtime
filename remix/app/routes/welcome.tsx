@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { UserCard, RAINBOW } from '~/components/User/UserCard';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
+import { getUserDisplayName } from '~/utils/userIdentity';
 
 export default function Welcome() {
   const user = useCurrentUser();
@@ -42,12 +43,12 @@ export default function Welcome() {
           Welcome to Thingtime! 🎉
         </Text>
         <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
-          Your account is ready, {user.displayName || user.username} ✨🦄
+          Your account is ready, {getUserDisplayName(user)} ✨🦄
         </Text>
       </Flex>
 
       <UserCard user={user}>
-        {!user.emailVerified && (
+        {!user.emailVerified && !user.temporary && (
           <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
             📬 We sent a verification link to your email.
           </Text>

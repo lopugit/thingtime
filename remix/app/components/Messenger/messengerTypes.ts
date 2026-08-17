@@ -2,6 +2,7 @@
 // pure helpers the messenger components share.
 
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
+import { getUserDisplayName } from '~/utils/userIdentity';
 
 export type ChatType = 'channel' | 'group' | 'dm';
 export type ChatRole = 'owner' | 'admin' | 'member';
@@ -12,6 +13,7 @@ export type MessengerProfile = {
   id: string;
   username: string;
   displayName: string | null;
+  temporary?: boolean;
   avatarUrl: string | null;
 };
 
@@ -122,7 +124,7 @@ export const customTokenId = (token: string) => token.slice(CUSTOM_TOKEN_PREFIX.
 // username; falls back to a friendly placeholder for vanished accounts.
 export const memberDisplayName = (member: ChatMember | null | undefined): string => {
   if (!member) return 'Someone';
-  return member.nickname || member.profile?.displayName || member.profile?.username || 'Someone';
+  return member.nickname || (member.profile ? getUserDisplayName(member.profile) : 'Someone');
 };
 
 // What a chat is called in lists and headers: explicit name first, else the

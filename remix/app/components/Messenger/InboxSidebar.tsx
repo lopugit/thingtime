@@ -4,6 +4,7 @@ import { Box, Button, Flex, Image, Input } from '@chakra-ui/react';
 import { timeAgo } from '../Feed/feedTypes';
 import { chatDisplayName, memberDisplayName, type ChatSummary, type MessengerProfile } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 const StackedAvatars = ({ chat, viewerId }: { chat: ChatSummary; viewerId: string | null }) => {
   const others = (chat.members || []).filter((m) => m.userId !== viewerId);
@@ -25,7 +26,7 @@ const StackedAvatars = ({ chat, viewerId }: { chat: ChatSummary; viewerId: strin
     );
   }
   const avatar = (profile: MessengerProfile | null, size: number, offset?: boolean) => {
-    const letter = (profile?.displayName || profile?.username || '?').slice(0, 1).toUpperCase();
+    const letter = profile ? getUserDisplayName(profile).slice(0, 1).toUpperCase() : '?';
     const common: any = {
       width: `${size}px`,
       height: `${size}px`,
@@ -78,7 +79,9 @@ export type InboxSidebarProps = {
 // conversations newest-first with unread emphasis — the FB Messenger shape.
 export const InboxSidebar = (props: InboxSidebarProps) => {
   const [query, setQuery] = React.useState('');
-  const [results, setResults] = React.useState<{ id: string; username: string; displayName: string | null; avatarUrl: string | null }[]>([]);
+  const [results, setResults] = React.useState<
+    Array<{ id: string; username: string; displayName: string | null; temporary?: boolean; avatarUrl: string | null }>
+  >([]);
   const seqRef = React.useRef(0);
 
   React.useEffect(() => {
@@ -155,13 +158,13 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
 								{person.avatarUrl ? (
 									<Image src={person.avatarUrl} width="28px" height="28px" objectFit="cover" />
 								) : (
-									(person.displayName || person.username).slice(0, 1).toUpperCase()
+									getUserDisplayName(person).slice(0, 1).toUpperCase()
 								)}
               </Flex>
               <Box fontSize="13px">
-                <Box fontWeight={600}>{person.displayName || person.username}</Box>
+                <Box fontWeight={600}>{getUserDisplayName(person)}</Box>
                 <Box color="var(--tt-muted, #9a9aa6)" fontSize="11px">
-                  @{person.username}
+                  {getUserIdentityDetail(person)}
                 </Box>
               </Box>
             </Flex>

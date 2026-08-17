@@ -34,6 +34,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Recoverable first-session Things space**: a fresh browser can land on
+  `/things` and immediately receive the real Things UI through a rate-limited
+  temporary user Thing, bounded subscription, normal browser session, and
+  account-switcher roster entry. The pre-paint bootstrap is idempotent,
+  preserves existing signed-in users, retains ordinary ACL/quota enforcement,
+  and leaves login/register reachable so the browser can add another account
+  without discarding its temporary space. Temporary sessions now retain the
+  standard logged-out `Login` navigation while every visible identity surface
+  presents `Anonymous` and `Login to claim`, never the generated guest handle
+  or placeholder email. — Codex (AI), 2026-08-12
+- **Per-automation GitHub/Vercel compute routing**: Admin → CI Control can now
+  keep each supported automation on GitHub-hosted runners or move its expensive
+  work to an ephemeral Vercel Sandbox with one toggle. A signed, idempotent
+  provider route starts a durable Vercel Workflow, registers a uniquely labelled
+  self-hosted runner, dispatches the exact protected `github-actions` workflow,
+  projects its status history, and removes the runner/Sandbox afterward. Native
+  trigger routing fails over to GitHub compute when the external path is not
+  configured or is unavailable; Docker-backed Web CI and native Electron builds
+  remain explicitly GitHub-only. Fork-safe App permissions, secrets, bootstrap,
+  first-Reconcile behavior, and regression checks are documented in
+  README/TESTING. — Codex (AI), 2026-08-10
 - **Conversation media, file attachments, and S3 custom reactions**: rich
   comments and replies now use the same gallery-style linked-media and private
   upload UI as posts, while DMs, groups, requests, community channels, inline
@@ -107,6 +128,119 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Thin Web CI promotion no longer blocks on topology contracts**: the stale
+  product-branch copy of the develop-preview controller was removed, the two
+  workflow/topology contract commands were removed from the required unit-test
+  aggregate, and the thin Web CI listener now delegates PR-warning permission
+  to the protected non-blocking advisory job. Real product unit tests, build,
+  typecheck diagnostics, API tests, and security checks remain unchanged.
+  — Codex (AI), 2026-08-17
+
+- **Mobile Safari Feed controls receive their click and focus events**: the
+  global Commander no longer changes Thingtime state from a document-level
+  `touchend` before Safari can synthesize the touched control's click. Its
+  click-away behavior now waits for `click` / `focusin` and is a no-op while
+  Commander is already closed. Editor.js also restores contenteditable focus
+  synchronously on a genuine touch release, so the Feed composer opens, accepts
+  typing, and leaves adjacent buttons and native inputs interactive in retained
+  account sessions. — Codex (AI), 2026-08-15
+
+- **A legacy Lopu browser snapshot is repaired before Feed becomes
+  interactive**: Thingtime hydration now reports and removes invalid saved
+  functions, commits the repaired snapshot before completing the first load,
+  and never persists the provider's live root `set` / `get` React closures.
+  Nested user data with those names is preserved. This removes the one-load
+  poisoned-state window that could make “What's on your mind?” and adjacent
+  inputs appear inert until another tab or reload. — Codex (AI), 2026-08-15
+
+- **Legacy Thingtime function state no longer disables interactive editors**:
+  persisted anonymous, arrow, named, method, and scoped functions now revive
+  only after Flatted has reconstructed their complete object graph. The parser
+  also removes the old saved no-op recovery function so current defaults can
+  repair poisoned browser state instead of carrying it into Feed composer and
+  other input sessions. — Codex (AI), 2026-08-15
+
+- **Safari-restored Vercel previews now force a real HTML navigation before the
+  app can remain inert**: an inline Vite preview freshness bootstrap runs before
+  the React application graph, refreshes every preview restored from Safari's
+  back/forward page cache, and permits one guarded recovery after a same-build
+  asset runtime error. Generated Vercel routes now return the SPA HTML shell
+  with `private, no-store` browser headers while leaving versioned assets on the
+  filesystem path. — Codex (AI), 2026-08-14
+
+- **Stale Vercel preview tabs recover their interactions after a redeploy**:
+  preview-only startup logic compares the loaded hashed Vite entry asset with
+  the branch alias's current HTML on load, foreground, and focus, then reloads
+  only when the alias has moved. A tab holding the pre-fix Things bundle can no
+  longer remain visually rendered but inert after the repaired deployment is
+  available; production-domain behavior is unchanged. — Codex (AI), 2026-08-13
+
+- **Things kind grouping no longer crashes populated spaces**: Group by Kind
+  now reads section icons from the canonical Thing icon registry instead of a
+  removed local binding, with a populated-group runtime regression test in the
+  required unit suite. — Codex (AI), 2026-08-12
+
+- **The Thingtime AI preference now reaches the remaining Claude runtime**:
+  Lopu musings resolve their Anthropic model from the current Admin waterfall
+  on every Claude attempt, just like conflict resolution, rebase repair, and
+  semantic Graphify. Named Admin choices override the old environment model;
+  the explicit `default` sentinel safely delegates to `LOPU_CLAUDE_MODEL`, and
+  the independent OpenAI fallback retains its provider-valid model. Focused
+  tests prevent warm runtimes from pinning an earlier Admin choice. — Codex
+  (AI), 2026-08-12
+
+- **iOS Vercel destination history is usable at full length**: the native Web
+  destination drawer now keeps its controls pinned above a lazy vertical list,
+  shows scroll indicators when content exceeds the viewport, and reserves the
+  swipe-to-close gesture for predominantly horizontal drags so vertical row
+  scrolling remains responsive. TestFlight build 13 includes the fix. — Codex
+  (AI), 2026-08-10
+- **Develop PR preview DNS publication now tests the live path**: externally
+  managed wildcard DNS can remain labelled `misconfigured` by Vercel while the
+  required Cloudflare CNAME, delegated ACME validation, and wildcard TLS are
+  healthy. The executable controller and reusable workflow now live on the
+  protected `github-actions` control plane behind a thin product-branch
+  listener. The controller verifies the actual probe CNAME against Vercel's
+  recommended target, verifies the assigned alias over HTTPS, and no
+  longer claims generic Preview is credential-free when it intentionally uses
+  the shared development runtime. The runbook also records the controller's
+  team-scoped token boundary accurately. See the
+  [PR #233 engineering note](../PRs/233-codex-fix-develop-preview-dns-gate.md)
+  and paired [control-plane PR #239](https://github.com/lopugit/thingtime/pull/239).
+  — Codex (AI), 2026-08-10
+- **Vercel's universal image now boots and tears down GitHub runners reliably**:
+  ephemeral CI setup runs GitHub's version-matched dependency installer,
+  provides the conventional `/dev/fd` link required by Bash process
+  substitution, and establishes a provisional cleanup handle immediately after
+  Sandbox creation. ICU or later bootstrap failures can no longer strand an
+  offline runner/Sandbox, and the same exact cleanup is preserved after a
+  registered job succeeds or fails. Three live canaries proved registration,
+  App-authored protected-workflow re-entry, GitHub fallback, successful Vercel
+  execution, and final resource deletion. — Codex (AI), 2026-08-10
+- **Vercel CI readiness now fails closed across UI, API, and routing**: Admin →
+  CI Control no longer reports a runner ready merely because the page is hosted
+  by Vercel. One server-derived capability now requires the GitHub App id,
+  installation id and private key, provider-router secret, and Vercel runtime
+  identity; the badge names incomplete setup, the dropdown stays disabled, and
+  direct policy writes receive an authored 409 while existing automation keeps
+  its safe GitHub fallback. Focused tests also cover runner identity, job
+  completion/failure summaries, and configuration drift. — Codex (AI),
+  2026-08-10
+- **Develop-preview automation no longer breaks product-branch CI**: the
+  develop-preview listener now delegates to the protected `github-actions`
+  implementation, and the thin workflow-caller contract rejects every local
+  Actions script on product branches. — Codex (AI), 2026-08-10
+- **Required Web CI checks no longer strand non-Remix pull requests**: the
+  stable product-branch listener is now path-filter-free and grants only the
+  read access needed by the protected classifier, which always starts and
+  classifies the complete changed-file list. The control plane assigns both
+  existing `control-plane /` check names to either the real build/API jobs or
+  lightweight no-op companions, without changing their ruleset identity; the
+  historical build label stays stable even though typecheck growth is
+  warning-only. Incomplete or unavailable changed-file listings safely run the
+  full suite instead of stranding the required names. See the
+  [PR #222 engineering note](../PRs/222-codex-typecheck-ratchet-warning-main-ci-make-typecheck-ratchet-warning-only.md).
+  — Codex (AI), 2026-08-10
 - **Proxied private-media mutations preserve same-origin protection**:
   attachment and avatar/banner writes now compare browser origins with the
   trusted forwarded public host and protocol, so local and reverse-proxied
@@ -184,7 +318,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   — Codex (AI), 2026-08-10
 - **Develop-preview activation runbook now matches the live control plane**:
   documents the no-bypass `main` ruleset, automatic no-reviewer cleanup,
-  installed project-scoped 90-day Vercel token and exact-bucket CORS-probe
+  installed team-scoped 90-day Vercel token and exact-bucket CORS-probe
   secret, narrowed develop/production runtime scope, and authoritative/public
   resolver verification of the wildcard CNAME. The narrow ACME NS delegation,
   exact-bucket CORS, `main` merge, and end-to-end gates remain. Independent
@@ -401,6 +535,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   reports `replicaSet`, and the brew `mongod.conf` replica-set stanza is
   staged locally (takes effect on the next sudo mongod restart +
   one-time initiate). — Claude (AI), 2026-08-08
+
+### Security
+
+- **Service-account provisioning is now rate limited and input-capped**
+  (TODO #7 / `claude-todo/09` A3, the last open item of the three): the public
+  `POST /api/v1/auth/service-account` route previously accepted unlimited
+  anonymous requests, each minting a non-expiring bearer token + a 5 GiB
+  storage-allowance account. It now enforces the shared Mongo-backed limiter
+  fail-closed per IP (`auth.serviceAccount`, default 10 / 15 min,
+  admin-editable), caps the request body at 16 KiB via `readJsonBody`, and
+  whitelists provisioning fields instead of spreading the raw body (privileged
+  meta is already stripped at the `createUserAccount` chokepoint —
+  defense-in-depth). API docs and `/tests` coverage updated; the sibling
+  raw-results/populate lockdowns from the same TODO shipped earlier —
+  Claude (AI), 2026-07-21.
 
 ### Added
 

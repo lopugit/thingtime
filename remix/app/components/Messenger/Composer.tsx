@@ -6,6 +6,7 @@ import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerEmojiPicker } from './MessengerEmojiPicker';
 import { CUSTOM_TOKEN_PREFIX, customTokenId, isCustomToken, type ChatMessage, type CustomEmoji } from './messengerTypes';
+import { getUserDisplayName } from '~/utils/userIdentity';
 
 export type ComposerProps = {
   placeholder: string;
@@ -123,7 +124,7 @@ export const Composer = (props: ComposerProps) => {
 		<ContextStrip label="Editing message" onCancel={props.onCancelEdit} disabled={composerLocked} />
   ) : props.replyTo ? (
     <ContextStrip
-      label={`Replying to ${props.replyTo.author?.displayName || props.replyTo.author?.username || 'someone'}: ${
+      label={`Replying to ${props.replyTo.author ? getUserDisplayName(props.replyTo.author) : 'someone'}: ${
         props.replyTo.text.slice(0, 60) || '…'
       }`}
       onCancel={props.onCancelReply}

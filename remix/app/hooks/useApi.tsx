@@ -154,6 +154,11 @@ export function useApi() {
           asyncFetcher.submit(args, { action: '/api/v1/admin/ci/dispatch', errorContext: `dispatch ${args.workflow}` }),
         [asyncFetcher]
       ),
+      setCiAutomationPolicy: useCallback(
+        async (args: { workflow: string; executionProvider: string; enabled?: boolean }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/automations', errorContext: `update ${args.workflow} execution provider` }),
+        [asyncFetcher]
+      ),
       setPrConflictResolverModelWaterfall: useCallback(
 				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
         [asyncFetcher]
@@ -391,6 +396,7 @@ export function useApi() {
             `/api/v1/things${toQuery({
               target: args?.target,
               thingtime: args?.thingtime,
+              folder: args?.folder,
               cursor: args?.cursor,
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
@@ -408,9 +414,28 @@ export function useApi() {
               acl: args?.acl,
               visibility: args?.visibility,
               tags: args?.tags,
-              tokenAcl: args?.tokenAcl
+              tokenAcl: args?.tokenAcl,
+              // move support — only send folderId when the caller provides it
+              // (undefined must stay "leave it where it is", null = root)
+              ...(args && 'folderId' in args ? { folderId: args.folderId } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }
+          ),
+        [asyncFetcher]
+      ),
+      // multi-select move/copy/delete/share — see /docs/api things-bulk
+      bulk: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            {
+              op: args?.op,
+              ids: args?.ids,
+              folderId: args?.folderId ?? null,
+              // share op only — omitted entirely for move/copy/delete
+              ...(args && 'acl' in args ? { acl: args.acl } : {}),
+              ...(args?.recursive ? { recursive: true } : {})
+            },
+            { action: '/api/v1/things/bulk' }
           ),
         [asyncFetcher]
       ),
@@ -434,10 +459,10 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-					const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags, tokenAcl, attachmentIds, shareId } = args;
+					const { type, text, images, listing, thing, thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId } = args;
           // unified shape when thingtime is given, legacy post shape otherwise
           const payload = Array.isArray(thingtime)
-						? { thingtime, crystal, targetId, acl, visibility, tags, tokenAcl, attachmentIds, shareId }
+						? { thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId }
 						: { type, text, images, listing, thing, acl, visibility, tags, attachmentIds, shareId };
 					const ret = asyncFetcher.submit(payload, { action: '/api/v1/things' });
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {

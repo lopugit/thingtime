@@ -8,6 +8,7 @@ const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
+  'develop-pr-preview.yml',
   'electron-release.yml',
   'web-ci.yml',
   'promote-develop-to-main.yml',
@@ -57,6 +58,10 @@ const filesUnder = (root) => {
 };
 
 assert.deepEqual(filesUnder(resolve(repositoryRoot, '.github', 'actions')), [], 'product branches must not retain local Actions behavior');
-assert.deepEqual(filesUnder(resolve(repositoryRoot, '.github', 'scripts')), [], 'product branches must not retain workflow scripts');
+assert.deepEqual(
+  filesUnder(resolve(repositoryRoot, '.github', 'scripts')).sort(),
+  [],
+  'product branches must not retain local Actions scripts; the develop-preview controller lives on github-actions'
+);
 
 console.log(`workflow caller contract: ${callers.length} thin listeners pinned to github-actions`);

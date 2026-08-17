@@ -26,6 +26,7 @@ import { AttachmentBindingError, reconcileReadyProfileAttachmentsToUser, type Pr
 import { effectiveProfileMediaUrl, linkedProfileMediaUrl, profileAttachmentIdFromRecord } from '~/utils/profileMediaUrl';
 import { isAdminDoc, isEnvAdmin } from './admin';
 import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
+import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 
 // Users are THINGS now (thingtime ["user"], see claude-todo/12): public
 // profile in crystal, credentials/private state under the root `secure` field
@@ -86,6 +87,7 @@ export type PublicUser = {
 	emailVerificationRequiredBy: string | null;
 	storageAllowanceBytes: number | null;
 	storageUsedBytes: number | null;
+	temporary?: boolean;
 	storageRemainingBytes: number | null;
 	storageAccountingReady: boolean;
 	storage: {
@@ -114,12 +116,14 @@ export type PublicProfile = {
 	avatarUrl: string | null;
 	bannerUrl: string | null;
 	createdAt: string;
+	temporary?: boolean;
 };
 
 export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null): PublicUser => {
 	const source = subscription?.subjectType === 'user' ? subscription.storage : null;
 	const status = source?.status ?? ('unavailable' as const);
 	const displayable = status === 'ready' || status === 'reconciling';
+	const temporary = user.meta?.temporary === true;
 	const storage = {
 		usedBytes: displayable ? source?.usedBytes ?? null : null,
 		allowanceBytes: source?.allowanceBytes ?? null,
@@ -134,7 +138,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		ttid: user.ttid,
 		username: user.username,
 		email: user.email,
-		displayName: user.displayName ?? null,
+		displayName: user.meta?.temporary === true ? ANONYMOUS_USER_NAME : user.displayName ?? null,
 		bio: typeof user.bio === 'string' ? user.bio : null,
 		avatarUrl: effectiveProfileMediaUrl(user, 'avatar'),
 		bannerUrl: effectiveProfileMediaUrl(user, 'banner'),
@@ -146,6 +150,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		createdAt: new Date(user.createdAt).toISOString(),
 		accountKind: user.accountKind === 'service' ? 'service' : 'user',
 		emailVerificationRequiredBy: user.emailVerificationRequiredBy ? new Date(user.emailVerificationRequiredBy).toISOString() : null,
+		temporary,
 		// Compatibility aliases now derive from the canonical nested projection.
 		// The old secure-blob fields are deliberately never read here.
 		storageAllowanceBytes: storage.allowanceBytes,
@@ -167,11 +172,12 @@ export const toPublicUserWithStorage = async (user: any): Promise<PublicUser> =>
 export const toPublicProfile = (user: any): PublicProfile => ({
 	id: String(user._id),
 	username: user.username,
-	displayName: user.displayName ?? null,
+	displayName: user.meta?.temporary === true ? ANONYMOUS_USER_NAME : user.displayName ?? null,
 	bio: typeof user.bio === 'string' ? user.bio : null,
 	avatarUrl: effectiveProfileMediaUrl(user, 'avatar'),
 	bannerUrl: effectiveProfileMediaUrl(user, 'banner'),
-	createdAt: new Date(user.createdAt).toISOString()
+	createdAt: new Date(user.createdAt).toISOString(),
+	temporary: user.meta?.temporary === true
 });
 
 // ---------------------------------------------------------------------------

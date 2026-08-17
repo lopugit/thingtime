@@ -27,6 +27,7 @@ import {
 	MAX_NICKNAME_CHARS
 } from '~/schemas/registry';
 import { customReactionEmojiId, isCustomReactionToken, sanitizeChatReactionToken } from '~/utils/reactionTokens';
+import { getUserDisplayName } from '~/utils/userIdentity';
 import { matchesCommittedMessageRequest, messageIdForRequest, normalizedMessengerRequestId } from './messengerMediaCore';
 import { followersOfSet, followingSet, isFollowing } from './follows';
 import type { ChatRole, ChatType, Fail, MemberState, RequestOrigin } from './shared';
@@ -565,7 +566,7 @@ const summaryEntry = (viewerId: string, chatDoc: any, ctx: SummaryContext): Chat
       ? {
           id: String(preview.id),
           authorId: String(preview.authorId),
-					authorName: ctx.profiles.get(String(preview.authorId))?.displayName || ctx.profiles.get(String(preview.authorId))?.username || null,
+					authorName: ctx.profiles.get(String(preview.authorId)) ? getUserDisplayName(ctx.profiles.get(String(preview.authorId))!) : null,
           text: preview.deleted ? '' : String(preview.text || ''),
           deleted: !!preview.deleted,
           systemType: preview.systemType ?? null,
@@ -1012,7 +1013,7 @@ const projectMessages = async (
         ? {
             id: reply.shareId,
             authorId: String(reply.ownerId),
-            authorName: replyAuthor?.displayName || replyAuthor?.username || null,
+            authorName: replyAuthor ? getUserDisplayName(replyAuthor) : null,
             text: previewText(reply.crystal),
 						deleted: !!reply.crystal?.deletedAt,
 						attachmentCount: reply.crystal?.deletedAt ? 0 : (attachmentsByMessage.get(reply.shareId) || []).length

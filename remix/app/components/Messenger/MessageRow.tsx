@@ -5,6 +5,7 @@ import { ReactionControl } from '../Feed/ReactionControl';
 import { PostAttachments } from '../Attachments/PostAttachments';
 import { timeAgo } from '../Feed/feedTypes';
 import { REACTION_EMOJIS } from '~/schemas/registry';
+import { getUserDisplayName } from '~/utils/userIdentity';
 import { CustomEmojiImage, renderTextWithEmojis } from './CustomEmojiImage';
 import { MessengerEmojiPicker } from './MessengerEmojiPicker';
 import {
@@ -22,7 +23,7 @@ import {
 const AVATAR_SIZE = 30;
 
 const Avatar = ({ profile, size = AVATAR_SIZE }: { profile: ChatMessage['author']; size?: number }) => {
-  const letter = (profile?.displayName || profile?.username || '?').slice(0, 1).toUpperCase();
+  const letter = (profile ? getUserDisplayName(profile) : '?').slice(0, 1).toUpperCase();
   if (profile?.avatarUrl) {
 		return (
 			<Image src={profile.avatarUrl} alt={letter} width={`${size}px`} height={`${size}px`} borderRadius="full" objectFit="cover" flexShrink={0} />
@@ -88,7 +89,7 @@ export const MessageRow = (props: MessageRowProps) => {
   }
 
   const member = members.find((m) => m.userId === message.authorId) || null;
-  const displayName = member ? memberDisplayName(member) : message.author?.displayName || message.author?.username || 'Someone';
+  const displayName = member ? memberDisplayName(member) : message.author ? getUserDisplayName(message.author) : 'Someone';
   const bodyText = message.deleted ? null : renderTextWithEmojis(message.text, emojiByName, mode === 'messenger' ? 20 : 20);
 
   const reactionEntries = Object.entries(message.reactionCounts).sort((a, b) => b[1] - a[1]);

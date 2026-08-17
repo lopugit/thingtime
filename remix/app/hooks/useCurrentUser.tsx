@@ -18,6 +18,7 @@ export type CurrentUser = {
   createdAt: string;
   accountKind: 'user' | 'service';
   emailVerificationRequiredBy: string | null;
+  temporary?: boolean;
 	// Flat aliases are retained for older consumers, but all new UI should read
 	// the canonical nested projection so unavailable/reconciling accounting is
 	// never mistaken for zero usage or an unlimited allowance.

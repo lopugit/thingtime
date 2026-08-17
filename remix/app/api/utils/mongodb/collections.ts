@@ -406,6 +406,9 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // /things folder browsing: one owner's direct children of one folder,
+    // newest first — fully index-provided including the page sort
+    col.createIndex({ ownerId: 1, folderId: 1, createdAt: -1, shareId: 1 }),
     // Control-plane history is relational: one ci-event per provider delivery
     // and parent entity, never an unbounded status array on the current row.
     col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }),

@@ -8,6 +8,7 @@ import { Composer } from './Composer';
 import { EmojiUploadModal } from './EmojiUploadModal';
 import { MessageList } from './MessageList';
 import { emitMessengerRefresh, mergeEmojiMap, pushCustomRecent, readEmojiMap, readMessages, writeMessages } from './messengerCache';
+import { getUserDisplayName } from '~/utils/userIdentity';
 import {
   chatDisplayName,
   memberDisplayName,
@@ -232,7 +233,15 @@ export const ChatView = (props: ChatViewProps) => {
       id: localId,
       chatId,
       authorId: userId || '',
-      author: user ? { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl } : null,
+      author: user
+        ? {
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            temporary: user.temporary,
+            avatarUrl: user.avatarUrl
+          }
+        : null,
       text,
 			attachments,
       deleted: false,
@@ -243,7 +252,7 @@ export const ChatView = (props: ChatViewProps) => {
         ? {
             id: reply.id,
             authorId: reply.authorId,
-            authorName: reply.author?.displayName || reply.author?.username || null,
+            authorName: reply.author ? getUserDisplayName(reply.author) : null,
             text: reply.text.slice(0, 140),
 						deleted: reply.deleted,
 						attachmentCount: reply.attachments.length

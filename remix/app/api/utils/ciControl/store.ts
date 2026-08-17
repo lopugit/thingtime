@@ -1,6 +1,15 @@
 import { createHash } from 'node:crypto';
 
 import { getHomeThingsCollection } from '../mongodb/collections';
+import {
+  CI_AUTOMATION_DEFINITIONS,
+  ciAutomationDefinition,
+  defaultCiAutomationPolicy,
+  isCiExecutionProvider,
+  type CiAutomationPolicy,
+  type CiExecutionProvider,
+  type CiWorkflowKey
+} from './automationPolicy';
 import { CI_CONTROL_THINGTIME, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 export const CI_THINGTIME = CI_CONTROL_THINGTIME;
@@ -226,12 +235,167 @@ const readKind = async (kind: CiThingtime, limit: number) => {
   return docs.map(publicCrystal);
 };
 
-export const listCiDashboard = async (options?: { limit?: number; eventLimit?: number }) => {
+const policyFromEntity = (workflow: CiWorkflowKey, entity: any | null): CiAutomationPolicy => {
+  const fallback = defaultCiAutomationPolicy(workflow);
+  if (!entity) return fallback;
+  const executionProvider = isCiExecutionProvider(entity.executionProvider)
+    ? entity.executionProvider
+    : fallback.executionProvider;
+  return {
+    ...fallback,
+    executionProvider,
+    enabled: entity.enabled !== false,
+    sourceUpdatedAt: typeof entity.sourceUpdatedAt === 'string' ? entity.sourceUpdatedAt : null,
+    updatedBy: typeof entity.updatedBy === 'string' ? entity.updatedBy : null
+  };
+};
+
+export const listCiAutomationPolicies = async (repository: string): Promise<CiAutomationPolicy[]> => {
+  const things = await getHomeThingsCollection();
+  const docs = await things
+    .find({ thingtime: 'ci-automation', 'crystal.repository': boundedText(repository, 300) })
+    .limit(CI_AUTOMATION_DEFINITIONS.length)
+    .toArray();
+  const entities = new Map(
+    docs.map((doc) => {
+      const entity = publicCrystal(doc);
+      return [String(entity.externalId ?? ''), entity];
+    })
+  );
+  return CI_AUTOMATION_DEFINITIONS.map((definition) =>
+    policyFromEntity(definition.key, entities.get(definition.key) ?? null)
+  );
+};
+
+export const getCiAutomationPolicy = async (
+  repository: string,
+  workflow: CiWorkflowKey
+): Promise<CiAutomationPolicy> => {
+  const things = await getHomeThingsCollection();
+  const doc = await things.findOne({
+    thingtime: 'ci-automation',
+    'crystal.repository': boundedText(repository, 300),
+    'crystal.externalId': workflow
+  });
+  return policyFromEntity(workflow, doc ? publicCrystal(doc) : null);
+};
+
+export const setCiAutomationPolicy = async (input: {
+  repository: string;
+  workflow: CiWorkflowKey;
+  executionProvider: CiExecutionProvider;
+  enabled: boolean;
+  actorId: string;
+}): Promise<CiAutomationPolicy> => {
+  const definition = ciAutomationDefinition(input.workflow);
+  if (input.executionProvider === 'vercel-sandbox' && !definition.vercelSupported) {
+    throw new Error('This automation requires a GitHub-hosted runner');
+  }
+  const occurredAt = new Date();
+  const entity = await upsertCiEntity(
+    {
+      kind: 'ci-automation',
+      provider: 'thingtime',
+      repository: input.repository,
+      externalId: input.workflow,
+      title: definition.title,
+      status: input.enabled ? 'enabled' : 'disabled',
+      occurredAt,
+      data: {
+        workflowKey: input.workflow,
+        executionProvider: input.executionProvider,
+        enabled: input.enabled,
+        vercelSupported: definition.vercelSupported,
+        updatedBy: boundedText(input.actorId, 180)
+      }
+    },
+    {
+      provider: 'thingtime',
+      repository: input.repository,
+      deliveryId: `automation-policy:${input.workflow}:${occurredAt.toISOString()}`,
+      eventType: 'automation_policy',
+      action: 'updated',
+      actor: input.actorId,
+      occurredAt,
+      data: { executionProvider: input.executionProvider, enabled: input.enabled }
+    }
+  );
+  const things = await getHomeThingsCollection();
+  const saved = await things.findOne({ shareId: entity.id, thingtime: 'ci-automation' });
+  return policyFromEntity(input.workflow, saved ? publicCrystal(saved) : null);
+};
+
+export const claimCiDispatchRoute = async (input: {
+  repository: string;
+  workflow: CiWorkflowKey;
+  deliveryKey: string;
+  actorId: string;
+  occurredAt: Date;
+}): Promise<{ id: string; externalId: string; claimed: boolean; status: string }> => {
+  const things = await getHomeThingsCollection();
+  const externalId = `automatic:${input.workflow}:${boundedText(input.deliveryKey, 300)}`;
+  const shareId = stableShareId(
+    ciEntityKey({ provider: 'thingtime', repository: input.repository, kind: 'ci-dispatch', externalId })
+  );
+  const now = new Date();
+  const result = await things.updateOne(
+    { shareId, thingtime: 'ci-dispatch' },
+    {
+      $setOnInsert: {
+        schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+        shareId,
+        thingtime: ['ci-dispatch'],
+        crystal: {
+          provider: 'thingtime',
+          repository: boundedText(input.repository, 300),
+          externalId,
+          entityKey: ciEntityKey({
+            provider: 'thingtime',
+            repository: input.repository,
+            kind: 'ci-dispatch',
+            externalId
+          }),
+          title: `Automatic dispatch ${input.workflow}`,
+          status: 'routing',
+          url: null,
+          sourceUpdatedAt: input.occurredAt,
+          workflow: input.workflow,
+          actorId: boundedText(input.actorId, 180),
+          deliveryKey: boundedText(input.deliveryKey, 300)
+        },
+        ownerId: 'system',
+        acl: [],
+        storageClass: 'control',
+        parentId: null,
+        targetId: null,
+        tags: [],
+        createdAt: now,
+        updatedAt: now
+      }
+    },
+    { upsert: true }
+  );
+  if (result.upsertedCount > 0) return { id: shareId, externalId, claimed: true, status: 'routing' };
+  const existing = await things.findOne(
+    { shareId, thingtime: 'ci-dispatch' },
+    { projection: { 'crystal.status': 1 } }
+  );
+  return {
+    id: shareId,
+    externalId,
+    claimed: false,
+    status: boundedText(existing?.crystal?.status, 120) || 'unknown'
+  };
+};
+
+export const listCiDashboard = async (options?: { limit?: number; eventLimit?: number; repository?: string }) => {
   const limit = Math.min(250, Math.max(1, Math.floor(options?.limit ?? 100)));
   const eventLimit = Math.min(500, Math.max(1, Math.floor(options?.eventLimit ?? 200)));
-  const [repositories, features, branches, pullRequests, workflowRuns, deployments, previews, dispatches, events] =
+  const repository = boundedText(options?.repository ?? process.env.THINGTIME_GITHUB_REPOSITORY ?? 'lopugit/thingtime', 300);
+  const [repositories, automations, features, branches, pullRequests, workflowRuns, deployments, previews, dispatches, events] =
     await Promise.all([
       readKind('ci-repository', 20),
+      listCiAutomationPolicies(repository),
       readKind('ci-feature', limit),
       readKind('ci-branch', limit),
       readKind('ci-pull-request', limit),
@@ -247,6 +411,7 @@ export const listCiDashboard = async (options?: { limit?: number; eventLimit?: n
   const latest = events[0]?.occurredAt ?? events[0]?.updatedAt ?? null;
   return {
     repositories,
+    automations,
     features,
     branches,
     pullRequests,
