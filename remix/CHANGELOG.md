@@ -19,6 +19,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Large merged PRs no longer strand promotion conflict resolution**: the
+  trusted worker now mirrors the promoter's topology rule and verifies a true
+  merge endpoint directly from its immutable first-parent boundary without
+  asking GitHub to regenerate the merged PR's commits or file list. This avoids
+  the recurring HTTP 422 “diff is taking too long” failure while preserving
+  fail-closed metadata checks for single-parent squash/rebase ranges. The
+  hardened checkout also opts out of its unnecessary global `safe.directory`
+  write, removing the misleading `/dev/null` permission annotation.
+  — Codex (AI), 2026-08-17
+
 - **True-union pnpm lock conflicts now finish deterministically after AI**:
   when Claude resolves every source conflict but deliberately leaves one
   pinned `pnpm-lock.yaml` because its adjacent `package.json` needed both
