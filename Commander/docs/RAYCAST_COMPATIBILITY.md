@@ -3,21 +3,22 @@
 Status meanings: **supported** executes with equivalent behavior; **partial** has a real execution path with named
 limits; **planned** is recognized and rejected with a capability diagnosis rather than silently ignored.
 
-| Surface                                              | Status    | Current behavior                                                                                                                                                                                          |
-| ---------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current/legacy manifest discovery                    | Supported | Reads `package.json` or `extension.json`, imports enabled and disabled commands, and preserves source path.                                                                                               |
-| `view`, `no-view`, `menu-bar` modes                  | Partial   | All index correctly. Prebuilt `no-view` entries have isolated-worker execution; view/menu-bar reconciliation is planned.                                                                                  |
-| Folder/ZIP sideload                                  | Supported | Native picker accepts folders or ZIPs. ZIP extraction rejects traversal, links, malformed archives, unsafe paths, and resource-limit violations.                                                          |
-| Source preparation/build                             | Partial   | Source/build entries and compatibility diagnostics are detected. Build scripts run only after explicit trust consent, with bounded output and a process timeout; dependencies are not auto-installed yet. |
-| Store browsing                                       | Supported | Reads Raycast’s official live JSON Feed for the latest 100 extensions and links complete searches into the current public Store.                                                                          |
-| Store source installation                            | Partial   | Public source is available through `raycast/extensions`; automatic sparse checkout/build/update remains planned.                                                                                          |
-| Per-extension containment                            | Partial   | Node workers have memory limits, execution timeouts, forced termination, and structured failures. They retain Commander’s filesystem/network permissions and are not a security sandbox.                  |
-| `List`, `Grid`, `Detail`, `Form`, `ActionPanel`      | Planned   | Platform-neutral render tree and JSON Patch protocol specified in `ARCHITECTURE.md`.                                                                                                                      |
-| Preferences and LocalStorage                         | Planned   | Manifest data is retained; runtime API not exposed yet.                                                                                                                                                   |
-| Clipboard, open, show in Finder, selected files/text | Partial   | Commander native bridge covers clipboard/open/reveal; Raycast API shim bindings are next.                                                                                                                 |
-| Toasts, HUDs, alerts                                 | Planned   | Requires trusted Commander presentation mapping.                                                                                                                                                          |
-| OAuth                                                | Planned   | Commander’s own Thingtime OAuth works; extension OAuth token sets are not wired yet.                                                                                                                      |
-| AI, browser extension, window management             | Planned   | These need dedicated service/capability adapters.                                                                                                                                                         |
+| Surface                                              | Status    | Current behavior                                                                                                                                                                                           |
+| ---------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Current/legacy manifest discovery                    | Supported | Reads `package.json` or `extension.json`, imports enabled and disabled commands, and preserves source path.                                                                                                |
+| `view`, `no-view`, `menu-bar` modes                  | Partial   | All index correctly. Prebuilt `no-view` entries have isolated-worker execution; view/menu-bar reconciliation is planned.                                                                                   |
+| Folder/ZIP sideload                                  | Supported | Native picker accepts folders or ZIPs. ZIP extraction rejects traversal, links, malformed archives, unsafe paths, and resource-limit violations.                                                           |
+| Source preparation/build                             | Partial   | Source/build entries and compatibility diagnostics are detected. Build scripts run only after explicit trust consent, with bounded output and a process timeout; dependencies are not auto-installed yet.  |
+| Store browsing                                       | Supported | Reads Raycast’s official live JSON Feed for the latest 100 extensions and links complete searches into the current public Store.                                                                           |
+| Store source installation                            | Partial   | Your Raycast can download an installed public extension's bounded source snapshot from `raycast/extensions`; dependency installation, automatic builds, and updates remain explicit/manual.                |
+| Local Raycast profile discovery                      | Partial   | macOS lists profile-linked extensions from Raycast's exported preferences without opening Raycast's encrypted database or Keychain. Development source locations are not exposed and must be sideloaded.   |
+| Per-extension containment                            | Partial   | Node workers have memory limits, execution timeouts, forced termination, and structured failures. They retain Commander’s filesystem/network permissions and are not a security sandbox.                   |
+| `List`, `Grid`, `Detail`, `Form`, `ActionPanel`      | Planned   | Platform-neutral render tree and JSON Patch protocol specified in `ARCHITECTURE.md`.                                                                                                                       |
+| Preferences and LocalStorage                         | Partial   | Your Raycast imports manifest-declared, non-password extension/command preferences and supplies them to compatible workers. Passwords, OAuth tokens, and LocalStorage remain protected and are not copied. |
+| Clipboard, open, show in Finder, selected files/text | Partial   | Commander native bridge covers clipboard/open/reveal; Raycast API shim bindings are next.                                                                                                                  |
+| Toasts, HUDs, alerts                                 | Planned   | Requires trusted Commander presentation mapping.                                                                                                                                                           |
+| OAuth                                                | Planned   | Commander’s own Thingtime OAuth works; extension OAuth token sets are not wired yet.                                                                                                                       |
+| AI, browser extension, window management             | Planned   | These need dedicated service/capability adapters.                                                                                                                                                          |
 
 Compatibility is evaluated per command and per platform. A macOS extension that shells out to AppleScript or
 bundles an Apple Silicon executable cannot become Linux-compatible merely because its manifest loads. Commander
@@ -53,3 +54,20 @@ Raycast extension now lives at `Commander/extensions/raycast/` and also ships a 
 no-view command that launches the installed macOS app by bundle identifier. The complete legacy extension moved
 with it, including its image commands and assets. These Commander-owned commands do not expand the compatibility
 claims for third-party extensions in the matrix above.
+
+## Your Raycast
+
+On macOS, Extensions Settings includes a **Your Raycast** tab. It asks the native `defaults` tool for Raycast's
+exported preference domain, derives a sanitized list of profile-linked extensions, and returns only metadata and
+counts to the Commander UI. It does not open `raycast-enc.sqlite`, inspect Raycast's Keychain entries, or expose
+preference values to the renderer.
+
+**Add to Commander** downloads the matching public source snapshot through Commander's existing bounded Store
+importer and copies manifest-declared, non-password settings. It does not install dependencies or execute package
+scripts. Raycast development extensions need their source folder to be chosen through Sideload because Raycast's
+profile does not disclose that source path.
+
+**Sync to Commander** refreshes those safe preference values for an already installed extension. Password fields
+are deliberately skipped even if declared in the manifest; OAuth credentials and Raycast LocalStorage are not
+transferred. Compatible `no-view` commands receive the imported values through the same worker-data preferences
+shape used by Raycast's API.

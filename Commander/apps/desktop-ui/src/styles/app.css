@@ -606,6 +606,41 @@
   color: var(--muted);
   font-size: 0.78rem;
 }
+.raycast-notice {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 10px 15px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.raycast-notice > svg {
+  width: 16px;
+  flex: 0 0 auto;
+  color: #41a968;
+}
+.raycast-notice span {
+  flex: 1;
+}
+.raycast-notice button {
+  min-height: 27px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-solid);
+  font-size: 0.73rem;
+}
+.raycast-notice button svg {
+  width: 13px;
+}
 .extension-table {
   display: grid;
 }
@@ -734,6 +769,32 @@
   height: 100%;
   border-radius: inherit;
   object-fit: cover;
+}
+.raycast-row small {
+  font-variant-numeric: tabular-nums;
+}
+.raycast-empty {
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 7px;
+  padding: 30px;
+  background: var(--surface-solid);
+  color: var(--muted);
+  text-align: center;
+}
+.raycast-empty > svg {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 4px;
+}
+.raycast-empty strong {
+  color: var(--text);
+}
+.raycast-empty span {
+  font-size: 0.78rem;
 }
 
 .account-settings {

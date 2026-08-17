@@ -48,6 +48,21 @@ describe('RaycastExtensionRuntime', () => {
     await expect(new RaycastExtensionRuntime().execute(extension, 'wave')).resolves.toBeUndefined();
   });
 
+  it('passes synced preferences through Raycast-compatible worker data', async () => {
+    const directory = await builtExtension(`
+      import { workerData } from 'node:worker_threads';
+      export default async function wave() {
+        if (workerData.preferences.repository !== 'thingtime') throw new Error('preferences missing');
+      }
+    `);
+    const extension = await readRaycastExtension(directory);
+    await expect(
+      new RaycastExtensionRuntime().execute(extension, 'wave', {
+        preferences: { repository: 'thingtime' },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it('terminates a command worker after its deadline', async () => {
     const directory = await builtExtension(
       'export default async function wave() { await new Promise(() => setInterval(() => {}, 1000)); }',

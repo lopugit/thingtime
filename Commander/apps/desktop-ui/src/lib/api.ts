@@ -3,7 +3,9 @@ import type {
   CommanderAccount,
   CommanderExtension,
   CommanderSettings,
+  LocalRaycastExtensionsResponse,
   NativeRequest,
+  RaycastPreferenceSyncSummary,
   RecentSearch,
   RecentSearchCommand,
   SearchHit,
@@ -49,6 +51,29 @@ export const api = {
       body: JSON.stringify({ itemId, actionId }),
     }),
   listExtensions: () => request<{ extensions: CommanderExtension[] }>('/api/extensions'),
+  listRaycastExtensions: () => request<LocalRaycastExtensionsResponse>('/api/extensions/raycast'),
+  addRaycastExtension: (name: string, installationId: string) =>
+    request<{
+      extension: CommanderExtension;
+      preparation: {
+        source: 'folder';
+        readyNoViewCommands: number;
+        diagnostics: Array<{ severity: 'info' | 'warning' | 'error'; message: string }>;
+        build: { attempted: boolean; exitCode?: number; timedOut?: boolean };
+      };
+      sync: RaycastPreferenceSyncSummary;
+    }>('/api/extensions/raycast/add', {
+      method: 'POST',
+      body: JSON.stringify({ name, installationId }),
+    }),
+  syncRaycastExtension: (name: string, installationId: string) =>
+    request<{ extension: CommanderExtension; sync: RaycastPreferenceSyncSummary }>(
+      '/api/extensions/raycast/sync',
+      {
+        method: 'POST',
+        body: JSON.stringify({ name, installationId }),
+      },
+    ),
   sideload: (path: string, allowUntrustedBuildScripts = false) =>
     request<{
       extension: CommanderExtension;

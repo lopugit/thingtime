@@ -12,6 +12,7 @@ import {
   DEFAULT_SETTINGS,
   normalizeRecentSearches,
 } from '@commander/protocol';
+import type { RaycastExtensionPreferenceState } from './raycastLocal.js';
 import { commanderDataDirectory } from './config.js';
 
 interface PersistentState {
@@ -19,6 +20,7 @@ interface PersistentState {
   settings: CommanderSettings;
   accounts: CommanderAccount[];
   extensions: CommanderExtension[];
+  extensionPreferences: RaycastExtensionPreferenceState[];
   recentSearches: RecentSearch[];
 }
 
@@ -39,6 +41,7 @@ function initialState(): PersistentState {
     settings: { ...DEFAULT_SETTINGS },
     accounts: [],
     extensions: [],
+    extensionPreferences: [],
     recentSearches: [],
   };
 }
@@ -61,6 +64,7 @@ export class PersistentStore {
         settings,
         accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
         extensions: Array.isArray(parsed.extensions) ? parsed.extensions : [],
+        extensionPreferences: normalizeExtensionPreferences(parsed.extensionPreferences),
         recentSearches,
       };
       if (clientIdNeedsMigration || historyNeedsMigration) await this.#persist();
@@ -121,6 +125,19 @@ export class PersistentStore {
     await this.#persist();
   }
 
+  async upsertExtensionPreferences(preferences: RaycastExtensionPreferenceState): Promise<void> {
+    this.#state.extensionPreferences = [
+      structuredClone(preferences),
+      ...this.#state.extensionPreferences.filter((item) => item.extensionId !== preferences.extensionId),
+    ];
+    await this.#persist();
+  }
+
+  extensionPreferences(extensionId: string): RaycastExtensionPreferenceState | undefined {
+    const preferences = this.#state.extensionPreferences.find((item) => item.extensionId === extensionId);
+    return preferences ? structuredClone(preferences) : undefined;
+  }
+
   async addRecentSearch(query: string, command?: RecentSearchCommand): Promise<RecentSearch[]> {
     const recentSearches = prependRecentSearch(this.#state.recentSearches, query, command);
     const unchanged = JSON.stringify(recentSearches) === JSON.stringify(this.#state.recentSearches);
@@ -141,4 +158,27 @@ export class PersistentStore {
     });
     await this.#writeQueue;
   }
+}
+
+function normalizeExtensionPreferences(value: unknown): RaycastExtensionPreferenceState[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((candidate): candidate is RaycastExtensionPreferenceState => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false;
+    const item = candidate as Partial<RaycastExtensionPreferenceState>;
+    return (
+      typeof item.extensionId === 'string' &&
+      typeof item.installationId === 'string' &&
+      typeof item.syncedAt === 'string' &&
+      item.values !== null &&
+      typeof item.values === 'object' &&
+      !Array.isArray(item.values) &&
+      item.commandValues !== null &&
+      typeof item.commandValues === 'object' &&
+      !Array.isArray(item.commandValues) &&
+      Number.isSafeInteger(item.copied) &&
+      Number.isSafeInteger(item.defaultsApplied) &&
+      Number.isSafeInteger(item.missing) &&
+      Number.isSafeInteger(item.protected)
+    );
+  });
 }

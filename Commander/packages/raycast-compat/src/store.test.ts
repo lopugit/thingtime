@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -37,6 +37,31 @@ function sourceFetch(
 }
 
 describe('materializePublicRaycastExtensionSource', () => {
+  it('materializes one bounded extension from a single sparse checkout', async () => {
+    const root = await cacheDirectory();
+    let checkouts = 0;
+    const result = await materializePublicRaycastExtensionSource('hello', root, {
+      checkout: async (name, checkoutRoot) => {
+        checkouts += 1;
+        const source = path.join(checkoutRoot, 'repository', 'extensions', name);
+        await mkdir(path.join(source, 'src'), { recursive: true });
+        await writeFile(
+          path.join(source, 'package.json'),
+          JSON.stringify({
+            name: 'hello',
+            commands: [{ name: 'wave', title: 'Wave', mode: 'no-view' }],
+          }),
+        );
+        await writeFile(path.join(source, 'src', 'wave.ts'), 'export default function wave() {}');
+        return source;
+      },
+    });
+
+    expect(checkouts).toBe(1);
+    expect(result).toMatchObject({ files: 2, path: result.report.extensionPath });
+    expect(await readdir(result.path)).toEqual(['package.json', 'src']);
+  });
+
   it('copies one bounded public source folder without executing it', async () => {
     const root = await cacheDirectory();
     const manifest = JSON.stringify({

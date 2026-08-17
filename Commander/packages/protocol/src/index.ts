@@ -10,6 +10,20 @@ export type Appearance = 'light' | 'dark' | 'system';
 export type WindowMode = 'default' | 'compact';
 export type TextSize = 'default' | 'large';
 export type SearchItemKind = 'builtin' | 'application' | 'extension' | 'command' | 'quicklink';
+export type SettingsTab = 'general' | 'extensions' | 'sync' | 'account' | 'advanced' | 'about';
+
+export const SETTINGS_TABS = [
+  'general',
+  'extensions',
+  'sync',
+  'account',
+  'advanced',
+  'about',
+] as const satisfies readonly SettingsTab[];
+
+export function isSettingsTab(value: unknown): value is SettingsTab {
+  return typeof value === 'string' && (SETTINGS_TABS as readonly string[]).includes(value);
+}
 
 export interface RecentSearchCommand {
   itemId: string;
@@ -195,6 +209,35 @@ export interface StoreExtension {
   installed: boolean;
 }
 
+export interface LocalRaycastExtension {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  installationId: string;
+  development: boolean;
+  installedInCommander: boolean;
+  canAdd: boolean;
+  detectedPreferenceCount: number;
+  syncedPreferenceCount: number;
+  protectedPreferenceCount: number;
+  lastSyncedAt?: string;
+}
+
+export interface LocalRaycastExtensionsResponse {
+  available: boolean;
+  extensions: LocalRaycastExtension[];
+  message?: string;
+}
+
+export interface RaycastPreferenceSyncSummary {
+  copied: number;
+  defaultsApplied: number;
+  missing: number;
+  protected: number;
+  syncedAt: string;
+}
+
 export interface SearchItem {
   id: string;
   title: string;
@@ -302,6 +345,10 @@ export interface NativeSettingsSnapshot {
   openAtLogin: boolean;
   showMenuBarIcon: boolean;
   windowMode: WindowMode;
+}
+
+export interface SettingsOpenRequest {
+  tab: SettingsTab;
 }
 
 export interface CredentialKey {

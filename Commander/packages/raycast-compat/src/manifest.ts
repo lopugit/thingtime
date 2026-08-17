@@ -11,6 +11,7 @@ interface RaycastManifestCommand {
   mode?: unknown;
   keywords?: unknown;
   entry?: unknown;
+  preferences?: unknown;
 }
 
 interface RaycastManifest {
@@ -26,6 +27,17 @@ interface RaycastManifest {
   dependencies?: unknown;
   devDependencies?: unknown;
   packageManager?: unknown;
+  preferences?: unknown;
+}
+
+export type RaycastPreferenceType =
+  'textfield' | 'password' | 'checkbox' | 'dropdown' | 'appPicker' | 'file' | 'directory';
+
+export interface RaycastPreferenceDefinition {
+  name: string;
+  type: RaycastPreferenceType;
+  commandName?: string;
+  defaultValue?: unknown;
 }
 
 export type RaycastPackageManager = 'pnpm' | 'yarn' | 'npm' | 'bun';
@@ -199,6 +211,45 @@ function stringRecord(value: unknown): Record<string, string> {
   return Object.fromEntries(
     Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
   );
+}
+
+const preferenceTypes = new Set<RaycastPreferenceType>([
+  'textfield',
+  'password',
+  'checkbox',
+  'dropdown',
+  'appPicker',
+  'file',
+  'directory',
+]);
+
+function preferenceDefinitions(value: unknown, commandName?: string): RaycastPreferenceDefinition[] {
+  if (!Array.isArray(value)) return [];
+  const definitions: RaycastPreferenceDefinition[] = [];
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+    const preference = candidate as { name?: unknown; type?: unknown; default?: unknown };
+    const name = text(preference.name).trim();
+    if (!name || !preferenceTypes.has(preference.type as RaycastPreferenceType)) continue;
+    definitions.push({
+      name,
+      type: preference.type as RaycastPreferenceType,
+      ...(commandName ? { commandName } : {}),
+      ...('default' in preference ? { defaultValue: structuredClone(preference.default) } : {}),
+    });
+  }
+  return definitions;
+}
+
+export async function readRaycastPreferenceDefinitions(
+  extensionPath: string,
+): Promise<RaycastPreferenceDefinition[]> {
+  const { manifest } = await loadManifest(extensionPath);
+  const definitions = preferenceDefinitions(manifest.preferences);
+  for (const { manifest: command, command: normalized } of manifestCommands(manifest)) {
+    definitions.push(...preferenceDefinitions(command.preferences, normalized.name));
+  }
+  return definitions;
 }
 
 async function detectPackageManager(

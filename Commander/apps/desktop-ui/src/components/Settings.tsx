@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CommanderSettings } from '@commander/protocol';
+import { isSettingsTab, type CommanderSettings, type SettingsTab } from '@commander/protocol';
 import { Box, Cloud, Info, KeyRound, Settings2, SlidersHorizontal, UserRound } from 'lucide-react';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { AccountSettings } from './AccountSettings.js';
@@ -8,9 +8,7 @@ import { ExtensionsSettings } from './ExtensionsSettings.js';
 import { GeneralSettings } from './GeneralSettings.js';
 import { beginWindowDrag } from '../lib/nativeBridge.js';
 
-type Tab = 'general' | 'extensions' | 'sync' | 'account' | 'advanced' | 'about';
-
-const tabs: Array<{ id: Tab; title: string; Icon: typeof Settings2 }> = [
+const tabs: Array<{ id: SettingsTab; title: string; Icon: typeof Settings2 }> = [
   { id: 'general', title: 'General', Icon: Settings2 },
   { id: 'extensions', title: 'Extensions', Icon: Box },
   { id: 'sync', title: 'Cloud Sync', Icon: Cloud },
@@ -20,8 +18,20 @@ const tabs: Array<{ id: Tab; title: string; Icon: typeof Settings2 }> = [
 ];
 
 export function Settings({ state }: { state: CommanderState }) {
-  const [tab, setTab] = useState<Tab>('general');
+  const [tab, setTab] = useState<SettingsTab>(() => {
+    const requested = new URLSearchParams(window.location.search).get('tab');
+    return isSettingsTab(requested) ? requested : 'general';
+  });
   const bootstrap = state.bootstrap!;
+
+  useEffect(() => {
+    const openTab = (event: Event) => {
+      const requested = (event as CustomEvent<unknown>).detail;
+      if (isSettingsTab(requested)) setTab(requested);
+    };
+    window.addEventListener('commander:settings-tab', openTab);
+    return () => window.removeEventListener('commander:settings-tab', openTab);
+  }, []);
 
   return (
     <main className="settings-shell">

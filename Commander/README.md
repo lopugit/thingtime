@@ -9,14 +9,15 @@ portable from day one.
 - global Commander shortcut on macOS (defaults to Command-Space; customizable in Settings);
 - application and command search with deterministic Rust fuzzy-search process plus TypeScript fallback;
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
-- a searchable Commander Settings command and separate native settings window;
+- searchable Commander Settings results with tab-aware deep links into the separate native settings window;
 - a Raycast-shaped built-in Commander extension with separate quit, hide-window, and open-window commands;
 - launcher queries clear on every reopen while private, device-local search sessions remain available in a first
   History section, led by the newest command launched from each search and followed by its search term as a separate
   top-level result;
 - launch-at-login, menu-bar icon, favourites-in-compact-mode, window mode, appearance, and text-size preferences;
 - draggable native launcher and Settings chrome plus physical-key shortcut recording for modified macOS keys;
-- installed extension management, safe folder/ZIP sideloading with opt-in source builds, and live Store browsing;
+- installed extension management, safe folder/ZIP sideloading with opt-in source builds, live Store browsing, and a
+  macOS Your Raycast view that can add public sources or sync manifest-declared non-password preferences;
 - timeout- and memory-bounded extension workers plus an explicit Raycast compatibility capability registry;
 - Thingtime desktop OAuth/PKCE, multi-account UI, Keychain token storage, account switching, and private app-data
   settings sync;
@@ -32,8 +33,10 @@ promised. A complete Commander-owned `@raycast/api` render/runtime shim is still
 
 The current runtime imports manifests and executes compatible prebuilt `no-view` commands inside bounded workers.
 Workers contain crashes, hangs, and JavaScript heap growth but are not an OS permissions sandbox.
-The view-command React reconciler is not complete yet. Commander reports this as partial compatibility rather than
-claiming imported metadata equals working compatibility. The exact matrix and roadmap are in
+The Your Raycast importer never opens Raycast's encrypted database or Keychain: it discovers profile-linked
+metadata from the exported preference domain and copies only manifest-declared non-password values. The view-command
+React reconciler is not complete yet. Commander reports this as partial compatibility rather than claiming imported
+metadata equals working compatibility. The exact matrix and roadmap are in
 [`docs/RAYCAST_COMPATIBILITY.md`](docs/RAYCAST_COMPATIBILITY.md).
 
 ## Architecture

@@ -22,7 +22,7 @@ export const compatibilityCapabilities: Record<CompatibilityCapability, 'support
     'list-view': 'planned',
     'detail-view': 'planned',
     'form-view': 'planned',
-    preferences: 'planned',
+    preferences: 'partial',
     storage: 'planned',
     clipboard: 'planned',
     notifications: 'planned',
@@ -41,6 +41,7 @@ export interface RaycastExtensionRuntimeOptions {
 
 export interface RaycastCommandExecutionOptions {
   timeoutMs?: number;
+  preferences?: Record<string, unknown>;
 }
 
 export class UnsupportedRaycastCapabilityError extends Error {
@@ -118,7 +119,12 @@ export class RaycastExtensionRuntime {
       throw new RaycastExtensionPreparationError(report, commandName);
     const timeoutMs = boundedTimeout(options.timeoutMs ?? this.timeoutMs);
     const worker = new Worker(new URL('./worker.js', import.meta.url), {
-      workerData: { extensionPath: report.extensionPath, entryPath: preparedCommand.buildEntry, commandName },
+      workerData: {
+        extensionPath: report.extensionPath,
+        entryPath: preparedCommand.buildEntry,
+        commandName,
+        preferences: options.preferences ?? {},
+      },
       resourceLimits: this.resourceLimits,
     });
     await waitForWorker(worker, commandName, timeoutMs);
