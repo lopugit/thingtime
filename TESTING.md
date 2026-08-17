@@ -15,6 +15,26 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] In a fresh Git checkout, `git ls-files -s AGENTS.md CLAUDE.md` reports
       mode `120000` for both links and both still resolve to `AI_ALL.md`.
 
+## Repository-root Vercel builds
+
+- [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
+      build, the nested config is absent, ordinary product commits build,
+      `github-actions` and duplicate SHAs skip, a valid Nitro artifact is
+      staged at root, and invalid source output preserves the prior artifact.
+- [ ] Run `npm run build:vercel` from the repository root. Confirm both the
+      existing Remix verifier and the root wrapper pass, then inspect
+      `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
+      than an `outputDirectory` selected by the dashboard.
+- [ ] In Vercel, clear the old `remix` Root Directory and all Build, Install,
+      Output Directory, and Ignored Build Step overrides; select Other as the
+      framework. Confirm a product-branch commit builds from root and serves
+      `/`, one `/assets/...` file, and `/api/root-data` from the same deployment.
+- [ ] Confirm the literal `github-actions` branch and a disposable branch made
+      from the thin control plane create no Vercel deployment. The product
+      config must map `github-actions` to `false`, while the thin branch config
+      must set `git.deploymentEnabled` to `false` and retain `ignoreCommand` as
+      a second fail-safe.
+
 ## Develop-target Vercel PR previews
 
 - [ ] Confirm `.github/workflows/develop-pr-preview.yml` and its controller
