@@ -69,7 +69,10 @@ export const ARCHETYPE_ORDER = [
 	'food-delivery',
 	'crypto-trading',
 	'events-tickets',
-	'support-help'
+	'support-help',
+	'photo-gallery',
+	'job-hiring',
+	'ai-assistant'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;
