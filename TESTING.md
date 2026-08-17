@@ -896,6 +896,10 @@ is fixed, and cite the checklist you ran in the PR description.
       drop data.
 - [ ] `["post","data"]` combinations still 400 (data crystals stand alone);
       a thingtime post's free-form payload lives ONLY under `crystal.thing`.
+- [ ] Whenever a builtin crystal schema is added, removed, or changes its
+      projected fields, run `npm run test:schemas`: the pinned projection table
+      must name the builtin and its exact retained fields so schema seeding
+      cannot drift silently or fail only in Web CI.
 
 ## Feed & profile advanced filters (`remix/app/components/Feed/AdvancedFilters.tsx`)
 

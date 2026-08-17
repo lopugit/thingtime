@@ -101,6 +101,11 @@ imported provider rows are read-only.
 - `npm --prefix remix run test:messenger` — 7/7 passing
 - `npm --prefix remix run test:storage` — 7/7 passing
 - `npm --prefix remix run test:migrations` — 19/19 passing
+- `npm --prefix remix run test:schemas` — 54/54 passing after pinning the new
+  `ai-connection` builtin and its seven intentional projected fields
+- CI-equivalent `build:client`, `typecheck:ratchet`, and complete `test:unit`
+  gate pass locally; the ratchet remains non-blocking at the repository's
+  existing 147 errors versus the 143 baseline
 - Disposable MongoDB 8 single-node replica-set integration: posts and all
   Messenger/imported-AI rows counted, identical import byte-idempotent,
   1-byte quota rolled back both community rows, and v1 history reconciled by

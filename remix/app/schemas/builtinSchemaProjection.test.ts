@@ -91,6 +91,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   friend: ['status', 'friendKey'],
   notification: ['type', 'actorId', 'actorName', 'postId', 'preview'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
+  'ai-connection': ['provider', 'sourceId', 'label', 'connectors', 'status', 'readOnly', 'lastSyncAt'],
   community: ['name', 'description'],
   'community-member': ['memberKey', 'role'],
   'community-invite': ['inviteCode', 'uses', 'maxUses', 'expiresAt', 'revoked'],
