@@ -28,7 +28,13 @@ import {
 // UX is explorable without an account.
 
 type EmbedApp = { clientId: string; name: string };
-type EmbedUser = { id: string; username: string; displayName?: string | null; avatarUrl?: string | null };
+type EmbedUser = {
+  id: string;
+  username: string;
+  displayName?: string | null;
+  temporary?: boolean;
+  avatarUrl?: string | null;
+};
 type ScopeDescriptor = {
   id: string;
   title: string;
@@ -290,7 +296,7 @@ export const AuthorizePage = () => {
     // Always resolves (fetchJson never rejects); a failed auth probe just
     // means "not logged in yet" — the login form handles it from there.
     fetchJson('/api/v1/auth/me').then((resp) => {
-      if (resp?.user) setUser(resp.user);
+      if (resp?.user && !resp.user.temporary) setUser(resp.user);
       setCheckedAuth(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
