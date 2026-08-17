@@ -12,6 +12,7 @@ import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDra
 import { useDrawer, useIsMobileViewport } from './useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerUnreadBadge } from '../../Messenger/MessengerNotifications';
+import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName } from '~/utils/userIdentity';
 
 // Shared drawer inner content, used by both the pinned NavDrawer panel and
 // the desktop hover popup.
@@ -32,7 +33,7 @@ export const UserAvatarCircle = (props: { size?: string; fontSize?: string }) =>
 		return (
 			<Image
 				src={user.avatarUrl}
-				alt={user.displayName || user.username}
+				alt={getUserDisplayName(user)}
 				width={props?.size || '28px'}
 				height={props?.size || '28px'}
 				borderRadius="999px"
@@ -43,7 +44,7 @@ export const UserAvatarCircle = (props: { size?: string; fontSize?: string }) =>
 		);
 	}
 
-	const initial = (user?.displayName || user?.username || '?').trim().charAt(0).toUpperCase();
+	const initial = user ? getUserDisplayName(user).trim().charAt(0).toUpperCase() : '?';
 
 	return (
 		<Center
@@ -297,12 +298,31 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		dismissAfterNavigate();
 	}, [navigate, dismissAfterNavigate]);
 
-	const onAvatarClick = React.useCallback(() => {
+	const openSettingsModal = React.useCallback(() => {
 		setAccountModalOpen(true);
 		if (variant === 'popup') {
 			onNavigate?.();
 		}
 	}, [setAccountModalOpen, variant, onNavigate]);
+
+	// avatar + name go to the profile page; logged out there is no profile, so
+	// the row opens the settings modal (it hosts the account switcher / log in)
+	const onAccountRowClick = React.useCallback(() => {
+		if (user) {
+			navigate('/profile');
+			dismissAfterNavigate();
+			return;
+		}
+		openSettingsModal();
+	}, [user, navigate, dismissAfterNavigate, openSettingsModal]);
+
+	const onSettingsClick = React.useCallback(
+		(event: React.MouseEvent) => {
+			event.stopPropagation();
+			openSettingsModal();
+		},
+		[openSettingsModal]
+	);
 
 	const isActivePath = React.useCallback(
 		(to?: string) => {
@@ -542,7 +562,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				{selectedTopItem?.id === 'things' && <EditorDrawerSection onNavigate={dismissAfterNavigate} />}
 			</Box>
 
-			{/* sticky account footer */}
+			{/* sticky account footer: avatar + name open the profile page, the
+			gear keeps opening the settings modal */}
 			<Flex
 				className="drawerAccountFooter"
 				alignItems="center"
@@ -556,17 +577,32 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
 				transition="background 0.15s ease"
 				cursor="pointer"
-				onClick={onAvatarClick}
+				title={user ? 'Your profile' : 'Log in'}
+				onClick={onAccountRowClick}
 			>
 				<UserAvatarCircle></UserAvatarCircle>
 				{!isMobile && (
 					<Text fontSize="xs" fontWeight={600} noOfLines={1}>
-						{user ? user.displayName || user.username : 'Log in'}
+						{user ? (user.temporary ? LOGIN_TO_CLAIM_LABEL : getUserDisplayName(user)) : 'Log in'}
 					</Text>
 				)}
-				<Box marginLeft="auto" opacity={0.4} display="inline-flex">
+				<Center
+					as="button"
+					type="button"
+					marginLeft="auto"
+					width="26px"
+					height="26px"
+					borderRadius="var(--tt-radius-sm, 9px)"
+					opacity={0.4}
+					_hover={{ opacity: 1, background: 'var(--tt-surface-alt, #f5f5f7)' }}
+					transition="background 0.15s ease, opacity 0.15s ease"
+					cursor="pointer"
+					aria-label="Settings"
+					title="Settings"
+					onClick={onSettingsClick}
+				>
 					<Icon name="gear" size="11px"></Icon>
-				</Box>
+				</Center>
 			</Flex>
 		</Flex>
 	);

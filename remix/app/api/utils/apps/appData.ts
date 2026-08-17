@@ -7,6 +7,8 @@ import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentSt
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { sandboxDisplayName } from './sandbox';
 import { scopeCovers } from './scopes';
+import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
+import { thirdPartyProfileMediaUrl } from './profileMedia';
 import {
   appAclEntry,
   appNamespaceStamp,
@@ -655,7 +657,7 @@ export const listSharedAppData = async (
         id: String(user._id),
         username: user.username,
         ...(scopeCovers(scopes, 'profile.displayName') ? { displayName: user.displayName ?? null } : {}),
-        ...(scopeCovers(scopes, 'profile.avatar') ? { avatarUrl: user.avatarUrl ?? null } : {})
+				...(scopeCovers(scopes, 'profile.avatar') ? { avatarUrl: thirdPartyProfileMediaUrl(effectiveProfileMediaUrl(user, 'avatar')) } : {})
       });
     });
   }

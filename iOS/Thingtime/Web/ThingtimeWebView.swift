@@ -61,7 +61,7 @@ struct ThingtimeWebView: View {
                 .frame(width: max(drawerWidth, 280))
                 .frame(maxHeight: .infinity)
                 .offset(x: isDestinationPickerOpen ? 0 : -max(drawerWidth, 280))
-                .gesture(closeDrawerGesture)
+                .simultaneousGesture(closeDrawerGesture)
                 .ignoresSafeArea(.container, edges: [.top, .bottom, .leading])
             }
             .background(Color.white.ignoresSafeArea())
@@ -93,6 +93,7 @@ struct ThingtimeWebView: View {
     private var closeDrawerGesture: some Gesture {
         DragGesture(minimumDistance: 18)
             .onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
                 guard value.translation.width < -56 else { return }
                 closeDestinationPicker()
             }
@@ -168,7 +169,7 @@ private struct DestinationPickerDrawer: View {
     let onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Text("Web destination")
                     .font(.headline)
@@ -198,21 +199,31 @@ private struct DestinationPickerDrawer: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Close destination picker")
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 18)
 
-            VStack(spacing: 8) {
-                ForEach(destinations) { destination in
-                    destinationRow(destination)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(destinations) { destination in
+                        destinationRow(destination)
+                    }
                 }
+                .padding(.horizontal, 16)
+
+                Divider()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 18)
+
+                deploymentStatusView
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
             }
-
-            Divider()
-
-            deploymentStatusView
-
-            Spacer(minLength: 0)
+            .scrollIndicators(.visible)
+            .scrollBounceBehavior(.basedOnSize)
+            .accessibilityIdentifier("destination-picker-scroll-view")
         }
         .padding(.top, safeAreaInsets.top + 18)
-        .padding(.horizontal, 16)
         .padding(.bottom, safeAreaInsets.bottom + 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.regularMaterial)

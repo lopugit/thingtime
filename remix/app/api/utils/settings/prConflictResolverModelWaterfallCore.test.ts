@@ -7,6 +7,7 @@ import {
   normalizePrConflictResolverModelWaterfall,
   PR_CONFLICT_RESOLVER_MODEL_OPTIONS,
   PR_CONFLICT_RESOLVER_MODEL_WATERFALL_KEY,
+  resolveAiPreferredClaudeModel,
   validatePrConflictResolverModelWaterfall
 } from './prConflictResolverModelWaterfallCore.ts';
 
@@ -47,6 +48,15 @@ test('normalization preserves valid order and appends the hard fallback when abs
     'claude-opus-5',
     'default'
   ]);
+});
+
+test('named Admin preference wins for direct Claude clients while default delegates safely', () => {
+  assert.equal(
+    resolveAiPreferredClaudeModel(['claude-opus-5', 'claude-fable-5', 'default'], 'provider-default'),
+    'claude-opus-5'
+  );
+  assert.equal(resolveAiPreferredClaudeModel(['default'], 'provider-default'), 'provider-default');
+  assert.equal(resolveAiPreferredClaudeModel(['unknown'], 'provider-default'), 'provider-default');
 });
 
 test('strict write validation accepts only unique known ids including default', () => {

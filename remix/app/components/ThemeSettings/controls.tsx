@@ -1,9 +1,14 @@
-import { Box, Flex, Input, Text, Textarea } from '@chakra-ui/react';
+import { Box, Button, Flex, Input, Text, Textarea } from '@chakra-ui/react';
 import { Wand2 } from 'lucide-react';
 import React from 'react';
 
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { TT_CUSTOM_TARGETS } from '~/theme/customise';
+import {
+	sanitizePaddingCssValue,
+	THINGS_BADGE_PADDING_PRESETS,
+	type TtThingsBadgePadding
+} from '~/theme/tokens';
 
 const MONO = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
 
@@ -47,6 +52,80 @@ export const ColorControl = ({ value, onChange }: { value: string; onChange: (v:
 		/>
 	</Flex>
 );
+
+const THINGS_BADGE_PADDING_OPTIONS: { value: TtThingsBadgePadding; label: string }[] = [
+	{ value: 'small', label: 'Small' },
+	{ value: 'medium', label: 'Medium' },
+	{ value: 'large', label: 'Large' },
+	{ value: 'custom', label: 'Custom' }
+];
+
+/** Shared control used by Theme Studio and both quick-settings surfaces. */
+export const ThingsBadgePaddingControl = ({
+	value,
+	customValue,
+	onValueChange,
+	onCustomValueChange
+}: {
+	value: TtThingsBadgePadding;
+	customValue: string;
+	onValueChange: (value: TtThingsBadgePadding) => void;
+	onCustomValueChange: (value: string) => void;
+}) => {
+	const customValidation = sanitizePaddingCssValue(customValue);
+	const customIsInvalid = value === 'custom' && customValidation === null;
+
+	return (
+		<Flex direction="column" alignItems="flex-end" gap="6px" maxWidth="100%">
+			<Flex role="group" aria-label="Things badge padding" gap="2px" flexWrap="wrap" justifyContent="flex-end">
+				{THINGS_BADGE_PADDING_OPTIONS.map((option) => (
+					<Button
+						key={option.value}
+						type="button"
+						size="xs"
+						variant={value === option.value ? 'solid' : 'ghost'}
+						aria-pressed={value === option.value}
+						title={option.value === 'custom' ? 'Enter CSS padding shorthand' : THINGS_BADGE_PADDING_PRESETS[option.value]}
+						onClick={() => onValueChange(option.value)}
+					>
+						{option.label}
+					</Button>
+				))}
+			</Flex>
+			{value === 'custom' ? (
+				<Box width="100%" maxWidth="220px">
+					<Input
+						aria-label="Custom Things badge padding CSS"
+						value={customValue}
+						onChange={(event) => onCustomValueChange(event.target.value)}
+						placeholder={THINGS_BADGE_PADDING_PRESETS.small}
+						autoComplete="off"
+						spellCheck={false}
+						isInvalid={customIsInvalid}
+						size="sm"
+						fontFamily={MONO}
+						fontSize="12px"
+						background="var(--tt-card, #ffffff)"
+						border="1px solid var(--tt-border, #ececef)"
+						borderRadius="var(--tt-radius-sm, 9px)"
+					/>
+					<Text
+						aria-live="polite"
+						marginTop="3px"
+						fontSize="10.5px"
+						color={customIsInvalid ? 'var(--tt-danger, #d6455a)' : 'var(--tt-faint, #b6b6c0)'}
+					>
+						{customIsInvalid
+							? 'Use 1–4 non-negative CSS lengths.'
+							: customValue.trim()
+								? 'CSS padding shorthand — applied live.'
+								: `Empty uses Small (${THINGS_BADGE_PADDING_PRESETS.small}).`}
+					</Text>
+				</Box>
+			) : null}
+		</Flex>
+	);
+};
 
 /** The little wand beside a theming option — toggles its customise panel. */
 export const CustomiseToggle = ({ open, onToggle }: { open: boolean; onToggle: () => void }) => (

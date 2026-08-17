@@ -45,7 +45,9 @@ export const action = async ({ request }: { request: Request }) => {
       acl: body?.acl,
       visibility: body?.visibility,
       tags: body?.tags,
-      tokenAcl: body?.tokenAcl
+      tokenAcl: body?.tokenAcl,
+      // folderId only when present — undefined means "leave it filed where it is"
+      ...(body && typeof body === 'object' && 'folderId' in body ? { folderId: body.folderId } : {})
     },
     {},
     app

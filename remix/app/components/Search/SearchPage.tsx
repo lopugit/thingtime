@@ -27,6 +27,7 @@ import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localC
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { thingtimeSchemas } from '~/schemas/registry';
 import { CARD_STYLES } from '~/theme/card';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import {
   ConditionRowsEditor,
   ROOT_FIELD_SUGGESTIONS,
@@ -144,14 +145,14 @@ function PersonCard({ person }: { person: SearchPerson }) {
         {person.avatarUrl ? (
           <img alt="" src={person.avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <Text fontSize="sm">{(person.displayName || person.username).slice(0, 1).toUpperCase()}</Text>
+          <Text fontSize="sm">{getUserDisplayName(person).slice(0, 1).toUpperCase()}</Text>
         )}
       </Center>
       <Box minWidth={0}>
         <Text color="var(--tt-text, #33333c)" fontSize="sm" fontWeight="600" isTruncated>
-          {person.displayName || person.username}
+          {getUserDisplayName(person)}
           <Text as="span" color="var(--tt-muted, #9a9aa6)" fontWeight="400" ml={1.5}>
-            @{person.username}
+            {getUserIdentityDetail(person)}
           </Text>
         </Text>
         {person.bio ? (
@@ -259,7 +260,7 @@ const ThingResultCard = React.memo(function ThingResultCard({
           </Badge>
         ))}
         <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto">
-          {thing.author ? `@${thing.author.username}` : 'unknown'} · {when}
+          {thing.author ? getUserIdentityDetail(thing.author) : 'unknown'} · {when}
         </Text>
       </Flex>
       {title ? (

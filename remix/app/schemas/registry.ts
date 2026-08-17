@@ -13,6 +13,19 @@
 // builtin-projection test.
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
+// Pure attachment metadata/envelope vocabulary shared with the server storage
+// layer. This module has no Node imports, so registry remains browser-safe.
+import {
+	ATTACHMENT_ENVELOPE_VERSION,
+	ATTACHMENT_MEDIA_KINDS,
+	ATTACHMENT_PROFILE_SLOTS,
+	ATTACHMENT_PURPOSES,
+	ATTACHMENT_STATES,
+	ATTACHMENT_THINGTIME,
+	MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
+	MAX_ATTACHMENT_NAME_CHARS,
+	sanitizeAttachmentPublicMetadata
+} from '../api/utils/attachments/attachmentCore.ts';
 
 export type ThingtimeFieldType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]' | 'object' | 'record' | 'id';
 
@@ -70,6 +83,21 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 // prefix is reserved so generic callers cannot squat a future diagnostic URL.
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
+
+// GitHub/Vercel control-plane projections and their append-only audit events.
+// This registry is the single source for their protection and schema docs.
+export const CI_CONTROL_THINGTIME = [
+  'ci-repository',
+  'ci-automation',
+  'ci-feature',
+  'ci-branch',
+  'ci-pull-request',
+  'ci-workflow-run',
+  'ci-deployment',
+  'ci-preview',
+  'ci-dispatch',
+  'ci-event'
+] as const;
 
 // ---------------------------------------------------------------------------
 // ACL permissions. A thing's audience is an array of tt: entries — grants,
@@ -394,7 +422,8 @@ const rootThingSchema: ThingtimeSchema = {
 			type: 'number',
 			required: false,
 			system: true,
-			description: 'Exact UTF-8 JSON bytes of the billable crystal, extended, and tags payload; absent on platform control-plane Things.'
+			description:
+				'Exact logical bytes billed to the owner: UTF-8 JSON crystal/extended/tags bytes plus verified objectSizeBytes for protected attachment Things; absent on platform control-plane Things.'
 		},
 		{
 			name: 'storageClass',
@@ -412,11 +441,135 @@ const rootThingSchema: ThingtimeSchema = {
 			description: 'Version of the logical byte projection used for sizeBytes.'
 		},
 		{
+			name: 'attachmentEnvelopeVersion',
+			type: 'number',
+			required: false,
+			system: true,
+			description: `Server-only proof for attachment object accounting (currently ${ATTACHMENT_ENVELOPE_VERSION}); never accepted from generic Thing input.`
+		},
+		{
+			name: 'attachmentState',
+			type: 'enum',
+			required: false,
+			values: [...ATTACHMENT_STATES],
+			system: true,
+			description:
+				'Private upload lifecycle state. Pending, finalizing, ready, and deleting objects all remain billable until their source Thing is removed.'
+		},
+		{
+			name: 'objectSizeBytes',
+			type: 'number',
+			required: false,
+			min: 0,
+			system: true,
+			description: 'Verified S3 object bytes added to a protected attachment Thing’s ordinary JSON allocation.'
+		},
+		{
+			name: 'objectKey',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Private server-generated S3 object key; never copied from generic Thing input or projected publicly.'
+		},
+		{
+			name: 'objectVersionId',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Private immutable S3 version id used for exact reads and permanent deletion before quota is refunded.'
+		},
+		{
+			name: 'attachmentRequestFingerprint',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Private server-derived fingerprint that makes upload-start retries idempotent without exposing request metadata.'
+		},
+		{
+			name: 'attachmentPurpose',
+			type: 'enum',
+			required: false,
+			values: [...ATTACHMENT_PURPOSES],
+			system: true,
+			description: 'Server-owned immutable binding domain: post, comment, message, profile, or custom-emoji media.'
+		},
+		{
+			name: 'attachmentProfileSlot',
+			type: 'enum',
+			required: false,
+			values: [...ATTACHMENT_PROFILE_SLOTS],
+			system: true,
+			description: 'Server-owned avatar/banner slot, present exactly when attachmentPurpose is profile.'
+		},
+		{
+			name: 'attachmentFinalizationLeaseId',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Private server-generated fencing token for the one request allowed to finalize a multipart upload.'
+		},
+		{
+			name: 'attachmentPartsIssuedAt',
+			type: 'date',
+			required: false,
+			system: true,
+			description: 'Private proof that a presigned UploadPart URL left the server; only these MPUs require lifecycle-backed settlement before refund.'
+		},
+		{
+			name: 'attachmentObjectlessDelete',
+			type: 'boolean',
+			required: false,
+			system: true,
+			description: 'Private deletion proof for a reserved upload that never received a multipart upload id or object version.'
+		},
+		{
+			name: 'attachmentMpuEmptyVerifiedAt',
+			type: 'date',
+			required: false,
+			system: true,
+			description: 'Private timestamp of the first empty multipart verification; a later cron pass must independently confirm it before refund.'
+		},
+		{
+			name: 'uploadId',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Private multipart-upload id while an attachment is pending or finalizing.'
+		},
+		{
+			name: 'attachmentExpiresAt',
+			type: 'date',
+			required: false,
+			system: true,
+			description: 'Private cleanup deadline for an unfinished upload; cleanup must refund transactionally rather than using Mongo TTL.'
+		},
+		{
 			name: 'expiresAt',
 			type: 'date',
 			required: false,
 			system: true,
 			description: 'Optional server-owned retention deadline for protected operational Things.'
+		},
+		{
+			name: 'avatarAttachmentId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Protected current managed-avatar attachment reference on a canonical user Thing.'
+		},
+		{
+			name: 'bannerAttachmentId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Protected current managed-banner attachment reference on a canonical user Thing.'
+		},
+		{
+			name: 'emojiAttachmentId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Protected exact S3 attachment reference on a custom-emoji Thing.'
 		},
     { name: 'createdAt', type: 'date', required: true, system: true, description: 'Creation time.' },
     { name: 'updatedAt', type: 'date', required: true, system: true, description: 'Last mutation time.' }
@@ -496,6 +649,54 @@ const postSchema: ThingtimeSchema = {
     }
   ],
   example: { type: 'text', text: 'Everything is a thing ✨', images: [], listing: null, thing: null }
+};
+
+const attachmentSchema: ThingtimeSchema = {
+	id: ATTACHMENT_THINGTIME,
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Attachment',
+	summary: 'A private-S3 file attached relationally to a post.',
+	detail:
+		'Attachment Things are created only through the dedicated upload endpoints. Their crystal contains ' +
+		'stable, safe public metadata; object keys, multipart ids, lifecycle state, and verified object bytes ' +
+		'are server-owned root fields. A ready post attachment points at its post through targetId and inherits that ' +
+		'post’s audience; managed profile media points at the exact public user and avatar/banner slot that references it. ' +
+		'Pending/finalizing/deleting rows remain billable source records until cleanup confirms ' +
+		'the object is inaccessible, preventing quota oversubscription and refund races.',
+	createdVia: 'POST /api/v1/attachments/uploads',
+	fields: [
+		{
+			name: 'name',
+			type: 'string',
+			required: true,
+			max: MAX_ATTACHMENT_NAME_CHARS,
+			description: 'Display filename only; never used as an S3 key.'
+		},
+		{
+			name: 'size',
+			type: 'number',
+			required: true,
+			min: 0,
+			description: 'Verified object size in bytes; must equal the server-owned root objectSizeBytes.'
+		},
+		{
+			name: 'contentType',
+			type: 'string',
+			required: true,
+			max: MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
+			description: 'Normalized MIME type, defaulting to application/octet-stream.'
+		},
+		{
+			name: 'mediaKind',
+			type: 'enum',
+			required: true,
+			values: [...ATTACHMENT_MEDIA_KINDS],
+			description: 'Server-derived safe rendering class. SVG, HTML, and unknown types are files, never inline media.'
+		}
+	],
+	example: { name: 'sunset.webp', size: 482013, contentType: 'image/webp', mediaKind: 'image' }
 };
 
 const commentSchema: ThingtimeSchema = {
@@ -1028,6 +1229,90 @@ const migrationDiagnosticSchema: ThingtimeSchema = {
 	}
 };
 
+const ciEntitySchema = (id: Exclude<(typeof CI_CONTROL_THINGTIME)[number], 'ci-event'>, title: string, summary: string): ThingtimeSchema => ({
+  id,
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title,
+  summary,
+  detail:
+    'A private, system-owned control-plane projection written only by signed GitHub/Vercel webhook ingestion, ' +
+    'an administrator reconciliation, or an allowlisted administrator dispatch. The deterministic shareId ' +
+    'keeps one current projection per external entity; status changes are stored separately as relational ' +
+    'ci-event Things so history never grows an embedded array. Generic Thing CRUD cannot create, edit, or delete it.',
+  createdVia: 'Signed integration webhooks and /api/v1/admin/ci*',
+  fields: [
+    { name: 'provider', type: 'enum', required: true, values: ['github', 'vercel', 'thingtime'], description: 'Authoritative provider.' },
+    { name: 'repository', type: 'string', required: true, max: 300, description: 'Canonical owner/repository name.' },
+    { name: 'externalId', type: 'string', required: true, max: 300, description: 'Provider-scoped stable identifier.' },
+    { name: 'entityKey', type: 'string', required: true, max: 1000, description: 'Deterministic provider/repository/kind/id key.' },
+    { name: 'title', type: 'string', required: true, max: 500, description: 'Bounded operator-facing label.' },
+    { name: 'status', type: 'string', required: true, max: 120, description: 'Latest normalized provider status.' },
+    { name: 'url', type: 'string', required: false, max: 1500, description: 'Provider detail URL, when available.' },
+    { name: 'sourceUpdatedAt', type: 'date', required: true, description: 'Provider timestamp used to reject stale updates.' }
+  ],
+  example: {
+    provider: 'github',
+    repository: 'lopugit/thingtime',
+    externalId: '172',
+    entityKey: `github:lopugit/thingtime:${id}:172`,
+    title: 'Example control-plane entity',
+    status: 'clean',
+    url: 'https://github.com/lopugit/thingtime/pull/172',
+    sourceUpdatedAt: '2026-08-09T00:00:00.000Z'
+  }
+});
+
+const ciControlSchemas: ThingtimeSchema[] = [
+  ciEntitySchema('ci-repository', 'CI repository', 'Current integration and default-branch state for one repository.'),
+  ciEntitySchema('ci-automation', 'CI automation policy', 'Current execution-provider policy for one allowlisted automation.'),
+  ciEntitySchema('ci-feature', 'CI feature', 'A feature/stack grouping that relates source and promotion pull requests.'),
+  ciEntitySchema('ci-branch', 'CI branch', 'Current ref and head state for one repository branch.'),
+  ciEntitySchema('ci-pull-request', 'CI pull request', 'Current topology, mergeability, and review state for one pull request.'),
+  ciEntitySchema('ci-workflow-run', 'CI workflow run', 'Current state of one GitHub Actions workflow run or job.'),
+  ciEntitySchema('ci-deployment', 'CI deployment', 'Current state of one GitHub or Vercel deployment.'),
+  ciEntitySchema('ci-preview', 'CI preview', 'Current address and readiness of one branch/deployment preview.'),
+  ciEntitySchema('ci-dispatch', 'CI dispatch', 'An administrator-requested, allowlisted GitHub Actions dispatch.'),
+  {
+    id: 'ci-event',
+    version: 1,
+    kind: 'crystal',
+    collection: null,
+    title: 'CI status event',
+    summary: 'One immutable, idempotent status-history entry attached to a control-plane Thing.',
+    detail:
+      'A relational audit record keyed by provider delivery id and parent entity. Events are append-only and ' +
+      'bounded; retries of the same signed webhook do not duplicate history. Generic Thing CRUD cannot create, ' +
+      'edit, or delete it.',
+    createdVia: 'Signed integration webhooks and /api/v1/admin/ci*',
+    fields: [
+      { name: 'provider', type: 'enum', required: true, values: ['github', 'vercel', 'thingtime'], description: 'Event provider.' },
+      { name: 'repository', type: 'string', required: true, max: 300, description: 'Canonical owner/repository name.' },
+      { name: 'deliveryId', type: 'string', required: true, max: 300, description: 'Provider idempotency key.' },
+      { name: 'eventType', type: 'string', required: true, max: 120, description: 'Webhook or controller event family.' },
+      { name: 'action', type: 'string', required: false, max: 120, description: 'Provider action subtype.' },
+      { name: 'actor', type: 'string', required: false, max: 180, description: 'Bounded provider actor identifier.' },
+      { name: 'statusFrom', type: 'string', required: false, max: 120, description: 'Previous normalized status.' },
+      { name: 'statusTo', type: 'string', required: false, max: 120, description: 'New normalized status.' },
+      { name: 'occurredAt', type: 'date', required: true, description: 'Provider event time.' },
+      { name: 'data', type: 'record', required: false, description: 'Bounded event-specific metadata.' }
+    ],
+    example: {
+      provider: 'github',
+      repository: 'lopugit/thingtime',
+      deliveryId: 'delivery-id',
+      eventType: 'pull_request',
+      action: 'synchronize',
+      actor: 'github-actions[bot]',
+      statusFrom: 'conflicting',
+      statusTo: 'clean',
+      occurredAt: '2026-08-09T00:00:00.000Z',
+      data: {}
+    }
+  }
+];
+
 const accountLinkSchema: ThingtimeSchema = {
   id: 'account-link',
   version: 1,
@@ -1079,9 +1364,7 @@ const followThingSchema: ThingtimeSchema = {
     '/api/v1/users/connections. The generic things CRUD refuses this kind.',
   requiresTarget: true,
   createdVia: 'POST /api/v1/users/follow',
-  fields: [
-    { name: 'follow', type: 'boolean', required: true, description: 'Always true — dedup index marker.' }
-  ],
+	fields: [{ name: 'follow', type: 'boolean', required: true, description: 'Always true — dedup index marker.' }],
   example: { follow: true }
 };
 
@@ -1154,9 +1437,7 @@ export type NormalizedNotificationPrefs = {
 // agree on what absent keys mean. Also accepts an already-normalized matrix
 // (nested push object) so the wire shape round-trips: normalize(normalize(x))
 // === normalize(x), which lets the client cache the GET response as-is.
-export const normalizeNotificationPrefs = (
-  stored: Record<string, any> | null | undefined
-): NormalizedNotificationPrefs => {
+export const normalizeNotificationPrefs = (stored: Record<string, any> | null | undefined): NormalizedNotificationPrefs => {
   const source = stored && typeof stored === 'object' ? stored : {};
   const emailStored = source.email && typeof source.email === 'object' ? source.email : {};
   const mastersStored = source.masters && typeof source.masters === 'object' ? source.masters : {};
@@ -1165,9 +1446,7 @@ export const normalizeNotificationPrefs = (
   for (const type of NOTIFICATION_TYPES) push[type] = pushStored[type] !== false;
   const email: Record<string, boolean> = {};
   for (const type of EMAIL_NOTIFICATION_TYPES) {
-    email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type)
-      ? emailStored[type] === true
-      : emailStored[type] !== false;
+		email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type) ? emailStored[type] === true : emailStored[type] !== false;
   }
   return {
     push,
@@ -1187,7 +1466,7 @@ const notificationThingSchema: ThingtimeSchema = {
     'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
     'comments, replies, reacts, shares, or (fan-out, capped) posts while you follow them. ' +
     'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
-    'flips when read. Listed via GET /api/v1/notifications (filtered by the recipient\'s ' +
+		"flips when read. Listed via GET /api/v1/notifications (filtered by the recipient's " +
     'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +
     '["tt:user"]; the generic things CRUD refuses this kind.',
   createdVia: 'server-side emission (social/engagement events)',
@@ -1199,6 +1478,40 @@ const notificationThingSchema: ThingtimeSchema = {
     { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview.' }
   ],
   example: { type: 'new-follower', actorId: '664f1c2a9d3e5b0012345678', actorName: 'Rick Deckard' }
+};
+
+// Folders: the Drive-style organization kind behind /things. A folder is an
+// ordinary thing (thingtime ["folder"]) whose crystal names it; containment is
+// a `folderId` pointer ON THE CHILD (FUNDAMENTALS §3 — never an embedded list
+// of childIds on the folder), so a folder holds any number of things without
+// its own doc growing. Folders nest by carrying a folderId themselves; the
+// move path cycle-checks the ancestor chain. Organization is personal:
+// folderId only ever points at a folder the SAME owner holds, and folders
+// default private (organization structure is not content).
+export const MAX_FOLDER_NAME_CHARS = 120;
+export const MAX_FOLDER_ICON_CHARS = 32;
+export const MAX_FOLDER_DESCRIPTION_CHARS = 500;
+
+const folderSchema: ThingtimeSchema = {
+  id: 'folder',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Folder',
+  summary: 'A Drive-style folder for organising your things on /things.',
+  detail:
+    'Folders organise the /things page: any of your things (posts, data, schemas, other ' +
+    'folders) can carry a folderId pointing at one of YOUR folder things — moving is just ' +
+    'rewriting that pointer (PATCH /api/v1/things { id, folderId } or POST /api/v1/things/bulk). ' +
+    'Folders nest; moves cycle-check the chain. Deleting a folder never deletes its contents — ' +
+    'they re-parent to the deleted folder’s parent. Folders default private (acl ["tt:user"]): ' +
+    'how you organise your things is yours even when the things themselves are public.',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: MAX_FOLDER_NAME_CHARS, description: 'Folder display name.' },
+    { name: 'icon', type: 'string', required: false, max: MAX_FOLDER_ICON_CHARS, description: 'Optional emoji shown instead of the default 📁.' },
+    { name: 'description', type: 'string', required: false, max: MAX_FOLDER_DESCRIPTION_CHARS, description: 'Optional note about what lives here.' }
+  ],
+  example: { name: 'Recipes', icon: '🍜', description: 'Everything I want to cook someday.' }
 };
 
 const sessionSchema: ThingtimeSchema = {
@@ -1518,7 +1831,7 @@ const communityMemberSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Community member',
-  summary: 'One user\'s membership of one community (relational child doc).',
+	summary: "One user's membership of one community (relational child doc).",
   detail:
     'targetId = the community shareId, ownerId = the member. Uniqueness rides the single ' +
     'crystal.memberKey field (`<communityId>:<userId>`, partial unique index) — the reaction-index ' +
@@ -1584,12 +1897,24 @@ const chatSchema: ThingtimeSchema = {
     'join) or private (admins add).',
   createdVia: 'POST /api/v1/chats',
   fields: [
-    { name: 'name', type: 'string', required: false, max: MAX_CHAT_NAME_CHARS, description: 'Chat name (null for DMs — the UI shows the other member).' },
+		{
+			name: 'name',
+			type: 'string',
+			required: false,
+			max: MAX_CHAT_NAME_CHARS,
+			description: 'Chat name (null for DMs — the UI shows the other member).'
+		},
     { name: 'topic', type: 'string', required: false, max: MAX_CHAT_TOPIC_CHARS, description: 'Channel topic line.' },
     { name: 'chatType', type: 'enum', required: true, values: ['channel', 'group', 'dm'], description: 'Conversation shape.' },
     { name: 'communityId', type: 'id', required: false, description: 'Owning community shareId (channels only).' },
     { name: 'sectionId', type: 'id', required: false, description: 'Sidebar section shareId (channels only).' },
-    { name: 'channelVisibility', type: 'enum', required: false, values: ['public', 'private'], description: 'Channel joinability within its community (channels only, default public).' },
+		{
+			name: 'channelVisibility',
+			type: 'enum',
+			required: false,
+			values: ['public', 'private'],
+			description: 'Channel joinability within its community (channels only, default public).'
+		},
     { name: 'dmKey', type: 'string', required: false, description: 'Sorted participant-id pair key deduping DMs.' }
   ],
   example: { name: 'general', topic: 'Anything goes', chatType: 'channel', channelVisibility: 'public' }
@@ -1601,7 +1926,7 @@ const chatMemberSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Chat member',
-  summary: 'One user\'s membership of one chat — role, nickname, request state and read receipt.',
+	summary: "One user's membership of one chat — role, nickname, request state and read receipt.",
   detail:
     'targetId = the chat shareId, ownerId = the member. Unique per (chat, user) via ' +
     'crystal.memberKey. state tracks the Messenger request flow: active, pending (message ' +
@@ -1613,7 +1938,13 @@ const chatMemberSchema: ThingtimeSchema = {
     { name: 'memberKey', type: 'string', required: true, description: 'Unique `<chatId>:<userId>` pair key.' },
     { name: 'role', type: 'enum', required: true, values: ['owner', 'admin', 'member'], description: 'Chat role.' },
     { name: 'nickname', type: 'string', required: false, max: MAX_NICKNAME_CHARS, description: 'Per-chat nickname (Messenger style).' },
-    { name: 'state', type: 'enum', required: true, values: ['active', 'pending', 'left', 'declined'], description: 'Membership lifecycle / message-request state.' },
+		{
+			name: 'state',
+			type: 'enum',
+			required: true,
+			values: ['active', 'pending', 'left', 'declined'],
+			description: 'Membership lifecycle / message-request state.'
+		},
     { name: 'requestOrigin', type: 'enum', required: false, values: ['follower', 'unknown'], description: 'Message-request bucket while pending.' },
     { name: 'lastReadMessageId', type: 'id', required: false, description: 'Newest message this member has read.' },
     { name: 'lastReadAt', type: 'string', required: false, description: 'ISO timestamp of that read (drives unread counts + seen-by).' },
@@ -1638,12 +1969,24 @@ const chatMessageSchema: ThingtimeSchema = {
     'standard reaction things targeting the message, including custom `custom:<emoji id>` tokens.',
   createdVia: 'POST /api/v1/chats/messages',
   fields: [
-    { name: 'text', type: 'string', required: true, max: MAX_MESSAGE_CHARS, description: `Message text, max ${MAX_MESSAGE_CHARS} chars. :name: tokens render as custom emojis.` },
+		{
+			name: 'text',
+			type: 'string',
+			required: false,
+			max: MAX_MESSAGE_CHARS,
+			description: `Optional message text, max ${MAX_MESSAGE_CHARS} chars. A message may instead contain one or more bound attachments. :name: tokens render as custom emojis.`
+		},
     { name: 'threadRootId', type: 'id', required: false, description: 'Root message shareId when this is a thread reply.' },
     { name: 'replyToId', type: 'id', required: false, description: 'Quoted message shareId (inline reply).' },
     { name: 'editedAt', type: 'string', required: false, description: 'ISO timestamp of the last edit.' },
     { name: 'deletedAt', type: 'string', required: false, description: 'ISO soft-delete timestamp (text is cleared).' },
-    { name: 'systemType', type: 'enum', required: false, values: ['member-added', 'member-left', 'member-removed', 'chat-renamed', 'chat-created', 'topic-changed'], description: 'Set on system event messages.' },
+		{
+			name: 'systemType',
+			type: 'enum',
+			required: false,
+			values: ['member-added', 'member-left', 'member-removed', 'chat-renamed', 'chat-created', 'topic-changed'],
+			description: 'Set on system event messages.'
+		},
     { name: 'systemMeta', type: 'record', required: false, description: 'Event payload for system messages ({ subjectId, value… }).' }
   ],
   example: { text: 'hello from the messenger 👋' }
@@ -1658,8 +2001,8 @@ const customEmojiSchema: ThingtimeSchema = {
   summary: 'An uploaded emoji/gif usable in chat reactions and messages.',
   detail:
     'One thing per emoji (relational, FUNDAMENTALS §3 — never an array on the community). The ' +
-    'image is an inline base64 data URI (gif/webp/png/apng/jpeg, ≤' +
-    `${Math.round(MAX_EMOJI_DATA_URI_CHARS / 1024)}K chars), the avatar-storage pattern. Scope is ` +
+		'image is a protected, quota-accounted S3 attachment (gif/webp/png/jpeg, ≤512 KiB); legacy ' +
+		'inline data-URI rows remain read-compatible. Scope is ' +
     'a community (targetId set) or personal (targetId null); names are unique per scope via ' +
     'crystal.emojiKey. Reaction tokens reference emojis by id (`custom:<shareId>`), so renames ' +
     'never orphan reactions.',
@@ -1667,10 +2010,10 @@ const customEmojiSchema: ThingtimeSchema = {
   fields: [
     { name: 'name', type: 'string', required: true, max: MAX_EMOJI_NAME_CHARS, description: 'Lowercase [a-z0-9_-] name, rendered as :name:.' },
     { name: 'emojiKey', type: 'string', required: true, description: 'Unique `<scope>:<name>` key (scope = communityId or user:<userId>).' },
-    { name: 'image', type: 'string', required: true, description: 'Inline data:image/... base64 URI.' },
-    { name: 'animated', type: 'boolean', required: false, description: 'True for gif/apng uploads.' }
+		{ name: 'image', type: 'string', required: false, description: 'Legacy inline data:image/... base64 URI; never written for new emojis.' },
+		{ name: 'animated', type: 'boolean', required: false, description: 'True for new GIF uploads or a compatible legacy animated row.' }
   ],
-  example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', image: 'data:image/gif;base64,R0lGOD…', animated: true }
+	example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', animated: true }
 };
 
 const followSchema: ThingtimeSchema = {
@@ -1681,14 +2024,12 @@ const followSchema: ThingtimeSchema = {
   title: 'Follow',
   summary: 'One user following another (the start of the relationship graph).',
   detail:
-    'ownerId = the follower, targetId = the followed user\'s shareId; unique per pair via ' +
+		"ownerId = the follower, targetId = the followed user's shareId; unique per pair via " +
     'crystal.followKey. Powers the messenger request buckets (a DM from someone you follow ' +
     'lands normally; from a follower it queues as a "follower" request; otherwise "unknown"). ' +
     'The acl circle entries (tt:userFriends…) are designed to plug into this graph later.',
   createdVia: 'POST /api/v1/users/follow',
-  fields: [
-    { name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }
-  ],
+	fields: [{ name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }],
   example: { followKey: '5eed…:c0ffee…' }
 };
 
@@ -1717,6 +2058,7 @@ const followSchema: ThingtimeSchema = {
 // endpoints (/api/v1/users/follow, /api/v1/users/friend, notifications utils)
 // do direct inserts.
 export const PROTECTED_THINGTIME = [
+	ATTACHMENT_THINGTIME,
   'user',
   'theme',
   'feed-algorithm',
@@ -1728,6 +2070,7 @@ export const PROTECTED_THINGTIME = [
 	'app-storage',
 	'service-quota',
   MIGRATION_DIAGNOSTIC_THINGTIME,
+  ...CI_CONTROL_THINGTIME,
   'follow',
   'friend',
   'notification'
@@ -1850,12 +2193,14 @@ const waitlistThingSchema: ThingtimeSchema = {
 export const thingtimeSchemas: ThingtimeSchema[] = [
   rootThingSchema,
   postSchema,
+	attachmentSchema,
   commentSchema,
   reactionSchema,
   shareSchema,
   dataSchema,
   schemaThingSchema,
   saveThingSchema,
+  folderSchema,
   appSchema,
   appDataSchema,
   // admin-plane kinds (PROTECTED: written only through admin endpoints)
@@ -1865,6 +2210,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   appStorageLedgerSchema,
 	serviceQuotaSchema,
   migrationDiagnosticSchema,
+  ...ciControlSchemas,
   // social graph + notifications (protected, server-minted). The `follow`
   // kind registers ONCE, below with the messenger family: followSchema is the
   // crystal.followKey shape POST /api/v1/users/follow actually mints, which
@@ -1907,14 +2253,46 @@ type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
 const isFail = <T extends { ok: boolean }>(value: T | Fail): value is Fail => value.ok === false;
 
-const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
+const UNSAFE_HTTP_URL_CHAR_RE = /[\p{Cc}\p{Cf}\p{Cs}\s]/u;
+const isHttpUrl = (value: string): boolean => {
+	if (!/^https?:\/\//i.test(value) || UNSAFE_HTTP_URL_CHAR_RE.test(value) || value.includes('\\')) return false;
+	try {
+		const parsed = new URL(value);
+		return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !!parsed.hostname && !parsed.username && !parsed.password;
+	} catch {
+		return false;
+	}
+};
 
-const sanitizePostCrystal = (input: Record<string, unknown>, appliedIds: string[]): { ok: true; crystal: Record<string, unknown> } | Fail => {
+const sanitizeAttachmentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+	const sanitized = sanitizeAttachmentPublicMetadata(input);
+	if (sanitized.ok === false) return fail(400, sanitized.error);
+	return sanitized;
+};
+
+export type ThingtimeCrystalValidationOptions = {
+	// Server-only attachment preflight. Generic Thing input never controls this
+	// context; the dedicated attachment store verifies ownership/state first and
+	// the post transaction rechecks while binding.
+	postAttachments?: { hasAny: boolean; hasVisual: boolean };
+};
+
+const sanitizePostCrystal = (
+	input: Record<string, unknown>,
+	appliedIds: string[],
+	options: ThingtimeCrystalValidationOptions = {}
+): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const type = POST_TYPES.includes(input.type as any) ? (input.type as string) : null;
   if (!type) return fail(400, 'Post type must be text, image, marketplace, or thingtime');
   // share things render the shared original, so their post payload may be
   // an empty caption regardless of type
   const isShare = appliedIds.includes('share');
+	// This context is server-only and arrives only after the attachment store
+	// verifies the exact owner, purpose, ready state and unbound expiry. It may
+	// therefore satisfy the same body rules for a top-level post or a rich
+	// ['post', 'comment'] Thing without opening those rules to generic input.
+	const hasAnyAttachment = options.postAttachments?.hasAny === true;
+	const hasVisualAttachment = options.postAttachments?.hasVisual === true;
 
   const text = typeof input.text === 'string' ? input.text.trim() : '';
   if (text.length > MAX_TEXT_CHARS) return fail(400, `Post text is too long (max ${MAX_TEXT_CHARS})`);
@@ -1979,8 +2357,10 @@ const sanitizePostCrystal = (input: Record<string, unknown>, appliedIds: string[
     }
   }
 
-  if (!isShare && type === 'text' && !text) return fail(400, 'Say something first ✍️');
-  if (!isShare && type === 'image' && !images.length) return fail(400, 'Image posts need at least one image');
+	if (!isShare && type === 'text' && !text && !hasAnyAttachment) return fail(400, 'Say something first ✍️');
+	if (!isShare && type === 'image' && !images.length && !hasVisualAttachment) {
+		return fail(400, 'Image posts need at least one image or video attachment');
+	}
 
   return { ok: true, crystal: { type, text, images, listing, thing } };
 };
@@ -2012,7 +2392,7 @@ export const KEY_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
 // components) so the two can't drift — a root field the server searches but the
 // client never suggests (shareId was exactly this) is the drift this prevents.
 // Root fields are searchable by bare name; anything else auto-prefixes to crystal.
-export const SEARCHABLE_ROOT_FIELDS = ['tags', 'thingtime', 'createdAt', 'updatedAt', 'shareId', 'targetId'] as const;
+export const SEARCHABLE_ROOT_FIELDS = ['tags', 'thingtime', 'createdAt', 'updatedAt', 'shareId', 'targetId', 'folderId'] as const;
 // Friendly datatype names offered by the `type` operator (mapped to Mongo $type
 // aliases server-side — 'boolean' → 'bool', the rest are identity).
 export const SEARCH_DATATYPES = ['string', 'number', 'boolean', 'date', 'array', 'object', 'null'] as const;
@@ -2728,11 +3108,37 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
   };
 };
 
+const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  if (!name) return fail(400, 'Folder name is required');
+  if (name.length > MAX_FOLDER_NAME_CHARS) return fail(400, `Folder name is too long (max ${MAX_FOLDER_NAME_CHARS})`);
+  const crystal: Record<string, unknown> = { name };
+  if (input.icon !== undefined && input.icon !== null) {
+    if (typeof input.icon !== 'string' || input.icon.trim().length > MAX_FOLDER_ICON_CHARS) {
+      return fail(400, `Folder icon must be a short emoji (max ${MAX_FOLDER_ICON_CHARS} chars)`);
+    }
+    if (input.icon.trim()) crystal.icon = input.icon.trim();
+  }
+  if (input.description !== undefined && input.description !== null) {
+    if (typeof input.description !== 'string' || input.description.trim().length > MAX_FOLDER_DESCRIPTION_CHARS) {
+      return fail(400, `Folder description is too long (max ${MAX_FOLDER_DESCRIPTION_CHARS})`);
+    }
+    if (input.description.trim()) crystal.description = input.description.trim();
+  }
+  return { ok: true, crystal };
+};
+
 const crystalSanitizers: Record<
   string,
-  (input: Record<string, unknown>, appliedIds: string[]) => { ok: true; crystal: Record<string, unknown> } | Fail
+	(
+		input: Record<string, unknown>,
+		appliedIds: string[],
+		options?: ThingtimeCrystalValidationOptions
+	) => { ok: true; crystal: Record<string, unknown> } | Fail
 > = {
+	attachment: sanitizeAttachmentCrystal,
   post: sanitizePostCrystal,
+  folder: sanitizeFolderCrystal,
   comment: sanitizeCommentCrystal,
   reaction: sanitizeReactionCrystal,
   share: () => ({ ok: true, crystal: {} }),
@@ -2757,7 +3163,11 @@ export type ValidatedCrystal = { ok: true; thingtime: string[]; crystal: Record<
 // /search — without declaring any schema. Storage always carries the resolved
 // non-empty thingtime; schema-lessness is an input convenience, never a stored
 // state.
-export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): ValidatedCrystal | Fail => {
+export const validateThingtimeCrystal = (
+	thingtime: unknown,
+	crystal: unknown,
+	options: ThingtimeCrystalValidationOptions = {}
+): ValidatedCrystal | Fail => {
   if (thingtime === undefined || thingtime === null || (Array.isArray(thingtime) && !thingtime.length)) {
     thingtime = ['data'];
   }
@@ -2781,6 +3191,13 @@ export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): 
     return fail(400, 'data crystals stand alone — publish a separate data thing and link it via targetId or tags');
   }
 
+  // Folders are pure organization: combining them with a content schema would
+  // make a doc that is both a container and content (and would let e.g.
+  // ["post","folder"] ride the folder sanitizer past the post whitelist).
+  if (ids.includes('folder') && ids.length > 1) {
+    return fail(400, 'folder things stand alone — put content IN the folder via folderId instead');
+  }
+
   const input = crystal && typeof crystal === 'object' && !Array.isArray(crystal) ? (crystal as Record<string, unknown>) : {};
   const merged: Record<string, unknown> = {};
   let requiresTarget = false;
@@ -2794,7 +3211,7 @@ export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): 
       // refuse with the real reason instead of pretending they don't exist.
       return fail(403, `${id} things are managed by their own endpoints`);
     }
-    const sanitized = sanitizer(input, ids);
+		const sanitized = sanitizer(input, ids, options);
     if (sanitized.ok === false) return sanitized;
     Object.assign(merged, sanitized.crystal);
   }

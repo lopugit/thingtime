@@ -1,10 +1,9 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { followStatus, isFollowing, toggleFollow } from '~/api/utils/messenger/follows';
-import { emitNotification } from '~/api/utils/notifications/notifications';
+import { followStatus } from '~/api/utils/messenger/follows';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import { resolveSocialTarget } from '~/api/utils/users/social';
+import { resolveSocialTarget, setFollow } from '~/api/utils/users/social';
 
 // GET /api/v1/users/follow?username= | ?userId= — follow relationship between
 // the caller and that user (following / followsYou) plus their counts.
@@ -56,28 +55,18 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'You already have your own undivided attention 💅' }, { status: 400 });
   }
 
-  // Prior state drives both the omitted-`follow` toggle and notification
-  // dedup — an idempotent re-follow must never re-notify the followed user.
-  const wasFollowing = await isFollowing(user.id, targetId);
-  const follow = typeof body?.follow === 'boolean' ? body.follow : !wasFollowing;
-  const result = await toggleFollow(user.id, { userId: targetId, follow });
+  // The shared social mutation owns toggle/idempotency, the canonical
+  // home-pinned followKey write, and winner-only notification emission.
+  const result = await setFollow(user, target, body?.follow);
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
-  }
-  if (follow && !wasFollowing) {
-    await emitNotification({
-      recipientId: targetId,
-      type: 'new-follower',
-      actor: { id: user.id, username: user.username, displayName: user.displayName },
-      targetId: user.id
-    });
   }
 
   // Re-read after the write so the response carries honest post-toggle counts
   // (the profile UI reconciles its optimistic followerCount from this).
   const status = await followStatus(user.id, { userId: targetId });
   if (status.ok === false) {
-    return json({ ok: true, following: result.following, user: result.user });
+    return json(result);
   }
   return json({
     ok: true,

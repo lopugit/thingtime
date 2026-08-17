@@ -3,6 +3,7 @@ import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { appAllowsOrigin, appIsRevoked, findAppByClientId, normalizeAppOrigin } from '~/api/utils/apps/apps';
 import { issueAppToken } from '~/api/utils/apps/appTokens';
+import { thirdPartyProfileMediaUrl } from '~/api/utils/apps/profileMedia';
 import { parseScopeParam, sanitizeGrantedScopes, scopeCovers } from '~/api/utils/apps/scopes';
 import { sanitizeSharedThings } from '~/api/utils/apps/sharedThings';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -89,7 +90,7 @@ export const action = async ({ request }: { request: Request }) => {
       id: user.id,
       username: user.username,
       ...(has('profile.displayName') ? { displayName: user.displayName } : {}),
-      ...(has('profile.avatar') ? { avatarUrl: user.avatarUrl } : {})
+			...(has('profile.avatar') ? { avatarUrl: thirdPartyProfileMediaUrl(user.avatarUrl) } : {})
     }
   });
 };

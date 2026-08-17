@@ -23,6 +23,7 @@ import {
 } from '@chakra-ui/react';
 
 import { AdminPanel } from '~/components/Admin/AdminPanel';
+import { CIControlDashboard } from '~/components/Admin/CIControl/CIControlDashboard';
 import { AdminRowQueryControls, useAdminRowQuery } from '~/components/Admin/AdminRowQueryControls';
 import { LinkManagerModal } from '~/components/Admin/LinkManagerModal';
 import { SubscriptionEditorModal } from '~/components/Admin/SubscriptionEditorModal';
@@ -743,13 +744,14 @@ export const AdminDashboard = () => {
         Admin
       </Heading>
       <Text fontSize="sm" opacity={0.65} mb={4}>
-        Manage users, apps, subscription tiers, quotas, and ownership.
+        Manage users, apps, subscription tiers, CI automation, quotas, and ownership.
       </Text>
       <Tabs variant="enclosed" size="sm" isLazy lazyBehavior="keepMounted">
         <TabList flexWrap="wrap">
           <Tab>Users</Tab>
           <Tab>Apps</Tab>
           <Tab>Tiers</Tab>
+          <Tab>CI Control</Tab>
           <Tab>System</Tab>
         </TabList>
         <TabPanels>
@@ -761,6 +763,9 @@ export const AdminDashboard = () => {
           </TabPanel>
           <TabPanel px={0}>
             <TierManager />
+          </TabPanel>
+          <TabPanel px={0}>
+            <CIControlDashboard cacheIdentity={user.id} />
           </TabPanel>
           <TabPanel px={0}>
             <AdminPanel />

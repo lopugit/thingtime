@@ -23,6 +23,7 @@ import {
 	buildUserSecure,
 	findLegacyUserStorageFieldsByIds,
 	packRecentReactions,
+	profileAttachmentRefsForUserRoot,
 	removeLegacyUserStorageFields,
 	toBin,
 	userEmailKey,
@@ -723,10 +724,12 @@ const conversionSemanticFields = [
 	'secure',
 	'secureVersion',
 	'secureAdmin',
-	'secureRecentReactions'
+	'secureRecentReactions',
+	'avatarAttachmentId',
+	'bannerAttachmentId'
 ] as const;
 
-const conversionThingSemanticallyEquals = (actual: any, expected: any, ignoreShareId: boolean): boolean => {
+export const conversionThingSemanticallyEquals = (actual: any, expected: any, ignoreShareId: boolean): boolean => {
 	const project = (doc: any) =>
 		Object.fromEntries(conversionSemanticFields.filter((field) => !(ignoreShareId && field === 'shareId')).map((field) => [field, doc?.[field]]));
 	return JSON.stringify(stableMigrationValue(project(actual))) === JSON.stringify(stableMigrationValue(project(expected)));
@@ -798,6 +801,9 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
 				.toArray()) as any[];
       if (!batch.length) break;
       for (const doc of batch) {
+				// This callback is invoked synchronously for only the current document;
+				// it never escapes the loop iteration.
+				// eslint-disable-next-line no-loop-func
         const skip = (reason: string) => {
           notes.push(`${spec.collection} ${spec.label(doc)}: ${reason}`);
           skipped += 1;
@@ -961,6 +967,7 @@ const usersToThings = collectionToThingsMigration({
         acl: [ACL_ALL],
         targetId: null,
         tags: [],
+				...profileAttachmentRefsForUserRoot(doc),
         uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
         secure,
         secureVersion: 0, // matches insertUser — optimistic-concurrency token
@@ -1245,10 +1252,9 @@ const seedBuiltinSchemas: Migration = {
 							$set: { crystal: validated.crystal, storageClass: 'control', updatedAt: now }
 						});
           }
-          const repairs = [
-            crystalNeedsRefresh ? 'registry crystal' : null,
-            storageClassNeedsRefresh ? 'control-plane storage class' : null
-          ].filter(Boolean);
+					const repairs = [crystalNeedsRefresh ? 'registry crystal' : null, storageClassNeedsRefresh ? 'control-plane storage class' : null].filter(
+						Boolean
+					);
           notes.push(`schema ${schema.id}: ${dryRun ? 'would repair' : 'repaired'} ${repairs.join(' and ')}`);
           refreshed += 1;
           continue;

@@ -7,6 +7,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { RAINBOW } from '~/theme/rainbow';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import type { PublicProfile } from '~/components/Feed/feedTypes';
 
 // Profile social block: follower/following/friend counts (everyone), the
@@ -376,9 +377,9 @@ export const RelationshipControls = (props: RelationshipControlsProps) => {
             {requests.map((from) => (
               <Flex key={from.id} alignItems="center" columnGap={2} flexWrap="wrap">
                 <Text fontSize="sm" color={INK} fontWeight={600} flex="1" minWidth="120px">
-                  {from.displayName || from.username}{' '}
+                  {getUserDisplayName(from)}{' '}
                   <Text as="span" fontWeight={400} color={MUTED}>
-                    @{from.username}
+                    {getUserIdentityDetail(from)}
                   </Text>
                 </Text>
                 <Button

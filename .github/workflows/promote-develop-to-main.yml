@@ -1,38 +1,3 @@
-# Keep a standing promotion PR open from develop into main, with a live
-# changelog of what merging it would ship.
-#
-# On every push to develop (or manual dispatch),
-# .github/scripts/promotion-pr-changelog.mjs:
-# - opens the promotion PR (base main, head develop) when develop is ahead of
-#   main and none is open — the body already contains the changelog section;
-# - refreshes the changelog section in the open PR's description (between the
-#   <!-- promotion-changelog --> markers, preserving any preamble text) so the
-#   PR lists, at a glance, every feature PR merged into develop that this
-#   promotion carries: title, author, source branch, merge date, no-promote
-#   warnings, plus direct commits without a PR;
-# - posts a short delta comment when PRs enter or leave the promotion window,
-#   so watchers get a notification without re-reading the description;
-# - creates the promotion PR with, and keeps re-applying, the no-ai-rebase
-#   label (PROMOTION_PR_LABELS). The AI rebase workflow honors it and never
-#   rewrites the PR head, so develop — an integration branch whose history IS
-#   its "Merge pull request #N" commits — is never flattened into plain
-#   commits again (a develop rebase on 2026-08-08 destroyed merge subjects
-#   and SHA↔PR association, the changelog's primary attribution signals).
-#   The merge-based conflict resolver explicitly keeps ownership of
-#   no-ai-rebase PRs, resolving develop↔main divergence with history-
-#   preserving merge commits, which is also the repo's house style;
-# - does nothing when develop and main are level. That is the normal state
-#   right after a promotion merges and "Sync main into develop" levels the
-#   branches again, so this pair of workflows never ping-pongs.
-#
-# Token notes (same trade-off documented in sync-main-into-develop.yml):
-# - A PR opened with GITHUB_TOKEN gets no pull_request workflow runs for the
-#   opening event (recursion guard), so Web CI would sit blank until the next
-#   push to develop. When SYNC_BRANCHES_PAT (or CONFLICT_RESOLVER_PAT) is
-#   configured the script opens the PR with it so CI runs on the PR
-#   immediately. Description edits and changelog comments stay on
-#   GITHUB_TOKEN.
-
 name: Promote develop to main
 
 on:
@@ -44,22 +9,7 @@ permissions:
   contents: read
   pull-requests: write
 
-concurrency:
-  group: promote-develop-to-main
-  cancel-in-progress: false
-
 jobs:
-  promotion-pr:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out develop with full history
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Open or refresh the promotion PR (changelog + delta comments)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_TOKEN_CREATE: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
-          PROMOTION_PR_LABELS: no-ai-rebase
-        run: node .github/scripts/promotion-pr-changelog.mjs
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/promote-develop-to-main.yml@github-actions
+    secrets: inherit

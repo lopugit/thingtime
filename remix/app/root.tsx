@@ -92,7 +92,9 @@ export default function App() {
                 ? `${baseTitle} - Settings`
                 : pathname === '/admin'
                   ? `${baseTitle} - Admin`
-                  : baseTitle;
+                  : pathname === '/things'
+                    ? `${baseTitle} - Things`
+                    : baseTitle;
 
       document.title = routeTitle;
     }

@@ -17,6 +17,7 @@ import type { EditorJsSourceRevision } from './editorJsChangeReconciliation';
 import { watchEditorJsTextFieldKeydowns } from './editorJsKeyboard';
 import { watchEditorJsPopoverViewport } from './editorJsPopoverViewport';
 import { filterListV2ChecklistToolbox } from './editorJsToolbox';
+import { getEditorJsTouchFocusTarget } from './editorJsTouchFocus';
 import { StyleTune } from './StyleTune';
 
 export { getEditorJsDoc, isEditorJsDoc, parseEditorJsDocString } from './editorJsValue';
@@ -539,6 +540,12 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 		<Box
 			className="long-text-editor"
 			ref={holderRef}
+			onPointerUp={(event) => {
+				if (readonlyRef.current) return;
+				const holder = event.currentTarget;
+				const editable = getEditorJsTouchFocusTarget(holder, event.target, event.pointerType, holder.ownerDocument.activeElement);
+				editable?.focus({ preventScroll: true });
+			}}
 			width="100%"
 			minHeight={props.minHeight || '96px'}
 			padding="10px 12px"

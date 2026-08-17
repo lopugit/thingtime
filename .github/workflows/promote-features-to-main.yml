@@ -1,66 +1,3 @@
-# Promote develop → main as reviewable per-feature PRs (with stacks).
-#
-# The develop branch is the integration branch: feature PRs merge there first.
-# This workflow watches develop and turns every merged feature PR into its own
-# promotion PR against main, so each feature gets a second, release-focused
-# review before it ships. Concretely, for each PR merged into develop that has
-# not reached main yet, it:
-# - cherry-picks the PR's exact diff onto a `promote/pr-<n>-<slug>` branch cut
-#   from main (`git cherry-pick -x`, so commit messages reference the original
-#   SHAs), and
-# - opens a promotion PR targeting main (labelled `promotion`, body carries a
-#   `<!-- promotion-of: <n> -->` marker that makes every run idempotent).
-#
-# Stacks: PRs that belong to one central feature are promoted as a stacked
-# chain in the order they merged into develop — the first promotion PR targets
-# main, the second targets the first promotion branch, and so on. Group
-# membership comes from (first match wins):
-#   1. `Promotion-Group: <key>` line (or `<!-- promotion-group: <key> -->`)
-#      in the source PR body,
-#   2. a `stack:<key>` / `group:<key>` / `feature:<key>` label,
-#   3. a `feature/<key>/...` or `feat/<key>/...` head branch,
-#   4. a conventional-commit title scope like `feat(<key>): ...`.
-# Review stacks bottom-up and delete each promotion branch on merge so GitHub
-# retargets the next PR; a maintenance pass here also retargets open stack
-# members whose base promotion PR has merged, as a backstop.
-#
-# Coexists with "Promote develop to main" (promote-develop-to-main.yml, the
-# standing all-or-nothing PR whose head is `develop`): use a per-feature
-# promotion PR to review and ship one change on its own, or merge the omnibus
-# PR when everything on develop is deemed mergeable and shipping it all at
-# once is easier. The two never fight — an omnibus merge makes every source
-# merge commit an ancestor of main, so the next scan here skips them all, and
-# open promotion PRs whose diff has become empty are closed automatically
-# (their branches deleted once nothing stacks on them).
-#
-# Opt-outs and overrides:
-# - label a develop PR `no-promote` (or `skip-promotion`) to keep it out of
-#   the per-feature train entirely;
-# - close a promotion PR without merging to reject that change for main — it
-#   is never recreated unless you reopen it;
-# - cherry-pick conflicts stop that group (later members depend on earlier
-#   ones) and the job summary prints exact manual-promotion commands; the next
-#   run picks up from the manually pushed branch.
-#
-# Relationship to the other branch automation:
-# - "Sync main into develop" back-merges main after promotions land, which is
-#   what makes later cherry-picks come out empty (= already shipped) instead
-#   of duplicated.
-# - The AI conflict/rebase workflows treat promotion PRs like any other
-#   same-repo PRs, so stacks keep getting rebased/resolved automatically.
-#
-# The push trigger runs from develop as soon as this file lands there;
-# schedule and dispatch activate once the file reaches main (via its own
-# promotion PR, or an omnibus merge).
-#
-# Token notes (same trade-off documented in sync-main-into-develop.yml):
-# - With plain GITHUB_TOKEN, created promotion PRs do NOT trigger other
-#   workflows (Web CI etc.), and promotion branches that touch
-#   .github/workflows/** cannot be pushed at all. A PROMOTION_PAT secret
-#   (repo + workflow scope) fixes both; SYNC_BRANCHES_PAT and
-#   CONFLICT_RESOLVER_PAT are honoured as fallbacks since they already carry
-#   the right scopes.
-
 name: Promote features to main
 
 on:
@@ -80,44 +17,15 @@ on:
         default: "50"
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
   issues: write
 
-concurrency:
-  group: promote-features-to-main
-  cancel-in-progress: false
-
 jobs:
-  promote:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.PROMOTION_PAT || secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
-
-      - name: Configure git identity
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Script and orphaned-history self-tests
-        run: node .github/scripts/promote-features-to-main.mjs --self-test
-
-      - name: Promote merged develop PRs to main
-        env:
-          GH_TOKEN: ${{ secrets.PROMOTION_PAT || secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
-          SOURCE_BRANCH: develop
-          TARGET_BRANCH: main
-          LOOKBACK: ${{ github.event.inputs.lookback || '50' }}
-          MAX_NEW_PRS: "10"
-          REQUIRE_LABEL: ""
-          SKIP_LABELS: "no-promote,skip-promotion"
-          GROUP_FROM_TITLE_SCOPE: "true"
-          GROUP_FROM_BRANCH_PREFIX: "true"
-          COMMENT_ON_SOURCE: "true"
-          PROMOTION_LABEL: "promotion"
-          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '' }}
-        run: node .github/scripts/promote-features-to-main.mjs
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/promote-features-to-main.yml@github-actions
+    with:
+      dry_run: ${{ inputs.dry_run || false }}
+      lookback: ${{ inputs.lookback || '50' }}
+    secrets: inherit

@@ -1,23 +1,22 @@
-// Custom emojis: one thing per emoji, image inline as a base64 data URI (the
-// avatar-storage pattern — no binary infrastructure exists or is needed).
+// Custom emojis: one thing per emoji. New images are protected S3 attachment
+// Things; legacy BinData/data-URI rows remain readable so migration is
+// backwards-compatible.
 // Scope is a community (targetId set) or personal (targetId null); reactions
 // reference emojis by id (`custom:<shareId>`), so a rename never orphans a
 // reaction and cross-scope readers can always resolve the image by id.
 //
-// The image is validated as a data-URI STRING but stored as a BinData blob:
-// the wildcard text index tokenizes every string field, and hundreds of
-// ~700K-char base64 strings would silently bloat it (the same reasoning that
-// keeps user secure state binary). Readers decode on the way out.
-import { Binary } from 'mongodb';
-import { getThingsCollection } from '../mongodb/collections';
-import {
-  EMOJI_DATA_URI_PATTERN,
-  EMOJI_NAME_PATTERN,
-  MAX_EMOJI_DATA_URI_CHARS,
-  MAX_EMOJIS_PER_SCOPE
-} from '~/schemas/registry';
+// New images never enter message or emoji crystals: the private S3 object is
+// quota-accounted by its protected attachment Thing and the emoji stores only
+// the exact server-bound attachment id. Legacy BinData/data-URI rows remain a
+// read-only compatibility path until migration retires them.
+import type { Binary } from 'mongodb';
+import { getThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
+import { createReadyAttachmentEmojiInsertHook, inspectReadyAttachmentForEmoji, prepareAttachmentCascadeForThing } from '../attachments/attachments';
+import { EMOJI_NAME_PATTERN, MAX_EMOJIS_PER_SCOPE } from '~/schemas/registry';
 import type { Fail} from './shared';
 import { communityRoleOf, emojiScopeKey, fail, findThingByKind, newThingDoc, ROLE_RANK } from './shared';
+import { customEmojiIdForAttachment, matchesCommittedEmojiRequest } from './messengerMediaCore';
 
 export type PublicCustomEmoji = {
   id: string;
@@ -29,8 +28,6 @@ export type PublicCustomEmoji = {
   createdBy: string;
   createdAt: string;
 };
-
-const packEmojiImage = (dataUri: string) => new Binary(Buffer.from(dataUri, 'utf8'));
 
 // Decodes stored images (BinData now, plain string for any early doc).
 export const emojiImageToString = (value: unknown): string => {
@@ -45,10 +42,15 @@ export const emojiImageToString = (value: unknown): string => {
   return '';
 };
 
+const emojiAttachmentUrl = (id: string): string => `/api/v1/attachments/content?id=${encodeURIComponent(id)}`;
+
 const toPublicEmoji = (doc: any): PublicCustomEmoji => ({
   id: doc.shareId,
   name: doc.crystal?.name,
-  image: emojiImageToString(doc.crystal?.image),
+	image:
+		typeof doc.emojiAttachmentId === 'string' && doc.emojiAttachmentId
+			? emojiAttachmentUrl(doc.emojiAttachmentId)
+			: emojiImageToString(doc.crystal?.image),
   animated: !!doc.crystal?.animated,
   scope: doc.targetId ? 'community' : 'personal',
   communityId: doc.targetId ? String(doc.targetId) : null,
@@ -60,19 +62,27 @@ export type UploadEmojiResult = Fail | { ok: true; emoji: PublicCustomEmoji };
 
 export const uploadEmoji = async (
   viewerId: string,
-  input: { name?: unknown; image?: unknown; communityId?: unknown }
+	input: { name?: unknown; attachmentId?: unknown; communityId?: unknown }
 ): Promise<UploadEmojiResult> => {
-  const name = typeof input.name === 'string' ? input.name.trim().toLowerCase().replace(/^:+|:+$/g, '') : '';
+	if (isCustomMongoEndpointActive()) {
+		return fail(400, 'Custom emoji attachments are unavailable with a custom MongoDB endpoint');
+	}
+	const name =
+		typeof input.name === 'string'
+			? input.name
+					.trim()
+					.toLowerCase()
+					.replace(/^:+|:+$/g, '')
+			: '';
   if (!EMOJI_NAME_PATTERN.test(name)) {
     return fail(400, 'Emoji names are 2-32 chars of lowercase letters, digits, - or _');
   }
-  const image = typeof input.image === 'string' ? input.image.trim() : '';
-  if (image.length > MAX_EMOJI_DATA_URI_CHARS) {
-    return fail(400, `That image is too chunky — cap is ~${Math.round((MAX_EMOJI_DATA_URI_CHARS * 3) / 4 / 1024)}KB`);
-  }
-  if (!EMOJI_DATA_URI_PATTERN.test(image)) {
-    return fail(400, 'Pass the image as a data:image/gif|webp|png|apng|jpeg;base64 URI');
-  }
+	const attachmentId = typeof input.attachmentId === 'string' ? input.attachmentId.trim() : '';
+	if (!attachmentId) return fail(400, 'Upload one custom emoji image first');
+	const emojiId = customEmojiIdForAttachment(viewerId, attachmentId);
+	const inspected = await inspectReadyAttachmentForEmoji(viewerId, [attachmentId], emojiId);
+	if (inspected.ok === false) return inspected;
+	const attachment = inspected.attachments[0];
   let communityId: string | null = null;
   if (typeof input.communityId === 'string' && input.communityId.trim()) {
     const community = await findThingByKind('community', input.communityId.trim());
@@ -87,21 +97,36 @@ export const uploadEmoji = async (
   const scopeFilter: any = communityId
     ? { thingtime: 'custom-emoji', targetId: communityId }
     : { thingtime: 'custom-emoji', targetId: null, ownerId: viewerId };
-  const count = await things.countDocuments(scopeFilter);
-  if (count >= MAX_EMOJIS_PER_SCOPE) return fail(400, `Emoji cap reached (${MAX_EMOJIS_PER_SCOPE}) — retire some first`);
-  const animated = /^data:image\/(gif|apng)/i.test(image);
+	const animated = attachment.contentType === 'image/gif';
   const emoji = newThingDoc('custom-emoji', {
     ownerId: viewerId,
     targetId: communityId,
-    crystal: { name, emojiKey: emojiScopeKey(scope, name), image: packEmojiImage(image), animated }
+		shareId: emojiId,
+		crystal: { name, emojiKey: emojiScopeKey(scope, name), animated }
   });
+	(emoji as any).emojiAttachmentId = attachmentId;
+	const bindAttachment = createReadyAttachmentEmojiInsertHook([attachmentId]);
   try {
-    await things.insertOne(emoji as any);
+		await withHomeMongoTransaction(async (session) => {
+			const count = await things.countDocuments(scopeFilter, { session });
+			if (count >= MAX_EMOJIS_PER_SCOPE) {
+				throw Object.assign(new Error('emoji_scope_full'), { status: 400 });
+			}
+			await things.insertOne(emoji as any, { session });
+			await bindAttachment(emoji as any, session);
+		});
   } catch (err: any) {
+		if (err?.message === 'emoji_scope_full') return fail(400, `Emoji cap reached (${MAX_EMOJIS_PER_SCOPE}) — retire some first`);
+		if (err?.code === 11000 || err?.errorLabels?.includes?.('UnknownTransactionCommitResult')) {
+			const existing = await things.findOne({ shareId: emojiId, thingtime: 'custom-emoji' } as any);
+			if (matchesCommittedEmojiRequest(existing as any, { ownerId: viewerId, communityId, name, attachmentId })) {
+				return { ok: true, emoji: toPublicEmoji(existing) };
+			}
     if (err?.code === 11000) return fail(409, `:${name}: is already taken here`);
+		}
     throw err;
   }
-  return { ok: true, emoji: { ...toPublicEmoji(emoji), image } };
+	return { ok: true, emoji: toPublicEmoji(emoji) };
 };
 
 export type ListEmojisResult = Fail | { ok: true; emojis: PublicCustomEmoji[] };
@@ -114,10 +139,7 @@ export type ListEmojisResult = Fail | { ok: true; emojis: PublicCustomEmoji[] };
 // only { name, animated } per referenced emoji, and clients fetch images
 // once by id (unguessable uuids that only ever travel inside chats the
 // caller could already read) and cache them.
-export const listEmojis = async (
-  viewerId: string,
-  input: { communityId?: unknown; chatId?: unknown; ids?: unknown }
-): Promise<ListEmojisResult> => {
+export const listEmojis = async (viewerId: string, input: { communityId?: unknown; chatId?: unknown; ids?: unknown }): Promise<ListEmojisResult> => {
   if (Array.isArray(input.ids) && input.ids.length) {
     const ids = (input.ids as unknown[])
       .filter((id): id is string => typeof id === 'string' && !!id.trim())
@@ -162,6 +184,11 @@ export const deleteEmoji = async (viewerId: string, input: { id?: unknown }): Pr
     allowed = !!role && ROLE_RANK[role] >= ROLE_RANK.admin;
   }
   if (!allowed) return fail(403, 'Only the uploader or a community admin can retire an emoji');
+	const attachmentCleanup = await prepareAttachmentCascadeForThing({
+		shareId: String(emoji.shareId),
+		ownerId: String(emoji.ownerId)
+	});
+	if (attachmentCleanup.ok === false) return fail(attachmentCleanup.status, attachmentCleanup.error);
   const things = await getThingsCollection();
   await things.deleteOne({ shareId: emoji.shareId } as any);
   // existing `custom:<id>` reactions keep their chips; readers render a

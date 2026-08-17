@@ -47,6 +47,40 @@ test('structured auth and account-switcher failure fields survive normalization'
   assert.deepEqual(error.accounts, accounts);
 });
 
+test('only allowlisted attachment retry metadata survives normalization', () => {
+	const retryable = createApiFailure({
+		payload: { ok: false, error: 'Parts need retrying', code: 'upload_parts_retryable', retryable: true },
+		status: 409,
+		method: 'POST'
+	});
+	assert.equal(retryable.code, 'upload_parts_retryable');
+	assert.equal(retryable.retryable, true);
+
+	const quota = createApiFailure({
+		payload: { ok: false, error: 'Private byte counts', code: 'quota_exceeded', retryable: false },
+		status: 503,
+		method: 'POST'
+	});
+	assert.equal(quota.code, 'quota_exceeded');
+	assert.equal(quota.retryable, false);
+
+	const unconfigured = createApiFailure({
+		payload: { ok: false, error: 'Private configuration detail', code: 'storage_unconfigured', retryable: false },
+		status: 503,
+		method: 'POST'
+	});
+	assert.equal(unconfigured.code, 'storage_unconfigured');
+	assert.equal(unconfigured.retryable, false);
+
+	const hostile = createApiFailure({
+		payload: { ok: false, error: 'No', code: 'private_internal_state', retryable: true },
+		status: 409,
+		method: 'POST'
+	});
+	assert.equal(hostile.code, undefined);
+	assert.equal(hostile.retryable, undefined);
+});
+
 test('migration diagnostics accept only bounded authored detail and fixed-format ids', () => {
 	const id = 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90';
 	const error = createApiFailure({

@@ -17,6 +17,7 @@ import {
 import { useLopu } from '../Lopu/useLopu';
 import type { Community, CommunityChannel } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 const shell = (children: React.ReactNode) => children;
 
@@ -125,8 +126,12 @@ export const NewChatModal = ({
 }) => {
   const lopu = useLopu();
   const [query, setQuery] = React.useState('');
-  const [results, setResults] = React.useState<{ id: string; username: string; displayName: string | null }[]>([]);
-  const [picked, setPicked] = React.useState<{ id: string; username: string; displayName: string | null }[]>([]);
+  const [results, setResults] = React.useState<
+    Array<{ id: string; username: string; displayName: string | null; temporary?: boolean }>
+  >([]);
+  const [picked, setPicked] = React.useState<
+    Array<{ id: string; username: string; displayName: string | null; temporary?: boolean }>
+  >([]);
   const [groupName, setGroupName] = React.useState('');
   const [busy, setBusy] = React.useState(false);
 
@@ -185,7 +190,7 @@ export const NewChatModal = ({
           <Flex wrap="wrap" gap={1}>
             {picked.map((person) => (
               <Button key={person.id} size="xs" variant="outline" borderRadius="var(--tt-radius-pill, 999px)" onClick={() => setPicked((prev) => prev.filter((p) => p.id !== person.id))}>
-                {person.displayName || person.username} ✕
+                {getUserDisplayName(person)} ✕
               </Button>
             ))}
           </Flex>
@@ -203,9 +208,9 @@ export const NewChatModal = ({
           .map((person) => (
             <Flex key={person.id} align="center" justify="space-between" fontSize="13px">
               <Box>
-                {person.displayName || person.username}{' '}
+                {getUserDisplayName(person)}{' '}
                 <Box as="span" color="var(--tt-muted, #9a9aa6)" fontSize="11px">
-                  @{person.username}
+                  {getUserIdentityDetail(person)}
                 </Box>
               </Box>
               <Button size="xs" onClick={() => setPicked((prev) => [...prev, person])}>

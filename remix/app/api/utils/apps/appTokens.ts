@@ -7,6 +7,7 @@ import { appAllowsOrigin, appIsRevoked, findAppByClientId } from './apps';
 import { sandboxPublicUser } from './sandbox';
 import { sessionScopes } from './scopes';
 import type { AppScopeId } from './scopes';
+import { thirdPartyProfileMediaUrl } from './profileMedia';
 import { MAX_APP_SESSIONS_PER_APP_USER } from '~/schemas/registry';
 
 // App-scoped tokens: the credential a third-party site holds after a user
@@ -31,7 +32,7 @@ export const toEmbedUser = (user: PublicUser): EmbedUser => ({
   id: user.id,
   username: user.username,
   displayName: user.displayName,
-  avatarUrl: user.avatarUrl
+	avatarUrl: thirdPartyProfileMediaUrl(user.avatarUrl)
 });
 
 export type AppTokenGrant = {

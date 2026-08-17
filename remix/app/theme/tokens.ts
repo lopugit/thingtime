@@ -53,6 +53,19 @@ export interface TtThemeFonts {
   display: string
 }
 
+export type TtThingsBadgePadding = 'small' | 'medium' | 'large' | 'custom'
+
+/**
+ * Padding presets for the View / Show / Arrange / Kind pills on /things.
+ * Values are full CSS padding shorthands so the Custom option can use the
+ * exact same token without a second styling path.
+ */
+export const THINGS_BADGE_PADDING_PRESETS: Readonly<Record<Exclude<TtThingsBadgePadding, 'custom'>, string>> = {
+  small: '3px 8px',
+  medium: '5px 12px',
+  large: '7px 16px',
+}
+
 export interface TtThemeGeneral {
   /** Multiplies the radius scale. 0 = square (Fable), 1 = Prism. */
   radiusScale: number
@@ -66,6 +79,10 @@ export interface TtThemeGeneral {
   animSpeed: number
   /** UI icon language: playful emoji or coloured Lucide line icons. */
   iconStyle: 'emoji' | 'lucide'
+  /** Preset or custom padding for the /things browse-control pills. */
+  thingsBadgePadding: TtThingsBadgePadding
+  /** CSS padding shorthand used when thingsBadgePadding is custom. */
+  thingsBadgeCustomPadding: string
 }
 
 export interface TtThemeWindows {
@@ -188,6 +205,8 @@ export const THINGTIME_THEME: TtTheme = {
     motion: true,
     animSpeed: 200,
     iconStyle: 'emoji',
+    thingsBadgePadding: 'small',
+    thingsBadgeCustomPadding: THINGS_BADGE_PADDING_PRESETS.small,
   },
   windows: {
     closeColor: '',
@@ -223,6 +242,8 @@ export const FABLE_THEME: TtTheme = {
     motion: true,
     animSpeed: 120,
     iconStyle: 'emoji',
+    thingsBadgePadding: 'small',
+    thingsBadgeCustomPadding: THINGS_BADGE_PADDING_PRESETS.small,
   },
 }
 
@@ -290,6 +311,21 @@ export const sanitizeCssValue = (value: unknown): string | null => {
   return v
 }
 
+/**
+ * A deliberately narrow CSS padding parser for saved/shared themes. It accepts
+ * the useful CSS shorthand form (one to four non-negative lengths) without
+ * allowing declarations, functions, URLs, or selectors into the token.
+ */
+export const sanitizePaddingCssValue = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null
+  const v = value.trim().slice(0, 120)
+  if (!v) return ''
+  const parts = v.split(/\s+/)
+  if (parts.length < 1 || parts.length > 4) return null
+  const length = /^(?:0|(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|ch|ex|vw|vh|vmin|vmax|pt))$/i
+  return parts.every((part) => length.test(part)) ? parts.join(' ') : null
+}
+
 const clampNumber = (value: unknown, min: number, max: number, dflt: number) => {
   const n = typeof value === 'string' ? Number(value) : (value as number)
   if (typeof n !== 'number' || Number.isNaN(n)) return dflt
@@ -351,6 +387,16 @@ export const resolveTheme = (
     if (typeof general.motion === 'boolean') out.general.motion = general.motion
     out.general.animSpeed = clampNumber(general.animSpeed, 0, 2000, out.general.animSpeed)
     if (general.iconStyle === 'emoji' || general.iconStyle === 'lucide') out.general.iconStyle = general.iconStyle
+    if (
+      general.thingsBadgePadding === 'small' ||
+      general.thingsBadgePadding === 'medium' ||
+      general.thingsBadgePadding === 'large' ||
+      general.thingsBadgePadding === 'custom'
+    ) {
+      out.general.thingsBadgePadding = general.thingsBadgePadding
+    }
+    const customBadgePadding = sanitizePaddingCssValue(general.thingsBadgeCustomPadding)
+    if (customBadgePadding !== null) out.general.thingsBadgeCustomPadding = customBadgePadding
   }
 
   const windows = patch.windows
@@ -397,6 +443,10 @@ export const themeToCssVars = (theme: TtTheme): Record<string, string> => {
   const w = theme.windows || THINGTIME_THEME.windows
   const r = (n: number) => px(n * g.radiusScale)
   const hard = g.shadow === 'hard'
+  const thingsBadgePadding =
+    g.thingsBadgePadding === 'custom'
+      ? sanitizePaddingCssValue(g.thingsBadgeCustomPadding) || THINGS_BADGE_PADDING_PRESETS.small
+      : THINGS_BADGE_PADDING_PRESETS[g.thingsBadgePadding] || THINGS_BADGE_PADDING_PRESETS.small
   const vars: Record<string, string> = {
     '--tt-ink': c.ink,
     '--tt-text': c.text,
@@ -444,6 +494,7 @@ export const themeToCssVars = (theme: TtTheme): Record<string, string> => {
     '--tt-border-w': px(g.borderWidth),
     '--tt-border-w-bold': px(Math.max(2, g.borderWidth)),
     '--tt-border-w-chunky': '3px',
+    '--tt-things-badge-padding': thingsBadgePadding,
     '--tt-shadow-card': hard ? `3px 3px 0 ${c.ink}` : '0 1px 2px rgba(0, 0, 0, 0.05)',
     '--tt-shadow-panel': hard
       ? `8px 8px 0 ${c.ink}`

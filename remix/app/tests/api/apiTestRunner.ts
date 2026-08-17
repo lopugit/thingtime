@@ -2,6 +2,7 @@ export type ApiTestGroup =
   | 'admin'
   | 'algorithms'
   | 'apps'
+  | 'attachments'
   | 'auth'
   | 'crypto'
   | 'docs'
