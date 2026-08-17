@@ -320,6 +320,26 @@ let indexesEnsured: Promise<void> | null = null;
 // racing upserts (e.g. reaction toggles) could insert duplicates. MongoDB (4.2+)
 // lets same-key indexes with distinct names / partial-filter options coexist, so
 // create-then-drop keeps a constraint active throughout the swap.
+
+// dropIndex with a bounded retry: ensureIndexes fires every createIndex in one
+// Promise.all, so on the boot that performs an index swap a legacy-name drop
+// can race a sibling index build and get rejected (observed live: the first
+// swap run left crystal.clientId_1 behind while its replacement built).
+// Absent index (IndexNotFound 27) is success; anything else backs off and
+// retries, then gives up quietly — the next boot's run re-prunes.
+const dropIndexRetrying = async (collection: any, name: string, attempts = 5) => {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      await collection.dropIndex(name);
+      return;
+    } catch (err: any) {
+      if (err?.code === 27 || err?.codeName === 'IndexNotFound') return;
+      if (attempt === attempts - 1) return;
+      await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+    }
+  }
+};
+
 const createIndexReplacing = async (
   collection: any,
   keys: Record<string, any>,
@@ -335,14 +355,14 @@ const createIndexReplacing = async (
     // definitions and recreate. This is the only branch with a no-index window,
     // and it fires only when options genuinely changed (text weights/overrides),
     // never for the steady-state unique-index swap above.
-    await collection.dropIndex(options.name).catch(() => {});
-    for (const legacy of legacyNames) await collection.dropIndex(legacy).catch(() => {});
+    await dropIndexRetrying(collection, options.name);
+    for (const legacy of legacyNames) await dropIndexRetrying(collection, legacy);
     await collection.createIndex(keys, options);
   }
   // New index is in place — now prune any legacy-named siblings of the same shape.
   for (const legacy of legacyNames) {
     if (legacy === options.name) continue;
-    await collection.dropIndex(legacy).catch(() => {}); // absent = fine
+    await dropIndexRetrying(collection, legacy); // absent = fine
   }
 };
 
