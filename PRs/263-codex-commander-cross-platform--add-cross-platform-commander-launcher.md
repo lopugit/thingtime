@@ -14,7 +14,8 @@ PR: https://github.com/lopugit/thingtime/pull/263
   text size, window mode, and favourites in compact mode.
 - Added Thingtime SSO with exact-loopback S256 PKCE, native Keychain storage,
   multi-account switching, and private app-data settings sync.
-- Added Raycast Store discovery plus bounded folder and ZIP sideload handling.
+- Added Raycast Store discovery, bounded folder and ZIP sideload handling, and a
+  privacy-preserving Your Raycast importer for local extensions and settings.
 
 The process split follows Raycast's published architecture: native lifecycle
 and operating-system integration stay in Swift/AppKit, portable business logic
@@ -48,11 +49,14 @@ Raycast extensions already work. Commander currently supports:
 - immutable, bounded folder or ZIP sideload preparation;
 - explicit opt-in builds with filtered environments and process-group timeout;
 - compatible prebuilt `no-view` commands in bounded workers.
+- macOS Raycast-profile discovery plus manifest-declared, non-password
+  preference import for compatible workers.
 
 Full `@raycast/api` view reconciliation, List/Grid/Detail/Form components,
-preferences, storage, OAuth providers, menu-bar commands, and integrated source
-build consent remain follow-up work. Worker threads constrain lifetime and heap
-size; they are not an operating-system permission sandbox.
+the complete preferences API shim, storage, OAuth providers, menu-bar commands,
+and integrated source build consent remain follow-up work. Worker threads
+constrain lifetime and heap size; they are not an operating-system permission
+sandbox.
 
 Windows and Linux protocol contracts are present for portability, but native
 shells for those platforms are not implemented or verified in this PR.
@@ -123,14 +127,29 @@ environment.
 - The latest follow-up QA install used the configured Apple Development
   identity and preserved the stable bundle identifier and designated
   requirement.
+- Extensions Settings now has a **Your Raycast** tab. The daemon reads Raycast's
+  exported macOS preference domain, returns only sanitized extension metadata
+  and counts to React, and never opens Raycast's encrypted database or Keychain.
+  Password fields, OAuth credentials, and Raycast LocalStorage stay protected.
+- **Add to Commander** fetches a public extension with one time-bounded sparse
+  checkout from the official `raycast/extensions` repository, then re-applies
+  Commander's file-count, byte, path, and link limits before installation. It
+  never installs dependencies or executes package scripts. **Sync to Commander**
+  refreshes only manifest-declared non-password extension and command values.
+  Development extensions remain visible but direct users to Sideload because
+  Raycast does not expose their source path.
+- Launcher settings results now carry a validated settings-tab deep link through
+  the daemon and native bridge, so Extensions and Accounts open their exact tabs.
+  Result selection now reacts to pointer movement instead of hover re-entry, so
+  a stationary cursor cannot steal keyboard selection after a query rerender.
 
 ## Verification
 
-- Commander TypeScript: 46 tests passed across UI, daemon, and compatibility
+- Commander TypeScript: 54 tests passed across UI, daemon, and compatibility
   packages; typecheck, ESLint, Prettier, and package builds passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
   Clippy with warnings denied passed.
-- Swift: two WebKit/panel transparency and compositor-mask regressions passed;
+- Swift: three WebKit/panel transparency, compositor-mask, and settings-deep-link regressions passed;
   the release build passed with warnings treated as errors.
 - `Commander/script/build_and_run.sh --verify` built, Apple Development signed,
   installed, and launched the exact follow-up app at
@@ -149,6 +168,11 @@ environment.
   imported in Raycast development mode, and its Open Commander command
   relaunched the fully quit installed app with persisted History and an empty
   focused query.
+- Packaged-daemon browser QA listed 23 profile-linked extensions, completed a
+  real Text Decorator Add through the sparse official-repository path, changed
+  its action to Sync to Commander, completed a second sync, traversed the full
+  settings list, and reported no browser warnings or errors. Raw Raycast values
+  and Commander session tokens were kept out of the renderer and QA logs.
 - Remix desktop OAuth tests passed 6/6; schema tests passed 25/25; targeted lint
   passed; the typecheck ratchet improved from 143 to 138; the production/Vercel
   build passed.

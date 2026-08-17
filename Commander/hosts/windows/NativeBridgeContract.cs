@@ -11,7 +11,7 @@ public interface INativeBridge
     Task ShowLauncherAsync();
     Task QuitApplicationAsync();
     Task BeginWindowDragAsync();
-    Task OpenSettingsAsync();
+    Task OpenSettingsAsync(string? tab = null);
     Task OpenApplicationAsync(string pathOrUrl);
     Task RevealAsync(string path);
     Task WriteClipboardAsync(string text);

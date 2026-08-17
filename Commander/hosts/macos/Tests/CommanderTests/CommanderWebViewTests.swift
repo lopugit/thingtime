@@ -21,7 +21,7 @@ final class CommanderWebViewTests: XCTestCase {
       loginItem: LaunchAtLoginService(),
       showLauncher: {},
       hideLauncher: {},
-      showSettings: {},
+      showSettings: { _ in },
       updateHotKey: { _ in },
       updateMenuBar: { _ in },
       updateWindowMode: { _ in }
@@ -62,7 +62,7 @@ final class CommanderWebViewTests: XCTestCase {
       loginItem: LaunchAtLoginService(),
       showLauncher: {},
       hideLauncher: {},
-      showSettings: {},
+      showSettings: { _ in },
       updateHotKey: { _ in },
       updateMenuBar: { _ in },
       updateWindowMode: { _ in }
@@ -87,6 +87,13 @@ final class CommanderWebViewTests: XCTestCase {
       LauncherPanelController.launcherOpenedScriptForTesting.contains("commander:launcher-opened")
     )
     controller.shutdown()
+  }
+
+  func testSettingsDeepLinkDispatchesOnlyKnownTabs() {
+    let script = SettingsWindowController.settingsTabScriptForTesting(.extensions)
+    XCTAssertTrue(script.contains("commander:settings-tab"))
+    XCTAssertTrue(script.contains("detail:'extensions'"))
+    XCTAssertNil(CommanderSettingsTab(rawValue: "not-a-tab"))
   }
 
   private func descendants(of view: NSView) -> [NSView] {

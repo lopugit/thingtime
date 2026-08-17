@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowRight, Command, CornerDownLeft, Search } from 'lucide-react';
 import type { RecentSearch, RecentSearchCommand, SearchHit } from '@commander/protocol';
 import { RECENT_SEARCH_PREVIEW_LIMIT } from '@commander/protocol';
@@ -34,6 +35,7 @@ function commandHistoryEntry(hit: SearchHit, actionId: string): RecentSearchComm
 
 export function Launcher({ state }: { state: CommanderState }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastPointerPosition = useRef<{ x: number; y: number } | null>(null);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const historyVisible = !state.query.trim() && state.recentSearches.length > 0;
   const visibleSearches = useMemo(
@@ -47,6 +49,16 @@ export function Launcher({ state }: { state: CommanderState }) {
   const selectedHistoryRow =
     historyVisible && state.selectedIndex < historyCount ? historyRows[state.selectedIndex] : undefined;
   const selected = selectedHistoryRow ? undefined : state.hits[state.selectedIndex - historyCount];
+
+  const selectFromPointer = useCallback(
+    (index: number, event: ReactPointerEvent<HTMLElement>) => {
+      const previous = lastPointerPosition.current;
+      if (previous && previous.x === event.clientX && previous.y === event.clientY) return;
+      lastPointerPosition.current = { x: event.clientX, y: event.clientY };
+      state.setSelectedIndex(index);
+    },
+    [state],
+  );
 
   useEffect(() => inputRef.current?.focus(), []);
 
@@ -231,7 +243,7 @@ export function Launcher({ state }: { state: CommanderState }) {
                         aria-selected={selectedRow}
                         className={selectedRow ? 'result-row selected' : 'result-row'}
                         key={`history:${row.search.query.toLowerCase()}`}
-                        onMouseEnter={() => state.setSelectedIndex(index)}
+                        onPointerMove={(event) => selectFromPointer(index, event)}
                         onDoubleClick={() => state.setQuery(row.search.query)}
                       >
                         <span className="result-icon kind-history">
@@ -265,7 +277,7 @@ export function Launcher({ state }: { state: CommanderState }) {
                       aria-selected={selectedRow}
                       className={selectedRow ? 'result-row selected' : 'result-row'}
                       key={`history:${row.search.query.toLowerCase()}:${row.command.itemId}:${row.command.actionId}`}
-                      onMouseEnter={() => state.setSelectedIndex(index)}
+                      onPointerMove={(event) => selectFromPointer(index, event)}
                       onDoubleClick={() => void runHistoryCommand(row)}
                     >
                       <span className={`result-icon kind-${row.command.kind}`}>
@@ -307,7 +319,7 @@ export function Launcher({ state }: { state: CommanderState }) {
                   aria-selected={rowIndex === state.selectedIndex}
                   className={rowIndex === state.selectedIndex ? 'result-row selected' : 'result-row'}
                   key={hit.id}
-                  onMouseEnter={() => state.setSelectedIndex(rowIndex)}
+                  onPointerMove={(event) => selectFromPointer(rowIndex, event)}
                   onDoubleClick={() => void runAction(hit.actions[0]?.id ?? 'open')}
                 >
                   <span className={`result-icon kind-${hit.kind}`}>

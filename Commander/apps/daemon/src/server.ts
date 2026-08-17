@@ -15,6 +15,8 @@ import type {
 import { PROTOCOL_VERSION } from '@commander/protocol';
 import {
   browseRaycastStore,
+  materializePublicRaycastExtensionSource,
+  prepareRaycastExtensionSource,
   prepareRaycastSideload,
   RaycastExtensionRuntime,
 } from '@commander/raycast-compat';
@@ -30,6 +32,7 @@ import {
   openCommanderCommandName,
 } from './services/catalog.js';
 import { PersistentStore } from './services/persistence.js';
+import { preferenceValuesForCommand, RaycastLocalService } from './services/raycastLocal.js';
 import { SearchService } from './services/search.js';
 import { ThingtimeService } from './services/thingtime.js';
 
@@ -59,6 +62,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   const search = new SearchService(options.rustBinary);
   const extensions = new RaycastExtensionRuntime();
   const thingtime = new ThingtimeService();
+  const localRaycast = new RaycastLocalService();
   const credentials = new Map<string, string>();
   let pendingCredential: { accountId: string; token: string; createdAt: number } | null = null;
 
@@ -144,6 +148,59 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       });
     if (request.method === 'GET' && url.pathname === '/api/extensions')
       return json(response, 200, { extensions: extensionsForState });
+    if (request.method === 'GET' && url.pathname === '/api/extensions/raycast') {
+      return json(response, 200, await localRaycast.list(extensionsForState, state.extensionPreferences));
+    }
+    if (request.method === 'POST' && url.pathname === '/api/extensions/raycast/add') {
+      const { name, installationId } = await readBody<{ name?: string; installationId?: string }>(request);
+      if (!name || !installationId)
+        return json(response, 400, { error: 'name and installationId are required' });
+      const installation = await localRaycast.requireInstallation(name, installationId);
+      if (installation.development)
+        return json(response, 409, {
+          error:
+            'Development extensions keep their source outside Raycast; choose Sideload to add that folder.',
+        });
+      if (extensionsForState.some((extension) => extension.name === name))
+        return json(response, 409, {
+          error: 'This extension is already installed in Commander; sync it instead.',
+        });
+      const destinationRoot = path.join(commanderCacheDirectory(), 'raycast-imports');
+      const existingPath = path.join(destinationRoot, name);
+      let prepared: Awaited<ReturnType<typeof prepareRaycastExtensionSource>>;
+      try {
+        await access(existingPath);
+        prepared = await prepareRaycastExtensionSource(existingPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        const materialized = await materializePublicRaycastExtensionSource(name, destinationRoot);
+        prepared = { report: materialized.report, build: { attempted: false } };
+      }
+      const extension: CommanderExtension = { ...prepared.report.extension, source: 'store' };
+      const sync = await localRaycast.syncPreferences(extension, installation);
+      await store.upsertExtension(extension);
+      await store.upsertExtensionPreferences(sync.state);
+      refreshCatalog();
+      return json(response, 200, {
+        extension,
+        preparation: preparationSummary(prepared),
+        sync: sync.summary,
+      });
+    }
+    if (request.method === 'POST' && url.pathname === '/api/extensions/raycast/sync') {
+      const { name, installationId } = await readBody<{ name?: string; installationId?: string }>(request);
+      if (!name || !installationId)
+        return json(response, 400, { error: 'name and installationId are required' });
+      const installation = await localRaycast.requireInstallation(name, installationId);
+      const extension = extensionsForState.find((candidate) => candidate.name === name);
+      if (!extension)
+        return json(response, 404, {
+          error: 'Install this Raycast extension in Commander before syncing it.',
+        });
+      const sync = await localRaycast.syncPreferences(extension, installation);
+      await store.upsertExtensionPreferences(sync.state);
+      return json(response, 200, { extension, sync: sync.summary });
+    }
     if (request.method === 'POST' && url.pathname === '/api/extensions/sideload') {
       const { path: extensionPath, allowUntrustedBuildScripts = false } = await readBody<{
         path?: string;
@@ -194,7 +251,17 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       if (actionId === 'open-settings')
         return json(response, 200, {
           ok: true,
-          nativeRequest: { method: 'settings.open' } satisfies Omit<NativeRequest, 'id'>,
+          nativeRequest: {
+            method: 'settings.open',
+            params: {
+              tab:
+                item.id === 'builtin:extensions'
+                  ? 'extensions'
+                  : item.id === 'builtin:accounts'
+                    ? 'account'
+                    : 'general',
+            },
+          } satisfies Omit<NativeRequest, 'id'>,
         });
       if (actionId === 'open-store')
         return json(response, 200, {
@@ -244,7 +311,9 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         }
         if (extension.source === 'builtin')
           return json(response, 409, { error: 'This built-in command is not available' });
-        await extensions.execute(extension, item.commandName);
+        await extensions.execute(extension, item.commandName, {
+          preferences: preferenceValuesForCommand(store.extensionPreferences(extension.id), item.commandName),
+        });
         return json(response, 200, { ok: true });
       }
       return json(response, 200, { ok: true });
@@ -363,6 +432,15 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         server.close((error) => (error ? reject(error) : resolve())),
       );
     },
+  };
+}
+
+function preparationSummary(prepared: Awaited<ReturnType<typeof prepareRaycastExtensionSource>>) {
+  return {
+    source: 'folder' as const,
+    readyNoViewCommands: prepared.report.readyNoViewCommands,
+    diagnostics: prepared.report.diagnostics,
+    build: prepared.build,
   };
 }
 

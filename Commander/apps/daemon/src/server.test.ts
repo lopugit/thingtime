@@ -114,6 +114,34 @@ describe('Commander daemon HTTP trust boundaries', () => {
         subtitle: 'Commander Settings',
       });
 
+      const extensionSettings = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({ itemId: 'builtin:extensions', actionId: 'open-settings' }),
+      });
+      expect(extensionSettings.status).toBe(200);
+      expect(await extensionSettings.json()).toEqual({
+        ok: true,
+        nativeRequest: { method: 'settings.open', params: { tab: 'extensions' } },
+      });
+
+      const accountSettings = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({ itemId: 'builtin:accounts', actionId: 'open-settings' }),
+      });
+      expect(accountSettings.status).toBe(200);
+      expect(await accountSettings.json()).toEqual({
+        ok: true,
+        nativeRequest: { method: 'settings.open', params: { tab: 'account' } },
+      });
+
       const exitSearch = await fetch(`${server.url}/api/search?q=exit`, {
         headers: { 'x-commander-session': server.token },
       });

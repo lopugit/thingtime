@@ -1,18 +1,35 @@
-import { useEffect, useState } from 'react';
-import type { CommanderExtension, StoreExtension } from '@commander/protocol';
-import { Check, ExternalLink, FolderPlus, Search } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import type { CommanderExtension, LocalRaycastExtension, StoreExtension } from '@commander/protocol';
+import { Check, Download, ExternalLink, FolderPlus, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { nativeRequest } from '../lib/nativeBridge.js';
 import { CommanderIcon } from './CommanderIcon.js';
 
-type ExtensionMode = 'installed' | 'store';
+type ExtensionMode = 'installed' | 'store' | 'raycast';
 
 export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] }) {
   const [mode, setMode] = useState<ExtensionMode>('installed');
   const [query, setQuery] = useState('');
   const [installed, setInstalled] = useState(initial);
   const [store, setStore] = useState<StoreExtension[]>([]);
+  const [raycast, setRaycast] = useState<LocalRaycastExtension[]>([]);
+  const [raycastNotice, setRaycastNotice] = useState<string | null>(null);
+  const [raycastLoading, setRaycastLoading] = useState(false);
+  const [raycastPending, setRaycastPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  const refreshRaycast = useCallback(async () => {
+    setRaycastLoading(true);
+    try {
+      const response = await api.listRaycastExtensions();
+      setRaycast(response.extensions);
+      setRaycastNotice(response.message ?? null);
+    } catch (error) {
+      setRaycastNotice(error instanceof Error ? error.message : 'Could not read the local Raycast profile');
+    } finally {
+      setRaycastLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (mode !== 'store') return;
@@ -26,6 +43,10 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
     }, 160);
     return () => window.clearTimeout(timer);
   }, [mode, query]);
+
+  useEffect(() => {
+    if (mode === 'raycast') void refreshRaycast();
+  }, [mode, refreshRaycast]);
 
   const sideload = async () => {
     try {
@@ -61,8 +82,43 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
     }
   };
 
+  const addFromRaycast = async (extension: LocalRaycastExtension) => {
+    setRaycastPending(extension.id);
+    try {
+      const response = await api.addRaycastExtension(extension.name, extension.installationId);
+      setInstalled((current) => [
+        response.extension,
+        ...current.filter((item) => item.id !== response.extension.id),
+      ]);
+      setMessage(syncMessage(`${response.extension.title} added to Commander`, response.sync));
+      await refreshRaycast();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not add the Raycast extension');
+    } finally {
+      setRaycastPending(null);
+    }
+  };
+
+  const syncFromRaycast = async (extension: LocalRaycastExtension) => {
+    setRaycastPending(extension.id);
+    try {
+      const response = await api.syncRaycastExtension(extension.name, extension.installationId);
+      setMessage(syncMessage(`${response.extension.title} settings synced`, response.sync));
+      await refreshRaycast();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not sync the Raycast settings');
+    } finally {
+      setRaycastPending(null);
+    }
+  };
+
   const visibleInstalled = installed.filter((extension) =>
     `${extension.title} ${extension.description} ${extension.author ?? ''}`
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+  const visibleRaycast = raycast.filter((extension) =>
+    `${extension.title} ${extension.name} ${extension.description}`
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
@@ -85,6 +141,13 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
           <button className={mode === 'store' ? 'active' : ''} type="button" onClick={() => setMode('store')}>
             Store
           </button>
+          <button
+            className={mode === 'raycast' ? 'active' : ''}
+            type="button"
+            onClick={() => setMode('raycast')}
+          >
+            Your Raycast
+          </button>
         </div>
         <button type="button" className="toolbar-button" onClick={() => void sideload()}>
           <FolderPlus /> Sideload
@@ -94,6 +157,16 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
       {message ? (
         <div className="inline-message" role="status">
           {message}
+        </div>
+      ) : null}
+
+      {mode === 'raycast' && raycastNotice ? (
+        <div className="raycast-notice" role="note">
+          <ShieldCheck />
+          <span>{raycastNotice}</span>
+          <button type="button" onClick={() => void refreshRaycast()} disabled={raycastLoading}>
+            <RefreshCw /> Refresh
+          </button>
         </div>
       ) : null}
 
@@ -122,7 +195,7 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
             </div>
           ))}
         </div>
-      ) : (
+      ) : mode === 'store' ? (
         <div className="store-grid">
           {store.map((extension) => (
             <article className="store-row" key={extension.id}>
@@ -152,7 +225,68 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
             </article>
           ))}
         </div>
+      ) : (
+        <div className="store-grid raycast-grid" aria-busy={raycastLoading}>
+          {!raycastLoading && visibleRaycast.length === 0 ? (
+            <div className="raycast-empty">
+              <CommanderIcon name="extensions" />
+              <strong>No Raycast extensions found</strong>
+              <span>Open or configure an extension in Raycast, then refresh this list.</span>
+            </div>
+          ) : null}
+          {visibleRaycast.map((extension) => {
+            const pending = raycastPending === extension.id;
+            return (
+              <article className="store-row raycast-row" key={extension.id}>
+                <span className="store-icon">
+                  <CommanderIcon name="extensions" />
+                </span>
+                <span className="store-copy">
+                  <strong>{extension.title}</strong>
+                  <span>{extension.description}</span>
+                  <small>
+                    {extension.detectedPreferenceCount} local setting
+                    {extension.detectedPreferenceCount === 1 ? '' : 's'} detected
+                    {extension.lastSyncedAt ? ` · ${extension.syncedPreferenceCount} synced` : ''}
+                    {extension.protectedPreferenceCount
+                      ? ` · ${extension.protectedPreferenceCount} password ${extension.protectedPreferenceCount === 1 ? 'field' : 'fields'} protected`
+                      : ''}
+                  </small>
+                </span>
+                {extension.installedInCommander ? (
+                  <button type="button" disabled={pending} onClick={() => void syncFromRaycast(extension)}>
+                    <RefreshCw /> {pending ? 'Syncing…' : 'Sync to Commander'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={pending || !extension.canAdd}
+                    title={
+                      extension.canAdd
+                        ? undefined
+                        : 'Development extension source is outside Raycast; use Sideload to choose its folder.'
+                    }
+                    onClick={() => void addFromRaycast(extension)}
+                  >
+                    <Download /> {pending ? 'Adding…' : 'Add to Commander'}
+                  </button>
+                )}
+              </article>
+            );
+          })}
+        </div>
       )}
     </div>
   );
+}
+
+function syncMessage(
+  prefix: string,
+  sync: { copied: number; defaultsApplied: number; missing: number; protected: number },
+): string {
+  const details = [`${sync.copied} copied`];
+  if (sync.defaultsApplied) details.push(`${sync.defaultsApplied} defaults applied`);
+  if (sync.protected) details.push(`${sync.protected} password fields left protected in Raycast`);
+  if (sync.missing) details.push(`${sync.missing} unset`);
+  return `${prefix}: ${details.join(' · ')}.`;
 }

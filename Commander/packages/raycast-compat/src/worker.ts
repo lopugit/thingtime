@@ -7,6 +7,7 @@ interface WorkerInput {
   extensionPath: string;
   entryPath: string;
   commandName: string;
+  preferences: Record<string, unknown>;
 }
 interface WorkerFailure {
   name: string;

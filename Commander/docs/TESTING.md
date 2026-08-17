@@ -11,6 +11,7 @@
 - [ ] Create at least nine distinct search sessions. Verify only the newest eight appear initially, Show More expands the retained history, Show Less collapses it again, and arrow navigation keeps every revealed row visible.
 - [ ] With text in the search field, Command-A selects the complete query and typing replaces it; on Windows/Linux shells, repeat with Control-A.
 - [ ] Up/Down selection stays visible through the complete result list. Return runs the selected primary action.
+- [ ] Hover a lower result, stop moving the pointer, then keep typing. The refreshed list resets to its first result; the stationary pointer must not steal selection until it moves again.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
 - [ ] Open an application, reveal it in Finder, and copy its path through Actions.
 - [ ] Verify default and compact modes; expansion never shows an unrendered blank region.
@@ -19,6 +20,7 @@
 
 ## Settings
 
+- [ ] Run the launcher results for Extensions and Accounts. Each opens the matching Settings tab rather than General; direct `?tab=extensions` and native tab events do the same.
 - [ ] Toggle launch at login and verify `SMAppService.mainApp.status` changes after relaunch.
 - [ ] Record a non-conflicting shortcut containing Option (for example Command-Option-J), verify the physical key is retained instead of its generated symbol, close Settings, and verify the new shortcut opens Commander.
 - [ ] Drag Settings by its centered title-bar chrome and verify buttons and fields remain independently clickable.
@@ -32,6 +34,9 @@
 - [ ] Choose Inspect Only and Build & Add separately; no package script runs without explicit consent.
 - [ ] Try an invalid folder; the error is visible and the installed list is unchanged.
 - [ ] Search Store, open the live Raycast catalog, and verify Commander does not pretend an uninstalled result is installed.
+- [ ] Open Your Raycast and verify it lists the current macOS Raycast profile with metadata/counts only; no preference value, password, token, encrypted database content, or Keychain content reaches the renderer.
+- [ ] For a disposable public extension, choose Add to Commander and verify its bounded source snapshot is installed without dependency installation or package scripts, then verify only manifest-declared non-password settings are reported as copied.
+- [ ] For an already installed extension, choose Sync to Commander and verify its safe extension/command preferences refresh. Password fields remain protected, and development extensions direct the user to Sideload instead of guessing a source path.
 - [ ] Execute a compatible prebuilt no-view command and confirm a worker crash cannot terminate the daemon.
 - [ ] Verify Installed contains the enabled built-in Commander extension with Close Commander, Close Commander Window, and Open Commander native commands.
 - [ ] Import `Commander/extensions/raycast/`, run its no-view Open Commander command from Raycast after Commander has quit, and verify the installed app relaunches with a focused, empty query.

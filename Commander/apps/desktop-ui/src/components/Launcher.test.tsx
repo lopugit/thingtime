@@ -90,6 +90,26 @@ describe('Launcher keyboard navigation', () => {
     expect(commander.setActionsOpen).toHaveBeenCalledWith(true);
   });
 
+  it('only lets newly moved pointers change the selected search result', () => {
+    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: MouseEvent });
+    const commander = state();
+    const view = render(<Launcher state={commander} />);
+    const secondRow = screen.getAllByRole('option')[1]!;
+
+    fireEvent.pointerMove(secondRow, { clientX: 120, clientY: 220 });
+    expect(commander.setSelectedIndex).toHaveBeenCalledWith(1);
+    vi.mocked(commander.setSelectedIndex).mockClear();
+
+    view.rerender(<Launcher state={{ ...commander, query: 'settings updated', selectedIndex: 0 }} />);
+    const rowAfterSearchUpdate = screen.getAllByRole('option')[1]!;
+    fireEvent.mouseEnter(rowAfterSearchUpdate);
+    fireEvent.pointerMove(rowAfterSearchUpdate, { clientX: 120, clientY: 220 });
+    expect(commander.setSelectedIndex).not.toHaveBeenCalled();
+
+    fireEvent.pointerMove(rowAfterSearchUpdate, { clientX: 121, clientY: 220 });
+    expect(commander.setSelectedIndex).toHaveBeenCalledWith(1);
+  });
+
   it('routes launcher chrome mouse-down events to the native drag handler', () => {
     render(<Launcher state={state()} />);
     const launcher = screen.getByLabelText('Commander');

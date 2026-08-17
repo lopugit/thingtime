@@ -34,7 +34,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
   private let nativeToken: String
   private let showLauncher: () -> Void
   private let hideLauncher: () -> Void
-  private let showSettings: () -> Void
+  private let showSettings: (CommanderSettingsTab?) -> Void
   private let updateHotKey: (String) throws -> Void
   private let updateMenuBar: (Bool) -> Void
   private let updateWindowMode: (String) throws -> Void
@@ -46,7 +46,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     loginItem: LaunchAtLoginService,
     showLauncher: @escaping () -> Void,
     hideLauncher: @escaping () -> Void,
-    showSettings: @escaping () -> Void,
+    showSettings: @escaping (CommanderSettingsTab?) -> Void,
     updateHotKey: @escaping (String) throws -> Void,
     updateMenuBar: @escaping (Bool) -> Void,
     updateWindowMode: @escaping (String) throws -> Void
@@ -109,7 +109,17 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
       case "launcher.hide": hideLauncher(); result = nil
       case "launcher.show": showLauncher(); result = nil
       case "application.quit": result = ["terminating": true]
-      case "settings.open": showSettings(); result = nil
+      case "settings.open":
+        let requestedTab: CommanderSettingsTab?
+        if let rawTab = request.params?["tab"]?.string {
+          guard let tab = CommanderSettingsTab(rawValue: rawTab) else {
+            throw BridgeError.invalidSettingsTab(rawTab)
+          }
+          requestedTab = tab
+        } else {
+          requestedTab = nil
+        }
+        showSettings(requestedTab); result = nil
       case "application.open":
         guard let raw = request.params?["path"]?.string else { throw BridgeError.missing("path") }
         guard let url = URL(string: raw), url.scheme != nil || raw.hasPrefix("/") else { throw BridgeError.invalidURL }
@@ -245,11 +255,12 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
 }
 
 private enum BridgeError: LocalizedError {
-  case missing(String), invalidURL, unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, daemon(String)
+  case missing(String), invalidURL, invalidSettingsTab(String), unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, daemon(String)
   var errorDescription: String? {
     switch self {
     case .missing(let key): "Native request is missing \(key)."
     case .invalidURL: "The requested URL is invalid."
+    case .invalidSettingsTab(let tab): "Unsupported Commander settings tab: \(tab)"
     case .unknownMethod(let method): "Unknown native method: \(method)"
     case .credentialMissing: "No saved credential exists for this account."
     case .invalidDaemonResponse: "The Commander service returned an invalid response."

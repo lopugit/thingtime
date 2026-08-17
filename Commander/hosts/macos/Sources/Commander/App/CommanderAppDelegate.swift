@@ -53,7 +53,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
         loginItem: loginItem,
         showLauncher: { [weak self] in self?.launcher?.show() },
         hideLauncher: { [weak self] in self?.launcher?.hide() },
-        showSettings: { [weak self] in self?.settings?.show() },
+        showSettings: { [weak self] tab in self?.settings?.show(tab: tab) },
         updateHotKey: { [weak self] shortcut in try self?.installHotKey(shortcut: shortcut) },
         updateMenuBar: { [weak self] visible in self?.setMenuBarVisible(visible) },
         updateWindowMode: { [weak self] mode in try self?.setWindowMode(mode) }
