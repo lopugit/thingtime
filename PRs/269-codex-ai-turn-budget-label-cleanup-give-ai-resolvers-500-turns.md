@@ -49,9 +49,10 @@ Those limits protect workflow-command transport and prevent an untrusted PR
 from turning a resolver into a broad repository editor.
 
 Graphify received its required structural/code refresh. Semantic extraction
-for the Markdown additions remains intentionally unavailable in this PR: the
-local semantic pass rewrote unrelated repository-wide graph state and made
-GitGuardian skip the scan, so the branch keeps the stable structural result.
+for the Markdown additions also completed through the local private proxy,
+followed by a portable report/community rebuild. Control-plane CI checks out
+only the current `.github` snapshot so neither required syntax checks nor
+warning-only contracts download the repository's full Graphify history.
 
 ## Validation
 
@@ -67,4 +68,6 @@ GitGuardian skip the scan, so the branch keeps the stable structural result.
   JSON, invalid session IDs, and unrelated failures.
 - Advisory contract jobs and marker-comment behavior; no contract command is
   part of a required unit-test or live automation path.
+- Shallow sparse control-plane checkouts validated against the pinned
+  `actions/checkout` inputs.
 - `git diff --check`.

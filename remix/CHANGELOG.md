@@ -27,6 +27,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   contracts were removed from required unit tests and live deploy/promote/
   rebase paths; they now run in independent advisory lanes whose failures
   update a PR warning comment without failing build, API, or automation jobs.
+  Those control-plane lanes now shallow-check out only `.github`, avoiding a
+  full-history Graphify download before their actual checks can begin.
   — Codex (AI), 2026-08-17
 
 - **AI resolver ceilings rise to 500 and stale labels no longer fail silently**:

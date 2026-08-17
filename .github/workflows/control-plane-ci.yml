@@ -30,7 +30,9 @@ jobs:
       - name: Check out github-actions
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github
 
       - name: Validate JavaScript syntax
         run: |
@@ -64,8 +66,9 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
+          sparse-checkout: .github
 
       - name: Collect contract advisory results
         id: contracts
