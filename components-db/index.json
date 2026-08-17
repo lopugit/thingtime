@@ -1,6 +1,6 @@
 {
-	"target": 2320,
-	"count": 2320,
+	"target": 2440,
+	"count": 2440,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -59,18 +59,21 @@
 		"support-help",
 		"photo-gallery",
 		"job-hiring",
-		"ai-assistant"
+		"ai-assistant",
+		"real-estate",
+		"whiteboard-collab",
+		"news-reading"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 290,
-		"bootstrap": 290,
-		"mui": 290,
-		"shadcn": 290,
-		"untitled": 290,
-		"daisyui": 290,
-		"reactflow": 290,
-		"thingtime": 290
+		"antd": 305,
+		"bootstrap": 305,
+		"mui": 305,
+		"shadcn": 305,
+		"untitled": 305,
+		"daisyui": 305,
+		"reactflow": 305,
+		"thingtime": 305
 	},
-	"hash": "e161cbb9012ec119"
+	"hash": "93dad73ed36cbee7"
 }
