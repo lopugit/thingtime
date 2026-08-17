@@ -199,5 +199,6 @@ test('self projection exposes managed ids and linked fallbacks separately; publi
 
 	const publicProfile = toPublicProfile(doc);
 	assert.equal(publicProfile.avatarUrl, '/api/v1/attachments/content?id=avatar-managed');
-	assert.deepEqual(Object.keys(publicProfile).sort(), ['avatarUrl', 'bannerUrl', 'bio', 'createdAt', 'displayName', 'id', 'username']);
+	assert.equal(publicProfile.temporary, false);
+	assert.deepEqual(Object.keys(publicProfile).sort(), ['avatarUrl', 'bannerUrl', 'bio', 'createdAt', 'displayName', 'id', 'temporary', 'username']);
 });
