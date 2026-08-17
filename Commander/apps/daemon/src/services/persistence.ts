@@ -10,6 +10,7 @@ import type {
 import {
   addRecentSearch as prependRecentSearch,
   DEFAULT_SETTINGS,
+  normalizeCommandShortcuts,
   normalizeRecentSearches,
 } from '@commander/protocol';
 import type { RaycastExtensionPreferenceState } from './raycastLocal.js';
@@ -31,6 +32,7 @@ function normalizedSettings(settings: Partial<CommanderSettings> | undefined): C
   const clientId = typeof merged.thingtimeClientId === 'string' ? merged.thingtimeClientId.trim() : '';
   return {
     ...merged,
+    commandShortcuts: normalizeCommandShortcuts(settings?.commandShortcuts),
     thingtimeClientId: clientId || DEFAULT_SETTINGS.thingtimeClientId,
   };
 }
@@ -55,6 +57,8 @@ export class PersistentStore {
       const parsed = JSON.parse(await readFile(statePath(), 'utf8')) as Partial<PersistentState>;
       const settings = normalizedSettings(parsed.settings);
       const clientIdNeedsMigration = parsed.settings?.thingtimeClientId !== settings.thingtimeClientId;
+      const shortcutsNeedMigration =
+        JSON.stringify(parsed.settings?.commandShortcuts ?? {}) !== JSON.stringify(settings.commandShortcuts);
       const recentSearches = normalizeRecentSearches(parsed.recentSearches);
       const historyNeedsMigration =
         Array.isArray(parsed.recentSearches) &&
@@ -67,7 +71,7 @@ export class PersistentStore {
         extensionPreferences: normalizeExtensionPreferences(parsed.extensionPreferences),
         recentSearches,
       };
-      if (clientIdNeedsMigration || historyNeedsMigration) await this.#persist();
+      if (clientIdNeedsMigration || shortcutsNeedMigration || historyNeedsMigration) await this.#persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }

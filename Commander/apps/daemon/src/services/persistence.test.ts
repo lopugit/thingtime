@@ -62,6 +62,44 @@ describe('PersistentStore Thingtime defaults', () => {
     }
   });
 
+  it('normalizes persisted command shortcuts without accepting the reserved launcher identifier', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
+    const dataDirectory = path.join(temporary, 'data');
+    await mkdir(dataDirectory);
+    vi.stubEnv('COMMANDER_DATA_DIR', dataDirectory);
+    await writeFile(
+      path.join(dataDirectory, 'state.json'),
+      `${JSON.stringify({
+        version: 1,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          commandShortcuts: {
+            'extension:builtin:emoji-symbols:search-emoji-symbols': ' Command+Option+E ',
+            launcher: 'Command+Q',
+            'extension:broken': 42,
+          },
+        },
+        accounts: [],
+        extensions: [],
+      })}\n`,
+    );
+
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      expect(store.snapshot().settings.commandShortcuts).toEqual({
+        'extension:builtin:emoji-symbols:search-emoji-symbols': 'Command+Option+E',
+      });
+      expect(
+        JSON.parse(await readFile(path.join(dataDirectory, 'state.json'), 'utf8')).settings.commandShortcuts,
+      ).toEqual({
+        'extension:builtin:emoji-symbols:search-emoji-symbols': 'Command+Option+E',
+      });
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('persists deduplicated search sessions and their launched commands across daemon restarts', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
     vi.stubEnv('COMMANDER_DATA_DIR', path.join(temporary, 'data'));

@@ -141,6 +141,12 @@
 .result-row:hover {
   background: var(--hover);
 }
+.result-row.draggable-result {
+  cursor: grab;
+}
+.result-row.draggable-result:active {
+  cursor: grabbing;
+}
 .result-row.selected {
   background: var(--selected);
 }
@@ -895,9 +901,10 @@
   display: grid;
 }
 .extension-head,
-.extension-row {
+.extension-row,
+.extension-command-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 100px 90px 70px;
+  grid-template-columns: minmax(260px, 1fr) 110px 190px 70px;
   align-items: center;
 }
 .extension-head {
@@ -907,7 +914,8 @@
   font-size: 0.72rem;
 }
 .extension-head span,
-.extension-row > span {
+.extension-row > span,
+.extension-command-row > span {
   padding: 0 13px;
 }
 .extension-head span + span {
@@ -919,6 +927,18 @@
   font-size: 0.78rem;
 }
 .extension-row:hover {
+  background: var(--hover);
+}
+.extension-group {
+  display: contents;
+}
+.extension-command-row {
+  min-height: 50px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-raised) 48%, transparent);
+  font-size: 0.76rem;
+}
+.extension-command-row:hover {
   background: var(--hover);
 }
 .extension-name {
@@ -950,6 +970,82 @@
   color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.extension-command-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding-left: 42px !important;
+}
+.extension-command-name > i {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-solid);
+  color: var(--muted);
+}
+.extension-command-name > i svg {
+  width: 13px;
+}
+.extension-command-name > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.extension-command-name strong,
+.extension-command-name small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.extension-command-name small,
+.command-count {
+  color: var(--muted);
+}
+.command-hotkey-recorder {
+  min-width: 122px;
+  min-height: 29px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-solid);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 570;
+}
+.command-hotkey-recorder:hover,
+.command-hotkey-recorder.recording {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  color: var(--accent);
+}
+.command-hotkey-recorder.recording {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.bundled-shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 9px;
+}
+.bundled-shortcut-list > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bundled-shortcut-list > span > span {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
 }
 .enabled-check svg {
   width: 15px;

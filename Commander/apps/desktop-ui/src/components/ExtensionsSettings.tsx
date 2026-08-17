@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CommanderExtension, LocalRaycastExtension, StoreExtension } from '@commander/protocol';
+import {
+  extensionCommandItemId,
+  type CommanderExtension,
+  type CommanderSettings,
+  type ExtensionCommand,
+  type LocalRaycastExtension,
+  type StoreExtension,
+} from '@commander/protocol';
 import {
   Check,
   Download,
   ExternalLink,
   FolderPlus,
+  Keyboard,
   PackageCheck,
   RefreshCw,
   Search,
@@ -12,11 +20,22 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { nativeRequest } from '../lib/nativeBridge.js';
+import { clearsRecordedShortcut, formatShortcut, shortcutFromKeyboardEvent } from '../lib/shortcuts.js';
 import { CommanderIcon } from './CommanderIcon.js';
 
 type ExtensionMode = 'installed' | 'bundled' | 'store' | 'raycast';
 
-export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] }) {
+export function ExtensionsSettings({
+  initial,
+  settings,
+  onChange,
+  onError,
+}: {
+  initial: CommanderExtension[];
+  settings: CommanderSettings;
+  onChange(next: CommanderSettings): void;
+  onError(message: string | null): void;
+}) {
   const [mode, setMode] = useState<ExtensionMode>('installed');
   const [query, setQuery] = useState('');
   const [installed, setInstalled] = useState(initial);
@@ -26,6 +45,50 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
   const [raycastLoading, setRaycastLoading] = useState(false);
   const [raycastPending, setRaycastPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [recordingCommandId, setRecordingCommandId] = useState<string | null>(null);
+
+  const updateCommandShortcut = useCallback(
+    async (itemId: string, shortcut: string | null) => {
+      const commandShortcuts = { ...settings.commandShortcuts };
+      if (shortcut) commandShortcuts[itemId] = shortcut;
+      else delete commandShortcuts[itemId];
+      try {
+        await nativeRequest('commandHotkeys.update', {
+          shortcuts: activeCommandShortcuts(commandShortcuts, installed),
+        });
+        onChange({ ...settings, commandShortcuts });
+        onError(null);
+      } catch (error) {
+        onError(error instanceof Error ? error.message : 'Could not register that command shortcut');
+      }
+    },
+    [installed, onChange, onError, settings],
+  );
+
+  useEffect(() => {
+    if (!recordingCommandId) return;
+    const captureShortcut = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') {
+        setRecordingCommandId(null);
+        return;
+      }
+      if (clearsRecordedShortcut(event)) {
+        const itemId = recordingCommandId;
+        setRecordingCommandId(null);
+        void updateCommandShortcut(itemId, null);
+        return;
+      }
+      const shortcut = shortcutFromKeyboardEvent(event);
+      if (!shortcut) return;
+      const itemId = recordingCommandId;
+      setRecordingCommandId(null);
+      void updateCommandShortcut(itemId, shortcut);
+    };
+    window.addEventListener('keydown', captureShortcut, true);
+    return () => window.removeEventListener('keydown', captureShortcut, true);
+  }, [recordingCommandId, updateCommandShortcut]);
 
   const refreshRaycast = useCallback(async () => {
     setRaycastLoading(true);
@@ -121,11 +184,22 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
     }
   };
 
-  const visibleInstalled = installed.filter((extension) =>
-    `${extension.title} ${extension.description} ${extension.author ?? ''}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleInstalled = installed.flatMap((extension) => {
+    const extensionMatches =
+      !normalizedQuery ||
+      `${extension.title} ${extension.description} ${extension.author ?? ''}`
+        .toLowerCase()
+        .includes(normalizedQuery);
+    const commands = extension.commands.filter(
+      (command) =>
+        extensionMatches ||
+        `${command.title} ${command.description ?? ''} ${command.keywords.join(' ')}`
+          .toLowerCase()
+          .includes(normalizedQuery),
+    );
+    return extensionMatches || commands.length ? [{ extension, commands }] : [];
+  });
   const visibleBundled = installed.filter(
     (extension) =>
       extension.source === 'builtin' &&
@@ -197,24 +271,58 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
         <div className="extension-table" role="table">
           <div className="extension-head" role="row">
             <span>Name</span>
-            <span>Source</span>
-            <span>Commands</span>
+            <span>Type</span>
+            <span>Shortcut</span>
             <span>Enabled</span>
           </div>
-          {visibleInstalled.map((extension) => (
-            <div className="extension-row" role="row" key={extension.id}>
-              <span className="extension-name">
-                <i>
-                  <CommanderIcon name={extension.icon ?? 'extensions'} />
-                </i>
-                <span>
-                  <strong>{extension.title}</strong>
-                  <small>{extension.description}</small>
+          {visibleInstalled.map(({ extension, commands }) => (
+            <div className="extension-group" role="rowgroup" key={extension.id}>
+              <div className="extension-row" role="row">
+                <span className="extension-name">
+                  <i>
+                    <CommanderIcon name={extension.icon ?? 'extensions'} />
+                  </i>
+                  <span>
+                    <strong>{extension.title}</strong>
+                    <small>{extension.description}</small>
+                  </span>
                 </span>
-              </span>
-              <span>{extension.source}</span>
-              <span>{extension.commands.length}</span>
-              <span className="enabled-check">{extension.enabled ? <Check /> : '—'}</span>
+                <span>Extension</span>
+                <span className="command-count">
+                  {commands.length} {commands.length === 1 ? 'command' : 'commands'}
+                </span>
+                <span className="enabled-check">{extension.enabled ? <Check /> : '—'}</span>
+              </div>
+              {commands.map((command) => {
+                const itemId = extensionCommandItemId(extension.id, command.name);
+                return (
+                  <div className="extension-command-row" role="row" key={itemId}>
+                    <span className="extension-command-name">
+                      <i>
+                        <Keyboard />
+                      </i>
+                      <span>
+                        <strong>{command.title}</strong>
+                        <small>{command.description ?? extension.title}</small>
+                      </span>
+                    </span>
+                    <span>{commandModeLabel(command)}</span>
+                    <span>
+                      <CommandShortcutButton
+                        title={command.title}
+                        shortcut={settings.commandShortcuts[itemId]}
+                        recording={recordingCommandId === itemId}
+                        onClick={() =>
+                          setRecordingCommandId((current) => (current === itemId ? null : itemId))
+                        }
+                      />
+                    </span>
+                    <span className="enabled-check">
+                      {extension.enabled && !command.disabled ? <Check /> : '—'}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
@@ -250,6 +358,24 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
                     {extension.commands.length === 1 ? 'command' : 'commands'} · by{' '}
                     {extension.author ?? 'Thingtime'}
                   </small>
+                  <span className="bundled-shortcut-list">
+                    {extension.commands.map((command) => {
+                      const itemId = extensionCommandItemId(extension.id, command.name);
+                      return (
+                        <span key={itemId}>
+                          <span>{command.title}</span>
+                          <CommandShortcutButton
+                            title={command.title}
+                            shortcut={settings.commandShortcuts[itemId]}
+                            recording={recordingCommandId === itemId}
+                            onClick={() =>
+                              setRecordingCommandId((current) => (current === itemId ? null : itemId))
+                            }
+                          />
+                        </span>
+                      );
+                    })}
+                  </span>
                 </span>
                 <span className="bundled-badge">
                   <Check /> Built in
@@ -340,6 +466,57 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
         </div>
       )}
     </div>
+  );
+}
+
+function activeCommandShortcuts(
+  shortcuts: CommanderSettings['commandShortcuts'],
+  extensions: readonly CommanderExtension[],
+): CommanderSettings['commandShortcuts'] {
+  const activeItemIds = new Set(
+    extensions.flatMap((extension) =>
+      extension.enabled
+        ? extension.commands
+            .filter((command) => !command.disabled)
+            .map((command) => extensionCommandItemId(extension.id, command.name))
+        : [],
+    ),
+  );
+  return Object.fromEntries(Object.entries(shortcuts).filter(([itemId]) => activeItemIds.has(itemId)));
+}
+
+function commandModeLabel(command: ExtensionCommand): string {
+  if (command.mode === 'menu-bar') return 'Menu Bar';
+  return command.mode === 'view' ? 'View Command' : 'Command';
+}
+
+function CommandShortcutButton({
+  title,
+  shortcut,
+  recording,
+  onClick,
+}: {
+  title: string;
+  shortcut: string | undefined;
+  recording: boolean;
+  onClick(): void;
+}) {
+  const description = recording
+    ? `Recording shortcut for ${title}`
+    : shortcut
+      ? `Rebind shortcut for ${title}, currently ${formatShortcut(shortcut)}`
+      : `Record shortcut for ${title}`;
+  return (
+    <button
+      type="button"
+      className={recording ? 'command-hotkey-recorder recording' : 'command-hotkey-recorder'}
+      aria-label={description}
+      aria-pressed={recording}
+      title={shortcut ? 'Click to rebind. Press Delete to clear.' : 'Click, then press a shortcut.'}
+      onClick={onClick}
+    >
+      {recording ? 'Press shortcut…' : shortcut ? formatShortcut(shortcut) : 'Record Shortcut'}
+    </button>
   );
 }
 

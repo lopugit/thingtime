@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { CommanderExtension, LocalRaycastExtension } from '@commander/protocol';
+import { DEFAULT_SETTINGS, type CommanderExtension, type LocalRaycastExtension } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api.js';
+import { nativeRequest } from '../lib/nativeBridge.js';
 import { ExtensionsSettings } from './ExtensionsSettings.js';
 
 vi.mock('../lib/api.js', () => ({
@@ -51,6 +52,16 @@ const emojiExtension: CommanderExtension = {
   ],
 };
 
+function renderExtensions(
+  initial: CommanderExtension[] = [],
+  settings = DEFAULT_SETTINGS,
+): { onChange: ReturnType<typeof vi.fn>; onError: ReturnType<typeof vi.fn> } {
+  const onChange = vi.fn();
+  const onError = vi.fn();
+  render(<ExtensionsSettings initial={initial} settings={settings} onChange={onChange} onError={onError} />);
+  return { onChange, onError };
+}
+
 describe('Your Raycast extensions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -90,7 +101,7 @@ describe('Your Raycast extensions', () => {
       },
     });
 
-    render(<ExtensionsSettings initial={[]} />);
+    renderExtensions();
     fireEvent.click(screen.getByRole('button', { name: 'Your Raycast' }));
 
     expect(await screen.findByText('GitHub')).toBeVisible();
@@ -130,7 +141,7 @@ describe('Your Raycast extensions', () => {
       },
     });
 
-    render(<ExtensionsSettings initial={[]} />);
+    renderExtensions();
     fireEvent.click(screen.getByRole('button', { name: 'Your Raycast' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sync to Commander' }));
 
@@ -140,7 +151,7 @@ describe('Your Raycast extensions', () => {
   });
 
   it('lists Commander-native equivalents under Bundled Raycast Commands', () => {
-    render(<ExtensionsSettings initial={[emojiExtension]} />);
+    renderExtensions([emojiExtension]);
 
     fireEvent.click(screen.getByRole('button', { name: 'Bundled' }));
 
@@ -148,5 +159,64 @@ describe('Your Raycast extensions', () => {
     expect(screen.getByText('Emoji & Symbols')).toBeVisible();
     expect(screen.getByText('1 bundled command · by Thingtime')).toBeVisible();
     expect(screen.getByText('Built in')).toBeVisible();
+  });
+
+  it('click-records and natively validates a per-command shortcut before saving it', async () => {
+    const itemId = 'extension:builtin:emoji-symbols:search-emoji-symbols';
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      commandShortcuts: { [itemId]: 'Command+E' },
+    };
+    const { onChange, onError } = renderExtensions([emojiExtension], settings);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Rebind shortcut for Search Emoji & Symbols, currently ⌘ E',
+      }),
+    );
+    fireEvent.keyDown(window, { key: '€', code: 'KeyE', metaKey: true, altKey: true });
+
+    await waitFor(() =>
+      expect(nativeRequest).toHaveBeenCalledWith('commandHotkeys.update', {
+        shortcuts: { [itemId]: 'Command+Option+E' },
+      }),
+    );
+    expect(onChange).toHaveBeenCalledWith({
+      ...settings,
+      commandShortcuts: { [itemId]: 'Command+Option+E' },
+    });
+    expect(onError).toHaveBeenCalledWith(null);
+  });
+
+  it('keeps persisted command shortcuts unchanged when macOS rejects a conflict', async () => {
+    const { onChange, onError } = renderExtensions([emojiExtension]);
+    vi.mocked(nativeRequest).mockRejectedValueOnce(new Error('macOS rejected this shortcut'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record shortcut for Search Emoji & Symbols' }));
+    fireEvent.keyDown(window, { key: ' ', code: 'Space', metaKey: true });
+
+    await waitFor(() => expect(onError).toHaveBeenCalledWith('macOS rejected this shortcut'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('clears an existing command shortcut with an unmodified Delete key', async () => {
+    const itemId = 'extension:builtin:emoji-symbols:search-emoji-symbols';
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      commandShortcuts: { [itemId]: 'Command+Option+E' },
+    };
+    const { onChange } = renderExtensions([emojiExtension], settings);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Rebind shortcut for Search Emoji & Symbols, currently ⌘ ⌥ E',
+      }),
+    );
+    fireEvent.keyDown(window, { key: 'Delete', code: 'Delete' });
+
+    await waitFor(() =>
+      expect(nativeRequest).toHaveBeenCalledWith('commandHotkeys.update', { shortcuts: {} }),
+    );
+    expect(onChange).toHaveBeenCalledWith({ ...settings, commandShortcuts: {} });
   });
 });

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo } from 'react';
+import { extensionCommandItemId } from '@commander/protocol';
 import { Launcher } from './components/Launcher.js';
 import { Settings } from './components/Settings.js';
 import { useCommander } from './hooks/useCommander.js';
@@ -13,6 +14,22 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
   const state = useCommander();
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const surface = surfaceOverride ?? params.get('surface') ?? 'launcher';
+  const nativeCommandShortcuts = useMemo(() => {
+    const bootstrap = state.bootstrap;
+    if (!bootstrap) return {};
+    const active = new Set(
+      bootstrap.extensions.flatMap((extension) =>
+        extension.enabled
+          ? extension.commands
+              .filter((command) => !command.disabled)
+              .map((command) => extensionCommandItemId(extension.id, command.name))
+          : [],
+      ),
+    );
+    return Object.fromEntries(
+      Object.entries(bootstrap.settings.commandShortcuts).filter(([itemId]) => active.has(itemId)),
+    );
+  }, [state.bootstrap]);
 
   useEffect(() => {
     const id = state.bootstrap?.settings.activeAccountId;
@@ -33,6 +50,7 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
     if (!settings) return;
     void nativeRequest('settings.applyNative', {
       hotkey: settings.hotkey,
+      commandShortcuts: nativeCommandShortcuts,
       openAtLogin: settings.openAtLogin,
       showMenuBarIcon: settings.showMenuBarIcon,
       windowMode: settings.windowMode,
@@ -41,6 +59,7 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
     });
   }, [
     state.bootstrap?.settings.hotkey,
+    nativeCommandShortcuts,
     state.bootstrap?.settings.openAtLogin,
     state.bootstrap?.settings.showMenuBarIcon,
     state.bootstrap?.settings.windowMode,

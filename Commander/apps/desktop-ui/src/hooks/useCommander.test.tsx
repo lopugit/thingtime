@@ -4,6 +4,7 @@ import type { SearchHit } from '@commander/protocol';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api.js';
+import { hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 import { useCommander } from './useCommander.js';
 
 vi.mock('../lib/api.js', () => ({
@@ -12,7 +13,13 @@ vi.mock('../lib/api.js', () => ({
     search: vi.fn(),
     addRecentSearch: vi.fn(),
     saveSettings: vi.fn(),
+    execute: vi.fn(),
+    sideload: vi.fn(),
   },
+}));
+vi.mock('../lib/nativeBridge.js', () => ({
+  hideLauncher: vi.fn(async () => undefined),
+  nativeRequest: vi.fn(async () => undefined),
 }));
 
 const bootstrap = {
@@ -42,6 +49,7 @@ describe('useCommander launcher sessions', () => {
         { query: 'settings', commands: [] },
       ],
     }));
+    vi.mocked(api.execute).mockResolvedValue({ ok: true });
   });
 
   afterEach(cleanup);
@@ -82,5 +90,37 @@ describe('useCommander launcher sessions', () => {
 
     expect(result.current.hits).toEqual([]);
     expect(result.current.selectedIndex).toBe(0);
+  });
+
+  it('runs a native action and hides the launcher through the shared command executor', async () => {
+    vi.mocked(api.execute).mockResolvedValueOnce({
+      ok: true,
+      nativeRequest: { method: 'application.open', params: { path: '/Applications/Notes.app' } },
+    });
+    const { result } = renderHook(() => useCommander());
+    await waitFor(() => expect(result.current.bootstrap).not.toBeNull());
+
+    await act(() => result.current.executeCommand('app:/Applications/Notes.app', 'open'));
+
+    expect(nativeRequest).toHaveBeenCalledWith('application.open', {
+      path: '/Applications/Notes.app',
+    });
+    expect(hideLauncher).toHaveBeenCalledOnce();
+  });
+
+  it('executes a registered command hotkey event and opens its Commander view', async () => {
+    const itemId = 'extension:builtin:emoji-symbols:search-emoji-symbols';
+    vi.mocked(api.execute).mockResolvedValueOnce({
+      ok: true,
+      view: { id: 'emoji-symbols' },
+    });
+    const { result } = renderHook(() => useCommander());
+    await waitFor(() => expect(result.current.bootstrap).not.toBeNull());
+
+    act(() => window.dispatchEvent(new CustomEvent('commander:command-hotkey', { detail: itemId })));
+
+    await waitFor(() => expect(api.execute).toHaveBeenCalledWith(itemId, 'run'));
+    await waitFor(() => expect(result.current.activeView).toBe('emoji-symbols'));
+    expect(hideLauncher).not.toHaveBeenCalled();
   });
 });

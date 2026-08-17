@@ -46,7 +46,9 @@ authorization headers. Windows maps the same calls to Credential Manager; Linux 
 
 `packages/protocol` is the source contract for daemon, UI, Rust-facing models, and native bridge messages. The
 shipping Swift bridge and the C# implementation contract mirror the same named methods; code generation and schema
-conformance tests are the next portability gate. OS differences stop at that boundary.
+conformance tests are the next portability gate. OS differences stop at that boundary. Per-command shortcut maps
+and file drag requests cross this boundary as stable command IDs and absolute paths; only the native host registers
+system hotkeys or constructs file-URL dragging sessions.
 
 ## Process lifecycle
 

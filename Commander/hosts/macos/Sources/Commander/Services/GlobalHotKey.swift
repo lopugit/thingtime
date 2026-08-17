@@ -8,53 +8,98 @@ enum HotKeyError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidShortcut(let shortcut): "Unsupported shortcut: \(shortcut)"
-    case .registrationFailed(let status): "macOS rejected this shortcut (\(status)). It may already be assigned."
+    case .registrationFailed(let status):
+      "macOS rejected this shortcut (\(status)). It may already be assigned."
     }
   }
 }
 
 @MainActor
-final class GlobalHotKey {
-  private var hotKeyRef: EventHotKeyRef?
+final class GlobalHotKeyRegistry {
+  private static let signature: OSType = 0x434D4452 // CMDR
+  private var hotKeyRefs: [EventHotKeyRef] = []
   private var eventHandler: EventHandlerRef?
-  private let handler: () -> Void
+  private var keysByIdentifier: [UInt32: String] = [:]
+  private let handler: (String) -> Void
 
-  init(shortcut: String, handler: @escaping () -> Void) throws {
+  init(shortcuts: [String: String], handler: @escaping (String) -> Void) throws {
     self.handler = handler
-    let parsed = try Self.parse(shortcut)
-    var specification = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-    let status = InstallEventHandler(
+    guard !shortcuts.isEmpty else { return }
+
+    var specification = EventTypeSpec(
+      eventClass: OSType(kEventClassKeyboard),
+      eventKind: UInt32(kEventHotKeyPressed)
+    )
+    let install = InstallEventHandler(
       GetApplicationEventTarget(),
-      { _, _, pointer -> OSStatus in
-        MainActor.assumeIsolated {
-          guard let pointer else { return }
-          Unmanaged<GlobalHotKey>.fromOpaque(pointer).takeUnretainedValue().handler()
+      { _, event, pointer -> OSStatus in
+        guard let pointer else { return OSStatus(eventNotHandledErr) }
+        return MainActor.assumeIsolated {
+          Unmanaged<GlobalHotKeyRegistry>.fromOpaque(pointer).takeUnretainedValue()
+            .handle(event: event)
         }
-        return noErr
       },
       1,
       &specification,
       Unmanaged.passUnretained(self).toOpaque(),
       &eventHandler
     )
-    guard status == noErr else { throw HotKeyError.registrationFailed(status) }
-    let identifier = EventHotKeyID(signature: 0x434D4452, id: 1) // CMDR
-    let register = RegisterEventHotKey(parsed.keyCode, parsed.modifiers, identifier, GetApplicationEventTarget(), 0, &hotKeyRef)
-    guard register == noErr else {
-      if let eventHandler { RemoveEventHandler(eventHandler) }
-      self.eventHandler = nil
-      throw HotKeyError.registrationFailed(register)
+    guard install == noErr else { throw HotKeyError.registrationFailed(install) }
+
+    do {
+      for (offset, entry) in shortcuts.sorted(by: { $0.key < $1.key }).enumerated() {
+        let parsed = try Self.parse(entry.value)
+        let identifierValue = UInt32(offset + 1)
+        let identifier = EventHotKeyID(signature: Self.signature, id: identifierValue)
+        var reference: EventHotKeyRef?
+        let register = RegisterEventHotKey(
+          parsed.keyCode,
+          parsed.modifiers,
+          identifier,
+          GetApplicationEventTarget(),
+          0,
+          &reference
+        )
+        guard register == noErr, let reference else {
+          throw HotKeyError.registrationFailed(register)
+        }
+        hotKeyRefs.append(reference)
+        keysByIdentifier[identifierValue] = entry.key
+      }
+    } catch {
+      invalidate()
+      throw error
     }
   }
 
   func invalidate() {
-    if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
+    hotKeyRefs.forEach { UnregisterEventHotKey($0) }
     if let eventHandler { RemoveEventHandler(eventHandler) }
-    hotKeyRef = nil
+    hotKeyRefs = []
     eventHandler = nil
+    keysByIdentifier = [:]
   }
 
-  private static func parse(_ shortcut: String) throws -> (keyCode: UInt32, modifiers: UInt32) {
+  private func handle(event: EventRef?) -> OSStatus {
+    guard let event else { return OSStatus(eventNotHandledErr) }
+    var identifier = EventHotKeyID()
+    let read = GetEventParameter(
+      event,
+      EventParamName(kEventParamDirectObject),
+      EventParamType(typeEventHotKeyID),
+      nil,
+      MemoryLayout<EventHotKeyID>.size,
+      nil,
+      &identifier
+    )
+    guard read == noErr,
+          identifier.signature == Self.signature,
+          let key = keysByIdentifier[identifier.id] else { return OSStatus(eventNotHandledErr) }
+    handler(key)
+    return noErr
+  }
+
+  static func parse(_ shortcut: String) throws -> (keyCode: UInt32, modifiers: UInt32) {
     let parts = shortcut.split(separator: "+").map { String($0).lowercased() }
     guard let key = parts.last else { throw HotKeyError.invalidShortcut(shortcut) }
     var modifiers: UInt32 = 0

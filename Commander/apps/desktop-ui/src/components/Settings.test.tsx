@@ -45,6 +45,7 @@ function state(): CommanderState {
     setActionsOpen: vi.fn(),
     setActiveView: vi.fn(),
     rememberRecentSearch: vi.fn(async () => undefined),
+    executeCommand: vi.fn(async () => undefined),
     reportError: vi.fn(),
     saveSettings: vi.fn(),
     refresh: vi.fn(),

@@ -154,15 +154,25 @@ environment.
 - Starting a new query now clears the prior result set synchronously, closing a
   debounce race where an immediate Return could execute the previously rendered
   command before fresh search results arrived.
+- Installed and bundled extension commands now expose click-to-record global
+  shortcuts. Commander persists them by stable extension-command item ID,
+  validates the complete active set with macOS before saving, rejects duplicate
+  or system conflicts, restores the last working registrations on failure, and
+  dispatches accepted shortcuts through the same daemon execution path as Return.
+- Application results with a real source path now start a native AppKit
+  `NSDraggingSession` after WebKit's pointer threshold. The pasteboard carries a
+  validated file URL and native file icon, preserving normal click execution
+  while allowing direct drag-out to Finder-compatible macOS targets.
 
 ## Verification
 
-- Commander TypeScript: 64 tests passed across UI, daemon, and compatibility
-  packages; typecheck, ESLint, Prettier, and package builds passed.
+- Commander TypeScript: 72 tests passed across UI (38), daemon (16), and
+  compatibility (18) packages; typecheck, ESLint, Prettier, and package builds
+  passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
   Clippy with warnings denied passed.
-- Swift: three WebKit/panel transparency, compositor-mask, and settings-deep-link regressions passed;
-  the release build passed with warnings treated as errors.
+- Swift: eight WebKit/panel, settings-deep-link, file-drag, and command-hotkey
+  regressions passed; the release build passed with warnings treated as errors.
 - `Commander/script/build_and_run.sh --verify` built, Apple Development signed,
   installed, and launched the exact follow-up app at
   `~/Applications/Commander.app`.
@@ -170,6 +180,8 @@ environment.
   entitlements, process ancestry, daemon health, and bundled executable paths
   were verified.
 - Native macOS QA covered physical-key custom-hotkey recording and restoration,
+  per-command recording and Delete-clear behavior, and a real Finder-compatible
+  file-URL drop of `/Applications/Hermes.app` into an isolated native receiver,
   all three built-in lifecycle commands, complete quit versus window-only hide,
   empty-query reopen, persistent History, and Raycast-driven app relaunch,
   native launcher/Settings drag gestures, search ranking,

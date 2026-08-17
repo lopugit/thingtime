@@ -731,6 +731,14 @@ is fixed, and cite the checklist you ran in the PR description.
       with arrows, execute with Return, open Command-K, traverse actions, and
       dismiss actions/launcher with Escape. Long names must not clip or create
       horizontal scroll in default or compact mode.
+- [ ] Drag an application result into a disposable Terminal prompt and verify
+      the exact `.app` path is inserted through a native file-URL drag without
+      opening it. Clear the prompt without executing it; single and double click
+      on that result must still preserve normal selection/execution behavior.
+- [ ] In Extensions Settings, record, invoke, rebind, and Delete-clear a global
+      command shortcut. A duplicate command binding or collision with the
+      launcher hotkey must fail before persistence and restore the complete
+      previously working native registration set.
 - [ ] Type a unique launcher query, launch a result, then hide and reopen with
       the global shortcut. Verify the field clears while the launched command
       is the first History row and its search term follows as a separate

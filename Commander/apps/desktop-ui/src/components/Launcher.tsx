@@ -4,7 +4,6 @@ import { ArrowRight, Command, CornerDownLeft, Search } from 'lucide-react';
 import type { RecentSearch, RecentSearchCommand, SearchHit } from '@commander/protocol';
 import { RECENT_SEARCH_PREVIEW_LIMIT } from '@commander/protocol';
 import type { CommanderState } from '../hooks/useCommander.js';
-import { api } from '../lib/api.js';
 import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 import { ActionsPanel } from './ActionsPanel.js';
 import { CommanderIcon } from './CommanderIcon.js';
@@ -73,58 +72,29 @@ export function Launcher({ state }: { state: CommanderState }) {
     if (typeof selectedRow?.scrollIntoView === 'function') selectedRow.scrollIntoView({ block: 'nearest' });
   }, [state.selectedIndex]);
 
-  const executeCommand = useCallback(
-    async (itemId: string, actionId: string) => {
-      let nativeRequestMethod: string | undefined;
-      const response = await api.execute(itemId, actionId);
-      if (response.view) state.setActiveView(response.view.id);
-      if (response.nativeRequest) {
-        const request = response.nativeRequest;
-        nativeRequestMethod = request.method;
-        const nativeResult = await nativeRequest<{ path?: string; allowUntrustedBuildScripts?: boolean }>(
-          request.method,
-          request.params,
-        );
-        if (request.method === 'extension.choose' && nativeResult?.path) {
-          await api.sideload(nativeResult.path, nativeResult.allowUntrustedBuildScripts === true);
-          await state.refresh();
-        }
-      }
-      const nativeOwnsLauncherLifecycle =
-        nativeRequestMethod === 'launcher.hide' ||
-        nativeRequestMethod === 'launcher.show' ||
-        nativeRequestMethod === 'application.quit';
-      if ((actionId === 'open' || actionId === 'run') && !nativeOwnsLauncherLifecycle && !response.view)
-        await hideLauncher();
-      state.setActionsOpen(false);
-      state.reportError(null);
-    },
-    [state],
-  );
-
   const runAction = useCallback(
     async (actionId: string) => {
       try {
         if (!selected) return;
         await state.rememberRecentSearch(state.query, commandHistoryEntry(selected, actionId));
-        await executeCommand(selected.id, actionId);
+        await state.executeCommand(selected.id, actionId);
       } catch (error) {
         state.reportError(error instanceof Error ? error.message : 'Command failed');
       }
     },
-    [executeCommand, selected, state],
+    [selected, state],
   );
 
   const runHistoryCommand = useCallback(
     async (row: Extract<HistoryRow, { type: 'command' }>) => {
       try {
         await state.rememberRecentSearch(row.search.query, row.command);
-        await executeCommand(row.command.itemId, row.command.actionId);
+        await state.executeCommand(row.command.itemId, row.command.actionId);
       } catch (error) {
         state.reportError(error instanceof Error ? error.message : 'Command failed');
       }
     },
-    [executeCommand, state],
+    [state],
   );
 
   const runSelected = useCallback(() => {
@@ -319,9 +289,16 @@ export function Launcher({ state }: { state: CommanderState }) {
                   type="button"
                   role="option"
                   aria-selected={rowIndex === state.selectedIndex}
-                  className={rowIndex === state.selectedIndex ? 'result-row selected' : 'result-row'}
+                  className={`${rowIndex === state.selectedIndex ? 'result-row selected' : 'result-row'}${hit.path ? ' draggable-result' : ''}`}
                   key={hit.id}
                   onPointerMove={(event) => selectFromPointer(rowIndex, event)}
+                  onPointerDown={(event) => {
+                    if (event.button !== 0 || !hit.path) return;
+                    state.setSelectedIndex(rowIndex);
+                    void nativeRequest('filesystem.beginDrag', { path: hit.path }).catch((error: unknown) =>
+                      state.reportError(error instanceof Error ? error.message : 'Could not drag that file'),
+                    );
+                  }}
                   onDoubleClick={() => void runAction(hit.actions[0]?.id ?? 'open')}
                 >
                   <span className={`result-icon kind-${hit.kind}`}>

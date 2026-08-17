@@ -26,10 +26,12 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   private let webView: CommanderWebView
   private var contentReady = false
   private var pendingShow = false
+  private var pendingCommandItemID: String?
   private var showPending = false
   private var showRequestID: UInt = 0
   private var windowMode = LauncherWindowMode.standard
   private var pasteTarget: NSRunningApplication?
+  private var fileDragInProgress = false
 
   init(ready: DaemonReady, bridge: CommanderNativeBridge) {
     let panel = CommanderPanel(
@@ -61,20 +63,40 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     webView.firstPresentationReady = { [weak self] in
       guard let self else { return }
       self.contentReady = true
-      if self.pendingShow { self.pendingShow = false; self.show() }
+      if self.pendingShow {
+        let commandItemID = self.pendingCommandItemID
+        self.pendingShow = false
+        self.pendingCommandItemID = nil
+        self.requestShow(commandItemID: commandItemID)
+      }
+    }
+    webView.fileDragSessionChanged = { [weak self] active, completed in
+      self?.fileDragSessionChanged(active: active, completed: completed)
     }
   }
 
-  func show() {
+  func show() { requestShow(commandItemID: nil) }
+
+  func runCommandHotKey(itemID: String) { requestShow(commandItemID: itemID) }
+
+  private func requestShow(commandItemID: String?) {
     rememberPasteTarget()
-    guard contentReady else { pendingShow = true; return }
+    guard contentReady else {
+      pendingShow = true
+      pendingCommandItemID = commandItemID
+      return
+    }
     pendingShow = false
+    pendingCommandItemID = nil
     showPending = true
     showRequestID &+= 1
     let requestID = showRequestID
     Task { [weak self] in
       guard let self else { return }
       _ = try? await self.webView.evaluateJavaScript(Self.launcherOpenedScript)
+      if let commandItemID {
+        _ = try? await self.webView.evaluateJavaScript(Self.commandHotKeyScript(itemID: commandItemID))
+      }
       await Task.yield()
       guard self.showPending, self.showRequestID == requestID else { return }
       self.showPending = false
@@ -92,6 +114,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   func hide() {
     pendingShow = false
+    pendingCommandItemID = nil
     showPending = false
     showRequestID &+= 1
     panel.orderOut(nil)
@@ -164,16 +187,40 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     panel.delegate = nil
   }
 
-  func windowDidResignKey(_ notification: Notification) { hide() }
+  func windowDidResignKey(_ notification: Notification) {
+    if !fileDragInProgress { hide() }
+  }
 
   var panelForTesting: NSPanel { panel }
   static var launcherOpenedScriptForTesting: String { launcherOpenedScript }
+  static func commandHotKeyScriptForTesting(itemID: String) -> String {
+    commandHotKeyScript(itemID: itemID)
+  }
+
+  private static func commandHotKeyScript(itemID: String) -> String {
+    guard let data = try? JSONSerialization.data(withJSONObject: itemID, options: [.fragmentsAllowed]),
+          let encoded = String(data: data, encoding: .utf8) else { return "" }
+    return "window.dispatchEvent(new CustomEvent('commander:command-hotkey',{detail:\(encoded)}))"
+  }
 
   private func rememberPasteTarget() {
     guard let active = NSWorkspace.shared.frontmostApplication,
           active.processIdentifier != ProcessInfo.processInfo.processIdentifier,
           !active.isTerminated else { return }
     pasteTarget = active
+  }
+
+  private func fileDragSessionChanged(active: Bool, completed: Bool) {
+    fileDragInProgress = active
+    panel.hidesOnDeactivate = !active
+    guard !active else { return }
+    if completed {
+      hide()
+    } else if panel.isVisible {
+      NSApp.activate(ignoringOtherApps: true)
+      panel.makeKeyAndOrderFront(nil)
+      panel.makeFirstResponder(webView)
+    }
   }
 
   private func centerOnActiveScreen() {

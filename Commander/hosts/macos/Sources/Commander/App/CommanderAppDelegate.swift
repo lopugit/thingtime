@@ -2,14 +2,16 @@ import AppKit
 
 @MainActor
 final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
+  private static let launcherHotKeyIdentifier = "launcher"
   private let daemon = DaemonSupervisor()
   private let keychain = KeychainStore()
   private let loginItem = LaunchAtLoginService()
   private var launcher: LauncherPanelController?
   private var settings: SettingsWindowController?
   private var statusItem: CommanderStatusItem?
-  private var hotKey: GlobalHotKey?
+  private var hotKeyRegistry: GlobalHotKeyRegistry?
   private var hotKeyShortcut: String?
+  private var commandHotKeyShortcuts: [String: String] = [:]
   private var isTerminating = false
 
   func applicationDidFinishLaunching(_ notification: Notification) {
@@ -62,7 +64,12 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
         },
         pasteTargetName: { [weak self] in self?.launcher?.pasteTargetName },
         showSettings: { [weak self] tab in self?.settings?.show(tab: tab) },
-        updateHotKey: { [weak self] shortcut in try self?.installHotKey(shortcut: shortcut) },
+        updateHotKeys: { [weak self] launcherShortcut, commandShortcuts in
+          try self?.updateHotKeys(
+            launcherShortcut: launcherShortcut,
+            commandShortcuts: commandShortcuts
+          )
+        },
         updateMenuBar: { [weak self] visible in self?.setMenuBarVisible(visible) },
         updateWindowMode: { [weak self] mode in try self?.setWindowMode(mode) }
       )
@@ -86,26 +93,62 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func installHotKey(shortcut: String) throws {
-    if hotKeyShortcut == shortcut, hotKey != nil { return }
-    let previousShortcut = hotKeyShortcut
-    hotKey?.invalidate()
-    hotKey = nil
+  private func updateHotKeys(
+    launcherShortcut: String?,
+    commandShortcuts: [String: String]?
+  ) throws {
+    let nextLauncherShortcut = launcherShortcut ?? hotKeyShortcut
+    guard let nextLauncherShortcut, !nextLauncherShortcut.isEmpty else {
+      throw HotKeyError.invalidShortcut(launcherShortcut ?? "")
+    }
+    let nextCommandShortcuts = commandShortcuts ?? commandHotKeyShortcuts
+    guard nextCommandShortcuts[Self.launcherHotKeyIdentifier] == nil else {
+      throw HotKeyError.invalidShortcut(Self.launcherHotKeyIdentifier)
+    }
+    if hotKeyShortcut == nextLauncherShortcut,
+       commandHotKeyShortcuts == nextCommandShortcuts,
+       hotKeyRegistry != nil { return }
+
+    let previousLauncherShortcut = hotKeyShortcut
+    let previousCommandShortcuts = commandHotKeyShortcuts
+    hotKeyRegistry?.invalidate()
+    hotKeyRegistry = nil
     do {
-      hotKey = try GlobalHotKey(shortcut: shortcut) { [weak self] in self?.launcher?.toggle() }
-      hotKeyShortcut = shortcut
+      hotKeyRegistry = try makeHotKeyRegistry(
+        launcherShortcut: nextLauncherShortcut,
+        commandShortcuts: nextCommandShortcuts
+      )
+      hotKeyShortcut = nextLauncherShortcut
+      commandHotKeyShortcuts = nextCommandShortcuts
     } catch {
-      hotKey = nil
-      hotKeyShortcut = nil
-      if let previousShortcut {
-        do {
-          hotKey = try GlobalHotKey(shortcut: previousShortcut) { [weak self] in self?.launcher?.toggle() }
-          hotKeyShortcut = previousShortcut
-        } catch {
-          NSLog("Commander could not restore previous hotkey %@: %@", previousShortcut, error.localizedDescription)
-        }
+      hotKeyRegistry = nil
+      do {
+        hotKeyRegistry = try makeHotKeyRegistry(
+          launcherShortcut: previousLauncherShortcut,
+          commandShortcuts: previousCommandShortcuts
+        )
+        hotKeyShortcut = previousLauncherShortcut
+        commandHotKeyShortcuts = previousCommandShortcuts
+      } catch {
+        hotKeyShortcut = nil
+        commandHotKeyShortcuts = [:]
+        NSLog("Commander could not restore its previous hotkeys: %@", error.localizedDescription)
       }
       throw error
+    }
+  }
+
+  private func makeHotKeyRegistry(
+    launcherShortcut: String?,
+    commandShortcuts: [String: String]
+  ) throws -> GlobalHotKeyRegistry? {
+    var shortcuts = commandShortcuts
+    if let launcherShortcut { shortcuts[Self.launcherHotKeyIdentifier] = launcherShortcut }
+    guard !shortcuts.isEmpty else { return nil }
+    return try GlobalHotKeyRegistry(shortcuts: shortcuts) { [weak self] identifier in
+      guard let self else { return }
+      if identifier == Self.launcherHotKeyIdentifier { launcher?.toggle() }
+      else { launcher?.runCommandHotKey(itemID: identifier) }
     }
   }
 
@@ -123,9 +166,10 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     settings = nil
     statusItem?.remove()
     statusItem = nil
-    hotKey?.invalidate()
-    hotKey = nil
+    hotKeyRegistry?.invalidate()
+    hotKeyRegistry = nil
     hotKeyShortcut = nil
+    commandHotKeyShortcuts = [:]
     if stopDaemon { daemon.stop() }
   }
 
