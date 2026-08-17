@@ -133,6 +133,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Vercel builds now start at the repository root without deploying the thin
+  CI branch**: root `vercel.json` installs only the Remix workspace, a tested
+  wrapper preserves the existing Vite/Nitro verification before staging the
+  Build Output API artifact at root `.vercel/output`, and both config and the
+  ignored-build decision exclude `github-actions`. The matching control-plane
+  config disables Git deployments for that branch and its descendants. Setup
+  and live verification steps are recorded in README, TESTING, and
+  VERCEL_DEPLOYMENTS. — Codex (AI), 2026-08-17
 - **Thin Web CI promotion no longer blocks on topology contracts**: the stale
   product-branch copy of the develop-preview controller was removed, the two
   workflow/topology contract commands were removed from the required unit-test
