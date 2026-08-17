@@ -32,6 +32,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Two questions decide whether the full suite applies, and both must be asked.
+  #
+  # First, is there a web app in this tree at all? The control plane carries
+  # only `.github/**`, so a branch (or a PR stacked on one) legitimately has no
+  # `remix/`, and the suite below would fail in seconds against nothing. Branch
+  # names are the wrong signal — deleting `remix/**` still matches the path
+  # filter, and a stacked PR's base is the branch it is stacked on, not the
+  # control plane. Asking the tree works for every topology.
+  #
+  # Second, does this pull request touch the web app? The listener above is
+  # deliberately path-filter-free, so a PR that changes nothing under `remix/`
+  # still starts this workflow; it gets the lightweight required-context
+  # companions instead of the full suite.
+  #
+  # Either answer being "no" means `full_web_ci=false`, which hands the stable
+  # required-context names to the companions rather than leaving them pending.
   scope:
     name: Classify Web CI scope
     runs-on: ubuntu-latest
@@ -39,11 +55,35 @@ jobs:
     outputs:
       full_web_ci: ${{ steps.scope.outputs.full_web_ci }}
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect the web app
+        id: detect
+        run: |
+          set -euo pipefail
+          if [ -f remix/package.json ]; then
+            echo "has_app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "This tree has no remix/ app; the web suite does not apply."
+            echo "has_app=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Inspect pull-request paths
         id: scope
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HAS_APP: ${{ steps.detect.outputs.has_app }}
         with:
           script: |
+            if (process.env.HAS_APP !== 'true') {
+              core.setOutput('full_web_ci', 'false');
+              core.info(
+                'This tree has no remix/ app: the required-context companions ' +
+                'stand in for the full Web CI suite.'
+              );
+              return;
+            }
+
             const pullRequest = context.payload.pull_request;
             if (!pullRequest) {
               core.setOutput('full_web_ci', 'true');
