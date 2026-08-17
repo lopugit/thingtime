@@ -955,6 +955,119 @@ const schemaThingSchema: ThingtimeSchema = {
   }
 };
 
+// UI components are things too (thingtime ["component"]). A component carries
+// a serialised render TEMPLATE (the element/chakra tree the sanitising
+// renderers draw) plus a bounded arg-descriptor list; the /components page
+// resolves template tokens ({label}, ttArg/ttMap/ttIf/ttMerge/ttRepeat
+// wrappers) against tester args before rendering. Saved versions snapshot the
+// chosen args in savedArgs. System-seeded library components (shareId
+// component-<slug>) mirror the components-db folder database.
+export const COMPONENT_LIBRARIES = [
+	'antd',
+	'bootstrap',
+	'mui',
+	'shadcn',
+	'untitled',
+	'daisyui',
+	'reactflow',
+	'thingtime',
+	'custom'
+] as const;
+export const MAX_COMPONENT_ARGS = 16;
+export const MAX_COMPONENT_ARG_NAME_CHARS = 40;
+export const MAX_COMPONENT_ARG_LABEL_CHARS = 40;
+export const MAX_COMPONENT_ARG_DESCRIPTION_CHARS = 200;
+export const MAX_COMPONENT_ARG_DEFAULT_CHARS = 400;
+export const MAX_COMPONENT_SAVED_ARGS = 24;
+export const MAX_COMPONENT_SAVED_ARG_CHARS = 2000;
+export const MAX_COMPONENT_CATEGORY_CHARS = 40;
+export const MAX_COMPONENT_KEY_CHARS = 80;
+export const MAX_COMPONENT_PREVIEW_BG_CHARS = 200;
+export const COMPONENT_ARG_TYPES = ['string', 'text', 'number', 'boolean', 'enum', 'color'] as const;
+export const COMPONENT_ARG_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const COMPONENT_KEY_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+const componentSchema: ThingtimeSchema = {
+	id: 'component',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Component',
+	summary: 'A UI component — browse and tweak them live on /components, save versions to your Things.',
+	detail:
+		'A component thing is a renderable UI building block: a serialised element/chakra render ' +
+		'template (drawn only through the sanitising allowlist renderers) plus a bounded list of ' +
+		'arg descriptors the /components tester turns into live inputs. Template strings may ' +
+		'interpolate {argName} tokens, and ttArg/ttMap/ttIf/ttMerge/ttRepeat wrapper objects ' +
+		'resolve against the current args before rendering. The platform library (1000+ components ' +
+		'styled after Ant Design, Bootstrap, MUI, shadcn/ui, Untitled UI, daisyUI, React Flow, and ' +
+		'the Thingtime house style) is seeded system-owned with shareId component-<slug>; ' +
+		'"Save version" stores a user-owned component thing whose savedArgs snapshot the tester ' +
+		'state, linked back via componentKey/forkOf.',
+	fields: [
+		{ name: 'name', type: 'string', required: true, max: MAX_SCHEMA_NAME_CHARS, description: 'Display name, e.g. "Solid Button".' },
+		{ name: 'description', type: 'string', required: false, max: MAX_SCHEMA_DESCRIPTION_CHARS, description: 'What this component is and when to use it.' },
+		{
+			name: 'library',
+			type: 'enum',
+			required: false,
+			values: [...COMPONENT_LIBRARIES],
+			description: 'The design language this component follows; user-authored components default to custom.'
+		},
+		{ name: 'category', type: 'string', required: false, max: MAX_COMPONENT_CATEGORY_CHARS, description: 'Catalog category, e.g. buttons, forms, feedback, navigation, flow.' },
+		{ name: 'componentKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Stable slug identity linking saved versions to their source component.' },
+		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a componentKey.' },
+		{ name: 'forkOf', type: 'string', required: false, description: 'shareId of the component this one was saved/forked from (provenance only).' },
+		{ name: 'previewBg', type: 'string', required: false, max: MAX_COMPONENT_PREVIEW_BG_CHARS, description: 'Optional CSS background for the preview surface (e.g. a dotted canvas).' },
+		{
+			// recursive/open-but-bounded structures — same honest 'record'
+			// classification the schema thing uses for its field tree
+			name: 'args',
+			type: 'record',
+			required: false,
+			max: MAX_COMPONENT_ARGS,
+			description:
+				`Arg descriptor list, max ${MAX_COMPONENT_ARGS}: { name, type (${COMPONENT_ARG_TYPES.join('/')}), ` +
+				'label?, description?, default, values? (enum), min?/max? (number), maxLength? (string) }. ' +
+				'The /components tester renders one input per descriptor.'
+		},
+		{
+			name: 'savedArgs',
+			type: 'record',
+			required: false,
+			max: MAX_COMPONENT_SAVED_ARGS,
+			description: 'Scalar arg-value snapshot a saved version renders with (keys mirror arg names).'
+		},
+		{
+			name: 'render',
+			type: 'record',
+			required: true,
+			description:
+				`Serialised render template — element ({ tag: "div", props, children }) or chakra shaped, max ` +
+				`${MAX_SCHEMA_RENDER_BYTES} bytes / ${MAX_SCHEMA_RENDER_NODES} nodes, drawn only through the sanitising ` +
+				'allowlist renderers after arg-template resolution.'
+		}
+	],
+	example: {
+		name: 'Solid Button',
+		description: 'Filled primary action button in the Thingtime house style.',
+		library: 'thingtime',
+		category: 'buttons',
+		componentKey: 'thingtime-button-solid',
+		version: 1,
+		args: [
+			{ name: 'label', type: 'string', label: 'Label', default: 'Get started', maxLength: 40 },
+			{ name: 'tone', type: 'enum', label: 'Tone', values: ['primary', 'success', 'danger'], default: 'primary' },
+			{ name: 'disabled', type: 'boolean', label: 'Disabled', default: false }
+		],
+		render: {
+			tag: 'button',
+			props: { type: 'button', style: { padding: '0 16px', height: '36px', borderRadius: '9px', background: '#16161a', color: '#ffffff' } },
+			children: ['{label}']
+		}
+	}
+};
+
 // Library saves: "add to my library" is a relational child thing (FUNDAMENTALS
 // §3) — one save doc per (user, target), private to the saver, toggled via
 // POST /api/v1/things/save. Zero crystal fields, like `share`.
@@ -2199,6 +2312,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   shareSchema,
   dataSchema,
   schemaThingSchema,
+  componentSchema,
   saveThingSchema,
   folderSchema,
   appSchema,
@@ -2932,6 +3046,148 @@ const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crys
   return { ok: true, crystal };
 };
 
+// Component things: bounded arg descriptors + a required render template.
+// Template wrapper objects (ttArg/ttMap/ttIf/ttMerge/ttRepeat) are plain keys,
+// so the shared render tree check ($-key/proto guards, node/depth/byte caps)
+// applies unchanged; token resolution and draw-time safety live client-side.
+
+const sanitizeComponentArgScalar = (value: unknown, cap: number): string | number | boolean | null => {
+	if (typeof value === 'boolean') return value;
+	if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+	if (typeof value === 'string') return value.slice(0, cap);
+	return null;
+};
+
+const sanitizeComponentArgs = (input: unknown): { ok: true; args: Record<string, unknown>[] } | Fail => {
+	if (!Array.isArray(input)) return fail(400, 'Component args must be a list of arg descriptors');
+	if (input.length > MAX_COMPONENT_ARGS) return fail(400, `Components can declare at most ${MAX_COMPONENT_ARGS} args`);
+	const args: Record<string, unknown>[] = [];
+	const seen = new Set<string>();
+	for (const entry of input) {
+		if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return fail(400, 'Each component arg must be an object');
+		const raw = entry as Record<string, unknown>;
+		const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+		if (!name || name.length > MAX_COMPONENT_ARG_NAME_CHARS || !COMPONENT_ARG_NAME_PATTERN.test(name)) {
+			return fail(400, `Component arg names must match ${COMPONENT_ARG_NAME_PATTERN} (got "${String(raw.name).slice(0, 40)}")`);
+		}
+		const lower = name.toLowerCase();
+		if (seen.has(lower)) return fail(400, `Duplicate component arg: ${name}`);
+		seen.add(lower);
+		const type = typeof raw.type === 'string' ? raw.type : '';
+		if (!(COMPONENT_ARG_TYPES as readonly string[]).includes(type)) {
+			return fail(400, `Component arg ${name} has an unknown type (expected ${COMPONENT_ARG_TYPES.join('/')})`);
+		}
+		const arg: Record<string, unknown> = { name, type };
+		if (typeof raw.label === 'string' && raw.label.trim()) arg.label = raw.label.trim().slice(0, MAX_COMPONENT_ARG_LABEL_CHARS);
+		if (typeof raw.description === 'string' && raw.description.trim()) {
+			arg.description = raw.description.trim().slice(0, MAX_COMPONENT_ARG_DESCRIPTION_CHARS);
+		}
+		if (type === 'enum') {
+			if (!Array.isArray(raw.values) || !raw.values.length || raw.values.length > MAX_SCHEMA_ENUM_VALUES) {
+				return fail(400, `Enum arg ${name} needs 1–${MAX_SCHEMA_ENUM_VALUES} values`);
+			}
+			const values: string[] = [];
+			for (const value of raw.values) {
+				if (typeof value !== 'string' || !value.trim() || value.length > MAX_SCHEMA_ENUM_VALUE_CHARS) {
+					return fail(400, `Enum arg ${name} has an invalid value`);
+				}
+				if (!values.includes(value)) values.push(value);
+			}
+			arg.values = values;
+		}
+		if (raw.default !== undefined) {
+			const fallback = sanitizeComponentArgScalar(raw.default, MAX_COMPONENT_ARG_DEFAULT_CHARS);
+			if (fallback === null && raw.default !== null) return fail(400, `Arg ${name} default must be a string, number, or boolean`);
+			if (fallback !== null) arg.default = fallback;
+		}
+		if (typeof raw.min === 'number' && Number.isFinite(raw.min)) arg.min = raw.min;
+		if (typeof raw.max === 'number' && Number.isFinite(raw.max)) arg.max = raw.max;
+		if (typeof raw.maxLength === 'number' && Number.isFinite(raw.maxLength)) {
+			arg.maxLength = Math.max(1, Math.min(Math.round(raw.maxLength), MAX_TEXT_CHARS));
+		}
+		args.push(arg);
+	}
+	return { ok: true, args };
+};
+
+const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+	const name = typeof input.name === 'string' ? input.name.trim() : '';
+	if (!name) return fail(400, 'Components need a name');
+	if (name.length > MAX_SCHEMA_NAME_CHARS) return fail(400, `Component name is too long (max ${MAX_SCHEMA_NAME_CHARS})`);
+
+	const crystal: Record<string, unknown> = { name };
+
+	const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
+	if (description) crystal.description = description;
+
+	const library = typeof input.library === 'string' ? input.library.trim() : '';
+	crystal.library = (COMPONENT_LIBRARIES as readonly string[]).includes(library) ? library : 'custom';
+
+	const category = typeof input.category === 'string' ? input.category.trim().slice(0, MAX_COMPONENT_CATEGORY_CHARS) : '';
+	crystal.category = category || 'general';
+
+	if (input.componentKey !== undefined && input.componentKey !== null && input.componentKey !== '') {
+		const componentKey = typeof input.componentKey === 'string' ? input.componentKey.trim() : '';
+		if (!componentKey || componentKey.length > MAX_COMPONENT_KEY_CHARS || !COMPONENT_KEY_PATTERN.test(componentKey)) {
+			return fail(400, 'componentKey must be a lowercase-dashed slug');
+		}
+		crystal.componentKey = componentKey;
+	}
+
+	if (input.version !== undefined && input.version !== null) {
+		const version = Number(input.version);
+		if (!Number.isInteger(version) || version < 1 || version > 999999) return fail(400, 'version must be a positive integer');
+		crystal.version = version;
+	}
+
+	if (input.forkOf !== undefined && input.forkOf !== null && input.forkOf !== '') {
+		const forkOf = typeof input.forkOf === 'string' ? input.forkOf.trim() : '';
+		if (!forkOf || forkOf.length > 128 || /[$\s]/.test(forkOf)) return fail(400, 'forkOf must be a thing id');
+		crystal.forkOf = forkOf;
+	}
+
+	if (input.previewBg !== undefined && input.previewBg !== null && input.previewBg !== '') {
+		const previewBg = typeof input.previewBg === 'string' ? input.previewBg.trim() : '';
+		if (!previewBg || previewBg.length > MAX_COMPONENT_PREVIEW_BG_CHARS || /[<>]|javascript:/i.test(previewBg)) {
+			return fail(400, 'previewBg must be a short CSS background value');
+		}
+		crystal.previewBg = previewBg;
+	}
+
+	if (input.args !== undefined && input.args !== null) {
+		const args = sanitizeComponentArgs(input.args);
+		if (isFail(args)) return args;
+		if (args.args.length) crystal.args = args.args;
+	}
+
+	if (input.savedArgs !== undefined && input.savedArgs !== null) {
+		if (typeof input.savedArgs !== 'object' || Array.isArray(input.savedArgs)) {
+			return fail(400, 'savedArgs must be an object of scalar arg values');
+		}
+		const savedArgs: Record<string, unknown> = {};
+		const entries = Object.entries(input.savedArgs as Record<string, unknown>);
+		if (entries.length > MAX_COMPONENT_SAVED_ARGS) return fail(400, `savedArgs can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
+		for (const [key, value] of entries) {
+			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
+				return fail(400, `savedArgs key "${key.slice(0, 40)}" is not a valid arg name`);
+			}
+			const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
+			if (scalar === null && value !== null) return fail(400, `savedArgs.${key} must be a string, number, or boolean`);
+			if (scalar !== null) savedArgs[key] = scalar;
+		}
+		if (Object.keys(savedArgs).length) crystal.savedArgs = savedArgs;
+	}
+
+	if (input.render === undefined || input.render === null) {
+		return fail(400, 'Components need a render template ({ tag: "div", … })');
+	}
+	const render = sanitizeSchemaRender(input.render);
+	if (isFail(render)) return render;
+	crystal.render = render.render;
+
+	return { ok: true, crystal };
+};
+
 // ---------------------------------------------------------------------------
 // Value validation against a schema-thing field tree. Pure and shared: the
 // schema builder previews with it, the create-a-thing form validates with it.
@@ -3144,6 +3400,7 @@ const crystalSanitizers: Record<
   share: () => ({ ok: true, crystal: {} }),
   save: () => ({ ok: true, crystal: {} }),
   schema: sanitizeSchemaCrystal,
+  component: sanitizeComponentCrystal,
   data: sanitizeDataCrystal,
   user: sanitizeUserCrystal,
   theme: sanitizeThemeCrystal,

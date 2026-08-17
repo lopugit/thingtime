@@ -7,6 +7,7 @@ import AppsManageRoute from './routes/apps-manage';
 import Authorize from './routes/authorize';
 import Branding from './routes/branding/_index';
 import BrandingOld from './routes/branding_old';
+import ComponentsRoute from './routes/components';
 import CryptoPage from './routes/crypto';
 import DocsLayout from './routes/docs/DocsLayout';
 import DocsApi from './routes/docs/api';
@@ -172,6 +173,8 @@ export const router = createBrowserRouter([
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', element: <SchemasRoute /> },
+      // UI component library: /schemas' UI-first sibling
+      { path: 'components', element: <ComponentsRoute /> },
       { path: 'search', element: <SearchRoute /> },
       {
         path: 'status',

@@ -24,6 +24,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.save': { limit: 60, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
+  // component browsing (/api/v1/components/browse) — same read-only shape
+  'components.browse': { limit: 120, windowMs: 60_000, enabled: true },
+  // admin component-library seeding (/api/v1/admin/components/seed) — batch
+  // writes; enforced fail-closed at the route
+  'components.seed': { limit: 30, windowMs: 60_000, enabled: true },
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
   'things.write': { limit: 60, windowMs: 60_000, enabled: true },

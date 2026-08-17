@@ -1919,3 +1919,35 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       composition; browse mode filters kinds client-side over loaded pages.
 - [ ] Columns-view folder loading happens in an effect, never during render
       (React "setState while rendering" stays fixed).
+
+## Components (/components, `remix/app/components/ComponentsLibrary/`, `/api/v1/components/browse`, `/api/v1/admin/components/seed`)
+
+- [ ] `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`
+      passes end to end (browse + filters + docs twin, admin seed gate,
+      user save-version via the unified things path, react/save decoration).
+- [ ] /components paints the seeded library; every card renders its component
+      LIVE from the stored template (no raw JSON fallbacks), with the library
+      badge matching the card's visual style.
+- [ ] The library filter pills (Ant Design → Thingtime) rescope the browse and
+      the counts line; text search works and the lib filter is not silently
+      applied while a q is active.
+- [ ] "Args" expands the tester; editing a string arg re-renders live, an enum
+      swaps its mapped styles (e.g. tracking-timeline stage), a boolean toggles
+      its ttIf branch, and "reset to defaults" restores the original render.
+- [ ] "Schema" stays collapsed by default and expands to inherits chips, args
+      chips, on-create shape, thingtime-adds system fields, and the raw JSON
+      definition (scrollable, no page overflow).
+- [ ] "Save version" (signed in) pre-fills a name, saves privately by default,
+      shows the Lopu toast, bumps the source card's "saved versions" count, and
+      the version appears under Mine with its savedArgs snapshot rendering.
+- [ ] React + Add to library work optimistically on component cards and
+      reconcile with the server (flags survive a reload).
+- [ ] Drawer: Schemas and Components are separate top-level items; /components
+      highlights Components (not Schemas), /schemas highlights Schemas, and
+      Search's submenu no longer contains Schemas.
+- [ ] Mobile (375px): pills wrap, cards stay single-column, no horizontal
+      scroll, args/schema expanders stay inside the card.
+- [ ] Seeding is idempotent: re-running `node scripts/components-db/seed.mjs`
+      reports unchanged (not created) for an already-seeded library, and a
+      foreign doc squatting a `component-<slug>` shareId is skipped, never
+      overwritten.
