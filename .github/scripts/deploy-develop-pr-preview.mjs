@@ -159,6 +159,11 @@ const previewAlias = (number, suffix = 'previews.dev.thingtime.com') => {
 	return `pr-${prNumber}.${safeHostname(suffix, 'Preview alias suffix')}`;
 };
 
+const customEnvironmentDomainNames = (domains) =>
+	(Array.isArray(domains) ? domains : [])
+		.map((domain) => (typeof domain === 'string' ? domain : domain?.name ?? domain?.domain))
+		.filter((domain) => typeof domain === 'string');
+
 const runtimeConfig = () => ({
 	repository: safeRepository(requiredEnv('GITHUB_REPOSITORY')),
 	repositoryId: boundedInteger(requiredEnv('GITHUB_REPOSITORY_ID'), 'GitHub repository id'),
@@ -257,6 +262,8 @@ const deploymentPayload = ({ pullRequest, config }) => {
 		name: config.projectName,
 		project: config.projectId,
 		customEnvironmentSlugOrId: config.customEnvironmentId,
+		// Only Git-connected develop builds may advance the Custom Environment's stable domain.
+		autoAssignCustomDomains: false,
 		gitSource: {
 			type: 'github',
 			repoId: config.gitRepoId,
@@ -408,9 +415,15 @@ const runSelfTest = () => {
 	const payload = deploymentPayload({ pullRequest: base, config });
 	equal(payload.project, config.projectId);
 	equal(payload.customEnvironmentSlugOrId, config.customEnvironmentId);
-	truthy(!Object.hasOwn(payload, 'autoAssignCustomDomains'));
+	equal(payload.autoAssignCustomDomains, false);
 	equal(payload.gitSource.sha, base.head.sha);
 	equal(payload.meta[WORKFLOW_DEPLOYMENT_MARKER], '1');
+	equal(customEnvironmentDomainNames(['dev.thingtime.com', { name: 'preview.example.com' }, { domain: 'legacy.example.com' }]), [
+		'dev.thingtime.com',
+		'preview.example.com',
+		'legacy.example.com'
+	]);
+	equal(customEnvironmentDomainNames(null), []);
 
 	const deployment = {
 		id: 'dpl_example',
@@ -773,15 +786,21 @@ const assertVercelConfiguration = async (config) => {
 	if (customEnvironment?.id !== config.customEnvironmentId || customEnvironment?.slug !== 'develop') {
 		throw new Error('Vercel custom environment identity did not match develop');
 	}
-	if ((customEnvironment.domains ?? []).length !== 0) {
-		throw new Error('Develop custom environment must not have an automatically assigned domain');
+	const environmentDomains = customEnvironmentDomainNames(customEnvironment.domains);
+	if (environmentDomains.length !== 1 || environmentDomains[0] !== config.stableDevelopDomain) {
+		throw new Error('Develop custom environment must own exactly the stable develop domain');
 	}
 
 	const stableDomain = await vercelRequest(
 		`/v9/projects/${encodeURIComponent(config.projectId)}/domains/${encodeURIComponent(config.stableDevelopDomain)}`
 	);
-	if (stableDomain?.projectId !== config.projectId || stableDomain?.gitBranch !== 'develop' || stableDomain?.customEnvironmentId != null) {
-		throw new Error('Stable develop domain must remain branch-scoped and detached from the custom environment');
+	if (
+		stableDomain?.projectId !== config.projectId ||
+		stableDomain?.verified !== true ||
+		stableDomain?.gitBranch != null ||
+		stableDomain?.customEnvironmentId !== config.customEnvironmentId
+	) {
+		throw new Error('Stable develop domain must be verified and attached only to the develop custom environment');
 	}
 
 	const wildcardDomainName = `*.${config.previewAliasSuffix}`;
