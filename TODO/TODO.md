@@ -91,16 +91,17 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
    10 attempts per 15 minutes per IP; PR #99 leaves that rule unchanged and adds
    the remaining 16 KiB streaming registration body cap. Public registration
    continues to whitelist accepted fields rather than forwarding caller `meta`.
-   Full rationale and remaining §A work: `claude-todo/09-security-hardening.md`.
+   Full rationale and the earlier §A closure: `claude-todo/09-security-hardening.md`.
 
 9. **✅ FIXED IN PR #99 — 🐛 persisted strings no longer corrupt into Dates.**
 
-   The extracted persistence codec tags real Dates, escapes user strings that
-   look like timestamps, and migrates only the exact bare `Date.toISOString()`
-   shape emitted by the legacy serializer. This keeps Dates and identical-looking
-   user text distinct across repeated save/reload cycles. Malformed tag-looking
-   user objects are preserved, functions are dropped, and the real flatted codec
-   is covered by focused regression tests.
+   The active persistence serializer tags real Dates and never infers a Date
+   from an untagged string. Ambiguous legacy ISO values remain text rather than
+   risking user-data corruption; known date fields can migrate schema-aware.
+   This keeps Dates and identical-looking user text distinct across new repeated
+   save/reload cycles. Malformed tag-looking user objects are preserved,
+   functions are dropped, and the real flatted codec is covered by focused
+   regression tests.
 
 10. **✅ FIXED IN PR #99 — 🔒 persisted-state code execution removed; strict CSP added.**
 
@@ -109,9 +110,10 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     both inline script execution and `unsafe-eval`. Pre-paint boot code now comes
     from same-origin `/tt-boot.js`; only repository-controlled design bundles get
     a path-scoped runtime-compiler exception inside an opaque-origin sandbox.
-    Legacy Commander/smarts paths that require `eval` deliberately fail closed;
-    any future executable-command design must use an explicit safe registry or
-    isolated sandbox rather than weakening the whole application policy.
+    Commander assignments now parse data literals without `eval`. Unused
+    smarts dynamic-code modes remain blocked by CSP; any future executable
+    command design must use an explicit safe registry or isolated sandbox rather
+    than weakening the whole application policy.
     Full spec: `claude-todo/09-security-hardening.md`.
 
 11. **🐛 Feed shows duplicate posts in ranked mode.**

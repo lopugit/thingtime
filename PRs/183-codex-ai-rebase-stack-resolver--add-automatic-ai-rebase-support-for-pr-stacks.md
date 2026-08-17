@@ -65,13 +65,9 @@ the parent branch.
   repository metadata, credentials, or trusted action implementation.
 - The trusted action is copied from the exact default-branch workflow SHA and
   hash-checked around every round. It independently recomputes the conflict
-  set, records configuration/security-adjacent paths for reviewer comments,
-  rejects unsafe file types or modes, verifies the immutable Git/rebase state,
-  scans resolved content, stages only the approved files, and continues the
-  real rebase outside the model workspace. Path sensitivity is advisory rather
-  than a resolution stop; executable drivers, credentials, unsafe paths,
-  non-regular files, binaries, and publication capabilities remain hard
-  boundaries.
+  set, rejects sensitive paths and unsafe file types or modes, verifies the
+  immutable Git/rebase state, scans resolved content, stages only the approved
+  files, and continues the real rebase outside the model workspace.
 - Automatic runs refuse fork heads, the default branch, protected branches,
   ambiguous child fork points, stale PR/ref metadata, and concurrent ownership.
   Failures add snapshot-bound `ai-rebase-paused`; stale snapshots recover

@@ -36,9 +36,9 @@ export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 
 // The persist codec (flatted parse/stringify + reviver/replacer) lives in
 // ./thingtimeSerialization so it can be unit-tested without React. Persisted
-// functions only revive where the CSP permits Function(): under the application
-// policy (scripts/csp.mjs — no 'unsafe-eval') revival fails closed, hydration
-// drops the dead entries, and ThingtimeDefaults re-supplies the real functions.
+// functions are always omitted on write and removed on read; hydration then
+// re-supplies legitimate runtime functions from ThingtimeDefaults. CSP is a
+// second boundary, not the mechanism that makes storage-controlled code inert.
 
 try {
 	window.smarts = smarts;
@@ -374,10 +374,9 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 						const restoredThingtime = restoreThingtime(newThingtime);
 
-						// Older blobs contain either an invalid fallback function or the
-						// provider's root set/get closures. Both are runtime-only state. Commit
-						// the repaired snapshot before exposing the hydrated UI so this very
-						// first load is also the last load that can see the poisoned blob.
+						// Older blobs can contain function tags or root set/get closures.
+						// Commit the inert repair before exposing the hydrated UI so this
+						// first load is also the last load that sees executable-looking data.
 						if (parseResult.repaired || hasPersistedThingtimeRuntimeMethods(parsed)) {
 							const repairedSerialized = stringifyThingtimeForStorage(restoredThingtime);
 							if (!repairedSerialized) throw new Error('Repaired Thingtime value could not be serialized');

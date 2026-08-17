@@ -19,6 +19,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #99 final security reconciliation**: the current Thingtime serializer
+  now treats persisted state strictly as data—functions are omitted on write,
+  every legacy function tag is removed without compilation, code-defined
+  defaults refill runtime behavior, and graph-aware repair preserves circular
+  aliases. Explicit Date tags and data-first legacy handling stop repeated
+  hydration from changing ordinary text. The strict app CSP now loads preview
+  freshness from external `/tt-preview-freshness.js`, while active Commander
+  assignments parse data literals without `eval`. Registration preserves the
+  existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
+  streaming body cap. — Codex (AI), 2026-08-18
 - **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
   now lets the controller build an already-previewed commit in the isolated
   `develop` Custom Environment instead of canceling it as a duplicate, while
@@ -510,19 +520,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   predicate (MongoDB code 224); it upserts by the deterministic reserved
   `shareId` and still validates the complete protected envelope before trusting
   either a new or existing ledger. — Codex (AI), 2026-08-08
-- **Sensitive-path conflicts are reviewer annotations, not resolver stops**:
-  both AI auto-mergers now resolve eligible regular-text conflicts in package
-  manifests, lockfiles, workflows, repository policies, `.gitattributes`,
-  environment templates, and build configuration. Merge and rebase terminal
-  PR comments call out the verifier-accepted configuration/security-adjacent
-  paths for focused review, with rebase paths accumulated across all replay
-  rounds and long merge/rebase audits split into bounded, HTML-escaped,
-  retry-pruned comments.
-  Uncertain unions use the newer base/destination side as a deterministic
-  fallback instead of deliberately leaving markers. Unsafe paths and file
-  types, binaries/size caps, executable Git drivers, credential and scope
-  checks, workflow-token capability, branch/ref/topology checks, and exact
-  leases remain blocking safety boundaries. — Codex (AI), 2026-08-08
+- **Conflict detection waits out GitHub and says so when it stands aside**:
+  the merge resolver's detector polled mergeability for only ~80 seconds
+  after a base push, but GitHub's verdicts can take ~6 minutes to settle —
+  observed on PR #190, where the develop push that created the conflict ran
+  detection while the PR still read UNKNOWN, so nothing was handed off, no
+  comment appeared, and the conflict sat silent until the scheduled sweep.
+  Detection now re-queries until every scanned PR has a verdict or a time
+  budget runs out (`MERGEABLE_POLL_SECONDS`, default 500s, with
+  `MERGEABLE_POLL_INTERVAL` between re-queries; detect timeout raised to 15
+  minutes), and the detect job now upserts a status comment on any PR it must
+  leave alone — conflicting fork PRs it cannot push to, and PRs whose
+  mergeability never settled — so detector silence always means "nothing
+  needed doing", never "nobody looked". Conflicts that are handed off keep
+  announcing themselves through the existing "Auto-resolve running" comment;
+  the rebase workflow already polls its verdicts round-robin and is
+  unchanged. Also restored the "AI PR and stack rebase conflict resolution"
+  changelog bullet's opening line, dropped by the AI resolution of a previous
+  merge. — Claude (AI), 2026-08-08
+
 - **`withMongoTransaction` ReferenceError + Web CI transaction support**: the
   AI-resolved merge that landed on main via PR #158 left `withMongoTransaction`
   calling the removed `getClientCached()`, 500-ing every transactional write

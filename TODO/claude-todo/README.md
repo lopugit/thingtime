@@ -18,7 +18,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 05 | Authed DB write (create/update/delete) | 🔴 Not started | [05-authed-db-write.md](./05-authed-db-write.md) |
 | 07 | Cross-tab sync for persisted thingtime state | 🔴 Not started | [07-cross-tab-thingtime-sync.md](./07-cross-tab-thingtime-sync.md) |
 | 08 | Drawer nav & editor UX follow-ups (draggable groups, brand link, `/branding` + SVG→PNG, API tests, hover key-path context) | 🔴 Not started | [08-drawer-nav-editor-polish.md](./08-drawer-nav-editor-polish.md) |
-| 09 | Security hardening (unauth admin/data endpoints, auth rate limiting, persisted-state `eval`/CSP, Date.parse corruption) | 🟡 In progress · §§B–D fixed by PRs #167/#99; §A remains | [09-security-hardening.md](./09-security-hardening.md) |
+| 09 | Security hardening (unauth admin/data endpoints, auth rate limiting, persisted-state `eval`/CSP, Date.parse corruption) | 🟡 Final §§C–D reconciliation in PR #99; §§A–B closed | [09-security-hardening.md](./09-security-hardening.md) |
 | 10 | Delight & growth ideas (sharing loops, theme gallery, algorithm-growth design, Commander/DevKit power-ups, easter eggs) | 🌱 Idea bank · some eggs shipped | [10-delight-and-growth-ideas.md](./10-delight-and-growth-ideas.md) |
 | 11 | Account switcher — multi-account sign-in (`tt_accounts` roster, switch/remove, add + register-new inline) | 🟢 Built, live-tested locally | [11-account-switcher.md](./11-account-switcher.md) |
 | 12 | Multi-emoji reactions + custom emoji picker + optimistic UI (native keyboard, typed multi-emoji tokens, paginated recents, no loading flashes) | 🟢 Built, live-tested locally | [12-reactions-and-optimistic-ui.md](./12-reactions-and-optimistic-ui.md) |
