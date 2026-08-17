@@ -73,6 +73,114 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Markdown document.', headers: { 'Content-Type': 'text/markdown; charset=utf-8' } }]
   }),
   endpoint({
+    id: 'admin-ci-control',
+    group: 'admin',
+    title: 'CI control dashboard snapshot',
+    endpoint: '/api/v1/admin/ci',
+    summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
+    detail:
+      'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET'],
+    steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
+    requestExamples: [{ name: 'Load CI control', description: 'Load up to 100 current entities per kind.', method: 'GET', query: { limit: 100 } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'CI control snapshot.',
+        body: {
+          ok: true,
+          dashboard: {
+            pullRequests: [{ kind: 'ci-pull-request', number: 190, status: 'conflicting' }],
+            workflowRuns: [{ kind: 'ci-workflow-run', runId: 31303934385, status: 'in_progress' }],
+            events: [{ kind: 'ci-event', eventType: 'workflow_run', statusTo: 'in_progress' }]
+          },
+          integration: { repository: 'lopugit/thingtime', controlPlaneRef: 'github-actions', githubAppConfigured: true }
+        }
+      },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-dispatch',
+    group: 'admin',
+    title: 'Dispatch a CI control-plane workflow',
+    endpoint: '/api/v1/admin/ci/dispatch',
+    summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
+    detail:
+      'Admins can request the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. Workflow names and inputs are server-allowlisted; arbitrary workflow paths and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: ['Choose an allowlisted workflow and target ref.', 'POST optional allowlisted inputs.', 'Follow the returned dispatch id in /api/v1/admin/ci.'],
+    requestExamples: [
+      {
+        name: 'Retry conflict resolution',
+        description: 'Ask the develop listener to resolve one exact PR using the github-actions control plane.',
+        method: 'POST',
+        body: { workflow: 'resolve-conflicts', ref: 'develop', inputs: { pr_number: '190' } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 202,
+        description: 'GitHub accepted the dispatch.',
+        body: { ok: true, dispatchId: 'ci-example', workflowFile: 'resolve-pr-conflicts.yml', ref: 'develop', controlPlaneRef: 'github-actions' }
+      },
+      { status: 502, description: 'GitHub could not accept the request.', body: { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-reconcile',
+    group: 'admin',
+    title: 'Reconcile CI state from GitHub',
+    endpoint: '/api/v1/admin/ci/reconcile',
+    summary: 'Refresh branches, open PRs, Actions runs, and deployments without discarding webhook history.',
+    detail:
+      'Uses the least-privileged Thingtime GitHub App installation token to reconcile current GitHub state. Existing ci-event history is append-only; reconciliation corrects current projections and writes its own audit event.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: ['POST with an admin session.', 'Reload /api/v1/admin/ci after completion.'],
+    requestExamples: [{ name: 'Reconcile', description: 'Refresh current GitHub state.', method: 'POST', body: {} }],
+    responseExamples: [
+      { status: 200, description: 'Reconciliation completed.', body: { ok: true, repository: 'lopugit/thingtime', touched: 72 } },
+      { status: 502, description: 'GitHub could not be queried.', body: { ok: false, error: 'GitHub reconciliation failed. Existing dashboard history was preserved.' } }
+    ]
+  }),
+  endpoint({
+    id: 'github-ci-webhook',
+    group: 'integrations',
+    title: 'GitHub CI webhook',
+    endpoint: '/api/v1/integrations/github/webhook',
+    summary: 'Receive signed GitHub App events for the CI control plane.',
+    detail:
+      'Validates X-Hub-Signature-256 against the raw body with a constant-time HMAC-SHA256 comparison, rejects oversized payloads, allowlists the configured repository, and projects only bounded operational fields into protected Things.',
+    auth: { mode: 'none', description: 'Public transport endpoint; every request requires a valid GitHub webhook signature.' },
+    methods: ['POST'],
+    steps: ['Configure the GitHub App webhook secret.', 'Subscribe only to the required repository, PR, workflow, check, deployment, push, create, and delete events.', 'POSTs are idempotent by X-GitHub-Delivery.'],
+    requestExamples: [{ name: 'Signed GitHub delivery', description: 'Sent by GitHub App webhooks with signature and delivery headers.', method: 'POST', body: { action: 'synchronize', repository: { full_name: 'lopugit/thingtime' } } }],
+    responseExamples: [
+      { status: 202, description: 'Verified event accepted.', body: { ok: true, accepted: true, touched: ['ci-example'] } },
+      { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
+    ]
+  }),
+  endpoint({
+    id: 'vercel-ci-webhook',
+    group: 'integrations',
+    title: 'Vercel deployment webhook',
+    endpoint: '/api/v1/integrations/vercel/webhook',
+    summary: 'Receive signed Vercel deployment and preview status events.',
+    detail:
+      'Validates x-vercel-signature with a constant-time HMAC-SHA1 comparison over the raw body, then stores deployment and preview projections plus relational history Things. The webhook secret is never returned by any API.',
+    auth: { mode: 'none', description: 'Public transport endpoint; every request requires a valid Vercel signature.' },
+    methods: ['POST'],
+    steps: ['Create a project-scoped Vercel webhook.', 'Subscribe to deployment.created, deployment.ready, deployment.error, deployment.canceled, and deployment.deleted.', 'Store the one-time webhook secret in THINGTIME_VERCEL_WEBHOOK_SECRET.'],
+    requestExamples: [{ name: 'Signed Vercel delivery', description: 'Sent by Vercel with x-vercel-signature.', method: 'POST', body: { type: 'deployment.ready', payload: { deployment: { id: 'dpl_example', url: 'preview.example.app' } } } }],
+    responseExamples: [
+      { status: 202, description: 'Verified deployment event accepted.', body: { ok: true, accepted: true, touched: ['ci-deployment', 'ci-preview'] } },
+      { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-rate-limits',
     group: 'admin',
     title: 'Rate-limit config',
