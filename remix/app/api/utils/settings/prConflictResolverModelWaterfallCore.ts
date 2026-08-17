@@ -3,6 +3,10 @@ export const PR_CONFLICT_RESOLVER_MODEL_WATERFALL_KEY =
 
 export type PRConflictResolverModelId = 'default' | 'claude-fable-5' | 'claude-opus-5';
 export type PRConflictAutoResolverModelId = PRConflictResolverModelId;
+// The persisted key and endpoint retain their historical conflict-resolver
+// names for compatibility, but this is now Thingtime's canonical preference
+// type for every Claude-capable AI entrypoint.
+export type AiPreferredModelId = PRConflictResolverModelId;
 
 export type PRConflictResolverModel = {
   id: PRConflictResolverModelId;
@@ -49,6 +53,14 @@ export const normalizePrConflictResolverModelWaterfall = (value: unknown): PRCon
   if (!waterfall) return [...DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL];
   if (!waterfall.includes('default')) waterfall.push('default');
   return waterfall;
+};
+
+// Direct Anthropic API clients cannot pass the Claude Code `default` sentinel
+// as a model id. Named Admin choices always win; `default` delegates to that
+// client's provider-valid default instead.
+export const resolveAiPreferredClaudeModel = (value: unknown, providerDefault: string): string => {
+  const primary = normalizePrConflictResolverModelWaterfall(value)[0];
+  return primary === 'default' ? providerDefault : primary;
 };
 
 export type ValidatePrConflictResolverModelWaterfallResult =

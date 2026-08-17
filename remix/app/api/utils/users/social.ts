@@ -5,18 +5,17 @@ import { ObjectId } from 'mongodb';
 // deployment DB regardless of any data-plane endpoint override (they gate
 // notifications and the tt:userFriends acl circle — an override endpoint must
 // never be able to fake or hide relationships).
-import {
-  getHomeThingsCollection as getThingsCollection,
-  getUsersCollection
-} from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { findUserById, findUserByUsername } from '../auth/users';
 import type { PublicProfile } from '../auth/users';
+import { isFollowing, toggleFollow } from '../messenger/follows';
 import { emitNotification } from '../notifications/notifications';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 
 // Two separate relationship types (see registry.ts follow/friend schemas):
 //   follow — one-way, no approval; one thing per (follower, followed), deduped
-//            by the things_follow_unique partial index.
+//            by crystal.followKey / the things_follow_key_unique partial index.
 //   friend — mutual, request → accept; ONE thing per unordered pair keyed by
 //            crystal.friendKey ('<minId>~<maxId>', things_friend_unique), so
 //            crossed/duplicate requests are structurally impossible.
@@ -66,10 +65,7 @@ export const setFollow = async (
   if (targetId === viewer.id) return fail(400, 'You already have your own undivided attention 💅');
 
   const things = await getThingsCollection();
-  const existing = await things.findOne(
-    { thingtime: 'follow', ownerId: viewer.id, targetId } as any,
-    { projection: { _id: 1 } }
-  );
+  const existing = await isFollowing(viewer.id, targetId);
   const desired = typeof follow === 'boolean' ? follow : !existing;
 
   if (desired && !existing) {
@@ -77,36 +73,24 @@ export const setFollow = async (
     if (followingCount >= MAX_FOLLOWING_PER_USER) {
       return fail(400, `Following limit reached (${MAX_FOLLOWING_PER_USER})`);
     }
-    const now = new Date();
-    try {
-      await things.insertOne({
-        shareId: randomUUID(),
-        schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-        thingtime: ['follow'],
-        crystal: { follow: true },
-        ownerId: viewer.id,
-        acl: [ACL_OWNER],
-        targetId,
-        tags: [],
-        createdAt: now,
-        updatedAt: now
-      } as any);
-    } catch (err: any) {
-      // duplicate = a racing follow already landed — that's the state we wanted
-      if (!isDuplicateKey(err)) throw err;
-    }
+  }
+
+  // One canonical writer for every caller: messenger + social both persist the
+  // home-pinned crystal.followKey shape. `created` identifies the unique-index
+  // winner so concurrent idempotent follows cannot emit duplicate notices.
+  const mutation = await toggleFollow(viewer.id, { userId: targetId, follow: desired });
+  if (mutation.ok === false) return mutation;
+  if (mutation.created) {
     await emitNotification({
       recipientId: targetId,
       type: 'new-follower',
       actor: { id: viewer.id, username: viewer.username, displayName: viewer.displayName },
       targetId: viewer.id
     });
-  } else if (!desired && existing) {
-    await things.deleteMany({ thingtime: 'follow', ownerId: viewer.id, targetId } as any);
   }
 
   const followerCount = await things.countDocuments({ thingtime: 'follow', targetId } as any);
-  return { ok: true, following: desired, followerCount };
+  return { ok: true, following: mutation.following, followerCount };
 };
 
 // Newest follower ids, capped — the post fan-out audience.
@@ -151,10 +135,7 @@ export const friendAction = async (
   const actor = { id: viewer.id, username: viewer.username, displayName: viewer.displayName };
 
   const accept = async (doc: any): Promise<FriendActionResult> => {
-    await things.updateOne(
-      { _id: doc._id, 'crystal.status': 'pending' } as any,
-      { $set: { 'crystal.status': 'accepted', updatedAt: now } }
-    );
+		await things.updateOne({ _id: doc._id, 'crystal.status': 'pending' } as any, { $set: { 'crystal.status': 'accepted', updatedAt: now } });
     await emitNotification({
       recipientId: String(doc.ownerId),
       type: 'friend-accepted',
@@ -276,10 +257,7 @@ export type RelationshipSummary = {
   } | null;
 };
 
-export const relationshipSummary = async (
-  viewerId: string | null,
-  target: { _id?: any } | null
-): Promise<Fail | RelationshipSummary> => {
+export const relationshipSummary = async (viewerId: string | null, target: { _id?: any } | null): Promise<Fail | RelationshipSummary> => {
   if (!target?._id) return fail(404, 'User not found');
   const userId = String(target._id);
   const things = await getThingsCollection();
@@ -330,12 +308,23 @@ const loadPublicProfiles = async (ids: string[]): Promise<Map<string, PublicProf
   const [userThings, legacyUsers] = await Promise.all([
     things
       .find({ thingtime: 'user', shareId: { $in: unique } } as any)
-      .project({ shareId: 1, crystal: 1, createdAt: 1 })
+			.project({ shareId: 1, crystal: 1, avatarAttachmentId: 1, bannerAttachmentId: 1, createdAt: 1 })
       .toArray(),
     objectIds.length
-      ? (await getUsersCollection())
+			? (
+					await getUsersCollection()
+			  )
           .find({ _id: { $in: objectIds } })
-          .project({ username: 1, displayName: 1, bio: 1, avatarUrl: 1, bannerUrl: 1, createdAt: 1 })
+					.project({
+						username: 1,
+						displayName: 1,
+						bio: 1,
+						avatarUrl: 1,
+						bannerUrl: 1,
+						avatarAttachmentId: 1,
+						bannerAttachmentId: 1,
+						createdAt: 1
+					})
           .toArray()
       : Promise.resolve([])
   ]);
@@ -345,8 +334,8 @@ const loadPublicProfiles = async (ids: string[]): Promise<Map<string, PublicProf
       username: doc.username,
       displayName: doc.displayName ?? null,
       bio: typeof doc.bio === 'string' ? doc.bio : null,
-      avatarUrl: typeof doc.avatarUrl === 'string' ? doc.avatarUrl : null,
-      bannerUrl: typeof doc.bannerUrl === 'string' ? doc.bannerUrl : null,
+			avatarUrl: effectiveProfileMediaUrl(doc, 'avatar'),
+			bannerUrl: effectiveProfileMediaUrl(doc, 'banner'),
       createdAt: new Date(doc.createdAt).toISOString()
     });
   }
@@ -356,8 +345,8 @@ const loadPublicProfiles = async (ids: string[]): Promise<Map<string, PublicProf
       username: doc.crystal?.username,
       displayName: doc.crystal?.displayName ?? null,
       bio: typeof doc.crystal?.bio === 'string' ? doc.crystal.bio : null,
-      avatarUrl: typeof doc.crystal?.avatarUrl === 'string' ? doc.crystal.avatarUrl : null,
-      bannerUrl: typeof doc.crystal?.bannerUrl === 'string' ? doc.crystal.bannerUrl : null,
+			avatarUrl: effectiveProfileMediaUrl(doc, 'avatar'),
+			bannerUrl: effectiveProfileMediaUrl(doc, 'banner'),
       createdAt: new Date(doc.createdAt).toISOString()
     });
   }
@@ -366,9 +355,7 @@ const loadPublicProfiles = async (ids: string[]): Promise<Map<string, PublicProf
 
 export type ConnectionsType = 'followers' | 'following' | 'friends' | 'requests';
 
-export type ConnectionsResult =
-  | Fail
-  | { ok: true; users: PublicProfile[]; nextBefore: string | null };
+export type ConnectionsResult = Fail | { ok: true; users: PublicProfile[]; nextBefore: string | null };
 
 // Public connection lists (followers/following/friends are public, matching
 // the public counts). 'requests' (pending incoming) is viewer-private.
@@ -388,13 +375,8 @@ export const listConnections = async (
   }
 
   const limitRaw = Number(options.limit);
-  const limit = Number.isFinite(limitRaw)
-    ? Math.min(Math.max(Math.floor(limitRaw), 1), MAX_CONNECTIONS_LIMIT)
-    : DEFAULT_CONNECTIONS_LIMIT;
-  const before =
-    typeof options.before === 'string' && !Number.isNaN(Date.parse(options.before))
-      ? new Date(options.before)
-      : null;
+	const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.floor(limitRaw), 1), MAX_CONNECTIONS_LIMIT) : DEFAULT_CONNECTIONS_LIMIT;
+	const before = typeof options.before === 'string' && !Number.isNaN(Date.parse(options.before)) ? new Date(options.before) : null;
 
   const filter: Record<string, any> =
     type === 'followers'
@@ -424,10 +406,7 @@ export const listConnections = async (
           : String(doc.ownerId);
 
   const profiles = await loadPublicProfiles((docs as any[]).map(otherIdOf));
-  const users = (docs as any[])
-    .map((doc) => profiles.get(otherIdOf(doc)))
-    .filter((profile): profile is PublicProfile => !!profile);
-  const nextBefore =
-    docs.length === limit ? new Date((docs as any[])[docs.length - 1].createdAt).toISOString() : null;
+	const users = (docs as any[]).map((doc) => profiles.get(otherIdOf(doc))).filter((profile): profile is PublicProfile => !!profile);
+	const nextBefore = docs.length === limit ? new Date((docs as any[])[docs.length - 1].createdAt).toISOString() : null;
   return { ok: true, users, nextBefore };
 };

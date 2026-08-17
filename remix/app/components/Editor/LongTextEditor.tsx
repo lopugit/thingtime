@@ -18,6 +18,7 @@ import { watchEditorJsTextFieldKeydowns } from './editorJsKeyboard';
 import { watchEditorJsBlockReorder } from './editorJsBlockDragDrop';
 import { watchEditorJsPopoverViewport } from './editorJsPopoverViewport';
 import { filterListV2ChecklistToolbox } from './editorJsToolbox';
+import { getEditorJsTouchFocusTarget } from './editorJsTouchFocus';
 import { StyleTune } from './StyleTune';
 
 export { getEditorJsDoc, isEditorJsDoc, parseEditorJsDocString } from './editorJsValue';
@@ -551,6 +552,12 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 			ref={holderRef}
 			// anchor for the block-reorder drop indicator (absolute child)
 			position="relative"
+			onPointerUp={(event) => {
+				if (readonlyRef.current) return;
+				const holder = event.currentTarget;
+				const editable = getEditorJsTouchFocusTarget(holder, event.target, event.pointerType, holder.ownerDocument.activeElement);
+				editable?.focus({ preventScroll: true });
+			}}
 			width="100%"
 			minHeight={props.minHeight || '96px'}
 			padding="10px 12px"
