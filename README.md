@@ -259,17 +259,26 @@ secrets. These files are optional for normal app usage; set them only when you
 want to override the default production-backed API fallback or run the backend
 self-sufficiently against your own services.
 
-Build and verify the Vercel output with:
+Build and verify the repository-root Vercel output with:
 
 ```sh
-cd remix
-corepack pnpm run build
+npm run build:vercel
 ```
 
-The build runs `vite build`, copies the Vite shell into Nitro's server assets,
-builds Nitro with `NITRO_PRESET=vercel`, and checks that
-`.vercel/output/static/index.html` contains the React shell before trusting the
-deployment artifact.
+The root `vercel.json` deliberately installs only `remix/`; it never runs the
+legacy repository-level `postinstall`. The build runs the existing Remix Vite +
+Nitro pipeline, validates `remix/.vercel/output`, then stages and revalidates it
+at the repository-root `.vercel/output` expected by Vercel's Build Output API.
+
+In the Vercel project, set **Root Directory** to the repository root (clear the
+old `remix` value), use the **Other** framework preset, and clear dashboard
+overrides for Build Command, Install Command, Output Directory, and Ignored
+Build Step so the tracked root config is authoritative. The root config also
+sets `outputDirectory: null`: the build emits `.vercel/output` itself. The
+product config disables Git deployments for the exact `github-actions` branch;
+the thin control-plane branch carries its own root config with all Git
+deployments disabled, so branches created from it never try to build an absent
+app.
 
 ## Electron desktop app
 
@@ -843,10 +852,13 @@ Unset values fall back to `https://thingtime.com`, `https://dev.thingtime.com`,
 
 ## Public env exposure rule
 
-Only variables with the `THINGTIME_` prefix are intentionally copied into the
-browser-visible loader data, and variables containing `PRIVATE` are excluded.
-Keep secrets such as MongoDB passwords and Vercel API tokens unprefixed and
-server-only.
+Browser-visible loader data uses an explicit allowlist. It includes only the
+public local/development/staging/production status origins plus derived branch,
+Vercel deployment, and status-display labels. Every other environment variable
+remains server-only — including all `THINGTIME_*` webhook, router, email,
+credential, token, password, and private-key values. Never add a new public
+value by prefix convention; add and review its exact key in
+`remix/app/root-data.server.ts`.
 
 ## Native iOS TestFlight web URL
 
