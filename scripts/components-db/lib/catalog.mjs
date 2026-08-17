@@ -42,7 +42,10 @@ export const ARCHETYPE_ORDER = [
 	// ---- tranche 2 ----
 	'rating',
 	'code-block',
-	'search-command'
+	'search-command',
+	'chat',
+	'media-player',
+	'date-time'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;

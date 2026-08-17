@@ -1,6 +1,6 @@
 {
-	"target": 1120,
-	"count": 1120,
+	"target": 1240,
+	"count": 1240,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -29,18 +29,21 @@
 		"flow",
 		"rating",
 		"code-block",
-		"search-command"
+		"search-command",
+		"chat",
+		"media-player",
+		"date-time"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 140,
-		"bootstrap": 140,
-		"mui": 140,
-		"shadcn": 140,
-		"untitled": 140,
-		"daisyui": 140,
-		"reactflow": 140,
-		"thingtime": 140
+		"antd": 155,
+		"bootstrap": 155,
+		"mui": 155,
+		"shadcn": 155,
+		"untitled": 155,
+		"daisyui": 155,
+		"reactflow": 155,
+		"thingtime": 155
 	},
-	"hash": "48f92007b7121139"
+	"hash": "7d81ba27bc732a6f"
 }
