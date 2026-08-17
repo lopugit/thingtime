@@ -333,6 +333,15 @@ is fixed, and cite the checklist you ran in the PR description.
       generated Custom Environment alias must resolve to that deployment's
       exact current `develop` SHA. Creating or reconciling a trusted PR preview
       must leave the stable-domain deployment id unchanged.
+- [ ] Merge a trusted same-repository PR into `develop` and confirm the
+      `pull_request_target` close listener dispatches even when GitHub reports
+      an empty source-run `pull_requests` array. The protected controller must
+      bind the exact source repository, workflow, actor, head SHA, and head ref,
+      then remove the PR alias and mark its GitHub deployment inactive.
+- [ ] Run the default-branch manual recovery with a positive `pr_number` and
+      confirm the reusable controller creates its environment-gated job instead
+      of failing before job creation. Dispatching the same caller from a branch
+      not allowed by `vercel-develop-pr-control` must not receive its secrets.
 
 ## Per-feature develop → main promoter (`.github/scripts/promote-features-to-main.mjs`)
 
