@@ -15,6 +15,74 @@ Repository-wide AI guidance lives in the single canonical `AI_ALL.md`.
 Claude, and other compatible tools read the same instructions. Update
 `AI_ALL.md` only; keep both symlinks intact.
 
+## GitHub Actions control plane
+
+Thingtime keeps executable CI/CD behavior on the long-lived, protected
+`github-actions` branch. Product branches (`main`, `develop`, feature branches,
+and promotion branches) retain only seven small event listeners in
+`.github/workflows/`: GitHub must be able to discover a workflow file on the
+ref/default branch that receives a native `push`, `pull_request_target`,
+`schedule`, `repository_dispatch`, or `workflow_dispatch` event. Each listener
+contains triggers, caller permissions, and typed inputs only; its sole job calls
+the matching reusable workflow at
+`lopugit/thingtime/.github/workflows/<name>.yml@github-actions`.
+
+All runner selection, shell commands, third-party actions, AI/model routing,
+Git operations, Graphify refreshes, and workflow scripts live only on
+`github-actions`. The product branches intentionally contain no `.github/actions`
+or `.github/scripts` behavior. `remix/scripts/workflow-caller-contract.mjs`
+fails if executable behavior leaks back into a listener or one stops pinning the
+control-plane ref.
+
+Protect `github-actions` with a ruleset: require pull-request review for changes,
+block force pushes and deletion, and restrict direct updates. A push to that
+branch runs its own control-plane contract CI. Updating the implementation no
+longer requires separately merging the same behavior into `develop` and `main`;
+the thin listeners on both branches call the same reviewed revision immediately.
+
+The Admin → CI Control dashboard adds the external observation/operation layer:
+signed GitHub and Vercel webhooks project repositories, features/stacks,
+branches, pull requests, Actions runs, deployments, previews, audited dispatches,
+and append-only status history into protected Things. The GitHub App is also
+used for explicit reconciliation and allowlisted workflow dispatch. Native
+listeners remain the automatic trigger path, so a webhook outage cannot silently
+turn off conflict resolution or CI; the dashboard makes drift and stale delivery
+state visible. Administrator dispatches enter only through the reviewed
+`develop` or `main` listener selected for that workflow; neither the UI nor API
+can load workflow YAML from an arbitrary feature branch.
+
+Configure the server-side integration with private environment variables only
+(never `PUBLIC_*`):
+
+```sh
+THINGTIME_GITHUB_REPOSITORY="owner/repository"
+THINGTIME_GITHUB_APP_ID="123456"
+THINGTIME_GITHUB_APP_INSTALLATION_ID="12345678"
+THINGTIME_GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+THINGTIME_GITHUB_WEBHOOK_SECRET="replace-with-a-long-random-secret"
+THINGTIME_VERCEL_WEBHOOK_SECRET="secret-returned-when-the-webhook-is-created"
+```
+
+Create a repository-installed GitHub App with repository metadata read,
+Actions read/write (for workflow dispatch), Contents read (branches), Pull
+requests read, and Deployments read. Subscribe its webhook to `push`, branch
+create/delete, pull request, workflow run, workflow job, deployment, and
+deployment status events, using:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/github/webhook
+```
+
+Create a project-scoped Vercel webhook for deployment created/ready/error/
+canceled/deleted events at:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/vercel/webhook
+```
+
+Store each secret directly in the deployment environment. The Admin API reports
+only whether an integration is configured; it never returns credentials.
+
 # 💹 Donate on Indiegogo to save humanity 🩷
 
 ### You can get Merch 🌈 + other benefits 🦄💯
@@ -315,7 +383,9 @@ the UI, so there's always a way back in) and are reserved at registration so
 nobody can squat an admin username before you register it.
 
 Admins get the `/admin` dashboard (also under the drawer's Account section):
-Users, Apps, Tiers, and System management. The Tiers tab manages protected,
+Users, Apps, Tiers, CI Control, and System management. CI Control presents the
+feature/branch/PR/Actions/deployment topology and signed status history, with
+allowlisted reconciliation and retry controls. The Tiers tab manages protected,
 versioned `subscription-tier` Things in separate Live, Draft / not live, and
 Archived sections. Admins can create a tier or draft a new revision, edit its
 name, tagline, banner, currency, daily/weekly/monthly/yearly prices, six

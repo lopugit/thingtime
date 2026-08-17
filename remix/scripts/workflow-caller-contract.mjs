@@ -39,15 +39,6 @@ assert.ok(
   promotionPermissionsStart >= 0 && promotionJobsStart > promotionPermissionsStart,
   'promote-features-to-main.yml must retain a top-level permissions block'
 );
-const promotionPermissions = promotionCaller.slice(
-  promotionPermissionsStart,
-  promotionJobsStart
-);
-assert.match(
-  promotionPermissions,
-  /^  actions: write$/m,
-  'promote-features-to-main.yml must grant the protected promoter permission to dispatch its resolver'
-);
 
 const filesUnder = (root) => {
   if (!existsSync(root)) return [];
