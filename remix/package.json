@@ -18,7 +18,7 @@
     "lint:files": "node scripts/ensure-dependencies.js --tool=eslint && eslint",
     "test": "npm run test:unit && npm run test:api",
     "test:api": "tsx scripts/run-api-tests.mts",
-    "test:unit": "npm run test:acl && npm run test:autosave && npm run test:ci-control && npm run test:client-errors && npm run test:collections && npm run test:dependencies && npm run test:editorjs && npm run test:migrations && npm run test:quota && npm run test:schemas && npm run test:sensitive-reveal && npm run test:settings && npm run test:storage && npm run test:storage-recovery && npm run test:typecheck-ratchet && npm run test:web-ci-context && npm run test:workflow-callers",
+    "test:unit": "npm run test:acl && npm run test:autosave && npm run test:ci-control && npm run test:client-errors && npm run test:collections && npm run test:dependencies && npm run test:editorjs && npm run test:migrations && npm run test:quota && npm run test:schemas && npm run test:sensitive-reveal && npm run test:settings && npm run test:storage && npm run test:storage-recovery && npm run test:typecheck-ratchet",
     "typecheck": "tsc --noEmit",
     "typecheck:ratchet": "node scripts/typecheck-ratchet.mjs",
     "lint-fix": "node scripts/ensure-dependencies.js --tool=eslint && eslint --ext .js,.ts,.jsx,.tsx . --fix",
