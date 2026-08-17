@@ -585,6 +585,22 @@ Workflows read/write, placeholder value `github_pat_...`) to lift both limits;
 
 ## Vercel deployment status
 
+### Stable develop domain for forks
+
+For a hosted `develop` URL, create a Vercel Custom Environment with an exact
+`develop` branch matcher and attach the stable domain to that Custom
+Environment. Do not also bind the domain through `gitBranch`; the domain should
+have the Custom Environment id and a null Git branch. This lets Vercel move the
+stable hostname whenever a Git-connected `develop` build becomes ready.
+
+If trusted PR automation creates deployments in that same Custom Environment,
+its deployment payload must set `autoAssignCustomDomains: false` and assign
+only a separate PR alias after validating the exact repository, branch, commit,
+and READY state. Keep the PR wildcard detached from both branches and Custom
+Environments. Use domains and environment ids from your own Vercel project;
+never copy another project's account-specific identifiers or verification
+records.
+
 The footer can show live Vercel deployment/build status. It works in a limited
 tokenless mode on Vercel, but full status, dashboard links, build state, last
 ready time, and active polling need a Vercel REST API token.

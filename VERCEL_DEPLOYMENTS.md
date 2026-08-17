@@ -1,6 +1,6 @@
 # Vercel Deployments
 
-Last updated: 2026-08-07
+Last updated: 2026-08-17
 
 ## Project
 
@@ -27,20 +27,24 @@ Last updated: 2026-08-07
 ## Preview
 
 - Generated preview URLs use `https://thingtime-<generated>-lopugits-projects.vercel.app`.
-- The `develop` branch alias is
-  https://thingtime-git-develop-lopugits-projects.vercel.app.
-- https://dev.thingtime.com is configured as a branch-specific Preview domain
-  that tracks `develop`. This deliberately preserves the existing
-  `develop`-scoped Preview environment variables; Vercel's built-in
-  Development environment remains local/CLI-only.
+- The `develop` Custom Environment alias is
+  https://thingtime-env-develop-lopugits-projects.vercel.app.
+- https://dev.thingtime.com is attached to the `develop` Custom Environment,
+  whose exact branch matcher is `develop`. Vercel therefore promotes the
+  stable domain with each successful Git-connected `develop` build.
+- Trusted PR previews may deliberately build in the same Custom Environment,
+  but their controller-created deployment payload sets
+  `autoAssignCustomDomains: false` and explicitly assigns only that PR's
+  `pr-<number>.previews.dev.thingtime.com` alias. A PR deployment can never
+  move the stable domain.
   - Cloudflare DNS: `CNAME dev` to
     `b45b7349d6eb9c18.vercel-dns-017.com`, DNS only, TTL Auto.
-  - If Vercel reports a pending ownership challenge, publish the exact
+  - If Vercel reports a future ownership challenge, publish the exact
     `_vercel` TXT value returned by the Vercel project-domain inspector; do
     not record the rotating verification value in this repository.
-  - Vercel assignment was configured on 2026-08-07. DNS, ownership
-    verification, and TLS remain pending until the Cloudflare records are
-    published.
+  - DNS, ownership verification, and TLS are live. After any domain change,
+    verify that both stable and generated environment aliases resolve to the
+    same READY deployment and exact `develop` SHA.
 - The `staging` branch alias is https://thingtime-git-staging-lopugits-projects.vercel.app.
 - For feature branches, use the Vercel PR status URL or deployment URL from
   the GitHub PR checks.
