@@ -850,10 +850,13 @@ Unset values fall back to `https://thingtime.com`, `https://dev.thingtime.com`,
 
 ## Public env exposure rule
 
-Only variables with the `THINGTIME_` prefix are intentionally copied into the
-browser-visible loader data, and variables containing `PRIVATE` are excluded.
-Keep secrets such as MongoDB passwords and Vercel API tokens unprefixed and
-server-only.
+Browser-visible loader data uses an explicit allowlist. It includes only the
+public local/development/staging/production status origins plus derived branch,
+Vercel deployment, and status-display labels. Every other environment variable
+remains server-only — including all `THINGTIME_*` webhook, router, email,
+credential, token, password, and private-key values. Never add a new public
+value by prefix convention; add and review its exact key in
+`remix/app/root-data.server.ts`.
 
 ## Native iOS TestFlight web URL
 
