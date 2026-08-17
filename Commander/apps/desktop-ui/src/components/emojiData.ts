@@ -29,6 +29,7 @@ export interface EmojiEntry {
   order: number;
   keywords: readonly string[];
   searchText: string;
+  searchTokens: readonly string[];
   skins: ReadonlyArray<{ value: string; tone: EmojiTone }>;
 }
 
@@ -99,11 +100,25 @@ const EXTRA_SYMBOLS: ReadonlyArray<readonly [string, string, readonly string[]]>
   ['☆', 'white star', ['favorite', 'rating', 'outline']],
 ];
 
-function normalized(value: string): string {
+export function normalizeEmojiQuery(value: string): string {
   return value
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function searchTokens(keywords: readonly string[]): string[] {
+  return [
+    ...new Set(
+      keywords.flatMap((keyword) =>
+        normalizeEmojiQuery(keyword)
+          .split(/[^\p{L}\p{N}:+]+/u)
+          .filter(Boolean),
+      ),
+    ),
+  ];
 }
 
 function entryFromRaw(raw: RawEmoji): EmojiEntry | undefined {
@@ -119,7 +134,8 @@ function entryFromRaw(raw: RawEmoji): EmojiEntry | undefined {
     category,
     order: raw.order ?? Number.MAX_SAFE_INTEGER,
     keywords,
-    searchText: normalized(keywords.join(' ')),
+    searchText: normalizeEmojiQuery(keywords.join(' ')),
+    searchTokens: searchTokens(keywords),
     skins: (raw.skins ?? []).flatMap((skin) =>
       skin.tone >= 1 && skin.tone <= 5 ? [{ value: skin.emoji, tone: skin.tone as EmojiTone }] : [],
     ),
@@ -145,7 +161,8 @@ for (const [value, label, tags] of EXTRA_SYMBOLS) {
     category: '8',
     order: 100_000 + entries.length,
     keywords,
-    searchText: normalized(keywords.join(' ')),
+    searchText: normalizeEmojiQuery(keywords.join(' ')),
+    searchTokens: searchTokens(keywords),
     skins: [],
   });
 }
@@ -167,12 +184,13 @@ export function findEmojiEntries(
   query: string,
   category: EmojiCategory,
   recentIDs: readonly string[],
+  learnedCounts: ReadonlyMap<string, number> = new Map(),
 ): EmojiEntry[] {
   const recent = recentIDs.flatMap((id) => {
     const entry = EMOJI_BY_ID.get(id);
     return entry ? [entry] : [];
   });
-  const normalizedQuery = normalized(query.trim());
+  const normalizedQuery = normalizeEmojiQuery(query);
   const terms = normalizedQuery.split(/\s+/).filter(Boolean);
   const categoryMatches = (entry: EmojiEntry) =>
     category === 'all' || category === 'recent' || entry.category === category;
@@ -186,18 +204,99 @@ export function findEmojiEntries(
   }
 
   return entries
-    .filter((entry) => categoryMatches(entry) && terms.every((term) => entry.searchText.includes(term)))
-    .map((entry) => ({ entry, score: matchScore(entry, normalizedQuery) }))
+    .filter(categoryMatches)
+    .flatMap((entry) => {
+      const termScores = terms.map((term) => termMatchScore(entry, term));
+      if (termScores.some((score) => score < 0)) return [];
+      const learnedCount = learnedCounts.get(entry.id) ?? 0;
+      return [
+        {
+          entry,
+          score:
+            matchScore(entry, normalizedQuery) +
+            termScores.reduce((total, score) => total + score, 0) +
+            learnedScore(learnedCount),
+        },
+      ];
+    })
     .sort((left, right) => right.score - left.score || left.entry.order - right.entry.order)
     .map(({ entry }) => entry);
 }
 
 function matchScore(entry: EmojiEntry, query: string): number {
-  const label = normalized(entry.label);
+  const label = normalizeEmojiQuery(entry.label);
   if (label === query) return 10_000;
   if (label.startsWith(query)) return 8_000;
-  if (entry.keywords.some((keyword) => normalized(keyword) === query)) return 7_000;
+  if (entry.keywords.some((keyword) => normalizeEmojiQuery(keyword) === query)) return 7_000;
   if (label.split(/\s+/).some((word) => word.startsWith(query))) return 6_000;
   if (label.includes(query)) return 5_000;
   return 1_000;
+}
+
+function termMatchScore(entry: EmojiEntry, term: string): number {
+  if (entry.searchTokens.includes(term)) return 900;
+  if (entry.searchTokens.some((candidate) => candidate.startsWith(term))) return 750;
+  if (entry.searchText.includes(term)) return 600;
+
+  const maximumDistance = allowedEditDistance(term);
+  if (maximumDistance === 0) return -1;
+
+  let best = -1;
+  for (const candidate of entry.searchTokens) {
+    if (Math.abs(candidate.length - term.length) > maximumDistance) continue;
+    const distance = boundedEditDistance(term, candidate, maximumDistance);
+    if (distance > maximumDistance) continue;
+    best = Math.max(best, 450 - distance * 125 - Math.abs(candidate.length - term.length) * 20);
+  }
+  return best;
+}
+
+function allowedEditDistance(term: string): number {
+  if (term.length < 3) return 0;
+  return term.length < 6 ? 1 : 2;
+}
+
+function boundedEditDistance(left: string, right: string, maximum: number): number {
+  if (left === right) return 0;
+  if (isAdjacentTransposition(left, right)) return 1;
+  if (Math.abs(left.length - right.length) > maximum) return maximum + 1;
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    let rowMinimum = leftIndex;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      const distance = Math.min(
+        previous[rightIndex]! + 1,
+        current[rightIndex - 1]! + 1,
+        previous[rightIndex - 1]! + substitutionCost,
+      );
+      current.push(distance);
+      rowMinimum = Math.min(rowMinimum, distance);
+    }
+    if (rowMinimum > maximum) return maximum + 1;
+    previous = current;
+  }
+  return previous[right.length] ?? maximum + 1;
+}
+
+function isAdjacentTransposition(left: string, right: string): boolean {
+  if (left.length !== right.length) return false;
+  const differences: number[] = [];
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) differences.push(index);
+    if (differences.length > 2) return false;
+  }
+  return (
+    differences.length === 2 &&
+    differences[1] === differences[0]! + 1 &&
+    left[differences[0]!] === right[differences[1]!] &&
+    left[differences[1]!] === right[differences[0]!]
+  );
+}
+
+function learnedScore(count: number): number {
+  if (!Number.isFinite(count) || count <= 0) return 0;
+  return Math.min(20_000, Math.round(Math.log2(Math.floor(count) + 1) * 2_500));
 }

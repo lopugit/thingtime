@@ -55,17 +55,57 @@ describe('EmojiPicker', () => {
   it('navigates the grid with arrows and opens the action selector with Command-K', async () => {
     render(<EmojiPicker platform="macos" onBack={vi.fn()} />);
     const input = screen.getByRole('textbox', { name: 'Search emoji and symbols' });
+    expect(input).toHaveAttribute('autocorrect', 'off');
+    expect(input).toHaveAttribute('autocapitalize', 'none');
+    expect(input).toHaveAttribute('spellcheck', 'false');
     fireEvent.change(input, { target: { value: 'heart' } });
     const grid = await screen.findByRole('listbox', { name: 'Emoji and symbol results' });
     const options = within(grid).getAllByRole('option');
     expect(options[0]).toHaveAttribute('aria-selected', 'true');
 
-    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(input, { key: 'ArrowRight' });
     expect(options[1]).toHaveAttribute('aria-selected', 'true');
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     expect(screen.getByRole('menu')).toBeVisible();
     expect(screen.getByRole('menuitem', { name: /Copy to Clipboard/ })).toBeVisible();
+  });
+
+  it('learns a selected emoji for a query and restores that ranking after remount', async () => {
+    vi.mocked(nativeRequest).mockImplementation(async (method) => {
+      if (method === 'application.pasteTarget') return { name: 'Notes' };
+      if (method === 'clipboard.paste')
+        return { copied: true, pasted: true, requiresAccessibility: false, targetApplication: 'Notes' };
+      return undefined;
+    });
+    const firstRender = render(<EmojiPicker platform="macos" onBack={vi.fn()} />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search emoji and symbols' }), {
+      target: { value: 'heart' },
+    });
+    const blueHeart = await screen.findByRole('option', { name: /^blue heart,/i });
+    fireEvent.click(blueHeart);
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem('commander-emoji-learning-v1') ?? '{}') as {
+        queries?: Array<{ query: string; choices: Array<{ emojiId: string; count: number }> }>;
+      };
+      expect(stored.queries?.[0]).toEqual({
+        query: 'heart',
+        choices: [{ emojiId: 'emoji:1F499', count: 1 }],
+      });
+    });
+
+    firstRender.unmount();
+    render(<EmojiPicker platform="macos" onBack={vi.fn()} />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search emoji and symbols' }), {
+      target: { value: 'heart' },
+    });
+    const restoredGrid = await screen.findByRole('listbox', { name: 'Emoji and symbol results' });
+
+    await waitFor(() =>
+      expect(within(restoredGrid).getAllByRole('option')[0]).toHaveAccessibleName(/^blue heart,/i),
+    );
   });
 
   it('keeps the picker open and explains the accessibility copy fallback', async () => {

@@ -175,6 +175,16 @@ environment.
   normalization on an array and blanked the picker. A top-level renderer error
   boundary also keeps any future view failure visible and reloadable instead of
   masquerading as a native app crash.
+- The emoji search field now explicitly disables WebKit spelling,
+  autocorrection, and autocapitalization UI so macOS cannot capture arrow-key
+  navigation with a correction pill. Emoji matching tolerates bounded edit and
+  adjacent-transposition mistakes, while a versioned, validated local model
+  records each normalized query/emoji selection as an n+1 count. Logarithmic
+  boosts promote learned choices without hiding semantic matches; storage is
+  capped at 128 queries and 16 emoji per query and contains no account data.
+  The exact-origin WebKit renderer now uses its persistent website-data store
+  so learning, recents, and tone survive a complete app quit; credentials
+  remain exclusively in the native Keychain bridge.
 - Commander now has a portable `System` result kind and a platform-gated
   **macOS System** built-in extension. Its curated global index exposes 39
   System Settings destinations—including Accessibility permissions, Screen &
@@ -188,7 +198,7 @@ environment.
 
 ## Verification
 
-- Commander TypeScript: 77 tests passed across UI (40), daemon (19), and
+- Commander TypeScript: 83 tests passed across UI (46), daemon (19), and
   compatibility (18) packages; typecheck, ESLint, Prettier, and package builds
   passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
@@ -204,6 +214,12 @@ environment.
 - Installed-WebKit QA opened Search Emoji & Symbols, typed the formerly
   crashing first character `h`, continued to `heart`, and kept the picker
   visible and focused with 46 results before returning to the launcher.
+- Installed-WebKit QA typed `ear` without a macOS correction pill, retained
+  input focus while Right Arrow moved from Ear to Ear With Hearing Aid, and
+  returned 45 relevant results for the transposition typo `haert`. It then
+  learned `heart` → Heart With Ribbon, fully quit the native host and daemon,
+  relaunched with a new session, and restored Heart With Ribbon as the first
+  result for that query.
 - Installed-WebKit QA searched `accessibility` in the final signed bundle,
   rendered Accessibility Settings first with the `System` kind, executed it,
   and confirmed System Settings opened the exact Privacy & Security →

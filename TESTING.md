@@ -1753,6 +1753,14 @@ is fixed, and cite the checklist you ran in the PR description.
       and focused. Dismiss it, press Command-Space once, and verify the normal
       launcher reappears. Hide Commander with Command-H and verify one
       Command-Space press unhides and presents it again.
+- [ ] In Search Emoji & Symbols, type `ear` and verify WebKit/macOS shows no
+      spelling or autocorrection pill. With the input still focused, use every
+      arrow direction and verify only the emoji selection moves. Search `haert`
+      and `hert` and verify typo-tolerant heart results remain relevant.
+- [ ] Search `heart`, choose a non-leading heart twice, reopen the picker, and
+      repeat the query. The selected emoji must be promoted; quit/relaunch and
+      verify the same query-specific preference persists while unrelated
+      queries retain their own ranking.
 - [ ] Type a unique launcher query, launch a result, then hide and reopen with
       the global shortcut. Verify the field clears while the launched command
       is the first History row and its search term follows as a separate
