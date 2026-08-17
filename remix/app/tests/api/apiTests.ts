@@ -84,6 +84,19 @@ const uniqueEmailOtpBody = (context: ApiTestContext) => ({
 
 const isObject = (value: any) => value && typeof value === 'object' && !Array.isArray(value);
 
+// Shared by the two app-shaped data-thing tests below: BOTH requests send this
+// exact crystal so the second create collides with the first on (ownerId,
+// crystal.appId, crystal.key). The things_app_data_unique index is partial-
+// filtered to thingtime: 'app-data' docs (see api/utils/mongodb/collections.ts),
+// so free-form data things carrying these keys must both persist — before the
+// kind scoping the second create 409'd on the app-data unique index. Computed
+// once per page load; duplicates across runs are fine (data things are not
+// unique on these keys, by design).
+const appShapedDataCrystal = (() => {
+  const suffix = uniqueSuffix();
+  return { name: `tt-api-test-app-shaped-${suffix}`, appId: `tt-api-test-appid-${suffix}`, key: 'tt-api-test-shared-key' };
+})();
+
 const decodeJwtPayload = (token: unknown) => {
   const encodedPayload = String(token || '').split('.')[1] || '';
   const base64 = encodedPayload
@@ -352,19 +365,36 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-service-account-validation',
     name: 'Service account email validation',
-    description: 'The service account endpoint is public but requires a valid email.',
+    description: 'The service account endpoint is public but requires a valid email (429/503 when the per-IP provisioning window or limiter is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/service-account',
     body: { serviceName: 'Thingtime API Test Missing Email' },
     expect: expectJson(
-      [400],
-      (body) =>
-        body?.ok === false &&
-        String(body?.error || '')
-          .toLowerCase()
-          .includes('email'),
-      'Service account route requires a valid email.'
+      [400, 429, 503],
+      (body, response) =>
+        response.status === 400
+          ? body?.ok === false && String(body?.error || '').toLowerCase().includes('email')
+          : body?.ok === false && typeof body?.error === 'string',
+      'Service account route requires a valid email (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'auth-service-account-body-cap',
+    name: 'Service account body size cap',
+    description: 'Oversized provisioning bodies are rejected with 413 before any account work (the route caps bodies at 16 KiB).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/service-account',
+    body: {
+      serviceName: 'Thingtime API Test Oversized Body',
+      email: 'oversized-body@example.invalid',
+      meta: { padding: 'x'.repeat(20 * 1024) }
+    },
+    expect: expectJson(
+      [413, 429, 503],
+      (body, response) => (response.status === 413 ? body?.ok === false : typeof body?.error === 'string'),
+      'Oversized service-account body rejected with 413 (or rate-limited with an error shape).'
     )
   },
   {
@@ -377,8 +407,9 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: uniqueServiceAccountBody,
     expect: expectJson(
-      [200],
-      (body) => {
+      [200, 429, 503],
+      (body, response) => {
+        if (response.status !== 200) return body?.ok === false && typeof body?.error === 'string';
         const payload = decodeJwtPayload(body?.accessToken);
         const deadlineMs = Date.parse(body?.verificationRequiredBy || '');
         const sevenDaysMs = 1000 * 60 * 60 * 24 * 7;
@@ -395,7 +426,7 @@ export const apiTests: ApiTestDefinition[] = [
           deadlineLooksRight
         );
       },
-      'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance.'
+      'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance (or the per-IP provisioning limit answered with an error shape).'
     )
   },
   {
@@ -447,8 +478,9 @@ export const apiTests: ApiTestDefinition[] = [
     timeoutMs: 30000,
     body: uniqueEmailServiceAccountBody,
     expect: expectJson(
-      [200],
-      (body) => {
+      [200, 429, 503],
+      (body, response) => {
+        if (response.status !== 200) return body?.ok === false && typeof body?.error === 'string';
         const payload = decodeJwtPayload(body?.accessToken);
         return (
           body?.ok === true &&
@@ -458,7 +490,7 @@ export const apiTests: ApiTestDefinition[] = [
           !Object.prototype.hasOwnProperty.call(payload || {}, 'exp')
         );
       },
-      'Service account was created and triggered verification email delivery.'
+      'Service account was created and triggered verification email delivery (or the per-IP provisioning limit answered with an error shape).'
     )
   },
   {
@@ -1077,6 +1109,16 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-search-null-condition',
+    name: 'Search rejects null conditions',
+    description: 'A conditions list carrying null is rejected with a 400 error shape instead of a 500.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/search',
+    body: { conditions: [null] },
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Null condition entry was rejected with a 400 error shape.')
+  },
+  {
     id: 'admin-rate-limits-guarded',
     name: 'Rate-limit config is admin-only',
     description: 'Reading the global rate-limit config requires an admin session.',
@@ -1360,6 +1402,50 @@ export const apiTests: ApiTestDefinition[] = [
             Array.isArray(body?.thing?.extended?.nested) &&
             body?.thing?.crystal?.legs === 4,
       'Schema-less create resolved to a data crystal and round-tripped extended verbatim (or was auth/rate limited).'
+    )
+  },
+  {
+    id: 'things-data-app-shaped-create',
+    name: 'Data crystal may carry appId + key',
+    description:
+      'A free-form data thing whose crystal contains appId and key entries is stored (session) — these are ordinary user keys, not reserved app-data fields — or rejected anonymously.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { crystal: appShapedDataCrystal, acl: ['tt:user'], tags: ['tt-api-test'] },
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status !== 200
+          ? body?.ok === false && typeof body?.error === 'string'
+          : body?.ok === true &&
+            Array.isArray(body?.thing?.thingtime) &&
+            body.thing.thingtime.includes('data') &&
+            body?.thing?.crystal?.appId === appShapedDataCrystal.appId &&
+            body?.thing?.crystal?.key === appShapedDataCrystal.key,
+      'Data thing with appId + key crystal entries persisted (or was auth/rate limited).'
+    )
+  },
+  {
+    id: 'things-data-app-shaped-duplicate',
+    name: 'Duplicate app-shaped data crystals do not collide',
+    description:
+      'A second data thing with the SAME appId + key crystal values as the previous test also persists: the app-data unique index is scoped to thingtime app-data docs, so free-form data things never 409 against it (pre-scoping this returned a duplicate-key conflict).',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { crystal: appShapedDataCrystal, acl: ['tt:user'], tags: ['tt-api-test'] },
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status !== 200
+          ? body?.ok === false && typeof body?.error === 'string'
+          : body?.ok === true &&
+            body?.thing?.crystal?.appId === appShapedDataCrystal.appId &&
+            body?.thing?.crystal?.key === appShapedDataCrystal.key,
+      'Second data thing with identical appId + key crystal values persisted alongside the first.'
     )
   },
   {

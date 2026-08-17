@@ -30,6 +30,7 @@ import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localC
 import { getThingtimeSchema, thingtimeSchemas } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField, flattenSchemaFieldsForDisplay, generateSampleFromFields } from '~/schemas/tools';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 import { SchemaBuilder, type BuilderPrefill } from './SchemaBuilder';
 import { SchemaThingForm } from './SchemaThingForm';
@@ -256,7 +257,8 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
         <Box flex={1} />
         {entry && (
           <Text color="var(--tt-faint, #b6b6c0)" fontSize="11px">
-            {entry.author?.displayName || entry.author?.username || 'anon'} · {timeAgo(entry.createdAt)}
+            {entry.author ? getUserDisplayName(entry.author) : 'anon'}
+            {entry.author?.temporary ? ` · ${getUserIdentityDetail(entry.author)}` : ''} · {timeAgo(entry.createdAt)}
           </Text>
         )}
       </Flex>

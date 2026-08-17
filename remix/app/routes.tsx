@@ -35,6 +35,7 @@ import DocsSchemas from './routes/docs/schemas';
 import SearchRoute from './routes/search';
 import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
+import ThingsRoute from './routes/things';
 import TestsPage from './routes/tests';
 import Themes from './routes/themes';
 import ThemesGallery from './routes/themes.gallery';
@@ -42,6 +43,7 @@ import ThingPage from './routes/thing';
 import VercelPage from './routes/vercel';
 import VerifyEmail from './routes/verify-email';
 import Welcome from './routes/welcome';
+import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
 
 const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
   const response = await fetch(url, {
@@ -62,7 +64,21 @@ const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
 
 const rootLoader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
-  return fetchJson<RootLoaderData>(`/api/root-data${url.search}`);
+  const rootData = await fetchJson<RootLoaderData>(`/api/root-data${url.search}`);
+
+  if (!shouldBootstrapTemporaryUser(url.pathname, rootData.user)) {
+    return rootData;
+  }
+
+  try {
+    const temporary = await fetchJson<{ user: RootLoaderData['user'] }>('/api/v1/auth/temporary', { method: 'POST' });
+    return temporary.user ? { ...rootData, user: temporary.user } : rootData;
+  } catch {
+    // Authentication remains recoverable through the existing login UI when
+    // the bootstrap service is unavailable; never replace the whole route
+    // with an error boundary for an optional first-session convenience.
+    return rootData;
+  }
 };
 
 const currentUserLoader = async () => {
@@ -71,7 +87,8 @@ const currentUserLoader = async () => {
 };
 
 const requireGuest = (redirectTo: string) => async () => {
-  if (await currentUserLoader()) {
+  const user = await currentUserLoader();
+  if (user && !user.temporary) {
     throw redirect(redirectTo);
   }
 
@@ -171,6 +188,9 @@ export const router = createBrowserRouter([
       { path: 'tests', element: <TestsPage /> },
       { path: 'themes', element: <Themes /> },
       { path: 'themes/gallery', element: <ThemesGallery /> },
+      // the unified Things browser claims EXACTLY /things; deeper /things/*
+      // paths still reach the ThingtimeUrl tree viewer via the catch-all
+      { path: 'things', element: <ThingsRoute /> },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]
