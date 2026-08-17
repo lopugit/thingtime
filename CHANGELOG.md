@@ -21,6 +21,18 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Manual develop-preview recovery reaches the trusted controller again**:
+  GitHub could drop the reusable workflow's forwarded typed input while
+  evaluating its job guard, producing an immediate failed run with no jobs.
+  Manual runs now schedule the controller unconditionally outside PR listener
+  events; the checked-out controller still validates the original PR-number
+  event input before any mutation, and the environment remains restricted to
+  `main`. — Codex (AI), 2026-08-17
+- **The control-plane tree is thin again after PR #272 regrew it**: the product
+  test note, app changelog, and generated graph remnants are removed from
+  `github-actions`, restoring the branch's bare-tree contract without touching
+  their canonical product-branch copies or Git history. — Codex (AI),
+  2026-08-17
 - **The thin control plane is excluded from repository-root Vercel builds**:
   its only Vercel config disables every Git deployment and ignores any fallback
   build, while the bare-tree contract requires and validates that exact

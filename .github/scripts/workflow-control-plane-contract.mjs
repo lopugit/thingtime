@@ -578,13 +578,27 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreview,
-    /github\.event_name != 'workflow_dispatch' \|\| inputs\.pr_number > 0/u,
-    "develop preview manual recovery is selected by its typed PR input",
+    /^    if: github\.event_name != 'pull_request_target'$/mu,
+    "develop preview always schedules its trusted controller outside PR listeners",
+  );
+  assert.doesNotMatch(
+    developPreview,
+    /inputs\.pr_number > 0/u,
+    "develop preview never filters manual recovery on a reusable-workflow input",
   );
   assert.doesNotMatch(
     developPreview,
     /github\.ref == 'refs\/heads\/main'/u,
     "develop preview delegates the manual branch gate to its protected environment",
+  );
+  const developPreviewController = readFileSync(
+    resolve(scripts, "deploy-develop-pr-preview.mjs"),
+    "utf8",
+  );
+  assert.match(
+    developPreviewController,
+    /eventName === 'workflow_dispatch'[\s\S]*boundedInteger\(event\.inputs\?\.pr_number, 'PR number'\)/u,
+    "develop preview validates the original manual PR input inside the trusted controller",
   );
 
   const providerRouter = readWorkflow("ci-provider-router.yml");
