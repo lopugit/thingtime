@@ -136,6 +136,20 @@ export function useApi() {
 			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), [])
     },
     admin: {
+      ciControl: useCallback(
+        async (args?: { limit?: number }, options?: { signal?: AbortSignal }) =>
+          getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
+        []
+      ),
+      reconcileCiControl: useCallback(
+        async () => asyncFetcher.submit({}, { action: '/api/v1/admin/ci/reconcile', errorContext: 'reconcile CI control data' }),
+        [asyncFetcher]
+      ),
+      dispatchCiWorkflow: useCallback(
+        async (args: { workflow: string; ref?: string; inputs?: Record<string, unknown> }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/dispatch', errorContext: `dispatch ${args.workflow}` }),
+        [asyncFetcher]
+      ),
       setPrConflictResolverModelWaterfall: useCallback(
 				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
         [asyncFetcher]

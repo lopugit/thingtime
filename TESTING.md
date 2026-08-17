@@ -334,6 +334,10 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Break the path-classification job deliberately in a disposable branch.
       Confirm neither exact required-context name is emitted and branch
       protection blocks the PR instead of treating a skipped job as proof.
+- [ ] Break either product workflow/topology contract in a disposable branch.
+      Confirm neither command runs inside `test:unit`, build/API keep their
+      real result, and the protected `github-actions` advisory updates one
+      warning comment without producing a failing or required status.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
@@ -986,7 +990,7 @@ re-checks the whole management plane end-to-end:
 `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
-      the dashboard (Users / Apps / Tiers / System tabs) for admins; the drawer's
+      the dashboard (Users / Apps / Tiers / CI Control / System tabs) for admins; the drawer's
       Account section shows the 🛠️ Admin item only for admins.
 - [ ] Users tab: free-text query searches every safe projected field; typed
       filters cover created-day ranges, tier id/name/version, booleans, quotas,
@@ -1068,6 +1072,43 @@ re-checks the whole management plane end-to-end:
 - [ ] Mobile (375px): the admin tables scroll inside their own container —
       the page body itself never scrolls horizontally; modals fit with no
       clipped controls.
+
+## Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`)
+
+- [ ] With a prior snapshot cached, CI Control paints the last-known feature
+      rows on first render without a spinner, then reconciles in the background.
+      A failed refresh preserves those rows, says they are cached, and retries.
+- [ ] Anonymous and non-admin callers receive the standard admin denial from
+      all three `/api/v1/admin/ci*` endpoints. The dashboard never renders for
+      them and the webhook routes do not accept a browser session as authority.
+- [ ] Send the same signed GitHub delivery twice: the entity projection is
+      current and exactly one relational `ci-event` exists for that delivery
+      and parent. A payload with one changed byte, a missing delivery header,
+      another repository, or a bad HMAC is rejected without writes.
+- [ ] Send Vercel deployment created → ready and retry each exact body. One
+      current deployment and preview projection advance to ready; exact retries
+      do not duplicate history. Invalid HMAC and payloads over 2 MiB fail.
+- [ ] GitHub reconciliation groups promotion PRs with their source feature,
+      paginates beyond 100 branches/open PRs, refreshes runs/deployments,
+      preserves existing event history, and never exposes the App private key
+      or installation token.
+- [ ] Dispatch every allowlisted workflow and confirm the audit row moves
+      requested → accepted (or failed) with a relational event. Arbitrary
+      workflow names, non-allowlisted inputs, and feature-branch entry refs
+      cannot reach GitHub. Rebase/release require the UI confirmation gate.
+- [ ] Desktop: search/filter feature rows, select a PR, open its GitHub and
+      preview links, inspect topology, Actions runs, and the full status
+      timeline. Scroll the page top-to-bottom and the sticky detail panel to its
+      bottom without clipping, overlap, or horizontal page overflow.
+- [ ] Mobile (375px): search/filter rows, open the bottom detail drawer, scroll
+      every section, open the dispatch modal and confirmation state, then close
+      both. The drawer is flush left/right/bottom, has no clipped controls, and
+      the page never scrolls horizontally.
+- [ ] Run `node scripts/workflow-caller-contract.mjs` manually or inspect its
+      protected advisory comment: every product-branch workflow has exactly
+      one reusable call pinned to `@github-actions`, no runner/steps/shell
+      behavior, and no product-branch Actions scripts. A mismatch warns but
+      does not join the required unit-test aggregate.
 
 ## App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`)
 

@@ -406,6 +406,9 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // Control-plane history is relational: one ci-event per provider delivery
+    // and parent entity, never an unbounded status array on the current row.
+    col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }),
     // Canonical account-storage reconciliation: content allocations are
     // grouped by owner and summed from their exact versioned byte stamps.
     // Control-plane Things never enter this partial index.
