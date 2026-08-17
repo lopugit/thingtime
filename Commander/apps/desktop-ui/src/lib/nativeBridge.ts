@@ -15,6 +15,10 @@ declare global {
 
 const pending = new Map<string, (response: NativeResponse) => void>();
 
+export function nativeBridgeAvailable(): boolean {
+  return Boolean(window.webkit?.messageHandlers?.commander || window.chrome?.webview);
+}
+
 window.commanderNativeReply = (response) => {
   pending.get(response.id)?.(response);
   pending.delete(response.id);

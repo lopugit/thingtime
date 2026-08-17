@@ -3,8 +3,8 @@ import type {
   CommanderAccount,
   CommanderExtension,
   CommanderSettings,
+  ExecuteResponse,
   LocalRaycastExtensionsResponse,
-  NativeRequest,
   RaycastPreferenceSyncSummary,
   RecentSearch,
   RecentSearchCommand,
@@ -46,7 +46,7 @@ export const api = {
       body: JSON.stringify(settings),
     }),
   execute: (itemId: string, actionId: string) =>
-    request<{ ok: true; nativeRequest?: Omit<NativeRequest, 'id'> }>('/api/execute', {
+    request<ExecuteResponse>('/api/execute', {
       method: 'POST',
       body: JSON.stringify({ itemId, actionId }),
     }),

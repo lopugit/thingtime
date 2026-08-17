@@ -11,6 +11,8 @@ portable from day one.
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
 - searchable Commander Settings results with tab-aware deep links into the separate native settings window;
 - a Raycast-shaped built-in Commander extension with separate quit, hide-window, and open-window commands;
+- a Bundled Raycast Commands catalog led by a native Search Emoji & Symbols picker with semantic search,
+  categories, skin tones, recents, keyboard navigation, copy actions, and paste-back to the previously active app;
 - launcher queries clear on every reopen while private, device-local search sessions remain available in a first
   History section, led by the newest command launched from each search and followed by its search term as a separate
   top-level result;
@@ -38,6 +40,12 @@ metadata from the exported preference domain and copies only manifest-declared n
 React reconciler is not complete yet. Commander reports this as partial compatibility rather than claiming imported
 metadata equals working compatibility. The exact matrix and roadmap are in
 [`docs/RAYCAST_COMPATIBILITY.md`](docs/RAYCAST_COMPATIBILITY.md).
+
+Commander-owned equivalents of Raycast commands that have no importable extension package appear separately under
+**Extensions → Bundled Raycast Commands**. The first is Search Emoji & Symbols: its searchable Unicode/CLDR catalog
+is powered by [Emojibase](https://emojibase.dev/) data under the MIT license, while its view, actions, recents, and
+native paste behavior are implemented by Commander. The complete attribution is bundled with every app build and
+tracked in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Architecture
 

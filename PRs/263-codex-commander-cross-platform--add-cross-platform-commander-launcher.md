@@ -142,10 +142,22 @@ environment.
   the daemon and native bridge, so Extensions and Accounts open their exact tabs.
   Result selection now reacts to pointer movement instead of hover re-entry, so
   a stationary cursor cannot steal keyboard selection after a query rerender.
+- Extensions Settings now separates Commander-owned **Bundled Raycast Commands**
+  from imported extensions. The first bundled equivalent is Emoji & Symbols:
+  semantic Unicode/CLDR search, an eight-column keyboard grid, categories, skin
+  tones, local recents, copy/Unicode actions, and native paste-back to the app
+  that was active before Commander opened. The picker uses MIT-licensed
+  Emojibase data and reports a clipboard-only fallback when macOS Accessibility
+  trust is unavailable; it does not overstate third-party Raycast Grid support.
+  The picker and its catalog are lazy-loaded, keeping the normal launcher entry
+  chunk at about 242 KB instead of adding the full dataset to Command-Space.
+- Starting a new query now clears the prior result set synchronously, closing a
+  debounce race where an immediate Return could execute the previously rendered
+  command before fresh search results arrived.
 
 ## Verification
 
-- Commander TypeScript: 54 tests passed across UI, daemon, and compatibility
+- Commander TypeScript: 64 tests passed across UI, daemon, and compatibility
   packages; typecheck, ESLint, Prettier, and package builds passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
   Clippy with warnings denied passed.

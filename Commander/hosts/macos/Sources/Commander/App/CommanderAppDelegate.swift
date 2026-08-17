@@ -53,6 +53,14 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
         loginItem: loginItem,
         showLauncher: { [weak self] in self?.launcher?.show() },
         hideLauncher: { [weak self] in self?.launcher?.hide() },
+        pasteClipboard: { [weak self] text in
+          await self?.launcher?.paste(text) ?? [
+            "copied": false,
+            "pasted": false,
+            "requiresAccessibility": false,
+          ]
+        },
+        pasteTargetName: { [weak self] in self?.launcher?.pasteTargetName },
         showSettings: { [weak self] tab in self?.settings?.show(tab: tab) },
         updateHotKey: { [weak self] shortcut in try self?.installHotKey(shortcut: shortcut) },
         updateMenuBar: { [weak self] visible in self?.setMenuBarVisible(visible) },

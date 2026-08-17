@@ -34,6 +34,8 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
   private let nativeToken: String
   private let showLauncher: () -> Void
   private let hideLauncher: () -> Void
+  private let pasteClipboard: (String) async -> [String: Any]
+  private let pasteTargetName: () -> String?
   private let showSettings: (CommanderSettingsTab?) -> Void
   private let updateHotKey: (String) throws -> Void
   private let updateMenuBar: (Bool) -> Void
@@ -46,6 +48,10 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     loginItem: LaunchAtLoginService,
     showLauncher: @escaping () -> Void,
     hideLauncher: @escaping () -> Void,
+    pasteClipboard: @escaping (String) async -> [String: Any] = { _ in
+      ["copied": false, "pasted": false, "requiresAccessibility": false]
+    },
+    pasteTargetName: @escaping () -> String? = { nil },
     showSettings: @escaping (CommanderSettingsTab?) -> Void,
     updateHotKey: @escaping (String) throws -> Void,
     updateMenuBar: @escaping (Bool) -> Void,
@@ -57,6 +63,8 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     self.loginItem = loginItem
     self.showLauncher = showLauncher
     self.hideLauncher = hideLauncher
+    self.pasteClipboard = pasteClipboard
+    self.pasteTargetName = pasteTargetName
     self.showSettings = showSettings
     self.updateHotKey = updateHotKey
     self.updateMenuBar = updateMenuBar
@@ -126,12 +134,17 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
         if url.scheme != nil { NSWorkspace.shared.open(url) }
         else { NSWorkspace.shared.open(URL(fileURLWithPath: raw)) }
         result = nil
+      case "application.pasteTarget":
+        result = pasteTargetName().map { ["name": $0] } ?? [:]
       case "filesystem.reveal":
         guard let raw = request.params?["path"]?.string else { throw BridgeError.missing("path") }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: raw)]); result = nil
       case "clipboard.write":
         guard let text = request.params?["text"]?.string else { throw BridgeError.missing("text") }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); result = nil
+      case "clipboard.paste":
+        guard let text = request.params?["text"]?.string else { throw BridgeError.missing("text") }
+        result = await pasteClipboard(text)
       case "extension.choose": result = chooseExtensionFolder()
       case "hotkey.update":
         guard let shortcut = request.params?["shortcut"]?.string else { throw BridgeError.missing("shortcut") }

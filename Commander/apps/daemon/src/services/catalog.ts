@@ -3,6 +3,7 @@ import type { CommanderExtension, SearchItem } from '@commander/protocol';
 export const closeCommanderCommandName = 'close-commander';
 export const closeCommanderWindowCommandName = 'close-commander-window';
 export const openCommanderCommandName = 'open-commander';
+export const searchEmojiSymbolsCommandName = 'search-emoji-symbols';
 
 export const commanderExtension: CommanderExtension = {
   id: 'builtin:commander',
@@ -42,7 +43,41 @@ export const commanderExtension: CommanderExtension = {
   ],
 };
 
-export const builtinExtensions = [commanderExtension] satisfies CommanderExtension[];
+export const emojiSymbolsExtension: CommanderExtension = {
+  id: 'builtin:emoji-symbols',
+  name: 'emoji-symbols',
+  title: 'Emoji & Symbols',
+  description: 'Search, copy, and paste emoji and Unicode symbols.',
+  version: '0.1.0',
+  author: 'Thingtime',
+  icon: 'emoji',
+  source: 'builtin',
+  enabled: true,
+  compatibility: 'native',
+  commands: [
+    {
+      name: searchEmojiSymbolsCommandName,
+      title: 'Search Emoji & Symbols',
+      description:
+        'Find emoji and symbols by name, meaning, or category, then paste them into the active app.',
+      mode: 'view',
+      keywords: [
+        'emoji',
+        'emojis',
+        'symbol',
+        'symbols',
+        'unicode',
+        'emoticon',
+        'smiley',
+        'character',
+        'heart',
+      ],
+      disabled: false,
+    },
+  ],
+};
+
+export const builtinExtensions = [commanderExtension, emojiSymbolsExtension] satisfies CommanderExtension[];
 
 export function availableExtensions(installed: CommanderExtension[]): CommanderExtension[] {
   const builtinIDs = new Set(builtinExtensions.map((extension) => extension.id));
@@ -112,7 +147,7 @@ export function extensionItems(extensions: CommanderExtension[]): SearchItem[] {
         subtitle: extension.title,
         kind: 'extension' as const,
         keywords: [extension.name, extension.title, ...command.keywords],
-        icon: 'extensions',
+        icon: extension.icon ?? 'extensions',
         favourite: false,
         extensionId: extension.id,
         commandName: command.name,

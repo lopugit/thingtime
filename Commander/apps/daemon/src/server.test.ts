@@ -99,6 +99,21 @@ describe('Commander daemon HTTP trust boundaries', () => {
               },
             ],
           },
+          {
+            id: 'builtin:emoji-symbols',
+            name: 'emoji-symbols',
+            title: 'Emoji & Symbols',
+            source: 'builtin',
+            compatibility: 'native',
+            commands: [
+              {
+                name: 'search-emoji-symbols',
+                title: 'Search Emoji & Symbols',
+                mode: 'view',
+                keywords: expect.arrayContaining(['emoji', 'symbol', 'unicode', 'heart']),
+              },
+            ],
+          },
         ],
         capabilities: { secureCredentialStore: true },
       });
@@ -204,6 +219,36 @@ describe('Commander daemon HTTP trust boundaries', () => {
       expect(await openCommander.json()).toEqual({
         ok: true,
         nativeRequest: { method: 'launcher.show' },
+      });
+
+      const emojiSearch = await fetch(`${server.url}/api/search?q=emoji`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(emojiSearch.status).toBe(200);
+      const emojiResults = (await emojiSearch.json()) as { hits: Array<{ id: string }> };
+      expect(emojiResults.hits[0]).toMatchObject({
+        id: 'extension:builtin:emoji-symbols:search-emoji-symbols',
+        title: 'Search Emoji & Symbols',
+        subtitle: 'Emoji & Symbols',
+        extensionId: 'builtin:emoji-symbols',
+        commandName: 'search-emoji-symbols',
+      });
+
+      const openEmojiPicker = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({
+          itemId: 'extension:builtin:emoji-symbols:search-emoji-symbols',
+          actionId: 'run',
+        }),
+      });
+      expect(openEmojiPicker.status).toBe(200);
+      expect(await openEmojiPicker.json()).toEqual({
+        ok: true,
+        view: { id: 'emoji-symbols' },
       });
 
       const rememberedSearch = await fetch(`${server.url}/api/history`, {

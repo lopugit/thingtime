@@ -12,11 +12,16 @@
 - [ ] With text in the search field, Command-A selects the complete query and typing replaces it; on Windows/Linux shells, repeat with Control-A.
 - [ ] Up/Down selection stays visible through the complete result list. Return runs the selected primary action.
 - [ ] Hover a lower result, stop moving the pointer, then keep typing. The refreshed list resets to its first result; the stationary pointer must not steal selection until it moves again.
+- [ ] Type a new query and press Return immediately, before the search debounce settles. Commander must never execute an item left over from the previous query.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
 - [ ] Open an application, reveal it in Finder, and copy its path through Actions.
 - [ ] Verify default and compact modes; expansion never shows an unrendered blank region.
 - [ ] Force-terminate the native host once; its parent watchdog must stop the daemon and Rust child and release port 47820 before relaunch.
 - [ ] Drag the launcher by its icon/header chrome; the window follows the pointer without moving focus into the search field.
+- [ ] Search `emoji` or `symbols`, run Search Emoji & Symbols, and verify the launcher changes into the eight-column picker without opening Settings or an external app.
+- [ ] In the emoji picker, search `heart`; verify semantic matches, category and skin-tone selectors, Left/Right/Up/Down navigation, selected-cell scrolling, and Command-K actions. Command-Return copies and Shift-Command-C copies Unicode code points.
+- [ ] Open Commander over a disposable TextEdit document, choose an emoji, and press Return. With Commander trusted in Accessibility, verify the launcher closes and the emoji is pasted into that original app; without trust, verify the picker stays open and clearly reports the clipboard-only fallback without prompting on launch.
+- [ ] Reopen Commander after leaving the emoji picker and verify the normal launcher returns with an empty query. Reopen the picker and verify its Recently Used ordering and selected skin tone persist locally.
 
 ## Settings
 
@@ -39,6 +44,7 @@
 - [ ] For an already installed extension, choose Sync to Commander and verify its safe extension/command preferences refresh. Password fields remain protected, and development extensions direct the user to Sideload instead of guessing a source path.
 - [ ] Execute a compatible prebuilt no-view command and confirm a worker crash cannot terminate the daemon.
 - [ ] Verify Installed contains the enabled built-in Commander extension with Close Commander, Close Commander Window, and Open Commander native commands.
+- [ ] Open Bundled Raycast Commands and verify Emoji & Symbols appears separately from installed/sideloaded extensions with its built-in badge and Search Emoji & Symbols command count.
 - [ ] Import `Commander/extensions/raycast/`, run its no-view Open Commander command from Raycast after Commander has quit, and verify the installed app relaunches with a focused, empty query.
 
 ## Thingtime accounts and sync

@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CommanderExtension, LocalRaycastExtension, StoreExtension } from '@commander/protocol';
-import { Check, Download, ExternalLink, FolderPlus, RefreshCw, Search, ShieldCheck } from 'lucide-react';
+import {
+  Check,
+  Download,
+  ExternalLink,
+  FolderPlus,
+  PackageCheck,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+} from 'lucide-react';
 import { api } from '../lib/api.js';
 import { nativeRequest } from '../lib/nativeBridge.js';
 import { CommanderIcon } from './CommanderIcon.js';
 
-type ExtensionMode = 'installed' | 'store' | 'raycast';
+type ExtensionMode = 'installed' | 'bundled' | 'store' | 'raycast';
 
 export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] }) {
   const [mode, setMode] = useState<ExtensionMode>('installed');
@@ -117,6 +126,13 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
+  const visibleBundled = installed.filter(
+    (extension) =>
+      extension.source === 'builtin' &&
+      `${extension.title} ${extension.description} ${extension.commands.map((command) => command.title).join(' ')}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
   const visibleRaycast = raycast.filter((extension) =>
     `${extension.title} ${extension.name} ${extension.description}`
       .toLowerCase()
@@ -137,6 +153,13 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
             onClick={() => setMode('installed')}
           >
             Installed
+          </button>
+          <button
+            className={mode === 'bundled' ? 'active' : ''}
+            type="button"
+            onClick={() => setMode('bundled')}
+          >
+            Bundled
           </button>
           <button className={mode === 'store' ? 'active' : ''} type="button" onClick={() => setMode('store')}>
             Store
@@ -182,7 +205,7 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
             <div className="extension-row" role="row" key={extension.id}>
               <span className="extension-name">
                 <i>
-                  <CommanderIcon name="extensions" />
+                  <CommanderIcon name={extension.icon ?? 'extensions'} />
                 </i>
                 <span>
                   <strong>{extension.title}</strong>
@@ -194,6 +217,46 @@ export function ExtensionsSettings({ initial }: { initial: CommanderExtension[] 
               <span className="enabled-check">{extension.enabled ? <Check /> : '—'}</span>
             </div>
           ))}
+        </div>
+      ) : mode === 'bundled' ? (
+        <div className="bundled-command-section">
+          <header className="bundled-command-heading">
+            <span>
+              <PackageCheck />
+            </span>
+            <div>
+              <strong>Bundled Raycast Commands</strong>
+              <small>Commander-native versions of useful commands that Raycast bundles into its app.</small>
+            </div>
+          </header>
+          <div className="store-grid bundled-command-grid">
+            {visibleBundled.length === 0 ? (
+              <div className="raycast-empty">
+                <CommanderIcon name="emoji" />
+                <strong>No bundled commands found</strong>
+                <span>Try searching for Emoji, Symbols, or Commander.</span>
+              </div>
+            ) : null}
+            {visibleBundled.map((extension) => (
+              <article className="store-row bundled-command-row" key={extension.id}>
+                <span className="store-icon">
+                  <CommanderIcon name={extension.icon} />
+                </span>
+                <span className="store-copy">
+                  <strong>{extension.title}</strong>
+                  <span>{extension.description}</span>
+                  <small>
+                    {extension.commands.length} bundled{' '}
+                    {extension.commands.length === 1 ? 'command' : 'commands'} · by{' '}
+                    {extension.author ?? 'Thingtime'}
+                  </small>
+                </span>
+                <span className="bundled-badge">
+                  <Check /> Built in
+                </span>
+              </article>
+            ))}
+          </div>
         </div>
       ) : mode === 'store' ? (
         <div className="store-grid">

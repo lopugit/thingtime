@@ -13,8 +13,10 @@ public interface INativeBridge
     Task BeginWindowDragAsync();
     Task OpenSettingsAsync(string? tab = null);
     Task OpenApplicationAsync(string pathOrUrl);
+    Task<string?> GetPasteTargetAsync();
     Task RevealAsync(string path);
     Task WriteClipboardAsync(string text);
+    Task<object?> PasteClipboardAsync(string text);
     Task<string?> ChooseExtensionPathAsync();
     Task UpdateHotkeyAsync(string shortcut);
     Task UpdateLaunchAtLoginAsync(bool enabled);

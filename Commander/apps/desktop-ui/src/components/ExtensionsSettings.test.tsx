@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { LocalRaycastExtension } from '@commander/protocol';
+import type { CommanderExtension, LocalRaycastExtension } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api.js';
 import { ExtensionsSettings } from './ExtensionsSettings.js';
@@ -27,6 +27,28 @@ const raycastExtension: LocalRaycastExtension = {
   detectedPreferenceCount: 3,
   syncedPreferenceCount: 0,
   protectedPreferenceCount: 0,
+};
+
+const emojiExtension: CommanderExtension = {
+  id: 'builtin:emoji-symbols',
+  name: 'emoji-symbols',
+  title: 'Emoji & Symbols',
+  description: 'Search, copy, and paste emoji and Unicode symbols.',
+  version: '0.1.0',
+  author: 'Thingtime',
+  icon: 'emoji',
+  source: 'builtin',
+  enabled: true,
+  compatibility: 'native',
+  commands: [
+    {
+      name: 'search-emoji-symbols',
+      title: 'Search Emoji & Symbols',
+      mode: 'view',
+      keywords: ['emoji', 'symbols'],
+      disabled: false,
+    },
+  ],
 };
 
 describe('Your Raycast extensions', () => {
@@ -115,5 +137,16 @@ describe('Your Raycast extensions', () => {
     await waitFor(() =>
       expect(api.syncRaycastExtension).toHaveBeenCalledWith('github', '11111111-1111-1111-1111-111111111111'),
     );
+  });
+
+  it('lists Commander-native equivalents under Bundled Raycast Commands', () => {
+    render(<ExtensionsSettings initial={[emojiExtension]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bundled' }));
+
+    expect(screen.getByText('Bundled Raycast Commands')).toBeVisible();
+    expect(screen.getByText('Emoji & Symbols')).toBeVisible();
+    expect(screen.getByText('1 bundled command · by Thingtime')).toBeVisible();
+    expect(screen.getByText('Built in')).toBeVisible();
   });
 });
