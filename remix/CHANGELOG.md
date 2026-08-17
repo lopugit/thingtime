@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Native iOS drawer and media capture**: the iOS WebView now uses the same
+  fixed drawer trigger as mobile web, so opening the drawer keeps its close
+  control inside the panel instead of translating it with the top nav. The
+  generated app Info.plist now declares camera, microphone, and photo-library
+  purpose strings so WebKit's Take Photo or Video flow requests permission
+  instead of terminating the app. — Codex (AI), 2026-08-17
 - **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
   now lets the controller build an already-previewed commit in the isolated
   `develop` Custom Environment instead of canceling it as a duplicate, while

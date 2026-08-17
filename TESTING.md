@@ -140,6 +140,16 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## iOS web destination drawer
 
+- [ ] At a phone-width native WebView destination, open the web app navigation
+      drawer from the top-left menu icon. The same fixed icon used by mobile web
+      stays inside the drawer header while the page and top nav move aside; no
+      duplicate icon appears at the drawer's outside edge. Close it, scroll from
+      the page top to bottom, reopen it, and confirm the icon remains tappable.
+- [ ] From any media composer in the native iOS app, choose Add Media → Take
+      Photo or Video. The system requests camera access instead of terminating
+      the app; photo capture returns a selectable file. Repeat with video and
+      confirm microphone permission is requested, then verify Photo Library
+      selection still returns media without a crash.
 - [ ] Confirm `https://thingtime.com/api/v1/vercel/deployments?limit=50` reports
       `source: "api"`, `hasError: false`, and more than the production `main`
       deployment before testing the native picker. A tokenless response or
