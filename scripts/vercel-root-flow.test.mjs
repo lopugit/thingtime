@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,8 +58,11 @@ test('staging promotes a complete Nitro artifact and replaces stale root output'
 	const source = resolve(temporaryRoot, 'remix/.vercel/output');
 	const destination = resolve(temporaryRoot, '.vercel/output');
 	await mkdir(resolve(source, 'static'), { recursive: true });
+	await mkdir(resolve(source, 'functions/__server.func'), { recursive: true });
 	await mkdir(destination, { recursive: true });
 	await writeFile(resolve(source, 'static/index.html'), '<div id="root"></div>');
+	await writeFile(resolve(source, 'functions/__server.func/index.mjs'), 'export default {}');
+	await symlink('./__server.func', resolve(source, 'functions/[...].func'));
 	await writeFile(
 		resolve(source, 'config.json'),
 		JSON.stringify({
@@ -71,6 +74,8 @@ test('staging promotes a complete Nitro artifact and replaces stale root output'
 	await stageVercelOutput({ sourceDirectory: source, destinationDirectory: destination });
 
 	assert.equal(await readFile(resolve(destination, 'static/index.html'), 'utf8'), '<div id="root"></div>');
+	assert.equal(await readlink(resolve(destination, 'functions/[...].func')), './__server.func');
+	assert.equal(await readFile(resolve(destination, 'functions/[...].func/index.mjs'), 'utf8'), 'export default {}');
 	assert.equal(existsSync(resolve(destination, 'stale.txt')), false);
 	assert.equal(existsSync(resolve(source, 'config.json')), true);
 });

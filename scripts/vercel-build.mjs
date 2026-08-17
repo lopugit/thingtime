@@ -48,7 +48,11 @@ export async function stageVercelOutput({ sourceDirectory = remixOutputDirectory
 	await mkdir(dirname(destination), { recursive: true });
 
 	try {
-		await cp(source, stagingDirectory, { recursive: true });
+		// Nitro emits relative function aliases such as `[...].func ->
+		// ./__server.func`. Node resolves symlink targets while copying unless
+		// verbatimSymlinks is enabled, which would make the promoted artifact
+		// point back into remix/.vercel/output instead of remaining self-contained.
+		await cp(source, stagingDirectory, { recursive: true, verbatimSymlinks: true });
 		await verifyVercelOutput(stagingDirectory);
 		await rm(destination, { force: true, recursive: true });
 		await rename(stagingDirectory, destination);
