@@ -10,6 +10,20 @@ export type RootLoaderData = {
   user: Awaited<ReturnType<typeof getCurrentUser>>;
 };
 
+// Browser-visible configuration is fail-closed: only these public status
+// origins may cross the server/client boundary. Never infer safety from an env
+// prefix or a denylist — Thingtime's integration secrets intentionally share
+// the THINGTIME_ prefix and must remain server-only.
+const PUBLIC_THINGTIME_ENV_KEYS = [
+  'THINGTIME_PRODUCTION_STATUS_ORIGIN',
+  'THINGTIME_PROD_STATUS_ORIGIN',
+  'THINGTIME_DEVELOPMENT_STATUS_ORIGIN',
+  'THINGTIME_DEV_STATUS_ORIGIN',
+  'THINGTIME_STAGING_STATUS_ORIGIN',
+  'THINGTIME_STAGE_STATUS_ORIGIN',
+  'THINGTIME_LOCAL_STATUS_ORIGIN'
+] as const;
+
 const getDeploymentBranchName = () => {
   return (
     process.env.VERCEL_GIT_COMMIT_REF ||
@@ -23,7 +37,11 @@ export async function loadRootData(request: Request) {
   const cookie = ((await Session.parse(cookieHeader)) || {}) as Record<string, unknown>;
   const cookiePingCounter = Number(cookie.pingCounter || 0);
   const pingCounter = cookiePingCounter + 1;
-  const processEnv: RootLoaderData['envFromCookie'] = {};
+  const processEnv: RootLoaderData['envFromCookie'] = Object.fromEntries(
+    PUBLIC_THINGTIME_ENV_KEYS.flatMap((key) =>
+      process.env[key] === undefined ? [] : [[key, process.env[key]]]
+    )
+  );
   const url = new URL(request.url);
   const devKitEnv = {
     NODE_ENV: process.env.NODE_ENV,
@@ -36,12 +54,6 @@ export async function loadRootData(request: Request) {
     if (url.hostname.endsWith('.ts.net')) return '[TS]';
     return process.env.NODE_ENV === 'development' ? '[LC]' : '[DEV]';
   })();
-
-  for (const key in process.env) {
-    if (key.startsWith('THINGTIME_') && !key.includes('PRIVATE')) {
-      processEnv[key] = process.env[key];
-    }
-  }
 
   processEnv.THINGTIME_BRANCH_NAME = getDeploymentBranchName();
   processEnv.THINGTIME_VERCEL_ENV =
@@ -59,7 +71,10 @@ export async function loadRootData(request: Request) {
       user: await getCurrentUser(request)
     } satisfies RootLoaderData,
     headers: {
-      'Set-Cookie': await Session.serialize({ ...cookie, pingCounter })
+      'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+      'Pragma': 'no-cache',
+      'Set-Cookie': await Session.serialize({ ...cookie, pingCounter }),
+      'Vary': 'Cookie'
     }
   };
 }
