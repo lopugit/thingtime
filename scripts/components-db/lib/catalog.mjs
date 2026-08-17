@@ -57,7 +57,10 @@ export const ARCHETYPE_ORDER = [
 	'gamification',
 	'settings',
 	'mail',
-	'schedule'
+	'schedule',
+	'map-travel',
+	'banking',
+	'docs-wiki'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;

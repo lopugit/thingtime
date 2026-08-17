@@ -1,6 +1,6 @@
 {
-	"target": 1720,
-	"count": 1720,
+	"target": 1840,
+	"count": 1840,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -44,18 +44,21 @@
 		"gamification",
 		"settings",
 		"mail",
-		"schedule"
+		"schedule",
+		"map-travel",
+		"banking",
+		"docs-wiki"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 215,
-		"bootstrap": 215,
-		"mui": 215,
-		"shadcn": 215,
-		"untitled": 215,
-		"daisyui": 215,
-		"reactflow": 215,
-		"thingtime": 215
+		"antd": 230,
+		"bootstrap": 230,
+		"mui": 230,
+		"shadcn": 230,
+		"untitled": 230,
+		"daisyui": 230,
+		"reactflow": 230,
+		"thingtime": 230
 	},
-	"hash": "a7225908d43cf01f"
+	"hash": "69c4fa445c6faf52"
 }
