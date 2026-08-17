@@ -596,6 +596,251 @@ sanitized resolved config (never credentials); `POST /api/v1/email/test-otp` is
 a dev/preview-only helper for the `/tests` page restricted to the configured
 test recipient (or a plus alias of it).
 
+### Private S3 media and attachments
+
+Posts, comments and replies, Messenger messages and thread replies, custom
+reaction emoji, and profile avatar/banner images use direct, checksummed
+multipart uploads to a private S3 bucket. The browser receives short-lived part
+URLs, not AWS credentials; product records reference stable attachment ids,
+never expiring S3 URLs. Attachment bytes are reserved against the account's
+Thingtime storage tier before upload and remain charged until exact-version S3
+deletion is confirmed. A stable client request id is hashed with the
+authenticated owner into an opaque owner-scoped attachment id, making lost
+start responses safely retryable without cross-account id squatting or
+existence disclosure.
+
+Every surface binds only its own server-validated attachment purpose. Comment
+and reply files inherit the root post visibility through the complete parent
+chain. Message and thread files require current chat membership. Personal and
+community custom emoji bind one safe raster image to their exact owner/scope;
+community images require membership, while an emoji already used in a shared
+conversation remains renderable to its authenticated participants. Deleting an
+owning post/comment/message/emoji removes the exact S3 versions before Mongo
+rows and quota reservations are released. Custom Mongo data planes cannot bind
+or authorize these home-storage objects.
+
+Profile media is limited to JPEG, PNG, GIF, WebP, or AVIF and 64 MiB per image.
+The server binds a ready upload only to its exact owner and requested avatar or
+banner slot in the same home-Mongo transaction as the profile update. Public
+profile rendering uses the stable same-origin content route; the bucket stays
+private. Replacing or removing managed profile media releases the old reference
+transactionally, but its bytes remain billed until the cleanup path permanently
+deletes the exact S3 version and removes the attachment Thing. External http(s)
+image URLs remain a separate, quota-saving alternative and are never fetched by
+the Thingtime server.
+
+Configure only these server-side Vercel variables. Scope the production bucket
+and role to **Production** only. Thingtime's `develop` Custom Environment and
+standard feature Preview deployments use the separate development bucket,
+role, data plane, and cleanup secret; never expose the production values to
+either environment.
+
+```sh
+THINGTIME_PRIVATE_S3_ROLE_ARN="arn:aws:iam::<12-digit-account-id>:role/<production-attachment-role>"
+THINGTIME_PRIVATE_S3_BUCKET="<private-bucket-name>"
+THINGTIME_PRIVATE_S3_REGION="<aws-region>"
+CRON_SECRET="<long-random-vercel-cron-secret>"
+```
+
+The bucket name must be DNS-compatible **without dots**; dotted names are
+rejected so every signed URL uses the unambiguous virtual-hosted S3 form. The
+bucket must also belong to the same 12-digit AWS account named by the role ARN.
+The runtime derives `ExpectedBucketOwner` from that ARN and fails closed when
+the bucket owner differs.
+
+In Vercel, mark all four values **Sensitive**. Give Production its values only
+in the built-in Production environment. Give `develop` a distinct set only in
+the branch-tracked Custom Environment named `develop`; never select the generic
+Preview environment. `CRON_SECRET` authenticates only
+`/api/v1/attachments/cleanup`; it is not a Thingtime user, PAT, app, or
+service-account credential, and must never use a `THINGTIME_*` browser-visible
+name. Use different secrets for Production and develop.
+
+The `develop` Custom Environment must use an exact `develop` branch matcher and
+own `https://dev.thingtime.com`. Its Vercel OIDC subject is
+`owner:<vercel-team-slug>:project:<vercel-project-name>:environment:develop`.
+This is intentionally different from ordinary PR deployments, whose subject
+ends in `environment:preview`. Branch-scoped Preview variables alone are not an
+AWS boundary because Vercel's Preview OIDC subject contains no Git branch; do
+not trust `environment:preview` for the develop role.
+
+The role must use Vercel OIDC temporary credentials and an exact production
+subject for this project. Do not create an S3 IAM user, reuse the SES IAM user,
+or set generic `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_REGION`
+variables for attachments. Restrict its object policy to the app's `objects/*`
+prefix. With Vercel's recommended team issuer mode, use this placeholder-only
+trust policy (replace every angle-bracket value):
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Principal": {
+				"Federated": "arn:aws:iam::<12-digit-account-id>:oidc-provider/oidc.vercel.com/<vercel-team-slug>"
+			},
+			"Action": "sts:AssumeRoleWithWebIdentity",
+			"Condition": {
+				"StringEquals": {
+					"oidc.vercel.com/<vercel-team-slug>:aud": "https://vercel.com/<vercel-team-slug>",
+					"oidc.vercel.com/<vercel-team-slug>:sub": "owner:<vercel-team-slug>:project:<vercel-project-name>:environment:<production-or-develop>"
+				}
+			}
+		}
+	]
+}
+```
+
+Create one role per environment. Substitute `production` for the Production
+role and `develop` for the develop role; never wildcard the environment portion
+of `sub` and never let one role trust both subjects.
+
+Attach this placeholder-only permissions policy to the role. Keep generic
+`s3:DeleteObject` out: in a versioned bucket it can create a delete marker
+without permanently removing the billed object version.
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "ThingtimePrivateAttachments",
+			"Effect": "Allow",
+			"Action": [
+				"s3:AbortMultipartUpload",
+				"s3:DeleteObjectVersion",
+				"s3:GetObject",
+				"s3:GetObjectVersion",
+				"s3:ListMultipartUploadParts",
+				"s3:PutObject",
+				"s3:PutObjectTagging",
+				"s3:PutObjectVersionTagging"
+			],
+			"Resource": "arn:aws:s3:::<private-bucket-name>/objects/*"
+		}
+	]
+}
+```
+
+The runtime role needs only those object actions:
+
+- `s3:PutObject` and `s3:PutObjectTagging` (the MPU starts with a pending tag)
+- `s3:GetObject` and `s3:GetObjectVersion`
+- `s3:DeleteObjectVersion`
+- `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`
+- `s3:PutObjectVersionTagging`
+
+Do not grant `s3:ListBucket`, `s3:ListBucketMultipartUploads`, ACL,
+public-read, or bucket-administration actions. Completed attachments persist
+the opaque S3 `VersionId`; sniffing, tagging, download, and deletion all target
+that exact verified version. Exact-version deletion happens before the Thingtime
+storage reservation is refunded, so bucket versioning cannot hide unmetered
+noncurrent bytes.
+
+Keep both account- and bucket-level S3 Block Public Access enabled, Bucket Owner
+Enforced object ownership on, and bucket versioning enabled. Bucket policy
+should explicitly deny non-TLS requests and TLS below 1.2. The
+`aws:PrincipalIsAWSService` condition avoids accidentally blocking AWS service
+principals whose network context AWS redacts:
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "DenyInsecureTransport",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"Bool": {
+					"aws:SecureTransport": "false",
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		},
+		{
+			"Sid": "DenyTLSBelow12",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"NumericLessThan": {
+					"s3:TlsVersion": "1.2"
+				},
+				"Bool": {
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		}
+	]
+}
+```
+
+Configure CORS with one exact origin per bucket, `PUT`, and the one
+application-authored request header: the production Thingtime origin for the
+production bucket, and `https://dev.thingtime.com` for the develop bucket. The
+uploader deliberately sends a Blob with no `Content-Type`, and completion
+obtains ETags/checksums server-side with ListParts, so no S3 response headers
+need to be exposed:
+
+```json
+[
+	{
+		"AllowedHeaders": ["x-amz-checksum-sha256"],
+		"AllowedMethods": ["PUT"],
+		"AllowedOrigins": ["https://<environment-origin>"],
+		"ExposeHeaders": [],
+		"MaxAgeSeconds": 300
+	}
+]
+```
+
+Lifecycle must abort incomplete multipart uploads after seven days and remove
+noncurrent versions after 30 days. This AWS CLI/API-shaped placeholder applies
+both actions only to Thingtime's object prefix (the S3 console asks for the same
+rule fields):
+
+```json
+{
+	"Rules": [
+		{
+			"ID": "thingtime-private-attachment-cleanup",
+			"Status": "Enabled",
+			"Filter": { "Prefix": "objects/" },
+			"NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
+			"AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+		}
+	]
+}
+```
+
+Presigned URLs work with a private bucket; public access must stay off.
+Production uses the app's hourly Vercel Cron at minute 17. Vercel Cron runs
+Production deployments only, so the `develop` Custom Environment instead needs
+an external hourly scheduler that sends the same exact bearer header to
+`https://dev.thingtime.com/api/v1/attachments/cleanup`. Thingtime uses a
+dedicated AWS EventBridge API Destination for that call; keep its connection
+secret distinct, its invocation role limited to that one destination, and its
+rate at one request/second. Configure the Connection as API-key auth with
+header name `Authorization` and value `Bearer <develop-cron-secret>`. Restrict
+the role trust to `events.amazonaws.com` plus the exact rule `aws:SourceArn`
+and account, and grant only `events:InvokeApiDestination` on the exact API
+Destination ARN. Schedule `cron(17 * * * ? *)`; never put the connection secret
+in the rule payload, repository, or logs. Both paths process at most 1,000 rows with a
+25-second wall-clock budget per pass. Pending cancellations
+that issued a presigned part URL stay conservatively billed through an eight-day,
+lifecycle-backed settlement window. Cleanup then requires two empty
+Abort/ListParts checks at least one hour apart before HEAD verification,
+exact-version deletion, and transactional refund. This prevents a signed part
+PUT that finishes late from escaping tier accounting; the seven-day S3
+incomplete-MPU lifecycle remains a required independent guard.
+An MPU that never issued a part URL has no possible late browser PUT and can be
+refunded promptly after Abort/ListParts/HEAD proves it empty.
+
 ### Notification emails (SES notification stream)
 
 Activity notifications (friend requests, new followers, comments, replies,
@@ -981,8 +1226,9 @@ Unset values fall back to `https://thingtime.com`, `https://dev.thingtime.com`,
 
 Only variables with the `THINGTIME_` prefix are intentionally copied into the
 browser-visible loader data, and variables containing `PRIVATE` are excluded.
-Keep secrets such as MongoDB passwords and Vercel API tokens unprefixed and
-server-only.
+Use the `THINGTIME_PRIVATE_` namespace for server-only Thingtime integrations
+such as S3, and keep secrets such as MongoDB passwords and Vercel API tokens
+unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
 
