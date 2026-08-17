@@ -5,11 +5,9 @@ import type { BootstrapResponse, SearchHit } from '@commander/protocol';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
-import { api } from '../lib/api.js';
-import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
+import { beginWindowDrag, nativeRequest } from '../lib/nativeBridge.js';
 import { Launcher } from './Launcher.js';
 
-vi.mock('../lib/api.js', () => ({ api: { execute: vi.fn(async () => ({ ok: true })) } }));
 vi.mock('../lib/nativeBridge.js', () => ({
   beginWindowDrag: vi.fn(),
   hideLauncher: vi.fn(async () => undefined),
@@ -48,8 +46,10 @@ const hits: SearchHit[] = [
   {
     id: 'app:notes',
     title: 'Notes',
+    subtitle: '/Applications/Notes.app',
     kind: 'application',
     keywords: ['app'],
+    path: '/Applications/Notes.app',
     favourite: false,
     actions: [{ id: 'open', title: 'Open' }],
     score: 80,
@@ -72,6 +72,7 @@ function state(overrides: Partial<CommanderState> = {}): CommanderState {
     setActionsOpen: vi.fn(),
     setActiveView: vi.fn(),
     rememberRecentSearch: vi.fn(async () => undefined),
+    executeCommand: vi.fn(async () => undefined),
     reportError: vi.fn(),
     saveSettings: vi.fn(),
     refresh: vi.fn(),
@@ -150,7 +151,7 @@ describe('Launcher keyboard navigation', () => {
     const commander = state({ selectedIndex: 1 });
     render(<Launcher state={commander} />);
     fireEvent.keyDown(window, { key: 'Enter' });
-    await waitFor(() => expect(api.execute).toHaveBeenCalledWith('app:notes', 'open'));
+    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith('app:notes', 'open'));
     expect(commander.rememberRecentSearch).toHaveBeenCalledWith(
       'settings',
       expect.objectContaining({
@@ -164,10 +165,10 @@ describe('Launcher keyboard navigation', () => {
   });
 
   it.each([
-    ['Close Commander', 'close-commander', 'application.quit' as const],
-    ['Close Commander Window', 'close-commander-window', 'launcher.hide' as const],
-    ['Open Commander', 'open-commander', 'launcher.show' as const],
-  ])('runs %s through its native lifecycle request', async (title, commandName, method) => {
+    ['Close Commander', 'close-commander'],
+    ['Close Commander Window', 'close-commander-window'],
+    ['Open Commander', 'open-commander'],
+  ])('routes %s through the shared command executor', async (title, commandName) => {
     const item = {
       ...hits[0]!,
       id: `extension:builtin:commander:${commandName}`,
@@ -178,14 +179,12 @@ describe('Launcher keyboard navigation', () => {
       commandName,
       actions: [{ id: 'run', title: `Run ${title}` }],
     };
-    vi.mocked(api.execute).mockResolvedValueOnce({ ok: true, nativeRequest: { method } });
-    render(<Launcher state={state({ hits: [item], selectedIndex: 0 })} />);
+    const commander = state({ hits: [item], selectedIndex: 0 });
+    render(<Launcher state={commander} />);
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    await waitFor(() => expect(api.execute).toHaveBeenCalledWith(item.id, 'run'));
-    expect(nativeRequest).toHaveBeenCalledWith(method, undefined);
-    expect(hideLauncher).not.toHaveBeenCalled();
+    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith(item.id, 'run'));
   });
 
   it('opens a bundled command view without hiding the launcher', async () => {
@@ -200,13 +199,11 @@ describe('Launcher keyboard navigation', () => {
       actions: [{ id: 'run', title: 'Run Search Emoji & Symbols' }],
     };
     const commander = state({ hits: [item], selectedIndex: 0 });
-    vi.mocked(api.execute).mockResolvedValueOnce({ ok: true, view: { id: 'emoji-symbols' } });
     render(<Launcher state={commander} />);
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    await waitFor(() => expect(commander.setActiveView).toHaveBeenCalledWith('emoji-symbols'));
-    expect(hideLauncher).not.toHaveBeenCalled();
+    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith(item.id, 'run'));
   });
 
   it('shows the newest launched commands before a top-level search term and restores it with Return', () => {
@@ -253,7 +250,7 @@ describe('Launcher keyboard navigation', () => {
     fireEvent.keyDown(window, { key: 'Enter' });
 
     expect(commander.setQuery).toHaveBeenCalledWith('1password');
-    expect(api.execute).not.toHaveBeenCalled();
+    expect(commander.executeCommand).not.toHaveBeenCalled();
   });
 
   it('runs a command from its search-session history with Return', async () => {
@@ -274,7 +271,7 @@ describe('Launcher keyboard navigation', () => {
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    await waitFor(() => expect(api.execute).toHaveBeenCalledWith('app:1password', 'open'));
+    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith('app:1password', 'open'));
     expect(commander.rememberRecentSearch).toHaveBeenCalledWith('passwords', search.commands[0]);
   });
 
@@ -313,9 +310,28 @@ describe('Launcher keyboard navigation', () => {
         ],
       },
     ];
-    render(<Launcher state={state({ hits: actionHits, selectedIndex: 0, actionsOpen: true })} />);
+    const commander = state({ hits: actionHits, selectedIndex: 0, actionsOpen: true });
+    render(<Launcher state={commander} />);
     fireEvent.keyDown(window, { key: 'ArrowDown' });
     fireEvent.keyDown(window, { key: 'Enter' });
-    await waitFor(() => expect(api.execute).toHaveBeenCalledWith('app:notes', 'copy-path'));
+    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith('app:notes', 'copy-path'));
+  });
+
+  it('prepares a native file drag only for a result with an explicit source path', async () => {
+    const commander = state({ hits: [hits[1]!], selectedIndex: 0 });
+    render(<Launcher state={commander} />);
+    const row = screen.getByRole('option', { name: /Notes/ });
+
+    expect(row).toHaveClass('draggable-result');
+    fireEvent.pointerDown(row, { button: 2 });
+    expect(nativeRequest).not.toHaveBeenCalledWith('filesystem.beginDrag', expect.anything());
+    fireEvent.pointerDown(row);
+
+    await waitFor(() =>
+      expect(nativeRequest).toHaveBeenCalledWith('filesystem.beginDrag', {
+        path: '/Applications/Notes.app',
+      }),
+    );
+    expect(commander.setSelectedIndex).toHaveBeenCalledWith(0);
   });
 });

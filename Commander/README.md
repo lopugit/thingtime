@@ -8,6 +8,8 @@ portable from day one.
 
 - global Commander shortcut on macOS (defaults to Command-Space; customizable in Settings);
 - application and command search with deterministic Rust fuzzy-search process plus TypeScript fallback;
+- per-command global shortcuts with click-to-record bindings in Extensions Settings, native conflict validation,
+  and rollback to the previously working shortcut set;
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
 - searchable Commander Settings results with tab-aware deep links into the separate native settings window;
 - a Raycast-shaped built-in Commander extension with separate quit, hide-window, and open-window commands;
@@ -18,6 +20,8 @@ portable from day one.
   top-level result;
 - launch-at-login, menu-bar icon, favourites-in-compact-mode, window mode, appearance, and text-size preferences;
 - draggable native launcher and Settings chrome plus physical-key shortcut recording for modified macOS keys;
+- Finder-compatible drag-out from application/file search results using validated native file URLs, so a result can
+  be dropped into Terminal, Finder, System Settings, or another macOS file target without browsing for it again;
 - installed extension management, safe folder/ZIP sideloading with opt-in source builds, live Store browsing, and a
   macOS Your Raycast view that can add public sources or sync manifest-declared non-password preferences;
 - timeout- and memory-bounded extension workers plus an explicit Raycast compatibility capability registry;

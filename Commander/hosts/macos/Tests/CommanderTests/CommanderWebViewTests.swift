@@ -22,7 +22,7 @@ final class CommanderWebViewTests: XCTestCase {
       showLauncher: {},
       hideLauncher: {},
       showSettings: { _ in },
-      updateHotKey: { _ in },
+      updateHotKeys: { _, _ in },
       updateMenuBar: { _ in },
       updateWindowMode: { _ in }
     )
@@ -63,7 +63,7 @@ final class CommanderWebViewTests: XCTestCase {
       showLauncher: {},
       hideLauncher: {},
       showSettings: { _ in },
-      updateHotKey: { _ in },
+      updateHotKeys: { _, _ in },
       updateMenuBar: { _ in },
       updateWindowMode: { _ in }
     )
@@ -94,6 +94,81 @@ final class CommanderWebViewTests: XCTestCase {
     XCTAssertTrue(script.contains("commander:settings-tab"))
     XCTAssertTrue(script.contains("detail:'extensions'"))
     XCTAssertNil(CommanderSettingsTab(rawValue: "not-a-tab"))
+  }
+
+  func testFileDragAcceptsAnExistingAbsolutePathAndRejectsUnsafeInputs() throws {
+    let file = FileManager.default.temporaryDirectory
+      .appendingPathComponent("commander-drag-\(UUID().uuidString).txt")
+    XCTAssertTrue(FileManager.default.createFile(atPath: file.path, contents: Data("drag".utf8)))
+    defer { try? FileManager.default.removeItem(at: file) }
+
+    XCTAssertEqual(try CommanderWebView.validatedFileURL(for: file.path), file.standardizedFileURL)
+    XCTAssertThrowsError(try CommanderWebView.validatedFileURL(for: "relative/file.txt"))
+    XCTAssertThrowsError(
+      try CommanderWebView.validatedFileURL(
+        for: FileManager.default.temporaryDirectory
+          .appendingPathComponent(UUID().uuidString)
+          .path
+      )
+    )
+  }
+
+  func testPreparedFileDragKeepsLauncherVisibleUntilTheSessionEnds() throws {
+    let ready = DaemonReady(
+      type: "ready",
+      protocolVersion: 1,
+      port: 1,
+      url: "http://127.0.0.1:1",
+      sessionToken: "test-session",
+      nativeToken: "test-native",
+      pid: 1
+    )
+    let bridge = CommanderNativeBridge(
+      ready: ready,
+      keychain: KeychainStore(),
+      loginItem: LaunchAtLoginService(),
+      showLauncher: {},
+      hideLauncher: {},
+      showSettings: { _ in },
+      updateHotKeys: { _, _ in },
+      updateMenuBar: { _ in },
+      updateWindowMode: { _ in }
+    )
+    let controller = LauncherPanelController(ready: ready, bridge: bridge)
+    let panel = controller.panelForTesting
+    guard let webView = panel.contentView as? CommanderWebView else {
+      return XCTFail("Launcher content is not a CommanderWebView")
+    }
+    let file = FileManager.default.temporaryDirectory
+      .appendingPathComponent("commander-drag-session-\(UUID().uuidString).txt")
+    XCTAssertTrue(FileManager.default.createFile(atPath: file.path, contents: Data()))
+    defer {
+      try? FileManager.default.removeItem(at: file)
+      controller.shutdown()
+    }
+
+    panel.orderFront(nil)
+    try webView.prepareFileDrag(path: file.path)
+    XCTAssertFalse(panel.hidesOnDeactivate)
+    controller.windowDidResignKey(
+      Notification(name: NSWindow.didResignKeyNotification, object: panel)
+    )
+    XCTAssertTrue(panel.isVisible)
+
+    webView.cancelPreparedFileDrag()
+    XCTAssertTrue(panel.hidesOnDeactivate)
+    controller.windowDidResignKey(
+      Notification(name: NSWindow.didResignKeyNotification, object: panel)
+    )
+    XCTAssertFalse(panel.isVisible)
+  }
+
+  func testCommandHotKeyScriptEscapesTheItemIDAsJSON() {
+    let script = LauncherPanelController.commandHotKeyScriptForTesting(
+      itemID: "extension:test:command-'\""
+    )
+    XCTAssertTrue(script.contains("commander:command-hotkey"))
+    XCTAssertTrue(script.contains(#"detail:"extension:test:command-'\"""#))
   }
 
   private func descendants(of view: NSView) -> [NSView] {

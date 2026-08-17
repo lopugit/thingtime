@@ -4,6 +4,7 @@ export const RECENT_SEARCH_PREVIEW_LIMIT = 8;
 export const RECENT_SEARCH_STORAGE_LIMIT = 50;
 export const RECENT_SEARCH_COMMAND_LIMIT = 8;
 export const RECENT_SEARCH_MAX_LENGTH = 256;
+export const COMMAND_SHORTCUT_LIMIT = 256;
 
 export type Platform = 'macos' | 'windows' | 'linux';
 export type Appearance = 'light' | 'dark' | 'system';
@@ -12,6 +13,7 @@ export type TextSize = 'default' | 'large';
 export type SearchItemKind = 'builtin' | 'application' | 'extension' | 'command' | 'quicklink';
 export type SettingsTab = 'general' | 'extensions' | 'sync' | 'account' | 'advanced' | 'about';
 export type CommanderViewId = 'emoji-symbols';
+export type CommandShortcutMap = Record<string, string>;
 
 export const SETTINGS_TABS = [
   'general',
@@ -145,6 +147,25 @@ export function addRecentSearch(
   ]);
 }
 
+export function extensionCommandItemId(extensionId: string, commandName: string): string {
+  return `extension:${extensionId}:${commandName}`;
+}
+
+export function normalizeCommandShortcuts(value: unknown): CommandShortcutMap {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const shortcuts: CommandShortcutMap = {};
+  let count = 0;
+  for (const [rawItemId, rawShortcut] of Object.entries(value)) {
+    const itemId = normalizedText(rawItemId, 512);
+    const shortcut = normalizedText(rawShortcut, 128);
+    if (!itemId || !shortcut || itemId === 'launcher') continue;
+    shortcuts[itemId] = shortcut;
+    count += 1;
+    if (count === COMMAND_SHORTCUT_LIMIT) break;
+  }
+  return shortcuts;
+}
+
 export interface CommanderSettings {
   version: 1;
   openAtLogin: boolean;
@@ -154,6 +175,7 @@ export interface CommanderSettings {
   appearance: Appearance;
   textSize: TextSize;
   hotkey: string;
+  commandShortcuts: CommandShortcutMap;
   activeAccountId: string | null;
   thingtimeBaseUrl: string;
   thingtimeClientId: string;
@@ -326,6 +348,7 @@ export interface NativeRequest<T = unknown> {
     | 'launcher.show'
     | 'application.quit'
     | 'window.beginDrag'
+    | 'filesystem.beginDrag'
     | 'settings.open'
     | 'application.open'
     | 'application.pasteTarget'
@@ -334,6 +357,7 @@ export interface NativeRequest<T = unknown> {
     | 'clipboard.paste'
     | 'extension.choose'
     | 'hotkey.update'
+    | 'commandHotkeys.update'
     | 'loginItem.update'
     | 'menuBar.update'
     | 'settings.applyNative'
@@ -362,6 +386,7 @@ export interface DaemonReadyMessage {
 
 export interface NativeSettingsSnapshot {
   hotkey: string;
+  commandShortcuts: CommandShortcutMap;
   openAtLogin: boolean;
   showMenuBarIcon: boolean;
   windowMode: WindowMode;
@@ -386,6 +411,7 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   appearance: 'system',
   textSize: 'default',
   hotkey: 'Command+Space',
+  commandShortcuts: {},
   activeAccountId: null,
   thingtimeBaseUrl: 'https://thingtime.com',
   thingtimeClientId: COMMANDER_THINGTIME_CLIENT_ID,

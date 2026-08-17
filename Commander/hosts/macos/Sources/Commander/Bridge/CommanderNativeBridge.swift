@@ -23,6 +23,7 @@ private enum JSONValue: Decodable {
 
   var string: String? { if case .string(let value) = self { value } else { nil } }
   var bool: Bool? { if case .bool(let value) = self { value } else { nil } }
+  var object: [String: JSONValue]? { if case .object(let value) = self { value } else { nil } }
 }
 
 @MainActor
@@ -37,7 +38,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
   private let pasteClipboard: (String) async -> [String: Any]
   private let pasteTargetName: () -> String?
   private let showSettings: (CommanderSettingsTab?) -> Void
-  private let updateHotKey: (String) throws -> Void
+  private let updateHotKeys: (String?, [String: String]?) throws -> Void
   private let updateMenuBar: (Bool) -> Void
   private let updateWindowMode: (String) throws -> Void
   weak var webView: WKWebView?
@@ -53,7 +54,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     },
     pasteTargetName: @escaping () -> String? = { nil },
     showSettings: @escaping (CommanderSettingsTab?) -> Void,
-    updateHotKey: @escaping (String) throws -> Void,
+    updateHotKeys: @escaping (String?, [String: String]?) throws -> Void,
     updateMenuBar: @escaping (Bool) -> Void,
     updateWindowMode: @escaping (String) throws -> Void
   ) {
@@ -66,7 +67,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     self.pasteClipboard = pasteClipboard
     self.pasteTargetName = pasteTargetName
     self.showSettings = showSettings
-    self.updateHotKey = updateHotKey
+    self.updateHotKeys = updateHotKeys
     self.updateMenuBar = updateMenuBar
     self.updateWindowMode = updateWindowMode
   }
@@ -93,6 +94,10 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
         beginWindowDrag(requestID: request.id)
         return
       }
+      if request.method == "filesystem.beginDrag" {
+        beginFileDrag(request)
+        return
+      }
       Task { @MainActor in await self.handle(request) }
     } catch {
       replyIfPossible(id: requestID, error: "The native request is malformed: \(error.localizedDescription)")
@@ -108,6 +113,28 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     }
     reply(id: requestID, ok: true, result: nil, error: nil)
     window.performDrag(with: event)
+  }
+
+  private func beginFileDrag(_ request: BridgeRequest) {
+    guard let path = request.params?["path"]?.string else {
+      reply(id: request.id, ok: false, result: nil, error: BridgeError.missing("path").localizedDescription)
+      return
+    }
+    guard let webView = webView as? CommanderWebView else {
+      reply(
+        id: request.id,
+        ok: false,
+        result: nil,
+        error: "The Commander drag source is unavailable."
+      )
+      return
+    }
+    do {
+      try webView.prepareFileDrag(path: path)
+      reply(id: request.id, ok: true, result: ["prepared": true], error: nil)
+    } catch {
+      reply(id: request.id, ok: false, result: nil, error: error.localizedDescription)
+    }
   }
 
   private func handle(_ request: BridgeRequest) async {
@@ -148,7 +175,10 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
       case "extension.choose": result = chooseExtensionFolder()
       case "hotkey.update":
         guard let shortcut = request.params?["shortcut"]?.string else { throw BridgeError.missing("shortcut") }
-        try updateHotKey(shortcut); result = ["registered": true]
+        try updateHotKeys(shortcut, nil); result = ["registered": true]
+      case "commandHotkeys.update":
+        let shortcuts = try decodeCommandShortcuts(request.params?["shortcuts"])
+        try updateHotKeys(nil, shortcuts); result = ["registered": true]
       case "loginItem.update":
         guard let enabled = request.params?["enabled"]?.bool else { throw BridgeError.missing("enabled") }
         try loginItem.update(enabled: enabled); result = nil
@@ -160,10 +190,11 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
               let openAtLogin = request.params?["openAtLogin"]?.bool,
               let showMenuBarIcon = request.params?["showMenuBarIcon"]?.bool,
               let windowMode = request.params?["windowMode"]?.string else { throw BridgeError.missing("native settings") }
+        let commandShortcuts = try decodeCommandShortcuts(request.params?["commandShortcuts"])
         try loginItem.update(enabled: openAtLogin)
         updateMenuBar(showMenuBarIcon)
         try updateWindowMode(windowMode)
-        try updateHotKey(shortcut)
+        try updateHotKeys(shortcut, commandShortcuts)
         result = ["applied": true]
       case "credential.claim":
         let key = try credentialKey(request)
@@ -195,6 +226,21 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
           let accountID = request.params?["accountId"]?.string,
           !issuer.isEmpty, !clientID.isEmpty, !accountID.isEmpty else { throw BridgeError.missing("issuer/clientId/accountId") }
     return (issuer, clientID, accountID)
+  }
+
+  private func decodeCommandShortcuts(_ value: JSONValue?) throws -> [String: String] {
+    guard let object = value?.object else { throw BridgeError.missing("command shortcuts") }
+    guard object.count <= 256 else { throw BridgeError.invalidCommandShortcuts }
+    var shortcuts: [String: String] = [:]
+    for (itemID, value) in object {
+      guard itemID.hasPrefix("extension:"),
+            itemID.count <= 512,
+            let shortcut = value.string,
+            !shortcut.isEmpty,
+            shortcut.count <= 128 else { throw BridgeError.invalidCommandShortcuts }
+      shortcuts[itemID] = shortcut
+    }
+    return shortcuts
   }
 
   private func claimCredential(accountID: String) async throws -> String {
@@ -268,12 +314,13 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
 }
 
 private enum BridgeError: LocalizedError {
-  case missing(String), invalidURL, invalidSettingsTab(String), unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, daemon(String)
+  case missing(String), invalidURL, invalidSettingsTab(String), invalidCommandShortcuts, unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, daemon(String)
   var errorDescription: String? {
     switch self {
     case .missing(let key): "Native request is missing \(key)."
     case .invalidURL: "The requested URL is invalid."
     case .invalidSettingsTab(let tab): "Unsupported Commander settings tab: \(tab)"
+    case .invalidCommandShortcuts: "The command shortcut map is invalid."
     case .unknownMethod(let method): "Unknown native method: \(method)"
     case .credentialMissing: "No saved credential exists for this account."
     case .invalidDaemonResponse: "The Commander service returned an invalid response."

@@ -15,6 +15,7 @@
 - [ ] Type a new query and press Return immediately, before the search debounce settles. Commander must never execute an item left over from the previous query.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
 - [ ] Open an application, reveal it in Finder, and copy its path through Actions.
+- [ ] Search for an application and drag its result into a disposable Terminal prompt. Verify the exact shell-escaped `.app` path is inserted, no app opens during the drag, and ordinary click/double-click execution still works. Cancel or clear the prompt without running it; do not mutate macOS Privacy & Security permissions during routine QA.
 - [ ] Verify default and compact modes; expansion never shows an unrendered blank region.
 - [ ] Force-terminate the native host once; its parent watchdog must stop the daemon and Rust child and release port 47820 before relaunch.
 - [ ] Drag the launcher by its icon/header chrome; the window follows the pointer without moving focus into the search field.
@@ -35,6 +36,8 @@
 
 ## Extensions
 
+- [ ] In Installed, click Record Shortcut beside a command, press a modified key combination, close Settings, and invoke it while another app is active. Rebind it, verify the old shortcut stops firing, then press Delete in recording mode and verify the binding clears.
+- [ ] Try assigning the launcher shortcut or another command's shortcut to a command. macOS must reject the conflict, show the error, keep the previous command bindings registered, and leave persisted settings unchanged.
 - [ ] Sideload the `Commander/extensions/raycast/` fixture and a ZIP copy; verify commands appear with honest compatibility state.
 - [ ] Choose Inspect Only and Build & Add separately; no package script runs without explicit consent.
 - [ ] Try an invalid folder; the error is visible and the installed list is unchanged.

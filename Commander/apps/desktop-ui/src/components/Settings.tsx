@@ -63,7 +63,14 @@ export function Settings({ state }: { state: CommanderState }) {
             onError={state.reportError}
           />
         ) : null}
-        {tab === 'extensions' ? <ExtensionsSettings initial={bootstrap.extensions} /> : null}
+        {tab === 'extensions' ? (
+          <ExtensionsSettings
+            initial={bootstrap.extensions}
+            settings={bootstrap.settings}
+            onChange={(next) => void state.saveSettings(next)}
+            onError={state.reportError}
+          />
+        ) : null}
         {tab === 'sync' ? (
           <CloudSyncSettings
             accounts={bootstrap.accounts}

@@ -2,7 +2,12 @@ namespace Thingtime.Commander;
 
 public sealed record NativeRequest(string Id, string Method, object? Params);
 public sealed record NativeResponse(string Id, bool Ok, object? Result = null, string? Error = null);
-public sealed record NativeSettingsSnapshot(string Hotkey, bool OpenAtLogin, bool ShowMenuBarIcon, string WindowMode);
+public sealed record NativeSettingsSnapshot(
+    string Hotkey,
+    IReadOnlyDictionary<string, string> CommandShortcuts,
+    bool OpenAtLogin,
+    bool ShowMenuBarIcon,
+    string WindowMode);
 public sealed record CredentialKey(string Issuer, string ClientId, string AccountId);
 
 public interface INativeBridge
@@ -11,6 +16,7 @@ public interface INativeBridge
     Task ShowLauncherAsync();
     Task QuitApplicationAsync();
     Task BeginWindowDragAsync();
+    Task BeginFileDragAsync(string path);
     Task OpenSettingsAsync(string? tab = null);
     Task OpenApplicationAsync(string pathOrUrl);
     Task<string?> GetPasteTargetAsync();
@@ -19,6 +25,7 @@ public interface INativeBridge
     Task<object?> PasteClipboardAsync(string text);
     Task<string?> ChooseExtensionPathAsync();
     Task UpdateHotkeyAsync(string shortcut);
+    Task UpdateCommandHotkeysAsync(IReadOnlyDictionary<string, string> shortcuts);
     Task UpdateLaunchAtLoginAsync(bool enabled);
     Task UpdateTrayIconAsync(bool enabled);
     Task ApplyNativeSettingsAsync(NativeSettingsSnapshot settings);

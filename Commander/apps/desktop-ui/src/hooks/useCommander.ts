@@ -9,6 +9,7 @@ import type {
 } from '@commander/protocol';
 import { addRecentSearch } from '@commander/protocol';
 import { api } from '../lib/api.js';
+import { hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 
 export interface CommanderState {
   bootstrap: BootstrapResponse | null;
@@ -24,6 +25,7 @@ export interface CommanderState {
   setActionsOpen(value: boolean): void;
   setActiveView(value: CommanderViewId | null): void;
   rememberRecentSearch(value: string, command?: RecentSearchCommand): Promise<void>;
+  executeCommand(itemId: string, actionId: string): Promise<void>;
   reportError(value: string | null): void;
   saveSettings(settings: CommanderSettings): Promise<void>;
   refresh(): Promise<void>;
@@ -126,6 +128,47 @@ export function useCommander(): CommanderState {
     [refresh],
   );
 
+  const executeCommand = useCallback(
+    async (itemId: string, actionId: string) => {
+      let nativeRequestMethod: string | undefined;
+      const response = await api.execute(itemId, actionId);
+      if (response.view) setActiveView(response.view.id);
+      if (response.nativeRequest) {
+        const request = response.nativeRequest;
+        nativeRequestMethod = request.method;
+        const nativeResult = await nativeRequest<{
+          path?: string;
+          allowUntrustedBuildScripts?: boolean;
+        }>(request.method, request.params);
+        if (request.method === 'extension.choose' && nativeResult?.path) {
+          await api.sideload(nativeResult.path, nativeResult.allowUntrustedBuildScripts === true);
+          await refresh();
+        }
+      }
+      const nativeOwnsLauncherLifecycle =
+        nativeRequestMethod === 'launcher.hide' ||
+        nativeRequestMethod === 'launcher.show' ||
+        nativeRequestMethod === 'application.quit';
+      if ((actionId === 'open' || actionId === 'run') && !nativeOwnsLauncherLifecycle && !response.view)
+        await hideLauncher();
+      setActionsOpen(false);
+      setError(null);
+    },
+    [refresh],
+  );
+
+  useEffect(() => {
+    const runCommandHotkey = (event: Event) => {
+      const itemId = (event as CustomEvent<unknown>).detail;
+      if (typeof itemId !== 'string' || !itemId.startsWith('extension:')) return;
+      void executeCommand(itemId, 'run').catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : 'Command shortcut failed');
+      });
+    };
+    window.addEventListener('commander:command-hotkey', runCommandHotkey);
+    return () => window.removeEventListener('commander:command-hotkey', runCommandHotkey);
+  }, [executeCommand]);
+
   return useMemo(
     () => ({
       bootstrap,
@@ -141,6 +184,7 @@ export function useCommander(): CommanderState {
       setActionsOpen,
       setActiveView,
       rememberRecentSearch,
+      executeCommand,
       reportError: setError,
       saveSettings,
       refresh,
@@ -156,6 +200,7 @@ export function useCommander(): CommanderState {
       activeView,
       setQuery,
       rememberRecentSearch,
+      executeCommand,
       saveSettings,
       refresh,
     ],

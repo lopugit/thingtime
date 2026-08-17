@@ -2,7 +2,7 @@ import AppKit
 import WebKit
 
 @MainActor
-final class CommanderWebView: WKWebView, WKNavigationDelegate {
+final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource {
   override var isOpaque: Bool { false }
 
   var firstPresentationReady: (() -> Void)? {
@@ -10,10 +10,12 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate {
       if presentationReady { firstPresentationReady?() }
     }
   }
+  var fileDragSessionChanged: ((_ active: Bool, _ completed: Bool) -> Void)?
   private var hasCommittedContent = false
   private var presentationReady = false
   private let allowedOrigin: String
   private var surfaceMask: (inset: CGFloat, cornerRadius: CGFloat)?
+  private var preparedFileDragURL: URL?
 
   init(ready: DaemonReady, surface: String, bridge: CommanderNativeBridge) {
     self.allowedOrigin = URL(string: ready.url)!.commanderOrigin
@@ -44,6 +46,69 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate {
     updateSurfaceMask()
   }
 
+  override func mouseDown(with event: NSEvent) {
+    cancelPreparedFileDrag()
+    super.mouseDown(with: event)
+  }
+
+  override func mouseDragged(with event: NSEvent) {
+    guard let url = preparedFileDragURL else {
+      super.mouseDragged(with: event)
+      return
+    }
+    preparedFileDragURL = nil
+    let draggingItem = NSDraggingItem(pasteboardWriter: url as NSURL)
+    let icon = NSWorkspace.shared.icon(forFile: url.path)
+    icon.size = NSSize(width: 48, height: 48)
+    let point = convert(event.locationInWindow, from: nil)
+    draggingItem.setDraggingFrame(
+      NSRect(x: point.x - 24, y: point.y - 24, width: 48, height: 48),
+      contents: icon
+    )
+    let session = beginDraggingSession(with: [draggingItem], event: event, source: self)
+    session.animatesToStartingPositionsOnCancelOrFail = true
+  }
+
+  override func mouseUp(with event: NSEvent) {
+    cancelPreparedFileDrag()
+    super.mouseUp(with: event)
+  }
+
+  func prepareFileDrag(path: String) throws {
+    preparedFileDragURL = try Self.validatedFileURL(for: path)
+    fileDragSessionChanged?(true, false)
+  }
+
+  func cancelPreparedFileDrag() {
+    guard preparedFileDragURL != nil else { return }
+    preparedFileDragURL = nil
+    fileDragSessionChanged?(false, false)
+  }
+
+  func draggingSession(
+    _ session: NSDraggingSession,
+    sourceOperationMaskFor context: NSDraggingContext
+  ) -> NSDragOperation { .copy }
+
+  func draggingSession(
+    _ session: NSDraggingSession,
+    endedAt screenPoint: NSPoint,
+    operation: NSDragOperation
+  ) {
+    fileDragSessionChanged?(false, operation != [])
+  }
+
+  static func validatedFileURL(for path: String) throws -> URL {
+    guard path.hasPrefix("/"), !path.contains("\0") else {
+      throw CommanderFileDragError.invalidPath
+    }
+    let url = URL(fileURLWithPath: path).standardizedFileURL
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      throw CommanderFileDragError.missingFile
+    }
+    return url
+  }
+
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     Self.makeCanvasTransparent(webView)
     guard !hasCommittedContent else { return }
@@ -64,6 +129,7 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate {
   func shutdown() {
     stopLoading()
     firstPresentationReady = nil
+    fileDragSessionChanged = nil
     navigationDelegate = nil
     configuration.userContentController.removeScriptMessageHandler(forName: "commander")
   }
@@ -101,6 +167,18 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate {
       transform: nil
     )
     layer.mask = shape
+  }
+}
+
+enum CommanderFileDragError: LocalizedError {
+  case invalidPath
+  case missingFile
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidPath: "Commander can only drag an absolute local file path."
+    case .missingFile: "That file no longer exists. Refresh Commander and try again."
+    }
   }
 }
 

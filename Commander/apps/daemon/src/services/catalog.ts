@@ -1,4 +1,4 @@
-import type { CommanderExtension, SearchItem } from '@commander/protocol';
+import { extensionCommandItemId, type CommanderExtension, type SearchItem } from '@commander/protocol';
 
 export const closeCommanderCommandName = 'close-commander';
 export const closeCommanderWindowCommandName = 'close-commander-window';
@@ -142,7 +142,7 @@ export function extensionItems(extensions: CommanderExtension[]): SearchItem[] {
     extension.commands
       .filter((command) => !command.disabled)
       .map((command) => ({
-        id: `extension:${extension.id}:${command.name}`,
+        id: extensionCommandItemId(extension.id, command.name),
         title: command.title,
         subtitle: extension.title,
         kind: 'extension' as const,
