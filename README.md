@@ -423,7 +423,9 @@ the UI, so there's always a way back in) and are reserved at registration so
 nobody can squat an admin username before you register it.
 
 Admins get the `/admin` dashboard (also under the drawer's Account section):
-Users, Apps, Tiers, and System management. The Tiers tab manages protected,
+Users, Apps, Tiers, CI Control, and System management. CI Control presents the
+feature/branch/PR/Actions/deployment topology and signed status history, with
+allowlisted reconciliation and retry controls. The Tiers tab manages protected,
 versioned `subscription-tier` Things in separate Live, Draft / not live, and
 Archived sections. Admins can create a tier or draft a new revision, edit its
 name, tagline, banner, currency, daily/weekly/monthly/yearly prices, six

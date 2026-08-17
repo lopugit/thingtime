@@ -1436,7 +1436,8 @@ export const PROTECTED_THINGTIME = [
   'account-link',
 	'app-storage',
 	'service-quota',
-	MIGRATION_DIAGNOSTIC_THINGTIME
+	MIGRATION_DIAGNOSTIC_THINGTIME,
+  ...CI_CONTROL_THINGTIME
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -1555,6 +1556,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   appStorageLedgerSchema,
 	serviceQuotaSchema,
 	migrationDiagnosticSchema,
+  ...ciControlSchemas,
   // system kinds (collections collapsing into things — dual-era)
   userThingSchema,
   themeThingSchema,

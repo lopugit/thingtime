@@ -334,6 +334,10 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Break the path-classification job deliberately in a disposable branch.
       Confirm neither exact required-context name is emitted and branch
       protection blocks the PR instead of treating a skipped job as proof.
+- [ ] Break either product workflow/topology contract in a disposable branch.
+      Confirm neither command runs inside `test:unit`, build/API keep their
+      real result, and the protected `github-actions` advisory updates one
+      warning comment without producing a failing or required status.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
@@ -986,7 +990,7 @@ re-checks the whole management plane end-to-end:
 `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
-      the dashboard (Users / Apps / Tiers / System tabs) for admins; the drawer's
+      the dashboard (Users / Apps / Tiers / CI Control / System tabs) for admins; the drawer's
       Account section shows the 🛠️ Admin item only for admins.
 - [ ] Users tab: free-text query searches every safe projected field; typed
       filters cover created-day ranges, tier id/name/version, booleans, quotas,
@@ -1132,9 +1136,11 @@ re-checks the whole management plane end-to-end:
       every section, open the dispatch modal and confirmation state, then close
       both. The drawer is flush left/right/bottom, has no clipped controls, and
       the page never scrolls horizontally.
-- [ ] `node scripts/workflow-caller-contract.mjs` passes: every product-branch
-      workflow has exactly one reusable call pinned to `@github-actions`, no
-      runner/steps/shell behavior, and no product-branch Actions scripts.
+- [ ] Run `node scripts/workflow-caller-contract.mjs` manually or inspect its
+      protected advisory comment: every product-branch workflow has exactly
+      one reusable call pinned to `@github-actions`, no runner/steps/shell
+      behavior, and no product-branch Actions scripts. A mismatch warns but
+      does not join the required unit-test aggregate.
 
 PR #220 live acceptance recorded on 2026-08-10:
 

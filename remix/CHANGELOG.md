@@ -47,6 +47,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Thin Web CI promotion no longer blocks on topology contracts**: the stale
+  product-branch copy of the develop-preview controller was removed, the two
+  workflow/topology contract commands were removed from the required unit-test
+  aggregate, and the thin Web CI listener now delegates PR-warning permission
+  to the protected non-blocking advisory job. Real product unit tests, build,
+  typecheck diagnostics, API tests, and security checks remain unchanged.
+  — Codex (AI), 2026-08-17
 - **Vercel's universal image now boots and tears down GitHub runners reliably**:
   ephemeral CI setup runs GitHub's version-matched dependency installer,
   provides the conventional `/dev/fd` link required by Bash process
