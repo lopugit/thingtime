@@ -19,6 +19,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Merged `develop` PR previews can be cleaned up automatically and manually**:
+  closed-event dispatches now carry the PR head ref and, when GitHub removes
+  the source run's `pull_requests` association after merge, accept only an
+  exact same-repository workflow/run/actor/head SHA/head-ref match before
+  revalidating the live closed PR. Manual recovery now selects the reusable
+  controller through its positive typed PR input, while the protected
+  environment remains the authoritative `main`-only secret gate.
+  — Codex (AI), 2026-08-17
+
 - **Develop PR previews no longer scan the project's entire Vercel history**:
   controller deployment queries now apply the workflow ownership marker and
   PR number at Vercel before paginating, so a busy project cannot exhaust the
