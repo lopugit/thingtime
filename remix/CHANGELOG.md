@@ -19,6 +19,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
 - **Native iOS drawer and media capture**: the iOS WebView now uses the same
   fixed drawer trigger as mobile web, so opening the drawer keeps its close
   control inside the panel instead of translating it with the top nav. The
