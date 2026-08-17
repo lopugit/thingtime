@@ -1,0 +1,15 @@
+{
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"framework": null,
+	"installCommand": "corepack pnpm --dir remix install --frozen-lockfile",
+	"buildCommand": "node scripts/vercel-build.mjs",
+	"outputDirectory": null,
+	"ignoreCommand": "node scripts/vercel-ignore-build.mjs",
+	"git": {
+		"deploymentEnabled": {
+			"github-actions": false
+		}
+	},
+	"regions": ["syd1"],
+	"fluid": true
+}
