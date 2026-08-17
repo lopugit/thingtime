@@ -80,6 +80,9 @@ const normalizeLogin = (value) => {
 	return login;
 };
 
+const isSafeHeadRef = (value) =>
+	typeof value === 'string' && value.length >= 1 && value.length <= 255 && !/[\u0000-\u001f\u007f]/.test(value);
+
 const parseTrustedLogins = (value) => {
 	const entries = String(value ?? '')
 		.split(/[\s,]+/)
@@ -198,12 +201,7 @@ const classifyPullRequest = (pullRequest, repository, repositoryId) => {
 	if (!/^[0-9a-f]{40}$/.test(pullRequest.head?.sha ?? '')) {
 		return { allowed: false, reason: 'invalid-sha' };
 	}
-	if (
-		typeof pullRequest.head?.ref !== 'string' ||
-		pullRequest.head.ref.length < 1 ||
-		pullRequest.head.ref.length > 255 ||
-		/[\u0000-\u001f\u007f]/.test(pullRequest.head.ref)
-	) {
+	if (!isSafeHeadRef(pullRequest.head?.ref)) {
 		return { allowed: false, reason: 'invalid-ref' };
 	}
 	try {
@@ -248,11 +246,29 @@ const repositoryDispatchSourceIssue = (run, payload, config) => {
 	const sourcePullRequest = Array.isArray(run.pull_requests)
 		? run.pull_requests.find((candidate) => Number(candidate.number) === payload.prNumber)
 		: null;
-	if (!sourcePullRequest) return 'missing-source-pull-request';
+	if (!sourcePullRequest) {
+		// GitHub removes the workflow run's pull_requests association after a PR
+		// closes. For that one event, bind the dispatch to the same-repository run's
+		// immutable head SHA and branch instead.
+		if (payload.action !== 'closed') return 'missing-source-pull-request';
+		if (Number(run.head_repository?.id) !== config.repositoryId) return 'wrong-source-head-repository';
+		if (run.head_sha !== payload.headSha) return 'wrong-source-head-sha';
+		if (run.head_branch !== payload.headRef) return 'wrong-source-head-ref';
+		return null;
+	}
 	if (Number(sourcePullRequest.head?.repo?.id) !== config.repositoryId || Number(sourcePullRequest.base?.repo?.id) !== config.repositoryId) {
 		return 'wrong-source-pull-request-repository';
 	}
 	if (sourcePullRequest.head?.sha !== payload.headSha) return 'wrong-source-head-sha';
+	if (sourcePullRequest.head?.ref !== payload.headRef) return 'wrong-source-head-ref';
+	return null;
+};
+
+const dispatchPullRequestIssue = (pullRequest, dispatch) => {
+	if (!dispatch) return null;
+	if (pullRequest.head?.sha !== dispatch.headSha) return 'head-sha-mismatch';
+	if (pullRequest.head?.ref !== dispatch.headRef) return 'head-ref-mismatch';
+	if (dispatch.action === 'closed' && pullRequest.state !== 'closed') return 'closed-state-mismatch';
 	return null;
 };
 
@@ -501,7 +517,8 @@ const runSelfTest = () => {
 		sourceRunId: 123,
 		actor: 'lopu',
 		action: 'synchronize',
-		headSha: base.head.sha
+		headSha: base.head.sha,
+		headRef: base.head.ref
 	};
 	const sourceRun = {
 		id: 123,
@@ -509,12 +526,15 @@ const runSelfTest = () => {
 		path: CONTROLLER_WORKFLOW_PATH,
 		status: 'in_progress',
 		repository: { id: 42 },
+		head_repository: { id: 42 },
+		head_sha: base.head.sha,
+		head_branch: base.head.ref,
 		actor: { login: 'lopu' },
 		triggering_actor: { login: 'lopu' },
 		pull_requests: [
 			{
 				number: 201,
-				head: { sha: base.head.sha, repo: { id: 42 } },
+				head: { sha: base.head.sha, ref: base.head.ref, repo: { id: 42 } },
 				base: { repo: { id: 42 } }
 			}
 		]
@@ -522,6 +542,40 @@ const runSelfTest = () => {
 	equal(repositoryDispatchSourceIssue(sourceRun, dispatchPayload, config), null);
 	equal(repositoryDispatchSourceIssue({ ...sourceRun, path: '.github/workflows/untrusted.yml' }, dispatchPayload, config), 'wrong-workflow-path');
 	equal(repositoryDispatchSourceIssue(sourceRun, { ...dispatchPayload, headSha: 'b'.repeat(40) }, config), 'wrong-source-head-sha');
+	equal(repositoryDispatchSourceIssue(sourceRun, { ...dispatchPayload, headRef: 'codex/wrong' }, config), 'wrong-source-head-ref');
+	equal(repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [] }, dispatchPayload, config), 'missing-source-pull-request');
+	const closedDispatchPayload = { ...dispatchPayload, action: 'closed' };
+	const closedSourceRun = { ...sourceRun, status: 'completed', pull_requests: [] };
+	equal(repositoryDispatchSourceIssue(closedSourceRun, closedDispatchPayload, config), null);
+	equal(
+		repositoryDispatchSourceIssue({ ...closedSourceRun, head_repository: { id: 99 } }, closedDispatchPayload, config),
+		'wrong-source-head-repository'
+	);
+	equal(repositoryDispatchSourceIssue({ ...closedSourceRun, head_sha: 'b'.repeat(40) }, closedDispatchPayload, config), 'wrong-source-head-sha');
+	equal(repositoryDispatchSourceIssue({ ...closedSourceRun, head_branch: 'codex/wrong' }, closedDispatchPayload, config), 'wrong-source-head-ref');
+	equal(dispatchPullRequestIssue(base, dispatchPayload), null);
+	equal(dispatchPullRequestIssue({ ...base, head: { ...base.head, sha: 'b'.repeat(40) } }, dispatchPayload), 'head-sha-mismatch');
+	equal(dispatchPullRequestIssue({ ...base, head: { ...base.head, ref: 'codex/wrong' } }, dispatchPayload), 'head-ref-mismatch');
+	equal(dispatchPullRequestIssue(base, closedDispatchPayload), 'closed-state-mismatch');
+	equal(dispatchPullRequestIssue({ ...base, state: 'closed' }, closedDispatchPayload), null);
+	const parsedDispatch = parseRepositoryDispatch({
+		action: CONTROLLER_DISPATCH_TYPE,
+		client_payload: {
+			pr_number: '201',
+			source_run_id: '123',
+			actor: 'Lopu',
+			action: 'closed',
+			head_sha: base.head.sha,
+			head_ref: base.head.ref
+		}
+	});
+	equal(parsedDispatch, closedDispatchPayload);
+	throws(() =>
+		parseRepositoryDispatch({
+			action: CONTROLLER_DISPATCH_TYPE,
+			client_payload: { pr_number: '201', source_run_id: '123', actor: 'lopu', action: 'closed', head_sha: base.head.sha, head_ref: '' }
+		})
+	);
 
 	console.log(`develop PR preview self-test: ${checks}/${checks} passed`);
 };
@@ -609,10 +663,12 @@ const parseRepositoryDispatch = (event) => {
 		sourceRunId: boundedInteger(event.client_payload.source_run_id, 'Source workflow run id'),
 		actor: normalizeLogin(event.client_payload.actor),
 		action: String(event.client_payload.action ?? ''),
-		headSha: String(event.client_payload.head_sha ?? '')
+		headSha: String(event.client_payload.head_sha ?? ''),
+		headRef: String(event.client_payload.head_ref ?? '')
 	};
 	if (!PR_EVENT_ACTIONS.has(payload.action)) throw new EligibilityError('unexpected-source-action');
 	if (!/^[0-9a-f]{40}$/.test(payload.headSha)) throw new EligibilityError('invalid-source-head-sha');
+	if (!isSafeHeadRef(payload.headRef)) throw new EligibilityError('invalid-source-head-ref');
 	return payload;
 };
 
@@ -1368,6 +1424,11 @@ const main = async () => {
 			? boundedInteger(event.inputs?.pr_number, 'PR number')
 			: dispatch?.prNumber ?? boundedInteger(event.pull_request?.number, 'PR number');
 	const pullRequest = await getPullRequest(config.repository, prNumber);
+	const dispatchIssue = dispatchPullRequestIssue(pullRequest, dispatch);
+	if (dispatchIssue) {
+		console.log(`Skipped stale controller dispatch for PR #${prNumber}: ${dispatchIssue}`);
+		return;
+	}
 	const action = dispatch?.action ?? String(event.action ?? 'workflow_dispatch');
 	const classification = classifyPullRequest(pullRequest, config.repository, config.repositoryId);
 
@@ -1379,11 +1440,6 @@ const main = async () => {
 		} else {
 			console.log(`Skipped unrelated PR #${prNumber}: ${classification.reason}`);
 		}
-		return;
-	}
-
-	if (dispatch && pullRequest.head.sha !== dispatch.headSha) {
-		console.log(`Skipped stale controller dispatch for PR #${prNumber}`);
 		return;
 	}
 

@@ -571,6 +571,21 @@ export function assertControlPlaneContract() {
     /github\.event\.changes\.base\.ref\.from == 'develop'/u,
     "develop preview preserves cleanup when a PR is retargeted away from develop",
   );
+  assert.match(
+    developPreview,
+    /PR_HEAD_REF:[\s\S]*head_ref: process\.env\.PR_HEAD_REF/u,
+    "develop preview preserves the source head ref for closed-event provenance",
+  );
+  assert.match(
+    developPreview,
+    /github\.event_name != 'workflow_dispatch' \|\| inputs\.pr_number > 0/u,
+    "develop preview manual recovery is selected by its typed PR input",
+  );
+  assert.doesNotMatch(
+    developPreview,
+    /github\.ref == 'refs\/heads\/main'/u,
+    "develop preview delegates the manual branch gate to its protected environment",
+  );
 
   const providerRouter = readWorkflow("ci-provider-router.yml");
   assertRoutingProofContract(providerRouter);

@@ -35,6 +35,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           SOURCE_ACTION: ${{ github.event.action }}
           SOURCE_RUN_ID: ${{ github.run_id }}
           SOURCE_ACTOR: ${{ github.triggering_actor }}
@@ -55,6 +56,7 @@ jobs:
                 client_payload: {
                   pr_number: process.env.PR_NUMBER,
                   head_sha: process.env.PR_HEAD_SHA,
+                  head_ref: process.env.PR_HEAD_REF,
                   action: process.env.SOURCE_ACTION,
                   source_run_id: process.env.SOURCE_RUN_ID,
                   actor: process.env.SOURCE_ACTOR
@@ -69,7 +71,9 @@ jobs:
 
   controller:
     name: Publish or reconcile develop S3 preview
-    if: github.event_name != 'pull_request_target' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
+    # Manual callers provide a positive PR number. The environment's deployment
+    # branch policy remains the authoritative main-only gate for secrets.
+    if: github.event_name != 'pull_request_target' && (github.event_name != 'workflow_dispatch' || inputs.pr_number > 0)
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment: vercel-develop-pr-control
