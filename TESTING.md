@@ -347,6 +347,14 @@ is fixed, and cite the checklist you ran in the PR description.
       object between two valid standalone PRs. A dry run must report that PR as
       blocked, continue to plan the later independent PR, and publish both the
       block and partial plan in the step summary without exiting early.
+- [ ] Queue promotion conflict resolution for a large source PR whose immutable
+      endpoint is a true two-parent merge. Confirm the trusted checkout emits no
+      `/dev/null` `safe.directory` error annotation, source authority verifies
+      the first-parent boundary without calling either PR metadata endpoint,
+      and the worker proceeds even when GitHub's merged-PR files endpoint would
+      return HTTP 422. For a single-parent multi-commit endpoint, make either
+      metadata request fail and confirm the snapshot stops retryably before AI
+      spend or publication instead of parsing an error response as PR JSON.
 - [ ] Repeat with the unavailable PR in the middle of a named promotion stack.
       The failed member and only its later dependent stack members must be
       deferred while the next unrelated group continues. Force an unexpected

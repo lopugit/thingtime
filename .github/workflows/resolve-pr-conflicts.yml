@@ -1616,6 +1616,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           path: trusted
+          # This job intentionally points GIT_CONFIG_GLOBAL at /dev/null.
+          # The checkout is owned by the runner, so its otherwise-default
+          # global safe.directory write is unnecessary and only emits a
+          # misleading "could not lock config file /dev/null" annotation.
+          set-safe-directory: false
 
       - name: Create an isolated, credential-free real checkout
         id: repo
@@ -1664,13 +1669,57 @@ jobs:
           set -euo pipefail
           commits="$RUNNER_TEMP/promotion-source-pr-commits.json"
           files="$RUNNER_TEMP/promotion-source-pr-files.json"
-          gh api --paginate "repos/$REPO/pulls/$SOURCE_PR/commits?per_page=100" --slurp \
-            | jq -c 'add // []' >"$commits"
-          gh api --paginate "repos/$REPO/pulls/$SOURCE_PR/files?per_page=100" --slurp \
-            | jq -c '[add // [] | .[].filename]' >"$files"
+          repo_path="${{ steps.repo.outputs.repo_path }}"
+          printf '[]\n' >"$commits"
+          printf '[]\n' >"$files"
+
+          # Mirror computePicks: a true merge endpoint authorizes exactly its
+          # first-parent aggregate and needs no live PR diff. Besides being
+          # redundant, asking GitHub to regenerate a large merged PR's file
+          # list can return HTTP 422 ("diff is taking too long") indefinitely.
+          # Single-parent squash/rebase endpoints still reload the metadata
+          # that distinguishes one commit from a verified multi-commit range.
+          parent_record="$(git -C "$repo_path" rev-list --parents -n 1 "$SOURCE_END_SHA")"
+          parent_count="$(awk '{ print NF - 1 }' <<<"$parent_record")"
+          (( parent_count >= 1 )) \
+            || { echo "::error::Source endpoint has no parent and cannot authorize a promotion patch."; exit 1; }
+          if (( parent_count == 1 )); then
+            commit_pages="$RUNNER_TEMP/promotion-source-pr-commit-pages.json"
+            if ! gh api --paginate "repos/$REPO/pulls/$SOURCE_PR/commits?per_page=100" --slurp \
+              >"$commit_pages"; then
+              echo "::error::Could not independently reload source PR commit metadata; retrying the immutable snapshot is safe."
+              exit 1
+            fi
+            if ! jq -ce '
+              if type != "array" then error("commit pages must be an array")
+              else (add // [])
+              end
+              | if type == "array" then . else error("commits must be an array") end
+            ' "$commit_pages" >"$commits"; then
+              echo "::error::Source PR commit metadata was malformed."
+              exit 1
+            fi
+            commit_count="$(jq -r 'length' "$commits")"
+            if (( commit_count > 1 )); then
+              file_pages="$RUNNER_TEMP/promotion-source-pr-file-pages.json"
+              if ! gh api --paginate "repos/$REPO/pulls/$SOURCE_PR/files?per_page=100" --slurp \
+                >"$file_pages"; then
+                echo "::error::Could not independently reload source PR file metadata required to verify its multi-commit range; retrying the immutable snapshot is safe."
+                exit 1
+              fi
+              if ! jq -ce '
+                if type != "array" then error("file pages must be an array")
+                else [add // [] | .[].filename]
+                end
+              ' "$file_pages" >"$files"; then
+                echo "::error::Source PR file metadata was malformed."
+                exit 1
+              fi
+            fi
+          fi
           authority_status=0
           bash "$GITHUB_WORKSPACE/trusted/.github/scripts/rebase-stack/verify-promotion-source-authority.sh" \
-            "${{ steps.repo.outputs.repo_path }}" "$commits" "$files" || authority_status=$?
+            "$repo_path" "$commits" "$files" || authority_status=$?
           if (( authority_status != 0 )); then
             echo "terminal_review_needed=true" >>"$GITHUB_OUTPUT"
             exit "$authority_status"
