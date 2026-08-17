@@ -1,6 +1,6 @@
 # Vercel Deployments
 
-Last updated: 2026-08-10
+Last updated: 2026-08-17
 
 ## Project
 
@@ -8,7 +8,7 @@ Last updated: 2026-08-10
 - Project name: `thingtime`
 - Project id: `prj_ZAX9FhGC2alHMXMwTHX96ql3EQ8v`
 - GitHub repository: `lopugit/thingtime`
-- Function region: `syd1` (Sydney), pinned via `remix/vercel.json` `"regions"` —
+- Function region: `syd1` (Sydney), pinned via root `vercel.json` `"regions"` —
   colocated with the Atlas cluster (also Sydney) so per-request Mongo round
   trips stay single-digit ms instead of ~209ms from the old default `iad1`.
   Verify on any deployment: the `x-vercel-id` response header should read
@@ -17,6 +17,26 @@ Last updated: 2026-08-10
   `Cache-Control: public, s-maxage=60, stale-while-revalidate=300` and are
   served from the nearest edge PoP (`x-vercel-cache: HIT`); authed requests
   never use `anon=1` URLs, so they can never hit those cache entries.
+
+## Repository-root build contract
+
+- Root Directory: repository root (the Vercel field is blank; it must not be
+  `remix`).
+- Framework Preset: Other. The tracked `vercel.json` uses `framework: null`
+  because Nitro emits the Build Output API directly.
+- Build, Install, Output Directory, and Ignored Build Step dashboard overrides:
+  clear them so root `vercel.json` is the single source of truth.
+- Output Directory: no dashboard override. Root `vercel.json` explicitly sets
+  it to `null`; `node scripts/vercel-build.mjs` validates
+  `remix/.vercel/output`, stages it at root `.vercel/output`, and validates the
+  staged artifact again.
+- Node.js: 24.x, matching `remix/package.json`.
+- Git deployment policy: the product config explicitly disables
+  `github-actions`; the thin branch's root config disables all Git deployments.
+  Its `ignoreCommand` is a second fail-safe, so control-plane feature branches
+  do not attempt to install or build product code.
+- Source Files Outside of the Root Directory: no longer needed once Root
+  Directory is the repository root; it may be disabled.
 
 ## Production
 
