@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
+import { UiErrorBoundary } from './components/UiErrorBoundary.js';
 import './styles/tokens.css';
 import './styles/app.css';
 
@@ -13,6 +14,8 @@ const surface = pathname.endsWith('/settings.html')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App {...(surface ? { surface } : {})} />
+    <UiErrorBoundary>
+      <App {...(surface ? { surface } : {})} />
+    </UiErrorBoundary>
   </StrictMode>,
 );

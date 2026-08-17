@@ -12,7 +12,7 @@ interface RawEmojiSkin {
 
 interface RawEmoji {
   emoji: string;
-  emoticon?: string;
+  emoticon?: string | string[];
   group?: number;
   hexcode: string;
   label: string;
@@ -110,7 +110,8 @@ function entryFromRaw(raw: RawEmoji): EmojiEntry | undefined {
   if (!raw.emoji || raw.group === undefined || raw.group === 2) return undefined;
   const category = String(raw.group) as EmojiEntry['category'];
   if (!EMOJI_CATEGORIES.some((candidate) => candidate.id === category)) return undefined;
-  const keywords = [raw.label, ...(raw.tags ?? []), raw.emoticon ?? '', raw.hexcode].filter(Boolean);
+  const emoticons = Array.isArray(raw.emoticon) ? raw.emoticon : raw.emoticon ? [raw.emoticon] : [];
+  const keywords = [raw.label, ...(raw.tags ?? []), ...emoticons, raw.hexcode].filter(Boolean);
   return {
     id: `emoji:${raw.hexcode}`,
     value: raw.emoji,

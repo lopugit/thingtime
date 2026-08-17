@@ -35,6 +35,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
   private let nativeToken: String
   private let showLauncher: () -> Void
   private let hideLauncher: () -> Void
+  private let commandHotKeyReady: (String) -> Void
   private let pasteClipboard: (String) async -> [String: Any]
   private let pasteTargetName: () -> String?
   private let showSettings: (CommanderSettingsTab?) -> Void
@@ -49,6 +50,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     loginItem: LaunchAtLoginService,
     showLauncher: @escaping () -> Void,
     hideLauncher: @escaping () -> Void,
+    commandHotKeyReady: @escaping (String) -> Void = { _ in },
     pasteClipboard: @escaping (String) async -> [String: Any] = { _ in
       ["copied": false, "pasted": false, "requiresAccessibility": false]
     },
@@ -64,6 +66,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     self.loginItem = loginItem
     self.showLauncher = showLauncher
     self.hideLauncher = hideLauncher
+    self.commandHotKeyReady = commandHotKeyReady
     self.pasteClipboard = pasteClipboard
     self.pasteTargetName = pasteTargetName
     self.showSettings = showSettings
@@ -143,6 +146,11 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
       switch request.method {
       case "launcher.hide": hideLauncher(); result = nil
       case "launcher.show": showLauncher(); result = nil
+      case "launcher.commandReady":
+        guard let itemID = request.params?["itemId"]?.string,
+              itemID.hasPrefix("extension:"),
+              itemID.count <= 512 else { throw BridgeError.missing("itemId") }
+        commandHotKeyReady(itemID); result = ["ready": true]
       case "application.quit": result = ["terminating": true]
       case "settings.open":
         let requestedTab: CommanderSettingsTab?

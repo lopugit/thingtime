@@ -14,6 +14,7 @@ public interface INativeBridge
 {
     Task HideLauncherAsync();
     Task ShowLauncherAsync();
+    Task CommandPresentationReadyAsync(string itemId);
     Task QuitApplicationAsync();
     Task BeginWindowDragAsync();
     Task BeginFileDragAsync(string path);

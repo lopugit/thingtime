@@ -156,10 +156,70 @@ final class CommanderWebViewTests: XCTestCase {
     XCTAssertTrue(panel.isVisible)
 
     webView.cancelPreparedFileDrag()
-    XCTAssertTrue(panel.hidesOnDeactivate)
+    XCTAssertFalse(panel.hidesOnDeactivate)
+    XCTAssertFalse(
+      LauncherPanelController.shouldRestoreAfterResign(
+        commandPresentationActive: false,
+        applicationIsActive: false,
+        hasOtherKeyWindow: false
+      )
+    )
+    controller.hide()
+    XCTAssertFalse(panel.isVisible)
+  }
+
+  func testCommandPresentationSurvivesTransientKeyLossUntilTheViewIsReady() {
+    let ready = DaemonReady(
+      type: "ready",
+      protocolVersion: 1,
+      port: 1,
+      url: "http://127.0.0.1:1",
+      sessionToken: "test-session",
+      nativeToken: "test-native",
+      pid: 1
+    )
+    let bridge = CommanderNativeBridge(
+      ready: ready,
+      keychain: KeychainStore(),
+      loginItem: LaunchAtLoginService(),
+      showLauncher: {},
+      hideLauncher: {},
+      showSettings: { _ in },
+      updateHotKeys: { _, _ in },
+      updateMenuBar: { _ in },
+      updateWindowMode: { _ in }
+    )
+    let controller = LauncherPanelController(ready: ready, bridge: bridge)
+    let panel = controller.panelForTesting
+    let itemID = "extension:builtin:emoji-symbols:search-emoji-symbols"
+    defer { controller.shutdown() }
+
+    panel.orderFront(nil)
+    controller.beginCommandHotKeyPresentation(itemID: itemID)
     controller.windowDidResignKey(
       Notification(name: NSWindow.didResignKeyNotification, object: panel)
     )
+
+    XCTAssertTrue(panel.isVisible)
+    XCTAssertEqual(controller.commandPresentationItemIDForTesting, itemID)
+
+    controller.commandHotKeyReady(itemID: itemID)
+    XCTAssertNil(controller.commandPresentationItemIDForTesting)
+    XCTAssertTrue(
+      LauncherPanelController.shouldRestoreAfterResign(
+        commandPresentationActive: true,
+        applicationIsActive: false,
+        hasOtherKeyWindow: false
+      )
+    )
+    XCTAssertFalse(
+      LauncherPanelController.shouldRestoreAfterResign(
+        commandPresentationActive: false,
+        applicationIsActive: true,
+        hasOtherKeyWindow: true
+      )
+    )
+    controller.hide()
     XCTAssertFalse(panel.isVisible)
   }
 

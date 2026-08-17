@@ -346,6 +346,7 @@ export interface NativeRequest<T = unknown> {
   method:
     | 'launcher.hide'
     | 'launcher.show'
+    | 'launcher.commandReady'
     | 'application.quit'
     | 'window.beginDrag'
     | 'filesystem.beginDrag'

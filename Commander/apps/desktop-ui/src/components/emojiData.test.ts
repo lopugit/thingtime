@@ -5,7 +5,13 @@ describe('Emoji & Symbols data', () => {
   it('ranks an exact semantic match before related emoji', () => {
     const matches = findEmojiEntries('red heart', 'all', []);
     expect(matches[0]).toMatchObject({ label: 'red heart', value: '❤️' });
-    expect(findEmojiEntries('heart', 'all', []).length).toBeGreaterThan(40);
+    const heartMatches = findEmojiEntries('heart', 'all', []);
+    expect(heartMatches.length).toBeGreaterThan(40);
+    expect(() => findEmojiEntries('h', 'all', [])).not.toThrow();
+    expect(heartMatches.find((entry) => entry.label === 'face blowing a kiss')?.keywords).toContain(':x');
+    expect(
+      heartMatches.every((entry) => entry.keywords.every((keyword) => typeof keyword === 'string')),
+    ).toBe(true);
   });
 
   it('includes searchable non-emoji Unicode symbols', () => {

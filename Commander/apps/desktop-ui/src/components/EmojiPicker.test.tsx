@@ -31,6 +31,11 @@ describe('EmojiPicker', () => {
       return undefined;
     });
     render(<EmojiPicker platform="macos" onBack={vi.fn()} />);
+    await waitFor(() =>
+      expect(nativeRequest).toHaveBeenCalledWith('launcher.commandReady', {
+        itemId: 'extension:builtin:emoji-symbols:search-emoji-symbols',
+      }),
+    );
     fireEvent.change(screen.getByRole('textbox', { name: 'Search emoji and symbols' }), {
       target: { value: 'red heart' },
     });

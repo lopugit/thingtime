@@ -1,7 +1,12 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowLeft, ChevronDown, CornerDownLeft, Search, Smile, WandSparkles } from 'lucide-react';
-import type { NativePasteResult, Platform, SearchHit } from '@commander/protocol';
+import {
+  extensionCommandItemId,
+  type NativePasteResult,
+  type Platform,
+  type SearchHit,
+} from '@commander/protocol';
 import { beginWindowDrag, nativeBridgeAvailable, nativeRequest } from '../lib/nativeBridge.js';
 import { ActionsPanel } from './ActionsPanel.js';
 import {
@@ -20,6 +25,7 @@ const RECENT_LIMIT = 32;
 const INITIAL_VISIBLE_LIMIT = 320;
 const PAGE_SIZE = 240;
 const GRID_COLUMNS = 8;
+const COMMAND_ITEM_ID = extensionCommandItemId('builtin:emoji-symbols', 'search-emoji-symbols');
 
 export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Platform }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +51,7 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
 
   useEffect(() => {
     inputRef.current?.focus();
+    void nativeRequest('launcher.commandReady', { itemId: COMMAND_ITEM_ID }).catch(() => undefined);
     void nativeRequest<{ name?: string }>('application.pasteTarget')
       .then((result) => setTargetApplication(result?.name?.trim() || null))
       .catch(() => undefined);
