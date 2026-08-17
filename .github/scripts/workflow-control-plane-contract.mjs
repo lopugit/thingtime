@@ -561,6 +561,16 @@ export function assertControlPlaneContract() {
     /deploy-develop-pr-preview\.mjs --self-test/u,
     "develop preview contract examples never block the live controller",
   );
+  assert.match(
+    developPreview,
+    /github\.event\.pull_request\.base\.ref == 'develop'/u,
+    "develop preview dispatches events that currently target develop",
+  );
+  assert.match(
+    developPreview,
+    /github\.event\.changes\.base\.ref\.from == 'develop'/u,
+    "develop preview preserves cleanup when a PR is retargeted away from develop",
+  );
 
   const providerRouter = readWorkflow("ci-provider-router.yml");
   assertRoutingProofContract(providerRouter);
@@ -762,11 +772,13 @@ export function assertControlPlaneContract() {
 }
 
 // The only paths this branch may hold at its root. `.github/**` is the point of
-// the branch; the AI instruction trio stays because agents work here too
+// the branch; `.gitattributes` preserves the generated graph's merge contract,
+// and the AI instruction trio stays because agents work here too
 // (`AGENTS.md` and `CLAUDE.md` are symlinks to `AI_ALL.md`, so all three must
 // travel together or the links dangle).
 export const CONTROL_PLANE_ROOTS = new Set([
   ".github",
+  ".gitattributes",
   ".gitignore",
   "AI_ALL.md",
   "AGENTS.md",

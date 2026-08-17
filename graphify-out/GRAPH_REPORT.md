@@ -1,62 +1,85 @@
-# Graph Report - .  (2026-08-17)
+# Graph Report - develop-preview-scan  (2026-08-17)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 21 files · ~132,218 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 458 nodes · 1048 edges · 19 communities
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 16 edges (avg confidence: 0.58)
+- 539 nodes · 1092 edges · 41 communities (24 shown, 17 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 13 edges (avg confidence: 0.55)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `dc0f2583`
+- Built from commit: `21c69a31`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- [[_COMMUNITY_Community 0|Community 0]]
-- [[_COMMUNITY_Community 1|Community 1]]
-- [[_COMMUNITY_Community 2|Community 2]]
-- [[_COMMUNITY_Community 3|Community 3]]
-- [[_COMMUNITY_Community 4|Community 4]]
-- [[_COMMUNITY_Community 5|Community 5]]
-- [[_COMMUNITY_Community 6|Community 6]]
-- [[_COMMUNITY_Community 7|Community 7]]
-- [[_COMMUNITY_Community 8|Community 8]]
-- [[_COMMUNITY_Community 9|Community 9]]
-- [[_COMMUNITY_Community 10|Community 10]]
-- [[_COMMUNITY_Community 11|Community 11]]
-- [[_COMMUNITY_Community 12|Community 12]]
-- [[_COMMUNITY_Community 13|Community 13]]
-- [[_COMMUNITY_Community 14|Community 14]]
-- [[_COMMUNITY_Community 15|Community 15]]
-- [[_COMMUNITY_Community 16|Community 16]]
-- [[_COMMUNITY_Community 17|Community 17]]
-- [[_COMMUNITY_Community 18|Community 18]]
+- [[_COMMUNITY_deploy-develop-pr-preview.mjs|deploy-develop-pr-preview.mjs]]
+- [[_COMMUNITY_workflow-control-plane-contract.mjs|workflow-control-plane-contract.mjs]]
+- [[_COMMUNITY_AI merge-conflict resolver workflow|AI merge-conflict resolver workflow]]
+- [[_COMMUNITY_promotion-pr-changelog.mjs|promotion-pr-changelog.mjs]]
+- [[_COMMUNITY_selfTest|selfTest]]
+- [[_COMMUNITY_failureDetail|failureDetail]]
+- [[_COMMUNITY_promotion-worker-routing-contract.mjs|promotion-worker-routing-contract.mjs]]
+- [[_COMMUNITY_promote-features-to-main.mjs|promote-features-to-main.mjs]]
+- [[_COMMUNITY_refresh-promotion-graphify.sh|refresh-promotion-graphify.sh]]
+- [[_COMMUNITY_promotion-worker-contract.sh|promotion-worker-contract.sh]]
+- [[_COMMUNITY_runPromotion|runPromotion]]
+- [[_COMMUNITY_prepare-round.sh|prepare-round.sh]]
+- [[_COMMUNITY_promotion-worker.sh|promotion-worker.sh]]
+- [[_COMMUNITY_resolve-pr-conflicts-routing-contract.mjs|resolve-pr-conflicts-routing-contract.mjs]]
+- [[_COMMUNITY_recoverPromotionReviewCheckpoint|recoverPromotionReviewCheckpoint]]
+- [[_COMMUNITY_repoFlag|repoFlag]]
+- [[_COMMUNITY_start.sh|start.sh]]
+- [[_COMMUNITY_verify-promotion-source-authority.sh|verify-promotion-source-authority.sh]]
+- [[_COMMUNITY_vercel.json|vercel.json]]
+- [[_COMMUNITY_TESTING.md — per-area manual test checklists|TESTING.md — per-area manual test checklists]]
+- [[_COMMUNITY_Unreleased|[Unreleased]]]
+- [[_COMMUNITY_`github-actions` — the CI control plane|`github-actions` — the CI control plane]]
+- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
+- [[_COMMUNITY_scope job (Web CI classification)|scope job (Web CI classification)]]
+- [[_COMMUNITY_Electron release — build and publish job|Electron release — build and publish job]]
+- [[_COMMUNITY_comment-product-contract-advisories job|comment-product-contract-advisories job]]
+- [[_COMMUNITY_AGENTS.md — symlink to AI_ALL|AGENTS.md — symlink to AI_ALL.md]]
+- [[_COMMUNITY_AI_ALL.md — canonical Thingtime AI instructions|AI_ALL.md — canonical Thingtime AI instructions]]
+- [[_COMMUNITY_Deterministic delete-shaped conflict settlement|Deterministic delete-shaped conflict settlement]]
+- [[_COMMUNITY_Lane-aware trusted promotion validator|Lane-aware trusted promotion validator]]
+- [[_COMMUNITY_CLAUDE.md — symlink to AI_ALL|CLAUDE.md — symlink to AI_ALL.md]]
+- [[_COMMUNITY_Control-plane CI — verify job|Control-plane CI — verify job]]
+- [[_COMMUNITY_Bare-tree invariant|Bare-tree invariant]]
+- [[_COMMUNITY_README — github-actions CI control plane|README — github-actions CI control plane]]
+- [[_COMMUNITY_TESTING.md — per-area manual checklists|TESTING.md — per-area manual checklists]]
+- [[_COMMUNITY_PR 24 Nitro React Router Migration Note|PR #24 Nitro React Router Migration Note]]
+- [[_COMMUNITY_PR 206 Feature Promoter Hardening Note|PR #206 Feature Promoter Hardening Note]]
+- [[_COMMUNITY_PR 207 Promoter Empty-Pick Detection Note|PR #207 Promoter Empty-Pick Detection Note]]
+- [[_COMMUNITY_PR 271 Deterministic Lockfile Conflict Recovery Note|PR #271 Deterministic Lockfile Conflict Recovery Note]]
+- [[_COMMUNITY_TESTING.md — per-area manual checklists|TESTING.md — per-area manual checklists]]
+- [[_COMMUNITY_vercel.json Git-deployment kill-switch|vercel.json Git-deployment kill-switch]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `selfTest()` - 49 edges
 2. `runPromotion()` - 35 edges
-3. `failureDetail()` - 28 edges
-4. `deploy()` - 26 edges
-5. `main()` - 20 edges
-6. `orphanedMergeHydrationIntegrationTest()` - 19 edges
-7. `repoFlag()` - 15 edges
-8. `runSelfTest()` - 14 edges
-9. `validateReusablePromotionBranch()` - 14 edges
-10. `main()` - 13 edges
+3. `TESTING.md — per-area manual test checklists` - 35 edges
+4. `failureDetail()` - 28 edges
+5. `deploy()` - 26 edges
+6. `[Unreleased]` - 20 edges
+7. `main()` - 20 edges
+8. `orphanedMergeHydrationIntegrationTest()` - 19 edges
+9. `runSelfTest()` - 15 edges
+10. `repoFlag()` - 15 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `AI merge-conflict resolver workflow` --references--> `workflow-caller-contract.mjs (thin listener contract)`  [EXTRACTED]
-  .github/workflows/resolve-pr-conflicts.yml → remix/scripts/workflow-caller-contract.mjs
-- `README — github-actions CI control plane` --references--> `vercel.json Git-deployment kill-switch`  [EXTRACTED]
-  README.md → vercel.json
-- `AI_ALL.md — canonical Thingtime AI instructions` --references--> `Control-plane changelog`  [INFERRED]
-  AI_ALL.md → CHANGELOG.md
-- `product-contract-advisories job` --calls--> `workflow-caller-contract.mjs (thin listener contract)`  [EXTRACTED]
-  .github/workflows/web-ci.yml → remix/scripts/workflow-caller-contract.mjs
-- `README — github-actions CI control plane` --references--> `workflow-caller-contract.mjs (thin listener contract)`  [EXTRACTED]
-  README.md → remix/scripts/workflow-caller-contract.mjs
+- `Electron release — build and publish job` --conceptually_related_to--> `Thin listener pattern (product branches call control plane by ref)`  [AMBIGUOUS]
+  .github/workflows/electron-release.yml → README.md
+- `Web CI workflow` --shares_data_with--> `run-api-tests.mts headless API suite runner`  [INFERRED]
+  .github/workflows/web-ci.yml → remix/scripts/run-api-tests.mts
+- `api-tests job (headless /tests runner)` --calls--> `run-api-tests.mts headless API suite runner`  [EXTRACTED]
+  .github/workflows/web-ci.yml → remix/scripts/run-api-tests.mts
+- `AI PR/stack rebase resolver workflow` --calls--> `AI rebase conflict round composite action`  [INFERRED]
+  .github/workflows/rebase-pr-stacks.yml → .github/actions/rebase-conflict-round/action.yml
+- `AI merge-conflict resolver workflow` --references--> `Superseded pr-conflict-resolver workflow`  [EXTRACTED]
+  .github/workflows/resolve-pr-conflicts.yml → .github/workflows/pr-conflict-resolver.yml
 
 ## Import Cycles
 - None detected.
@@ -67,108 +90,132 @@
 - **develop ↔ main branch automation flow** — github_workflows_promote_features_to_main, github_workflows_promote_develop_to_main, github_workflows_sync_main_into_develop, github_workflows_resolve_pr_conflicts, github_workflows_rebase_pr_stacks [EXTRACTED 0.90]
 - **Disjoint merge-vs-rebase AI conflict ownership** — github_workflows_resolve_pr_conflicts, github_workflows_rebase_pr_stacks, github_workflows_rebase_pr_stacks_no_ai_rebase, github_workflows_resolve_pr_conflicts_no_ai_merge, github_workflows_rebase_pr_stacks_rebase_owner_jq [EXTRACTED 0.85]
 - **Web CI required-context scoping** — github_workflows_web_ci_scope, github_workflows_web_ci_build, github_workflows_web_ci_api_tests, github_workflows_web_ci_required_build_context, github_workflows_web_ci_required_api_context, remix_scripts_web_ci_required_context_contract [EXTRACTED 0.90]
+- **Trusted Develop PR Preview Dispatch Flow** — github_workflows_develop_pr_preview_dispatch, github_workflows_develop_pr_preview_repository_dispatch, github_workflows_develop_pr_preview_controller, github_workflows_develop_pr_preview_deploy_script [EXTRACTED 1.00]
+- **Develop Preview Vercel and Stable Domain Control** — github_workflows_develop_pr_preview_controller, remix_changelog_develop_pr_preview_history_filtering, remix_changelog_stable_develop_domain [INFERRED 0.92]
+- **Protected Automation Control Plane** — github_workflows_develop_pr_preview_dispatch, github_workflows_develop_pr_preview_controller, remix_changelog_conflict_resolver_control_plane, remix_changelog_graphify_semantic_refresh [INFERRED 0.78]
 - **Canonical AI instruction file plus its two symlink aliases** — ai_all_thingtime_ai_instructions, agents_thingtime_ai_instructions, claude_thingtime_ai_instructions [EXTRACTED 0.95]
 
-## Communities (19 total, 0 thin omitted)
+## Communities (41 total, 17 thin omitted)
 
-### Community 0 - "Community 0"
-Cohesion: 0.07
-Nodes (77): ACTIVE_STATES, assertCurrentPullRequest(), assertRepositoryDispatchSource(), assertTrustedPrincipal(), assertTrustedPullRequest(), assertVercelConfiguration(), assignAliasVerified(), boundedInteger() (+69 more)
-
-### Community 1 - "Community 1"
+### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.08
-Nodes (36): Control-plane changelog, Deterministic delete-shaped conflict settlement, Lane-aware trusted promotion validator, acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, ALLOWED_MODELS, appReentryDisposition() (+28 more)
+Nodes (76): ACTIVE_STATES, assertCurrentPullRequest(), assertRepositoryDispatchSource(), assertTrustedPrincipal(), assertTrustedPullRequest(), assertVercelConfiguration(), assignAliasVerified(), boundedInteger() (+68 more)
 
-### Community 2 - "Community 2"
-Cohesion: 0.07
-Nodes (36): AGENTS.md — symlink to AI_ALL.md, Graphify knowledge-graph usage rules, AI_ALL.md — canonical Thingtime AI instructions, CLAUDE.md — symlink to AI_ALL.md, CI provider router workflow, make_routing_proof (HMAC routing proof), CI provider router — route job, Superseded pr-conflict-resolver workflow (+28 more)
-
-### Community 3 - "Community 3"
+### Community 1 - "workflow-control-plane-contract.mjs"
 Cohesion: 0.14
 Nodes (35): associatedPr(), bodyFile(), buildComment(), buildSection(), CFG, computeDelta(), computeMissingLabels(), contentIndex (+27 more)
 
-### Community 4 - "Community 4"
+### Community 2 - "AI merge-conflict resolver workflow"
+Cohesion: 0.13
+Nodes (24): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, ALLOWED_MODELS, appReentryDisposition(), assertAdminLoader(), assertAdminModelRouting(), assertBareControlPlaneTree() (+16 more)
+
+### Community 3 - "promotion-pr-changelog.mjs"
 Cohesion: 0.09
 Nodes (34): botCommentsByLatestEvent(), buildPromotionDispatchRequest(), clearSourceStandAside(), computePicks(), dependentMembersAfter(), dispatchPromotionResolution(), exactReservationDeleteArgs(), exactReservationPushArgs() (+26 more)
 
-### Community 5 - "Community 5"
+### Community 4 - "selfTest"
+Cohesion: 0.11
+Nodes (21): CI provider router workflow, make_routing_proof (HMAC routing proof), CI provider router — route job, Superseded pr-conflict-resolver workflow, Promote develop to main (omnibus) workflow, Promote develop to main — promotion-pr job, Promote develop to main — route job, Promote features to main workflow (+13 more)
+
+### Community 5 - "failureDetail"
 Cohesion: 0.13
 Nodes (32): applyPicks(), buildPromotionPlanContext(), checkoutRemoteBranch(), createPromotionReservation(), createPromotionReviewCheckpoint(), ensureCommitAvailable(), ensureRemoteBranchAvailable(), expectedReservationTrailers() (+24 more)
 
-### Community 6 - "Community 6"
+### Community 6 - "promotion-worker-routing-contract.mjs"
 Cohesion: 0.07
 Nodes (28): action, aiBlock, checkpointPending, checkpointPush, cleanWorkerDispatch, commitGuard, commitsApi, contentPush (+20 more)
 
-### Community 7 - "Community 7"
+### Community 7 - "promote-features-to-main.mjs"
 Cohesion: 0.12
 Nodes (23): CFG, cleanReplayQuarantinePolicy(), env(), EXEC_OPTS, flag(), gh(), ghJson(), git() (+15 more)
 
-### Community 8 - "Community 8"
+### Community 8 - "refresh-promotion-graphify.sh"
 Cohesion: 0.13
 Nodes (21): assert_control_metadata_unchanged(), assert_tool_boundary(), current_refs_hash(), emit(), fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_COUNT, GIT_CONFIG_GLOBAL (+13 more)
 
-### Community 9 - "Community 9"
+### Community 9 - "promotion-worker-contract.sh"
 Cohesion: 0.12
 Nodes (16): BASE_REF, BASE_SHA, GITHUB_OUTPUT, PLAN_HASH, PROMOTION_BRANCH, reject_lineage_mismatch(), require_review_replay(), RESERVATION_SHA (+8 more)
 
-### Community 10 - "Community 10"
+### Community 10 - "runPromotion"
 Cohesion: 0.21
 Nodes (17): cancelPromotionRetirement(), exactBranchDeleteWithActionsToken(), finalizeAiPromotionMetadata(), finalizeSourceLineageMetadata(), findOpenPromotionNumber(), listRemotePromotionBranches(), processGroupsIndependently(), promotionBody() (+9 more)
 
-### Community 11 - "Community 11"
-Cohesion: 0.25
-Nodes (14): AI rebase conflict round composite action, assert_safe_regular_text_conflict(), clear_scratch(), emit(), emit_paths(), has_coherent_zdiff3_markers(), hash_rebase_state(), rebase_in_progress() (+6 more)
+### Community 11 - "prepare-round.sh"
+Cohesion: 0.06
+Nodes (35): Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`), Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`), AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`), AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`), App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`), Canonical AI instruction links (`AI_ALL.md`), Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`), Data crystals & nesting depth (`remix/app/schemas/registry.ts`) (+27 more)
 
-### Community 12 - "Community 12"
+### Community 12 - "promotion-worker.sh"
 Cohesion: 0.35
 Nodes (12): classify_source_lineage(), emit(), emit_paths(), fail(), prepare(), require_environment(), require_reservation(), secure_git_environment() (+4 more)
 
-### Community 13 - "Community 13"
+### Community 13 - "resolve-pr-conflicts-routing-contract.mjs"
 Cohesion: 0.24
 Nodes (13): aiRuntimeSourceFiles(), assertAdminLoader(), assertAdminModelRouting(), assertRoute(), assertWorkflowSource(), positiveDecimal(), REBASE_ACTION_URL, REBASE_WORKFLOW_URL (+5 more)
 
-### Community 14 - "Community 14"
+### Community 14 - "recoverPromotionReviewCheckpoint"
+Cohesion: 0.17
+Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
+
+### Community 15 - "repoFlag"
 Cohesion: 0.27
 Nodes (10): attestationMatches(), checkpointRecoveryDisposition(), encodePromotionAttestation(), exactCheckpointPush(), isObjectId(), liveRefShaWithActionsToken(), promotionAttestationBody(), promotionResolverRunDisposition() (+2 more)
 
-### Community 15 - "Community 15"
+### Community 16 - "start.sh"
 Cohesion: 0.44
 Nodes (10): closeRedundantPass(), createPromotionPr(), ensurePromotionLabel(), ensureSourceLineageReviewLabel(), queueTrustedPromotionWorker(), repoFlag(), retargetPass(), tryGh() (+2 more)
 
-### Community 16 - "Community 16"
+### Community 17 - "verify-promotion-source-authority.sh"
 Cohesion: 0.46
 Nodes (7): emit(), emit_paths(), rebase_in_progress(), secure_git_environment(), start.sh script, usage(), write_conflicts()
 
-### Community 17 - "Community 17"
+### Community 18 - "vercel.json"
 Cohesion: 0.33
 Nodes (6): fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM, GIT_CONFIG_SYSTEM, verify-promotion-source-authority.sh script
 
-### Community 18 - "Community 18"
+### Community 19 - "TESTING.md — per-area manual test checklists"
+Cohesion: 0.29
+Nodes (7): Web CI workflow, api-tests job (headless /tests runner), build job (client build, typecheck ratchet, unit tests), required-api-context companion job, required-build-context companion job, scope job (Web CI classification), run-api-tests.mts headless API suite runner
+
+### Community 20 - "[Unreleased]"
 Cohesion: 0.33
 Nodes (5): framework, git, deploymentEnabled, ignoreCommand, $schema
+
+### Community 21 - "`github-actions` — the CI control plane"
+Cohesion: 0.09
+Nodes (22): [1.0.0] - YYYY-MM-DD, Added, Added, Added, Added, Changed, Changed, Changed (+14 more)
+
+### Community 23 - "scope job (Web CI classification)"
+Cohesion: 0.25
+Nodes (14): AI rebase conflict round composite action, assert_safe_regular_text_conflict(), clear_scratch(), emit(), emit_paths(), has_coherent_zdiff3_markers(), hash_rebase_state(), rebase_in_progress() (+6 more)
+
+### Community 26 - "AGENTS.md — symlink to AI_ALL.md"
+Cohesion: 0.15
+Nodes (11): Added, Control-plane changelog, Fixed, [Unreleased], Fork setup: Vercel develop previews, `github-actions` — the CI control plane, Known trade-off, Stable develop domain (+3 more)
 
 ## Ambiguous Edges - Review These
 - `Electron release — build and publish job` → `Thin listener pattern (product branches call control plane by ref)`  [AMBIGUOUS]
   .github/workflows/electron-release.yml · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **106 isolated node(s):** `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS`, `ACTIVE_STATES`, `TERMINAL_FAILURE_STATES` (+101 more)
+- **187 isolated node(s):** `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS`, `ACTIVE_STATES`, `TERMINAL_FAILURE_STATES` (+182 more)
   These have ≤1 connection - possible missing edges or undocumented components.
+- **17 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Electron release — build and publish job` and `Thin listener pattern (product branches call control plane by ref)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `Control-plane CI — contract advisories job` connect `Community 6` to `Community 0`, `Community 1`, `Community 3`, `Community 7`, `Community 9`, `Community 13`?**
-  _High betweenness centrality (0.419) - this node is a cross-community bridge._
-- **Why does `TESTING.md — per-area manual checklists` connect `Community 2` to `Community 0`, `Community 7`?**
-  _High betweenness centrality (0.119) - this node is a cross-community bridge._
-- **Why does `AI PR/stack rebase resolver workflow` connect `Community 2` to `Community 11`?**
-  _High betweenness centrality (0.054) - this node is a cross-community bridge._
+- **Why does `Control-plane CI — contract advisories job` connect `promotion-worker-routing-contract.mjs` to `deploy-develop-pr-preview.mjs`, `workflow-control-plane-contract.mjs`, `AI merge-conflict resolver workflow`, `promote-features-to-main.mjs`, `promotion-worker-contract.sh`, `resolve-pr-conflicts-routing-contract.mjs`?**
+  _High betweenness centrality (0.338) - this node is a cross-community bridge._
+- **Why does `CI provider router — route job` connect `selfTest` to `promote-features-to-main.mjs`?**
+  _High betweenness centrality (0.062) - this node is a cross-community bridge._
+- **Why does `AI PR/stack rebase resolver workflow` connect `selfTest` to `scope job (Web CI classification)`?**
+  _High betweenness centrality (0.037) - this node is a cross-community bridge._
 - **What connects `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS` to the rest of the system?**
-  _106 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.07436708860759493 - nodes in this community are weakly interconnected._
-- **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.08108108108108109 - nodes in this community are weakly interconnected._
+  _189 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
+  _Cohesion score 0.07692307692307693 - nodes in this community are weakly interconnected._
+- **Should `workflow-control-plane-contract.mjs` be split into smaller, more focused modules?**
+  _Cohesion score 0.14126984126984127 - nodes in this community are weakly interconnected._
