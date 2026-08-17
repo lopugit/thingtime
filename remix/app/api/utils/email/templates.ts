@@ -36,6 +36,148 @@ export const renderEmailOtpTemplate = ({
   html: `<p>Your Thingtime security code is <strong>${htmlEscape(code)}</strong>.</p><p>It expires in ${expiresMinutes} minutes.</p>`
 });
 
+// Activity notification emails (friend requests, reactions, comments, …).
+// Subjects/bodies stay per-type so the inbox line reads like the bell row;
+// every email carries a manage link and a one-click unsubscribe-all link.
+
+export type NotificationEmailInput = {
+  type: string;
+  actorName: string | null;
+  preview?: string | null;
+  // click-through target (the post, or the actor's profile)
+  ctaUrl: string;
+  ctaLabel: string;
+  settingsUrl: string;
+  unsubscribeUrl?: string;
+};
+
+const NOTIFICATION_EMAIL_COPY: Record<string, { subject: (actor: string) => string; line: (actor: string) => string }> = {
+  'friend-request': {
+    subject: (actor) => `${actor} wants to be your friend on Thingtime 🤝`,
+    line: (actor) => `${actor} sent you a friend request.`
+  },
+  'friend-accepted': {
+    subject: (actor) => `${actor} accepted your friend request 💚`,
+    line: (actor) => `${actor} accepted your friend request — you're friends now.`
+  },
+  'new-follower': {
+    subject: (actor) => `${actor} started following you on Thingtime 👀`,
+    line: (actor) => `${actor} started following you.`
+  },
+  'post-from-followed': {
+    subject: (actor) => `${actor} just posted on Thingtime 📰`,
+    line: (actor) => `${actor} shared a new post.`
+  },
+  'post-from-friend': {
+    subject: (actor) => `Your friend ${actor} just posted 🫶`,
+    line: (actor) => `Your friend ${actor} shared a new post.`
+  },
+  comment: {
+    subject: (actor) => `${actor} commented on your post 💬`,
+    line: (actor) => `${actor} commented on your post.`
+  },
+  reply: {
+    subject: (actor) => `${actor} replied to your comment ↩️`,
+    line: (actor) => `${actor} replied to your comment.`
+  },
+  reaction: {
+    subject: (actor) => `${actor} reacted to your post 🤣`,
+    line: (actor) => `${actor} reacted to your post.`
+  },
+  share: {
+    subject: (actor) => `${actor} shared your post 🔁`,
+    line: (actor) => `${actor} shared your post.`
+  },
+  groups: {
+    subject: (actor) => `${actor} — group activity on Thingtime 👥`,
+    line: (actor) => `${actor} did something in a group you're in.`
+  }
+};
+
+const emailFooter = ({ settingsUrl, unsubscribeUrl }: { settingsUrl: string; unsubscribeUrl?: string }) => ({
+  text: [
+    `Manage notification emails: ${settingsUrl}`,
+    unsubscribeUrl ? `Unsubscribe from all notification emails: ${unsubscribeUrl}` : undefined
+  ]
+    .filter(Boolean)
+    .join('\n'),
+  html: `<hr><p style="font-size:12px;color:#9a9aa6"><a href="${htmlEscape(settingsUrl)}">Manage notification emails</a>${
+    unsubscribeUrl ? ` · <a href="${htmlEscape(unsubscribeUrl)}">Unsubscribe from all</a>` : ''
+  }</p>`
+});
+
+export const renderNotificationEmailTemplate = ({
+  type,
+  actorName,
+  preview,
+  ctaUrl,
+  ctaLabel,
+  settingsUrl,
+  unsubscribeUrl
+}: NotificationEmailInput) => {
+  const actor = actorName || 'Someone';
+  const copy = NOTIFICATION_EMAIL_COPY[type] || {
+    subject: (name: string) => `${name} — new activity on Thingtime 🔔`,
+    line: (name: string) => `${name} did something that landed in your notifications.`
+  };
+  const footer = emailFooter({ settingsUrl, unsubscribeUrl });
+  return {
+    subject: copy.subject(actor),
+    text: [copy.line(actor), preview ? `“${preview}”` : undefined, `${ctaLabel}: ${ctaUrl}`, '', footer.text]
+      .filter((line) => line !== undefined)
+      .join('\n'),
+    html: [
+      `<p>${htmlEscape(copy.line(actor))}</p>`,
+      preview
+        ? `<blockquote style="margin:8px 0;padding:8px 12px;border-left:3px solid #ececef;color:#5a5a66">${htmlEscape(preview)}</blockquote>`
+        : '',
+      `<p><a href="${htmlEscape(ctaUrl)}">${htmlEscape(ctaLabel)}</a></p>`,
+      footer.html
+    ].join('')
+  };
+};
+
+export type WeeklySummaryStat = { label: string; count: number };
+
+export const renderWeeklySummaryTemplate = ({
+  displayName,
+  stats,
+  ctaUrl,
+  settingsUrl,
+  unsubscribeUrl
+}: {
+  displayName: string | null;
+  stats: WeeklySummaryStat[];
+  ctaUrl: string;
+  settingsUrl: string;
+  unsubscribeUrl?: string;
+}) => {
+  const greeting = displayName ? `Hey ${displayName} 👋` : 'Hey 👋';
+  const lines = stats.filter((stat) => stat.count > 0);
+  const footer = emailFooter({ settingsUrl, unsubscribeUrl });
+  return {
+    subject: 'Your week on Thingtime ✨',
+    text: [
+      greeting,
+      'Here’s what happened around your things this week:',
+      ...lines.map((stat) => `• ${stat.count} ${stat.label}`),
+      '',
+      `Open Thingtime: ${ctaUrl}`,
+      '',
+      footer.text
+    ].join('\n'),
+    html: [
+      `<p>${htmlEscape(greeting)}</p>`,
+      '<p>Here’s what happened around your things this week:</p>',
+      `<ul>${lines
+        .map((stat) => `<li><strong>${stat.count}</strong> ${htmlEscape(stat.label)}</li>`)
+        .join('')}</ul>`,
+      `<p><a href="${htmlEscape(ctaUrl)}">Open Thingtime</a></p>`,
+      footer.html
+    ].join('')
+  };
+};
+
 export const renderNewsletterTemplate = ({
   title,
   bodyText,
