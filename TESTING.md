@@ -1735,6 +1735,11 @@ is fixed, and cite the checklist you ran in the PR description.
       with arrows, execute with Return, open Command-K, traverse actions, and
       dismiss actions/launcher with Escape. Long names must not clip or create
       horizontal scroll in default or compact mode.
+- [ ] Search `accessibility`; verify Accessibility Settings is the first
+      `System` result and Return opens the exact Privacy & Security →
+      Accessibility pane without changing any permission. Repeat with Screen
+      Recording, Full Disk Access, Login Items, and Displays; non-macOS
+      bootstrap catalogs must omit these platform-only entries.
 - [ ] Drag an application result into a disposable Terminal prompt and verify
       the exact `.app` path is inserted through a native file-URL drag without
       opening it. Clear the prompt without executing it; single and double click

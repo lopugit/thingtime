@@ -10,7 +10,7 @@ export type Platform = 'macos' | 'windows' | 'linux';
 export type Appearance = 'light' | 'dark' | 'system';
 export type WindowMode = 'default' | 'compact';
 export type TextSize = 'default' | 'large';
-export type SearchItemKind = 'builtin' | 'application' | 'extension' | 'command' | 'quicklink';
+export type SearchItemKind = 'builtin' | 'system' | 'application' | 'extension' | 'command' | 'quicklink';
 export type SettingsTab = 'general' | 'extensions' | 'sync' | 'account' | 'advanced' | 'about';
 export type CommanderViewId = 'emoji-symbols';
 export type CommandShortcutMap = Record<string, string>;
@@ -45,6 +45,7 @@ export interface RecentSearch {
 
 const SEARCH_ITEM_KINDS = new Set<SearchItemKind>([
   'builtin',
+  'system',
   'application',
   'extension',
   'command',

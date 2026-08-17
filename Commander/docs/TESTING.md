@@ -15,6 +15,7 @@
 - [ ] Type a new query and press Return immediately, before the search debounce settles. Commander must never execute an item left over from the previous query.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
 - [ ] Open an application, reveal it in Finder, and copy its path through Actions.
+- [ ] Search `accessibility`; verify Accessibility Settings is the first `System` result and Return opens Privacy & Security → Accessibility without changing any permission. Repeat with `screen recording`, `full disk access`, `login items`, and one ordinary pane such as Displays.
 - [ ] Search for an application and drag its result into a disposable Terminal prompt. Verify the exact shell-escaped `.app` path is inserted, no app opens during the drag, and ordinary click/double-click execution still works. Cancel or clear the prompt without running it; do not mutate macOS Privacy & Security permissions during routine QA.
 - [ ] Verify default and compact modes; expansion never shows an unrendered blank region.
 - [ ] Force-terminate the native host once; its parent watchdog must stop the daemon and Rust child and release port 47820 before relaunch.
@@ -48,6 +49,7 @@
 - [ ] For an already installed extension, choose Sync to Commander and verify its safe extension/command preferences refresh. Password fields remain protected, and development extensions direct the user to Sideload instead of guessing a source path.
 - [ ] Execute a compatible prebuilt no-view command and confirm a worker crash cannot terminate the daemon.
 - [ ] Verify Installed contains the enabled built-in Commander extension with Close Commander, Close Commander Window, and Open Commander native commands.
+- [ ] Verify the macOS System built-in exposes its indexed destinations and per-command shortcut controls on macOS, while Windows/Linux bootstrap catalogs omit it.
 - [ ] Open Bundled Raycast Commands and verify Emoji & Symbols appears separately from installed/sideloaded extensions with its built-in badge and Search Emoji & Symbols command count.
 - [ ] Import `Commander/extensions/raycast/`, run its no-view Open Commander command from Raycast after Commander has quit, and verify the installed app relaunches with a focused, empty query.
 

@@ -18,7 +18,7 @@ describe('Commander daemon HTTP trust boundaries', () => {
 
     let server: CommanderServer | undefined;
     try {
-      server = await createCommanderServer({ host: '127.0.0.1', port: 0, uiPath });
+      server = await createCommanderServer({ host: '127.0.0.1', port: 0, uiPath, platform: 'macos' });
       expect(server.token).not.toBe(server.nativeToken);
 
       const health = await fetch(`${server.url}/healthz`);
@@ -113,6 +113,25 @@ describe('Commander daemon HTTP trust boundaries', () => {
                 keywords: expect.arrayContaining(['emoji', 'symbol', 'unicode', 'heart']),
               },
             ],
+          },
+          {
+            id: 'builtin:macos-system',
+            name: 'macos-system',
+            title: 'macOS System',
+            source: 'builtin',
+            compatibility: 'native',
+            commands: expect.arrayContaining([
+              expect.objectContaining({
+                name: 'open-accessibility-settings',
+                title: 'Accessibility Settings',
+                mode: 'no-view',
+                keywords: expect.arrayContaining(['accessibility', 'assistive access', 'system settings']),
+              }),
+              expect.objectContaining({
+                name: 'open-screen-recording-settings',
+                title: 'Screen & System Audio Recording Settings',
+              }),
+            ]),
           },
         ],
         capabilities: { secureCredentialStore: true },
@@ -249,6 +268,44 @@ describe('Commander daemon HTTP trust boundaries', () => {
       expect(await openEmojiPicker.json()).toEqual({
         ok: true,
         view: { id: 'emoji-symbols' },
+      });
+
+      const accessibilitySearch = await fetch(`${server.url}/api/search?q=accessibility`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(accessibilitySearch.status).toBe(200);
+      const accessibilityResults = (await accessibilitySearch.json()) as {
+        hits: Array<{ id: string }>;
+      };
+      expect(accessibilityResults.hits[0]).toMatchObject({
+        id: 'extension:builtin:macos-system:open-accessibility-settings',
+        title: 'Accessibility Settings',
+        subtitle: 'macOS System',
+        kind: 'system',
+        extensionId: 'builtin:macos-system',
+        commandName: 'open-accessibility-settings',
+      });
+
+      const openAccessibilitySettings = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({
+          itemId: 'extension:builtin:macos-system:open-accessibility-settings',
+          actionId: 'run',
+        }),
+      });
+      expect(openAccessibilitySettings.status).toBe(200);
+      expect(await openAccessibilitySettings.json()).toEqual({
+        ok: true,
+        nativeRequest: {
+          method: 'application.open',
+          params: {
+            path: 'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility',
+          },
+        },
       });
 
       const rememberedSearch = await fetch(`${server.url}/api/history`, {

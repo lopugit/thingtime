@@ -30,6 +30,7 @@ export interface RuntimeOptions {
   uiPath: string;
   rustBinary?: string;
   parentPid?: number;
+  platform?: Platform;
 }
 
 export function parseRuntimeOptions(argv: string[]): RuntimeOptions {

@@ -26,6 +26,7 @@ const FAVOURITE_BONUS: u64 = 25;
 #[serde(rename_all = "lowercase")]
 pub enum SearchItemKind {
     Builtin,
+    System,
     Application,
     Extension,
     Command,
@@ -36,10 +37,11 @@ impl SearchItemKind {
     fn sort_rank(self) -> u8 {
         match self {
             Self::Builtin => 0,
-            Self::Application => 1,
-            Self::Extension => 2,
-            Self::Command => 3,
-            Self::Quicklink => 4,
+            Self::System => 1,
+            Self::Application => 2,
+            Self::Extension => 3,
+            Self::Command => 4,
+            Self::Quicklink => 5,
         }
     }
 }
@@ -1029,6 +1031,7 @@ mod tests {
     fn every_item_kind_matches_the_typescript_wire_values() {
         let cases = [
             (SearchItemKind::Builtin, "builtin"),
+            (SearchItemKind::System, "system"),
             (SearchItemKind::Application, "application"),
             (SearchItemKind::Extension, "extension"),
             (SearchItemKind::Command, "command"),

@@ -1,4 +1,10 @@
-import { extensionCommandItemId, type CommanderExtension, type SearchItem } from '@commander/protocol';
+import {
+  extensionCommandItemId,
+  type CommanderExtension,
+  type Platform,
+  type SearchItem,
+} from '@commander/protocol';
+import { macosSystemExtension, macosSystemExtensionId } from './macosSystem.js';
 
 export const closeCommanderCommandName = 'close-commander';
 export const closeCommanderWindowCommandName = 'close-commander-window';
@@ -77,11 +83,21 @@ export const emojiSymbolsExtension: CommanderExtension = {
   ],
 };
 
-export const builtinExtensions = [commanderExtension, emojiSymbolsExtension] satisfies CommanderExtension[];
+export const builtinExtensions = [
+  commanderExtension,
+  emojiSymbolsExtension,
+  macosSystemExtension,
+] satisfies CommanderExtension[];
 
-export function availableExtensions(installed: CommanderExtension[]): CommanderExtension[] {
+export function availableExtensions(
+  installed: CommanderExtension[],
+  platform: Platform,
+): CommanderExtension[] {
   const builtinIDs = new Set(builtinExtensions.map((extension) => extension.id));
-  return [...builtinExtensions, ...installed.filter((extension) => !builtinIDs.has(extension.id))];
+  const platformBuiltins = builtinExtensions.filter(
+    (extension) => extension.id !== macosSystemExtensionId || platform === 'macos',
+  );
+  return [...platformBuiltins, ...installed.filter((extension) => !builtinIDs.has(extension.id))];
 }
 
 export const builtins: SearchItem[] = [
@@ -145,7 +161,7 @@ export function extensionItems(extensions: CommanderExtension[]): SearchItem[] {
         id: extensionCommandItemId(extension.id, command.name),
         title: command.title,
         subtitle: extension.title,
-        kind: 'extension' as const,
+        kind: extension.id === macosSystemExtensionId ? ('system' as const) : ('extension' as const),
         keywords: [extension.name, extension.title, ...command.keywords],
         icon: extension.icon ?? 'extensions',
         favourite: false,

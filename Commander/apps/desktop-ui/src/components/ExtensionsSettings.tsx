@@ -25,6 +25,8 @@ import { CommanderIcon } from './CommanderIcon.js';
 
 type ExtensionMode = 'installed' | 'bundled' | 'store' | 'raycast';
 
+const bundledRaycastExtensionIds = new Set(['builtin:emoji-symbols']);
+
 export function ExtensionsSettings({
   initial,
   settings,
@@ -203,6 +205,7 @@ export function ExtensionsSettings({
   const visibleBundled = installed.filter(
     (extension) =>
       extension.source === 'builtin' &&
+      bundledRaycastExtensionIds.has(extension.id) &&
       `${extension.title} ${extension.description} ${extension.commands.map((command) => command.title).join(' ')}`
         .toLowerCase()
         .includes(query.toLowerCase()),

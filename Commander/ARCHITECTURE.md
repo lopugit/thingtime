@@ -108,6 +108,22 @@ Commander reads Raycast `extension.json`/`package.json` manifests without transl
 Runtime execution is intentionally isolated behind `packages/raycast-compat`. Public Raycast API coverage is
 tracked in `docs/RAYCAST_COMPATIBILITY.md`; unsupported APIs must fail with a named capability error, never silently.
 
+## System shortcut providers
+
+Operating-system destinations use the portable `system` search-item kind and live in platform-gated built-in
+extensions. The first provider is **macOS System**, a curated global index of System Settings destinations such as
+Accessibility permissions, Screen Recording, Full Disk Access, networking, displays, keyboard, and login items.
+Selecting one returns the same narrow `application.open` native request used for other trusted URLs; the macOS host
+opens an `x-apple.systempreferences:` deep link and Commander never automates or changes the setting itself. Because
+the entries are ordinary extension commands, they participate in fuzzy search, History, Command-K, and per-command
+global shortcut binding without adding another execution path.
+
+Stable URL destinations exposed by third-party apps can join the same provider model. A universal “open app, then
+choose this menu item” index is a different trust boundary: app menus are localized, may only exist while the app is
+running, and require macOS Accessibility access to inspect or invoke. Commander must implement that as an explicit,
+opt-in live Accessibility provider with app identity and menu-path validation rather than recording brittle mouse or
+keyboard macros in the static system catalog.
+
 ## Distribution
 
 The macOS build stages a signed `.app` containing compiled React assets, daemon/worker bundles, the Rust search
