@@ -13,6 +13,13 @@
 - Retry and verify stale resolver-label removal, use the configured resolver
   PAT only as a fallback, surface sanitized failures, and stop before dispatch
   when ownership labels remain ambiguous.
+- Resume the exact runner-local Claude session whenever its terminal subtype
+  is `error_max_turns`; reject every other failed subtype instead of retrying
+  an unrelated authentication, permission, or model error.
+- Move deterministic workflow/topology contracts out of required unit tests
+  and live resolver/deploy/promote paths into non-blocking PR-comment advisory
+  lanes. Build, typecheck, unit, API, security, exact-ref, scope, and
+  post-model verification remain hard gates.
 
 ## Live evidence
 
@@ -28,6 +35,14 @@ workflows therefore define one first-round step, one anchored retry step, and
 498 aliases of that retry step. The composite action maintains a trusted
 one-based round counter through `GITHUB_ENV`, records completion and audit
 state for the caller, and independently refuses round 501.
+
+Within each model invocation, the pinned Anthropic action remains the first
+request. If and only if its private execution JSON ends in
+`error_max_turns`, the workflow validates the exact UUID from the result or
+`system.init` message and calls `claude --resume <uuid>` with the same model,
+500-turn budget, tool allowlist, path denials, and a narrow continuation
+prompt. The loop ends on success, a different error, or GitHub's 360-minute
+job ceiling; no transcript or stderr is printed.
 
 The 500-turn/round/path request does not weaken byte- or trust-boundary caps.
 Those limits protect workflow-command transport and prevent an untrusted PR
@@ -48,4 +63,8 @@ GitGuardian skip the scan, so the branch keeps the stable structural result.
 - YAML parse checks with alias expansion enabled.
 - `actionlint` with expression/workflow validation (pre-existing ShellCheck
   informational/style findings excluded).
+- Exact-session classifier fixtures for success, `error_max_turns`, malformed
+  JSON, invalid session IDs, and unrelated failures.
+- Advisory contract jobs and marker-comment behavior; no contract command is
+  part of a required unit-test or live automation path.
 - `git diff --check`.

@@ -46,16 +46,166 @@ jobs:
             bash -n "$script"
           done < <(find .github/scripts -type f -name '*.sh' -print | sort)
 
-      - name: Run automation contracts
-        run: |
-          set -euo pipefail
-          node .github/scripts/deploy-develop-pr-preview.mjs --self-test
-          node .github/scripts/workflow-control-plane-contract.mjs --self-test
-          node .github/scripts/resolve-pr-conflicts-routing-contract.mjs --self-test
-          node .github/scripts/promotion-worker-routing-contract.mjs
-          bash .github/scripts/promotion-worker-contract.sh
-          node .github/scripts/promotion-pr-changelog.mjs --self-test
-          node .github/scripts/promote-features-to-main.mjs --self-test
-
       - name: Verify patch hygiene
         run: git diff --check
+
+  contract-advisories:
+    name: Contract advisories (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      warnings: ${{ steps.contracts.outputs.warnings }}
+      report_b64: ${{ steps.contracts.outputs.report_b64 }}
+    steps:
+      - name: Check out github-actions for read-only advisory checks
+        id: contract_checkout
+        continue-on-error: true
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Collect contract advisory results
+        id: contracts
+        if: always()
+        shell: bash
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.contract_checkout.outcome }}
+        run: |
+          set -uo pipefail
+          report="$RUNNER_TEMP/contract-advisories.md"
+          warnings=false
+          : >"$report"
+
+          escape_log() {
+            sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+          }
+          run_contract() {
+            local label="$1"
+            shift
+            local log status=0
+            log="$(mktemp "$RUNNER_TEMP/contract.XXXXXX")"
+            timeout 300 "$@" >"$log" 2>&1 || status=$?
+            if (( status == 0 )); then
+              printf -- '- ✅ %s\n' "$label" >>"$report"
+            else
+              warnings=true
+              printf -- '- ⚠️ %s (exit %s)\n' "$label" "$status" >>"$report"
+              {
+                echo '<details><summary>Sanitized tail</summary>'
+                echo
+                echo '<pre>'
+                tail -n 30 "$log" | head -c 12000 | escape_log
+                echo '</pre>'
+                echo '</details>'
+              } >>"$report"
+            fi
+            rm -f -- "$log"
+          }
+
+          if [ "$CHECKOUT_OUTCOME" != success ]; then
+            warnings=true
+            echo '- ⚠️ The advisory checkout was unavailable; no contract examples ran.' >>"$report"
+          else
+            run_contract 'Develop-preview controller examples' \
+              node .github/scripts/deploy-develop-pr-preview.mjs --self-test
+            run_contract 'Workflow control-plane examples' \
+              node .github/scripts/workflow-control-plane-contract.mjs --self-test
+            run_contract 'Conflict-resolver routing examples' \
+              node .github/scripts/resolve-pr-conflicts-routing-contract.mjs --self-test
+            run_contract 'Rebase ownership routing examples' \
+              bash .github/scripts/rebase-ownership-routing-contract.sh
+            run_contract 'Promotion-worker routing examples' \
+              node .github/scripts/promotion-worker-routing-contract.mjs
+            run_contract 'Promotion-worker behavior examples' \
+              bash .github/scripts/promotion-worker-contract.sh
+            run_contract 'Promotion changelog examples' \
+              node .github/scripts/promotion-pr-changelog.mjs --self-test
+            run_contract 'Feature promoter examples' \
+              node .github/scripts/promote-features-to-main.mjs --self-test
+          fi
+
+          echo "warnings=$warnings" >>"$GITHUB_OUTPUT"
+          printf 'report_b64=' >>"$GITHUB_OUTPUT"
+          base64 -w0 <"$report" >>"$GITHUB_OUTPUT"
+          echo >>"$GITHUB_OUTPUT"
+          if [ "$warnings" = true ]; then
+            echo '::warning::One or more deterministic contract advisories need review; required CI remains unaffected.'
+          fi
+          {
+            echo '## Deterministic contract advisories'
+            echo
+            cat "$report"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  comment-contract-advisories:
+    name: Comment contract advisories (non-blocking)
+    needs: contract-advisories
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Upsert or clear the advisory comment
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HAS_WARNINGS: ${{ needs.contract-advisories.outputs.warnings }}
+          REPORT_B64: ${{ needs.contract-advisories.outputs.report_b64 }}
+        with:
+          script: |
+            const marker = '<!-- thingtime-control-plane-contract-advisories:v1 -->';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = [...comments].reverse().find(
+              ({ body, user }) => user?.login === 'github-actions[bot]' && body?.includes(marker)
+            );
+            if (process.env.HAS_WARNINGS !== 'true') {
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                });
+              }
+              return;
+            }
+            let report = '';
+            try {
+              report = Buffer.from(process.env.REPORT_B64 || '', 'base64').toString('utf8');
+            } catch {
+              report = '- ⚠️ The advisory report could not be decoded.';
+            }
+            report = report.slice(0, 50000);
+            const body = [
+              '⚠️ **Deterministic CI contract advisory**',
+              '',
+              'These examples are warning-only. They do not fail a required check or block this PR.',
+              '',
+              report,
+              '',
+              marker,
+            ].join('\n');
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

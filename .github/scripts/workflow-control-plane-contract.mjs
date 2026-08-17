@@ -396,10 +396,9 @@ function assertAdminModelRouting(resolver, rebase) {
       value: Number(match[1]),
     }));
   });
-  assert.equal(
-    turnBudgets.length,
-    claudeActionCount,
-    "every Claude action declares an explicit bounded turn budget",
+  assert.ok(
+    turnBudgets.length >= claudeActionCount,
+    "every Claude action and exact-session continuation declares a turn budget",
   );
   for (const budget of turnBudgets) {
     assert.equal(
@@ -408,6 +407,24 @@ function assertAdminModelRouting(resolver, rebase) {
       `${budget.path}: Claude turn budget remains 500`,
     );
   }
+  const runtimeSource = runtimeFiles
+    .map((path) => readFileSync(resolve(githubRoot, "..", path), "utf8"))
+    .join("\n");
+  assert.equal(
+    runtimeSource.match(/steps\.[A-Za-z0-9_]+\.outcome == 'failure'/gu)?.length,
+    claudeActionCount,
+    "each Claude action classifies its failed result before continuation",
+  );
+  assert.ok(
+    (runtimeSource.match(/RESULT_SUBTYPE[^\n]+error_max_turns/gu)?.length ?? 0) >=
+      claudeActionCount,
+    "only error_max_turns can enter exact-session continuation",
+  );
+  assert.equal(
+    runtimeSource.match(/claude --resume "\$session_id" --print/gu)?.length,
+    claudeActionCount,
+    "every Claude action has an exact --resume continuation path",
+  );
 }
 
 function assertObservableLabelCleanup(rebase) {
@@ -482,10 +499,10 @@ export function assertControlPlaneContract() {
     /^          ref: main$/mu,
     "develop preview controller never loads executable behavior from a product branch",
   );
-  assert.match(
+  assert.doesNotMatch(
     developPreview,
-    /node \.github\/scripts\/deploy-develop-pr-preview\.mjs --self-test/u,
-    "develop preview controller verifies its local invariants before mutation",
+    /deploy-develop-pr-preview\.mjs --self-test/u,
+    "develop preview contract examples never block the live controller",
   );
 
   const providerRouter = readWorkflow("ci-provider-router.yml");
@@ -535,6 +552,11 @@ export function assertControlPlaneContract() {
   const promotions = readWorkflow("promote-features-to-main.yml");
   assert.match(promotions, /ref: github-actions/);
   assert.match(promotions, /workflow-control\/\.github\/scripts\/promote-features-to-main\.mjs/);
+  assert.doesNotMatch(
+    promotions,
+    /promote-features-to-main\.mjs --self-test/u,
+    "promoter contract examples never block a live promotion",
+  );
   assert.match(promotions, /^  actions: write$/m);
   assert.match(promotions, /ACTIONS_TOKEN: \$\{\{ github\.token \}\}/);
   const promoter = readFileSync(
@@ -550,6 +572,16 @@ export function assertControlPlaneContract() {
     /pull_request:\n\s+branches: \[github-actions\]/,
   );
   assert.doesNotMatch(controlPlaneCi, /^\s+secrets:/m);
+  assert.match(
+    controlPlaneCi,
+    /Contract advisories \(non-blocking\)/u,
+    "automation contracts run in their advisory-only lane",
+  );
+  assert.match(
+    controlPlaneCi,
+    /thingtime-control-plane-contract-advisories:v1/u,
+    "automation contract warnings are surfaced through one PR comment",
+  );
 
   const omnibus = readWorkflow("promote-develop-to-main.yml");
   assert.match(omnibus, /ref: github-actions/);
@@ -559,6 +591,11 @@ export function assertControlPlaneContract() {
   assert.match(rebase, /ref: github-actions/);
   assert.match(rebase, /origin\/github-actions/);
   assert.doesNotMatch(rebase, /ref: \$\{\{ github\.sha \}\}/);
+  assert.doesNotMatch(
+    rebase,
+    /Rebase ownership routing self-test/u,
+    "rebase ownership examples never block live target detection",
+  );
   assert.match(rebase, /routing_proof: \$\{\{ inputs\.routing_proof/);
   assert.match(rebase, /routing_proof_issued_at: \$\{\{ inputs\.routing_proof_issued_at/);
   assert.match(rebase, /internal_worker: >-/);

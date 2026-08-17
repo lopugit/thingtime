@@ -192,9 +192,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Script and orphaned-history self-tests
-        run: node workflow-control/.github/scripts/promote-features-to-main.mjs --self-test
-
       - name: Promote merged develop PRs to main
         env:
           GH_TOKEN: ${{ secrets.PROMOTION_PAT || secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}

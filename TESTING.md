@@ -245,6 +245,12 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Break the path-classification job deliberately in a disposable branch.
       Confirm neither exact required-context name is emitted and branch
       protection blocks the PR instead of treating a skipped job as proof.
+- [ ] Break `web-ci-required-context-contract.mjs` or
+      `workflow-caller-contract.mjs` on a disposable PR. Confirm build/API
+      contexts stay green or fail only for their real work, the product
+      contract advisory job stays non-blocking, and one marker comment is
+      created or updated with the warning. Repair the contract and confirm the
+      stale warning comment is removed.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
@@ -291,6 +297,13 @@ is fixed, and cite the checklist you ran in the PR description.
       work; if `git push` reports a transport error after the exact commit
       lands, the live-ref check must classify it as published rather than
       retrying it.
+- [ ] Force the pinned Claude action to end with `error_max_turns` after it has
+      edited at least one conflicted file. Confirm the next request uses the
+      exact emitted session UUID with `--resume`, retains the same model and
+      edit allowlist, repeats in 500-turn chunks, and reaches the existing
+      verifier. An auth, permission, malformed-output, or model error must not
+      enter the continuation loop, and private execution JSON/stderr must not
+      appear in logs.
 
 ## Per-feature develop → main promoter (`.github/scripts/promote-features-to-main.mjs`)
 
@@ -427,6 +440,16 @@ is fixed, and cite the checklist you ran in the PR description.
       500th unresolved round. A 500-file conflict set must pass count/path
       intake while byte, scope, secret, symlink, and exact-ref guards remain
       enforced.
+- [ ] In a rebase conflict round, force `error_max_turns` and confirm the same
+      session resumes repeatedly inside that one round before any new outer
+      round begins. Confirm a non-max failure stops, a successful continuation
+      proceeds through scratch hashing/scope verification, and the hosted job
+      timeout remains the only whole-session runtime ceiling.
+- [ ] Break each automation contract example in a disposable `github-actions`
+      PR. Confirm the resolver, rebase detector, promoter, and develop-preview
+      controller no longer execute self-tests inline; the independent
+      contract advisory lane updates one warning comment and never reports a
+      failing/blocking status for the contract result.
 - [ ] While a run is resolving, push another commit to the PR head. The exact
       force-with-lease must reject the stale rewrite; no partial rebase may
       reach the remote branch and the concurrent commit must remain intact.
