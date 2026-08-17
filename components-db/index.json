@@ -1,6 +1,6 @@
 {
-	"target": 1600,
-	"count": 1600,
+	"target": 1720,
+	"count": 1720,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -41,18 +41,21 @@
 		"window-chrome",
 		"kanban",
 		"forms-advanced",
-		"gamification"
+		"gamification",
+		"settings",
+		"mail",
+		"schedule"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 200,
-		"bootstrap": 200,
-		"mui": 200,
-		"shadcn": 200,
-		"untitled": 200,
-		"daisyui": 200,
-		"reactflow": 200,
-		"thingtime": 200
+		"antd": 215,
+		"bootstrap": 215,
+		"mui": 215,
+		"shadcn": 215,
+		"untitled": 215,
+		"daisyui": 215,
+		"reactflow": 215,
+		"thingtime": 215
 	},
-	"hash": "a957eb7850706c58"
+	"hash": "a7225908d43cf01f"
 }

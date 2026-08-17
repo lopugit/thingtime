@@ -54,7 +54,10 @@ export const ARCHETYPE_ORDER = [
 	'window-chrome',
 	'kanban',
 	'forms-advanced',
-	'gamification'
+	'gamification',
+	'settings',
+	'mail',
+	'schedule'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;
