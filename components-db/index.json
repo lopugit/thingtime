@@ -1,6 +1,6 @@
 {
-	"target": 2080,
-	"count": 2080,
+	"target": 2200,
+	"count": 2200,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -53,18 +53,21 @@
 		"social-feed",
 		"dev-tools",
 		"education",
-		"food-delivery"
+		"food-delivery",
+		"crypto-trading",
+		"events-tickets",
+		"support-help"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 260,
-		"bootstrap": 260,
-		"mui": 260,
-		"shadcn": 260,
-		"untitled": 260,
-		"daisyui": 260,
-		"reactflow": 260,
-		"thingtime": 260
+		"antd": 275,
+		"bootstrap": 275,
+		"mui": 275,
+		"shadcn": 275,
+		"untitled": 275,
+		"daisyui": 275,
+		"reactflow": 275,
+		"thingtime": 275
 	},
-	"hash": "44d55aad237c4d7a"
+	"hash": "162da30db15be975"
 }
