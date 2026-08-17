@@ -185,6 +185,17 @@ function assertWorkflowSource() {
     source.indexOf("      - name: Cascade to PRs stacked on this head"),
     source.indexOf("      - name: Comment on PR (needs attention)"),
   );
+  const startCommentBlock = source.slice(
+    source.indexOf("      - name: Comment on PR (resolution starting)"),
+    source.indexOf("      - name: Check out PR head"),
+  );
+  const resolvedCommentBlock = source.slice(
+    source.indexOf("      - name: Comment on PR (resolved)"),
+    source.indexOf("      - name: Cascade to PRs stacked on this head"),
+  );
+  const failureCommentBlock = source.slice(
+    source.indexOf("      - name: Comment on PR (needs attention)"),
+  );
 
   assert.match(source, /description: "PR base or head branch to scan;/);
   assert.doesNotMatch(source, /unique head|exact PR snapshot/);
@@ -233,6 +244,39 @@ function assertWorkflowSource() {
   assert.match(source, /actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g);
   assert.doesNotMatch(source, /gh api "repos\/\$REPO\/dispatches"/);
   assert.doesNotMatch(cascadeBlock, /if: env\.HAS_WORKFLOW_PUSH/);
+
+  assert.match(
+    resolveBlock,
+    /RUN_STATUS_MARKER: '<!-- thingtime-ai-resolve-status:v2 run_id=\$\{\{ github\.run_id \}\} -->'/u,
+    "resolver status marker is scoped to the workflow run",
+  );
+  assert.doesNotMatch(
+    resolveBlock,
+    /thingtime-ai-resolve-start:v1/u,
+    "resolver never reuses the historical global start marker",
+  );
+  assert.match(
+    startCommentBlock,
+    /this status comment updates with the result/u,
+    "start comment promises the in-place terminal update",
+  );
+  for (const [name, block] of [
+    ["start", startCommentBlock],
+    ["resolved", resolvedCommentBlock],
+    ["failure", failureCommentBlock],
+  ]) {
+    assert.match(block, /--arg marker "\$RUN_STATUS_MARKER"/u, `${name}: searches for this run's marker`);
+    assert.match(block, /contains\(\$marker\)/u, `${name}: matches the complete run marker`);
+    assert.match(block, /issues\/comments\/\$comment_id/u, `${name}: updates this run's existing comment`);
+    assert.match(block, /issues\/\$PR_NUMBER\/comments/u, `${name}: creates this run's missing comment`);
+    assert.match(block, /"\$RUN_STATUS_MARKER"/u, `${name}: preserves the marker in the comment body`);
+  }
+  for (const [name, block] of [
+    ["resolved", resolvedCommentBlock],
+    ["failure", failureCommentBlock],
+  ]) {
+    assert.doesNotMatch(block, /gh pr comment/u, `${name}: does not append a second result comment`);
+  }
 
   for (const [name, block] of [["model_config", modelBlock], ["resolve", resolveBlock]]) {
     assert.match(block, /github\.event_name == 'workflow_dispatch'/, `${name}: event gate`);
