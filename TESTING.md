@@ -21,6 +21,11 @@ is fixed, and cite the checklist you ran in the PR description.
       script are present on the default `main` branch before expecting
       `pull_request_target` to run; a workflow present only on the feature PR is
       deliberately inactive.
+- [ ] On a product branch, run
+      `node remix/scripts/workflow-caller-contract.mjs` and
+      `node --test remix/scripts/vercel-config.test.mjs`: the thin listener
+      checks out the trusted controller from `main`, `.github/scripts/` is
+      empty, and every Vercel cron `(path, schedule)` pair appears exactly once.
 - [ ] Inspect an eligible PR's two runs: the `pull_request_target` dispatcher
       has no GitHub Environment/Vercel secret, checks out no code, and emits one
       bounded `repository_dispatch`; only the downstream default-branch run
@@ -54,6 +59,11 @@ is fixed, and cite the checklist you ran in the PR description.
       list is empty. Confirm a newly built generic Preview has all current
       `develop` variables plus the six existing Preview-only values, while
       production MongoDB/JWT/S3 values remain absent.
+- [ ] On a `develop` Custom Environment deployment, confirm `/api/root-data`
+      reports `THINGTIME_VERCEL_ENV=develop` and
+      `THINGTIME_SHOW_DEPLOYMENT_STATUS=true`; `/api/v1/vercel/status` returns
+      JSON with HTTP 200, and `/status` renders the deployment status instead of
+      the React Router 404 boundary. Repeat on an ordinary Preview deployment.
 - [ ] Open or update a same-repository, trusted-author PR targeting `develop`:
       the `Develop S3 PR preview` workflow deploys the exact head SHA, the
       one marker comment moves through deploying to ready, the GitHub Deployment
@@ -137,6 +147,12 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
+- [ ] Seed the `thingtime` LocalForage value with a legacy unrevivable function
+      plus root `set` / `get` runtime methods, then load `/feed` ONCE: the
+      collapsed “What's on your mind?” control opens, Editor.js accepts focus
+      and typing, Latest / Filters and the global search remain interactive,
+      and the repaired stored snapshot already contains neither runtime method
+      nor the legacy fallback before a second navigation.
 - [ ] Open the feed composer → Thingtime tab: the editor shows exactly ONE
       root property, `New Thing`, with no default children (no `name`).
 - [ ] The draft path is session-scoped (`tmp.<sessionId>.New Thing`): add a
@@ -160,6 +176,171 @@ is fixed, and cite the checklist you ran in the PR description.
       the first rename (`path-renamed` bus event).
 - [ ] The in-post editor height-drags via the bottom handle (mouse and touch)
       with no upper limit, and never below the small floor.
+
+## Post and comment attachments (`remix/app/components/Attachments/`)
+
+- [ ] Top-level post, rich comment, and reply composers use the same responsive
+      attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
+      flow remains available as a quota-saving alternative on every rich
+      post/comment surface.
+- [ ] In Photos, add one public image URL, then paste several newline-separated
+      URLs. Valid unique URLs become responsive preview tiles in stable order,
+      duplicates are skipped, invalid/credentialed URLs remain editable with an
+      accessible error, and linked images use `referrerPolicy=no-referrer`.
+- [ ] The visual upload area uses responsive thumbnail tiles plus a real
+      `🏞️ Add Media` control. At desktop and 390px mobile widths it has no
+      horizontal overflow; the URL fallback panel and every lower composer
+      control remain reachable after scrolling top-to-bottom.
+- [ ] Pick and drag/drop raster images, a supported video, and an arbitrary
+      file. Safe image/video previews appear immediately; each row reports
+      progress; Post stays disabled until every selected file is Ready; and a
+      26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] Cancel an in-flight file, remove a completed draft file, and retry both a
+      failed part upload and a failed completion. No file is silently omitted,
+      duplicated, charged twice, or left in a permanent uploading state.
+- [ ] Drop the upload-start response after the server reserves storage, then
+      retry/remove: the stable request id resolves the same owner-scoped upload
+      without a second charge. A different account using that request id gets
+      its own opaque attachment id and learns nothing about the first.
+- [ ] Remove an MPU before any part URL is issued: its empty reservation refunds
+      promptly. Remove after a part URL was issued: the UI explains that bytes
+      remain reserved while lifecycle-backed cleanup settles, without exposing
+      server or S3 error text.
+- [ ] Post an attachment without body text, then post URL photos and uploaded
+      attachments together. The optimistic card receives stable metadata only
+      and survives a later reload without persisting a presigned URL.
+- [ ] Add an attachment-only comment, a text-plus-files comment, and a reply
+      containing an image, video, and generic download. Each renders inline or
+      as a safe download exactly like the parent post, survives reload and its
+      `/post/:id` permalink, and never persists a presigned URL.
+- [ ] Build a 6+-deep reply chain and attach a file at multiple depths. An
+      authorized viewer can open each file through the inherited root ACL;
+      logged-out, unauthorized, broken-chain, and custom-Mongo collision reads
+      return not found without revealing attachment metadata.
+- [ ] Simulate a lost attachment-comment response, then retry. The immutable
+      shareId, comment payload, and exact attachment set reconcile once without
+      a duplicate comment or second quota charge. A definitive first-attempt
+      rejection returns the composer to an editable state.
+- [ ] Delete an attached reply, an attached comment subtree, and finally the
+      root post. Every descendant object's exact S3 version is removed before
+      its attachment Thing and quota charge; a partial remote failure keeps the
+      remaining tombstone billed and retryable rather than orphaning bytes.
+- [ ] Feed, profile, nested repost, and permalink cards render vetted raster
+      images and videos inline. SVG, HTML, script, and unknown types render only
+      as named download rows; their bytes never execute inline.
+- [ ] Let a content URL expire at the storage provider and open the attachment
+      again: the stable authenticated `/api/v1/attachments/content?id=…` route
+      issues fresh access. A private post's attachment fails closed for another
+      account and logged-out browser.
+- [ ] Exhaust the active account tier, then select a file larger than the
+      remaining allowance. Every post, comment, message, reply, emoji, avatar,
+      and banner picker shows the fixed account-quota message with delete-media
+      or upgrade-tier recovery; it must never call this an unavailable
+      environment or echo ledger/provider detail. Removing the draft or
+      deleting the bound content reconciles usage, and `ready` / `reconciling`
+      / `unavailable` storage labels never present unknown accounting as
+      unlimited capacity.
+- [ ] Switch Thingtime accounts during prepare, hashing, direct upload, and
+      completion. Requests and XHRs cancel, local previews clear, and no draft
+      attachment ID or storage content crosses into the new account.
+- [ ] Simulate a lost post-create response: the exact first payload becomes
+      inert, retry uses the same post id and attachment set, and an exact GET
+      readback completes once without duplicating the post. A first-attempt
+      attachment 409 does not freeze an otherwise editable draft.
+- [ ] At desktop and narrow mobile widths, long filenames truncate without
+      horizontal overflow, multi-sentence errors span the available row width
+      instead of wrapping one or two words per line, controls remain at least
+      44px touchable, keyboard users can add/retry/cancel/remove files, and
+      progress/error updates are announced without stealing focus.
+- [ ] Through the local Vite proxy or a trusted reverse proxy, attachment and
+      profile-media mutations succeed only when `Origin` matches the forwarded
+      public host/protocol. A mismatched origin or `Sec-Fetch-Site: cross-site`
+      request remains forbidden even if forwarded headers are spoofed.
+- [ ] In the production AWS account, all four account-level and bucket-level
+      Block Public Access switches are on, Object Ownership is Bucket Owner
+      Enforced, versioning is enabled, default encryption is on, and no bucket
+      ACL or public-access policy is present.
+- [ ] The Vercel OIDC role trust policy matches the exact team audience and
+      `owner:<team>:project:<project>:environment:production` subject. A
+      production function can assume it; preview/development tokens cannot.
+- [ ] The Vercel Custom Environment named `develop` has an exact `develop`
+      branch matcher, owns the verified `https://dev.thingtime.com` domain,
+      and is the only non-production scope containing the four Sensitive S3 /
+      cleanup variables. Generic Preview contains none of them.
+- [ ] On an ordinary feature-branch Preview, selecting a file fails before
+      quota reservation with the fixed client-authored “private uploads are
+      unavailable in this environment” guidance and offers the public image URL
+      fallback. Never expose Vercel, proxy, AWS, role, bucket, or request text.
+- [ ] The develop role trusts only
+      `owner:<team>:project:<project>:environment:develop`. A deployed develop
+      function can assume it, while a feature-branch
+      `environment:preview` token and local `environment:development` token
+      are both denied.
+- [ ] The attachment role is limited to `objects/*` and the documented eight
+      version-aware multipart/object actions. Confirm `s3:ListBucket`,
+      `s3:DeleteObject`, ACL, and bucket-administration actions are denied.
+- [ ] The bucket policy denies HTTP and TLS below 1.2 for non-service
+      principals. CORS preflight succeeds only for the production origin's
+      `PUT` with `x-amz-checksum-sha256`; a different origin, method, or header
+      is denied, and no response header is unnecessarily exposed.
+- [ ] Repeat the bucket controls against develop: only
+      `https://dev.thingtime.com` can preflight its checksum-locked `PUT`, and
+      neither environment's role can read, write, list, or delete objects in
+      the other environment's bucket.
+- [ ] The enabled `objects/` lifecycle rule aborts incomplete multipart uploads
+      after seven days and permanently expires noncurrent versions after 30
+      days. Account and bucket settings still match after a fresh console load.
+- [ ] Upload a tiny production attachment, record its S3 VersionId and storage
+      usage, then delete its post. That exact version is permanently absent
+      before the Thingtime ledger refunds the bytes; no delete marker or hidden
+      noncurrent copy stands in for deletion.
+- [ ] Call `/api/v1/attachments/cleanup` with no bearer, a Thingtime user token,
+      and an incorrect cron secret: every request fails closed. The exact
+      production `CRON_SECRET` succeeds only through the scheduled cleanup
+      path, and a cleanup retry never exposes the secret or raw S3 errors.
+- [ ] After this PR's routes are deployed to `develop`, confirm the develop
+      EventBridge rule invokes
+      `https://dev.thingtime.com/api/v1/attachments/cleanup` at minute 17 each
+      hour through its one-purpose API Destination/role. Its exact develop
+      secret succeeds, missing/wrong secrets fail, and EventBridge reports no
+      failed invocation.
+- [ ] After the same deployment, upload a tiny attachment on
+      `dev.thingtime.com`, complete it, render or download it, then remove the
+      draft or delete its post. The exact S3 version disappears and the account
+      storage meter returns to its starting value without touching the
+      production bucket.
+
+## Profile avatar and banner media (`remix/app/components/Profile/`)
+
+- [ ] Open both Edit profile and Settings → Profile. With no saved image, each
+      avatar/banner field shows a responsive `🏞️ Add Media` tile and a separate
+      “Use public image URL” fallback; all controls remain at least 44px.
+- [ ] Select JPEG, PNG, GIF, WebP, and AVIF files. A local preview paints
+      immediately, progress/retry/remove remain usable, Save stays disabled
+      until the image is ready, and SVG/non-image/empty/>64 MiB files fail with
+      fixed client-authored guidance before upload.
+- [ ] Save a managed avatar and banner, reload, and verify profile, feed cards,
+      search, notifications, Messenger/account navigation, and the owned-account
+      roster render the stable same-origin content URL without exposing an S3
+      key, upload id, version id, or presigned URL.
+- [ ] Load a public profile logged out and verify its current managed avatar and
+      banner render. A replaced, unbound, cross-account, wrong-slot, custom-Mongo
+      collision, or arbitrary attachment id must return not found.
+- [ ] Replace a saved managed avatar/banner, clear it, and switch it to one
+      credential-free http(s) URL. The user-slot update and new attachment bind
+      are atomic; the old object stays charged until exact-version deletion and
+      then the storage meter refreshes to the correct value.
+- [ ] Paste a valid external image URL: it previews with no referrer, remains a
+      quota-saving remote link, and is never server-fetched. Credentialed,
+      protocol-relative, whitespace/control-character, and non-http(s) URLs are
+      rejected without raw server/proxy text.
+- [ ] Close the editor, navigate away, or switch accounts while a profile upload
+      is preparing/uploading/ready-but-unsaved. Requests cancel, local object
+      URLs clear, unbound drafts are cleaned safely, and no filename, preview,
+      attachment id, or storage state flashes into the next account.
+- [ ] Simulate a lost profile-save response and retry the same attachment ids.
+      An already-bound exact owner/slot succeeds idempotently; a mismatched slot
+      or changed attachment fails closed without deleting another current image.
 
 ## Editor windows & layer system (`remix/app/components/Thingtime/EditorSplit.tsx`)
 
@@ -353,6 +534,10 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Break the path-classification job deliberately in a disposable branch.
       Confirm neither exact required-context name is emitted and branch
       protection blocks the PR instead of treating a skipped job as proof.
+- [ ] Break either product workflow/topology contract in a disposable branch.
+      Confirm neither command runs inside `test:unit`, build/API keep their
+      real result, and the protected `github-actions` advisory updates one
+      warning comment without producing a failing or required status.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
@@ -1287,9 +1472,11 @@ re-checks the whole management plane end-to-end:
       every section, open the dispatch modal and confirmation state, then close
       both. The drawer is flush left/right/bottom, has no clipped controls, and
       the page never scrolls horizontally.
-- [ ] `node scripts/workflow-caller-contract.mjs` passes: every product-branch
-      workflow has exactly one reusable call pinned to `@github-actions`, no
-      runner/steps/shell behavior, and no product-branch Actions scripts.
+- [ ] Run `node scripts/workflow-caller-contract.mjs` manually or inspect its
+      protected advisory comment: every product-branch workflow has exactly
+      one reusable call pinned to `@github-actions`, no runner/steps/shell
+      behavior, and no product-branch Actions scripts. A mismatch warns but
+      does not join the required unit-test aggregate.
 
 PR #220 live acceptance recorded on 2026-08-10:
 
@@ -1506,6 +1693,10 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       (`navigator.webdriver`) browsers skip client-side too.
 - [ ] Views are tracked on every post surface: feed, profiles (both wired via
       PostList) and the `/post/:id` permalink page.
+- [ ] Activate a custom Mongo endpoint containing a public post whose shareId
+      matches a home post: its card shows zero home view stats, view reports
+      count zero, and create/comment/reaction/share activity emits no home bell
+      notification or email. Resetting to home restores normal telemetry/emits.
 
 ## Messenger (chats, communities, custom emojis) (`remix/app/components/Messenger/`, `/api/v1/chats*`, `api/utils/messenger/`)
 
@@ -1533,6 +1724,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Threads: Reply in thread opens the side panel, replies stay OUT of the
       main list, the root shows a 🧵 count chip. One level deep only —
       replying to a reply files under the same root.
+- [ ] In DMs, groups, message requests, community channels, inline replies, and
+      Slack-style threads, the composer shows the same responsive attachment
+      gallery as posts. Send image, video, generic file, text-plus-files, and
+      attachment-only messages; each optimistic message reconciles to stable
+      metadata and safe inline/download rendering after reload.
+- [ ] Simulate a lost message-send response with files. The composer freezes
+      the immutable request id, text, and attachment set, then exact retry
+      reconciles one message without duplicate bytes or chat-preview drift.
+      Known validation failures remain editable and show only authored errors.
+- [ ] A non-member, departed member, declined request recipient, arbitrary id,
+      and custom-Mongo shareId collision cannot open a message attachment. A
+      current pending/active participant can, including from a thread reply.
+- [ ] Delete an attachment message and verify its exact S3 versions disappear
+      before the soft-delete/refund completes, the chat preview loses its file
+      count, and displayed account storage refreshes without a stale balance.
 - [ ] Reactions: hover/long-press → quick row + full picker; same token
       toggles off; custom tab lists community + personal emojis; a custom
       reaction renders its image chip for OTHER members too (resolved by id,
@@ -1540,7 +1746,11 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       endpoint (namespace isolation both ways).
 - [ ] Custom emojis: upload ≤512KB gif/webp/png/jpeg → renders inline via
       `:name:` in messages, animated gifs animate; duplicate name in scope
-      409s; another user's PERSONAL emoji is refused in your chat.
+      409s. Personal emoji can render for authenticated recipients where it was
+      used; community emoji content remains membership-gated. The upload uses
+      the same single-tile gallery, charges the uploader's storage tier, and
+      deleting it removes the exact S3 version before refunding quota. Legacy
+      inline data-URI emoji remain read-only and cannot be newly created.
 - [ ] Read receipts: opening a chat advances your receipt (forward-only —
       REGRESSION: reading an old message must never rewind it); seen-by
       avatars appear under the last-read message in Messenger mode; the
@@ -1561,3 +1771,148 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       kind 403s ("managed by their own endpoints"); chats/messages are 404
       through `GET /api/v1/things?id=` for non-owners;
       `POST /api/v1/things/react` cannot reach another member's chat message.
+
+## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
+
+- [ ] A fresh browser landing directly on `/things` blocks first paint only
+      long enough to create one temporary session user, then serves the real
+      Things UI (never the logged-out sign-in hero). Reload and navigation
+      reuse the same user/roster entry without creating duplicates; direct
+      `/login` and `/register` remain reachable so another account can be
+      added without losing the temporary space. Existing signed-in users are
+      never replaced. Once authenticated, `/things` seeds instantly from
+      `tt-things-<userId>` localStorage cache and background-refetches.
+- [ ] Temporary-session identity stays visually logged out: the top navigation
+      says `Login` (never `Temporary space`), while account/profile/person
+      surfaces say `Anonymous` with `Login to claim`. Generated `guest-*`
+      usernames and placeholder `@temporary.thingtime.invalid` emails never
+      appear in normal UI. Login/register can claim or add a real account
+      without deleting the recoverable temporary roster entry.
+- [ ] Folder CRUD: New → New folder creates a `["folder"]` thing (private by
+      default) inside the CURRENT folder; rename edits `crystal.name`; folders
+      never combine with other schemas (`["post","folder"]` 400s).
+- [ ] Containment is a `folderId` pointer on the child: move = PATCH
+      `{ id, folderId }` (null = root); a folder can never move into itself or
+      its own subtree (400, cycle-safe ancestor walk); reactions/saves refuse
+      folderId; deleting a folder RE-PARENTS its contents to the folder's
+      parent instead of deleting them.
+- [ ] `GET /api/v1/things?folder=root|<id>` lists only that folder level for
+      the owner; v1/pre-folder docs read as root; `folderId` is a searchable
+      root field on /search conditions.
+- [ ] Bulk ops (`POST /api/v1/things/bulk`, ≤100 ids): move/copy/delete/share
+      run the SAME single-item paths (updateThing/createThing/deleteThing)
+      with per-item ok/error results — one bad id never fails the batch, and
+      the toast reports "N done, M skipped" honestly. Copy refuses
+      comment/reaction/save/share things and mints fresh shareIds ("Copy of"
+      name hint on data things and folders).
+- [ ] Recursive folder copy: copying a FOLDER duplicates its whole subtree
+      through the same per-item create path (snapshot-first, so copying a
+      folder into itself terminates), skips uncopyable kinds with honest
+      copied/skipped counts, and refuses trees over 500 things BEFORE copying
+      anything (never a half-copied tree).
+- [ ] Bulk share (`op: 'share'` + acl/visibility): applies the audience per
+      item via updateThing; `recursive: true` flows a folder's audience to
+      everything inside (same 500 bound, refused past it), counting
+      inherit-locked things as skipped, never silently changing them. Missing
+      acl 400s the whole batch loudly.
+- [ ] Selection: click selects, Cmd/Ctrl toggles, Shift ranges, Cmd/Ctrl+A
+      selects all loaded, Escape clears; the View / Show / Arrange / Kind
+      toolbar remains visible in its top position while the contextual toolbar
+      appears beneath it. Mobile: tap OPENS, checkboxes select; both toolbars
+      wrap without overlap or horizontal overflow.
+- [ ] Clipboard: Copy/Cut (toolbar or Cmd/Ctrl+C/X) then Paste into any folder
+      (Cmd/Ctrl+V or the Paste pill); cut items dim until pasted; cut+paste
+      moves, copy+paste duplicates.
+- [ ] Delete always confirms first (permanent — cascade note; folder
+      re-parenting note when folders are selected); optimistic removal
+      reconciles by refetch.
+- [ ] Views: grid / list (name-kind-audience-tags-updated columns) / Miller
+      columns (click folder opens next column, path highlighted). The
+      Names/Previews toggle applies to ALL views: previews live-render each
+      thing through the kind registry (crystal.render templates win, then
+      crystal.thing, then the crystal itself) inside bounded, pointer-inert
+      boxes, falling back to icon+name per item; folders always show as icons.
+- [ ] Search + browse controls: the animated rainbow search ring is flush on
+      all four sides (including after focus/resize), and every View / Show /
+      Arrange / Kind pill keeps non-zero, even inline padding around its icon
+      and label on desktop and mobile wrapping layouts.
+- [ ] Things badge density: Theme Studio and both Appearance quick-settings
+      surfaces switch the View / Show / Arrange / Kind pills live between
+      Small / Medium / Large; Custom accepts safe 1–4-value CSS padding
+      shorthand, persists after navigation/reload, and invalid CSS cannot
+      escape into another declaration. Small is the compact default.
+- [ ] Auto-icons use the ordered file-type registry: screenshot-like names win
+      over generic image MIME/extensions (`🖼️`), ordinary photos/images use
+      `🏞️`, known media/document/archive/install families are distinct, and an
+      unrecognised attachment honestly falls back to `💾` rather than `🌀`.
+- [ ] On a moving Vercel branch alias, leave the preview open on mobile, deploy
+      a client change, then foreground/focus the old tab. It fetches the live
+      alias HTML without cache and reloads only when the hashed `index-*.js`
+      entry differs. The refreshed Feed Filters/composer/search input and
+      Things New/View/Arrange controls all respond; production-domain tabs do
+      not run this preview freshness check.
+- [ ] On iOS Safari, navigate away from a Vercel preview and return with Back.
+      The inline preview recovery bootstrap loads before the main application
+      entry and a `pageshow.persisted` restore immediately replaces the page
+      with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
+      `/things` returns `Cache-Control: private, no-store, max-age=0,
+      must-revalidate`, while `/assets/*` remains outside the HTML no-store
+      route.
+- [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
+      and the old `Function could not be revived` fallback values, reload Feed
+      and open “What's on your mind?”. Hydration reports no function syntax
+      exception; the composer focuses and edits, Photos opens, close restores
+      the collapsed composer, and Latest / Filters / navigation still respond.
+- [ ] In Mobile Safari with a retained signed-in session and Commander closed,
+      physically tap the collapsed “What's on your mind?” control immediately
+      after a fresh Feed navigation. The composer opens on that first tap;
+      tapping its Editor.js placeholder opens the keyboard and retains typed
+      text; Photos opens; and the Tags input focuses and retains typing. The
+      document has no Commander `touchend` click-away listener, and opening
+      Commander then clicking or focusing outside still closes it without
+      consuming the target control's action.
+- [ ] Preview modal deep link `/things?preview=<id>` opens any viewable thing
+      (ThingView tree + Move/Share/Delete actions) and is what Copy link hands
+      out for non-post things (posts link `/post/:id`).
+- [ ] Share dialog: audience select initialises from the thing's acl; person
+      grants add `tt:user/<username>` entries via people search;
+      inherit-locked (attached) things are warned about and skipped, not
+      silently changed. Selecting folders reveals the "Also apply to
+      everything inside" checkbox (off by default) — applying with it on
+      updates deep descendants' acls and toasts the applied/skipped counts.
+- [ ] Right-click context menus (the design-system Thing Context Menu):
+      right-clicking a thing selects it (Finder semantics) and opens
+      Open/Copy link · Rename/Move/Share · Copy/Cut/Paste-into-folder ·
+      Delete, acting on the whole selection when the target is part of one
+      ("Copy 4 things"); right-clicking empty canvas opens New folder / Paste
+      / Sort by / Group by / View / Select all with radio-checked current
+      states. Text selections and editable fields keep the BROWSER menu; any
+      outside press closes the surface; page keyboard shortcuts pause while a
+      menu is open.
+- [ ] Sort (Newest/Oldest/Name A–Z/Z–A/Kind) and Group by (None/Kind) apply
+      across grid+list (columns stays hierarchical), folders always first,
+      persisted in the tt-things cache; a non-default arrangement eagerly
+      loads the folder's remaining pages (bounded at 1000) so ordering is
+      honest, and group sections show "📁 Folders · N"-style counts with
+      correct plurals ("Data", not "Datas"). Exercise Group by Kind with at
+      least one loaded thing so every section resolves its canonical icon;
+      grouped rendering must not throw or show the route error boundary.
+- [ ] Drag-and-drop: dragging a selected thing drags the whole selection
+      (desktop only); folder tiles/rows, tree nodes, and every breadcrumb
+      (including "All things" = root) highlight with the accent inset ring on
+      dragover, clear on dragleave, and drop = the same bulk move path as
+      Move to… (server still cycle-checks); a folder can't be dropped onto
+      itself.
+- [ ] Schema render-template previews: in Previews mode, data things stamped
+      with crystal.schemaId render through that schema's crystal.render tree
+      with `{field}` tokens interpolated from the data thing's crystal —
+      always through the sanitising Chakra/Html allowlist renderers
+      (interpolation runs BEFORE the gates, so injected values can't bypass
+      URL/CSS screening); schemas are fetched once each and cached (null
+      cached for schemas without templates); everything else keeps the
+      existing kind-registry preview with per-item icon+name fallback.
+- [ ] Deep search (top input) queries /api/v1/things/search scoped to the
+      viewer's username across ALL folders, debounced, with kind-filter
+      composition; browse mode filters kinds client-side over loaded pages.
+- [ ] Columns-view folder loading happens in an effect, never during render
+      (React "setState while rendering" stays fixed).

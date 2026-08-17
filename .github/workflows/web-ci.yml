@@ -20,7 +20,9 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  # The protected reusable workflow uses this only from its no-checkout
+  # warning-comment job; build/test jobs keep read-only job permissions.
+  pull-requests: write
 
 jobs:
   control-plane:

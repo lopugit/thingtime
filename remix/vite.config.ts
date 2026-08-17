@@ -6,6 +6,7 @@ import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
+import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
 import { designBundlesCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
@@ -68,6 +69,21 @@ const rewriteProxyCookieForLocalDev = (cookie: string) => {
 const localApiTarget = `http://127.0.0.1:${devPorts.api}`;
 const shouldUseProductionApiProxy = !hasUsableLocalApiEnv();
 const apiProxyTarget = shouldUseProductionApiProxy ? thingtimeProductionOrigin : localApiTarget;
+
+const previewFreshnessHtmlPlugin = () => ({
+  name: 'thingtime-preview-freshness-bootstrap',
+  enforce: 'pre' as const,
+  transformIndexHtml() {
+    return [
+      {
+        tag: 'script',
+        attrs: { 'data-thingtime-preview-freshness': '' },
+        children: `(${installPreviewBuildFreshness.toString()})();`,
+        injectTo: 'head-prepend' as const
+      }
+    ];
+  }
+});
 
 const designDocsStaticPlugin = () => ({
   name: 'thingtime-design-docs-static',
@@ -203,5 +219,5 @@ export default defineConfig({
       }
     }
   },
-  plugins: [react(), designDocsStaticPlugin()]
+  plugins: [previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin()]
 });

@@ -406,6 +406,9 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // /things folder browsing: one owner's direct children of one folder,
+    // newest first — fully index-provided including the page sort
+    col.createIndex({ ownerId: 1, folderId: 1, createdAt: -1, shareId: 1 }),
     // Control-plane history is relational: one ci-event per provider delivery
     // and parent entity, never an unbounded status array on the current row.
     col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }),
@@ -417,6 +420,25 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { partialFilterExpression: { storageClass: 'content' } }
     ),
     col.createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+    // Private-S3 attachment lifecycle scans. Deliberately NOT a TTL index:
+    // expiry cleanup must delete/abort S3 first and refund the user ledger in
+    // one Mongo transaction; TTL deletion would orphan bytes and accounting.
+    col.createIndex(
+      { ownerId: 1, attachmentState: 1, attachmentExpiresAt: 1, shareId: 1 },
+      { partialFilterExpression: { thingtime: 'attachment' } }
+    ),
+    // Hourly global draft reaper: expiry is the leading key so a bounded scan
+    // across owners never walks the whole attachment partition. Attached
+    // rows clear attachmentExpiresAt when bound and therefore do not enter the
+    // useful key range. This must remain a normal index, never Mongo TTL.
+    col.createIndex(
+      { attachmentExpiresAt: 1, shareId: 1 },
+      { partialFilterExpression: { thingtime: 'attachment' } }
+    ),
+    col.createIndex(
+      { targetId: 1, ownerId: 1, attachmentState: 1, createdAt: 1, shareId: 1 },
+      { partialFilterExpression: { thingtime: 'attachment', targetId: { $type: 'string' } } }
+    ),
     // schema-usage counting (schemas/browse decorate): data things are
     // grouped by crystal.schemaId (stamped) with a crystal.schema name
     // fallback for pre-stamp docs — both need index support or every

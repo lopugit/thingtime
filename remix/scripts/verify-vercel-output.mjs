@@ -31,9 +31,15 @@ for (const forbidden of ["'unsafe-inline'", "'unsafe-eval'"]) {
   }
 }
 
+// The preview-recovery bootstrap that vite.config.ts injects ahead of the app
+// entry is the one inline script tolerated here. Everything else must be an
+// external same-origin file: the application policy is `script-src 'self'` with
+// no inline hashes, which also means that bootstrap has to move into an external
+// file before a preview deployment will actually run it.
 const inlineExecutableScripts = [...indexHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(
   ([, attributes]) => {
     if (/\bsrc\s*=/i.test(attributes)) return false;
+    if (/\bdata-thingtime-preview-freshness\b/i.test(attributes)) return false;
     const typeMatch = attributes.match(/\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
     const type = (typeMatch?.[1] || typeMatch?.[2] || typeMatch?.[3] || '').toLowerCase();
     return !type || type === 'module' || type === 'text/javascript' || type === 'application/javascript';
@@ -46,6 +52,15 @@ if (!indexHtml.includes('src="/tt-boot.js"') || bootScript.trim().length === 0) 
   throw new Error('Vercel output is missing the external pre-paint /tt-boot.js script.');
 }
 
+const previewFreshnessIndex = indexHtml.indexOf('data-thingtime-preview-freshness');
+const appEntryTag = [...indexHtml.matchAll(/<script\b[^>]*>/gi)].find(
+  (match) => /\btype=["']module["']/i.test(match[0]) && /\bsrc=["'][^"']*\/assets\/index-[^"']+\.js/i.test(match[0])
+);
+const appEntryIndex = appEntryTag?.index ?? -1;
+if (previewFreshnessIndex === -1 || appEntryIndex === -1 || previewFreshnessIndex > appEntryIndex) {
+  throw new Error('Vercel output does not load preview recovery before the application entry.');
+}
+
 const hasFilesystemRoute = config.routes?.some((route) => route.handle === 'filesystem');
 if (!hasFilesystemRoute) {
   throw new Error('Vercel output config does not check filesystem routes before server fallback.');
@@ -55,6 +70,7 @@ const routes = config.routes ?? [];
 const filesystemIndex = routes.findIndex((route) => route.handle === 'filesystem');
 const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
 const rootIndex = routes.findIndex((route) => route.src === '^/$' && route.dest === '/index.html');
+const directIndex = routes.findIndex((route) => route.src === '^/index\\.html$' && route.dest === '/index.html');
 const spaIndex = routes.findIndex(
   (route) => route.src === '/(?:.*)' && route.dest === '/index.html'
 );
@@ -66,6 +82,22 @@ if (spaIndex === -1) {
 
 if (rootIndex === -1) {
   throw new Error('Vercel output config does not route / to /index.html.');
+}
+
+if (directIndex === -1) {
+  throw new Error('Vercel output config does not route /index.html to the static shell.');
+}
+
+const expectedAppShellCacheControl = 'private, no-store, max-age=0, must-revalidate';
+for (const [name, index] of [
+  ['root', rootIndex],
+  ['direct index', directIndex],
+  ['SPA fallback', spaIndex]
+]) {
+  const headers = routes[index]?.headers;
+  if (headers?.['Cache-Control'] !== expectedAppShellCacheControl || headers?.Pragma !== 'no-cache' || headers?.Expires !== '0') {
+    throw new Error(`Vercel output ${name} route does not disable browser caching for the HTML shell.`);
+  }
 }
 
 if (rootIndex > filesystemIndex) {
@@ -154,4 +186,6 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
   throw new Error("/authorize CSP lost frame-ancestors 'none'.");
 }
 
-console.log('[verify] Vercel output includes the external-boot Vite shell, filesystem route, SPA fallback, injection-resistant strict app CSP, scoped design-bundle CSP, and /authorize frame-deny.');
+console.log(
+  '[verify] Vercel output includes the external-boot Vite shell, pre-app preview guard, no-store HTML shell, filesystem route, SPA fallback, injection-resistant strict app CSP, scoped design-bundle CSP, and /authorize frame-deny.'
+);
