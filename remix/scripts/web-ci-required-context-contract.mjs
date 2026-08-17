@@ -31,7 +31,8 @@ if (source.includes(protectedCall)) {
 }
 
 const requiredFragments = [
-	'pull-requests: read',
+	'pull-requests: write',
+	'thingtime-product-contract-advisories:v1',
 	'uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0',
 	"filename.startsWith('remix/')",
 	"filename === '.github/workflows/web-ci.yml'",

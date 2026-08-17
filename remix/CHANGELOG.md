@@ -19,6 +19,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Resolver max-turn results continue and CI contracts no longer block work**:
+  an exact `error_max_turns` result now resumes the same Claude session in
+  another 500-turn request, repeating inside the existing 360-minute job
+  ceiling while preserving the original model/tool/path restrictions. Other
+  Anthropic failures still stop normally. Deterministic workflow/topology
+  contracts were removed from required unit tests and live deploy/promote/
+  rebase paths; they now run in independent advisory lanes whose failures
+  update a PR warning comment without failing build, API, or automation jobs.
+  Those control-plane lanes now shallow-check out only `.github`, avoiding a
+  full-history Graphify download before their actual checks can begin.
+  — Codex (AI), 2026-08-17
+
+- **AI resolver ceilings rise to 500 and stale labels no longer fail silently**:
+  every protected Claude conflict/rebase/advisory invocation now declares
+  `--max-turns 500`; stack and promotion conflict chains expose 500 sequential
+  rounds, accept up to 500 conflict paths, and use GitHub's 360-minute hosted
+  runner ceiling. Byte, path, secret, scope, exact-ref, and force-with-lease
+  protections remain closed. The stack detector retries label deletion,
+  verifies the live PR after every attempt, falls back to the configured
+  resolver PAT when the run token is refused, surfaces sanitized API errors,
+  and fails closed instead of leaving pause labels behind in a green scan.
+  — Codex (AI), 2026-08-17
+
 - **One merged PR can promote to several branches**: the promoter had exactly
   one target, so a source PR owing changes to two branches — #211 converts
   `main` to thin listeners *and* carries the implementation those listeners
