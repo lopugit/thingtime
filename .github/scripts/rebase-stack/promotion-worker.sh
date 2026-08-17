@@ -142,7 +142,7 @@ write_plan() {
   local path_count path_bytes
   path_count="$(wc -l <"$paths_file")"
   path_bytes="$(wc -c <"$paths_file")"
-  (( path_count <= 200 && path_bytes <= 16384 )) \
+  (( path_count <= 500 && path_bytes <= 65536 )) \
     || fail "Promotion plan exceeds the safe path cap ($path_count paths, $path_bytes bytes)."
 
   mapfile -t planned_paths <"$paths_file"
