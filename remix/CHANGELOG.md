@@ -30,7 +30,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   object-store verifier stages, commits, and pushes it. The model prompt calls
   this an intentional successful handoff, while failure comments now report
   only paths that actually remain conflicted instead of the entire pre-AI
-  merge list. — Codex (AI), 2026-08-17
+  merge list. See the [PR #271 implementation and replay note](../PRs/271-codex-deterministic-lockfile-conflict-recovery-ai-resolver-deterministically-finish-true-union-pnpm-lock-conflicts.md).
+  — Codex (AI), 2026-08-17
 
 - **Resolver max-turn results continue and CI contracts no longer block work**:
   an exact `error_max_turns` result now resumes the same Claude session in
