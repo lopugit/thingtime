@@ -94,6 +94,13 @@
 # - persist-credentials: false — no token in .git/config for the model to
 #   read; the push step injects auth via GIT_CONFIG_* env at push time only,
 #   and pushes to an explicit https URL (immune to remote-URL tampering).
+# - If the model deliberately leaves exactly one pnpm-lock.yaml marker-bearing
+#   after resolving every other conflict, a separate trusted step regenerates
+#   it from the base-side lockfile with the adjacent package.json and pinned
+#   pnpm@10.12.1. That subprocess receives an empty environment, no AI or
+#   repository-write credentials, and disables lifecycle scripts + pnpmfile
+#   hooks. The step proves every non-lockfile worktree byte stayed unchanged;
+#   the existing verifier still independently re-derives/stages/commits it.
 # - All deterministic git steps run hook-proof (core.hooksPath=/dev/null,
 #   core.fsmonitor=false via job-level GIT_CONFIG_* env), so a planted
 #   .git/hooks script can never execute.
@@ -3809,11 +3816,21 @@ jobs:
             3. Rules:
                - graphify-out/** has ALREADY been handled deterministically before you
                  ran. Never touch anything under graphify-out/.
-               - pnpm-lock.yaml / package-lock.json: only take one side wholesale, and
-                 only if the corresponding package.json resolved fully to that SAME
-                 side. If package.json needed a true union of dependency changes,
-                 LEAVE THE LOCKFILE'S MARKERS IN PLACE and say why — a human must
-                 regenerate it (the run will then stop for manual resolution).
+               - pnpm-lock.yaml: only take one side wholesale when the corresponding
+                 package.json resolved fully to that SAME side. If package.json needed
+                 a true union of dependency changes and declares
+                 "packageManager": "pnpm@10.12.1", deliberately LEAVE THAT
+                 LOCKFILE'S MARKERS IN PLACE after resolving every other conflict. A
+                 following trusted, credential-free step regenerates it with pinned
+                 pnpm@10.12.1, --lockfile-only, --ignore-scripts, and
+                 --ignore-pnpmfile, verifies its scope, then hands it to the normal
+                 commit/push verifier. That is a SUCCESSFUL HANDOFF, not a manual-
+                 resolution result and not an unfinished task. Do not try to synthesize
+                 a true-union pnpm lockfile yourself.
+               - package-lock.json: only take one side wholesale when package.json
+                 resolved fully to that SAME side. Otherwise leave its markers for
+                 manual resolution; the deterministic handoff applies only to pinned
+                 pnpm lockfiles.
                - Edit ONLY files that contain conflict markers. Do not create, rename,
                  or delete files, and do not edit non-conflicted files. (Only the
                  conflicted files are staged afterward; anything else you change is
@@ -3822,7 +3839,9 @@ jobs:
                in place rather than guessing — the workflow then stops and asks a human.
 
             When you are done, every file you could confidently resolve should have no
-            conflict markers left, and you should have touched nothing else.
+            conflict markers left, and you should have touched nothing else. The one
+            permitted successful exception is an eligible pnpm-lock.yaml intentionally
+            handed to the trusted regeneration step exactly as described above.
           # The first admin-ordered model is primary; the rest are Claude
           # Code's native availability fallbacks. This does not retry a
           # completed-but-unresolved edit with another model.
@@ -3908,7 +3927,7 @@ jobs:
             stderr="$RUNNER_TEMP/thingtime-claude-continuation.stderr"
             status=0
             claude --resume "$session_id" --print \
-              "Continue the exact bounded conflict-resolution task from this session. Finish the unresolved conflicted-file edits under the original instructions and restrictions without broadening scope." \
+              "Continue the exact bounded conflict-resolution task from this session. Finish the unresolved conflicted-file edits under the original instructions and restrictions without broadening scope. An eligible pinned pnpm lockfile may remain marker-bearing as the original prompt's successful handoff to the next trusted step; do not misclassify that handoff as unfinished." \
               "${model_args[@]}" \
               --effort max \
               --max-turns 500 \
@@ -3931,6 +3950,198 @@ jobs:
             fi
             session_id="$RESULT_SESSION"
           done
+
+      - name: Regenerate a lone pinned pnpm lockfile without credentials
+        if: steps.merge.outputs.conflicted == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # This step receives no secret expressions. Clear any value a prior
+          # process might nevertheless have exported, then execute pnpm under
+          # env -i so AI, GitHub, npm, and repository-write credentials cannot
+          # reach package resolution.
+          unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN GH_TOKEN GITHUB_TOKEN
+          unset ACTIONS_TOKEN NODE_AUTH_TOKEN NPM_TOKEN NODE_OPTIONS
+
+          if [ ! -f .git/MERGE_HEAD ]; then
+            echo "::error::Merge is no longer in progress — refusing lockfile recovery."
+            exit 1
+          fi
+          if git config --local --get-regexp '^(http\..*\.extraheader|credential\.)' >/dev/null 2>&1; then
+            echo "::error::A repository credential is persisted in local git config — refusing credential-free lockfile recovery."
+            exit 1
+          fi
+          if git config --local --list --name-only 2>/dev/null \
+             | grep -qiE '^(merge|filter|diff)\.[^.]+\.(driver|clean|smudge|process|textconv|command)$'; then
+            echo "::error::Unexpected local git driver configured — refusing lockfile recovery."
+            exit 1
+          fi
+
+          # Re-derive the exact conflicted set from immutable git objects. The
+          # model does not stage files, so `git ls-files -u` still names every
+          # original conflict even after a correct edit; marker-bearing paths
+          # are the actual residual handoff at this point.
+          merge_head="$(git rev-parse MERGE_HEAD)"
+          head_sha="$(git rev-parse HEAD)"
+          git_dir="$(git rev-parse --absolute-git-dir)"
+          attic="$(mktemp -d "$RUNNER_TEMP/lockfile-merge-tree.XXXXXX")"
+          merge_out="$(cd "$attic" && GIT_DIR="$git_dir" GIT_ATTR_NOSYSTEM=1 \
+            git -c core.attributesFile=/dev/null merge-tree --write-tree --no-messages --name-only "$head_sha" "$merge_head")" || true
+          rmdir "$attic" 2>/dev/null || true
+          automerge_tree="$(printf '%s\n' "$merge_out" | head -1)"
+          git rev-parse --verify --quiet "$automerge_tree^{tree}" >/dev/null || {
+            echo "::error::Could not recompute the auto-merge tree for lockfile recovery."
+            exit 1
+          }
+          derived="$RUNNER_TEMP/lockfile-conflicted-derived.txt"
+          residual="$RUNNER_TEMP/residual-conflicts.txt"
+          printf '%s\n' "$merge_out" | tail -n +2 | sed -n '/^$/q;p' | sort -u >"$derived"
+          : >"$residual"
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            if [ -f "$path" ] && [ ! -L "$path" ] \
+               && grep -qE '^(<{7}|\|{7}|>{7})( |$)' "$path"; then
+              printf '%s\n' "$path" >>"$residual"
+            fi
+          done <"$derived"
+          sort -u -o "$residual" "$residual"
+
+          residual_count="$(wc -l <"$residual" | tr -d ' ')"
+          if [ "$residual_count" -eq 0 ]; then
+            echo "::notice::No marker-bearing conflict remains for deterministic lockfile recovery."
+            exit 0
+          fi
+          if [ "$residual_count" -ne 1 ]; then
+            echo "::notice::$residual_count marker-bearing conflicts remain; the lockfile handoff requires exactly one."
+            exit 0
+          fi
+
+          lockfile="$(sed -n '1p' "$residual")"
+          case "$lockfile" in
+            pnpm-lock.yaml)
+              package_dir=.
+              ;;
+            */pnpm-lock.yaml)
+              package_dir="${lockfile%/pnpm-lock.yaml}"
+              ;;
+            *)
+              echo "::notice::The lone residual path is not a pnpm lockfile; the normal verifier will report it."
+              exit 0
+              ;;
+          esac
+          stage_mode="$(git ls-files -u -- "$lockfile" | awk '$3 == 3 { print $1; exit }')"
+          if [ "$stage_mode" != 100644 ]; then
+            echo "::notice::$lockfile has no regular base-side merge stage; leaving it for the normal verifier."
+            exit 0
+          fi
+
+          manifest="$package_dir/package.json"
+          if [ ! -f "$manifest" ] || [ -L "$manifest" ]; then
+            echo "::notice::$lockfile has no adjacent regular package.json; leaving it for the normal verifier."
+            exit 0
+          fi
+          if grep -qE '^(<{7}|\|{7}|>{7})( |$)' "$manifest"; then
+            echo "::notice::$manifest is still marker-bearing; leaving both paths for the normal verifier."
+            exit 0
+          fi
+          if ! node - "$manifest" <<'NODE'
+          const fs = require('node:fs');
+          const manifestPath = process.argv[2];
+          let manifest;
+          try {
+            manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          } catch {
+            process.exit(1);
+          }
+          process.exit(manifest?.packageManager === 'pnpm@10.12.1' ? 0 : 1);
+          NODE
+          then
+            echo "::notice::$manifest does not pin packageManager to pnpm@10.12.1; leaving the lockfile for manual resolution."
+            exit 0
+          fi
+
+          # Snapshot every tracked/untracked non-target change before invoking
+          # pnpm. The patch comparison catches content changes to paths that
+          # were already dirty from model resolution; status alone would not.
+          exclude_path=":(exclude)$lockfile"
+          before_patch="$RUNNER_TEMP/lockfile-nontarget-before.patch"
+          after_patch="$RUNNER_TEMP/lockfile-nontarget-after.patch"
+          before_status="$RUNNER_TEMP/lockfile-nontarget-before.status"
+          after_status="$RUNNER_TEMP/lockfile-nontarget-after.status"
+          git diff --binary --no-ext-diff HEAD -- . "$exclude_path" >"$before_patch"
+          git status --porcelain=v1 -z --untracked-files=all -- . "$exclude_path" >"$before_status"
+
+          # Begin from the base branch's valid lockfile, then regenerate against
+          # the model-resolved union package.json. Nothing is staged here; the
+          # existing object-store verifier remains the sole staging/commit path.
+          git show ":3:$lockfile" >"$lockfile"
+
+          corepack_bin="$(command -v corepack || true)"
+          if [ -z "$corepack_bin" ]; then
+            echo "::error::corepack is unavailable for pinned lockfile recovery."
+            exit 1
+          fi
+          corepack_real="$(realpath "$corepack_bin")"
+          case "$corepack_real" in
+            "$GITHUB_WORKSPACE"/*|"$RUNNER_TEMP"/*)
+              echo "::error::corepack resolved inside a model-writable path — refusing to execute it."
+              exit 1
+              ;;
+          esac
+
+          safe_home="$RUNNER_TEMP/pnpm-lockfile-home"
+          safe_store="$RUNNER_TEMP/pnpm-lockfile-store"
+          safe_corepack="$RUNNER_TEMP/pnpm-lockfile-corepack"
+          mkdir -p "$safe_home" "$safe_store" "$safe_corepack"
+          clean_env=(
+            "PATH=$PATH"
+            "HOME=$safe_home"
+            "TMPDIR=$RUNNER_TEMP"
+            "CI=true"
+            "COREPACK_HOME=$safe_corepack"
+            "COREPACK_ENABLE_DOWNLOAD_PROMPT=0"
+            "PNPM_HOME=$safe_home/.pnpm"
+            "XDG_CACHE_HOME=$safe_home/.cache"
+            "XDG_CONFIG_HOME=$safe_home/.config"
+            "NPM_CONFIG_USERCONFIG=/dev/null"
+            "NPM_CONFIG_GLOBALCONFIG=/dev/null"
+            "NPM_CONFIG_CACHE=$safe_home/.npm-cache"
+            "GIT_TERMINAL_PROMPT=0"
+            "GIT_CONFIG_COUNT=2"
+            "GIT_CONFIG_KEY_0=core.hooksPath"
+            "GIT_CONFIG_VALUE_0=/dev/null"
+            "GIT_CONFIG_KEY_1=core.fsmonitor"
+            "GIT_CONFIG_VALUE_1=false"
+            "GIT_CONFIG_GLOBAL=/dev/null"
+            "GIT_CONFIG_SYSTEM=/dev/null"
+          )
+          pnpm_args=(
+            pnpm@10.12.1
+            --dir "$package_dir"
+            install
+            --lockfile-only
+            --ignore-scripts
+            --ignore-pnpmfile
+            --store-dir "$safe_store"
+          )
+          env -i "${clean_env[@]}" "$corepack_real" "${pnpm_args[@]}"
+          env -i "${clean_env[@]}" "$corepack_real" "${pnpm_args[@]}" --frozen-lockfile
+
+          if grep -qE '^(<{7}|\|{7}|={7}|>{7})( |$)' "$lockfile"; then
+            echo "::error::Pinned pnpm regeneration left conflict markers in $lockfile."
+            exit 1
+          fi
+          git diff --binary --no-ext-diff HEAD -- . "$exclude_path" >"$after_patch"
+          git status --porcelain=v1 -z --untracked-files=all -- . "$exclude_path" >"$after_status"
+          if ! cmp -s "$before_patch" "$after_patch" \
+             || ! cmp -s "$before_status" "$after_status"; then
+            echo "::error::Pinned pnpm regeneration changed a path other than $lockfile — refusing the result."
+            exit 1
+          fi
+
+          : >"$residual"
+          echo "::notice::Regenerated $lockfile with credential-free pinned pnpm@10.12.1; the normal verifier will stage and commit it."
 
       - name: Verify resolution and commit
         if: >-
@@ -4013,10 +4224,13 @@ jobs:
             fi
           done < "$RUNNER_TEMP/conflicted-derived.txt"
 
-          # Any unmerged path left now is an unresolved conflict.
-          if [ -n "$(git ls-files -u)" ]; then
+          # Any unmerged path left now is an unresolved conflict. Persist only
+          # that residual set for the failure comment; never fall back to the
+          # pre-model list, which made fully resolved files look unresolved.
+          git ls-files -u | awk -F'\t' '{print $2}' | sort -u >"$RUNNER_TEMP/residual-conflicts.txt"
+          if [ -s "$RUNNER_TEMP/residual-conflicts.txt" ]; then
             echo "::error::Unresolved paths remain:"
-            git ls-files -u | awk -F'\t' '{print $2}' | sort -u
+            cat "$RUNNER_TEMP/residual-conflicts.txt"
             exit 1
           fi
 
@@ -4611,6 +4825,35 @@ jobs:
             fi
           done < <(jq -cS '[range(0; length; 200) as $start | .[$start:$start + 200]][]' <<<"$children")
 
+      - name: Collect residual conflicts for failure reporting
+        if: failure() && steps.merge.outputs.conflicted == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          residual="$RUNNER_TEMP/residual-conflicts.txt"
+          if [ -s "$residual" ]; then
+            sort -u -o "$residual" "$residual"
+            exit 0
+          fi
+
+          # A failure can happen before the verifier stages resolved paths. In
+          # that case git's unmerged index still contains every original path,
+          # so report only files whose working-tree markers actually remain.
+          : >"$residual"
+          source_list="$RUNNER_TEMP/conflicted-derived.txt"
+          [ -s "$source_list" ] || source_list="$RUNNER_TEMP/lockfile-conflicted-derived.txt"
+          [ -s "$source_list" ] || source_list="$RUNNER_TEMP/conflicted.txt"
+          if [ -s "$source_list" ]; then
+            while IFS= read -r path; do
+              [ -n "$path" ] || continue
+              if [ -f "$path" ] && [ ! -L "$path" ] \
+                 && grep -qE '^(<{7}|\|{7}|>{7})( |$)' "$path"; then
+                printf '%s\n' "$path" >>"$residual"
+              fi
+            done <"$source_list"
+          fi
+          sort -u -o "$residual" "$residual"
+
       - name: Comment on PR (needs attention)
         if: failure() && steps.preflight.outputs.ready == 'true'
         env:
@@ -4731,15 +4974,14 @@ jobs:
             elif [ "$WF_BLOCKED" = "true" ]; then
               echo "⚠️ Merging \`$BASE_REF\` into this branch changes \`.github/workflows/\`, which the default token cannot push. Merge the base branch manually (\`git merge $BASE_REF\`), or add a \`CONFLICT_RESOLVER_PAT\` secret (repo + workflow scope) so this workflow can handle it. [Workflow run]($RUN_URL)"
             else
-              echo "⚠️ Could not auto-resolve conflicts with \`$BASE_REF\` — manual resolution needed. See the [workflow run]($RUN_URL)."
-              # prefer the verify step's recomputed list when it exists; the
-              # merge step's list is informational (pre-AI)
-              list="$RUNNER_TEMP/conflicted-derived.txt"
-              [ -s "$list" ] || list="$RUNNER_TEMP/conflicted.txt"
+              list="$RUNNER_TEMP/residual-conflicts.txt"
               if [ -s "$list" ]; then
+                echo "⚠️ Could not auto-resolve every conflict with \`$BASE_REF\` — manual resolution is needed for the residual paths below. See the [workflow run]($RUN_URL)."
                 echo
-                echo "Conflicted files (as recorded by the merge step):"
+                echo "Residual conflicted files:"
                 sed 's/^/- `/; s/$/`/' "$list"
+              else
+                echo "⚠️ The resolver stopped in a later safety, verification, or publication step. No residual conflicted paths were confirmed; see the [workflow run]($RUN_URL)."
               fi
             fi
             if [ "$paused" = true ]; then
