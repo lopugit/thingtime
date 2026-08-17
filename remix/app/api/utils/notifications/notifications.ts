@@ -4,14 +4,12 @@ import { ObjectId } from 'mongodb';
 // Notifications are identity-adjacent (they belong to the RECIPIENT, not to
 // whatever data plane the actor's request was riding), so every access here is
 // home-pinned — same rationale as users.ts.
-import {
-  getHomeThingsCollection as getThingsCollection,
-  getUsersCollection
-} from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { getUserNotificationPrefs } from '../auth/users';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, normalizeNotificationPrefs } from '~/schemas/registry';
 import type { NotificationType } from '~/schemas/registry';
 import { emailNotificationsBulk, maybeEmailNotification } from './emails';
+import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 
 // Notifications are PROTECTED things minted only here (see registry.ts
 // PROTECTED_THINGTIME): ownerId = recipient, targetId = the subject thing
@@ -167,12 +165,14 @@ const loadActors = async (
   const [userThings, legacyUsers] = await Promise.all([
     things
       .find({ thingtime: 'user', shareId: { $in: ids } } as any)
-      .project({ shareId: 1, crystal: 1 })
+			.project({ shareId: 1, crystal: 1, avatarAttachmentId: 1 })
       .toArray(),
     objectIds.length
-      ? (await getUsersCollection())
+			? (
+					await getUsersCollection()
+			  )
           .find({ _id: { $in: objectIds } })
-          .project({ username: 1, displayName: 1, avatarUrl: 1 })
+					.project({ username: 1, displayName: 1, avatarUrl: 1, avatarAttachmentId: 1 })
           .toArray()
       : Promise.resolve([])
   ]);
@@ -180,14 +180,14 @@ const loadActors = async (
     map.set(String(doc._id), {
       username: doc.username || null,
       displayName: doc.displayName || null,
-      avatarUrl: typeof doc.avatarUrl === 'string' ? doc.avatarUrl : null
+			avatarUrl: effectiveProfileMediaUrl(doc, 'avatar')
     });
   }
   for (const doc of userThings as any[]) {
     map.set(String(doc.shareId), {
       username: doc.crystal?.username || null,
       displayName: doc.crystal?.displayName || null,
-      avatarUrl: typeof doc.crystal?.avatarUrl === 'string' ? doc.crystal.avatarUrl : null
+			avatarUrl: effectiveProfileMediaUrl(doc, 'avatar')
     });
   }
   return map;
@@ -200,18 +200,10 @@ export type ListNotificationsResult = {
   nextBefore: string | null;
 };
 
-export const listNotifications = async (
-  userId: string,
-  options: { limit?: unknown; before?: unknown } = {}
-): Promise<ListNotificationsResult> => {
+export const listNotifications = async (userId: string, options: { limit?: unknown; before?: unknown } = {}): Promise<ListNotificationsResult> => {
   const limitRaw = Number(options.limit);
-  const limit = Number.isFinite(limitRaw)
-    ? Math.min(Math.max(Math.floor(limitRaw), 1), MAX_LIST_LIMIT)
-    : DEFAULT_LIST_LIMIT;
-  const before =
-    typeof options.before === 'string' && !Number.isNaN(Date.parse(options.before))
-      ? new Date(options.before)
-      : null;
+	const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.floor(limitRaw), 1), MAX_LIST_LIMIT) : DEFAULT_LIST_LIMIT;
+	const before = typeof options.before === 'string' && !Number.isNaN(Date.parse(options.before)) ? new Date(options.before) : null;
 
   const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(userId));
   // Push master off = the bell goes quiet entirely (list AND badge), without
@@ -255,8 +247,7 @@ export const listNotifications = async (
     };
   });
 
-  const nextBefore =
-    docs.length === limit ? new Date((docs as any[])[docs.length - 1].createdAt).toISOString() : null;
+	const nextBefore = docs.length === limit ? new Date((docs as any[])[docs.length - 1].createdAt).toISOString() : null;
   return { ok: true, notifications, unreadCount, nextBefore };
 };
 
@@ -265,9 +256,7 @@ export const markNotificationsRead = async (
   input: { ids?: unknown; all?: unknown }
 ): Promise<{ ok: false; status: number; error: string } | { ok: true; updated: number }> => {
   const all = input.all === true;
-  const ids = Array.isArray(input.ids)
-    ? input.ids.filter((id): id is string => typeof id === 'string' && !!id.trim()).slice(0, 200)
-    : [];
+	const ids = Array.isArray(input.ids) ? input.ids.filter((id): id is string => typeof id === 'string' && !!id.trim()).slice(0, 200) : [];
   if (!all && !ids.length) {
     return { ok: false, status: 400, error: 'Pass ids to mark, or all: true' };
   }

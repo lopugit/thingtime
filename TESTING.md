@@ -15,6 +15,145 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] In a fresh Git checkout, `git ls-files -s AGENTS.md CLAUDE.md` reports
       mode `120000` for both links and both still resolve to `AI_ALL.md`.
 
+## Repository-root Vercel builds
+
+- [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
+      build, the nested config is absent, ordinary product commits build,
+      `github-actions` and generic Preview duplicate SHAs skip, the `develop`
+      Custom Environment still rebuilds an already-previewed SHA, a valid Nitro
+      artifact is staged at root, and invalid source output preserves the prior
+      artifact.
+- [ ] Run `npm run build:vercel` from the repository root. Confirm both the
+      existing Remix verifier and the root wrapper pass, then inspect
+      `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
+      than an `outputDirectory` selected by the dashboard.
+- [ ] In Vercel, clear the old `remix` Root Directory and all Build, Install,
+      Output Directory, and Ignored Build Step overrides; select Other as the
+      framework. Confirm a product-branch commit builds from root and serves
+      `/`, one `/assets/...` file, and `/api/root-data` from the same deployment.
+- [ ] Confirm the literal `github-actions` branch and a disposable branch made
+      from the thin control plane create no Vercel deployment. The product
+      config must map `github-actions` to `false`, while the thin branch config
+      must set `git.deploymentEnabled` to `false` and retain `ignoreCommand` as
+      a second fail-safe.
+
+## Develop-target Vercel PR previews
+
+- [ ] Confirm `.github/workflows/develop-pr-preview.yml` and its controller
+      script are present on the default `main` branch before expecting
+      `pull_request_target` to run; a workflow present only on the feature PR is
+      deliberately inactive.
+- [ ] On a product branch, run
+      `node remix/scripts/workflow-caller-contract.mjs` and
+      `node --test remix/scripts/vercel-config.test.mjs`: the thin listener
+      checks out the trusted controller from `main`, `.github/scripts/` is
+      empty, and every Vercel cron `(path, schedule)` pair appears exactly once.
+- [ ] Inspect an eligible PR's two runs: the `pull_request_target` dispatcher
+      has no GitHub Environment/Vercel secret, checks out no code, and emits one
+      bounded `repository_dispatch`; only the downstream default-branch run
+      enters `vercel-develop-pr-control`, checks out `main`, and receives the
+      controller secret. Neither GitHub job executes the PR head.
+- [ ] Replay or forge a dispatch payload with a wrong source run id, workflow
+      path, repository, PR, action, actor, or head SHA: the privileged job fails
+      closed before any Vercel mutation. A stale legitimate dispatch also no-ops
+      after the live PR SHA fence.
+- [ ] Inspect the private `vercel-develop-pr-control` GitHub Environment
+      without printing values: only the `main` deployment branch is allowed,
+      `VERCEL_CUSTOM_ENVIRONMENT_ID` contains the exact immutable develop ID,
+      `DEVELOP_PREVIEW_TRUSTED_ACTORS` is explicit, the Vercel token is the
+      fresh dedicated `VERCEL_DEVELOP_DEPLOY_TOKEN` environment secret, the two
+      domain variables match controlled domains, the masked
+      `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret is an unsigned exact
+      develop-bucket HTTPS object URL with no query, and no live `env_*` ID,
+      bucket name, or token appears in tracked controller files or workflow
+      logs.
+- [ ] Confirm the active `main` `Basic Protection` ruleset has no bypass,
+      requires a pull request with resolved review threads, both strict Web CI
+      jobs, and the CodeQL Analyze checks for actions and javascript-typescript,
+      and blocks deletion and force-pushes. Confirm the controller Environment
+      has no required reviewer so event cleanup and six-hour reconciliation
+      remain automatic. CODEOWNERS presence alone is not an enforcement check;
+      independent CODEOWNER approval is optional future hardening once a second
+      trusted collaborator can review changes.
+- [ ] In Vercel, confirm `dev.thingtime.com` is bound to the literal `develop`
+      Git branch and has no domain `customEnvironmentId`, rather than being
+      bound to the whole Custom Environment; the Custom Environment's own domain
+      list is empty. Confirm a newly built generic Preview has all current
+      `develop` variables plus the six existing Preview-only values, while
+      production MongoDB/JWT/S3 values remain absent.
+- [ ] On a `develop` Custom Environment deployment, confirm `/api/root-data`
+      reports `THINGTIME_VERCEL_ENV=develop` and
+      `THINGTIME_SHOW_DEPLOYMENT_STATUS=true`; `/api/v1/vercel/status` returns
+      JSON with HTTP 200, and `/status` renders the deployment status instead of
+      the React Router 404 boundary. Repeat on an ordinary Preview deployment.
+- [ ] Open or update a same-repository, trusted-author PR targeting `develop`:
+      the `Develop S3 PR preview` workflow deploys the exact head SHA, the
+      one marker comment moves through deploying to ready, the GitHub Deployment
+      reaches success, and the comment links
+      `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
+      after the build completes.
+- [ ] For an exact SHA that already has a READY generic Preview, run the
+      controller again and confirm its `develop` Custom Environment deployment
+      builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
+      marker comment must reach the ready state for that exact SHA.
+- [ ] Confirm the wildcard Vercel domain is verified and detached, its
+      Cloudflare `*.previews.dev` CNAME targets `cname.vercel-dns.com` with
+      DNS-only proxying, and `_acme-challenge.previews.dev` has NS delegations
+      to both `ns1.vercel-dns.com` and `ns2.vercel-dns.com` without moving the
+      apex nameservers or delegating a broader subtree. Confirm its Git branch
+      and Custom Environment bindings are empty. Do not require Vercel's
+      external-DNS advisory to report `misconfigured: false`: independently
+      confirm a probe hostname resolves to Vercel's currently recommended
+      CNAME target and the published PR alias presents a valid certificate.
+- [ ] From that alias, sign in and upload/remove a small attachment: the direct
+      S3 `PUT` preflight permits only that exact origin pattern, `PUT`, and
+      `x-amz-checksum-sha256`; it exposes no headers, the bucket remains private,
+      and storage usage returns to its original value. Repeat from
+      `https://dev.thingtime.com` and a newly built generated
+      `https://thingtime-*-lopugits-projects.vercel.app` Preview; reject an
+      unrelated origin.
+- [ ] Update the PR twice: the same alias moves to the newest successful SHA,
+      the comment is edited rather than duplicated, and older workflow-created
+      develop deployments are deleted. A canceled/superseded run must not move
+      the alias after the newer SHA wins.
+- [ ] A fork PR, draft PR, non-allowlisted author/actor, read-only collaborator,
+      and PR targeting `main` never receive a controller-managed develop alias.
+      If Vercel builds their ordinary Preview, confirm it uses only the shared
+      development role/data plane and cannot assume the production AWS role.
+      Retargeting or converting an eligible PR to draft cleans its existing
+      controller-managed alias/deployment.
+- [ ] Confirm `*.previews.thingtime.com` is not used by the develop controller.
+      Until a separately protected production-preview controller exists, no
+      ordinary Preview can assume the production role or publish a trusted
+      production-preview alias.
+- [ ] With two eligible PRs open, use disposable accounts and verify that their
+      aliases intentionally see the same development data/quota plane; do not
+      describe either alias as an isolated sandbox.
+- [ ] Close the develop-target PR: its alias is removed, its transient GitHub
+      Deployment becomes inactive, and workflow-created Vercel deployments are
+      deleted without moving `dev.thingtime.com`.
+- [ ] Simulate a missed close/interrupted cleanup with workflow-tagged test
+      resources, then run/wait for the six-hour scheduled reconciliation: it
+      removes stale alias/deployments idempotently while preserving unmarked
+      deployments and the stable `develop` branch deployment. Manually dispatch
+      one PR number and verify the bounded per-PR recovery path separately.
+
+## iOS web destination drawer
+
+- [ ] Confirm `https://thingtime.com/api/v1/vercel/deployments?limit=50` reports
+      `source: "api"`, `hasError: false`, and more than the production `main`
+      deployment before testing the native picker. A tokenless response or
+      `Vercel API returned 403` means the Vercel project token must be repaired
+      and a fresh deployment built before the app can discover previews.
+- [ ] Launch the iOS app with at least twelve returned destinations, open the
+      left-edge Web destination drawer, and scroll from the first row to the
+      final row and back. The header, refresh, and close controls stay pinned;
+      rows do not clip or overlap the home indicator in portrait or landscape.
+- [ ] Drag vertically over a destination row and confirm the list scrolls
+      without dismissing the drawer. Then swipe predominantly left and confirm
+      the drawer closes; reopen it, select an off-screen preview, and confirm
+      the web view loads that exact URL.
+
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
 - [ ] In a fresh linked worktree with no copied `node_modules`, run
@@ -26,9 +165,20 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
       scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+- [ ] In a disposable worktree, remove one transitive pnpm link required by
+      ESLint while leaving every direct dependency link present, then run the
+      targeted lint command: the startup probe performs one forced relink and
+      ESLint starts. `npm --prefix remix run ensure-deps -- --check` also proves
+      both ESLint and the directly declared Prettier CLI can start.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
+- [ ] Seed the `thingtime` LocalForage value with a legacy unrevivable function
+      plus root `set` / `get` runtime methods, then load `/feed` ONCE: the
+      collapsed “What's on your mind?” control opens, Editor.js accepts focus
+      and typing, Latest / Filters and the global search remain interactive,
+      and the repaired stored snapshot already contains neither runtime method
+      nor the legacy fallback before a second navigation.
 - [ ] Open the feed composer → Thingtime tab: the editor shows exactly ONE
       root property, `New Thing`, with no default children (no `name`).
 - [ ] The draft path is session-scoped (`tmp.<sessionId>.New Thing`): add a
@@ -52,6 +202,171 @@ is fixed, and cite the checklist you ran in the PR description.
       the first rename (`path-renamed` bus event).
 - [ ] The in-post editor height-drags via the bottom handle (mouse and touch)
       with no upper limit, and never below the small floor.
+
+## Post and comment attachments (`remix/app/components/Attachments/`)
+
+- [ ] Top-level post, rich comment, and reply composers use the same responsive
+      attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
+      flow remains available as a quota-saving alternative on every rich
+      post/comment surface.
+- [ ] In Photos, add one public image URL, then paste several newline-separated
+      URLs. Valid unique URLs become responsive preview tiles in stable order,
+      duplicates are skipped, invalid/credentialed URLs remain editable with an
+      accessible error, and linked images use `referrerPolicy=no-referrer`.
+- [ ] The visual upload area uses responsive thumbnail tiles plus a real
+      `🏞️ Add Media` control. At desktop and 390px mobile widths it has no
+      horizontal overflow; the URL fallback panel and every lower composer
+      control remain reachable after scrolling top-to-bottom.
+- [ ] Pick and drag/drop raster images, a supported video, and an arbitrary
+      file. Safe image/video previews appear immediately; each row reports
+      progress; Post stays disabled until every selected file is Ready; and a
+      26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] Cancel an in-flight file, remove a completed draft file, and retry both a
+      failed part upload and a failed completion. No file is silently omitted,
+      duplicated, charged twice, or left in a permanent uploading state.
+- [ ] Drop the upload-start response after the server reserves storage, then
+      retry/remove: the stable request id resolves the same owner-scoped upload
+      without a second charge. A different account using that request id gets
+      its own opaque attachment id and learns nothing about the first.
+- [ ] Remove an MPU before any part URL is issued: its empty reservation refunds
+      promptly. Remove after a part URL was issued: the UI explains that bytes
+      remain reserved while lifecycle-backed cleanup settles, without exposing
+      server or S3 error text.
+- [ ] Post an attachment without body text, then post URL photos and uploaded
+      attachments together. The optimistic card receives stable metadata only
+      and survives a later reload without persisting a presigned URL.
+- [ ] Add an attachment-only comment, a text-plus-files comment, and a reply
+      containing an image, video, and generic download. Each renders inline or
+      as a safe download exactly like the parent post, survives reload and its
+      `/post/:id` permalink, and never persists a presigned URL.
+- [ ] Build a 6+-deep reply chain and attach a file at multiple depths. An
+      authorized viewer can open each file through the inherited root ACL;
+      logged-out, unauthorized, broken-chain, and custom-Mongo collision reads
+      return not found without revealing attachment metadata.
+- [ ] Simulate a lost attachment-comment response, then retry. The immutable
+      shareId, comment payload, and exact attachment set reconcile once without
+      a duplicate comment or second quota charge. A definitive first-attempt
+      rejection returns the composer to an editable state.
+- [ ] Delete an attached reply, an attached comment subtree, and finally the
+      root post. Every descendant object's exact S3 version is removed before
+      its attachment Thing and quota charge; a partial remote failure keeps the
+      remaining tombstone billed and retryable rather than orphaning bytes.
+- [ ] Feed, profile, nested repost, and permalink cards render vetted raster
+      images and videos inline. SVG, HTML, script, and unknown types render only
+      as named download rows; their bytes never execute inline.
+- [ ] Let a content URL expire at the storage provider and open the attachment
+      again: the stable authenticated `/api/v1/attachments/content?id=…` route
+      issues fresh access. A private post's attachment fails closed for another
+      account and logged-out browser.
+- [ ] Exhaust the active account tier, then select a file larger than the
+      remaining allowance. Every post, comment, message, reply, emoji, avatar,
+      and banner picker shows the fixed account-quota message with delete-media
+      or upgrade-tier recovery; it must never call this an unavailable
+      environment or echo ledger/provider detail. Removing the draft or
+      deleting the bound content reconciles usage, and `ready` / `reconciling`
+      / `unavailable` storage labels never present unknown accounting as
+      unlimited capacity.
+- [ ] Switch Thingtime accounts during prepare, hashing, direct upload, and
+      completion. Requests and XHRs cancel, local previews clear, and no draft
+      attachment ID or storage content crosses into the new account.
+- [ ] Simulate a lost post-create response: the exact first payload becomes
+      inert, retry uses the same post id and attachment set, and an exact GET
+      readback completes once without duplicating the post. A first-attempt
+      attachment 409 does not freeze an otherwise editable draft.
+- [ ] At desktop and narrow mobile widths, long filenames truncate without
+      horizontal overflow, multi-sentence errors span the available row width
+      instead of wrapping one or two words per line, controls remain at least
+      44px touchable, keyboard users can add/retry/cancel/remove files, and
+      progress/error updates are announced without stealing focus.
+- [ ] Through the local Vite proxy or a trusted reverse proxy, attachment and
+      profile-media mutations succeed only when `Origin` matches the forwarded
+      public host/protocol. A mismatched origin or `Sec-Fetch-Site: cross-site`
+      request remains forbidden even if forwarded headers are spoofed.
+- [ ] In the production AWS account, all four account-level and bucket-level
+      Block Public Access switches are on, Object Ownership is Bucket Owner
+      Enforced, versioning is enabled, default encryption is on, and no bucket
+      ACL or public-access policy is present.
+- [ ] The Vercel OIDC role trust policy matches the exact team audience and
+      `owner:<team>:project:<project>:environment:production` subject. A
+      production function can assume it; preview/development tokens cannot.
+- [ ] The Vercel Custom Environment named `develop` has an exact `develop`
+      branch matcher, owns the verified `https://dev.thingtime.com` domain,
+      and is the only non-production scope containing the four Sensitive S3 /
+      cleanup variables. Generic Preview contains none of them.
+- [ ] On an ordinary feature-branch Preview, selecting a file fails before
+      quota reservation with the fixed client-authored “private uploads are
+      unavailable in this environment” guidance and offers the public image URL
+      fallback. Never expose Vercel, proxy, AWS, role, bucket, or request text.
+- [ ] The develop role trusts only
+      `owner:<team>:project:<project>:environment:develop`. A deployed develop
+      function can assume it, while a feature-branch
+      `environment:preview` token and local `environment:development` token
+      are both denied.
+- [ ] The attachment role is limited to `objects/*` and the documented eight
+      version-aware multipart/object actions. Confirm `s3:ListBucket`,
+      `s3:DeleteObject`, ACL, and bucket-administration actions are denied.
+- [ ] The bucket policy denies HTTP and TLS below 1.2 for non-service
+      principals. CORS preflight succeeds only for the production origin's
+      `PUT` with `x-amz-checksum-sha256`; a different origin, method, or header
+      is denied, and no response header is unnecessarily exposed.
+- [ ] Repeat the bucket controls against develop: only
+      `https://dev.thingtime.com` can preflight its checksum-locked `PUT`, and
+      neither environment's role can read, write, list, or delete objects in
+      the other environment's bucket.
+- [ ] The enabled `objects/` lifecycle rule aborts incomplete multipart uploads
+      after seven days and permanently expires noncurrent versions after 30
+      days. Account and bucket settings still match after a fresh console load.
+- [ ] Upload a tiny production attachment, record its S3 VersionId and storage
+      usage, then delete its post. That exact version is permanently absent
+      before the Thingtime ledger refunds the bytes; no delete marker or hidden
+      noncurrent copy stands in for deletion.
+- [ ] Call `/api/v1/attachments/cleanup` with no bearer, a Thingtime user token,
+      and an incorrect cron secret: every request fails closed. The exact
+      production `CRON_SECRET` succeeds only through the scheduled cleanup
+      path, and a cleanup retry never exposes the secret or raw S3 errors.
+- [ ] After this PR's routes are deployed to `develop`, confirm the develop
+      EventBridge rule invokes
+      `https://dev.thingtime.com/api/v1/attachments/cleanup` at minute 17 each
+      hour through its one-purpose API Destination/role. Its exact develop
+      secret succeeds, missing/wrong secrets fail, and EventBridge reports no
+      failed invocation.
+- [ ] After the same deployment, upload a tiny attachment on
+      `dev.thingtime.com`, complete it, render or download it, then remove the
+      draft or delete its post. The exact S3 version disappears and the account
+      storage meter returns to its starting value without touching the
+      production bucket.
+
+## Profile avatar and banner media (`remix/app/components/Profile/`)
+
+- [ ] Open both Edit profile and Settings → Profile. With no saved image, each
+      avatar/banner field shows a responsive `🏞️ Add Media` tile and a separate
+      “Use public image URL” fallback; all controls remain at least 44px.
+- [ ] Select JPEG, PNG, GIF, WebP, and AVIF files. A local preview paints
+      immediately, progress/retry/remove remain usable, Save stays disabled
+      until the image is ready, and SVG/non-image/empty/>64 MiB files fail with
+      fixed client-authored guidance before upload.
+- [ ] Save a managed avatar and banner, reload, and verify profile, feed cards,
+      search, notifications, Messenger/account navigation, and the owned-account
+      roster render the stable same-origin content URL without exposing an S3
+      key, upload id, version id, or presigned URL.
+- [ ] Load a public profile logged out and verify its current managed avatar and
+      banner render. A replaced, unbound, cross-account, wrong-slot, custom-Mongo
+      collision, or arbitrary attachment id must return not found.
+- [ ] Replace a saved managed avatar/banner, clear it, and switch it to one
+      credential-free http(s) URL. The user-slot update and new attachment bind
+      are atomic; the old object stays charged until exact-version deletion and
+      then the storage meter refreshes to the correct value.
+- [ ] Paste a valid external image URL: it previews with no referrer, remains a
+      quota-saving remote link, and is never server-fetched. Credentialed,
+      protocol-relative, whitespace/control-character, and non-http(s) URLs are
+      rejected without raw server/proxy text.
+- [ ] Close the editor, navigate away, or switch accounts while a profile upload
+      is preparing/uploading/ready-but-unsaved. Requests cancel, local object
+      URLs clear, unbound drafts are cleaned safely, and no filename, preview,
+      attachment id, or storage state flashes into the next account.
+- [ ] Simulate a lost profile-save response and retry the same attachment ids.
+      An already-bound exact owner/slot succeeds idempotently; a mismatched slot
+      or changed attachment fails closed without deleting another current image.
 
 ## Editor windows & layer system (`remix/app/components/Thingtime/EditorSplit.tsx`)
 
@@ -117,7 +432,7 @@ is fixed, and cite the checklist you ran in the PR description.
       `props:{position:'fixed',inset:0,zIndex:99999,…}` renders as a data
       tree, NOT a viewport overlay; image/audio/cover URLs with unsafe schemes
       fall back to the emoji placeholder. Verify via DOM: no `a[href^=
-  "javascript:"]`, no fixed/absolute high-z overlay from post content.
+"javascript:"]`, no fixed/absolute high-z overlay from post content.
 - [ ] Editing a feed thing (context menu → Toggle Edit Mode) and pressing
       Cmd/Ctrl+Z does NOT undo the viewer's own persisted tree — the keydown
       is contained to the sandbox (native field undo still works).
@@ -215,6 +530,19 @@ is fixed, and cite the checklist you ran in the PR description.
       OUTWARD only: native share sheet where available, otherwise copy-link
       with the Lopu toast — logged-out users can still share, while react /
       repost nudge them to log in.
+- [ ] The owner's ⋯ menu is Edit ✏️ / Copy link 🔗 / a Privacy radio group
+      (current circle checked) / Delete 🗑️ — not Delete alone. Copy link
+      always copies to the clipboard (never the native share sheet); a
+      privacy pick updates the header circle badge optimistically and
+      persists (server acl follows, e.g. friends → `-tt:all`,
+      `tt:userFriends`, `tt:user`).
+- [ ] Edit ✏️ mounts the FULL composer suite inside the card, pre-filled
+      from the post: type tabs (text/photos/marketplace/thingtime), text,
+      image rows, listing fields, thingtime draft seeded with the post's
+      existing thing, tags, and the post's CURRENT circle. Save persists
+      text + circle and swaps the card to the server copy; the close X
+      cancels without changes. Shares edit their caption only (the nested
+      original stays visible below the textarea).
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
@@ -230,6 +558,37 @@ is fixed, and cite the checklist you ran in the PR description.
       show the user's avatar IMAGE when one is set — the rainbow initial
       circle is only the no-avatar fallback (regression: UserAvatarCircle
       ignored avatarUrl entirely).
+- [ ] The drawer account footer splits: clicking the avatar/name row goes to
+      /profile (drawer dismisses on both viewports) while the gear button
+      opens the settings modal (desktop centred modal, mobile bottom sheet)
+      WITHOUT navigating. Logged out, the row reads "Log in" and opens the
+      settings modal (account switcher hosts log-in) instead of navigating.
+
+## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
+
+- [ ] The self-profile action row is Edit profile ✏️ / All settings ⚙️ /
+      Log out 🗝️ (+ Resend verification when unverified): All settings
+      navigates to /settings, and the buttons wrap cleanly on mobile with no
+      overflow.
+
+## Required Web CI contexts (`.github/workflows/web-ci.yml`)
+
+- [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
+      `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
+      runner)`, while both required-context companion jobs have distinct
+      skipped names and cannot satisfy a failed real job. Reusable callers keep
+      the same inner names under their existing `control-plane /` prefix.
+- [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
+      confirm the lightweight companions report both exact required-context
+      names successfully and the expensive build/API jobs have distinct
+      skipped names. Neither context may remain in Expected/Pending state.
+- [ ] Break the path-classification job deliberately in a disposable branch.
+      Confirm neither exact required-context name is emitted and branch
+      protection blocks the PR instead of treating a skipped job as proof.
+- [ ] Break either product workflow/topology contract in a disposable branch.
+      Confirm neither command runs inside `test:unit`, build/API keep their
+      real result, and the protected `github-actions` advisory updates one
+      warning comment without producing a failing or required status.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
@@ -277,6 +636,131 @@ is fixed, and cite the checklist you ran in the PR description.
       lands, the live-ref check must classify it as published rather than
       retrying it.
 
+## Per-feature develop → main promoter (protected `.github/scripts/promote-features-to-main.mjs`)
+
+- [ ] Merge a standalone source PR whose exact promotion patch conflicts with
+      `main`. Confirm the thin `develop` caller contains no executable behavior,
+      retains `actions: write`, and invokes the protected promoter. The promoter
+      must first prove the historical source patch is still effective at the
+      current `develop` tip, then create one immutable reservation branch,
+      dispatch one bot-authored worker to the fixed `github-actions` resolver
+      revision, and continue processing unrelated groups. The worker must
+      re-derive the source plan and live base/branch SHAs, resolve the conflict,
+      replace the reservation with an exact-lease push, and open the promotion
+      PR without any manual cherry-pick or follow-up promoter run.
+- [ ] Confirm an automatically resolved promotion PR has the `promotion`,
+      `ai-conflict-resolved`, and `review-ai-resolution` labels plus an upserted
+      comment naming the immutable source/base SHAs, resolver run, and exact
+      files that require review. Its merged source PR must link to the created
+      promotion PR. A Graphify-only collision must say it was resolved
+      deterministically without invoking a model.
+- [ ] Put a creation-time conflict in the middle of a three-member promotion
+      stack. The first member must remain the verified base, the conflicting
+      member must be queued exactly once, and a trusted follow-up promoter run
+      must resume the final dependent member on the resolved promotion branch.
+      A failed worker may defer only its dependent members; unrelated clean and
+      conflicting groups must continue independently.
+- [ ] Race the worker by moving the source tip, target base, or reservation
+      branch before resolution and immediately before push. Every stale worker
+      must stop without overwriting newer work, then permit a changed snapshot
+      to be planned automatically. Repeat after crashes following reservation
+      push, resolved-branch push, and PR creation; reruns must converge on one
+      branch, one promotion PR, and one current status comment.
+- [ ] Attempt the internal promotion handoff manually, from a feature workflow
+      revision, with malformed SHAs/refs, or with mismatched source/base/plan
+      metadata. No secret-bearing worker may start. During a valid run, make the
+      model leave conflict markers, edit a clean/non-planned path, introduce an
+      unsafe file type, or alter the trusted workflow/action copy. Verification
+      must reject publication and leave an exact-snapshot `ai-promotion-paused`
+      review comment instead of repeatedly spending model budget.
+- [ ] Promote a source whose diff includes `graphify-out/**`. Source-side
+      Graphify artifacts must never be cherry-picked or supplied to the model;
+      regenerate them from the exact promotion base plus selected feature and
+      verify the portable graph pair is coherent before publication.
+- [ ] Replace the Graphify executable in the worker fixture with one that
+      changes `HEAD` while leaving a clean worktree. Refresh and publication
+      must fail closed. A legitimate derived Graphify commit must be exactly
+      one direct child of the already-verified source head and may change only
+      the approved Graphify output paths.
+- [ ] Set `conflict-marker-size=10` for a planned text path and leave real
+      10-character start/base/end markers after the model round; verification
+      must reject them. A standalone Markdown `=======` divider must remain
+      valid and must not be treated as an unresolved conflict.
+- [ ] Exercise both conflict-free and AI-resolved promotions that change
+      `.github/**` after source authority is positively verified. Confirm their
+      bot-authored content commits carry `[skip ci]` rather than executable
+      historical commit messages, the promotion PR is created by
+      `GITHUB_TOKEN`, and an empty non-skip review-checkpoint child produces
+      approval-gated `pull_request` checks without executing the edited
+      automation automatically. Crash before/after checkpoint push and leave
+      duplicate pending comments: the next promoter run must recover the one
+      live checkpoint, make the latest final attestation authoritative, and
+      repair all review labels/comments idempotently.
+- [ ] Move the promotion base after the resolved content branch is published.
+      Confirm the bot records an exact durable retirement, closes and
+      lease-deletes only its unchanged stale branch, and requeues the source.
+      Stop after close and before delete, then repeat with a concurrently moved
+      branch and a transient reopen failure: recovery must resume exact cleanup
+      or preserve/reopen the moved branch, cancel every stale retirement event,
+      and respect a later intentional reviewer closure.
+- [ ] Merge a feature PR into `develop`, record its two-parent merge SHA, then
+      force-rewrite `develop` to an equivalent cherry-pick so that merge object
+      is no longer advertised by any ref. From a fresh full clone, confirm the
+      promoter's self-test first proves the object is absent, fetches it by
+      exact SHA with both parents, proves a stable patch-equivalent commit is
+      still effective at the current `develop` tip, performs the mainline
+      cherry-pick, and gets the expected tree. Repeat after a later revert and
+      with overlapping source edits that make both forward and reverse checks
+      inconclusive: the exact patch must remain mechanically recoverable, but
+      the promoter must classify the full aggregate range, not only its last
+      commit, as removed or ambiguous and block visibly before creating any
+      reservation, branch, AI worker, or promotion PR.
+- [ ] Exercise both a mechanically clean replay and a potentially conflicting
+      replay whose recovered source patch is removed or ambiguous at current
+      `develop`. Each must create no reservation, branch, immutable promotion
+      plan, AI worker, or promotion PR; the blocked summary must name the checked
+      `develop` tip and lineage classification. Defer only later members of that
+      promotion group while unrelated groups continue, and confirm no review
+      branch or PR is opened.
+- [ ] Move `develop` so a previously ambiguous blocked source becomes
+      verifiably present. A later run may proceed only after freshly proving
+      source authority and must create a new verified plan rather than upgrading
+      the blocked result in place. Conversely, a still-removed or ambiguous
+      patch, missing merge object, unreadable or empty exact patch, Git
+      inspection failure, or unknown lineage enum must create no reservation,
+      branch, worker, or PR and remain visible in the blocked summary. A worker-
+      observed classification mismatch after verified dispatch must stop before
+      publication and leave a visible blocked result.
+- [ ] Run the orphaned-history self-test with the clone's Git author name
+      deliberately empty. The attempted mainline cherry-pick must return an
+      operational error, abort the sequencer, leave `HEAD` at the target base,
+      and clean both the index and tracked worktree instead of treating the
+      words `empty ident name` as an empty source patch.
+- [ ] Configure a valid Git identity, apply the recovered source pick, then
+      apply that identical pick again. The second, genuinely empty pick must
+      be skipped from verified sequencer/index state and leave the promoted
+      tree unchanged.
+- [ ] Give one standalone source PR an invalid or unavailable historical merge
+      object between two valid standalone PRs. A dry run must report that PR as
+      blocked, continue to plan the later independent PR, and publish both the
+      block and partial plan in the step summary without exiting early.
+- [ ] Repeat with the unavailable PR in the middle of a named promotion stack.
+      The failed member and only its later dependent stack members must be
+      deferred while the next unrelated group continues. Force an unexpected
+      group-local Git error as well and confirm later groups still run.
+- [ ] Re-run after a partial batch has already created promotion PRs. Existing
+      `promotion-of` markers and branches must prevent duplicates, including
+      records older than the first 200 repository PRs, while `MAX_NEW_PRS`
+      counts reused branches as newly opened PRs too. Force-update an open
+      promotion branch between runs and confirm the promoter fetches its live
+      OID before stacking the next member rather than using a stale local ref;
+      a repurposed branch, same-path/whitespace drift, duplicate provenance,
+      or an OPEN promotion targeting the wrong stack base must be blocked. For
+      an external stack, validate every OPEN link back to `main` and every
+      CLOSED source merged before the current group; any unshipped earlier
+      CLOSED member must stop dependents, while a later successor must not be
+      misclassified as their prerequisite.
+
 ## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
 
 - [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
@@ -298,6 +782,27 @@ is fixed, and cite the checklist you ran in the PR description.
       duplicate/unknown model, wrong key, or empty array emits a warning and
       selects only `--model default`; no stored value can inject another CLI
       flag.
+- [ ] Save a new Admin order, then issue GETs through separate warm app
+      instances immediately (no 15-second wait): both must read the new
+      home-DB value. With Mongo unavailable, a warm instance may return its
+      last-known-good order and a cold instance must return only `default`.
+- [ ] Put `claude-opus-5` first and exercise a merge conflict, a replay/rebase
+      conflict, and each workflow's semantic Graphify refresh. Logs must show
+      the same Admin-selected primary for every Claude/Graphify invocation;
+      no refresh may inject literal Sonnet. Repeat with `default` first and
+      confirm Graphify leaves its backend default unforced. Run
+      `node remix/scripts/workflow-caller-contract.mjs --self-test` in the
+      product branch and `node .github/scripts/workflow-control-plane-contract.mjs
+      --self-test` in the `github-actions` control plane to prove both the
+      delegated callers and every AI runtime remain bound to the contract.
+- [ ] Request an AI-backed Lopu musing with an Anthropic key and confirm its
+      Anthropic request uses the same current Admin primary. Reorder from Opus
+      to Fable without restarting the app; the next musing must use Fable.
+- [ ] Put `default` first and request an Anthropic-backed Lopu musing. It must
+      use the provider-valid `LOPU_CLAUDE_MODEL` fallback, never send the
+      literal Claude Code `default` sentinel to Anthropic. With OpenAI first,
+      the OpenAI call must retain `LOPU_OPENAI_MODEL`; if it falls through to
+      Claude, that Claude call must still resolve the current Admin preference.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently
@@ -307,22 +812,26 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
-      Confirm **Rebase PRs and stacks (AI)** detects both while the merge-based
-      resolver correctly no-ops, and that replaying more than one conflicting
-      commit can advance through multiple bounded Claude/verify/continue
-      rounds. Then make a standalone PR genuinely merge-conflicting and
-      confirm only **Resolve PR conflicts (AI)** owns it.
+      Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
+      manual scans leave both histories untouched: they are not stacks and
+      already merge cleanly. An explicit PR-number retry may still replay one
+      deliberately. Then make a standalone PR genuinely merge-conflicting and
+      confirm only **Resolve PR conflicts (AI)** owns it. Regression class:
+      standalone replay failures were incorrectly force-rebased and could
+      ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
       root is rebased, confirm the child dispatch receives the old and new
       parent SHAs, replays with onto semantics, and completes root-to-leaf
-      without duplicating the parent's commits.
+      without duplicating the parent's commits. Confirm a stack member with
+      either `mergeable: false` or `rebaseable: false` remains rebase-owned,
+      while a clean stack is left alone.
 - [ ] Exercise detection from a branch push, PR opened/reopened event, the
-      scheduled scan, and a manual PR-number dispatch. Automatic scans select
-      every same-repo PR regardless of base branch, route standalone merge
-      conflicts to the merge workflow, do not race a blocked child ahead of
-      its parent, and terminate after resolution instead of looping on the
-      workflow's own push. A blank manual dispatch must perform the same
-      repository-wide scan.
+      scheduled scan, and a manual PR-number dispatch. Automatic scans evaluate
+      every same-repo PR regardless of base branch, never dispatch a
+      standalone history rewrite, route standalone merge conflicts to the
+      merge workflow, do not race a blocked child ahead of its parent, and
+      terminate after resolution instead of looping on the workflow's own
+      push. A blank manual dispatch must perform the same repository-wide scan.
 - [ ] Return unknown merge/rebaseability for several PRs at once and confirm
       polling proceeds round-robin, giving every candidate an API check in each
       bounded round. Exercise a stack deeper than eight PRs and confirm it is
@@ -609,7 +1118,7 @@ is fixed, and cite the checklist you ran in the PR description.
       the entry's acl becomes `["tt:user", "tt:app/<clientId>"]`.
 - [ ] A plain `{ key, value }` rewrite of an existing shared entry keeps it
       shared (audience only changes when the write names one); `visibility:
-  'private'` flips the acl back to `["tt:user"]`.
+'private'` flips the acl back to `["tt:user"]`.
 - [ ] GET /api/v1/app-data/shared returns other users' `visibility: 'app'`
       entries for the SAME app only — never private entries, never another
       app's entries — newest first, and `key=post:*` prefix-filters.
@@ -630,7 +1139,7 @@ is fixed, and cite the checklist you ran in the PR description.
       stamp; reads, updates, and deletes aimed at a first-party thing's id
       (or another app's doc) all 404.
 - [ ] App writes are acl-clamped: an acl beyond `tt:user` / `tt:app/<own
-  clientId>` (tt:all, other apps, other users, exclusions) 400s; an
+clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       insert that omits visibility/acl lands PRIVATE (never the generic
       route's public default); `save`/`share` thingtimes 403 as first-party
       surfaces; protected kinds stay refused.
@@ -826,7 +1335,7 @@ re-checks the whole management plane end-to-end:
 `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
-      the dashboard (Users / Apps / Tiers / System tabs) for admins; the drawer's
+      the dashboard (Users / Apps / Tiers / CI Control / System tabs) for admins; the drawer's
       Account section shows the 🛠️ Admin item only for admins.
 - [ ] Users tab: free-text query searches every safe projected field; typed
       filters cover created-day ranges, tier id/name/version, booleans, quotas,
@@ -909,6 +1418,91 @@ re-checks the whole management plane end-to-end:
       the page body itself never scrolls horizontally; modals fit with no
       clipped controls.
 
+## Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`)
+
+- [ ] With a prior snapshot cached, CI Control paints the last-known feature
+      rows on first render without a spinner, then reconciles in the background.
+      A failed refresh preserves those rows, says they are cached, and retries.
+- [ ] Anonymous and non-admin callers receive the standard admin denial from
+      all three `/api/v1/admin/ci*` endpoints. The dashboard never renders for
+      them and the webhook routes do not accept a browser session as authority.
+- [ ] Send the same signed GitHub delivery twice: the entity projection is
+      current and exactly one relational `ci-event` exists for that delivery
+      and parent. A payload with one changed byte, a missing delivery header,
+      another repository, or a bad HMAC is rejected without writes.
+- [ ] Send Vercel deployment created → ready and retry each exact body. One
+      current deployment and preview projection advance to ready; exact retries
+      do not duplicate history. Invalid HMAC and payloads over 2 MiB fail.
+- [ ] GitHub reconciliation groups promotion PRs with their source feature,
+      paginates beyond 100 branches/open PRs, refreshes runs/deployments,
+      preserves existing event history, and never exposes the App private key
+      or installation token.
+- [ ] Dispatch every allowlisted workflow and confirm the audit row moves
+      requested → accepted (or failed) with a relational event. Arbitrary
+      workflow names, non-allowlisted inputs, and feature-branch entry refs
+      cannot reach GitHub. Rebase/release require the UI confirmation gate.
+- [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
+      and verify the cached dashboard updates optimistically and rolls back with
+      authored copy on failure. Web CI and Electron release visibly remain
+      GitHub-only rather than accepting an unsupported provider.
+- [ ] Remove each Vercel-provider prerequisite in turn (GitHub App id,
+      installation id, private key, router secret, and Vercel runtime identity).
+      The Admin badge says setup is needed, names the missing server setting,
+      disables the Vercel option, and a direct policy POST returns the authored
+      409 without changing the prior policy. Vercel is shown ready only when all
+      prerequisites are present.
+- [ ] Send a fresh, correctly HMAC-signed provider request and verify a GitHub
+      policy returns `execute: true`; a Vercel policy creates exactly one
+      idempotent dispatch for duplicate delivery keys. Reject stale timestamps,
+      changed bodies, unknown workflows/inputs, and bad signatures without
+      starting a Workflow or writing a claim.
+- [ ] With Vercel selected, confirm the native GitHub trigger performs only its
+      provider-router job, a durable Vercel Workflow creates one uniquely
+      labelled ephemeral Sandbox runner, and the exact protected workflow
+      re-enters on that runner. Confirm completion/failure is projected and the
+      Sandbox plus GitHub runner registration are deleted afterward.
+- [ ] On Vercel's universal image, bootstrap must run GitHub's version-matched
+      `bin/installdependencies.sh` non-interactively and provide `/dev/fd` from
+      `/proc/self/fd` before registration. Make each command fail in turn and
+      verify the provisional exact runner/Sandbox is still cleaned even though
+      `createRunner()` never returns its handle to the outer Workflow.
+- [ ] Remove or invalidate each router dependency in turn (router secret, App,
+      Workflow/Sandbox auth) and verify automatic triggers fail over to
+      GitHub-hosted compute with a visible event instead of silently stopping.
+- [ ] Before the first Reconcile, the configured-but-empty dashboard explains
+      that no provider events have been imported. Run Reconcile once and verify
+      existing branches, open PRs, runs, deployments, and previews populate;
+      subsequent GitHub/Vercel deliveries advance the same records and history.
+- [ ] Desktop: search/filter feature rows, select a PR, open its GitHub and
+      preview links, inspect topology, Actions runs, and the full status
+      timeline. Scroll the page top-to-bottom and the sticky detail panel to its
+      bottom without clipping, overlap, or horizontal page overflow.
+- [ ] Mobile (375px): search/filter rows, open the bottom detail drawer, scroll
+      every section, open the dispatch modal and confirmation state, then close
+      both. The drawer is flush left/right/bottom, has no clipped controls, and
+      the page never scrolls horizontally.
+- [ ] Run `node scripts/workflow-caller-contract.mjs` manually or inspect its
+      protected advisory comment: every product-branch workflow has exactly
+      one reusable call pinned to `@github-actions`, no runner/steps/shell
+      behavior, and no product-branch Actions scripts. A mismatch warns but
+      does not join the required unit-test aggregate.
+
+PR #220 live acceptance recorded on 2026-08-10:
+
+- [x] A human exact-PR trigger handed off to Vercel, registered one unique
+      runner, re-entered as `thingtime-ci-control[bot]`, ran the protected
+      detector successfully, and deleted the exact runner and Sandbox.
+- [x] A setup failure after the original trigger exited dispatched the same
+      protected workflow back to GitHub-hosted compute through the App.
+- [x] First authenticated Reconcile populated the CI dashboard; GitHub App,
+      webhook, provider-router, and Vercel readiness were visible together.
+- [x] Desktop and 375 px mobile acceptance covered provider persistence,
+      dispatch confirmation/cancel, PR #220 detail panel/drawer, full-page
+      scrolling, and zero horizontal overflow.
+- [x] `node scripts/workflow-caller-contract.mjs`, focused CI-control tests,
+      targeted lint, build/output verification, and Graphify integrity checks
+      passed for the published branch.
+
 ## App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`)
 
 - [ ] Logged-out visitors get the sign-in card. An owner sees every registered
@@ -927,7 +1521,7 @@ re-checks the whole management plane end-to-end:
       plan change. Existing users without overrides immediately inherit it.
 - [ ] Select one user or many (up to all 200 shown) and apply a custom cap;
       each protected `app-storage` ledger records its own override, `Use app
-  default` unsets it, and runtime usage reports the effective cap. A custom
+default` unsets it, and runtime usage reports the effective cap. A custom
       value above the aggregate is refused; a later aggregate downgrade clamps
       enforcement even if a historical override was larger.
 - [ ] The roster includes users with current or past grants/ledgers, but a
@@ -1071,8 +1665,9 @@ re-checks the whole management plane end-to-end:
       only reach explicit opt-ins. Throttle: >10 notification emails to one
       recipient within an hour are silently skipped (digest excluded). A
       failed/slow send never fails or delays the triggering action.
-- [ ] One-click unsubscribe: the footer link (`/api/v1/notifications/email/
-      unsubscribe?uid&token`) flips ONLY the email master off, renders the
+- [ ] One-click unsubscribe: the footer link
+      (`/api/v1/notifications/email/unsubscribe?uid&token`) flips ONLY the
+      email master off, renders the
       confirmation page (mobile viewport included), is idempotent, and rejects
       a tampered token with the 400 page. Bell/push switches are untouched;
       re-enabling from Settings works.
@@ -1107,6 +1702,10 @@ re-checks the whole management plane end-to-end:
       (`navigator.webdriver`) browsers skip client-side too.
 - [ ] Views are tracked on every post surface: feed, profiles (both wired via
       PostList) and the `/post/:id` permalink page.
+- [ ] Activate a custom Mongo endpoint containing a public post whose shareId
+      matches a home post: its card shows zero home view stats, view reports
+      count zero, and create/comment/reaction/share activity emits no home bell
+      notification or email. Resetting to home restores normal telemetry/emits.
 
 ## Messenger (chats, communities, custom emojis) (`remix/app/components/Messenger/`, `/api/v1/chats*`, `api/utils/messenger/`)
 
@@ -1134,6 +1733,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Threads: Reply in thread opens the side panel, replies stay OUT of the
       main list, the root shows a 🧵 count chip. One level deep only —
       replying to a reply files under the same root.
+- [ ] In DMs, groups, message requests, community channels, inline replies, and
+      Slack-style threads, the composer shows the same responsive attachment
+      gallery as posts. Send image, video, generic file, text-plus-files, and
+      attachment-only messages; each optimistic message reconciles to stable
+      metadata and safe inline/download rendering after reload.
+- [ ] Simulate a lost message-send response with files. The composer freezes
+      the immutable request id, text, and attachment set, then exact retry
+      reconciles one message without duplicate bytes or chat-preview drift.
+      Known validation failures remain editable and show only authored errors.
+- [ ] A non-member, departed member, declined request recipient, arbitrary id,
+      and custom-Mongo shareId collision cannot open a message attachment. A
+      current pending/active participant can, including from a thread reply.
+- [ ] Delete an attachment message and verify its exact S3 versions disappear
+      before the soft-delete/refund completes, the chat preview loses its file
+      count, and displayed account storage refreshes without a stale balance.
 - [ ] Reactions: hover/long-press → quick row + full picker; same token
       toggles off; custom tab lists community + personal emojis; a custom
       reaction renders its image chip for OTHER members too (resolved by id,
@@ -1141,7 +1755,11 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       endpoint (namespace isolation both ways).
 - [ ] Custom emojis: upload ≤512KB gif/webp/png/jpeg → renders inline via
       `:name:` in messages, animated gifs animate; duplicate name in scope
-      409s; another user's PERSONAL emoji is refused in your chat.
+      409s. Personal emoji can render for authenticated recipients where it was
+      used; community emoji content remains membership-gated. The upload uses
+      the same single-tile gallery, charges the uploader's storage tier, and
+      deleting it removes the exact S3 version before refunding quota. Legacy
+      inline data-URI emoji remain read-only and cannot be newly created.
 - [ ] Read receipts: opening a chat advances your receipt (forward-only —
       REGRESSION: reading an old message must never rewind it); seen-by
       avatars appear under the last-read message in Messenger mode; the
@@ -1160,5 +1778,150 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       admin, else earliest member.
 - [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
       kind 403s ("managed by their own endpoints"); chats/messages are 404
-      through `GET /api/v1/things?id=` for non-owners; `POST
-      /api/v1/things/react` cannot reach another member's chat message.
+      through `GET /api/v1/things?id=` for non-owners;
+      `POST /api/v1/things/react` cannot reach another member's chat message.
+
+## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
+
+- [ ] A fresh browser landing directly on `/things` blocks first paint only
+      long enough to create one temporary session user, then serves the real
+      Things UI (never the logged-out sign-in hero). Reload and navigation
+      reuse the same user/roster entry without creating duplicates; direct
+      `/login` and `/register` remain reachable so another account can be
+      added without losing the temporary space. Existing signed-in users are
+      never replaced. Once authenticated, `/things` seeds instantly from
+      `tt-things-<userId>` localStorage cache and background-refetches.
+- [ ] Temporary-session identity stays visually logged out: the top navigation
+      says `Login` (never `Temporary space`), while account/profile/person
+      surfaces say `Anonymous` with `Login to claim`. Generated `guest-*`
+      usernames and placeholder `@temporary.thingtime.invalid` emails never
+      appear in normal UI. Login/register can claim or add a real account
+      without deleting the recoverable temporary roster entry.
+- [ ] Folder CRUD: New → New folder creates a `["folder"]` thing (private by
+      default) inside the CURRENT folder; rename edits `crystal.name`; folders
+      never combine with other schemas (`["post","folder"]` 400s).
+- [ ] Containment is a `folderId` pointer on the child: move = PATCH
+      `{ id, folderId }` (null = root); a folder can never move into itself or
+      its own subtree (400, cycle-safe ancestor walk); reactions/saves refuse
+      folderId; deleting a folder RE-PARENTS its contents to the folder's
+      parent instead of deleting them.
+- [ ] `GET /api/v1/things?folder=root|<id>` lists only that folder level for
+      the owner; v1/pre-folder docs read as root; `folderId` is a searchable
+      root field on /search conditions.
+- [ ] Bulk ops (`POST /api/v1/things/bulk`, ≤100 ids): move/copy/delete/share
+      run the SAME single-item paths (updateThing/createThing/deleteThing)
+      with per-item ok/error results — one bad id never fails the batch, and
+      the toast reports "N done, M skipped" honestly. Copy refuses
+      comment/reaction/save/share things and mints fresh shareIds ("Copy of"
+      name hint on data things and folders).
+- [ ] Recursive folder copy: copying a FOLDER duplicates its whole subtree
+      through the same per-item create path (snapshot-first, so copying a
+      folder into itself terminates), skips uncopyable kinds with honest
+      copied/skipped counts, and refuses trees over 500 things BEFORE copying
+      anything (never a half-copied tree).
+- [ ] Bulk share (`op: 'share'` + acl/visibility): applies the audience per
+      item via updateThing; `recursive: true` flows a folder's audience to
+      everything inside (same 500 bound, refused past it), counting
+      inherit-locked things as skipped, never silently changing them. Missing
+      acl 400s the whole batch loudly.
+- [ ] Selection: click selects, Cmd/Ctrl toggles, Shift ranges, Cmd/Ctrl+A
+      selects all loaded, Escape clears; the View / Show / Arrange / Kind
+      toolbar remains visible in its top position while the contextual toolbar
+      appears beneath it. Mobile: tap OPENS, checkboxes select; both toolbars
+      wrap without overlap or horizontal overflow.
+- [ ] Clipboard: Copy/Cut (toolbar or Cmd/Ctrl+C/X) then Paste into any folder
+      (Cmd/Ctrl+V or the Paste pill); cut items dim until pasted; cut+paste
+      moves, copy+paste duplicates.
+- [ ] Delete always confirms first (permanent — cascade note; folder
+      re-parenting note when folders are selected); optimistic removal
+      reconciles by refetch.
+- [ ] Views: grid / list (name-kind-audience-tags-updated columns) / Miller
+      columns (click folder opens next column, path highlighted). The
+      Names/Previews toggle applies to ALL views: previews live-render each
+      thing through the kind registry (crystal.render templates win, then
+      crystal.thing, then the crystal itself) inside bounded, pointer-inert
+      boxes, falling back to icon+name per item; folders always show as icons.
+- [ ] Search + browse controls: the animated rainbow search ring is flush on
+      all four sides (including after focus/resize), and every View / Show /
+      Arrange / Kind pill keeps non-zero, even inline padding around its icon
+      and label on desktop and mobile wrapping layouts.
+- [ ] Things badge density: Theme Studio and both Appearance quick-settings
+      surfaces switch the View / Show / Arrange / Kind pills live between
+      Small / Medium / Large; Custom accepts safe 1–4-value CSS padding
+      shorthand, persists after navigation/reload, and invalid CSS cannot
+      escape into another declaration. Small is the compact default.
+- [ ] Auto-icons use the ordered file-type registry: screenshot-like names win
+      over generic image MIME/extensions (`🖼️`), ordinary photos/images use
+      `🏞️`, known media/document/archive/install families are distinct, and an
+      unrecognised attachment honestly falls back to `💾` rather than `🌀`.
+- [ ] On a moving Vercel branch alias, leave the preview open on mobile, deploy
+      a client change, then foreground/focus the old tab. It fetches the live
+      alias HTML without cache and reloads only when the hashed `index-*.js`
+      entry differs. The refreshed Feed Filters/composer/search input and
+      Things New/View/Arrange controls all respond; production-domain tabs do
+      not run this preview freshness check.
+- [ ] On iOS Safari, navigate away from a Vercel preview and return with Back.
+      The inline preview recovery bootstrap loads before the main application
+      entry and a `pageshow.persisted` restore immediately replaces the page
+      with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
+      `/things` returns `Cache-Control: private, no-store, max-age=0,
+      must-revalidate`, while `/assets/*` remains outside the HTML no-store
+      route.
+- [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
+      and the old `Function could not be revived` fallback values, reload Feed
+      and open “What's on your mind?”. Hydration reports no function syntax
+      exception; the composer focuses and edits, Photos opens, close restores
+      the collapsed composer, and Latest / Filters / navigation still respond.
+- [ ] In Mobile Safari with a retained signed-in session and Commander closed,
+      physically tap the collapsed “What's on your mind?” control immediately
+      after a fresh Feed navigation. The composer opens on that first tap;
+      tapping its Editor.js placeholder opens the keyboard and retains typed
+      text; Photos opens; and the Tags input focuses and retains typing. The
+      document has no Commander `touchend` click-away listener, and opening
+      Commander then clicking or focusing outside still closes it without
+      consuming the target control's action.
+- [ ] Preview modal deep link `/things?preview=<id>` opens any viewable thing
+      (ThingView tree + Move/Share/Delete actions) and is what Copy link hands
+      out for non-post things (posts link `/post/:id`).
+- [ ] Share dialog: audience select initialises from the thing's acl; person
+      grants add `tt:user/<username>` entries via people search;
+      inherit-locked (attached) things are warned about and skipped, not
+      silently changed. Selecting folders reveals the "Also apply to
+      everything inside" checkbox (off by default) — applying with it on
+      updates deep descendants' acls and toasts the applied/skipped counts.
+- [ ] Right-click context menus (the design-system Thing Context Menu):
+      right-clicking a thing selects it (Finder semantics) and opens
+      Open/Copy link · Rename/Move/Share · Copy/Cut/Paste-into-folder ·
+      Delete, acting on the whole selection when the target is part of one
+      ("Copy 4 things"); right-clicking empty canvas opens New folder / Paste
+      / Sort by / Group by / View / Select all with radio-checked current
+      states. Text selections and editable fields keep the BROWSER menu; any
+      outside press closes the surface; page keyboard shortcuts pause while a
+      menu is open.
+- [ ] Sort (Newest/Oldest/Name A–Z/Z–A/Kind) and Group by (None/Kind) apply
+      across grid+list (columns stays hierarchical), folders always first,
+      persisted in the tt-things cache; a non-default arrangement eagerly
+      loads the folder's remaining pages (bounded at 1000) so ordering is
+      honest, and group sections show "📁 Folders · N"-style counts with
+      correct plurals ("Data", not "Datas"). Exercise Group by Kind with at
+      least one loaded thing so every section resolves its canonical icon;
+      grouped rendering must not throw or show the route error boundary.
+- [ ] Drag-and-drop: dragging a selected thing drags the whole selection
+      (desktop only); folder tiles/rows, tree nodes, and every breadcrumb
+      (including "All things" = root) highlight with the accent inset ring on
+      dragover, clear on dragleave, and drop = the same bulk move path as
+      Move to… (server still cycle-checks); a folder can't be dropped onto
+      itself.
+- [ ] Schema render-template previews: in Previews mode, data things stamped
+      with crystal.schemaId render through that schema's crystal.render tree
+      with `{field}` tokens interpolated from the data thing's crystal —
+      always through the sanitising Chakra/Html allowlist renderers
+      (interpolation runs BEFORE the gates, so injected values can't bypass
+      URL/CSS screening); schemas are fetched once each and cached (null
+      cached for schemas without templates); everything else keeps the
+      existing kind-registry preview with per-item icon+name fallback.
+- [ ] Deep search (top input) queries /api/v1/things/search scoped to the
+      viewer's username across ALL folders, debounced, with kind-filter
+      composition; browse mode filters kinds client-side over loaded pages.
+- [ ] Columns-view folder loading happens in an effect, never during render
+      (React "setState while rendering" stays fixed).

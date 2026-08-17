@@ -19,6 +19,411 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
+  now lets the controller build an already-previewed commit in the isolated
+  `develop` Custom Environment instead of canceling it as a duplicate, while
+  the thin `github-actions` control plane remains excluded before every other
+  rule. — Codex (AI), 2026-08-17
+- **Vercel status in custom environments**: deployment status now checks
+  Vercel's system environment and custom target independently, so the
+  Preview-backed `develop` target keeps `/api/v1/vercel/status`, `/status`, and
+  the footer status enabled without a dashboard override. The API and root-data
+  paths now share one tested feature gate. — Codex (AI), 2026-08-17
+- **Accurate attachment quota recovery**: upload preparation now preserves
+  bounded storage failure codes through the API and distinguishes a full
+  account tier from missing environment configuration, temporary private
+  storage outages, and storage-accounting reconciliation. Every shared media
+  picker uses the current account allowance as a safe fallback and tells users
+  to delete stored media or upgrade their tier instead of incorrectly claiming
+  that uploads are unavailable in the environment. File-row errors now span
+  the available width on narrow screens instead of being squeezed between the
+  preview and action controls. Unexpected server, ledger, proxy, and provider
+  detail remains hidden. See the
+  [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
+  — Codex (AI), 2026-08-11
+
+### Added
+
+- **Recoverable first-session Things space**: a fresh browser can land on
+  `/things` and immediately receive the real Things UI through a rate-limited
+  temporary user Thing, bounded subscription, normal browser session, and
+  account-switcher roster entry. The pre-paint bootstrap is idempotent,
+  preserves existing signed-in users, retains ordinary ACL/quota enforcement,
+  and leaves login/register reachable so the browser can add another account
+  without discarding its temporary space. Temporary sessions now retain the
+  standard logged-out `Login` navigation while every visible identity surface
+  presents `Anonymous` and `Login to claim`, never the generated guest handle
+  or placeholder email. — Codex (AI), 2026-08-12
+- **Per-automation GitHub/Vercel compute routing**: Admin → CI Control can now
+  keep each supported automation on GitHub-hosted runners or move its expensive
+  work to an ephemeral Vercel Sandbox with one toggle. A signed, idempotent
+  provider route starts a durable Vercel Workflow, registers a uniquely labelled
+  self-hosted runner, dispatches the exact protected `github-actions` workflow,
+  projects its status history, and removes the runner/Sandbox afterward. Native
+  trigger routing fails over to GitHub compute when the external path is not
+  configured or is unavailable; Docker-backed Web CI and native Electron builds
+  remain explicitly GitHub-only. Fork-safe App permissions, secrets, bootstrap,
+  first-Reconcile behavior, and regression checks are documented in
+  README/TESTING. — Codex (AI), 2026-08-10
+- **Conversation media, file attachments, and S3 custom reactions**: rich
+  comments and replies now use the same gallery-style linked-media and private
+  upload UI as posts, while DMs, groups, requests, community channels, inline
+  replies, and Slack-style threads can send image, video, audio, or generic
+  files—including attachment-only messages. Stable owner-scoped request ids,
+  atomic purpose/target binding, exact lost-response reconciliation, inherited
+  comment ACLs, current-chat membership checks, nested cascade cleanup, and
+  exact-version deletion keep storage private and tier accounting fail-closed.
+  Custom reaction emoji now bind quota-accounted GIF/PNG/JPEG/WebP uploads
+  instead of accepting new inline base64 payloads; legacy emoji remain
+  read-compatible. See the
+  [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
+  — Codex (AI), 2026-08-10
+- **Gallery-style post and profile media**: post photo links now use responsive
+  preview tiles with stable multi-line URL add, deduplication, credential-free
+  http(s) validation, and no-referrer previews, while private image/video/file
+  uploads use a Facebook-like `🏞️ Add Media` tile without removing the
+  quota-saving URL option. Avatar and banner editors in both Profile and
+  Settings can now upload safe raster images through the same private,
+  checksummed S3 pipeline or retain an external URL. Profile attachment purpose
+  and slot are server-owned; ready media binds to the exact owner/user slot in
+  the profile transaction, renders through the stable same-origin content
+  route, and old bytes remain billed until exact-version cleanup. Ordinary PR
+  Previews now explain that private storage is unavailable there without
+  exposing provider errors; the develop Custom Environment remains the secure
+  positive upload target. See the
+  [PR #232 implementation notes](../PRs/232-codex-media-gallery-profile-attachments--add-media-galleries-and-managed-profile-attachments.md).
+  — Codex (AI), 2026-08-09
+- **Isolated develop S3 attachment environment**: `dev.thingtime.com` now maps
+  to a branch-tracked Vercel Custom Environment named `develop`, with its own
+  private bucket, exact-subject OIDC role, dev-origin-only CORS, Sensitive S3
+  variables, and cleanup secret. Generic feature previews receive no attachment
+  configuration and their shared Preview OIDC identity cannot assume the
+  develop role. Because Vercel Cron runs Production only, a one-purpose AWS
+  EventBridge API Destination is configured to invoke develop cleanup hourly;
+  its first successful invocation and the positive upload/delete smoke wait for
+  this PR's routes to be deployed to `develop`. Production bucket configuration,
+  variables, and objects remain unchanged; its role gained the required
+  `s3:PutObjectTagging` action used by Thingtime's tagged multipart start. —
+  Codex (AI), 2026-08-09
+- **Private S3 post attachments with exact tier accounting**: posts can upload
+  images, video, audio, and generic files directly through checksummed multipart
+  S3 uploads without exposing AWS credentials or public objects. Protected
+  relational attachment Things reserve verified object bytes against the same
+  transactional account storage ledger as Mongo content, stable authorized
+  content routes replace persisted presigned URLs, and unsafe active content is
+  forced to download. S3 VersionIds keep sniff/tag/read/delete pinned to the
+  exact verified object version before quota refund, stable client request ids
+  make ambiguous upload starts idempotent, and an hourly bounded cron safely
+  retries expired or crash-interrupted cleanup behind a lifecycle-backed,
+  two-pass multipart settlement fence. Production uses an exact-subject Vercel
+  OIDC role and server-only `THINGTIME_PRIVATE_*` configuration; comments and
+  messenger/thread surfaces remain intentionally unchanged in this post-only
+  scope. See the
+  [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
+  — Codex (AI), 2026-08-09
+- **One GitHub Actions control plane + Admin CI dashboard**: executable CI,
+  promotion, sync, release, rebase, and AI conflict-resolution behavior now
+  lives on the protected `github-actions` branch. `main`/`develop` retain only
+  GitHub-required trigger/input/permission callers pinned to that branch, with
+  a regression contract that rejects runner steps or local Actions scripts.
+  Admin → CI Control renders cached feature/branch/PR/run/deployment/preview
+  topology, signed GitHub/Vercel webhook freshness, relational status history,
+  GitHub App reconciliation, and allowlisted audited dispatch controls across
+  desktop and mobile. All current projections and append-only events are
+  protected, system-owned, non-billable Things. Fork-safe App/webhook setup and
+  failure-preserving verification are documented in README/TESTING. Reconcile
+  pagination covers repositories with more than 100 branches, and administrator
+  dispatches can enter only through the reviewed `develop`/`main` listeners. —
+  Codex (AI), 2026-08-09
+
+### Fixed
+
+- **Repository-root Vercel builds preserve the app's pnpm pin and function
+  aliases**: the root package now declares pnpm 10.12.1 to match Remix, so
+  Corepack cannot select Vercel's newer global pnpm before entering the nested
+  workspace. Output promotion preserves Nitro's relative function symlinks,
+  keeping route aliases inside the root artifact instead of pointing back into
+  `remix/.vercel/output`. The deployment contract covers both invariants. —
+  Codex (AI), 2026-08-17
+- **Vercel builds now start at the repository root without deploying the thin
+	CI branch**: root `vercel.json` installs only the Remix workspace, a tested
+	wrapper preserves the existing Vite/Nitro verification before staging the
+	Build Output API artifact at root `.vercel/output`, and the attachment-cleanup
+	and weekly-summary crons now live in that same root config. Both config and the
+	ignored-build decision exclude `github-actions`. The matching control-plane
+	config disables Git deployments for that branch and its descendants. Setup
+	and live verification steps are recorded in README, TESTING, and
+	VERCEL_DEPLOYMENTS. — Codex (AI), 2026-08-17
+- **Root bootstrap no longer exposes server secrets**: browser-visible loader
+  configuration is now built from an explicit status-origin allowlist instead
+  of every `THINGTIME_*` variable, and `/api/root-data` is private, no-store,
+  and cookie-varying. Regression coverage seeds representative CI, webhook, and
+  email HMAC values and proves none cross the server/client boundary. — Codex
+  (AI), 2026-08-17
+
+
+- **Thin Web CI promotion no longer blocks on topology contracts**: the stale
+  product-branch copy of the develop-preview controller was removed, the two
+  workflow/topology contract commands were removed from the required unit-test
+  aggregate, and the thin Web CI listener now delegates PR-warning permission
+  to the protected non-blocking advisory job. Real product unit tests, build,
+  typecheck diagnostics, API tests, and security checks remain unchanged.
+  — Codex (AI), 2026-08-17
+
+- **Mobile Safari Feed controls receive their click and focus events**: the
+  global Commander no longer changes Thingtime state from a document-level
+  `touchend` before Safari can synthesize the touched control's click. Its
+  click-away behavior now waits for `click` / `focusin` and is a no-op while
+  Commander is already closed. Editor.js also restores contenteditable focus
+  synchronously on a genuine touch release, so the Feed composer opens, accepts
+  typing, and leaves adjacent buttons and native inputs interactive in retained
+  account sessions. — Codex (AI), 2026-08-15
+
+- **A legacy Lopu browser snapshot is repaired before Feed becomes
+  interactive**: Thingtime hydration now reports and removes invalid saved
+  functions, commits the repaired snapshot before completing the first load,
+  and never persists the provider's live root `set` / `get` React closures.
+  Nested user data with those names is preserved. This removes the one-load
+  poisoned-state window that could make “What's on your mind?” and adjacent
+  inputs appear inert until another tab or reload. — Codex (AI), 2026-08-15
+
+- **Legacy Thingtime function state no longer disables interactive editors**:
+  persisted anonymous, arrow, named, method, and scoped functions now revive
+  only after Flatted has reconstructed their complete object graph. The parser
+  also removes the old saved no-op recovery function so current defaults can
+  repair poisoned browser state instead of carrying it into Feed composer and
+  other input sessions. — Codex (AI), 2026-08-15
+
+- **Safari-restored Vercel previews now force a real HTML navigation before the
+  app can remain inert**: an inline Vite preview freshness bootstrap runs before
+  the React application graph, refreshes every preview restored from Safari's
+  back/forward page cache, and permits one guarded recovery after a same-build
+  asset runtime error. Generated Vercel routes now return the SPA HTML shell
+  with `private, no-store` browser headers while leaving versioned assets on the
+  filesystem path. — Codex (AI), 2026-08-14
+
+- **Stale Vercel preview tabs recover their interactions after a redeploy**:
+  preview-only startup logic compares the loaded hashed Vite entry asset with
+  the branch alias's current HTML on load, foreground, and focus, then reloads
+  only when the alias has moved. A tab holding the pre-fix Things bundle can no
+  longer remain visually rendered but inert after the repaired deployment is
+  available; production-domain behavior is unchanged. — Codex (AI), 2026-08-13
+
+- **Things kind grouping no longer crashes populated spaces**: Group by Kind
+  now reads section icons from the canonical Thing icon registry instead of a
+  removed local binding, with a populated-group runtime regression test in the
+  required unit suite. — Codex (AI), 2026-08-12
+
+- **The Thingtime AI preference now reaches the remaining Claude runtime**:
+  Lopu musings resolve their Anthropic model from the current Admin waterfall
+  on every Claude attempt, just like conflict resolution, rebase repair, and
+  semantic Graphify. Named Admin choices override the old environment model;
+  the explicit `default` sentinel safely delegates to `LOPU_CLAUDE_MODEL`, and
+  the independent OpenAI fallback retains its provider-valid model. Focused
+  tests prevent warm runtimes from pinning an earlier Admin choice. — Codex
+  (AI), 2026-08-12
+
+- **iOS Vercel destination history is usable at full length**: the native Web
+  destination drawer now keeps its controls pinned above a lazy vertical list,
+  shows scroll indicators when content exceeds the viewport, and reserves the
+  swipe-to-close gesture for predominantly horizontal drags so vertical row
+  scrolling remains responsive. TestFlight build 13 includes the fix. — Codex
+  (AI), 2026-08-10
+- **Develop PR preview DNS publication now tests the live path**: externally
+  managed wildcard DNS can remain labelled `misconfigured` by Vercel while the
+  required Cloudflare CNAME, delegated ACME validation, and wildcard TLS are
+  healthy. The executable controller and reusable workflow now live on the
+  protected `github-actions` control plane behind a thin product-branch
+  listener. The controller verifies the actual probe CNAME against Vercel's
+  recommended target, verifies the assigned alias over HTTPS, and no
+  longer claims generic Preview is credential-free when it intentionally uses
+  the shared development runtime. The runbook also records the controller's
+  team-scoped token boundary accurately. See the
+  [PR #233 engineering note](../PRs/233-codex-fix-develop-preview-dns-gate.md)
+  and paired [control-plane PR #239](https://github.com/lopugit/thingtime/pull/239).
+  — Codex (AI), 2026-08-10
+- **Vercel's universal image now boots and tears down GitHub runners reliably**:
+  ephemeral CI setup runs GitHub's version-matched dependency installer,
+  provides the conventional `/dev/fd` link required by Bash process
+  substitution, and establishes a provisional cleanup handle immediately after
+  Sandbox creation. ICU or later bootstrap failures can no longer strand an
+  offline runner/Sandbox, and the same exact cleanup is preserved after a
+  registered job succeeds or fails. Three live canaries proved registration,
+  App-authored protected-workflow re-entry, GitHub fallback, successful Vercel
+  execution, and final resource deletion. — Codex (AI), 2026-08-10
+- **Vercel CI readiness now fails closed across UI, API, and routing**: Admin →
+  CI Control no longer reports a runner ready merely because the page is hosted
+  by Vercel. One server-derived capability now requires the GitHub App id,
+  installation id and private key, provider-router secret, and Vercel runtime
+  identity; the badge names incomplete setup, the dropdown stays disabled, and
+  direct policy writes receive an authored 409 while existing automation keeps
+  its safe GitHub fallback. Focused tests also cover runner identity, job
+  completion/failure summaries, and configuration drift. — Codex (AI),
+  2026-08-10
+- **Develop-preview automation no longer breaks product-branch CI**: the
+  develop-preview listener now delegates to the protected `github-actions`
+  implementation, and the thin workflow-caller contract rejects every local
+  Actions script on product branches. — Codex (AI), 2026-08-10
+- **Required Web CI checks no longer strand non-Remix pull requests**: the
+  stable product-branch listener is now path-filter-free and grants only the
+  read access needed by the protected classifier, which always starts and
+  classifies the complete changed-file list. The control plane assigns both
+  existing `control-plane /` check names to either the real build/API jobs or
+  lightweight no-op companions, without changing their ruleset identity; the
+  historical build label stays stable even though typecheck growth is
+  warning-only. Incomplete or unavailable changed-file listings safely run the
+  full suite instead of stranding the required names. See the
+  [PR #222 engineering note](../PRs/222-codex-typecheck-ratchet-warning-main-ci-make-typecheck-ratchet-warning-only.md).
+  — Codex (AI), 2026-08-10
+- **Proxied private-media mutations preserve same-origin protection**:
+  attachment and avatar/banner writes now compare browser origins with the
+  trusted forwarded public host and protocol, so local and reverse-proxied
+  requests no longer fail against the internal Nitro origin while mismatched
+  and explicitly cross-site requests still fail closed. Invalid external
+  profile-image URLs also expose their error state to assistive technology. —
+  Codex (AI), 2026-08-10
+- **Attachment parent refresh preserves deployment and workflow boundaries**:
+  the hourly attachment cleanup and weekly notification digest each appear
+  exactly once in `vercel.json`, with an automated uniqueness contract that
+  prevents duplicate-cron deployment rejection. Product branches also retain
+  only the secret-free develop-preview listener; the privileged controller
+  implementation remains owned by the protected default-branch control plane.
+  See the
+  [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
+  — Codex (AI), 2026-08-10
+- **Worktree lint and formatting dependencies now self-heal completely**:
+  validation startup probes detect incomplete transitive pnpm links even when
+  every direct package looks installed, retry once with a forced relink, and
+  verify ESLint plus the now-direct Prettier CLI before reporting the checkout
+  ready. — Codex (AI), 2026-08-10
+- **Creation-time promotion conflicts are resolved automatically**: when a
+  selected `develop` feature cannot be replayed cleanly onto its promotion base,
+  the protected per-feature promoter first positively proves its historical
+  patch is still effective at the current `develop` tip, then reserves the
+  deterministic branch and hands the immutable source/base plan to a bot-only
+  worker on the fixed `github-actions` control plane. The thin `develop`
+  listener grants the Actions permission needed for that dispatch without
+  restoring executable workflow behavior to product branches. The
+  secret-bearing provider router stays on GitHub-hosted compute and accepts only
+  authenticated, validated downstream runner metadata; promotion-plan handoffs
+  bypass external provider routing until that boundary supports the same
+  immutable plan envelope. The worker re-derives live authority, resolves only
+  mechanically proven conflict paths, treats `graphify-out/**` as derived
+  target-side output, publishes with an exact lease, opens the promotion PR, and
+  resumes dependent stack members automatically. The result
+  is labelled for review and receives evidence naming the resolver run,
+  immutable SHAs, and AI-edited paths; unchanged failed snapshots pause
+  visibly instead of requiring undocumented manual cherry-picks or repeatedly
+  spending model budget. Bot attestations, exact leases, durable stale-snapshot
+  retirement, and idempotent checkpoint/metadata recovery make retries
+  converge across API ambiguity, worker crashes, base movement, or duplicate
+  comments. A recoverable historical patch that current `develop` classifies as
+  removed or ambiguous now blocks visibly before any reservation, branch,
+  immutable promotion plan, AI worker, or promotion PR is created. Only later
+  members of its dependent promotion group wait; unrelated groups continue
+  independently. A later run can proceed only after freshly proving the patch
+  effective and creating a new verified plan; no blocked state is upgraded in
+  place. Missing objects, unreadable patches, operational Git failures, and
+  worker classification mismatches likewise stop before publication. See the
+  [PR #213 engineering note](../PRs/213-codex-auto-resolve-promotion-conflicts-automatically-resolve-promotion-creation-conflicts.md).
+  Conflict-free and AI-resolved verified-source promotions that touch
+  `.github/**` still share the same bot-authored `[skip ci]` content commit and
+  `GITHUB_TOKEN` review checkpoint, so promoted workflow changes cannot execute
+  merely from the branch push that creates their review PR. Removed or ambiguous
+  historical patches never reach that gate because no branch or PR is created.
+  — Codex (AI), 2026-08-10
+- **Generic Vercel Preview now mirrors the shared development runtime**: all 26
+  variables currently assigned to `develop` also target Preview, while the six
+  existing Preview-only filesystem/CI/webhook settings remain. The development
+  S3 role now trusts the generic `environment:preview` OIDC subject and the
+  development bucket permits Thingtime's generated Vercel Preview origins;
+  production MongoDB/JWT/S3 and the production S3 role remain excluded. The
+  trusted controller is retained for stable `*.previews.dev.thingtime.com`
+  aliases, exact-SHA status, and cleanup. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
+- **Develop and production preview hostnames are now separated**: the trusted
+  `develop` controller uses `*.previews.dev.thingtime.com`, with its protected
+  GitHub variable, detached Vercel wildcard, DNS/ACME delegation, TLS, and S3
+  CORS aligned to that origin. `*.previews.thingtime.com` is reserved for a
+  separate future production-preview controller, while ordinary Vercel
+  previews retain the development role but never the production role. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
+- **Develop-preview activation runbook now matches the live control plane**:
+  documents the no-bypass `main` ruleset, automatic no-reviewer cleanup,
+  installed team-scoped 90-day Vercel token and exact-bucket CORS-probe
+  secret, narrowed develop/production runtime scope, and authoritative/public
+  resolver verification of the wildcard CNAME. The narrow ACME NS delegation,
+  exact-bucket CORS, `main` merge, and end-to-end gates remain. Independent
+  CODEOWNER approval is recorded as optional future hardening once a second
+  trusted collaborator exists. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
+- **Every live AI conflict/rebase path now follows the current Thingtime Admin
+  model order**: merge resolution, all rebase rounds, and their semantic
+  Graphify refreshes share the validated primary model instead of letting the
+  refresh silently fall back to Sonnet. The public setting endpoint now reads
+  the home-DB singleton on every request (retaining last-known-good only for a
+  real database outage), so a successful Admin reorder is visible immediately
+  across warm serverless instances. Source contracts cover the delegated
+  product-branch callers and inventory every control-plane AI workflow/action,
+  rejecting new unbound runtimes or obsolete hard-coded models. The deleted
+  legacy GitHub workflow registration was also disabled.
+  — Codex (AI), 2026-08-10
+- **The complete Actions control plane is ready for atomic promotion to
+  `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
+  #194, #190, #199, #206, #207, and #208 are replayed together so the default
+  branch never runs an obsolete intermediate resolver, rebaser, or feature
+  promoter revision. The seven action workflow/script files exactly match the
+  current `develop` versions. See the
+  [PR #210 engineering note](../PRs/210-promote-actions-control-plane-rollup.md).
+  — Codex (AI), 2026-08-09
+- **Promotion self-test and empty-pick handling are runner-safe**: the
+  per-feature promoter's orphaned-history fixture now configures its own Git
+  author identity instead of depending on runner account defaults. Failed
+  cherry-picks are classified from sequencer and index state rather than broad
+  error-message words, so an operational failure such as `empty ident name`
+  is aborted and reported instead of being mistaken for an empty patch and
+  silently skipped. A genuine already-applied cherry-pick still advances the
+  sequencer safely. See the
+  [PR #207 engineering note](../PRs/207-codex-fix-promoter-empty-pick-detection-distinguish-empty-promotion-cherry-picks-safely.md).
+  — Codex (AI), 2026-08-09
+- **Automatic rebasing is now restricted to genuine PR stacks**: the stack
+  detector still identifies a member only when its base targets another open
+  PR head or another open PR targets its head, but automatic scans no longer
+  override that topology for standalone PRs whose combined diff merges cleanly
+  while individual commits are not replayable. Those standalone branches are
+  left untouched instead of being force-rebased or ping-ponging after a merge
+  resolver update. Shared topology and ownership expressions are rechecked at
+  detection, worker validation, post-replay validation, pre-push validation,
+  and failure cleanup; an inline truth-table regression guard covers
+  standalone, stack, opt-out, and explicit exact-PR retry cases. — Codex (AI),
+  2026-08-09
+- **Per-feature promotion survives rewritten historical merge commits and
+  isolated failures**: the `develop` → `main` promoter now verifies every
+  source merge object, fetches unreachable historical merges by exact SHA,
+  distinguishes a normal non-ancestor result from a Git inspection error, and
+  requires original ancestry or both patch-equivalent history and current-tip
+  effect verification before an old change may be promoted. Later reverts and
+  removed aggregate ranges are classified instead of being mistaken for
+  current source; PR #213 visibly blocks removed or ambiguous recoverable cases
+  before any reservation, branch, worker, or promotion PR, while unrecoverable
+  authority still fails closed. It records structured per-PR blocks instead of
+  aborting the batch. A failed standalone feature no longer prevents later
+  independent promotions; a failed stack member still defers only its
+  dependent members. Group-local
+  exceptions are contained through the remaining groups before failing the
+  run, the partial summary is always published, reused promotion branches are
+  freshly fetched and checked against an exactly reconstructed source tree and
+  expected PR base before stacking, every external OPEN link is validated back
+  to `main`, every genuinely earlier CLOSED predecessor is checked, and
+  `MAX_NEW_PRS` applies to branch reuse too. A local-Git regression test
+  reproduces the force-rewritten-history failure before proving full-parent
+  recovery. Promotion-marker lookup also scans up to 1,000 PRs so older records
+  remain idempotent as the repository grows. See the
+  [PR #206 engineering note](../PRs/206-codex-harden-feature-promoter-keep-feature-promotion-running-across-historical-git-failures.md).
+  — Codex (AI), 2026-08-09
 - **Conflict resolution now uses a fixed `develop` control plane**: every
   external event and human manual run is detector-only, then dispatches each
   selected PR number to the resolver workflow revision on `develop`; only a
@@ -105,6 +510,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   predicate (MongoDB code 224); it upserts by the deterministic reserved
   `shareId` and still validates the complete protected envelope before trusting
   either a new or existing ledger. — Codex (AI), 2026-08-08
+- **Conflict detection waits out GitHub and says so when it stands aside**:
+  the merge resolver's detector polled mergeability for only ~80 seconds
+  after a base push, but GitHub's verdicts can take ~6 minutes to settle —
+  observed on PR #190, where the develop push that created the conflict ran
+  detection while the PR still read UNKNOWN, so nothing was handed off, no
+  comment appeared, and the conflict sat silent until the scheduled sweep.
+  Detection now re-queries until every scanned PR has a verdict or a time
+  budget runs out (`MERGEABLE_POLL_SECONDS`, default 500s, with
+  `MERGEABLE_POLL_INTERVAL` between re-queries; detect timeout raised to 15
+  minutes), and the detect job now upserts a status comment on any PR it must
+  leave alone — conflicting fork PRs it cannot push to, and PRs whose
+  mergeability never settled — so detector silence always means "nothing
+  needed doing", never "nobody looked". Conflicts that are handed off keep
+  announcing themselves through the existing "Auto-resolve running" comment;
+  the rebase workflow already polls its verdicts round-robin and is
+  unchanged. Also restored the "AI PR and stack rebase conflict resolution"
+  changelog bullet's opening line, dropped by the AI resolution of a previous
+  merge. — Claude (AI), 2026-08-08
+
 - **`withMongoTransaction` ReferenceError + Web CI transaction support**: the
   AI-resolved merge that landed on main via PR #158 left `withMongoTransaction`
   calling the removed `getClientCached()`, 500-ing every transactional write
@@ -146,7 +570,43 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   staged locally (takes effect on the next sudo mongod restart +
   one-time initiate). — Claude (AI), 2026-08-08
 
+### Security
+
+- **Service-account provisioning is now rate limited and input-capped**
+  (TODO #7 / `claude-todo/09` A3, the last open item of the three): the public
+  `POST /api/v1/auth/service-account` route previously accepted unlimited
+  anonymous requests, each minting a non-expiring bearer token + a 5 GiB
+  storage-allowance account. It now enforces the shared Mongo-backed limiter
+  fail-closed per IP (`auth.serviceAccount`, default 10 / 15 min,
+  admin-editable), caps the request body at 16 KiB via `readJsonBody`, and
+  whitelists provisioning fields instead of spreading the raw body (privileged
+  meta is already stripped at the `createUserAccount` chokepoint —
+  defense-in-depth). API docs and `/tests` coverage updated; the sibling
+  raw-results/populate lockdowns from the same TODO shipped earlier —
+  Claude (AI), 2026-07-21.
+
 ### Added
+
+- **Trusted `develop`-target PR deployment controller**: same-repository,
+  trusted-author PRs targeting `develop` can now be deployed through a
+  secret-free `pull_request_target` dispatcher and provenance-checked
+  default-branch `repository_dispatch` controller to the exact Vercel `develop`
+  Custom Environment. Neither GitHub job executes PR-head code, the detector
+  never receives the Vercel token, and generic Preview access was not broadened
+  when the controller was introduced (it was deliberately broadened later as
+  recorded above); the approved Vercel build intentionally receives the shared
+  develop runtime configuration. An explicit trusted-actor plus live write/admin permission
+  gate protects the dedicated GitHub Environment secret. Each PR gets a
+  marker-updated status comment, transient GitHub Deployment, and dedicated
+  alias under `*.previews.dev.thingtime.com`; SHA revalidation, marker-scoped
+  supersession/close cleanup, six-hour reconciliation, and bounded manual
+  recovery prevent stale builds from retaining aliases or shared develop
+  credentials. The fork-safe runbook keeps
+  `dev.thingtime.com` bound to the literal `develop` branch, stores the exact
+  Custom Environment ID only in a private GitHub variable, documents minimal
+  wildcard S3 CORS/DNS, and calls out that eligible PRs intentionally share the
+  same development data plane rather than receiving isolated sandboxes. — Codex
+  (AI), 2026-08-09. [Detailed PR #212 runbook](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
 
 - **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
   now creates the standing develop → main PR with — and re-applies on every
@@ -229,7 +689,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   domain, matching the existing staging pattern while preserving the
   branch-scoped Preview secrets already used by develop deployments. The
   deployment runbook now records the required Cloudflare DNS-only CNAME and
-  ownership-verification flow. — Codex (AI), 2026-08-07
+  ownership-verification flow. This original assignment was superseded on
+  2026-08-09 by the isolated `develop` Custom Environment recorded above. —
+  Codex (AI), 2026-08-07
 
 - **Typed queries across every admin workspace**: Users, Apps, Tiers, rate
   limits, and the administrator roster now share an all-field free-text,
@@ -299,7 +761,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   (`postViews` collection, unique-viewer dedup per salted identity,
   dwell/ratio/position capture via `useViewTracking` on feed/profile/permalink,
   public 👁 viewCount + impressions/avg-read-time on every post). Detailed
-  notes in `PRs/followers-friends-notifications-views.md`.
+  notes in
+  [`PRs/172-followers-friends-notifications-views-4fcfcf-followers-friends-notifications-views.md`](../PRs/172-followers-friends-notifications-views-4fcfcf-followers-friends-notifications-views.md).
   — Claude (AI), 2026-08-03
 
 - **CI conflict-resolver graphify refresh now does LLM semantic extraction**:

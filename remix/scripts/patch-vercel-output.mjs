@@ -10,6 +10,11 @@ const filesystemRoute = routes.find((route) => route.handle === 'filesystem');
 const apiRootDataRoute = routes.find((route) => route.src === '/api/root-data');
 const apiCatchAllRoute = routes.find((route) => route.src === '/api/(?:.*)');
 const serverFallbackRoute = routes.find((route) => route.dest === '/__server');
+const appShellHeaders = {
+  'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0'
+};
 
 config.routes = [
   // The /authorize consent popup must never render inside a frame (UI-redress
@@ -24,11 +29,12 @@ config.routes = [
     },
     continue: true
   },
-  { src: '^/$', dest: '/index.html' },
+  { src: '^/$', headers: appShellHeaders, dest: '/index.html' },
+  { src: '^/index\\.html$', headers: appShellHeaders, dest: '/index.html' },
   filesystemRoute ?? { handle: 'filesystem' },
   apiRootDataRoute ?? { src: '/api/root-data', dest: '/api/root-data' },
   apiCatchAllRoute ?? { src: '/api/(?:.*)', dest: '/api/[...]' },
-  { src: '/(?:.*)', dest: '/index.html' }
+  { src: '/(?:.*)', headers: appShellHeaders, dest: '/index.html' }
 ];
 
 if (serverFallbackRoute) {

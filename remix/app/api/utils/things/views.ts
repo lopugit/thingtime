@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { getPostViewsCollection, getThingsCollection } from '../mongodb/collections';
+import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { getRequestIp } from '../rateLimit/enforce';
 import { aclAllows, aclFromVisibility, ACL_ALL, ACL_INHERIT } from '~/schemas/registry';
 import type { AclViewer } from '~/schemas/registry';
@@ -100,6 +101,10 @@ export const recordPostViews = async (
   eventsInput: unknown,
   friendIds?: ReadonlySet<string>
 ): Promise<RecordViewsResult> => {
+	// Custom Mongo is an untrusted data plane and its shareIds are not globally
+	// namespaced. Never authorize there and then mutate home telemetry: a caller
+	// could clone a home post id and inflate its real stats.
+	if (isCustomMongoEndpointActive()) return { ok: true, counted: 0 };
   const events = sanitizeEvents(eventsInput);
   if (!events.length) return { ok: true, counted: 0 };
   const identity = viewerKeyFor(request, viewer?.id || null);
@@ -160,6 +165,9 @@ export type PostViewStats = {
 // resolveRelated's shape (Map keyed by post shareId).
 export const resolveViewStats = async (postIds: string[]): Promise<Map<string, PostViewStats>> => {
   const map = new Map<string, PostViewStats>();
+	// Symmetric with recordPostViews: custom-plane cards must not inherit stats
+	// from an unrelated home post that happens to share their public id.
+	if (isCustomMongoEndpointActive()) return map;
   if (!postIds.length) return map;
   const postViews = await getPostViewsCollection();
   const rows = await postViews
