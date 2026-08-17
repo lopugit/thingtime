@@ -4,6 +4,8 @@ import type {
   CommanderExtension,
   CommanderSettings,
   NativeRequest,
+  RecentSearch,
+  RecentSearchCommand,
   SearchHit,
   StoreExtension,
 } from '@commander/protocol';
@@ -31,10 +33,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   bootstrap: () => request<BootstrapResponse>('/api/bootstrap'),
   search: (value: string) => request<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(value)}`),
-  addRecentSearch: (value: string) =>
-    request<{ recentSearches: string[] }>('/api/history', {
+  addRecentSearch: (value: string, command?: RecentSearchCommand) =>
+    request<{ recentSearches: RecentSearch[] }>('/api/history', {
       method: 'POST',
-      body: JSON.stringify({ query: value }),
+      body: JSON.stringify({ query: value, command }),
     }),
   saveSettings: (settings: CommanderSettings) =>
     request<{ settings: CommanderSettings }>('/api/settings', {

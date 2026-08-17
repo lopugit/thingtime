@@ -1,4 +1,7 @@
-# Image Modification
+# Thingtime Commander Raycast extension
+
+This complete legacy Raycast extension now lives under `Commander/extensions/raycast/` so Commander has one
+extension home. Its image tools and assets are preserved alongside the Commander control command.
 
 ## Commander control
 

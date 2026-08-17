@@ -184,16 +184,51 @@ describe('Commander daemon HTTP trust boundaries', () => {
           'content-type': 'application/json',
           'x-commander-session': server.token,
         },
-        body: JSON.stringify({ query: '1password' }),
+        body: JSON.stringify({
+          query: '1password',
+          command: {
+            itemId: 'app:1password',
+            actionId: 'open',
+            title: '1Password',
+            subtitle: '/Applications/1Password.app',
+            icon: 'application',
+            kind: 'application',
+            actionTitle: 'Open',
+          },
+        }),
       });
       expect(rememberedSearch.status).toBe(200);
-      expect(await rememberedSearch.json()).toEqual({ recentSearches: ['1password'] });
+      expect(await rememberedSearch.json()).toEqual({
+        recentSearches: [
+          {
+            query: '1password',
+            commands: [
+              {
+                itemId: 'app:1password',
+                actionId: 'open',
+                title: '1Password',
+                subtitle: '/Applications/1Password.app',
+                icon: 'application',
+                kind: 'application',
+                actionTitle: 'Open',
+              },
+            ],
+          },
+        ],
+      });
 
       const historyBootstrap = await fetch(`${server.url}/api/bootstrap`, {
         headers: { 'x-commander-session': server.token },
       });
       expect(historyBootstrap.status).toBe(200);
-      expect(await historyBootstrap.json()).toMatchObject({ recentSearches: ['1password'] });
+      expect(await historyBootstrap.json()).toMatchObject({
+        recentSearches: [
+          {
+            query: '1password',
+            commands: [expect.objectContaining({ itemId: 'app:1password', actionId: 'open' })],
+          },
+        ],
+      });
 
       const missingClaim = await fetch(`${server.url}/api/native/credentials/claim`, {
         method: 'POST',

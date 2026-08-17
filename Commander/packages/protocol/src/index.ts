@@ -1,33 +1,134 @@
 export const PROTOCOL_VERSION = 1 as const;
 export const COMMANDER_THINGTIME_CLIENT_ID = 'ttapp_fb2f7fc9-32c8-47ea-bd08-863728de69f1';
-export const RECENT_SEARCH_LIMIT = 8;
+export const RECENT_SEARCH_PREVIEW_LIMIT = 8;
+export const RECENT_SEARCH_STORAGE_LIMIT = 50;
+export const RECENT_SEARCH_COMMAND_LIMIT = 8;
 export const RECENT_SEARCH_MAX_LENGTH = 256;
-
-export function normalizeRecentSearches(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const searches: string[] = [];
-  const seen = new Set<string>();
-  for (const candidate of value) {
-    if (typeof candidate !== 'string') continue;
-    const query = candidate.trim().slice(0, RECENT_SEARCH_MAX_LENGTH);
-    const key = query.toLowerCase();
-    if (!query || seen.has(key)) continue;
-    seen.add(key);
-    searches.push(query);
-    if (searches.length === RECENT_SEARCH_LIMIT) break;
-  }
-  return searches;
-}
-
-export function addRecentSearch(searches: readonly string[], value: string): string[] {
-  return normalizeRecentSearches([value, ...searches]);
-}
 
 export type Platform = 'macos' | 'windows' | 'linux';
 export type Appearance = 'light' | 'dark' | 'system';
 export type WindowMode = 'default' | 'compact';
 export type TextSize = 'default' | 'large';
 export type SearchItemKind = 'builtin' | 'application' | 'extension' | 'command' | 'quicklink';
+
+export interface RecentSearchCommand {
+  itemId: string;
+  actionId: string;
+  title: string;
+  subtitle?: string;
+  icon?: string;
+  kind: SearchItemKind;
+  actionTitle?: string;
+}
+
+export interface RecentSearch {
+  query: string;
+  commands: RecentSearchCommand[];
+}
+
+const SEARCH_ITEM_KINDS = new Set<SearchItemKind>([
+  'builtin',
+  'application',
+  'extension',
+  'command',
+  'quicklink',
+]);
+
+function normalizedText(value: unknown, maximumLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const text = value.trim().slice(0, maximumLength);
+  return text || undefined;
+}
+
+function normalizeRecentSearchCommand(value: unknown): RecentSearchCommand | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as Partial<RecentSearchCommand>;
+  const itemId = normalizedText(candidate.itemId, 512);
+  const actionId = normalizedText(candidate.actionId, 128);
+  const title = normalizedText(candidate.title, 256);
+  const subtitle = normalizedText(candidate.subtitle, 512);
+  const icon = normalizedText(candidate.icon, 128);
+  const actionTitle = normalizedText(candidate.actionTitle, 256);
+  if (!itemId || !actionId || !title) return undefined;
+  return {
+    itemId,
+    actionId,
+    title,
+    kind: SEARCH_ITEM_KINDS.has(candidate.kind as SearchItemKind)
+      ? (candidate.kind as SearchItemKind)
+      : 'command',
+    ...(subtitle ? { subtitle } : {}),
+    ...(icon ? { icon } : {}),
+    ...(actionTitle ? { actionTitle } : {}),
+  };
+}
+
+function normalizeRecentSearchCommands(value: unknown): RecentSearchCommand[] {
+  if (!Array.isArray(value)) return [];
+  const commands: RecentSearchCommand[] = [];
+  const seen = new Set<string>();
+  for (const candidate of value) {
+    const command = normalizeRecentSearchCommand(candidate);
+    if (!command) continue;
+    const key = `${command.itemId}\u0000${command.actionId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    commands.push(command);
+    if (commands.length === RECENT_SEARCH_COMMAND_LIMIT) break;
+  }
+  return commands;
+}
+
+export function normalizeRecentSearches(value: unknown): RecentSearch[] {
+  if (!Array.isArray(value)) return [];
+  const searches: RecentSearch[] = [];
+  const byQuery = new Map<string, RecentSearch>();
+  for (const candidate of value) {
+    const query = normalizedText(
+      typeof candidate === 'string'
+        ? candidate
+        : candidate && typeof candidate === 'object'
+          ? (candidate as Partial<RecentSearch>).query
+          : undefined,
+      RECENT_SEARCH_MAX_LENGTH,
+    );
+    if (!query) continue;
+    const key = query.toLowerCase();
+    const commands = normalizeRecentSearchCommands(
+      candidate && typeof candidate === 'object' ? (candidate as Partial<RecentSearch>).commands : [],
+    );
+    const existing = byQuery.get(key);
+    if (existing) {
+      existing.commands = normalizeRecentSearchCommands([...existing.commands, ...commands]);
+      continue;
+    }
+    const search = { query, commands };
+    byQuery.set(key, search);
+    searches.push(search);
+    if (searches.length === RECENT_SEARCH_STORAGE_LIMIT) break;
+  }
+  return searches;
+}
+
+export function addRecentSearch(
+  searches: readonly RecentSearch[],
+  value: string,
+  command?: RecentSearchCommand,
+): RecentSearch[] {
+  const normalized = normalizeRecentSearches(searches);
+  const query = normalizedText(value, RECENT_SEARCH_MAX_LENGTH);
+  if (!query) return normalized;
+  const key = query.toLowerCase();
+  const existing = normalized.find((search) => search.query.toLowerCase() === key);
+  const commands = normalizeRecentSearchCommands([
+    ...(command ? [command] : []),
+    ...(existing?.commands ?? []),
+  ]);
+  return normalizeRecentSearches([
+    { query, commands },
+    ...normalized.filter((search) => search.query.toLowerCase() !== key),
+  ]);
+}
 
 export interface CommanderSettings {
   version: 1;
@@ -147,7 +248,7 @@ export interface BootstrapResponse {
   settings: CommanderSettings;
   accounts: CommanderAccount[];
   extensions: CommanderExtension[];
-  recentSearches: string[];
+  recentSearches: RecentSearch[];
   capabilities: {
     nativeBridge: boolean;
     globalHotkey: boolean;

@@ -933,6 +933,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with `private, no-store` browser headers while leaving versioned assets on the
   filesystem path. — Codex (AI), 2026-08-14
 
+- **Commander History now links searches to the commands they launched**:
+  each local search session renders its term plus replayable, de-duplicated
+  command children. The compact History view keeps the newest eight sessions
+  while Show More expands up to 50 retained sessions, including migrated
+  string-only history from earlier builds. The complete legacy Raycast
+  extension also moved under `Commander/extensions/raycast/`, keeping its image
+  tools and real Open Commander command in Commander's extension tree. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-17
 - **Commander now ships ready for Thingtime sign-in and paints only its
   rounded launcher surface**: its public production client ID is built in,
   legacy blank settings migrate automatically, and the native WebKit canvas is

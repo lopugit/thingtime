@@ -129,7 +129,15 @@ describe('Launcher keyboard navigation', () => {
     render(<Launcher state={commander} />);
     fireEvent.keyDown(window, { key: 'Enter' });
     await waitFor(() => expect(api.execute).toHaveBeenCalledWith('app:notes', 'open'));
-    expect(commander.rememberRecentSearch).toHaveBeenCalledWith('settings');
+    expect(commander.rememberRecentSearch).toHaveBeenCalledWith(
+      'settings',
+      expect.objectContaining({
+        itemId: 'app:notes',
+        actionId: 'open',
+        title: 'Notes',
+        kind: 'application',
+      }),
+    );
     expect(screen.getByRole('option', { name: /Notes/ })).toHaveAttribute('aria-selected', 'true');
   });
 
@@ -159,19 +167,85 @@ describe('Launcher keyboard navigation', () => {
   });
 
   it('shows recent searches before suggestions and restores one with Return', () => {
-    const commander = state({ query: '', recentSearches: ['1password', 'settings'] });
+    const commander = state({
+      query: '',
+      recentSearches: [
+        {
+          query: '1password',
+          commands: [
+            {
+              itemId: 'app:1password',
+              actionId: 'open',
+              title: '1Password',
+              subtitle: '/Applications/1Password.app',
+              kind: 'application',
+              actionTitle: 'Open',
+            },
+          ],
+        },
+        { query: 'settings', commands: [] },
+      ],
+    });
     render(<Launcher state={commander} />);
 
     expect(screen.getByRole('heading', { name: /History/ })).toBeVisible();
     expect(screen.getByRole('heading', { name: /Suggestions/ })).toBeVisible();
     const options = screen.getAllByRole('option');
     expect(options[0]).toHaveTextContent('1password');
-    expect(options[2]).toHaveTextContent('Commander Settings');
+    expect(options[1]).toHaveTextContent('1Password');
+    expect(options[3]).toHaveTextContent('Commander Settings');
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
     expect(commander.setQuery).toHaveBeenCalledWith('1password');
     expect(api.execute).not.toHaveBeenCalled();
+  });
+
+  it('runs a command from its search-session history with Return', async () => {
+    const search = {
+      query: 'passwords',
+      commands: [
+        {
+          itemId: 'app:1password',
+          actionId: 'open',
+          title: '1Password',
+          kind: 'application' as const,
+          actionTitle: 'Open',
+        },
+      ],
+    };
+    const commander = state({ query: '', recentSearches: [search], selectedIndex: 1 });
+    render(<Launcher state={commander} />);
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await waitFor(() => expect(api.execute).toHaveBeenCalledWith('app:1password', 'open'));
+    expect(commander.rememberRecentSearch).toHaveBeenCalledWith('passwords', search.commands[0]);
+  });
+
+  it('shows eight search sessions initially and expands the retained history interactively', () => {
+    const recentSearches = Array.from({ length: 10 }, (_, index) => ({
+      query: `search ${index}`,
+      commands: [],
+    }));
+    const commander = state({ query: '', recentSearches });
+    render(<Launcher state={commander} />);
+
+    const showMore = screen.getByRole('button', { name: 'Show More' });
+    expect(showMore).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('8 of 10')).toBeVisible();
+    expect(screen.queryByRole('option', { name: /search 8/i })).not.toBeInTheDocument();
+
+    fireEvent.click(showMore);
+
+    expect(screen.getByRole('option', { name: /search 8/i })).toBeVisible();
+    const showLess = screen.getByRole('button', { name: 'Show Less' });
+    expect(showLess).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('10 of 10')).toBeVisible();
+
+    fireEvent.click(showLess);
+    expect(screen.queryByRole('option', { name: /search 8/i })).not.toBeInTheDocument();
+    expect(commander.setSelectedIndex).toHaveBeenCalledWith(0);
   });
 
   it('navigates and executes the Command-K action selector', async () => {
