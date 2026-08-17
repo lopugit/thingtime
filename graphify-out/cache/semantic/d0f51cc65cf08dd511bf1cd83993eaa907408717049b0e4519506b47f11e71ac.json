@@ -1,1 +1,1 @@
-{"nodes": [{"id": "testing_ai_all", "label": "Canonical AI Instructions", "file_type": "document", "source_file": "AI_ALL.md", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}
+{"nodes": [{"id": "claude", "label": "CLAUDE.md / AI_ALL.md instructions", "file_type": "document", "source_file": "CLAUDE.md", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}
