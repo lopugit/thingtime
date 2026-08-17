@@ -1,6 +1,6 @@
 {
-	"target": 1960,
-	"count": 1960,
+	"target": 2080,
+	"count": 2080,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -50,18 +50,21 @@
 		"docs-wiki",
 		"health-fitness",
 		"smart-home",
-		"social-feed"
+		"social-feed",
+		"dev-tools",
+		"education",
+		"food-delivery"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 245,
-		"bootstrap": 245,
-		"mui": 245,
-		"shadcn": 245,
-		"untitled": 245,
-		"daisyui": 245,
-		"reactflow": 245,
-		"thingtime": 245
+		"antd": 260,
+		"bootstrap": 260,
+		"mui": 260,
+		"shadcn": 260,
+		"untitled": 260,
+		"daisyui": 260,
+		"reactflow": 260,
+		"thingtime": 260
 	},
-	"hash": "7efbca22a99926f5"
+	"hash": "44d55aad237c4d7a"
 }

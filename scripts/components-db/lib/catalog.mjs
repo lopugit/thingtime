@@ -63,7 +63,10 @@ export const ARCHETYPE_ORDER = [
 	'docs-wiki',
 	'health-fitness',
 	'smart-home',
-	'social-feed'
+	'social-feed',
+	'dev-tools',
+	'education',
+	'food-delivery'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;
