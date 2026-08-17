@@ -90,6 +90,24 @@ assert.match(workflow, /inputs\.manual_retry != true/);
 assert.match(workflow, /inputs\.depth == '0'/);
 assert.match(workflow, /conflict-policy: promotion/);
 assert.match(workflow, /Independently re-derive the source patch boundary/);
+const promotionCheckout = workflow.slice(
+  workflow.indexOf("      - name: Check out the fixed trusted github-actions control plane"),
+  workflow.indexOf("      - name: Create an isolated, credential-free real checkout"),
+);
+assert.match(promotionCheckout, /set-safe-directory: false/);
+const sourceAuthority = workflow.slice(
+  workflow.indexOf("      - name: Independently re-derive the source patch boundary"),
+  workflow.indexOf("      - name: Reconstruct the exact plan and start its synthetic rebase"),
+);
+const parentGuard = sourceAuthority.indexOf("if (( parent_count == 1 )); then");
+const commitsApi = sourceAuthority.indexOf('pulls/$SOURCE_PR/commits?per_page=100');
+const commitGuard = sourceAuthority.indexOf("if (( commit_count > 1 )); then");
+const filesApi = sourceAuthority.indexOf('pulls/$SOURCE_PR/files?per_page=100');
+assert.ok(parentGuard > 0 && parentGuard < commitsApi);
+assert.ok(commitsApi < commitGuard && commitGuard < filesApi);
+assert.match(sourceAuthority, /printf '\[\]\\n' >"\$commits"/);
+assert.match(sourceAuthority, /printf '\[\]\\n' >"\$files"/);
+assert.match(sourceAuthority, /retrying the immutable snapshot is safe/);
 assert.match(workflow, /--force-with-lease="refs\/heads\/\$PROMOTION_BRANCH:\$RESERVATION_SHA"/);
 assert.match(workflow, /thingtime-ai-promotion-resolved:v1/);
 assert.match(workflow, /thingtime-ai-promotion-paused:v1/);
