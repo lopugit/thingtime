@@ -36,12 +36,28 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Repository-root Vercel builds preserve the app's pnpm pin and function
+  aliases**: the root package now declares pnpm 10.12.1 to match Remix, so
+  Corepack cannot select Vercel's newer global pnpm before entering the nested
+  workspace. Output promotion preserves Nitro's relative function symlinks,
+  keeping route aliases inside the root artifact instead of pointing back into
+  `remix/.vercel/output`. The deployment contract covers both invariants. —
+  Codex (AI), 2026-08-17
+- **Vercel builds now start at the repository root without deploying the thin
+  CI branch**: root `vercel.json` installs only the Remix workspace, a tested
+  wrapper preserves the existing Vite/Nitro verification before staging the
+  Build Output API artifact at root `.vercel/output`, and both config and the
+  ignored-build decision exclude `github-actions`. The matching control-plane
+  config disables Git deployments for that branch and its descendants. Setup
+  and live verification steps are recorded in README, TESTING, and
+  VERCEL_DEPLOYMENTS. — Codex (AI), 2026-08-17
 - **Root bootstrap no longer exposes server secrets**: browser-visible loader
   configuration is now built from an explicit status-origin allowlist instead
   of every `THINGTIME_*` variable, and `/api/root-data` is private, no-store,
   and cookie-varying. Regression coverage seeds representative CI, webhook, and
   email HMAC values and proves none cross the server/client boundary. — Codex
   (AI), 2026-08-17
+
 
 - **Thin Web CI promotion no longer blocks on topology contracts**: the stale
   product-branch copy of the develop-preview controller was removed, the two
