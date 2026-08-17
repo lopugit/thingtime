@@ -101,9 +101,11 @@ environment.
   previous non-empty query is de-duplicated into a device-local History section
   that appears before Suggestions and persists across full relaunches. History
   is modeled as search sessions: each term owns the de-duplicated commands
-  launched from that term, and those child rows can directly replay their saved
-  action. The newest eight sessions appear initially; Show More expands up to 50
-  retained sessions without turning the initial display cap into data loss.
+  launched from that term. Each session leads with its newest executed command,
+  followed by older commands and then the search term as context; command rows
+  directly replay their saved action. The newest eight sessions appear
+  initially; Show More expands up to 50 retained sessions without turning the
+  initial display cap into data loss.
 - The repository's existing Raycast extension moved intact from root `raycast/`
   to `Commander/extensions/raycast/`, keeping its image tools, assets, and pinned
   package alongside the real no-view Open Commander command. That command opens

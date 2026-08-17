@@ -166,9 +166,10 @@ describe('Launcher keyboard navigation', () => {
     expect(hideLauncher).not.toHaveBeenCalled();
   });
 
-  it('shows recent searches before suggestions and restores one with Return', () => {
+  it('shows the newest launched commands before their search term and restores the term with Return', () => {
     const commander = state({
       query: '',
+      selectedIndex: 2,
       recentSearches: [
         {
           query: '1password',
@@ -181,6 +182,14 @@ describe('Launcher keyboard navigation', () => {
               kind: 'application',
               actionTitle: 'Open',
             },
+            {
+              itemId: 'builtin:settings',
+              actionId: 'open-settings',
+              title: 'Commander Settings',
+              subtitle: 'Change preferences',
+              kind: 'builtin',
+              actionTitle: 'Open Settings',
+            },
           ],
         },
         { query: 'settings', commands: [] },
@@ -191,9 +200,11 @@ describe('Launcher keyboard navigation', () => {
     expect(screen.getByRole('heading', { name: /History/ })).toBeVisible();
     expect(screen.getByRole('heading', { name: /Suggestions/ })).toBeVisible();
     const options = screen.getAllByRole('option');
-    expect(options[0]).toHaveTextContent('1password');
-    expect(options[1]).toHaveTextContent('1Password');
-    expect(options[3]).toHaveTextContent('Commander Settings');
+    expect(options[0]).toHaveTextContent('1Password');
+    expect(options[1]).toHaveTextContent('Commander Settings');
+    expect(options[2]).toHaveTextContent('1password');
+    expect(options[2]).toHaveClass('history-query-row');
+    expect(options[4]).toHaveTextContent('Commander Settings');
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
@@ -214,7 +225,7 @@ describe('Launcher keyboard navigation', () => {
         },
       ],
     };
-    const commander = state({ query: '', recentSearches: [search], selectedIndex: 1 });
+    const commander = state({ query: '', recentSearches: [search], selectedIndex: 0 });
     render(<Launcher state={commander} />);
 
     fireEvent.keyDown(window, { key: 'Enter' });

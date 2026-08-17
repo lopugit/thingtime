@@ -14,8 +14,8 @@ type HistoryRow =
 
 function buildHistoryRows(searches: readonly RecentSearch[]): HistoryRow[] {
   return searches.flatMap((search) => [
-    { type: 'query' as const, search },
     ...search.commands.map((command) => ({ type: 'command' as const, search, command })),
+    { type: 'query' as const, search },
   ]);
 }
 
@@ -229,7 +229,9 @@ export function Launcher({ state }: { state: CommanderState }) {
                         type="button"
                         role="option"
                         aria-selected={selectedRow}
-                        className={selectedRow ? 'result-row selected' : 'result-row'}
+                        className={`result-row${commandCount ? ' history-query-row' : ''}${
+                          selectedRow ? ' selected' : ''
+                        }`}
                         key={`history:${row.search.query.toLowerCase()}`}
                         onMouseEnter={() => state.setSelectedIndex(index)}
                         onDoubleClick={() => state.setQuery(row.search.query)}
@@ -263,11 +265,7 @@ export function Launcher({ state }: { state: CommanderState }) {
                       type="button"
                       role="option"
                       aria-selected={selectedRow}
-                      className={
-                        selectedRow
-                          ? 'result-row history-command-row selected'
-                          : 'result-row history-command-row'
-                      }
+                      className={selectedRow ? 'result-row selected' : 'result-row'}
                       key={`history:${row.search.query.toLowerCase()}:${row.command.itemId}:${row.command.actionId}`}
                       onMouseEnter={() => state.setSelectedIndex(index)}
                       onDoubleClick={() => void runHistoryCommand(row)}

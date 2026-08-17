@@ -12,7 +12,7 @@ portable from day one.
 - a searchable Commander Settings command and separate native settings window;
 - a Raycast-shaped built-in Commander extension with separate quit, hide-window, and open-window commands;
 - launcher queries clear on every reopen while private, device-local search sessions remain available in a first
-  History section, with each search term followed by the commands launched from it;
+  History section, led by the newest command launched from each search with its search term shown beneath it;
 - launch-at-login, menu-bar icon, favourites-in-compact-mode, window mode, appearance, and text-size preferences;
 - draggable native launcher and Settings chrome plus physical-key shortcut recording for modified macOS keys;
 - installed extension management, safe folder/ZIP sideloading with opt-in source builds, and live Store browsing;
