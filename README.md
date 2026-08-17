@@ -24,6 +24,113 @@ from any MCP host, ChatGPT and Claude JSON exports, and a portable connector
 manifest for other apps. See [`MCP/README.md`](MCP/README.md) for setup and the
 current ThingtimeDB integration boundary.
 
+## GitHub Actions control plane
+
+Thingtime keeps executable CI/CD behavior on the long-lived, protected
+`github-actions` branch. Product branches (`main`, `develop`, feature branches,
+and promotion branches) retain only seven small event listeners in
+`.github/workflows/`: GitHub must be able to discover a workflow file on the
+ref/default branch that receives a native `push`, `pull_request_target`,
+`schedule`, `repository_dispatch`, or `workflow_dispatch` event. Each listener
+contains triggers, caller permissions, and typed inputs only; its sole job calls
+the matching reusable workflow at
+`lopugit/thingtime/.github/workflows/<name>.yml@github-actions`.
+
+All runner selection, shell commands, third-party actions, AI/model routing,
+Git operations, Graphify refreshes, and workflow scripts live only on
+`github-actions`. The product branches intentionally contain no `.github/actions`
+or `.github/scripts` behavior. `remix/scripts/workflow-caller-contract.mjs`
+fails if executable behavior leaks back into a listener or one stops pinning the
+control-plane ref.
+
+Protect `github-actions` with a ruleset: require pull-request review for changes,
+block force pushes and deletion, and restrict direct updates. A push to that
+branch runs its own control-plane contract CI. Updating the implementation no
+longer requires separately merging the same behavior into `develop` and `main`;
+the thin listeners on both branches call the same reviewed revision immediately.
+
+The Admin → CI Control dashboard adds the external observation/operation layer:
+signed GitHub and Vercel webhooks project repositories, features/stacks,
+branches, pull requests, Actions runs, deployments, previews, audited dispatches,
+and append-only status history into protected Things. The GitHub App is also
+used for explicit reconciliation, allowlisted workflow dispatch, and ephemeral
+self-hosted runner registration. Native listeners remain the automatic trigger
+path, so a webhook outage cannot silently turn off conflict resolution or CI;
+the dashboard makes drift and stale delivery state visible. Administrator
+dispatches always enter the reviewed `github-actions` implementation; neither
+the UI nor API can load workflow YAML from an arbitrary feature branch.
+
+For supported automations, an administrator can choose **GitHub Actions** or
+**Vercel Sandbox** independently. The native listener first runs a tiny provider
+router on GitHub. A GitHub selection continues normally. A Vercel selection
+starts a durable Vercel Workflow, creates an ephemeral Vercel Sandbox, registers
+that Sandbox as a uniquely labelled GitHub self-hosted runner, and dispatches the
+same protected reusable workflow back onto that runner. GitHub therefore remains
+the workflow/event control plane while the expensive compute runs on Vercel. If
+the signed router, App, Workflow, or Sandbox is unavailable, the trigger records
+the fallback and continues on GitHub-hosted compute instead of dropping the
+automation. Web CI remains GitHub-only while its API test job requires a Docker
+MongoDB service; Electron release remains GitHub-only because it needs native
+platform runners.
+
+Configure the server-side integration with private environment variables only
+(never `PUBLIC_*`):
+
+```sh
+THINGTIME_GITHUB_REPOSITORY="owner/repository"
+THINGTIME_GITHUB_APP_ID="123456"
+THINGTIME_GITHUB_APP_INSTALLATION_ID="12345678"
+THINGTIME_GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+THINGTIME_GITHUB_WEBHOOK_SECRET="replace-with-a-long-random-secret"
+THINGTIME_VERCEL_WEBHOOK_SECRET="secret-returned-when-the-webhook-is-created"
+THINGTIME_CI_ROUTER_SECRET="another-independent-long-random-secret"
+```
+
+Create a repository-installed GitHub App with repository metadata read,
+Actions read/write (workflow dispatch and run/job observation), Administration
+read/write (short-lived self-hosted runner registration and deletion), Contents
+read (branches), Pull requests read, and Deployments read. Install it only on
+the intended repository. Subscribe its webhook to `push`, branch create/delete,
+pull request, workflow run, workflow job, deployment, and deployment status
+events, using:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/github/webhook
+```
+
+Create a project-scoped Vercel webhook for deployment created/ready/error/
+canceled/deleted events at:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/vercel/webhook
+```
+
+The signed compute-provider route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/route
+```
+
+Store each secret directly in the deployment environment. Also add the same
+`THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
+repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The
+router secret is deliberately independent of both webhook secrets. Vercel's
+system-provided OIDC identity authenticates Sandbox creation in deployed
+functions; local/non-Vercel execution may instead provide `VERCEL_TOKEN`,
+`VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`. Set
+`WORKFLOW_SEQUENTIAL_REPLAYS=1` in Vercel for deterministic durable-workflow
+replay. The Admin API reports only whether an integration is configured; it
+never returns credentials. Admin reports **Vercel runner ready** only when the
+GitHub App credentials, provider-router secret, and Vercel runtime identity are
+all available; its API refuses to select Vercel before that complete capability
+is ready. An already-saved Vercel policy still fails over safely to GitHub if a
+dependency later disappears.
+
+After deployment and App installation, create both provider webhooks and click
+**Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
+open PRs, Actions runs, deployments, and previews; subsequent webhooks keep the
+projection current. Until that first successful reconcile, an empty dashboard
+with zero counts is expected.
 # 💹 Donate on Indiegogo to save humanity 🩷
 
 ### You can get Merch 🌈 + other benefits 🦄💯
@@ -200,17 +307,26 @@ secrets. These files are optional for normal app usage; set them only when you
 want to override the default production-backed API fallback or run the backend
 self-sufficiently against your own services.
 
-Build and verify the Vercel output with:
+Build and verify the repository-root Vercel output with:
 
 ```sh
-cd remix
-corepack pnpm run build
+npm run build:vercel
 ```
 
-The build runs `vite build`, copies the Vite shell into Nitro's server assets,
-builds Nitro with `NITRO_PRESET=vercel`, and checks that
-`.vercel/output/static/index.html` contains the React shell before trusting the
-deployment artifact.
+The root `vercel.json` deliberately installs only `remix/`; it never runs the
+legacy repository-level `postinstall`. The build runs the existing Remix Vite +
+Nitro pipeline, validates `remix/.vercel/output`, then stages and revalidates it
+at the repository-root `.vercel/output` expected by Vercel's Build Output API.
+
+In the Vercel project, set **Root Directory** to the repository root (clear the
+old `remix` value), use the **Other** framework preset, and clear dashboard
+overrides for Build Command, Install Command, Output Directory, and Ignored
+Build Step so the tracked root config is authoritative. The root config also
+sets `outputDirectory: null`: the build emits `.vercel/output` itself. The
+product config disables Git deployments for the exact `github-actions` branch;
+the thin control-plane branch carries its own root config with all Git
+deployments disabled, so branches created from it never try to build an absent
+app.
 
 ## Electron desktop app
 
@@ -324,7 +440,9 @@ the UI, so there's always a way back in) and are reserved at registration so
 nobody can squat an admin username before you register it.
 
 Admins get the `/admin` dashboard (also under the drawer's Account section):
-Users, Apps, Tiers, and System management. The Tiers tab manages protected,
+Users, Apps, Tiers, CI Control, and System management. CI Control presents the
+feature/branch/PR/Actions/deployment topology and signed status history, with
+allowlisted reconciliation and retry controls. The Tiers tab manages protected,
 versioned `subscription-tier` Things in separate Live, Draft / not live, and
 Archived sections. Admins can create a tier or draft a new revision, edit its
 name, tagline, banner, currency, daily/weekly/monthly/yearly prices, six
@@ -471,6 +589,251 @@ sanitized resolved config (never credentials); `POST /api/v1/email/test-otp` is
 a dev/preview-only helper for the `/tests` page restricted to the configured
 test recipient (or a plus alias of it).
 
+### Private S3 media and attachments
+
+Posts, comments and replies, Messenger messages and thread replies, custom
+reaction emoji, and profile avatar/banner images use direct, checksummed
+multipart uploads to a private S3 bucket. The browser receives short-lived part
+URLs, not AWS credentials; product records reference stable attachment ids,
+never expiring S3 URLs. Attachment bytes are reserved against the account's
+Thingtime storage tier before upload and remain charged until exact-version S3
+deletion is confirmed. A stable client request id is hashed with the
+authenticated owner into an opaque owner-scoped attachment id, making lost
+start responses safely retryable without cross-account id squatting or
+existence disclosure.
+
+Every surface binds only its own server-validated attachment purpose. Comment
+and reply files inherit the root post visibility through the complete parent
+chain. Message and thread files require current chat membership. Personal and
+community custom emoji bind one safe raster image to their exact owner/scope;
+community images require membership, while an emoji already used in a shared
+conversation remains renderable to its authenticated participants. Deleting an
+owning post/comment/message/emoji removes the exact S3 versions before Mongo
+rows and quota reservations are released. Custom Mongo data planes cannot bind
+or authorize these home-storage objects.
+
+Profile media is limited to JPEG, PNG, GIF, WebP, or AVIF and 64 MiB per image.
+The server binds a ready upload only to its exact owner and requested avatar or
+banner slot in the same home-Mongo transaction as the profile update. Public
+profile rendering uses the stable same-origin content route; the bucket stays
+private. Replacing or removing managed profile media releases the old reference
+transactionally, but its bytes remain billed until the cleanup path permanently
+deletes the exact S3 version and removes the attachment Thing. External http(s)
+image URLs remain a separate, quota-saving alternative and are never fetched by
+the Thingtime server.
+
+Configure only these server-side Vercel variables. Scope the production bucket
+and role to **Production** only. Thingtime's `develop` Custom Environment and
+standard feature Preview deployments use the separate development bucket,
+role, data plane, and cleanup secret; never expose the production values to
+either environment.
+
+```sh
+THINGTIME_PRIVATE_S3_ROLE_ARN="arn:aws:iam::<12-digit-account-id>:role/<production-attachment-role>"
+THINGTIME_PRIVATE_S3_BUCKET="<private-bucket-name>"
+THINGTIME_PRIVATE_S3_REGION="<aws-region>"
+CRON_SECRET="<long-random-vercel-cron-secret>"
+```
+
+The bucket name must be DNS-compatible **without dots**; dotted names are
+rejected so every signed URL uses the unambiguous virtual-hosted S3 form. The
+bucket must also belong to the same 12-digit AWS account named by the role ARN.
+The runtime derives `ExpectedBucketOwner` from that ARN and fails closed when
+the bucket owner differs.
+
+In Vercel, mark all four values **Sensitive**. Give Production its values only
+in the built-in Production environment. Give `develop` a distinct set only in
+the branch-tracked Custom Environment named `develop`; never select the generic
+Preview environment. `CRON_SECRET` authenticates only
+`/api/v1/attachments/cleanup`; it is not a Thingtime user, PAT, app, or
+service-account credential, and must never use a `THINGTIME_*` browser-visible
+name. Use different secrets for Production and develop.
+
+The `develop` Custom Environment must use an exact `develop` branch matcher and
+own `https://dev.thingtime.com`. Its Vercel OIDC subject is
+`owner:<vercel-team-slug>:project:<vercel-project-name>:environment:develop`.
+This is intentionally different from ordinary PR deployments, whose subject
+ends in `environment:preview`. Branch-scoped Preview variables alone are not an
+AWS boundary because Vercel's Preview OIDC subject contains no Git branch; do
+not trust `environment:preview` for the develop role.
+
+The role must use Vercel OIDC temporary credentials and an exact production
+subject for this project. Do not create an S3 IAM user, reuse the SES IAM user,
+or set generic `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_REGION`
+variables for attachments. Restrict its object policy to the app's `objects/*`
+prefix. With Vercel's recommended team issuer mode, use this placeholder-only
+trust policy (replace every angle-bracket value):
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Principal": {
+				"Federated": "arn:aws:iam::<12-digit-account-id>:oidc-provider/oidc.vercel.com/<vercel-team-slug>"
+			},
+			"Action": "sts:AssumeRoleWithWebIdentity",
+			"Condition": {
+				"StringEquals": {
+					"oidc.vercel.com/<vercel-team-slug>:aud": "https://vercel.com/<vercel-team-slug>",
+					"oidc.vercel.com/<vercel-team-slug>:sub": "owner:<vercel-team-slug>:project:<vercel-project-name>:environment:<production-or-develop>"
+				}
+			}
+		}
+	]
+}
+```
+
+Create one role per environment. Substitute `production` for the Production
+role and `develop` for the develop role; never wildcard the environment portion
+of `sub` and never let one role trust both subjects.
+
+Attach this placeholder-only permissions policy to the role. Keep generic
+`s3:DeleteObject` out: in a versioned bucket it can create a delete marker
+without permanently removing the billed object version.
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "ThingtimePrivateAttachments",
+			"Effect": "Allow",
+			"Action": [
+				"s3:AbortMultipartUpload",
+				"s3:DeleteObjectVersion",
+				"s3:GetObject",
+				"s3:GetObjectVersion",
+				"s3:ListMultipartUploadParts",
+				"s3:PutObject",
+				"s3:PutObjectTagging",
+				"s3:PutObjectVersionTagging"
+			],
+			"Resource": "arn:aws:s3:::<private-bucket-name>/objects/*"
+		}
+	]
+}
+```
+
+The runtime role needs only those object actions:
+
+- `s3:PutObject` and `s3:PutObjectTagging` (the MPU starts with a pending tag)
+- `s3:GetObject` and `s3:GetObjectVersion`
+- `s3:DeleteObjectVersion`
+- `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`
+- `s3:PutObjectVersionTagging`
+
+Do not grant `s3:ListBucket`, `s3:ListBucketMultipartUploads`, ACL,
+public-read, or bucket-administration actions. Completed attachments persist
+the opaque S3 `VersionId`; sniffing, tagging, download, and deletion all target
+that exact verified version. Exact-version deletion happens before the Thingtime
+storage reservation is refunded, so bucket versioning cannot hide unmetered
+noncurrent bytes.
+
+Keep both account- and bucket-level S3 Block Public Access enabled, Bucket Owner
+Enforced object ownership on, and bucket versioning enabled. Bucket policy
+should explicitly deny non-TLS requests and TLS below 1.2. The
+`aws:PrincipalIsAWSService` condition avoids accidentally blocking AWS service
+principals whose network context AWS redacts:
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "DenyInsecureTransport",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"Bool": {
+					"aws:SecureTransport": "false",
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		},
+		{
+			"Sid": "DenyTLSBelow12",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"NumericLessThan": {
+					"s3:TlsVersion": "1.2"
+				},
+				"Bool": {
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		}
+	]
+}
+```
+
+Configure CORS with one exact origin per bucket, `PUT`, and the one
+application-authored request header: the production Thingtime origin for the
+production bucket, and `https://dev.thingtime.com` for the develop bucket. The
+uploader deliberately sends a Blob with no `Content-Type`, and completion
+obtains ETags/checksums server-side with ListParts, so no S3 response headers
+need to be exposed:
+
+```json
+[
+	{
+		"AllowedHeaders": ["x-amz-checksum-sha256"],
+		"AllowedMethods": ["PUT"],
+		"AllowedOrigins": ["https://<environment-origin>"],
+		"ExposeHeaders": [],
+		"MaxAgeSeconds": 300
+	}
+]
+```
+
+Lifecycle must abort incomplete multipart uploads after seven days and remove
+noncurrent versions after 30 days. This AWS CLI/API-shaped placeholder applies
+both actions only to Thingtime's object prefix (the S3 console asks for the same
+rule fields):
+
+```json
+{
+	"Rules": [
+		{
+			"ID": "thingtime-private-attachment-cleanup",
+			"Status": "Enabled",
+			"Filter": { "Prefix": "objects/" },
+			"NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
+			"AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+		}
+	]
+}
+```
+
+Presigned URLs work with a private bucket; public access must stay off.
+Production uses the app's hourly Vercel Cron at minute 17. Vercel Cron runs
+Production deployments only, so the `develop` Custom Environment instead needs
+an external hourly scheduler that sends the same exact bearer header to
+`https://dev.thingtime.com/api/v1/attachments/cleanup`. Thingtime uses a
+dedicated AWS EventBridge API Destination for that call; keep its connection
+secret distinct, its invocation role limited to that one destination, and its
+rate at one request/second. Configure the Connection as API-key auth with
+header name `Authorization` and value `Bearer <develop-cron-secret>`. Restrict
+the role trust to `events.amazonaws.com` plus the exact rule `aws:SourceArn`
+and account, and grant only `events:InvokeApiDestination` on the exact API
+Destination ARN. Schedule `cron(17 * * * ? *)`; never put the connection secret
+in the rule payload, repository, or logs. Both paths process at most 1,000 rows with a
+25-second wall-clock budget per pass. Pending cancellations
+that issued a presigned part URL stay conservatively billed through an eight-day,
+lifecycle-backed settlement window. Cleanup then requires two empty
+Abort/ListParts checks at least one hour apart before HEAD verification,
+exact-version deletion, and transactional refund. This prevents a signed part
+PUT that finishes late from escaping tier accounting; the seven-day S3
+incomplete-MPU lifecycle remains a required independent guard.
+An MPU that never issued a part URL has no possible late browser PUT and can be
+refunded promptly after Abort/ListParts/HEAD proves it empty.
+
 ### Notification emails (SES notification stream)
 
 Activity notifications (friend requests, new followers, comments, replies,
@@ -554,6 +917,13 @@ OPENAI_API_KEY="<openai-api-key>"
 LOPU_PROVIDER="claude"
 ```
 
+Every Claude-backed musing reads the current Admin → AI workflow model order
+from `Thingtime.PRConflictAutoResolverModelWaterfall`; a named preference wins
+over `LOPU_CLAUDE_MODEL`. When the Admin primary is `default`,
+`LOPU_CLAUDE_MODEL` remains the Anthropic-valid provider default. OpenAI is a
+separate provider and continues to use `LOPU_OPENAI_MODEL` (or its documented
+built-in default), including when it is selected first with `LOPU_PROVIDER`.
+
 When an AI key is configured, the musing endpoint uses MongoDB to allow 10
 AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
@@ -633,6 +1003,187 @@ Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 `VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_GIT_COMMIT_REF`, and
 `VERCEL_GIT_COMMIT_SHA` during deployments.
 
+### Trusted `develop`-target PR deployments
+
+A pull request's base branch does not select its Vercel environment. A feature
+branch targeting `develop` is therefore still an ordinary Preview unless the
+trusted controller in `.github/workflows/develop-pr-preview.yml` explicitly
+deploys its exact head SHA to the `develop` Custom Environment. Thingtime now
+also assigns the current `develop` runtime variables to generic Preview, so an
+ordinary newly built Preview shares the development data/services even without
+the controller. The controller remains responsible for the stable
+`pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
+comment, and marker-scoped cleanup.
+
+The workflow deliberately uses two stages. The product branches retain only a
+thin event listener pinned to the reusable implementation on the protected
+`github-actions` branch. Its `pull_request_target` job has no environment or
+Vercel secret, checks out no code, and emits only a bounded
+`repository_dispatch` payload. The privileged dispatch job runs in the trusted
+default-branch event context behind the `vercel-develop-pr-control` environment
+while checking out the controller from `github-actions`. It proves the
+source workflow path/run, repository, same-repository PR, head SHA, action, and
+triggering actor through GitHub's API, then re-reads the live PR. Both the PR
+author and triggering actor must be explicitly allowlisted, currently hold
+write/admin permission, and the non-draft PR must still target `develop`.
+Neither GitHub job checks out or executes PR-head code; Vercel performs the
+remote build only after those gates pass.
+
+The reusable implementation and controller script must first merge to the
+protected `github-actions` branch. The thin listener must then reach the
+repository's default `main` branch through the normal `develop` promotion path.
+`pull_request_target` loads the listener from the default branch, so merely
+adding it to a feature branch does not activate the controller. Thingtime's
+active `main` `Basic Protection` ruleset
+has no bypass: it requires a pull request, resolved review threads, strict Web
+CI and CodeQL status checks, and blocks branch deletion and force-pushes. The
+tracked CODEOWNERS file requests owner review, but independent CODEOWNER
+approval is optional future hardening once a second trusted collaborator can
+review controller changes. The controller Environment intentionally has no
+required reviewer because that would pause event cleanup and every six-hour
+scheduled reconciliation instead of letting them run automatically.
+
+Thingtime's protected GitHub Environment `vercel-develop-pr-control` allows only
+the `main` deployment branch. It contains the nine controller variables and a
+dedicated 90-day Vercel token scoped to the owning team. Vercel does not offer
+a project-scoped PAT for this API surface, so the protected Environment and the
+controller's exact project/team checks are the project boundary. The masked
+unsigned S3 CORS probe secret is also installed. The secret-free
+`pull_request_target` stage hands off to a `repository_dispatch` run in the
+default-branch context; scheduled runs also use the default branch, and the
+workflow refuses a manual dispatch from any other ref. Forks must use values
+from their own Vercel project; the examples are placeholders and must not be
+committed with live credentials or identifiers:
+
+```sh
+# GitHub Environment secrets
+VERCEL_DEVELOP_DEPLOY_TOKEN="<dedicated-Vercel-deployment-token>"
+THINGTIME_DEVELOP_S3_CORS_PROBE_URL="https://<exact-develop-bucket>.s3.<region>.amazonaws.com/<probe-object>"
+
+# GitHub Environment variables
+VERCEL_PROJECT_ID="<Vercel-project-id>"
+VERCEL_PROJECT_NAME="<Vercel-project-name>"
+VERCEL_TEAM_ID="<Vercel-team-id>"
+VERCEL_TEAM_SLUG="<Vercel-team-slug>"
+VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
+VERCEL_CUSTOM_ENVIRONMENT_ID="<Vercel-develop-custom-environment-id>"
+DEVELOP_PREVIEW_TRUSTED_ACTORS="<trusted-GitHub-login>[,<trusted-GitHub-login>]"
+PREVIEW_ALIAS_SUFFIX="<preview-alias-suffix>"
+STABLE_DEVELOP_DOMAIN="<stable-develop-domain>"
+```
+
+`VERCEL_CUSTOM_ENVIRONMENT_ID` must contain the exact immutable ID returned for
+the `develop` Custom Environment, not the display slug `develop`. The author and
+triggering actor must both appear in `DEVELOP_PREVIEW_TRUSTED_ACTORS` and
+still hold current write/admin repository permission. Keep the Vercel
+environment's branch matcher on the literal `develop` branch. Bind
+`dev.thingtime.com` to that Git branch (`gitBranch: develop` and no
+`customEnvironmentId` on the domain), not to the entire Custom Environment,
+and keep the Custom Environment's own domain list empty. The controller assigns
+only the verified PR wildcard alias explicitly. This leaves the stable
+development hostname on the real `develop` branch while PRs receive only
+`https://pr-<number>.previews.dev.thingtime.com`.
+
+Generic Preview intentionally receives every runtime variable currently
+assigned to the `develop` Custom Environment, while retaining its existing
+Preview-only filesystem, CI, repository, webhook, and workflow variables. This
+includes the development-only APP URL, CRON, JWT, MongoDB, and S3 settings, plus
+the AI, SES/email, and Vercel API values that `develop` intentionally shares
+with Production. Production MongoDB, JWT, and S3 settings remain separate and
+are not assigned to Preview.
+
+For Thingtime, set `PREVIEW_ALIAS_SUFFIX=previews.dev.thingtime.com` and
+`STABLE_DEVELOP_DOMAIN=dev.thingtime.com`. Forks should replace both with
+domains they control. The masked Environment secret
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` is required and must be a credential-free
+HTTPS object URL on the exact develop bucket, with no query string or presigned
+parameters. The controller sends only an unauthenticated CORS `OPTIONS` probe
+and fail-closes alias publication if it is not accepted.
+
+`*.previews.dev.thingtime.com` is registered, verified, and detached from
+both Git branches and Custom Environments in Vercel. Its remaining Thingtime
+DNS setup keeps Cloudflare authoritative for the apex. The **DNS only**
+(grey-cloud) CNAME from `*.previews.dev` to `cname.vercel-dns.com` routes wildcard
+traffic, while wildcard TLS issuance and renewal require two narrow NS
+delegations from `_acme-challenge.previews.dev` to `ns1.vercel-dns.com` and
+`ns2.vercel-dns.com`. Do not move the `thingtime.com` apex to Vercel nameservers
+or delegate a broader subtree. Dedicate `_acme-challenge.previews.dev` to this
+preview wildcard, because that delegation gives Vercel control of certificate
+validation for the subtree and can prevent another provider from issuing there.
+Vercel may still label this externally managed arrangement `DNS Change
+Recommended` or return `misconfigured: true`; that advisory asks to move the
+apex nameservers and is not the publication gate. The controller instead
+requires the live probe hostname to resolve to Vercel's currently recommended
+CNAME target, then verifies HTTPS on the exact alias after assigning it.
+Making Vercel authoritative for the domain would normally remove the advisory,
+but Thingtime intentionally keeps Cloudflare authoritative and delegates only
+the two narrow ACME validation subtrees.
+See Vercel's official
+[wildcard-without-Vercel-nameservers guide](https://vercel.com/kb/guide/wildcard-domain-without-vercel-nameservers).
+Forks should first add their own wildcard to Vercel and copy every CNAME or
+verification record Vercel currently displays for that domain; do not copy
+another project's account-specific targets.
+
+The develop S3 bucket permits browser upload CORS from the stable development
+origin, the controller-managed PR aliases, and Thingtime's generated Vercel
+Preview hostnames. Downloads remain same-origin through Thingtime and the
+bucket stays private:
+
+```json
+[
+	{
+		"AllowedHeaders": ["x-amz-checksum-sha256"],
+		"AllowedMethods": ["PUT"],
+		"AllowedOrigins": ["https://dev.thingtime.com", "https://*.previews.dev.thingtime.com", "https://thingtime-*-lopugits-projects.vercel.app"],
+		"ExposeHeaders": [],
+		"MaxAgeSeconds": 300
+	}
+]
+```
+
+Activation status as of 2026-08-11: the no-bypass `main` ruleset, protected
+Environment, nine controller variables, dedicated 90-day Vercel token, masked
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, shared develop/Preview runtime
+scope, generic-Preview OIDC trust, develop bucket CORS, detached Vercel
+wildcard, DNS-only wildcard CNAME, narrow ACME NS delegation, and wildcard TLS
+are complete for `*.previews.dev.thingtime.com`. The first live dispatch
+authenticated successfully and exposed the external-DNS advisory mismatch.
+The corrected implementation must merge to `github-actions`, and this thin
+listener must reach `main` through `develop`; a successful post-fix exact-SHA
+deployment, alias publication, CORS probe, and attachment upload/removal check
+then complete the activation checklist.
+
+CORS is not authorization. The bucket remains private, while the development
+AWS role explicitly trusts both Thingtime's `environment:develop` and
+`environment:preview` OIDC subjects. Every new ordinary Preview can therefore
+read or mutate the same development MongoDB/S3/data plane and use the same
+private integration values as `dev.thingtime.com`. Treat all branches Vercel is
+allowed to build as trusted development code, use disposable data, and keep
+production MongoDB/JWT/S3 credentials out of Preview.
+
+`*.previews.thingtime.com` is reserved for a separate future production-preview
+controller. Do not point the develop controller at that suffix, copy the
+production S3 role into generic Preview, or let ordinary Vercel feature/fork
+previews assume the production AWS role. A production-preview controller must have its
+own trusted actors, protected control environment, exact production OIDC trust,
+deployment cleanup, CORS probe, and bucket CORS rule before that namespace is
+activated.
+
+Every generic Preview and eligible controller deployment intentionally shares
+the same development MongoDB, S3 bucket, quotas, and other runtime state as
+`dev.thingtime.com`. It is a trusted integration surface, not an isolated
+sandbox: use disposable test accounts/data and do not allow Vercel to build
+untrusted code in this project. The controller updates one marker comment with
+deploying/ready/failure state, moves
+the PR alias only after the exact SHA is ready and revalidated, and deletes only
+its marker-tagged superseded resources. Close/retarget/draft handling removes
+the alias, inactivates the transient GitHub Deployment, and deletes its tagged
+Vercel deployments. A six-hour scheduled reconciliation repeats marker-scoped
+cleanup after an interrupted or missed event without touching the stable
+`develop` deployment; manual dispatch safely revalidates one supplied PR.
+See `VERCEL_DEPLOYMENTS.md` and the Develop-target checklist in `TESTING.md` for
+the operator runbook.
+
 The footer environment selector can compare public origins for this tab, local,
 development, staging, and production. These values are browser-visible
 `THINGTIME_` values, so use public origins only and never include tokens,
@@ -650,10 +1201,18 @@ Unset values fall back to `https://thingtime.com`, `https://dev.thingtime.com`,
 
 ## Public env exposure rule
 
-Only variables with the `THINGTIME_` prefix are intentionally copied into the
-browser-visible loader data, and variables containing `PRIVATE` are excluded.
-Keep secrets such as MongoDB passwords and Vercel API tokens unprefixed and
-server-only.
+Browser-visible loader data uses an explicit allowlist. It includes only the
+public local/development/staging/production status origins plus derived branch,
+Vercel deployment, and status-display labels. Every other environment variable
+remains server-only — including all `THINGTIME_*` webhook, router, email,
+credential, token, password, and private-key values. Never add a new public
+value by prefix convention; add and review its exact key in
+`remix/app/root-data.server.ts`.
+
+Naming still matters for reviewability even though it no longer decides
+exposure: use the `THINGTIME_PRIVATE_` namespace for server-only Thingtime
+integrations such as S3, and keep secrets such as MongoDB passwords and Vercel
+API tokens unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
 

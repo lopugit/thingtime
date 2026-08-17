@@ -1,5 +1,7 @@
 import { PublicError, safeErrorText } from '../errors/safeError';
 
+export { isVercelStatusEnabled } from './environment';
+
 export type VercelDeploymentStatus = {
   branch?: string;
   commitSha?: string;
@@ -120,17 +122,6 @@ const setCachedJson = (
     data,
     expiresAt: Date.now() + ttlMs
   });
-};
-
-export const isVercelStatusEnabled = () => {
-  const vercelEnvironment = process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
-
-  return (
-    process.env.NODE_ENV === 'development' ||
-    vercelEnvironment === 'preview' ||
-    vercelEnvironment === 'production' ||
-    process.env.THINGTIME_SHOW_DEPLOYMENT_STATUS === 'true'
-  );
 };
 
 const normaliseUrl = (url?: string) => {

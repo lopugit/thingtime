@@ -1,49 +1,70 @@
-import { json } from '~/api/http';
+import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { findUserByUsername, toPublicProfile, updateUserProfile } from '~/api/utils/auth/users';
+import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
 import { countPublicPosts } from '~/api/utils/things/things';
 
 // GET /api/v1/users/profile?username= — a user's public profile (safe
 // projection: never email/verification/storage) + their public post count.
 export const loader = async ({ request }: { request: Request }) => {
-  const params = new URL(request.url).searchParams;
-  const username = (params.get('username') || '').trim();
-  if (!username) {
-    return json({ ok: false, error: 'username is required' }, { status: 400 });
-  }
+	const params = new URL(request.url).searchParams;
+	const username = (params.get('username') || '').trim();
+	if (!username) {
+		return json({ ok: false, error: 'username is required' }, { status: 400 });
+	}
 
-  const user = await findUserByUsername(username);
-  if (!user) {
-    return json({ ok: false, error: 'User not found' }, { status: 404 });
-  }
+	const user = await findUserByUsername(username);
+	if (!user) {
+		return json({ ok: false, error: 'User not found' }, { status: 404 });
+	}
 
-  const postCount = await countPublicPosts(String(user._id));
+	const postCount = await countPublicPosts(String(user._id));
 
-  return json({ ok: true, profile: toPublicProfile(user), postCount });
+	return json({ ok: true, profile: toPublicProfile(user), postCount });
 };
 
-// Profile updates may carry small data:image URIs for avatar/banner.
+// Keep this mutation body bounded. Existing data:image values remain readable,
+// but new profile image writes use http(s) links or managed S3 attachments.
 const MAX_BODY_BYTES = 256 * 1024;
 
-// POST /api/v1/users/profile — { displayName?, bio?, avatarUrl?, bannerUrl? }
+// POST /api/v1/users/profile — { displayName?, bio?, avatarUrl?, bannerUrl?,
+// avatarAttachmentId?, bannerAttachmentId? }
 // — update the caller's own profile fields.
-export const action = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
-  if (!user) {
-    return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const contentLength = Number(request.headers.get('content-length') || 0);
-  if (contentLength > MAX_BODY_BYTES) {
-    return json({ ok: false, error: 'Profile payload too large' }, { status: 413 });
-  }
-
-  const body = await request.json().catch(() => ({}));
-  const result = await updateUserProfile(user.id, body);
-
-  if (result.ok === false) {
-    return json({ ok: false, error: result.error }, { status: result.status });
-  }
-  return json({ ok: true, user: result.user });
+type ProfileActionDependencies = {
+	getUser: typeof getCurrentUser;
+	updateProfile: typeof updateUserProfile;
 };
+
+export const createProfileAction = (overrides: Partial<ProfileActionDependencies> = {}) => {
+	const dependencies: ProfileActionDependencies = {
+		getUser: getCurrentUser,
+		updateProfile: updateUserProfile,
+		...overrides
+	};
+
+	return async ({ request }: { request: Request }) => {
+		if (!isSameOriginAttachmentRequest(request)) {
+			return json({ ok: false, error: 'Cross-origin profile requests are not allowed' }, { status: 403 });
+		}
+		const user = await dependencies.getUser(request);
+		if (!user) {
+			return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+		}
+
+		const contentType = request.headers.get('content-type') || '';
+		if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+			return json({ ok: false, error: 'Content-Type must be application/json' }, { status: 415 });
+		}
+
+		const body = await readJsonBody(request, MAX_BODY_BYTES);
+		const result = await dependencies.updateProfile(user.id, body);
+
+		if (result.ok === false) {
+			return json({ ok: false, error: result.error }, { status: result.status });
+		}
+		return json({ ok: true, user: result.user });
+	};
+};
+
+export const action = createProfileAction();
