@@ -47,6 +47,7 @@ build_all() {
   /usr/bin/ditto "$ROOT_DIR/apps/desktop-ui/dist" "$staged_bundle/Contents/Resources/ui"
   /usr/bin/ditto "$ROOT_DIR/apps/daemon/dist/commander-daemon.mjs" "$staged_bundle/Contents/Resources/commander-daemon.mjs"
   /usr/bin/ditto "$ROOT_DIR/apps/daemon/dist/worker.js" "$staged_bundle/Contents/Resources/worker.js"
+  /usr/bin/ditto "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$staged_bundle/Contents/Resources/THIRD_PARTY_NOTICES.md"
   stage_node "$staged_bundle/Contents/Resources/node"
   stage_icon "$staged_bundle/Contents/Resources/$APP_NAME.icns"
   if [[ -n "$rust_binary" && -x "$rust_binary" ]]; then

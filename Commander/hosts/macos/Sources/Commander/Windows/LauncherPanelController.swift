@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 
 private final class CommanderPanel: NSPanel {
   override var canBecomeKey: Bool { true }
@@ -28,6 +29,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   private var showPending = false
   private var showRequestID: UInt = 0
   private var windowMode = LauncherWindowMode.standard
+  private var pasteTarget: NSRunningApplication?
 
   init(ready: DaemonReady, bridge: CommanderNativeBridge) {
     let panel = CommanderPanel(
@@ -64,6 +66,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   func show() {
+    rememberPasteTarget()
     guard contentReady else { pendingShow = true; return }
     pendingShow = false
     showPending = true
@@ -92,6 +95,44 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     showPending = false
     showRequestID &+= 1
     panel.orderOut(nil)
+  }
+
+  var pasteTargetName: String? {
+    guard let pasteTarget, !pasteTarget.isTerminated else { return nil }
+    return pasteTarget.localizedName
+  }
+
+  func paste(_ text: String) async -> [String: Any] {
+    NSPasteboard.general.clearContents()
+    let copied = NSPasteboard.general.setString(text, forType: .string)
+    var result: [String: Any] = [
+      "copied": copied,
+      "pasted": false,
+      "requiresAccessibility": false,
+    ]
+    if let pasteTargetName { result["targetApplication"] = pasteTargetName }
+    guard copied else { return result }
+    guard AXIsProcessTrusted() else {
+      result["requiresAccessibility"] = true
+      return result
+    }
+    guard let pasteTarget, !pasteTarget.isTerminated else { return result }
+
+    hide()
+    _ = pasteTarget.activate(options: [.activateAllWindows])
+    try? await Task.sleep(for: .milliseconds(120))
+
+    guard let source = CGEventSource(stateID: .hidSystemState),
+          let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+      return result
+    }
+    keyDown.flags = .maskCommand
+    keyUp.flags = .maskCommand
+    keyDown.post(tap: .cghidEventTap)
+    keyUp.post(tap: .cghidEventTap)
+    result["pasted"] = true
+    return result
   }
   func toggle() { panel.isVisible || pendingShow || showPending ? hide() : show() }
 
@@ -127,6 +168,13 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   var panelForTesting: NSPanel { panel }
   static var launcherOpenedScriptForTesting: String { launcherOpenedScript }
+
+  private func rememberPasteTarget() {
+    guard let active = NSWorkspace.shared.frontmostApplication,
+          active.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+          !active.isTerminated else { return }
+    pasteTarget = active
+  }
 
   private func centerOnActiveScreen() {
     let mouse = NSEvent.mouseLocation

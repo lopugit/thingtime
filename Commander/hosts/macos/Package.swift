@@ -11,6 +11,7 @@ let package = Package(
       path: "Sources/Commander",
       linkerSettings: [
         .linkedFramework("AppKit"),
+        .linkedFramework("ApplicationServices"),
         .linkedFramework("Carbon"),
         .linkedFramework("Security"),
         .linkedFramework("ServiceManagement"),

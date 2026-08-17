@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   BootstrapResponse,
+  CommanderViewId,
   CommanderSettings,
   RecentSearch,
   RecentSearchCommand,
@@ -17,9 +18,11 @@ export interface CommanderState {
   selectedIndex: number;
   actionsOpen: boolean;
   error: string | null;
+  activeView: CommanderViewId | null;
   setQuery(value: string): void;
   setSelectedIndex(value: number): void;
   setActionsOpen(value: boolean): void;
+  setActiveView(value: CommanderViewId | null): void;
   rememberRecentSearch(value: string, command?: RecentSearchCommand): Promise<void>;
   reportError(value: string | null): void;
   saveSettings(settings: CommanderSettings): Promise<void>;
@@ -34,6 +37,7 @@ export function useCommander(): CommanderState {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<CommanderViewId | null>(null);
   const requestSequence = useRef(0);
   const recentSearchSequence = useRef(0);
   const queryRef = useRef('');
@@ -42,6 +46,7 @@ export function useCommander(): CommanderState {
   const setQuery = useCallback((value: string) => {
     queryRef.current = value;
     setQueryState(value);
+    setHits([]);
     setSelectedIndex(0);
     setActionsOpen(false);
   }, []);
@@ -82,6 +87,7 @@ export function useCommander(): CommanderState {
     const handleLauncherOpened = () => {
       const previousQuery = queryRef.current;
       if (previousQuery.trim()) void rememberRecentSearch(previousQuery);
+      setActiveView(null);
       setQuery('');
     };
     window.addEventListener('commander:launcher-opened', handleLauncherOpened);
@@ -129,9 +135,11 @@ export function useCommander(): CommanderState {
       selectedIndex,
       actionsOpen,
       error,
+      activeView,
       setQuery,
       setSelectedIndex,
       setActionsOpen,
+      setActiveView,
       rememberRecentSearch,
       reportError: setError,
       saveSettings,
@@ -145,6 +153,7 @@ export function useCommander(): CommanderState {
       selectedIndex,
       actionsOpen,
       error,
+      activeView,
       setQuery,
       rememberRecentSearch,
       saveSettings,

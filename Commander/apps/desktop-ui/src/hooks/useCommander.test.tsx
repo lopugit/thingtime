@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import type { SearchHit } from '@commander/protocol';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api.js';
@@ -60,5 +61,26 @@ describe('useCommander launcher sessions', () => {
       { query: '1password', commands: [] },
       { query: 'settings', commands: [] },
     ]);
+  });
+
+  it('clears results immediately when a new query starts so Return cannot run a stale item', async () => {
+    const staleHit: SearchHit = {
+      id: 'builtin:settings',
+      title: 'Commander Settings',
+      kind: 'builtin',
+      keywords: ['settings'],
+      favourite: true,
+      actions: [{ id: 'open-settings', title: 'Open Settings' }],
+      score: 100,
+      matchedRanges: [],
+    };
+    vi.mocked(api.search).mockResolvedValueOnce({ hits: [staleHit] });
+    const { result } = renderHook(() => useCommander());
+    await waitFor(() => expect(result.current.hits).toEqual([staleHit]));
+
+    act(() => result.current.setQuery('emoji'));
+
+    expect(result.current.hits).toEqual([]);
+    expect(result.current.selectedIndex).toBe(0);
   });
 });

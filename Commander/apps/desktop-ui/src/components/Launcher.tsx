@@ -77,6 +77,7 @@ export function Launcher({ state }: { state: CommanderState }) {
     async (itemId: string, actionId: string) => {
       let nativeRequestMethod: string | undefined;
       const response = await api.execute(itemId, actionId);
+      if (response.view) state.setActiveView(response.view.id);
       if (response.nativeRequest) {
         const request = response.nativeRequest;
         nativeRequestMethod = request.method;
@@ -93,7 +94,8 @@ export function Launcher({ state }: { state: CommanderState }) {
         nativeRequestMethod === 'launcher.hide' ||
         nativeRequestMethod === 'launcher.show' ||
         nativeRequestMethod === 'application.quit';
-      if ((actionId === 'open' || actionId === 'run') && !nativeOwnsLauncherLifecycle) await hideLauncher();
+      if ((actionId === 'open' || actionId === 'run') && !nativeOwnsLauncherLifecycle && !response.view)
+        await hideLauncher();
       state.setActionsOpen(false);
       state.reportError(null);
     },

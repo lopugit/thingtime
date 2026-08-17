@@ -1,8 +1,13 @@
-import { useEffect, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo } from 'react';
 import { Launcher } from './components/Launcher.js';
 import { Settings } from './components/Settings.js';
 import { useCommander } from './hooks/useCommander.js';
 import { nativeRequest } from './lib/nativeBridge.js';
+
+const EmojiPicker = lazy(async () => {
+  const module = await import('./components/EmojiPicker.js');
+  return { default: module.EmojiPicker };
+});
 
 export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'settings' } = {}) {
   const state = useCommander();
@@ -58,5 +63,18 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
   document.documentElement.dataset.textSize = state.bootstrap.settings.textSize;
   document.documentElement.dataset.windowMode = state.bootstrap.settings.windowMode;
 
-  return surface === 'settings' ? <Settings state={state} /> : <Launcher state={state} />;
+  if (surface === 'settings') return <Settings state={state} />;
+  if (state.activeView === 'emoji-symbols')
+    return (
+      <Suspense fallback={<Launcher state={state} />}>
+        <EmojiPicker
+          platform={state.bootstrap.platform}
+          onBack={() => {
+            state.setActiveView(null);
+            state.setActionsOpen(false);
+          }}
+        />
+      </Suspense>
+    );
+  return <Launcher state={state} />;
 }

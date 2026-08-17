@@ -11,6 +11,7 @@ export type WindowMode = 'default' | 'compact';
 export type TextSize = 'default' | 'large';
 export type SearchItemKind = 'builtin' | 'application' | 'extension' | 'command' | 'quicklink';
 export type SettingsTab = 'general' | 'extensions' | 'sync' | 'account' | 'advanced' | 'about';
+export type CommanderViewId = 'emoji-symbols';
 
 export const SETTINGS_TABS = [
   'general',
@@ -285,6 +286,23 @@ export interface CommanderAction {
   destructive?: boolean;
 }
 
+export interface CommanderView {
+  id: CommanderViewId;
+}
+
+export interface ExecuteResponse {
+  ok: true;
+  nativeRequest?: Omit<NativeRequest, 'id'>;
+  view?: CommanderView;
+}
+
+export interface NativePasteResult {
+  copied: boolean;
+  pasted: boolean;
+  requiresAccessibility: boolean;
+  targetApplication?: string;
+}
+
 export interface BootstrapResponse {
   protocolVersion: typeof PROTOCOL_VERSION;
   platform: Platform;
@@ -310,8 +328,10 @@ export interface NativeRequest<T = unknown> {
     | 'window.beginDrag'
     | 'settings.open'
     | 'application.open'
+    | 'application.pasteTarget'
     | 'filesystem.reveal'
     | 'clipboard.write'
+    | 'clipboard.paste'
     | 'extension.choose'
     | 'hotkey.update'
     | 'loginItem.update'

@@ -28,8 +28,10 @@ import {
   closeCommanderCommandName,
   closeCommanderWindowCommandName,
   commanderExtension,
+  emojiSymbolsExtension,
   extensionItems,
   openCommanderCommandName,
+  searchEmojiSymbolsCommandName,
 } from './services/catalog.js';
 import { PersistentStore } from './services/persistence.js';
 import { preferenceValuesForCommand, RaycastLocalService } from './services/raycastLocal.js';
@@ -308,6 +310,9 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
             ok: true,
             nativeRequest: { method: 'launcher.show' } satisfies Omit<NativeRequest, 'id'>,
           });
+        }
+        if (extension.id === emojiSymbolsExtension.id && item.commandName === searchEmojiSymbolsCommandName) {
+          return json(response, 200, { ok: true, view: { id: 'emoji-symbols' } });
         }
         if (extension.source === 'builtin')
           return json(response, 409, { error: 'This built-in command is not available' });

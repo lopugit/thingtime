@@ -66,9 +66,11 @@ function state(overrides: Partial<CommanderState> = {}): CommanderState {
     selectedIndex: 0,
     actionsOpen: false,
     error: null,
+    activeView: null,
     setQuery: vi.fn(),
     setSelectedIndex: vi.fn(),
     setActionsOpen: vi.fn(),
+    setActiveView: vi.fn(),
     rememberRecentSearch: vi.fn(async () => undefined),
     reportError: vi.fn(),
     saveSettings: vi.fn(),
@@ -183,6 +185,27 @@ describe('Launcher keyboard navigation', () => {
 
     await waitFor(() => expect(api.execute).toHaveBeenCalledWith(item.id, 'run'));
     expect(nativeRequest).toHaveBeenCalledWith(method, undefined);
+    expect(hideLauncher).not.toHaveBeenCalled();
+  });
+
+  it('opens a bundled command view without hiding the launcher', async () => {
+    const item = {
+      ...hits[0]!,
+      id: 'extension:builtin:emoji-symbols:search-emoji-symbols',
+      title: 'Search Emoji & Symbols',
+      subtitle: 'Emoji & Symbols',
+      kind: 'extension' as const,
+      extensionId: 'builtin:emoji-symbols',
+      commandName: 'search-emoji-symbols',
+      actions: [{ id: 'run', title: 'Run Search Emoji & Symbols' }],
+    };
+    const commander = state({ hits: [item], selectedIndex: 0 });
+    vi.mocked(api.execute).mockResolvedValueOnce({ ok: true, view: { id: 'emoji-symbols' } });
+    render(<Launcher state={commander} />);
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await waitFor(() => expect(commander.setActiveView).toHaveBeenCalledWith('emoji-symbols'));
     expect(hideLauncher).not.toHaveBeenCalled();
   });
 

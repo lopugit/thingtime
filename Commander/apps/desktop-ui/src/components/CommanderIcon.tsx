@@ -9,6 +9,7 @@ import {
   History,
   Link,
   Settings,
+  Smile,
   Sparkles,
   TerminalSquare,
 } from 'lucide-react';
@@ -25,26 +26,28 @@ export function CommanderIcon({
   const Icon =
     key === 'settings'
       ? Settings
-      : key === 'extensions'
-        ? Box
-        : key === 'store'
-          ? Cloud
-          : key === 'sideload'
-            ? FolderOpen
-            : key === 'history'
-              ? History
-              : key === 'application'
-                ? AppWindow
-                : key === 'quicklink'
-                  ? Link
-                  : key === 'command'
-                    ? TerminalSquare
-                    : key === 'external'
-                      ? ExternalLink
-                      : key === 'file'
-                        ? FileCode2
-                        : key === 'sparkles'
-                          ? Sparkles
-                          : Command;
+      : key === 'emoji'
+        ? Smile
+        : key === 'extensions'
+          ? Box
+          : key === 'store'
+            ? Cloud
+            : key === 'sideload'
+              ? FolderOpen
+              : key === 'history'
+                ? History
+                : key === 'application'
+                  ? AppWindow
+                  : key === 'quicklink'
+                    ? Link
+                    : key === 'command'
+                      ? TerminalSquare
+                      : key === 'external'
+                        ? ExternalLink
+                        : key === 'file'
+                          ? FileCode2
+                          : key === 'sparkles'
+                            ? Sparkles
+                            : Command;
   return <Icon aria-hidden="true" strokeWidth={1.8} />;
 }
