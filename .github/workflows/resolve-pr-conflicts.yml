@@ -3253,6 +3253,7 @@ jobs:
       RECOVER_REBASE_PAUSE: ${{ matrix.pr.recover_rebase_pause }}
       PR_NUMBER: ${{ matrix.pr.number }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      RUN_STATUS_MARKER: '<!-- thingtime-ai-resolve-status:v2 run_id=${{ github.run_id }} -->'
       # True when CONFLICT_RESOLVER_PAT exists (a boolean, never the secret
       # itself — the secret is scoped to the push step only, so it is not in
       # the environment while the model runs).
@@ -3278,16 +3279,16 @@ jobs:
       # (observed on PR #183, resolved within ~6 minutes of the banner
       # appearing). Say a resolution attempt is underway BEFORE anything slow
       # (the full-history checkout alone takes a while on this repository).
-      # Upserted via hidden marker so retried attempts edit one status comment
-      # instead of stacking new ones; a comment failure never blocks the
-      # resolution itself.
+      # Each workflow run owns one hidden-marker status comment. A distinct
+      # github.run_id creates a fresh, visible timeline entry; a retry of that
+      # same run and its terminal success/failure step update only that entry.
+      # A comment failure never blocks the resolution itself.
       - name: Comment on PR (resolution starting)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          post_start_comment() {
-            local marker='<!-- thingtime-ai-resolve-start:v1 -->'
+          upsert_start_comment() {
             local started eta body comment_id
             started="$(date -u '+%H:%M UTC')"
             eta="$(date -u -d '+8 minutes' '+%H:%M UTC')"
@@ -3295,15 +3296,15 @@ jobs:
             {
               printf '🤖 **Auto-resolve running** — the conflict resolver started working on this PR at %s.\n\n' "$started"
               printf 'Expected to finish around **%s** (most resolutions still land in 3-8 minutes; the hosted-runner ceiling is 360). ' "$eta"
-              printf 'On success a merge commit resolving the conflicts is pushed to this branch and a result comment follows — no manual action is needed meanwhile.\n\n'
-              printf '[Live status](%s)\n\n%s\n' "$RUN_URL" "$marker"
+              printf 'On success a merge commit resolving the conflicts is pushed to this branch and this status comment updates with the result — no manual action is needed meanwhile.\n\n'
+              printf '[Live status](%s)\n\n%s\n' "$RUN_URL" "$RUN_STATUS_MARKER"
             } > "$body"
             comment_id="$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --slurp \
-              | jq -r '
+              | jq -r --arg marker "$RUN_STATUS_MARKER" '
                   add // []
                   | [.[]
                       | select(.user.login == "github-actions[bot]")
-                      | select(.body | contains("thingtime-ai-resolve-start:v1"))
+                      | select(.body | contains($marker))
                       | .id]
                   | last // empty
                 ')"
@@ -3313,7 +3314,7 @@ jobs:
               gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body" >/dev/null
             fi
           }
-          post_start_comment || echo "::warning::Could not post the resolution-start comment; continuing with the resolution."
+          upsert_start_comment || echo "::warning::Could not post the resolution-start comment; continuing with the resolution."
 
       - name: Check out PR head
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -4511,6 +4512,23 @@ jobs:
           GRAPHIFY_SEMANTIC: ${{ steps.graphify.outputs.semantic }}
         run: |
           set -euo pipefail
+          upsert_run_comment() {
+            local body_file="$1" comment_id
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --slurp \
+              | jq -r --arg marker "$RUN_STATUS_MARKER" '
+                  add // []
+                  | [.[]
+                      | select(.user.login == "github-actions[bot]")
+                      | select(.body | contains($marker))
+                      | .id]
+                  | last // empty
+                ')"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body_file" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body_file" >/dev/null
+            fi
+          }
           body="$RUNNER_TEMP/comment.md"
           {
             echo "🤝 Merged \`$BASE_REF\` into \`$HEAD_REF\` — conflicts auto-resolved by the [resolve-pr-conflicts workflow]($RUN_URL)."
@@ -4547,8 +4565,10 @@ jobs:
             fi
             echo
             echo "Please review the merge commit before relying on it."
+            echo
+            echo "$RUN_STATUS_MARKER"
           } > "$body"
-          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body"
+          upsert_run_comment "$body"
 
       - name: Cascade to PRs stacked on this head
         # Always dispatch exact child PR selections, even when a PAT-backed
@@ -4656,6 +4676,23 @@ jobs:
           encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
           live_ref_sha() {
             gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+          upsert_run_comment() {
+            local body_file="$1" comment_id
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --slurp \
+              | jq -r --arg marker "$RUN_STATUS_MARKER" '
+                  add // []
+                  | [.[]
+                      | select(.user.login == "github-actions[bot]")
+                      | select(.body | contains($marker))
+                      | .id]
+                  | last // empty
+                ')"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body_file" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body_file" >/dev/null
+            fi
           }
 
           # Pause only when the exact failed snapshot is still open, writable,
@@ -4779,8 +4816,10 @@ jobs:
               echo
               echo "$pause_marker"
             fi
+            echo
+            echo "$RUN_STATUS_MARKER"
           } > "$body"
-          if ! gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body"; then
+          if ! upsert_run_comment "$body"; then
             if [ "$paused" = true ]; then
               gh api --method DELETE \
                 "repos/$REPO/issues/$PR_NUMBER/labels/ai-merge-paused" \
