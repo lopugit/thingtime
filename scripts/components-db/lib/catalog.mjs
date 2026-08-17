@@ -60,7 +60,10 @@ export const ARCHETYPE_ORDER = [
 	'schedule',
 	'map-travel',
 	'banking',
-	'docs-wiki'
+	'docs-wiki',
+	'health-fitness',
+	'smart-home',
+	'social-feed'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;

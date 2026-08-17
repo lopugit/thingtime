@@ -1,6 +1,6 @@
 {
-	"target": 1840,
-	"count": 1840,
+	"target": 1960,
+	"count": 1960,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -47,18 +47,21 @@
 		"schedule",
 		"map-travel",
 		"banking",
-		"docs-wiki"
+		"docs-wiki",
+		"health-fitness",
+		"smart-home",
+		"social-feed"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 230,
-		"bootstrap": 230,
-		"mui": 230,
-		"shadcn": 230,
-		"untitled": 230,
-		"daisyui": 230,
-		"reactflow": 230,
-		"thingtime": 230
+		"antd": 245,
+		"bootstrap": 245,
+		"mui": 245,
+		"shadcn": 245,
+		"untitled": 245,
+		"daisyui": 245,
+		"reactflow": 245,
+		"thingtime": 245
 	},
-	"hash": "69c4fa445c6faf52"
+	"hash": "7efbca22a99926f5"
 }
