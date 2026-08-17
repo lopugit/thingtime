@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, relative, resolve } from "node:path";
@@ -705,8 +706,128 @@ export function assertControlPlaneContract() {
   assertAdminModelRouting(resolver, rebase);
   assertResolverLockfileRecovery(resolver);
   assertObservableLabelCleanup(rebase);
+  assertBareControlPlaneTree();
+  assertControlPlaneVercelConfig();
+  // Cover the assertion itself, so it is verified even where the checkout is
+  // not the control plane.
+  assert.throws(
+    () =>
+      assertBareControlPlaneTree({
+        entries: [".github", "README.md", "CHANGELOG.md", "vercel.json", "remix"],
+      }),
+    /unexpected root path\(s\): remix/,
+    "a regrown product tree must fail the bare-tree invariant",
+  );
+  assert.throws(
+    () => assertBareControlPlaneTree({ entries: [".github", "README.md", "vercel.json"] }),
+    /must keep CHANGELOG\.md/,
+    "the control plane must keep its own changelog",
+  );
+  assert.throws(
+    () => assertBareControlPlaneTree({ entries: [".github", "README.md", "CHANGELOG.md"] }),
+    /must keep vercel\.json/,
+    "the control plane must keep its Vercel deployment kill-switch",
+  );
+  assertBareControlPlaneTree({
+    entries: [
+      ".github",
+      ".gitignore",
+      "AI_ALL.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "README.md",
+      "CHANGELOG.md",
+      "vercel.json",
+    ],
+  });
+  assertControlPlaneVercelConfig({
+    config: {
+      framework: null,
+      ignoreCommand: "exit 0",
+      git: { deploymentEnabled: false },
+    },
+  });
+  assert.throws(
+    () =>
+      assertControlPlaneVercelConfig({
+        config: {
+          framework: null,
+          ignoreCommand: "exit 0",
+          git: { deploymentEnabled: true },
+        },
+      }),
+    /must disable every Git deployment/,
+  );
 
   console.log("workflow control-plane contract: self-test OK");
+}
+
+// The only paths this branch may hold at its root. `.github/**` is the point of
+// the branch; the AI instruction trio stays because agents work here too
+// (`AGENTS.md` and `CLAUDE.md` are symlinks to `AI_ALL.md`, so all three must
+// travel together or the links dangle).
+export const CONTROL_PLANE_ROOTS = new Set([
+  ".github",
+  ".gitignore",
+  "AI_ALL.md",
+  "AGENTS.md",
+  "CLAUDE.md",
+  "README.md",
+  "CHANGELOG.md",
+  "vercel.json",
+]);
+
+// The bare-tree invariant. Without it the branch regrows silently — someone
+// merges a product branch in to fix a path, and the drift this branch was
+// stripped to eliminate is back, with CI once again testing a stale copy of an
+// app that nothing reads. Runs only on the control plane: a product-branch
+// checkout legitimately has remix/, docs/, iOS/ and the rest, and this contract
+// is invoked exclusively by control-plane-ci.yml.
+export function assertBareControlPlaneTree({ root = resolve(githubRoot, ".."), entries = null } = {}) {
+  // Read git's tracked INDEX, not the filesystem and not HEAD: what the branch
+  // carries is the invariant. The filesystem holds untracked node_modules and
+  // editor droppings that must not fail the contract, and HEAD would miss a
+  // staged strip — the index is what a clean CI checkout materialises.
+  const present = entries ?? [...new Set(
+    execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
+      .split("\n")
+      .map((path) => path.trim().split("/")[0])
+      .filter(Boolean),
+  )];
+  const unexpected = present.filter((name) => !CONTROL_PLANE_ROOTS.has(name)).sort();
+  assert.deepEqual(
+    unexpected,
+    [],
+    `the control plane must stay bare; unexpected root path(s): ${unexpected.join(", ")}. ` +
+      "Add a genuinely required path to CONTROL_PLANE_ROOTS in the same commit, " +
+      "so it is reviewed rather than discovered later.",
+  );
+  for (const required of [".github", "README.md", "CHANGELOG.md", "vercel.json"]) {
+    assert.ok(present.includes(required), `the control plane must keep ${required}`);
+  }
+}
+
+export function assertControlPlaneVercelConfig({
+  root = resolve(githubRoot, ".."),
+  config = null,
+} = {}) {
+  const value = config ?? JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8"));
+
+  assert.equal(value.framework, null, "the control plane must use Vercel's Other preset");
+  assert.equal(
+    value.git?.deploymentEnabled,
+    false,
+    "the control plane must disable every Git deployment",
+  );
+  assert.equal(value.ignoreCommand, "exit 0", "the control plane must ignore any fallback build");
+
+  for (const forbidden of ["buildCommand", "installCommand", "outputDirectory"]) {
+    assert.equal(
+      Object.hasOwn(value, forbidden),
+      false,
+      `the control plane must not declare ${forbidden}`,
+    );
+  }
 }
 
 if (process.argv.includes("--self-test")) {
