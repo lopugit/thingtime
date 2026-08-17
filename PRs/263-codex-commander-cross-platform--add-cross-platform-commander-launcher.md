@@ -163,15 +163,27 @@ environment.
   `NSDraggingSession` after WebKit's pointer threshold. The pasteboard carries a
   validated file URL and native file icon, preserving normal click execution
   while allowing direct drag-out to Finder-compatible macOS targets.
+- Command-shortcut presentation now has an explicit native-to-renderer readiness
+  handoff. The AppKit host presents and focuses the panel before dispatching a
+  command, protects the lazy command view from transient key-window loss, and
+  restores an app-hidden launcher before evaluating toggle state. Search Emoji
+  & Symbols therefore remains visible when Command-E is followed immediately by
+  typing, and Command-Space recovers Commander in one press even after app hide.
+- Emojibase 17 permits either one emoticon or an array of aliases. Commander now
+  flattens both shapes into string keywords before indexing, fixing the
+  production-only first-character failure where typing `h` attempted Unicode
+  normalization on an array and blanked the picker. A top-level renderer error
+  boundary also keeps any future view failure visible and reloadable instead of
+  masquerading as a native app crash.
 
 ## Verification
 
-- Commander TypeScript: 72 tests passed across UI (38), daemon (16), and
+- Commander TypeScript: 73 tests passed across UI (39), daemon (16), and
   compatibility (18) packages; typecheck, ESLint, Prettier, and package builds
   passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
   Clippy with warnings denied passed.
-- Swift: eight WebKit/panel, settings-deep-link, file-drag, and command-hotkey
+- Swift: nine WebKit/panel, settings-deep-link, file-drag, and command-hotkey
   regressions passed; the release build passed with warnings treated as errors.
 - `Commander/script/build_and_run.sh --verify` built, Apple Development signed,
   installed, and launched the exact follow-up app at
@@ -179,6 +191,9 @@ environment.
 - The installed signature, stable designated requirement, Node JIT
   entitlements, process ancestry, daemon health, and bundled executable paths
   were verified.
+- Installed-WebKit QA opened Search Emoji & Symbols, typed the formerly
+  crashing first character `h`, continued to `heart`, and kept the picker
+  visible and focused with 46 results before returning to the launcher.
 - Native macOS QA covered physical-key custom-hotkey recording and restoration,
   per-command recording and Delete-clear behavior, and a real Finder-compatible
   file-URL drop of `/Applications/Hermes.app` into an isolated native receiver,

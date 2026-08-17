@@ -32,6 +32,9 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   private var windowMode = LauncherWindowMode.standard
   private var pasteTarget: NSRunningApplication?
   private var fileDragInProgress = false
+  private var isPresented = false
+  private var commandPresentationItemID: String?
+  private var commandPresentationFallback: Task<Void, Never>?
 
   init(ready: DaemonReady, bridge: CommanderNativeBridge) {
     let panel = CommanderPanel(
@@ -50,7 +53,9 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     panel.backgroundColor = .clear
     panel.hasShadow = true
     panel.isMovableByWindowBackground = true
-    panel.hidesOnDeactivate = true
+    // A nonactivating panel can be automatically hidden while AppKit still reports
+    // it as visible. Commander owns dismissal through windowDidResignKey instead.
+    panel.hidesOnDeactivate = false
     panel.animationBehavior = .utilityWindow
     panel.contentView = webView
     panel.contentView?.wantsLayer = true
@@ -91,6 +96,12 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     showPending = true
     showRequestID &+= 1
     let requestID = showRequestID
+    if let commandItemID {
+      beginCommandHotKeyPresentation(itemID: commandItemID)
+    } else {
+      cancelCommandHotKeyPresentation()
+    }
+    present()
     Task { [weak self] in
       guard let self else { return }
       _ = try? await self.webView.evaluateJavaScript(Self.launcherOpenedScript)
@@ -100,16 +111,18 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
       await Task.yield()
       guard self.showPending, self.showRequestID == requestID else { return }
       self.showPending = false
-      self.present()
+      self.focusCurrentInput()
     }
   }
 
   private func present() {
+    isPresented = true
     centerOnActiveScreen()
+    NSApp.unhide(nil)
     NSApp.activate(ignoringOtherApps: true)
     panel.makeKeyAndOrderFront(nil)
     webView.window?.makeFirstResponder(webView)
-    webView.evaluateJavaScript("document.querySelector('input')?.focus()")
+    focusCurrentInput()
   }
 
   func hide() {
@@ -117,6 +130,8 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     pendingCommandItemID = nil
     showPending = false
     showRequestID &+= 1
+    isPresented = false
+    cancelCommandHotKeyPresentation()
     panel.orderOut(nil)
   }
 
@@ -157,7 +172,15 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     result["pasted"] = true
     return result
   }
-  func toggle() { panel.isVisible || pendingShow || showPending ? hide() : show() }
+  func toggle() {
+    if NSApp.isHidden {
+      show()
+    } else if (isPresented && panel.isVisible) || pendingShow || showPending {
+      hide()
+    } else {
+      show()
+    }
+  }
 
   func setWindowMode(_ mode: LauncherWindowMode) {
     guard mode != windowMode else { return }
@@ -182,13 +205,70 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   func shutdown() {
     hide()
+    commandPresentationFallback?.cancel()
     webView.firstPresentationReady = nil
     webView.shutdown()
     panel.delegate = nil
   }
 
   func windowDidResignKey(_ notification: Notification) {
-    if !fileDragInProgress { hide() }
+    guard !fileDragInProgress else { return }
+    let commandPresentationWasActive = commandPresentationItemID != nil
+    let hasOtherKeyWindow = NSApp.keyWindow.map { $0 !== panel } ?? false
+    if !Self.shouldRestoreAfterResign(
+      commandPresentationActive: commandPresentationWasActive,
+      applicationIsActive: NSApp.isActive,
+      hasOtherKeyWindow: hasOtherKeyWindow
+    ) {
+      hide()
+      return
+    }
+    Task { @MainActor [weak self] in
+      await Task.yield()
+      guard let self, self.isPresented, !self.fileDragInProgress else { return }
+      if self.panel.isKeyWindow { return }
+      let hasOtherKeyWindow = NSApp.keyWindow.map { $0 !== self.panel } ?? false
+      if Self.shouldRestoreAfterResign(
+        commandPresentationActive: commandPresentationWasActive
+          || self.commandPresentationItemID != nil,
+        applicationIsActive: NSApp.isActive,
+        hasOtherKeyWindow: hasOtherKeyWindow
+      ) {
+        self.restoreCommandPresentationFocus()
+        return
+      }
+      self.hide()
+    }
+  }
+
+  func beginCommandHotKeyPresentation(itemID: String) {
+    isPresented = true
+    commandPresentationFallback?.cancel()
+    commandPresentationItemID = itemID
+    commandPresentationFallback = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .seconds(1))
+      guard !Task.isCancelled else { return }
+      self?.commandHotKeyReady(itemID: itemID)
+    }
+  }
+
+  func commandHotKeyReady(itemID: String) {
+    guard commandPresentationItemID == itemID else { return }
+    commandPresentationFallback?.cancel()
+    commandPresentationFallback = nil
+    commandPresentationItemID = nil
+    guard isPresented else { return }
+    restoreCommandPresentationFocus()
+  }
+
+  var commandPresentationItemIDForTesting: String? { commandPresentationItemID }
+
+  static func shouldRestoreAfterResign(
+    commandPresentationActive: Bool,
+    applicationIsActive: Bool,
+    hasOtherKeyWindow: Bool
+  ) -> Bool {
+    commandPresentationActive || (applicationIsActive && !hasOtherKeyWindow)
   }
 
   var panelForTesting: NSPanel { panel }
@@ -212,7 +292,6 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   private func fileDragSessionChanged(active: Bool, completed: Bool) {
     fileDragInProgress = active
-    panel.hidesOnDeactivate = !active
     guard !active else { return }
     if completed {
       hide()
@@ -221,6 +300,25 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
       panel.makeKeyAndOrderFront(nil)
       panel.makeFirstResponder(webView)
     }
+  }
+
+  private func cancelCommandHotKeyPresentation() {
+    commandPresentationFallback?.cancel()
+    commandPresentationFallback = nil
+    commandPresentationItemID = nil
+  }
+
+  private func restoreCommandPresentationFocus() {
+    guard isPresented else { return }
+    NSApp.unhide(nil)
+    NSApp.activate(ignoringOtherApps: true)
+    panel.makeKeyAndOrderFront(nil)
+    panel.makeFirstResponder(webView)
+    focusCurrentInput()
+  }
+
+  private func focusCurrentInput() {
+    webView.evaluateJavaScript("document.querySelector('input')?.focus()")
   }
 
   private func centerOnActiveScreen() {

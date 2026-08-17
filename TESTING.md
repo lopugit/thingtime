@@ -761,6 +761,11 @@ is fixed, and cite the checklist you ran in the PR description.
       command shortcut. A duplicate command binding or collision with the
       launcher hotkey must fail before persistence and restore the complete
       previously working native registration set.
+- [ ] Bind Search Emoji & Symbols to Command-E. From another app, press
+      Command-E and immediately type `heart`; the picker must remain visible
+      and focused. Dismiss it, press Command-Space once, and verify the normal
+      launcher reappears. Hide Commander with Command-H and verify one
+      Command-Space press unhides and presents it again.
 - [ ] Type a unique launcher query, launch a result, then hide and reopen with
       the global shortcut. Verify the field clears while the launched command
       is the first History row and its search term follows as a separate

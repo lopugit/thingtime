@@ -55,6 +55,9 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
         loginItem: loginItem,
         showLauncher: { [weak self] in self?.launcher?.show() },
         hideLauncher: { [weak self] in self?.launcher?.hide() },
+        commandHotKeyReady: { [weak self] itemID in
+          self?.launcher?.commandHotKeyReady(itemID: itemID)
+        },
         pasteClipboard: { [weak self] text in
           await self?.launcher?.paste(text) ?? [
             "copied": false,
