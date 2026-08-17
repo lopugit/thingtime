@@ -19,6 +19,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
+  now lets the controller build an already-previewed commit in the isolated
+  `develop` Custom Environment instead of canceling it as a duplicate, while
+  the thin `github-actions` control plane remains excluded before every other
+  rule. — Codex (AI), 2026-08-17
 - **Vercel status in custom environments**: deployment status now checks
   Vercel's system environment and custom target independently, so the
   Preview-backed `develop` target keeps `/api/v1/vercel/status`, `/status`, and

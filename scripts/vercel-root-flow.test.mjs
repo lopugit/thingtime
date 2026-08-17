@@ -31,23 +31,40 @@ test('the repository-root Vercel config owns the product build', async () => {
 	assert.equal(existsSync(resolve(repositoryRoot, 'remix/vercel.json')), false);
 });
 
-test('the ignore decision excludes only the control plane and duplicate commits', () => {
-	assert.equal(getVercelIgnoreDecision({ VERCEL_GIT_COMMIT_REF: 'github-actions' }).skip, true);
-	assert.equal(
+test('the ignore decision excludes the control plane while preserving develop custom-environment builds', () => {
+	assert.deepEqual(
 		getVercelIgnoreDecision({
-			VERCEL_GIT_COMMIT_REF: 'develop',
+			VERCEL_GIT_COMMIT_REF: 'github-actions',
+			VERCEL_TARGET_ENV: 'develop',
 			VERCEL_GIT_COMMIT_SHA: 'same',
 			VERCEL_GIT_PREVIOUS_SHA: 'same'
-		}).skip,
-		true
+		}),
+		{ skip: true, reason: 'the github-actions control plane does not deploy' }
 	);
-	assert.equal(
+	assert.deepEqual(
+		getVercelIgnoreDecision({
+			VERCEL_GIT_COMMIT_REF: 'codex/product-change',
+			VERCEL_GIT_COMMIT_SHA: 'same',
+			VERCEL_GIT_PREVIOUS_SHA: 'same'
+		}),
+		{ skip: true, reason: 'the selected commit was already considered' }
+	);
+	assert.deepEqual(
+		getVercelIgnoreDecision({
+			VERCEL_GIT_COMMIT_REF: 'codex/product-change',
+			VERCEL_TARGET_ENV: 'develop',
+			VERCEL_GIT_COMMIT_SHA: 'same',
+			VERCEL_GIT_PREVIOUS_SHA: 'same'
+		}),
+		{ skip: false, reason: 'the develop custom environment requires an isolated build' }
+	);
+	assert.deepEqual(
 		getVercelIgnoreDecision({
 			VERCEL_GIT_COMMIT_REF: 'codex/product-change',
 			VERCEL_GIT_COMMIT_SHA: 'new',
 			VERCEL_GIT_PREVIOUS_SHA: 'old'
-		}).skip,
-		false
+		}),
+		{ skip: false, reason: 'this product commit requires a build' }
 	);
 });
 

@@ -15,7 +15,7 @@ import {
 import { LongTextEditor } from '~/components/Editor/LongTextEditor';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { LinkedImageGallery } from '~/components/Media/LinkedImageGallery';
-import { canonicalLinkedImageUrls, type LinkedImageItem } from '~/components/Media/mediaGalleryCore';
+import { canonicalLinkedImageUrls, createLinkedImageItem, type LinkedImageItem } from '~/components/Media/mediaGalleryCore';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
 import { EditorSplit } from '~/components/Thingtime/EditorSplit';
 import { ThingView } from '~/components/Thingtime/ThingView';
@@ -102,14 +102,18 @@ const TEXTAREA_PLACEHOLDERS: Record<PostType, string> = {
 
 export type PostComposerProps = {
   // in comment mode this receives the created comment (post-shaped — comments
-  // share the post schema)
+  // share the post schema); in edit mode it receives the UPDATED post
   onPosted: (post: PublicPost) => void;
   // compose a COMMENT on this thing instead of a top-level post — starts
   // expanded, hides the circle picker (comments inherit the thread root's
   // audience) and posts through api.v1.things.comment
   parentId?: string;
-  // called when the comment composer's close button is pressed
+  // called when the comment/edit composer's close button is pressed
   onClose?: () => void;
+  // EDIT an existing post: starts expanded and pre-filled from this post
+  // (type tabs, photos, listing, thing, tags, circle all editable — the same
+  // suite as a new post) and saves through api.v1.things.update
+  editPost?: PublicPost;
 };
 
 const Eyebrow = ({ children }: { children: React.ReactNode }) => (
@@ -119,27 +123,31 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const PostComposer = (props: PostComposerProps) => {
-  const { onPosted, parentId, onClose } = props;
+  const { onPosted, parentId, onClose, editPost } = props;
 
   const isComment = !!parentId;
+  const isEdit = !!editPost;
 
   const api = useApi();
 	const user = useCurrentUser();
   const lopu = useLopu();
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
-  const [expanded, setExpanded] = React.useState(isComment);
-  const [type, setType] = React.useState<PostType>('text');
-  const [text, setText] = React.useState('');
-	const [linkedImages, setLinkedImages] = React.useState<LinkedImageItem[]>([]);
-  const [title, setTitle] = React.useState('');
-  const [price, setPrice] = React.useState('');
-  const [currency, setCurrency] = React.useState('AUD');
-  const [category, setCategory] = React.useState<MarketplaceCategory>('other');
-  const [condition, setCondition] = React.useState('');
-  const [listingLocation, setListingLocation] = React.useState('');
-  const [tagsInput, setTagsInput] = React.useState('');
-  const [visibility, setVisibility] = React.useState<PostVisibility>('public');
+  const [expanded, setExpanded] = React.useState(isComment || isEdit);
+  const [type, setType] = React.useState<PostType>(editPost?.type || 'text');
+  const [text, setText] = React.useState(editPost?.text || '');
+	// edit mode pre-fills the linked-image rows from the post's saved URLs
+	const [linkedImages, setLinkedImages] = React.useState<LinkedImageItem[]>(() =>
+		(editPost?.images || []).map((url) => createLinkedImageItem(url))
+	);
+  const [title, setTitle] = React.useState(editPost?.listing?.title || '');
+  const [price, setPrice] = React.useState(editPost?.listing ? String(editPost.listing.price) : '');
+  const [currency, setCurrency] = React.useState(editPost?.listing?.currency || 'AUD');
+  const [category, setCategory] = React.useState<MarketplaceCategory>(editPost?.listing?.category || 'other');
+  const [condition, setCondition] = React.useState<string>(editPost?.listing?.condition || '');
+  const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
+  const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
+  const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
   const [posting, setPosting] = React.useState(false);
 	const [submissionUncertain, setSubmissionUncertain] = React.useState(false);
 	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENT_SNAPSHOT);
@@ -147,8 +155,8 @@ export const PostComposer = (props: PostComposerProps) => {
   // thingtime-tab extras: toggleable photos/marketplace field groups, the
   // in-post editor's draggable height, and its imperative API (the pop-out
   // button duplicates the window into one of the editor's own floating frames)
-  const [thingPhotos, setThingPhotos] = React.useState(false);
-  const [thingListing, setThingListing] = React.useState(false);
+  const [thingPhotos, setThingPhotos] = React.useState(isEdit && editPost?.type === 'thingtime' && !!editPost.images?.length);
+  const [thingListing, setThingListing] = React.useState(isEdit && editPost?.type === 'thingtime' && !!editPost.listing);
   // the thing edits in a bottom-sheet modal (nested comment composers can't
   // host a full editor inline, and mobile needs the room)
   const [thingModalOpen, setThingModalOpen] = React.useState(false);
@@ -168,6 +176,10 @@ export const PostComposer = (props: PostComposerProps) => {
   // bumping the session remounts the block editor with a clean document
   // (while mounted, the editor owns the text)
   const [composerSession, setComposerSession] = React.useState(0);
+
+  // edit mode: the thing to seed the draft branch with, captured at mount so
+  // the seed effect's deps stay constant
+  const editSeedRef = React.useRef(editPost?.thing || null);
 
 	const parsedTags = canonicalPostTags(tagsInput.split(','));
 
@@ -213,8 +225,12 @@ export const PostComposer = (props: PostComposerProps) => {
     }
     // seed the session BRANCH only — the draft value itself starts undefined,
     // so the editor opens on a truly blank "Imagine.." slate instead of an
-    // empty object rendering as {} chrome
-    setThingtime(DRAFT_TMP_KEY, { ...preserved, [draftSessionId]: {} });
+    // empty object rendering as {} chrome. Editing an existing thingtime post
+    // seeds the draft with the post's thing as of mount (editSeedRef).
+    setThingtime(DRAFT_TMP_KEY, {
+      ...preserved,
+      [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
+    });
   }, [type, expanded, thingtimeLoading, getThingtime, setThingtime, draftSessionId]);
 
   // which optional field groups are in play (marketplace always has both;
@@ -339,25 +355,55 @@ export const PostComposer = (props: PostComposerProps) => {
 		const submittedPostType = pendingSubmission?.postType ?? type;
 
 		const finishPost = (created: PublicPost) => {
-			if (attachmentIds.length > 0) {
+			if (!isEdit && attachmentIds.length > 0) {
 				// A successful or exactly reconciled post means the server atomically
 				// claimed these drafts. Mark them before reset unmounts the uploader.
+				// An edit saves through things.update, which claims no drafts.
 				attachmentComposerRef.current?.markCommitted(attachmentIds);
 			}
-      lopu({ title: isComment ? 'Commented 💬' : 'Posted ✨', status: 'success', duration: 6000 });
+      lopu({
+        title: isEdit ? 'Post updated ✏️' : isComment ? 'Commented 💬' : 'Posted ✨',
+        status: 'success',
+        duration: 6000
+      });
+      // the posted thing draft is spent — next thingtime tab starts fresh
+      // (reset the whole session branch so the draft value is undefined again,
+      // not an empty {} that would render as an object)
 			if (submittedPostType === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {});
-      reset();
+      // an edit keeps its pre-filled draft — the parent closes the composer
+      if (!isEdit) reset();
 			onPosted(created);
 		};
 
 		setPosting(true);
 		try {
-			const resp = isComment ? await api.v1.things.comment({ id: parentId, ...payload }) : await api.v1.things.create(payload);
-			finishPost(isComment ? resp.comment : resp.post);
+			if (isEdit) {
+				// full-crystal replace: the server sanitizer rebuilds { type, text,
+				// images, listing, thing } per type, so switching type clears the
+				// fields that no longer apply
+				const updated = await api.v1.things.update({
+					id: editPost!.id,
+					crystal: {
+						type,
+						text: text.trim(),
+						images: canonicalImages,
+						listing: canonicalListing,
+						thing: canonicalThing
+					},
+					tags: parsedTags,
+					visibility
+				});
+				finishPost(updated.post);
+			} else {
+				const resp = isComment ? await api.v1.things.comment({ id: parentId, ...payload }) : await api.v1.things.create(payload);
+				finishPost(isComment ? resp.comment : resp.post);
+			}
 		} catch (error) {
 			let reconciled: PublicPost | null = null;
 			const status = Number((error as { status?: unknown } | null)?.status);
-			if (!isComment && postShareId && committedExpectation && (hasUnknownMutationOutcome(error) || status === 409)) {
+			// only a create can be reconciled by shareId read-back; an edit is a
+			// full-crystal replace, so retrying it is already safe
+			if (!isComment && !isEdit && postShareId && committedExpectation && (hasUnknownMutationOutcome(error) || status === 409)) {
 				// The first GET may race a still-committing request. Keep this bounded;
 				// if it remains absent, the next click resubmits the SAME shareId and
 				// can reconcile the resulting duplicate safely.
@@ -484,7 +530,7 @@ export const PostComposer = (props: PostComposerProps) => {
           borderRadius="8px"
 						isDisabled={posting}
 						onClick={() => {
-							if (isComment) onClose?.();
+							if (isComment || isEdit) onClose?.();
 							else {
 								setExpanded(false);
 								setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
@@ -771,7 +817,7 @@ export const PostComposer = (props: PostComposerProps) => {
           isLoading={posting}
           onClick={handlePost}
         >
-          {isComment ? 'Comment 💬' : 'Post ✨'}
+          {isEdit ? 'Save ✨' : isComment ? 'Comment 💬' : 'Post ✨'}
         </Button>
       </Flex>
 			</Box>
