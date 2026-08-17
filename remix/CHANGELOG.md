@@ -19,6 +19,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Repository-root Vercel installs honor the app's pnpm pin**: the root
+  package now declares pnpm 10.12.1 to match Remix, so Corepack cannot select
+  Vercel's newer global pnpm before entering the nested workspace. The root
+  deployment contract asserts that both package-manager declarations remain
+  identical. — Codex (AI), 2026-08-17
 - **Vercel status in custom environments**: deployment status now checks
   Vercel's system environment and custom target independently, so the
   Preview-backed `develop` target keeps `/api/v1/vercel/status`, `/status`, and
