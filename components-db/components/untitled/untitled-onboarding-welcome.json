@@ -242,6 +242,7 @@
 	},
 	"previewBg": "#f9fafb",
 	"version": 1,
+	"familyKey": "onboarding-welcome",
 	"source": {
 		"kind": "archetype",
 		"archetype": "onboarding",

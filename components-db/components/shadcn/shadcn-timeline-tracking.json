@@ -831,6 +831,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "timeline-tracking",
 	"source": {
 		"kind": "archetype",
 		"archetype": "timeline",

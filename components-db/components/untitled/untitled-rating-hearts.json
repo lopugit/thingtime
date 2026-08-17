@@ -207,6 +207,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "rating-hearts",
 	"source": {
 		"kind": "archetype",
 		"archetype": "rating",

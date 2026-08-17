@@ -152,6 +152,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "input-addon",
 	"source": {
 		"kind": "archetype",
 		"archetype": "input",

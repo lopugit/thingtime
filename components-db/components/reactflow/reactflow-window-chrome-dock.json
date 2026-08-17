@@ -636,6 +636,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "window-chrome-dock",
 	"source": {
 		"kind": "archetype",
 		"archetype": "window-chrome",

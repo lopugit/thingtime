@@ -369,6 +369,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "marketing-pricing",
 	"source": {
 		"kind": "archetype",
 		"archetype": "marketing",

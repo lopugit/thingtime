@@ -213,6 +213,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "rating-labeled",
 	"source": {
 		"kind": "archetype",
 		"archetype": "rating",

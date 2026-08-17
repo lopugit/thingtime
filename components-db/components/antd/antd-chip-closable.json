@@ -156,6 +156,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "chip-closable",
 	"source": {
 		"kind": "archetype",
 		"archetype": "chip",

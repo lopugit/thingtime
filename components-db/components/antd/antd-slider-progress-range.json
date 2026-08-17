@@ -209,6 +209,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "slider-progress-range",
 	"source": {
 		"kind": "archetype",
 		"archetype": "slider-progress",

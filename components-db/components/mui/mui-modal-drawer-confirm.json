@@ -299,6 +299,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "modal-drawer-confirm",
 	"source": {
 		"kind": "archetype",
 		"archetype": "modal-drawer",

@@ -14,6 +14,8 @@ import { browseComponents } from '~/api/utils/components/browse';
 //   ?limit=      page size (max 50)
 //   ?lib=        design-library filter (antd|bootstrap|mui|…), no-q pages only
 //   ?category=   catalog category filter, no-q pages only
+//   ?group=family  one card per familyKey (plain browse only) with designs[]
+//   ?family=     every design of one family (familyKey or componentKey)
 //   ?library=1   only components the caller saved (auth required)
 //   ?mine=1      only the caller's own components (auth required)
 //
@@ -36,6 +38,8 @@ export const loader = async ({ request }: { request: Request }) => {
     limit: params.get('limit') ? Number(params.get('limit')) : undefined,
     lib: params.get('lib') || undefined,
     category: params.get('category') || undefined,
+    group: params.get('group') || undefined,
+    family: params.get('family') || undefined,
     library: params.get('library') || undefined,
     mine: params.get('mine') || undefined
   });

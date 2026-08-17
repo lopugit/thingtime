@@ -286,6 +286,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "select-menu-combobox",
 	"source": {
 		"kind": "archetype",
 		"archetype": "select-menu",

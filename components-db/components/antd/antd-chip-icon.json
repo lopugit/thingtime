@@ -243,6 +243,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "chip-icon",
 	"source": {
 		"kind": "archetype",
 		"archetype": "chip",

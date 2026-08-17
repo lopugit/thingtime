@@ -593,6 +593,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "navbar-sidebar",
 	"source": {
 		"kind": "archetype",
 		"archetype": "navbar",

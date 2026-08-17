@@ -127,6 +127,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "card-basic",
 	"source": {
 		"kind": "archetype",
 		"archetype": "card",

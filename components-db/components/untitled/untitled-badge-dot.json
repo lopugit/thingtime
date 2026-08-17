@@ -132,6 +132,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "badge-dot",
 	"source": {
 		"kind": "archetype",
 		"archetype": "badge",

@@ -130,6 +130,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "badge-soft",
 	"source": {
 		"kind": "archetype",
 		"archetype": "badge",

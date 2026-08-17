@@ -213,6 +213,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "card-actions",
 	"source": {
 		"kind": "archetype",
 		"archetype": "card",

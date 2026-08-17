@@ -175,6 +175,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "input-error",
 	"source": {
 		"kind": "archetype",
 		"archetype": "input",

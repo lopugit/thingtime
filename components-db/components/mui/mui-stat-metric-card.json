@@ -169,6 +169,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "stat-metric-card",
 	"source": {
 		"kind": "archetype",
 		"archetype": "stat-metric",

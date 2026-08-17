@@ -160,6 +160,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "choice-controls-switch",
 	"source": {
 		"kind": "archetype",
 		"archetype": "choice-controls",

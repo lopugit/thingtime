@@ -567,6 +567,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "media-player-playlist",
 	"source": {
 		"kind": "archetype",
 		"archetype": "media-player",

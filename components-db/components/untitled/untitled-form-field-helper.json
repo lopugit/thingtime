@@ -122,6 +122,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "form-field-helper",
 	"source": {
 		"kind": "archetype",
 		"archetype": "form-field",

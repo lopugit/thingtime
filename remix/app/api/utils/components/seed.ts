@@ -78,6 +78,7 @@ export const seedComponents = async (input: unknown): Promise<SeedFail | SeedCom
 			library: def.library,
 			category: def.category,
 			componentKey: slug,
+			familyKey: def.familyKey,
 			version: def.version ?? 1,
 			args: def.args,
 			render: def.render,

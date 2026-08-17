@@ -424,6 +424,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "media-player-audio",
 	"source": {
 		"kind": "archetype",
 		"archetype": "media-player",

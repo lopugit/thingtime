@@ -244,6 +244,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "commerce-payment",
 	"source": {
 		"kind": "archetype",
 		"archetype": "commerce",

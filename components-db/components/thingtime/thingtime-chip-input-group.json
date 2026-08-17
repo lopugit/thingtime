@@ -332,6 +332,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "chip-input-group",
 	"source": {
 		"kind": "archetype",
 		"archetype": "chip",

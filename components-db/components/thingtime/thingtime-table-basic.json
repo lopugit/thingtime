@@ -384,6 +384,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "table-basic",
 	"source": {
 		"kind": "archetype",
 		"archetype": "table",

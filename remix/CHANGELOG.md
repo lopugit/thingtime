@@ -31,8 +31,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   admin `POST /api/v1/admin/components/seed` endpoint (idempotent,
   self-healing, `component-` shareId prefix reserved). Drawer: Schemas moved
   out of Search into its own top-level item, Components added beside it.
-  Verification: `remix/scripts/verify-components.mjs` (23 checks) + the new
-  Components checklist in `TESTING.md`. — Claude (AI), 2026-08-17
+  Verification: `remix/scripts/verify-components.mjs` (30 checks) + the new
+  Components checklist in `TESTING.md`. Follow-up in the same PR: component
+  families — the library renditions of one functional component share a
+  crystal `familyKey` and collapse into ONE card with a designs
+  click-through (server `group=family` aggregation + `family=` roster
+  fetch, client-side collapse for text search), and every family gets its
+  own deep-linked page at `/components/<key>` with a `/docs` twin the
+  cards' Docs buttons open. The catalog kept growing meanwhile
+  (tranche 2: 40 archetypes, 1600 components seeded). — Claude (AI), 2026-08-17
 
 ### Fixed
 

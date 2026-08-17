@@ -163,6 +163,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "list-numbered",
 	"source": {
 		"kind": "archetype",
 		"archetype": "list",

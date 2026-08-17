@@ -269,6 +269,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "commerce-cart-item",
 	"source": {
 		"kind": "archetype",
 		"archetype": "commerce",

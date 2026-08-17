@@ -316,6 +316,7 @@
 	},
 	"previewBg": "#fafafb",
 	"version": 1,
+	"familyKey": "tooltip-popover-hovercard",
 	"source": {
 		"kind": "archetype",
 		"archetype": "tooltip-popover",

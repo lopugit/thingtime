@@ -1016,6 +1016,7 @@ const componentSchema: ThingtimeSchema = {
 		},
 		{ name: 'category', type: 'string', required: false, max: MAX_COMPONENT_CATEGORY_CHARS, description: 'Catalog category, e.g. buttons, forms, feedback, navigation, flow.' },
 		{ name: 'componentKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Stable slug identity linking saved versions to their source component.' },
+		{ name: 'familyKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Groups the library renditions (designs) of one functional component — /components shows one card per family.' },
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a componentKey.' },
 		{ name: 'forkOf', type: 'string', required: false, description: 'shareId of the component this one was saved/forked from (provenance only).' },
 		{ name: 'previewBg', type: 'string', required: false, max: MAX_COMPONENT_PREVIEW_BG_CHARS, description: 'Optional CSS background for the preview surface (e.g. a dotted canvas).' },
@@ -3132,6 +3133,16 @@ const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; c
 			return fail(400, 'componentKey must be a lowercase-dashed slug');
 		}
 		crystal.componentKey = componentKey;
+	}
+
+	// familyKey groups the library renditions (designs) of one functional
+	// component — /components collapses a family into one card
+	if (input.familyKey !== undefined && input.familyKey !== null && input.familyKey !== '') {
+		const familyKey = typeof input.familyKey === 'string' ? input.familyKey.trim() : '';
+		if (!familyKey || familyKey.length > MAX_COMPONENT_KEY_CHARS || !COMPONENT_KEY_PATTERN.test(familyKey)) {
+			return fail(400, 'familyKey must be a lowercase-dashed slug');
+		}
+		crystal.familyKey = familyKey;
 	}
 
 	if (input.version !== undefined && input.version !== null) {

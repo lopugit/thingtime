@@ -209,6 +209,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "breadcrumb-pagination-compact",
 	"source": {
 		"kind": "archetype",
 		"archetype": "breadcrumb-pagination",

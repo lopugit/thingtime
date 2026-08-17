@@ -206,6 +206,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "avatar-initials",
 	"source": {
 		"kind": "archetype",
 		"archetype": "avatar",

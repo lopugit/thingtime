@@ -1951,3 +1951,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       reports unchanged (not created) for an already-seeded library, and a
       foreign doc squatting a `component-<slug>` shareId is skipped, never
       overwritten.
+- [ ] Grouping: the default catalog shows ONE card per component family with a
+      "designs (N)" pill row; clicking a pill swaps the card's preview,
+      badge, and description to that library's rendition (args tweaks
+      survive the switch); a q-search collapses its result pages the same
+      way (no 8-duplicate walls).
+- [ ] Deep links: every card's Docs button opens /components/<familyKey>/docs
+      (scrolled to Docs); /components/<familyKey> shows the design switcher,
+      big preview, args tester, deep-link copy row, args reference, API
+      snippet, and definition; a componentKey slug and a component-<slug>
+      shareId resolve to the same family page; unknown keys get the friendly
+      not-found panel.

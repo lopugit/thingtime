@@ -244,6 +244,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "media-player-volume",
 	"source": {
 		"kind": "archetype",
 		"archetype": "media-player",

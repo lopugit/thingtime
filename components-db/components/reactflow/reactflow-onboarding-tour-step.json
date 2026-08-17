@@ -330,6 +330,7 @@
 	},
 	"previewBg": "#f8f8f8",
 	"version": 1,
+	"familyKey": "onboarding-tour-step",
 	"source": {
 		"kind": "archetype",
 		"archetype": "onboarding",

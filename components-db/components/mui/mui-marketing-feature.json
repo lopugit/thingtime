@@ -284,6 +284,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "marketing-feature",
 	"source": {
 		"kind": "archetype",
 		"archetype": "marketing",

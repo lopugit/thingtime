@@ -144,6 +144,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "button-soft",
 	"source": {
 		"kind": "archetype",
 		"archetype": "button",

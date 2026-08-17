@@ -342,6 +342,7 @@
 	},
 	"previewBg": "#f8f8f8",
 	"version": 1,
+	"familyKey": "tooltip-popover-hovercard",
 	"source": {
 		"kind": "archetype",
 		"archetype": "tooltip-popover",

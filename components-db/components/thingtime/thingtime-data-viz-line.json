@@ -229,6 +229,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "data-viz-line",
 	"source": {
 		"kind": "archetype",
 		"archetype": "data-viz",

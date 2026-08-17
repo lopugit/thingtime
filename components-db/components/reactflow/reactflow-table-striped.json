@@ -420,6 +420,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "table-striped",
 	"source": {
 		"kind": "archetype",
 		"archetype": "table",

@@ -417,6 +417,7 @@
 	},
 	"previewBg": "#f5f5f5",
 	"version": 1,
+	"familyKey": "onboarding-checklist",
 	"source": {
 		"kind": "archetype",
 		"archetype": "onboarding",

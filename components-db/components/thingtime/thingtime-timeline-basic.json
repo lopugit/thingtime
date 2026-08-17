@@ -187,6 +187,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "timeline-basic",
 	"source": {
 		"kind": "archetype",
 		"archetype": "timeline",

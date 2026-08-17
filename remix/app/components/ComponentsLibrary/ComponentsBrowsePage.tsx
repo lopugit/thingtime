@@ -38,10 +38,13 @@ import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity'
 
 import {
   COMPONENT_LIBRARY_LABELS,
+  collapseEntriesByFamily,
+  deepLinkKeyFor,
   entryToCardSource,
   type BrowseComponentEntry,
   type BrowseComponentsResponse,
-  type ComponentCardSource
+  type ComponentCardSource,
+  type ComponentDesignRef
 } from './componentBrowseTypes';
 import {
   coerceArgValue,
@@ -231,15 +234,45 @@ type ComponentCardProps = {
   onReact: (source: ComponentCardSource, token: string) => void;
   onSave: (source: ComponentCardSource) => void;
   onSaveVersion: (source: ComponentCardSource, values: ComponentArgValues, name: string, isPublic: boolean) => Promise<boolean>;
+  onOpenDocs: (source: ComponentCardSource) => void;
+  loadFamily: (key: string) => Promise<BrowseComponentEntry[]>;
 };
 
-const ComponentCard = React.memo(({ source, onReact, onSave, onSaveVersion }: ComponentCardProps) => {
-  const entry = source.entry;
+const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersion, onOpenDocs, loadFamily }: ComponentCardProps) => {
+  // `active` is the design currently on the card — the family's representative
+  // until the designs click-through swaps in a sibling rendition. The rest of
+  // the card body reads it through the `source` alias.
+  const [active, setActive] = React.useState(family);
   // saved versions reopen with their snapshot; fresh cards start from defaults
   const [values, setValues] = React.useState<ComponentArgValues>(() => ({
-    ...defaultsFromArgs(source.args),
-    ...(source.savedArgs || {})
+    ...defaultsFromArgs(family.args),
+    ...(family.savedArgs || {})
   }));
+  const source = active;
+  const entry = active.entry;
+
+  // new page data re-keys the card — reset the active design and tester
+  React.useEffect(() => {
+    setActive(family);
+    setValues({ ...defaultsFromArgs(family.args), ...(family.savedArgs || {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [family.key]);
+
+  const switchDesign = React.useCallback(
+    async (design: ComponentDesignRef) => {
+      if (design.id === active.id) return;
+      const entries = await loadFamily(deepLinkKeyFor(family));
+      const nextEntry = entries.find((candidate) => candidate.id === design.id);
+      const nextSource = nextEntry ? entryToCardSource(nextEntry) : null;
+      if (!nextSource) return;
+      nextSource.designs = family.designs;
+      nextSource.key = family.key;
+      setActive(nextSource);
+      // args are shared across a family — keep the user's tweaks through a switch
+      setValues((prev) => ({ ...defaultsFromArgs(nextSource.args), ...(nextSource.savedArgs || {}), ...prev }));
+    },
+    [active.id, loadFamily, family]
+  );
   const [argsOpen, setArgsOpen] = React.useState(false);
   const [schemaOpen, setSchemaOpen] = React.useState(false);
   const [versionOpen, setVersionOpen] = React.useState(false);
@@ -323,6 +356,36 @@ const ComponentCard = React.memo(({ source, onReact, onSave, onSaveVersion }: Co
         <Text color="var(--tt-text, #33333c)" fontSize="sm" lineHeight="1.55">
           {source.description}
         </Text>
+      )}
+
+      {/* the family's designs click-through — one functional component, many looks */}
+      {family.designs.length > 1 && (
+        <Flex align="center" gap={1.5} wrap="wrap">
+          <Text {...monoLabel}>designs ({family.designs.length})</Text>
+          {family.designs.map((design) => {
+            const activeDesign = design.id === active.id;
+            return (
+              <Button
+                background={activeDesign ? 'var(--tt-ink, #16161a)' : 'var(--tt-card, #ffffff)'}
+                border="1px solid var(--tt-border, #ececef)"
+                borderRadius="full"
+                color={activeDesign ? 'var(--tt-card, #ffffff)' : 'var(--tt-muted, #9a9aa6)'}
+                fontSize="10px"
+                fontWeight={600}
+                height="22px"
+                key={design.id}
+                minWidth={0}
+                onClick={() => switchDesign(design)}
+                paddingX={2}
+                size="xs"
+                variant="unstyled"
+                _hover={{ background: activeDesign ? 'var(--tt-ink, #16161a)' : 'var(--tt-surface-hover, #ececee)' }}
+              >
+                {COMPONENT_LIBRARY_LABELS[design.library] || design.library}
+              </Button>
+            );
+          })}
+        </Flex>
       )}
 
       <ComponentPreview source={source} values={values} />
@@ -571,13 +634,7 @@ const ComponentCard = React.memo(({ source, onReact, onSave, onSaveVersion }: Co
         <Button leftIcon={<Save size={14} />} onClick={openVersionPanel} size="xs" variant="outline">
           Save version
         </Button>
-        <Button
-          as="a"
-          href="/docs/schemas#schema-component"
-          leftIcon={<BookOpen size={14} />}
-          size="xs"
-          variant="ghost"
-        >
+        <Button leftIcon={<BookOpen size={14} />} onClick={() => onOpenDocs(active)} size="xs" variant="ghost">
           Docs
         </Button>
       </Flex>
@@ -678,6 +735,10 @@ export const ComponentsBrowsePage = () => {
           // catalog filters ride no-q pages only — the server ignores them
           // during text search, so don't send a misleading param
           lib: scopeMode === 'all' && !query.trim() && libMode !== 'all' ? libMode : undefined,
+          // one card per family on the plain catalog view; q-search pages and
+          // library-filtered views stay per-design (q collapses client-side)
+          group:
+            scopeMode === 'all' && !query.trim() && libMode === 'all' && sortMode === 'newest' ? 'family' : undefined,
           cursor,
           limit: PAGE_SIZE,
           library: scopeMode === 'library' ? 1 : undefined,
@@ -733,9 +794,34 @@ export const ComponentsBrowsePage = () => {
     runBrowse({ sortOverride: updates.sort, scopeOverride: updates.scope, libOverride: updates.lib });
   };
 
-  const sources = React.useMemo(
-    () => entries.map(entryToCardSource).filter(Boolean) as ComponentCardSource[],
-    [entries]
+  // One card per family everywhere: grouped server pages arrive one-per-family
+  // (collapse is then the identity), q-search pages collapse client-side over
+  // the loaded entries.
+  const sources = React.useMemo(() => collapseEntriesByFamily(entries), [entries]);
+
+  // family design rosters hydrate lazily on first switch, cached per key
+  const familyCacheRef = React.useRef(new Map<string, BrowseComponentEntry[]>());
+  const loadFamily = React.useCallback(async (key: string): Promise<BrowseComponentEntry[]> => {
+    const cached = familyCacheRef.current.get(key);
+    if (cached) return cached;
+    try {
+      const resp = (await apiRef.current.v1.components.browse({ family: key })) as BrowseComponentsResponse;
+      if (!resp?.ok) throw resp;
+      familyCacheRef.current.set(key, resp.components);
+      return resp.components;
+    } catch (err: any) {
+      lopuRef.current({ title: err?.error || 'Couldn’t load this component’s designs 🌈', status: 'error' });
+      return [];
+    }
+  }, []);
+
+  const handleOpenDocs = React.useCallback(
+    (source: ComponentCardSource) => {
+      const key = deepLinkKeyFor(source);
+      const design = source.familyKey ? `?design=${encodeURIComponent(source.library)}` : '';
+      navigate(`/components/${encodeURIComponent(key)}/docs${design}`);
+    },
+    [navigate]
   );
 
   // ---- actions ------------------------------------------------------------
@@ -889,7 +975,15 @@ export const ComponentsBrowsePage = () => {
   };
 
   const cardFor = (source: ComponentCardSource) => (
-    <ComponentCard key={source.key} onReact={handleReact} onSave={handleSave} onSaveVersion={handleSaveVersion} source={source} />
+    <ComponentCard
+      key={source.key}
+      loadFamily={loadFamily}
+      onOpenDocs={handleOpenDocs}
+      onReact={handleReact}
+      onSave={handleSave}
+      onSaveVersion={handleSaveVersion}
+      source={source}
+    />
   );
 
   const countLabel = total !== null ? `${total}${totalCapped ? '+' : ''}` : entries.length ? String(entries.length) : '…';

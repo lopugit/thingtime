@@ -187,6 +187,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "toast-notification-top-banner",
 	"source": {
 		"kind": "archetype",
 		"archetype": "toast-notification",

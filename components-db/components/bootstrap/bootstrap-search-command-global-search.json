@@ -207,6 +207,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "search-command-global-search",
 	"source": {
 		"kind": "archetype",
 		"archetype": "search-command",

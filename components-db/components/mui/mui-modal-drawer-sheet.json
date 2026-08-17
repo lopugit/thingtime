@@ -179,6 +179,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "modal-drawer-sheet",
 	"source": {
 		"kind": "archetype",
 		"archetype": "modal-drawer",

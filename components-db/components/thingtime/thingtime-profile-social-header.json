@@ -276,6 +276,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "profile-social-header",
 	"source": {
 		"kind": "archetype",
 		"archetype": "profile-social",

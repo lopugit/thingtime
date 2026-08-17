@@ -658,6 +658,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "tabs-steps-steps-numbered",
 	"source": {
 		"kind": "archetype",
 		"archetype": "tabs-steps",

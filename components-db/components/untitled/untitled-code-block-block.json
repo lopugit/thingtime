@@ -358,6 +358,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "code-block-block",
 	"source": {
 		"kind": "archetype",
 		"archetype": "code-block",

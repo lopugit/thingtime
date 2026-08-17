@@ -234,6 +234,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "timeline-changelog",
 	"source": {
 		"kind": "archetype",
 		"archetype": "timeline",

@@ -462,6 +462,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "navbar-bottom-tabs",
 	"source": {
 		"kind": "archetype",
 		"archetype": "navbar",

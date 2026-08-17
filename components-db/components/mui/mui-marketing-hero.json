@@ -207,6 +207,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "marketing-hero",
 	"source": {
 		"kind": "archetype",
 		"archetype": "marketing",

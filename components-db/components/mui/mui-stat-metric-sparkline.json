@@ -171,6 +171,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "stat-metric-sparkline",
 	"source": {
 		"kind": "archetype",
 		"archetype": "stat-metric",

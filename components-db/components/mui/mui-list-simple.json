@@ -113,6 +113,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "list-simple",
 	"source": {
 		"kind": "archetype",
 		"archetype": "list",

@@ -264,6 +264,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "select-menu-grouped",
 	"source": {
 		"kind": "archetype",
 		"archetype": "select-menu",

@@ -235,6 +235,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "choice-controls-toggle-group",
 	"source": {
 		"kind": "archetype",
 		"archetype": "choice-controls",

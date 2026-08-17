@@ -135,6 +135,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "input-text",
 	"source": {
 		"kind": "archetype",
 		"archetype": "input",

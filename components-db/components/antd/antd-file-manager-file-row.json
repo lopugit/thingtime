@@ -351,6 +351,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "file-manager-file-row",
 	"source": {
 		"kind": "archetype",
 		"archetype": "file-manager",

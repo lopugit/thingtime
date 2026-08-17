@@ -222,6 +222,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "profile-social-follower-row",
 	"source": {
 		"kind": "archetype",
 		"archetype": "profile-social",

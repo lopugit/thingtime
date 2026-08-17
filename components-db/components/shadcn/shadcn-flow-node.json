@@ -206,6 +206,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "flow-node",
 	"source": {
 		"kind": "archetype",
 		"archetype": "flow",

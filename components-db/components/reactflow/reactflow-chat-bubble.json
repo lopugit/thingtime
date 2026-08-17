@@ -140,6 +140,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "chat-bubble",
 	"source": {
 		"kind": "archetype",
 		"archetype": "chat",

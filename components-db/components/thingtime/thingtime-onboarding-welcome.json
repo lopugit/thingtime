@@ -255,6 +255,7 @@
 	},
 	"previewBg": "#fafafb",
 	"version": 1,
+	"familyKey": "onboarding-welcome",
 	"source": {
 		"kind": "archetype",
 		"archetype": "onboarding",

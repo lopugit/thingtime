@@ -196,6 +196,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "data-viz-gauge",
 	"source": {
 		"kind": "archetype",
 		"archetype": "data-viz",

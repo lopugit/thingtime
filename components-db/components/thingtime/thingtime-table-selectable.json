@@ -514,6 +514,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "table-selectable",
 	"source": {
 		"kind": "archetype",
 		"archetype": "table",

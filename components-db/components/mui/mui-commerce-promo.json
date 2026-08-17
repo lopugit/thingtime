@@ -216,6 +216,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "commerce-promo",
 	"source": {
 		"kind": "archetype",
 		"archetype": "commerce",

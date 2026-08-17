@@ -267,6 +267,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "profile-social-stats",
 	"source": {
 		"kind": "archetype",
 		"archetype": "profile-social",

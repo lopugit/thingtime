@@ -319,6 +319,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "alert-titled",
 	"source": {
 		"kind": "archetype",
 		"archetype": "alert",

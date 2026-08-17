@@ -279,6 +279,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "modal-drawer-dialog",
 	"source": {
 		"kind": "archetype",
 		"archetype": "modal-drawer",

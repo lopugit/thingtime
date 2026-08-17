@@ -586,6 +586,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "data-viz-heatmap",
 	"source": {
 		"kind": "archetype",
 		"archetype": "data-viz",

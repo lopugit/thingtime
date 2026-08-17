@@ -148,6 +148,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "form-field-char-count",
 	"source": {
 		"kind": "archetype",
 		"archetype": "form-field",

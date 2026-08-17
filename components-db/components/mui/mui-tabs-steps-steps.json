@@ -815,6 +815,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "tabs-steps-steps",
 	"source": {
 		"kind": "archetype",
 		"archetype": "tabs-steps",

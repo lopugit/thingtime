@@ -170,6 +170,7 @@
 	},
 	"previewBg": "#f2f2f2",
 	"version": 1,
+	"familyKey": "empty-states-no-results",
 	"source": {
 		"kind": "archetype",
 		"archetype": "empty-states",

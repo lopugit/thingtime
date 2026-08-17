@@ -315,6 +315,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "alert-inline",
 	"source": {
 		"kind": "archetype",
 		"archetype": "alert",

@@ -208,6 +208,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "loading-loading-button",
 	"source": {
 		"kind": "archetype",
 		"archetype": "loading",

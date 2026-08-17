@@ -262,6 +262,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "tabs-steps-segmented",
 	"source": {
 		"kind": "archetype",
 		"archetype": "tabs-steps",

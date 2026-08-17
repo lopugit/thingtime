@@ -264,6 +264,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "chat-input",
 	"source": {
 		"kind": "archetype",
 		"archetype": "chat",

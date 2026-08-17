@@ -196,6 +196,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "avatar-status",
 	"source": {
 		"kind": "archetype",
 		"archetype": "avatar",

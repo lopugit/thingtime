@@ -383,6 +383,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "choice-controls-radio-group",
 	"source": {
 		"kind": "archetype",
 		"archetype": "choice-controls",

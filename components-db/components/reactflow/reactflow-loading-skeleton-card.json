@@ -173,6 +173,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "loading-skeleton-card",
 	"source": {
 		"kind": "archetype",
 		"archetype": "loading",

@@ -8,6 +8,7 @@ import Authorize from './routes/authorize';
 import Branding from './routes/branding/_index';
 import BrandingOld from './routes/branding_old';
 import ComponentsRoute from './routes/components';
+import ComponentDetailRoute, { ComponentDetailDocs } from './routes/component-detail';
 import CryptoPage from './routes/crypto';
 import DocsLayout from './routes/docs/DocsLayout';
 import DocsApi from './routes/docs/api';
@@ -173,8 +174,11 @@ export const router = createBrowserRouter([
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', element: <SchemasRoute /> },
-      // UI component library: /schemas' UI-first sibling
+      // UI component library: /schemas' UI-first sibling; every component
+      // family gets its own deep-linked page + /docs twin
       { path: 'components', element: <ComponentsRoute /> },
+      { path: 'components/:key', element: <ComponentDetailRoute /> },
+      { path: 'components/:key/docs', element: <ComponentDetailDocs /> },
       { path: 'search', element: <SearchRoute /> },
       {
         path: 'status',

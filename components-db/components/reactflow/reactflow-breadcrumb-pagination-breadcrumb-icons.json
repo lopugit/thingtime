@@ -251,6 +251,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "breadcrumb-pagination-breadcrumb-icons",
 	"source": {
 		"kind": "archetype",
 		"archetype": "breadcrumb-pagination",

@@ -185,6 +185,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "stat-metric-comparison",
 	"source": {
 		"kind": "archetype",
 		"archetype": "stat-metric",

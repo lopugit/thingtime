@@ -198,6 +198,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "code-block-diff",
 	"source": {
 		"kind": "archetype",
 		"archetype": "code-block",

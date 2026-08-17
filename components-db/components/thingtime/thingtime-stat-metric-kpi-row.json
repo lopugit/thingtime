@@ -228,6 +228,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "stat-metric-kpi-row",
 	"source": {
 		"kind": "archetype",
 		"archetype": "stat-metric",

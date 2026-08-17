@@ -115,6 +115,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "badge-pill-count",
 	"source": {
 		"kind": "archetype",
 		"archetype": "badge",

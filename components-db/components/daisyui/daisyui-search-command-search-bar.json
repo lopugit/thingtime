@@ -181,6 +181,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "search-command-search-bar",
 	"source": {
 		"kind": "archetype",
 		"archetype": "search-command",

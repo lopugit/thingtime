@@ -83,6 +83,40 @@ const run = async () => {
 	const docs = await api('/api/v1/components/browse-docs');
 	check('browse docs twin serves', docs.status === 200 && docs.body?.docs?.endpoint === '/api/v1/components/browse');
 
+	// ---- family grouping ----------------------------------------------------
+	const grouped = await api('/api/v1/components/browse?group=family&limit=5');
+	check('group=family returns ok', grouped.status === 200 && grouped.body?.ok === true);
+	const groupedEntries = grouped.body?.components || [];
+	check(
+		'grouped entries carry a designs roster',
+		groupedEntries.length > 0 && groupedEntries.every((entry) => !entry.designs || entry.designs.length > 1)
+	);
+	check(
+		'grouped familyKeys are unique per page',
+		new Set(groupedEntries.map((entry) => entry.crystal?.familyKey || entry.id)).size === groupedEntries.length
+	);
+	const familyKey = groupedEntries.find((entry) => entry.designs?.length)?.crystal?.familyKey;
+	if (familyKey) {
+		const familyResp = await api(`/api/v1/components/browse?family=${encodeURIComponent(familyKey)}`);
+		const designs = familyResp.body?.components || [];
+		check('family= fetch returns every design', familyResp.status === 200 && designs.length > 1);
+		check(
+			'family designs share the familyKey',
+			designs.every((entry) => entry.crystal?.familyKey === familyKey)
+		);
+		check(
+			'family designs lead with the house style',
+			designs[0]?.crystal?.library === 'thingtime'
+		);
+		const byComponentKey = await api(`/api/v1/components/browse?family=${encodeURIComponent(designs[0].crystal.componentKey)}`);
+		check(
+			'family= also resolves a componentKey slug',
+			byComponentKey.status === 200 && (byComponentKey.body?.components || []).length === designs.length
+		);
+	} else {
+		check('a grouped family with designs exists', false, 'no multi-design family on page 1');
+	}
+
 	check('mine=1 without auth is 401', (await api('/api/v1/components/browse?mine=1')).status === 401);
 	check('library=1 without auth is 401', (await api('/api/v1/components/browse?library=1')).status === 401);
 

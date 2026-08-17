@@ -296,6 +296,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "window-chrome-tabs",
 	"source": {
 		"kind": "archetype",
 		"archetype": "window-chrome",

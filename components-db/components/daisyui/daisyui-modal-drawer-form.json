@@ -371,6 +371,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "modal-drawer-form",
 	"source": {
 		"kind": "archetype",
 		"archetype": "modal-drawer",

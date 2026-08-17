@@ -133,6 +133,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "form-field-labeled",
 	"source": {
 		"kind": "archetype",
 		"archetype": "form-field",

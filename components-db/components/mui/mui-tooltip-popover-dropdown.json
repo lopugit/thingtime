@@ -269,6 +269,7 @@
 	},
 	"previewBg": "#f5f5f5",
 	"version": 1,
+	"familyKey": "tooltip-popover-dropdown",
 	"source": {
 		"kind": "archetype",
 		"archetype": "tooltip-popover",

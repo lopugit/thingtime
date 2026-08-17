@@ -116,6 +116,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "badge-outline",
 	"source": {
 		"kind": "archetype",
 		"archetype": "badge",

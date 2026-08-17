@@ -230,6 +230,7 @@
 	},
 	"previewBg": "#fafafa",
 	"version": 1,
+	"familyKey": "empty-states-error",
 	"source": {
 		"kind": "archetype",
 		"archetype": "empty-states",

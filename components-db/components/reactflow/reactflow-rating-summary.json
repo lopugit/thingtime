@@ -585,6 +585,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "rating-summary",
 	"source": {
 		"kind": "archetype",
 		"archetype": "rating",

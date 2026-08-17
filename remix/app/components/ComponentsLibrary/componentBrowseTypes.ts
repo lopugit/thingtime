@@ -13,6 +13,8 @@ export type BrowseComponentAuthor = {
   avatarUrl: string | null;
 } | null;
 
+export type ComponentDesignRef = { id: string; library: string };
+
 export type BrowseComponentEntry = {
   id: string;
   thingtime: string[];
@@ -28,6 +30,8 @@ export type BrowseComponentEntry = {
   viewerReactions: string[];
   saved: boolean;
   usageCount: number;
+  // group=family pages: every visible design of this entry's family
+  designs?: ComponentDesignRef[];
 };
 
 export type BrowseComponentsResponse = {
@@ -55,13 +59,14 @@ export const COMPONENT_LIBRARY_LABELS: Record<string, string> = {
 // (ownerId 'system' is never a real user), which is how cards tell the
 // platform catalog apart from community publishes.
 export type ComponentCardSource = {
-  key: string; // stable list key (thing shareId)
+  key: string; // stable list key (thing shareId — or familyKey on grouped pages)
   id: string;
   name: string;
   description: string;
   library: string;
   category: string;
   componentKey: string | null;
+  familyKey: string | null;
   version: number | null;
   args: ComponentArgSpec[];
   savedArgs: Record<string, string | number | boolean> | null;
@@ -70,7 +75,20 @@ export type ComponentCardSource = {
   forkOf: string | null;
   origin: 'platform' | 'community';
   entry: BrowseComponentEntry;
+  // the family's design roster (>1 → the card shows the designs click-through)
+  designs: ComponentDesignRef[];
 };
+
+// canonical design order: house style first, then the source libraries
+export const DESIGN_LIBRARY_ORDER = ['thingtime', 'antd', 'bootstrap', 'mui', 'shadcn', 'untitled', 'daisyui', 'reactflow', 'custom'];
+export const designRank = (library: string): number => {
+  const index = DESIGN_LIBRARY_ORDER.indexOf(library);
+  return index === -1 ? DESIGN_LIBRARY_ORDER.length : index;
+};
+
+// the deep-link key for a card: family page when grouped, else the design slug
+export const deepLinkKeyFor = (source: Pick<ComponentCardSource, 'familyKey' | 'componentKey' | 'id'>): string =>
+  source.familyKey || source.componentKey || source.id;
 
 export const entryToCardSource = (entry: BrowseComponentEntry): ComponentCardSource | null => {
   const crystal = entry.crystal || {};
@@ -88,6 +106,7 @@ export const entryToCardSource = (entry: BrowseComponentEntry): ComponentCardSou
     library: typeof crystal.library === 'string' ? crystal.library : 'custom',
     category: typeof crystal.category === 'string' ? crystal.category : 'general',
     componentKey: typeof crystal.componentKey === 'string' ? crystal.componentKey : null,
+    familyKey: typeof crystal.familyKey === 'string' ? crystal.familyKey : null,
     version: typeof crystal.version === 'number' ? crystal.version : null,
     args: sanitizeArgSpecs(crystal.args),
     savedArgs,
@@ -95,6 +114,43 @@ export const entryToCardSource = (entry: BrowseComponentEntry): ComponentCardSou
     previewBg: typeof crystal.previewBg === 'string' ? crystal.previewBg : null,
     forkOf: typeof crystal.forkOf === 'string' ? crystal.forkOf : null,
     origin: entry.author ? 'community' : 'platform',
-    entry
+    entry,
+    designs: Array.isArray(entry.designs) ? entry.designs : []
   };
+};
+
+// Client-side family collapse for pages the server can't group (q-search):
+// one source per familyKey from the loaded entries, representative by design
+// rank, designs built from what's loaded (the full roster hydrates on switch).
+export const collapseEntriesByFamily = (entries: BrowseComponentEntry[]): ComponentCardSource[] => {
+  const byFamily = new Map<string, BrowseComponentEntry[]>();
+  const order: string[] = [];
+  for (const entry of entries) {
+    const familyKey = typeof entry.crystal?.familyKey === 'string' ? entry.crystal.familyKey : entry.id;
+    if (!byFamily.has(familyKey)) {
+      byFamily.set(familyKey, []);
+      order.push(familyKey);
+    }
+    byFamily.get(familyKey)!.push(entry);
+  }
+  const sources: ComponentCardSource[] = [];
+  for (const familyKey of order) {
+    const group = byFamily.get(familyKey)!;
+    const ranked = [...group].sort(
+      (a, b) =>
+        designRank(typeof a.crystal?.library === 'string' ? a.crystal.library : 'custom') -
+          designRank(typeof b.crystal?.library === 'string' ? b.crystal.library : 'custom') || (a.id < b.id ? -1 : 1)
+    );
+    const source = entryToCardSource(ranked[0]);
+    if (!source) continue;
+    if (group.length > 1) {
+      source.designs = ranked.map((entry) => ({
+        id: entry.id,
+        library: typeof entry.crystal?.library === 'string' ? entry.crystal.library : 'custom'
+      }));
+    }
+    source.key = familyKey;
+    sources.push(source);
+  }
+  return sources;
 };

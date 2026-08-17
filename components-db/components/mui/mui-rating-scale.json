@@ -200,6 +200,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "rating-scale",
 	"source": {
 		"kind": "archetype",
 		"archetype": "rating",

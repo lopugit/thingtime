@@ -351,6 +351,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "window-chrome-window",
 	"source": {
 		"kind": "archetype",
 		"archetype": "window-chrome",

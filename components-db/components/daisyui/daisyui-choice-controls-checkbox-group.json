@@ -328,6 +328,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "choice-controls-checkbox-group",
 	"source": {
 		"kind": "archetype",
 		"archetype": "choice-controls",

@@ -127,6 +127,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "chip-basic",
 	"source": {
 		"kind": "archetype",
 		"archetype": "chip",

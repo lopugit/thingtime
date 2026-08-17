@@ -206,6 +206,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "stat-metric-trend",
 	"source": {
 		"kind": "archetype",
 		"archetype": "stat-metric",

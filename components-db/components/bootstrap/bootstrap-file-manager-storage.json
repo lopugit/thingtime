@@ -251,6 +251,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "file-manager-storage",
 	"source": {
 		"kind": "archetype",
 		"archetype": "file-manager",

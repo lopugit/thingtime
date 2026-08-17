@@ -133,6 +133,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "chat-typing",
 	"source": {
 		"kind": "archetype",
 		"archetype": "chat",

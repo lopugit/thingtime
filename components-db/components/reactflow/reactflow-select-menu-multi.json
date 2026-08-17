@@ -385,6 +385,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "select-menu-multi",
 	"source": {
 		"kind": "archetype",
 		"archetype": "select-menu",

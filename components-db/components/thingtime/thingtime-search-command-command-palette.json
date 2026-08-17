@@ -689,6 +689,7 @@
 	},
 	"previewBg": "#fafafb",
 	"version": 1,
+	"familyKey": "search-command-command-palette",
 	"source": {
 		"kind": "archetype",
 		"archetype": "search-command",

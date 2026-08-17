@@ -200,6 +200,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "media-player-video",
 	"source": {
 		"kind": "archetype",
 		"archetype": "media-player",

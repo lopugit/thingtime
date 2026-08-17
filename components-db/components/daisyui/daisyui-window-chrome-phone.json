@@ -305,6 +305,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "window-chrome-phone",
 	"source": {
 		"kind": "archetype",
 		"archetype": "window-chrome",

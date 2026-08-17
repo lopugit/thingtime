@@ -166,6 +166,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "list-two-line",
 	"source": {
 		"kind": "archetype",
 		"archetype": "list",

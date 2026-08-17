@@ -526,6 +526,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "file-manager-toolbar",
 	"source": {
 		"kind": "archetype",
 		"archetype": "file-manager",

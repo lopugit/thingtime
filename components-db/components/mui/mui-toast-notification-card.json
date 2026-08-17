@@ -475,6 +475,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "toast-notification-card",
 	"source": {
 		"kind": "archetype",
 		"archetype": "toast-notification",

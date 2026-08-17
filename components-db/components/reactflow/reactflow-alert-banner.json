@@ -335,6 +335,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "alert-banner",
 	"source": {
 		"kind": "archetype",
 		"archetype": "alert",

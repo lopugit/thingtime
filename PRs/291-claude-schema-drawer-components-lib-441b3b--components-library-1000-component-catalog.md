@@ -97,3 +97,36 @@ A 10-minute loop continues catalog growth beyond 1000 (tranche 2: +5000
 varied components target, stopping if the weekly usage quota exhausts), using
 the same generate → validate → seed pipeline; each run is idempotent and
 converges via the seed census.
+
+## Round 2 (owner feedback): families + deep links
+
+Owner feedback mid-session: the 8 library renditions of one component read as
+duplicates, and components deserved their own pages.
+
+- **familyKey** (`<archetype>-<variant>`) stamped on every component (crystal
+  grammar + registry field + pin test + generator); the self-healing seed
+  refreshed all pre-existing docs in place (1480 refreshed / 120 created in
+  one run — the drift-refresh path did the migration for free).
+- **Grouping**: `group=family` aggregation ($group on familyKey over the
+  visibility superset, exact-check on representatives, designs roster with
+  house-style-first ordering) + `family=` roster fetch that also resolves a
+  componentKey slug by expanding to its family. Plain catalog groups
+  server-side; q-search collapses client-side (`collapseEntriesByFamily`);
+  lib-filtered/popular/mine/library views stay per-design.
+- **Cards**: designs pill row swaps the active rendition in place (args tweaks
+  survive the switch via defaults-merge); Docs button →
+  `/components/<key>/docs`.
+- **Detail pages**: `/components/:key` (+ `/docs` twin scrolled to Docs) —
+  design switcher with `?design=` deep links, big preview, args tester,
+  copyable deep links, args reference, create-via-API snippet, definition.
+  `:key` resolves familyKey | componentKey | `component-<slug>` shareId.
+  (The requested `/things/<slug>/docs` shape was landed as
+  `/components/<key>/docs` instead — deeper `/things/*` paths belong to the
+  ThingtimeUrl tree viewer, and fighting that catch-all for component pages
+  would have special-cased the things namespace.)
+- **Debugging**: a blank /components with `NotFoundError: removeChild` React
+  crashes after the edit storm turned out to be stale-HMR corruption — real
+  loads crashed while the module graph settled, then both full loads and SPA
+  navs rendered clean; the templates themselves were exonerated via the
+  detail pages. Also: `family=` by componentKey originally returned just that
+  one design (caught by the extended verify suite, now 30 checks).

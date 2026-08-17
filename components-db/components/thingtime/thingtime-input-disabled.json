@@ -112,6 +112,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "input-disabled",
 	"source": {
 		"kind": "archetype",
 		"archetype": "input",

@@ -51,7 +51,10 @@ export const ARCHETYPE_ORDER = [
 	'data-viz',
 	'file-manager',
 	'onboarding',
-	'window-chrome'
+	'window-chrome',
+	'kanban',
+	'forms-advanced',
+	'gamification'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;
@@ -128,6 +131,10 @@ export const buildCatalog = async () => {
 				definitions.push({
 					...def,
 					version: 1,
+					// familyKey groups the 8 library renditions of one functional
+					// component — /components shows one card per family with a
+					// designs click-through
+					familyKey: `${id}-${variant}`,
 					source: { kind: 'archetype', archetype: id, variant, tranche: trancheOf(id) }
 				});
 			});

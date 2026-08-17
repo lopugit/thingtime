@@ -364,6 +364,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "commerce-summary",
 	"source": {
 		"kind": "archetype",
 		"archetype": "commerce",

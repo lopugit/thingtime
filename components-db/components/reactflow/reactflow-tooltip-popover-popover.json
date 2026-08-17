@@ -258,6 +258,7 @@
 	},
 	"previewBg": "#f8f8f8",
 	"version": 1,
+	"familyKey": "tooltip-popover-popover",
 	"source": {
 		"kind": "archetype",
 		"archetype": "tooltip-popover",

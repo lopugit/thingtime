@@ -225,6 +225,7 @@
 	},
 	"previewBg": "#f5f5f5",
 	"version": 1,
+	"familyKey": "empty-states-success",
 	"source": {
 		"kind": "archetype",
 		"archetype": "empty-states",

@@ -176,6 +176,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "date-time-date-input",
 	"source": {
 		"kind": "archetype",
 		"archetype": "date-time",

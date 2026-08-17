@@ -248,6 +248,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "navbar-top",
 	"source": {
 		"kind": "archetype",
 		"archetype": "navbar",

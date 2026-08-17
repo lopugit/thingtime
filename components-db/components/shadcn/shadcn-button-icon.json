@@ -166,6 +166,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "button-icon",
 	"source": {
 		"kind": "archetype",
 		"archetype": "button",

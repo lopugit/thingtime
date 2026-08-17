@@ -321,6 +321,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "timeline-icons",
 	"source": {
 		"kind": "archetype",
 		"archetype": "timeline",

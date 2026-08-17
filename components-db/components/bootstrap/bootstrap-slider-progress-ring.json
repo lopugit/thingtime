@@ -220,6 +220,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "slider-progress-ring",
 	"source": {
 		"kind": "archetype",
 		"archetype": "slider-progress",

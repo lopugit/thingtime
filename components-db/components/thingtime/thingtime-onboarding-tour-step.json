@@ -343,6 +343,7 @@
 	},
 	"previewBg": "#fafafb",
 	"version": 1,
+	"familyKey": "onboarding-tour-step",
 	"source": {
 		"kind": "archetype",
 		"archetype": "onboarding",

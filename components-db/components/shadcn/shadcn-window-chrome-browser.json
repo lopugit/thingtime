@@ -276,6 +276,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "window-chrome-browser",
 	"source": {
 		"kind": "archetype",
 		"archetype": "window-chrome",

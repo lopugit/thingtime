@@ -192,6 +192,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "table-compact",
 	"source": {
 		"kind": "archetype",
 		"archetype": "table",

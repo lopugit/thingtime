@@ -122,6 +122,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "loading-dots",
 	"source": {
 		"kind": "archetype",
 		"archetype": "loading",

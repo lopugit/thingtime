@@ -519,6 +519,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "table-badges",
 	"source": {
 		"kind": "archetype",
 		"archetype": "table",

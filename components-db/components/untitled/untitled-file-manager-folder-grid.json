@@ -290,6 +290,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "file-manager-folder-grid",
 	"source": {
 		"kind": "archetype",
 		"archetype": "file-manager",

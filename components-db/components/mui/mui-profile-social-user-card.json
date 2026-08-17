@@ -354,6 +354,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "profile-social-user-card",
 	"source": {
 		"kind": "archetype",
 		"archetype": "profile-social",

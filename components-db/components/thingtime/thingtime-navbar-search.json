@@ -340,6 +340,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "navbar-search",
 	"source": {
 		"kind": "archetype",
 		"archetype": "navbar",

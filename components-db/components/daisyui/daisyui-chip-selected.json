@@ -149,6 +149,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "chip-selected",
 	"source": {
 		"kind": "archetype",
 		"archetype": "chip",

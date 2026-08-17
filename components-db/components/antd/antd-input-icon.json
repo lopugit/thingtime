@@ -156,6 +156,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "input-icon",
 	"source": {
 		"kind": "archetype",
 		"archetype": "input",

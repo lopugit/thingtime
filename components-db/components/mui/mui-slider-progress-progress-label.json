@@ -141,6 +141,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "slider-progress-progress-label",
 	"source": {
 		"kind": "archetype",
 		"archetype": "slider-progress",

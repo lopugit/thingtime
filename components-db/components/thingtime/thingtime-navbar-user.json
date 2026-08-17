@@ -271,6 +271,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "navbar-user",
 	"source": {
 		"kind": "archetype",
 		"archetype": "navbar",

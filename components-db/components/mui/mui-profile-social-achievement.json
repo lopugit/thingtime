@@ -303,6 +303,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "profile-social-achievement",
 	"source": {
 		"kind": "archetype",
 		"archetype": "profile-social",

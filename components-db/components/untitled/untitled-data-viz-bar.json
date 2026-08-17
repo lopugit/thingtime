@@ -456,6 +456,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "data-viz-bar",
 	"source": {
 		"kind": "archetype",
 		"archetype": "data-viz",

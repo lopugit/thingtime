@@ -451,6 +451,7 @@
 	},
 	"previewBg": "#fafafa",
 	"version": 1,
+	"familyKey": "onboarding-invite",
 	"source": {
 		"kind": "archetype",
 		"archetype": "onboarding",

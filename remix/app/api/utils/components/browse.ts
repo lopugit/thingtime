@@ -49,13 +49,19 @@ export type BrowseComponentsQuery = {
   mine?: unknown; // truthy → only the viewer's own components
   lib?: unknown; // design-library filter
   category?: unknown; // category filter
+  group?: unknown; // 'family' → one representative card per familyKey
+  family?: unknown; // fetch every design of one family (familyKey or componentKey)
 };
+
+export type ComponentDesignRef = { id: string; library: string };
 
 export type BrowseComponentEntry = PublicThing & {
   reactionCounts: Record<string, number>;
   viewerReactions: string[];
   saved: boolean;
   usageCount: number;
+  // present on group=family pages: every visible design of this entry's family
+  designs?: ComponentDesignRef[];
 };
 
 export type BrowseComponentsResult = {
@@ -171,6 +177,153 @@ const decorate = async (viewer: Viewer, things: PublicThing[]): Promise<BrowseCo
       usageCount: Math.max(0, kin - 1)
     };
   });
+};
+
+// Canonical design order: the house style fronts a family, then the source
+// libraries in catalog order. Used to pick a family's representative card and
+// to order design switcher pills.
+const DESIGN_LIBRARY_ORDER = ['thingtime', 'antd', 'bootstrap', 'mui', 'shadcn', 'untitled', 'daisyui', 'reactflow', 'custom'];
+const designRank = (library: unknown): number => {
+  const index = DESIGN_LIBRARY_ORDER.indexOf(typeof library === 'string' ? library : '');
+  return index === -1 ? DESIGN_LIBRARY_ORDER.length : index;
+};
+
+const familyKeyOf = (raw: unknown): string | null => {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  return value && value.length <= 80 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(value) ? value : null;
+};
+
+const MAX_FAMILY_DESIGNS = 16;
+
+// One family, every visible design — powers the card's designs click-through
+// and the /components/:key detail page. Key matches familyKey OR componentKey
+// (so individual design slugs deep-link too).
+const browseFamily = async (
+  viewer: Viewer,
+  key: string
+): Promise<Fail | { things: PublicThing[]; nextCursor: null; total: number | null }> => {
+  const visibility = visibilityQueryFor(viewer, []);
+  if (!visibility) return { things: [], nextCursor: null, total: 0 };
+
+  const collection = await getThingsCollection();
+  const match = withMatch(
+    { thingtime: 'component' },
+    { $or: [{ 'crystal.familyKey': key }, { 'crystal.componentKey': key }] },
+    visibility
+  );
+  let docs = (await collection
+    .find(match as any)
+    .limit(MAX_FAMILY_DESIGNS * 2)
+    .toArray()) as any as ThingDoc[];
+
+  // a componentKey slug names ONE design — expand to its whole family so the
+  // detail page always gets the full designs roster
+  const expandKey = docs
+    .map((doc) => (typeof (doc as any).crystal?.familyKey === 'string' ? (doc as any).crystal.familyKey : null))
+    .find((candidate) => candidate && candidate !== key);
+  if (expandKey) {
+    docs = (await collection
+      .find(withMatch({ thingtime: 'component' }, { 'crystal.familyKey': expandKey }, visibility) as any)
+      .limit(MAX_FAMILY_DESIGNS * 2)
+      .toArray()) as any as ThingDoc[];
+  }
+
+  const visibleFlags = await Promise.all(docs.map((doc) => canViewInherited(doc, viewer)));
+  const visible = docs
+    .filter((_, index) => visibleFlags[index])
+    .sort(
+      (a, b) =>
+        designRank((a as any).crystal?.library) - designRank((b as any).crystal?.library) ||
+        (a.shareId < b.shareId ? -1 : 1)
+    )
+    .slice(0, MAX_FAMILY_DESIGNS);
+  return { things: await toPublicThings(visible, viewer), nextCursor: null, total: visible.length };
+};
+
+// group=family: one representative card per familyKey (offset cursor over a
+// bounded window, mirroring the popular path's superset-then-exact model).
+// Ungrouped docs (no familyKey — e.g. user saved versions) group by shareId,
+// so they still appear as their own card.
+const browseFamilies = async (
+  viewer: Viewer,
+  cursor: unknown,
+  limit: number,
+  category: string | null
+): Promise<Fail | { things: PublicThing[]; nextCursor: string | null; total: number | null; designsByFamily: Map<string, ComponentDesignRef[]> }> => {
+  const visibility = visibilityQueryFor(viewer, []);
+  if (!visibility) return { things: [], nextCursor: null, total: 0, designsByFamily: new Map() };
+
+  const offset = Math.min(Math.max(0, Number(cursor) || 0), POPULAR_MAX_OFFSET);
+  const filters: Record<string, unknown>[] = [];
+  if (category) filters.push({ 'crystal.category': category });
+  const match = withMatch({ thingtime: 'component' }, ...filters, visibility);
+
+  const collection = await getThingsCollection();
+  const groups = (await collection
+    .aggregate(
+      [
+        { $match: match },
+        { $sort: { createdAt: -1, shareId: 1 } },
+        {
+          $group: {
+            _id: { $ifNull: ['$crystal.familyKey', '$shareId'] },
+            latest: { $first: '$createdAt' },
+            designs: { $push: { id: '$shareId', library: '$crystal.library' } }
+          }
+        },
+        { $sort: { latest: -1, _id: 1 } },
+        { $skip: offset },
+        { $limit: limit + 1 }
+      ],
+      { maxTimeMS: COUNT_MAX_TIME_MS * 2 }
+    )
+    .toArray()) as any[];
+
+  const page = groups.slice(0, limit);
+  const designsByFamily = new Map<string, ComponentDesignRef[]>();
+  const representativeIds: string[] = [];
+  for (const group of page) {
+    const designs = (Array.isArray(group.designs) ? group.designs : [])
+      .filter((design: any) => typeof design?.id === 'string')
+      .map((design: any) => ({ id: design.id, library: typeof design.library === 'string' ? design.library : 'custom' }))
+      .sort((a: ComponentDesignRef, b: ComponentDesignRef) => designRank(a.library) - designRank(b.library) || (a.id < b.id ? -1 : 1))
+      .slice(0, MAX_FAMILY_DESIGNS);
+    if (!designs.length) continue;
+    designsByFamily.set(String(group._id), designs);
+    representativeIds.push(designs[0].id);
+  }
+
+  const fetched = representativeIds.length
+    ? ((await collection.find({ shareId: { $in: representativeIds } } as any).toArray()) as any as ThingDoc[])
+    : [];
+  const byId = new Map(fetched.map((doc) => [doc.shareId, doc]));
+  const ordered = representativeIds.map((id) => byId.get(id)).filter(Boolean) as ThingDoc[];
+  const visibleFlags = await Promise.all(ordered.map((doc) => canViewInherited(doc, viewer)));
+  const visible = ordered.filter((_, index) => visibleFlags[index]);
+
+  // total = family count (capped), first page only — cheap distinct-ish count
+  let total: number | null = null;
+  if (!cursor) {
+    try {
+      const counted = (await collection
+        .aggregate(
+          [
+            { $match: match },
+            { $group: { _id: { $ifNull: ['$crystal.familyKey', '$shareId'] } } },
+            { $count: 'families' }
+          ],
+          { maxTimeMS: COUNT_MAX_TIME_MS }
+        )
+        .toArray()) as any[];
+      total = Math.min(Number(counted[0]?.families) || 0, COUNT_LIMIT);
+    } catch {
+      total = null;
+    }
+  }
+
+  const nextOffset = offset + limit;
+  const nextCursor = groups.length > limit && nextOffset <= POPULAR_MAX_OFFSET ? String(nextOffset) : null;
+  return { things: await toPublicThings(visible, viewer), nextCursor, total, designsByFamily };
 };
 
 // newest/oldest with optional lib/category filters: superset visibility match,
@@ -375,6 +528,33 @@ export const browseComponents = async (
       totalCapped: result.totalCapped ?? result.total === COUNT_LIMIT
     };
   };
+
+  // one family's designs (familyKey or componentKey) — the card switcher and
+  // the /components/:key detail page ride this
+  const family = familyKeyOf(query.family);
+  if (family) {
+    return finish(await browseFamily(viewer, family));
+  }
+
+  // grouped catalog: one card per family. Only the plain browse path groups —
+  // q-search, lib filter, popular, and the personal scopes stay per-design.
+  if (query.group === 'family' && !q && !lib && sortRaw !== 'popular' && !truthyFlag(query.library) && !truthyFlag(query.mine)) {
+    const result = await browseFamilies(viewer, query.cursor, limit, category);
+    if (isFail(result)) return result;
+    const decorated = await decorate(viewer, result.things);
+    const withDesigns = decorated.map((entry) => {
+      const familyKey = typeof entry.crystal?.familyKey === 'string' ? entry.crystal.familyKey : entry.id;
+      const designs = result.designsByFamily.get(familyKey);
+      return designs && designs.length > 1 ? { ...entry, designs } : entry;
+    });
+    return {
+      ok: true,
+      components: withDesigns,
+      nextCursor: result.nextCursor,
+      total: result.total,
+      totalCapped: result.total === COUNT_LIMIT
+    };
+  }
 
   if (truthyFlag(query.library)) {
     return finish(await browseSaved(viewer, query.cursor, limit));

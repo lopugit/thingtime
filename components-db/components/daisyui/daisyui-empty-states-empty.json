@@ -329,6 +329,7 @@
 	},
 	"previewBg": "#f2f2f2",
 	"version": 1,
+	"familyKey": "empty-states-empty",
 	"source": {
 		"kind": "archetype",
 		"archetype": "empty-states",

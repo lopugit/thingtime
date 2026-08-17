@@ -206,6 +206,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "flow-edge",
 	"source": {
 		"kind": "archetype",
 		"archetype": "flow",

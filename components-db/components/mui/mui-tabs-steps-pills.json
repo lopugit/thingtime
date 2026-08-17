@@ -296,6 +296,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "tabs-steps-pills",
 	"source": {
 		"kind": "archetype",
 		"archetype": "tabs-steps",

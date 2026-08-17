@@ -215,6 +215,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "timeline-activity",
 	"source": {
 		"kind": "archetype",
 		"archetype": "timeline",

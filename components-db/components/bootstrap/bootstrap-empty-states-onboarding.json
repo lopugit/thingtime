@@ -315,6 +315,7 @@
 	},
 	"previewBg": "#f8f9fa",
 	"version": 1,
+	"familyKey": "empty-states-onboarding",
 	"source": {
 		"kind": "archetype",
 		"archetype": "empty-states",

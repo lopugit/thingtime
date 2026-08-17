@@ -408,6 +408,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "alert-actions",
 	"source": {
 		"kind": "archetype",
 		"archetype": "alert",

@@ -145,6 +145,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "loading-spinner",
 	"source": {
 		"kind": "archetype",
 		"archetype": "loading",

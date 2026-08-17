@@ -130,6 +130,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "button-ghost",
 	"source": {
 		"kind": "archetype",
 		"archetype": "button",

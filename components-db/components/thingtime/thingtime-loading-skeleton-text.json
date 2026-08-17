@@ -97,6 +97,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "loading-skeleton-text",
 	"source": {
 		"kind": "archetype",
 		"archetype": "loading",

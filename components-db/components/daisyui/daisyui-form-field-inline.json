@@ -140,6 +140,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "form-field-inline",
 	"source": {
 		"kind": "archetype",
 		"archetype": "form-field",

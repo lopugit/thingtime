@@ -327,6 +327,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "tabs-steps-underline",
 	"source": {
 		"kind": "archetype",
 		"archetype": "tabs-steps",

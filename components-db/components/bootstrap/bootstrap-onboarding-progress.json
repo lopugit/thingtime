@@ -248,6 +248,7 @@
 	},
 	"previewBg": "#f8f9fa",
 	"version": 1,
+	"familyKey": "onboarding-progress",
 	"source": {
 		"kind": "archetype",
 		"archetype": "onboarding",

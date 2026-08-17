@@ -152,6 +152,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "form-field-required",
 	"source": {
 		"kind": "archetype",
 		"archetype": "form-field",

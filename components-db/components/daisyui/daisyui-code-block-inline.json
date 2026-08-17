@@ -86,6 +86,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "code-block-inline",
 	"source": {
 		"kind": "archetype",
 		"archetype": "code-block",

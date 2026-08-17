@@ -318,6 +318,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "media-player-mini",
 	"source": {
 		"kind": "archetype",
 		"archetype": "media-player",

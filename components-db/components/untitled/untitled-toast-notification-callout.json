@@ -437,6 +437,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "toast-notification-callout",
 	"source": {
 		"kind": "archetype",
 		"archetype": "toast-notification",

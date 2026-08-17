@@ -216,6 +216,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "date-time-countdown",
 	"source": {
 		"kind": "archetype",
 		"archetype": "date-time",

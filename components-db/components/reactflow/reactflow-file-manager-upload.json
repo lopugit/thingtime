@@ -330,6 +330,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "file-manager-upload",
 	"source": {
 		"kind": "archetype",
 		"archetype": "file-manager",

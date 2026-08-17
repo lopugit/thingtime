@@ -319,6 +319,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "commerce-product-card",
 	"source": {
 		"kind": "archetype",
 		"archetype": "commerce",

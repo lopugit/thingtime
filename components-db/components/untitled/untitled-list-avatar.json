@@ -180,6 +180,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "list-avatar",
 	"source": {
 		"kind": "archetype",
 		"archetype": "list",

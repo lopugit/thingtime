@@ -252,6 +252,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "chat-contact",
 	"source": {
 		"kind": "archetype",
 		"archetype": "chat",

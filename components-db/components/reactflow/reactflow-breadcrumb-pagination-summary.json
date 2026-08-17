@@ -226,6 +226,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "breadcrumb-pagination-summary",
 	"source": {
 		"kind": "archetype",
 		"archetype": "breadcrumb-pagination",

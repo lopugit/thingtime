@@ -285,6 +285,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "date-time-calendar",
 	"source": {
 		"kind": "archetype",
 		"archetype": "date-time",

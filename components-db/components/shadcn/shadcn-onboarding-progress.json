@@ -248,6 +248,7 @@
 	},
 	"previewBg": "#fafafa",
 	"version": 1,
+	"familyKey": "onboarding-progress",
 	"source": {
 		"kind": "archetype",
 		"archetype": "onboarding",

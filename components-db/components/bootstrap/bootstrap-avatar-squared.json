@@ -179,6 +179,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "avatar-squared",
 	"source": {
 		"kind": "archetype",
 		"archetype": "avatar",

@@ -202,6 +202,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "code-block-terminal",
 	"source": {
 		"kind": "archetype",
 		"archetype": "code-block",

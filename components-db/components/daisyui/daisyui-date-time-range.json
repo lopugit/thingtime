@@ -325,6 +325,7 @@
 		]
 	},
 	"version": 1,
+	"familyKey": "date-time-range",
 	"source": {
 		"kind": "archetype",
 		"archetype": "date-time",
