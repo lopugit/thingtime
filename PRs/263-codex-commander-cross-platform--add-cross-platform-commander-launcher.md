@@ -175,10 +175,20 @@ environment.
   normalization on an array and blanked the picker. A top-level renderer error
   boundary also keeps any future view failure visible and reloadable instead of
   masquerading as a native app crash.
+- Commander now has a portable `System` result kind and a platform-gated
+  **macOS System** built-in extension. Its curated global index exposes 39
+  System Settings destinations—including Accessibility permissions, Screen &
+  System Audio Recording, Full Disk Access, Login Items, Displays, networking,
+  input devices, and Spotlight—through validated `x-apple.systempreferences:`
+  deep links. The commands automatically participate in search, History,
+  Command-K, and per-command global shortcuts; other platforms never receive
+  the macOS-only catalog. Stable third-party app deep links can use the same
+  provider shape, while arbitrary app-menu indexing remains an explicit future
+  Accessibility provider rather than an unsafe static macro.
 
 ## Verification
 
-- Commander TypeScript: 73 tests passed across UI (39), daemon (16), and
+- Commander TypeScript: 77 tests passed across UI (40), daemon (19), and
   compatibility (18) packages; typecheck, ESLint, Prettier, and package builds
   passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
@@ -194,6 +204,10 @@ environment.
 - Installed-WebKit QA opened Search Emoji & Symbols, typed the formerly
   crashing first character `h`, continued to `heart`, and kept the picker
   visible and focused with 46 results before returning to the launcher.
+- Installed-WebKit QA searched `accessibility` in the final signed bundle,
+  rendered Accessibility Settings first with the `System` kind, executed it,
+  and confirmed System Settings opened the exact Privacy & Security →
+  Accessibility permission list without changing a permission.
 - Native macOS QA covered physical-key custom-hotkey recording and restoration,
   per-command recording and Delete-clear behavior, and a real Finder-compatible
   file-URL drop of `/Applications/Hermes.app` into an isolated native receiver,

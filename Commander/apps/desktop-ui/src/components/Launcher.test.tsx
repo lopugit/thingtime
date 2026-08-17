@@ -187,6 +187,26 @@ describe('Launcher keyboard navigation', () => {
     await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith(item.id, 'run'));
   });
 
+  it('renders and executes a macOS System shortcut as a System result', async () => {
+    const item = {
+      ...hits[0]!,
+      id: 'extension:builtin:macos-system:open-accessibility-settings',
+      title: 'Accessibility Settings',
+      subtitle: 'macOS System',
+      kind: 'system' as const,
+      extensionId: 'builtin:macos-system',
+      commandName: 'open-accessibility-settings',
+      actions: [{ id: 'run', title: 'Open Accessibility Settings' }],
+    };
+    const commander = state({ hits: [item], selectedIndex: 0 });
+    render(<Launcher state={commander} />);
+
+    expect(screen.getByRole('option', { name: /Accessibility Settings/ })).toHaveTextContent('System');
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith(item.id, 'run'));
+  });
+
   it('opens a bundled command view without hiding the launcher', async () => {
     const item = {
       ...hits[0]!,

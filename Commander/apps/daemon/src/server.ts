@@ -34,6 +34,7 @@ import {
   searchEmojiSymbolsCommandName,
 } from './services/catalog.js';
 import { PersistentStore } from './services/persistence.js';
+import { macosSystemExtension, macosSystemShortcutURL } from './services/macosSystem.js';
 import { preferenceValuesForCommand, RaycastLocalService } from './services/raycastLocal.js';
 import { SearchService } from './services/search.js';
 import { ThingtimeService } from './services/thingtime.js';
@@ -60,6 +61,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   const nativeToken = randomBytes(32).toString('base64url');
   const store = new PersistentStore();
   await store.load();
+  const platform = options.platform ?? currentPlatform();
   const applications = await discoverApplications();
   const search = new SearchService(options.rustBinary);
   const extensions = new RaycastExtensionRuntime();
@@ -70,7 +72,11 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
 
   const refreshCatalog = () => {
     const state = store.snapshot();
-    search.setItems([...builtins, ...extensionItems(availableExtensions(state.extensions)), ...applications]);
+    search.setItems([
+      ...builtins,
+      ...extensionItems(availableExtensions(state.extensions, platform)),
+      ...applications,
+    ]);
   };
   refreshCatalog();
 
@@ -107,20 +113,20 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
 
   async function routeApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
     const state = store.snapshot();
-    const extensionsForState = availableExtensions(state.extensions);
+    const extensionsForState = availableExtensions(state.extensions, platform);
     if (request.method === 'GET' && url.pathname === '/api/bootstrap') {
       const body: BootstrapResponse = {
         protocolVersion: PROTOCOL_VERSION,
-        platform: currentPlatform(),
+        platform,
         settings: state.settings,
         accounts: state.accounts,
         extensions: extensionsForState,
         recentSearches: state.recentSearches,
         capabilities: {
           nativeBridge: true,
-          globalHotkey: process.platform === 'darwin',
+          globalHotkey: platform === 'macos',
           secureCredentialStore: true,
-          openAtLogin: process.platform === 'darwin',
+          openAtLogin: platform === 'macos',
           sideloadPicker: true,
         },
       };
@@ -313,6 +319,18 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         }
         if (extension.id === emojiSymbolsExtension.id && item.commandName === searchEmojiSymbolsCommandName) {
           return json(response, 200, { ok: true, view: { id: 'emoji-symbols' } });
+        }
+        if (extension.id === macosSystemExtension.id) {
+          const settingsURL = macosSystemShortcutURL(item.commandName);
+          if (!settingsURL)
+            return json(response, 404, { error: 'macOS System Settings destination not found' });
+          return json(response, 200, {
+            ok: true,
+            nativeRequest: {
+              method: 'application.open',
+              params: { path: settingsURL },
+            } satisfies Omit<NativeRequest, 'id'>,
+          });
         }
         if (extension.source === 'builtin')
           return json(response, 409, { error: 'This built-in command is not available' });

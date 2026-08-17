@@ -52,6 +52,28 @@ const emojiExtension: CommanderExtension = {
   ],
 };
 
+const macosSystemExtension: CommanderExtension = {
+  id: 'builtin:macos-system',
+  name: 'macos-system',
+  title: 'macOS System',
+  description: 'Open indexed macOS System Settings destinations directly from Commander.',
+  version: '0.1.0',
+  author: 'Thingtime',
+  icon: 'settings',
+  source: 'builtin',
+  enabled: true,
+  compatibility: 'native',
+  commands: [
+    {
+      name: 'open-accessibility-settings',
+      title: 'Accessibility Settings',
+      mode: 'no-view',
+      keywords: ['accessibility'],
+      disabled: false,
+    },
+  ],
+};
+
 function renderExtensions(
   initial: CommanderExtension[] = [],
   settings = DEFAULT_SETTINGS,
@@ -151,12 +173,13 @@ describe('Your Raycast extensions', () => {
   });
 
   it('lists Commander-native equivalents under Bundled Raycast Commands', () => {
-    renderExtensions([emojiExtension]);
+    renderExtensions([emojiExtension, macosSystemExtension]);
 
     fireEvent.click(screen.getByRole('button', { name: 'Bundled' }));
 
     expect(screen.getByText('Bundled Raycast Commands')).toBeVisible();
     expect(screen.getByText('Emoji & Symbols')).toBeVisible();
+    expect(screen.queryByText('macOS System')).not.toBeInTheDocument();
     expect(screen.getByText('1 bundled command · by Thingtime')).toBeVisible();
     expect(screen.getByText('Built in')).toBeVisible();
   });
