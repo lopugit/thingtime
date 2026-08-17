@@ -921,6 +921,30 @@ AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
 the preset fallback responses instead of calling an AI provider.
 
+## Third-party app connections
+
+`/connections` links external accounts (Reddit, YouTube channels, Mastodon,
+Bluesky, Lemmy, Hacker News, GitHub activity, any RSS/Atom feed, plus a
+deterministic demo provider) to a Thingtime account; `/connections/feed`
+browses them with native Thingtime comments/reactions layered on the synced
+posts, and AI feed filters ("warn for sad news" → veiled behind a Show
+button, or hidden) applied server-side.
+
+Fork-safe setup: the shipped providers are keyless public-content APIs and
+need **no configuration**. AI-backed filter classification reuses the Lopu
+provider keys above (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) and the Admin AI
+model waterfall; without any key, classification falls back to a
+deterministic keyword heuristic so the feature keeps working. Verify a
+deployment end to end with:
+
+```sh
+pnpm --dir remix run verify:connections
+```
+
+(45 real-API checks against the local nitro port; `TT_VERIFY_LIVE=1` adds a
+live Hacker News pull. OAuth-based providers land config-gated behind
+placeholder env credentials and report `configured: false` until set.)
+
 ## Branch automation: develop → main promotion
 
 `develop` is the integration branch; `main` is the release branch. Four

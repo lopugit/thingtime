@@ -28,6 +28,7 @@ import {
   ACL_OWNER,
 	APP_STORAGE_RESERVED_ID_PREFIX,
   COLLECTION_SCHEMA_VERSIONS,
+	EXTERNAL_RESERVED_ID_PREFIX,
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
 	MIGRATION_DIAGNOSTIC_ID_PREFIX,
@@ -709,11 +710,12 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) ||
-		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX)
+		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(EXTERNAL_RESERVED_ID_PREFIX)
   ) {
 		// Deterministic migration, schema, tier-revision, subscription assignment,
-		// service-quota, and app-storage destinations must never be squatted or
-		// impersonated by generic user-created Things.
+		// service-quota, app-storage, and external-connection destinations must
+		// never be squatted or impersonated by generic user-created Things.
     return fail(400, 'shareId uses a reserved prefix');
   }
   return trimmed;
@@ -1619,6 +1621,20 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
 
   const project = (doc: ThingDoc, withShare: boolean): PublicPost => {
     const crystal = crystalOf(doc);
+    // external posts (api/utils/connections) are owned by 'system' — no
+    // Thingtime profile resolves — so their third-party author surfaces from
+    // the synced extended.external envelope on every read path (feed,
+    // permalink, thread root)
+    const external = thingtimeOf(doc).includes('external-post') ? (doc.extended as any)?.external : null;
+    const externalAuthor: FeedAuthor | null = external?.author
+      ? {
+          id: `ext:${external.provider || 'unknown'}:${external.author.handle || external.author.name || 'unknown'}`,
+          username: String(external.author.handle || external.author.name || external.providerName || 'external'),
+          displayName: external.author.name || external.author.handle || external.providerName || null,
+          temporary: false,
+          avatarUrl: typeof external.author.avatarUrl === 'string' ? external.author.avatarUrl : null
+        }
+      : null;
     const allComments = mergedCommentsOf(doc, related);
     const comments = allComments.slice(-RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId));
     // the counter reports the WHOLE thread: v2 descendants via $graphLookup
@@ -1635,7 +1651,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       id: doc.shareId,
       thingtime: thingtimeOf(doc),
       type: (crystal.type as PostType) || 'text',
-      author: profiles.get(doc.ownerId) || null,
+      author: externalAuthor || profiles.get(doc.ownerId) || null,
       visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
       acl: aclOf(doc),
       text: String(crystal.text || ''),
@@ -2173,7 +2189,11 @@ export const getThing = async (
   }
 
   const isComment = thingtimeOf(doc).includes('comment');
-  const post = isPostThing(doc) || isComment ? (await toPublicPosts([doc], viewer))[0] : null;
+  // synced third-party posts render as posts too (their /post/:id permalink
+  // carries the native comment/reaction overlay) — they are deliberately NOT
+  // isPostThing so they never enter the first-party feed queries
+  const isExternalPost = thingtimeOf(doc).includes('external-post');
+  const post = isPostThing(doc) || isComment || isExternalPost ? (await toPublicPosts([doc], viewer))[0] : null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;

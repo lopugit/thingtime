@@ -98,7 +98,22 @@ export type PublicPost = {
   // impressions/avgDwellMs secondary — see api/utils/things/views.ts
   viewCount?: number;
   viewStats?: { impressions: number; avgDwellMs: number };
+  // free-form extended JSON; connections posts carry `extended.external`
+  // (provider, url, original author, stats) — see api/utils/connections
+  extended?: Record<string, any> | null;
+  // connections feed only: the viewer's AI feed-filter matches for this post
+  feedFilterMatches?: FeedFilterMatch[];
   createdAt: string;
+};
+
+// A matched AI feed filter on a connections-feed post: 'warn' veils the post
+// behind a Show button, 'hide' drops it from the rendered feed.
+export type FeedFilterMatch = {
+  filterId: string;
+  name: string;
+  action: 'warn' | 'hide';
+  reason: string;
+  source: 'claude' | 'openai' | 'heuristic';
 };
 
 // A post update bubbled up from a card. A value replaces the post (null removes

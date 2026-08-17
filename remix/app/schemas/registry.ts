@@ -2057,6 +2057,26 @@ const followSchema: ThingtimeSchema = {
 // minted only by the server on someone ELSE's action. Their dedicated
 // endpoints (/api/v1/users/follow, /api/v1/users/friend, notifications utils)
 // do direct inserts.
+// Third-party connections (api/utils/connections/): external-account carries
+// provider identity (and, later, OAuth tokens in its secure blob) — forging
+// one through generic CRUD would be credential forgery; external-account-link
+// is an authorization record (a forged link would grant another user's
+// personal feed); external-post/feed-filter-verdict are server-synced state
+// written only by the sync/classify utils; feed-filter is an operational
+// preference managed by /api/v1/connections/filters. Their deterministic
+// shareIds live under the reserved `ext-` prefix below.
+export const EXTERNAL_CONNECTION_THINGTIME = [
+  'external-account',
+  'external-account-link',
+  'external-post',
+  'feed-filter',
+  'feed-filter-verdict'
+] as const;
+// Deterministic sync/link/verdict destinations (`ext-account-…`, `ext-link-…`,
+// `ext-post-…`, `ext-filter-…`, `ext-verdict-…`) must never be squatted by
+// client-supplied shareIds (enforced in things.ts sanitizeShareId).
+export const EXTERNAL_RESERVED_ID_PREFIX = 'ext-';
+
 export const PROTECTED_THINGTIME = [
 	ATTACHMENT_THINGTIME,
   'user',
@@ -2071,6 +2091,7 @@ export const PROTECTED_THINGTIME = [
 	'service-quota',
   MIGRATION_DIAGNOSTIC_THINGTIME,
   ...CI_CONTROL_THINGTIME,
+  ...EXTERNAL_CONNECTION_THINGTIME,
   'follow',
   'friend',
   'notification'

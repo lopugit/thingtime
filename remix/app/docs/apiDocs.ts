@@ -7401,6 +7401,269 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'Unknown migration' }
       }
     ]
+  }),
+  endpoint({
+    id: 'connections-providers',
+    group: 'connections',
+    title: 'Connection providers',
+    endpoint: '/api/v1/connections/providers',
+    summary: 'Lists the third-party feed providers Thingtime can connect to.',
+    detail:
+      'The provider catalog behind "connect a 3rd party app": Reddit, YouTube, Mastodon, Bluesky, RSS, Hacker News, ' +
+      'Lemmy, GitHub, and a demo personal-algorithm provider. Each entry declares its connect fields, whether its ' +
+      'content is public or personal, and whether it is configured on this deployment (OAuth providers appear ' +
+      'unconfigured until their credentials are set).',
+    auth: {
+      mode: 'none',
+      description: 'Public — the catalog holds no user data.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET to read the provider catalog.',
+      'Render a connect form from each provider `fields` list.',
+      'POST the filled fields to /api/v1/connections to link an account.'
+    ],
+    requestExamples: [
+      {
+        name: 'List providers',
+        description: 'Read the catalog.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Provider catalog returned.',
+        body: {
+          ok: true,
+          providers: [
+            {
+              id: 'reddit',
+              name: 'Reddit',
+              icon: '👽',
+              auth: 'none',
+              contentVisibility: 'public',
+              configured: true,
+              fields: [{ key: 'subreddits', label: 'Subreddits', required: true }]
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections',
+    group: 'connections',
+    title: 'Connections',
+    endpoint: '/api/v1/connections',
+    summary: 'Lists or creates links between this Thingtime account and third-party app accounts.',
+    detail:
+      'A connection links the current Thingtime account to one external identity (a subreddit set, a YouTube ' +
+      'channel, a Mastodon account, …). External accounts are shared many-to-many: the same third-party identity ' +
+      'can be linked from several Thingtime accounts, converging on one account record. Once linked, the feed is ' +
+      'browsable via /api/v1/connections/feed with Thingtime comments and reactions layered on top.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with credentials to list the current account connections.',
+      'POST provider plus its connect fields (from /api/v1/connections/providers) to link an account.',
+      'Reconnecting the same identity is idempotent — alreadyLinked reports it.',
+      'Unlink via POST /api/v1/connections/unlink with the connection id.'
+    ],
+    requestExamples: [
+      {
+        name: 'List connections',
+        description: 'Read the linked third-party accounts.',
+        method: 'GET'
+      },
+      {
+        name: 'Connect Reddit',
+        description: 'Follow two subreddits as one connection.',
+        method: 'POST',
+        body: { provider: 'reddit', fields: { subreddits: 'worldnews+technology', sort: 'hot' } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Connection created.',
+        body: {
+          ok: true,
+          alreadyLinked: false,
+          connection: {
+            id: 'ext-link-…',
+            provider: 'reddit',
+            providerName: 'Reddit',
+            contentVisibility: 'public',
+            account: { id: 'ext-account-…', handle: 'r/worldnews+technology', displayName: 'r/worldnews+technology' }
+          }
+        }
+      },
+      {
+        status: 401,
+        description: 'No authenticated user.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-unlink',
+    group: 'connections',
+    title: 'Unlink connection',
+    endpoint: '/api/v1/connections/unlink',
+    summary: 'Removes one of the caller’s third-party connections.',
+    detail:
+      'Deletes the caller’s link to the external account. The shared external account record retires with its last ' +
+      'link; already-synced external posts (and any Thingtime comments and reactions on them) remain.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the connection id (from GET /api/v1/connections).',
+      'Handle 404 for ids the caller does not hold.'
+    ],
+    requestExamples: [
+      {
+        name: 'Unlink',
+        description: 'Remove one connection.',
+        method: 'POST',
+        body: { id: 'ext-link-…' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Connection removed.',
+        body: { ok: true, removed: true }
+      },
+      {
+        status: 404,
+        description: 'Not one of the caller’s connections.',
+        body: { ok: false, error: 'Connection not found' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-feed',
+    group: 'connections',
+    title: 'Connections feed',
+    endpoint: '/api/v1/connections/feed',
+    summary: 'Syncs and reads the caller’s connected third-party feeds as Thingtime posts.',
+    detail:
+      'Pulls fresh items from each linked provider (per-account cooldown, one minute), upserts them idempotently as ' +
+      'external-post things, and returns them newest-first in the standard post shape — so Thingtime comments and ' +
+      'reactions attach natively via /api/v1/things/comment and /api/v1/things/react, and /post/<id> permalinks ' +
+      'resolve. Personal-algorithm providers grant each linked user individually; public providers publish tt:all ' +
+      'posts. The caller’s enabled AI feed filters annotate each post via feedFilterMatches.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET to sync and read all connections merged; connection=<id> narrows to one.',
+      'Page with cursor from nextCursor; limit caps the page (max 50).',
+      'sync=force bypasses the per-account sync cooldown.',
+      'Render feedFilterMatches: action warn veils the post behind a Show button, hide drops it.',
+      'Comment and react through the standard things endpoints using each post id.'
+    ],
+    requestExamples: [
+      {
+        name: 'Merged feed',
+        description: 'Sync and read every connection.',
+        method: 'GET'
+      },
+      {
+        name: 'One connection',
+        description: 'Read a single connection’s feed.',
+        method: 'GET',
+        query: { connection: 'ext-link-…', limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Feed page returned.',
+        body: {
+          ok: true,
+          posts: [
+            {
+              id: 'ext-post-…',
+              text: 'Community garden doubles its harvest',
+              author: { id: 'ext:reddit:u/gardener', username: 'u/gardener' },
+              extended: { external: { provider: 'reddit', url: 'https://www.reddit.com/…' } },
+              feedFilterMatches: []
+            }
+          ],
+          nextCursor: null,
+          connections: [],
+          synced: [{ connectionId: 'ext-link-…', provider: 'reddit', fetched: 25, skipped: false, error: null }],
+          filters: []
+        }
+      },
+      {
+        status: 401,
+        description: 'No authenticated user.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-filters',
+    group: 'connections',
+    title: 'Feed filters',
+    endpoint: '/api/v1/connections/filters',
+    summary: 'Lists or manages the caller’s AI feed filters for connected feeds.',
+    detail:
+      'A feed filter is a natural-language rule ("warn for sad news") applied server-side to connected third-party ' +
+      'feeds. Matched posts carry the filter in feedFilterMatches: action warn veils the post behind a Show button, ' +
+      'hide drops it from the feed view. Classification uses the configured AI provider when available (verdicts ' +
+      'cached per filter revision and post) and a deterministic keyword heuristic otherwise.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with credentials to list filters.',
+      'POST name, prompt, and action (warn | hide) to create one.',
+      'Include id to update; pass enabled false to pause without deleting.',
+      'POST id plus remove true to delete.'
+    ],
+    requestExamples: [
+      {
+        name: 'Create a filter',
+        description: 'Warn for sad news with a Show button.',
+        method: 'POST',
+        body: { name: 'Sad news', prompt: 'warn for sad news', action: 'warn' }
+      },
+      {
+        name: 'Delete a filter',
+        description: 'Remove a filter by id.',
+        method: 'POST',
+        body: { id: 'ext-filter-…', remove: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Filter saved.',
+        body: {
+          ok: true,
+          filter: { id: 'ext-filter-…', name: 'Sad news', prompt: 'warn for sad news', action: 'warn', enabled: true }
+        }
+      },
+      {
+        status: 401,
+        description: 'No authenticated user.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
   })
 ];
 

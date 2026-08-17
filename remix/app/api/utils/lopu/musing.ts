@@ -128,11 +128,11 @@ const getLopuClaudeModel = createLopuClaudeModelResolver({
   getProviderDefaultModel: getDefaultLopuClaudeModel
 });
 
-async function* streamClaude(system: string, user: string, model: string): AsyncGenerator<string> {
+async function* streamClaude(system: string, user: string, model: string, maxTokens = 200): AsyncGenerator<string> {
   const client = new Anthropic();
   const stream = client.messages.stream({
     model,
-    max_tokens: 200, // intentionally short — a musing is one or two sentences
+    max_tokens: maxTokens, // musings stay intentionally short (one or two sentences)
     system,
     messages: [{ role: 'user', content: user }]
   });
@@ -143,11 +143,11 @@ async function* streamClaude(system: string, user: string, model: string): Async
   }
 }
 
-async function* streamOpenAI(system: string, user: string): AsyncGenerator<string> {
+async function* streamOpenAI(system: string, user: string, maxTokens = 200): AsyncGenerator<string> {
   const client = new OpenAI();
   const stream = await client.chat.completions.create({
     model: process.env.LOPU_OPENAI_MODEL || 'gpt-4o-mini',
-    max_tokens: 200,
+    max_tokens: maxTokens,
     stream: true,
     messages: [
       { role: 'system', content: system },
@@ -159,6 +159,36 @@ async function* streamOpenAI(system: string, user: string): AsyncGenerator<strin
     if (text) yield text;
   }
 }
+
+// Generic non-streaming completion for other Thingtime features (e.g. the
+// connections feed filters). Same provider waterfall + admin model routing as
+// the musing, same graceful degradation: null when no provider is configured
+// or every provider fails — callers must have a non-AI fallback. AI clients
+// are constructed ONLY in this module (scripts/ai-model-routing-contract.mjs).
+export const generateAiCompletion = async (opts: {
+  system: string;
+  user: string;
+  maxTokens?: number;
+}): Promise<{ text: string; source: 'claude' | 'openai' } | null> => {
+  if (!hasAnyKey()) return null;
+  const maxTokens = Math.min(Math.max(1, opts.maxTokens || 200), 4000);
+  for (const provider of providerOrder()) {
+    const key = provider === 'claude' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
+    if (!key) continue;
+    try {
+      const gen =
+        provider === 'claude'
+          ? streamClaude(opts.system, opts.user, await getLopuClaudeModel(), maxTokens)
+          : streamOpenAI(opts.system, opts.user, maxTokens);
+      let text = '';
+      for await (const chunk of gen) text += chunk;
+      if (text.trim()) return { text: text.trim(), source: provider };
+    } catch {
+      // try the next provider
+    }
+  }
+  return null;
+};
 
 // Provider preference: LOPU_PROVIDER picks who goes first; the other is the
 // automatic fallback. Default is Claude first.

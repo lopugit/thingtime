@@ -445,6 +445,11 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // schema browse page scans the whole data partition
     col.createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
     col.createIndex({ thingtime: 1, 'crystal.schema': 1 }),
+    // Connections: the external-post feed read (linked accounts' synced posts,
+    // newest first, chrono cursor) and external-account-link reverse lookups
+    // ("who links this account") both filter one kind + crystal.accountId —
+    // thingtime is the only multikey field, so the compound is legal.
+    col.createIndex({ thingtime: 1, 'crystal.accountId': 1, createdAt: -1, shareId: 1 }),
     // acl and thingtime are both arrays — Mongo forbids two multikey fields
     // in one compound index, so the audience index stands alone
     col.createIndex({ acl: 1, createdAt: -1, shareId: 1 }),

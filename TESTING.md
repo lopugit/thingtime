@@ -1919,3 +1919,32 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       composition; browse mode filters kinds client-side over loaded pages.
 - [ ] Columns-view folder loading happens in an effect, never during render
       (React "setState while rendering" stays fixed).
+
+## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
+
+Automated first: `pnpm --dir remix run verify:connections` (45 real-API
+checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
+
+- [ ] `/connections` renders the provider catalog signed-out with a quiet
+      sign-in card; signed in, connecting the Demo provider adds it under
+      "Your connections" with Feed + Unlink working, and reconnecting the
+      same handle reports "Already connected".
+- [ ] Connecting the same external identity from a SECOND Thingtime account
+      converges on the same external account (many-to-many): both accounts
+      read the same posts through their own links, and each earns its own
+      acl grant even when the other account's sync fired first (the shared
+      per-account cooldown must never strand the second user's grants).
+- [ ] `/connections/feed` merges all connections newest-first with per-
+      connection tabs; external posts render through the native PostCard
+      with the third-party author (never "Anonymous"), comments and
+      reactions work natively, and `/post/<ext-post-…>` permalinks resolve
+      with aggregated counts.
+- [ ] A "warn" AI feed filter veils matched posts behind the ⚠️ card with a
+      working "Show anyway" button (reason + source line shown); a "hide"
+      filter drops them with the "N posts hidden" summary; pausing a filter
+      stops matching; verdicts stay stable across reads (cached) and editing
+      the prompt re-classifies.
+- [ ] Personal-provider posts stay invisible (404) to non-linked users;
+      `ext-` shareIds are refused on generic create/update; the connections
+      kinds never appear in the generic /things browser; unlink removes only
+      the caller's link and the shared account retires with its last link.

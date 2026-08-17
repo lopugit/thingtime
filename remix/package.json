@@ -32,6 +32,7 @@
     "test:app-origins": "node --import tsx --test app/api/utils/apps/appOriginsCore.test.ts",
     "test:app-storage": "node --import tsx --test app/api/utils/apps/appStorageCore.test.ts",
     "verify:app-storage": "node scripts/verify-app-storage.mjs",
+    "verify:connections": "node scripts/verify-connections.mjs",
     "test:autosave": "node --import tsx --test app/Providers/*.test.ts",
     "test:collections": "node --import tsx --test app/api/utils/mongodb/*.test.ts",
     "test:client-errors": "node --import tsx --test app/hooks/apiFailure.test.ts app/components/Lopu/lopuMessage.test.ts app/components/Feed/reactionFailure.test.ts app/components/Things/sensitiveRevealError.test.ts app/api/utils/errors/adminDiagnostic.test.ts app/api/utils/migrations/migrationFailure.test.ts app/api/utils/migrations/migrationDiagnostics.test.ts",

@@ -17,6 +17,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **Third-party app connections** (`/connections`, `/connections/feed`, API
+  family `/api/v1/connections/*`): link external accounts (Reddit, YouTube,
+  Mastodon, Bluesky, Lemmy, Hacker News, GitHub, generic RSS/Atom, and a
+  deterministic demo personal-algorithm provider) to a Thingtime account —
+  one external account is linkable from MULTIPLE Thingtime accounts
+  (deterministic shared `external-account` things). Feeds sync idempotently
+  into `external-post` things (reserved `ext-` shareId namespace, CI-style
+  not-older upserts, per-account cooldown), so native Thingtime comments and
+  reactions attach by `targetId` and `/post/:id` permalinks resolve with the
+  third-party author. AI feed filters ("warn for sad news" → veil + Show
+  button, or hide) classify feeds server-side via the shared Lopu provider
+  waterfall (`generateAiCompletion` in `musing.ts`) with cached per-revision
+  verdicts and a deterministic keyword fallback when no AI key is set.
+  E2E: `pnpm --dir remix run verify:connections` (45 checks; +2 live with
+  `TT_VERIFY_LIVE=1`). — Claude (AI), 2026-08-17
+
 ### Fixed
 
 - **Vercel status in custom environments**: deployment status now checks

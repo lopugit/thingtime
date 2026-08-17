@@ -7,6 +7,8 @@ import AppsManageRoute from './routes/apps-manage';
 import Authorize from './routes/authorize';
 import Branding from './routes/branding/_index';
 import BrandingOld from './routes/branding_old';
+import ConnectionsRoute from './routes/connections';
+import ConnectionsFeedRoute from './routes/connections-feed';
 import CryptoPage from './routes/crypto';
 import DocsLayout from './routes/docs/DocsLayout';
 import DocsApi from './routes/docs/api';
@@ -127,6 +129,10 @@ export const router = createBrowserRouter([
       { path: 'apps/manage', element: <AppsManageRoute /> },
       { path: 'branding', element: <Branding /> },
       { path: 'branding_old', element: <BrandingOld /> },
+      // third-party app connections — no guard: both pages render their own
+      // signed-out quiet state (the /settings, /apps idiom)
+      { path: 'connections', element: <ConnectionsRoute /> },
+      { path: 'connections/feed', element: <ConnectionsFeedRoute /> },
       { path: 'crypto', element: <CryptoPage /> },
       {
         path: 'docs',
