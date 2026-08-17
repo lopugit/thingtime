@@ -45,7 +45,10 @@ export const ARCHETYPE_ORDER = [
 	'search-command',
 	'chat',
 	'media-player',
-	'date-time'
+	'date-time',
+	'commerce',
+	'profile-social',
+	'data-viz'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;

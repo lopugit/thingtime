@@ -1,6 +1,6 @@
 {
-	"target": 1240,
-	"count": 1240,
+	"target": 1360,
+	"count": 1360,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -32,18 +32,21 @@
 		"search-command",
 		"chat",
 		"media-player",
-		"date-time"
+		"date-time",
+		"commerce",
+		"profile-social",
+		"data-viz"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 155,
-		"bootstrap": 155,
-		"mui": 155,
-		"shadcn": 155,
-		"untitled": 155,
-		"daisyui": 155,
-		"reactflow": 155,
-		"thingtime": 155
+		"antd": 170,
+		"bootstrap": 170,
+		"mui": 170,
+		"shadcn": 170,
+		"untitled": 170,
+		"daisyui": 170,
+		"reactflow": 170,
+		"thingtime": 170
 	},
-	"hash": "7d81ba27bc732a6f"
+	"hash": "456ccf82bff02d28"
 }
