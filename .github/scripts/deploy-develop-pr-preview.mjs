@@ -327,6 +327,21 @@ const choosePreferredDeployment = (deployments, expectedSha) =>
 			return readiness || Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0);
 		})[0] ?? null;
 
+const deploymentListParams = (config, { prNumber = null, sha = null, until = null } = {}) => {
+	const params = new URLSearchParams({
+		projectId: config.projectId,
+		limit: '100',
+		[`meta-${WORKFLOW_DEPLOYMENT_MARKER}`]: '1'
+	});
+	if (prNumber !== null) params.set('meta-githubPrId', String(boundedInteger(prNumber, 'PR number')));
+	if (sha) {
+		if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Vercel deployment SHA filter is invalid');
+		params.set('sha', sha);
+	}
+	if (until !== null) params.set('until', String(boundedInteger(until, 'Vercel deployment cursor')));
+	return params;
+};
+
 const runSelfTest = () => {
 	let checks = 0;
 	const equal = (actual, expected) => {
@@ -467,6 +482,16 @@ const runSelfTest = () => {
 	);
 	equal(choosePreferredDeployment([deployment], base.head.sha)?.id, deployment.id);
 	equal(choosePreferredDeployment([{ ...deployment, readyState: 'ERROR' }], base.head.sha), null);
+	equal(Object.fromEntries(deploymentListParams(config, { prNumber: 201, sha: base.head.sha, until: 123 })), {
+		projectId: config.projectId,
+		limit: '100',
+		[`meta-${WORKFLOW_DEPLOYMENT_MARKER}`]: '1',
+		'meta-githubPrId': '201',
+		sha: base.head.sha,
+		until: '123'
+	});
+	throws(() => deploymentListParams(config, { prNumber: 0 }));
+	throws(() => deploymentListParams(config, { sha: 'not-a-sha' }));
 	truthy(IDEMPOTENT_METHODS.has('GET'));
 	truthy(!IDEMPOTENT_METHODS.has('POST'));
 	truthy(CLEANUP_ACTIONS.has('converted_to_draft'));
@@ -849,15 +874,13 @@ const verifyPublishedAlias = async (aliasUrl) => {
 
 const deploymentDetail = async (deploymentId) => vercelRequest(`/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true`);
 
-const listDeploymentSummaries = async (config, { sha = null } = {}) => {
+const listDeploymentSummaries = async (config, { prNumber = null, sha = null } = {}) => {
 	const results = [];
 	const seenIds = new Set();
 	const seenCursors = new Set();
 	let until = null;
 	for (let page = 0; page < MAX_DEPLOYMENT_PAGES; page += 1) {
-		const params = new URLSearchParams({ projectId: config.projectId, limit: '100' });
-		if (sha) params.set('sha', sha);
-		if (until !== null) params.set('until', String(until));
+		const params = deploymentListParams(config, { prNumber, sha, until });
 		const response = await vercelRequest(`/v7/deployments?${params}`);
 		if (!Array.isArray(response?.deployments)) throw new Error('Vercel deployment list response was invalid');
 		for (const deployment of response.deployments) {
@@ -876,7 +899,7 @@ const listDeploymentSummaries = async (config, { sha = null } = {}) => {
 };
 
 const listWorkflowDeployments = async (config, { prNumber = null, sha = null } = {}) => {
-	const summaries = await listDeploymentSummaries(config, { sha });
+	const summaries = await listDeploymentSummaries(config, { prNumber, sha });
 	const owned = summaries.filter(
 		(candidate) =>
 			candidate.meta?.[WORKFLOW_DEPLOYMENT_MARKER] === '1' && (prNumber === null || String(candidate.meta?.githubPrId ?? '') === String(prNumber))
