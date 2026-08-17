@@ -21,6 +21,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **The thin control plane is excluded from repository-root Vercel builds**:
+  its only Vercel config disables every Git deployment and ignores any fallback
+  build, while the bare-tree contract requires and validates that exact
+  kill-switch. The remaining product, graph, test-note, and PR-note remnants
+  were removed so the branch finally satisfies the invariant it introduced. —
+  Codex (AI), 2026-08-17
 - **The trusted promotion validator is lane-aware**: the reverse lane's first
   real run failed on "Source PR was not merged to develop" — the promoter was
   lane-parameterized but the validator still assumed the develop lane. The

@@ -7,11 +7,19 @@ CI and nothing else:
 .github/workflows/   the real workflow implementations
 .github/scripts/     the automation they run (promoter, contracts, changelog)
 .github/actions/     composite actions they call
+vercel.json          the Vercel Git-deployment kill-switch
 ```
 
 Plus the repository's canonical AI instruction files (`AI_ALL.md`, with
 `AGENTS.md` and `CLAUDE.md` as symlinks to it), because agents work on this
 branch too.
+
+The root `vercel.json` is the one deliberate non-CI runtime file. Vercel now
+uses the repository root for product deployments, so this branch must keep a
+config at that same location. It sets `git.deploymentEnabled` to `false` for
+every branch inheriting this thin tree and keeps `ignoreCommand: "exit 0"` as a
+second fail-safe. It has no install, build, or output command because there is
+no product here to deploy.
 
 ## Why it is bare
 
@@ -59,7 +67,8 @@ the drift this branch was stripped to eliminate comes straight back.
 
 If you genuinely need a new root path here, add it to `CONTROL_PLANE_ROOTS` in
 that script in the same commit that introduces it, so the addition is reviewed
-rather than discovered later.
+rather than discovered later. The contract also validates the exact no-deploy
+posture of `vercel.json`; merely keeping a file with that name is insufficient.
 
 ## Known trade-off
 
