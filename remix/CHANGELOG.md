@@ -36,6 +36,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Repository-root Vercel installs honor the app's pnpm pin**: the root
+  package now declares pnpm 10.12.1 to match Remix, so Corepack cannot select
+  Vercel's newer global pnpm before entering the nested workspace. The root
+  deployment contract asserts that both package-manager declarations remain
+  identical. — Codex (AI), 2026-08-17
 - **Vercel builds now start at the repository root without deploying the thin
   CI branch**: root `vercel.json` installs only the Remix workspace, a tested
   wrapper preserves the existing Vite/Nitro verification before staging the

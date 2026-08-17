@@ -11,6 +11,14 @@ import { getVercelIgnoreDecision } from './vercel-ignore-build.mjs';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+test('the repository root pins the same pnpm version as Remix', async () => {
+	const rootPackage = JSON.parse(await readFile(resolve(repositoryRoot, 'package.json'), 'utf8'));
+	const remixPackage = JSON.parse(await readFile(resolve(repositoryRoot, 'remix/package.json'), 'utf8'));
+
+	assert.equal(rootPackage.packageManager, 'pnpm@10.12.1');
+	assert.equal(rootPackage.packageManager, remixPackage.packageManager);
+});
+
 test('the repository-root Vercel config owns the product build', async () => {
 	const config = JSON.parse(await readFile(resolve(repositoryRoot, 'vercel.json'), 'utf8'));
 
