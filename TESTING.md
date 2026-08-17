@@ -323,6 +323,17 @@ is fixed, and cite the checklist you ran in the PR description.
       failure updates that same comment instead of editing an older run or
       appending a second result comment.
 
+## Develop Custom Environment stable-domain promotion
+
+- [ ] Run the develop-preview controller self-test and confirm every explicit
+      PR deployment sets `autoAssignCustomDomains: false`. In Vercel, confirm
+      the verified stable develop domain is attached only to the exact
+      `develop` Custom Environment, while the PR wildcard remains detached.
+      After a real `develop` build reaches READY, the stable domain and the
+      generated Custom Environment alias must resolve to that deployment's
+      exact current `develop` SHA. Creating or reconciling a trusted PR preview
+      must leave the stable-domain deployment id unchanged.
+
 ## Per-feature develop → main promoter (`.github/scripts/promote-features-to-main.mjs`)
 
 - [ ] Merge a feature PR into `develop`, record its two-parent merge SHA, then

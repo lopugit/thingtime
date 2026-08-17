@@ -26,6 +26,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   success or failure updates that run's own comment while preserving the
   marker. — Codex (AI), 2026-08-17
 
+- **`dev.thingtime.com` now follows each successful `develop` build without
+  letting PR previews move it**: the stable hostname is owned by the
+  branch-matched `develop` Custom Environment so Vercel promotes it natively.
+  The trusted PR-preview controller now sends
+  `autoAssignCustomDomains: false`, validates the exact stable-domain binding,
+  and continues to assign only each verified PR alias explicitly. This fixes
+  the stale August 12 bundle while preserving the shared-environment SHA and
+  trust fences. — Codex (AI), 2026-08-17
+
 - **Large merged PRs no longer strand promotion conflict resolution**: the
   trusted worker now mirrors the promoter's topology rule and verifies a true
   merge endpoint directly from its immutable first-parent boundary without
