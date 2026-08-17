@@ -5949,11 +5949,6 @@
     "ast_hash": "7a337a5914e2a0016d931a80f9b68e01",
     "semantic_hash": "7a337a5914e2a0016d931a80f9b68e01"
   },
-  "remix/vercel.json": {
-    "mtime": 1786946499.1386724,
-    "ast_hash": "72bd1b78239c5769387d27aca9b0b4b2",
-    "semantic_hash": "72bd1b78239c5769387d27aca9b0b4b2"
-  },
   "PRs/154-claude-unified-things-page-796e34--unified-things-page.md": {
     "mtime": 1786946498.5119848,
     "ast_hash": "8bcdd99f7be9c955669ad400e6c73bad",
