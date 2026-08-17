@@ -1527,7 +1527,7 @@
   "README.md": {
     "mtime": 1786943919.79384,
     "ast_hash": "99beb239143bab5802d62cecd91b7c1b",
-    "semantic_hash": ""
+    "semantic_hash": "99beb239143bab5802d62cecd91b7c1b"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1786941336.7939198,
@@ -1750,8 +1750,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786944012.3202543,
-    "ast_hash": "dbf1486157dff42e77c937534aae4a05",
+    "mtime": 1786944671.651219,
+    "ast_hash": "92d4514c7cbf60358114f5c0c13fcb65",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -5975,9 +5975,9 @@
     "semantic_hash": "312e45e3553f82519b95887568571bc5"
   },
   "scripts/vercel-build.mjs": {
-    "mtime": 1786941289.204183,
-    "ast_hash": "dab5f501709870f53a58f02da85497f7",
-    "semantic_hash": "dab5f501709870f53a58f02da85497f7"
+    "mtime": 1786944652.0054612,
+    "ast_hash": "cd0eeb99db73563c0b88bc77d805c0a6",
+    "semantic_hash": "cd0eeb99db73563c0b88bc77d805c0a6"
   },
   "scripts/vercel-ignore-build.mjs": {
     "mtime": 1786941289.2043319,
@@ -5985,9 +5985,9 @@
     "semantic_hash": "c360e3ea5afc17e23f18bc3242a5b19a"
   },
   "scripts/vercel-root-flow.test.mjs": {
-    "mtime": 1786943943.1792667,
-    "ast_hash": "3317dd977dc053f5bcb3768b01bc4f4d",
-    "semantic_hash": "3317dd977dc053f5bcb3768b01bc4f4d"
+    "mtime": 1786944652.0059676,
+    "ast_hash": "7566e1bb8196b94263a83ddf10ea4e2d",
+    "semantic_hash": "7566e1bb8196b94263a83ddf10ea4e2d"
   },
   "vercel.json": {
     "mtime": 1786941320.8546388,
