@@ -19,6 +19,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // a new registry field should appear (or be knowingly dropped as a record/
 // reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
+  attachment: ['name', 'size', 'contentType', 'mediaKind'],
   post: ['type', 'text', 'images', 'listing'], // thing: record → dropped
   comment: ['text'],
   reaction: ['emoji'],
@@ -87,7 +88,6 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'ci-preview': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-dispatch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
-  follow: ['follow'],
   friend: ['status', 'friendKey'],
   notification: ['type', 'actorId', 'actorName', 'postId', 'preview'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
@@ -110,15 +110,109 @@ test('the builtin crystal-schema set matches the pinned projection table', () =>
   assert.deepEqual(crystalSchemas.map((schema) => schema.id).sort(), Object.keys(EXPECTED_PROJECTED_FIELDS).sort());
 });
 
-test('registered app control Things are protected from generic Thing CRUD', () => {
+test('registered server-owned Things are protected from generic Thing CRUD', () => {
+	assert.ok(PROTECTED_THINGTIME.includes('attachment'));
 	assert.ok(PROTECTED_THINGTIME.includes('app'));
 	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-pull-request'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-event'));
 	assert.equal(isProtectedThingtime(['app']), true);
+	assert.equal(isProtectedThingtime(['attachment']), true);
 	assert.equal(isProtectedThingtime(['migration-diagnostic']), true);
 	assert.equal(isProtectedThingtime(['ci-workflow-run']), true);
 	assert.equal(isProtectedThingtime(['data', 'app']), true);
+	assert.equal(isProtectedThingtime(['user']), true);
+});
+
+test('managed attachment purpose, profile slot, user references, and emoji reference are closed server-owned root fields', () => {
+	const root = thingtimeSchemas.find((schema) => schema.id === 'thing')!;
+	const fields = new Map(root.fields.map((field) => [field.name, field]));
+	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'avatarAttachmentId', 'bannerAttachmentId', 'emojiAttachmentId']) {
+		assert.equal(fields.get(name)?.system, true, name);
+		assert.equal(fields.get(name)?.required, false, name);
+	}
+	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji']);
+	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
+});
+
+test('attachment metadata is normalized but its Thingtime kind remains protected from generic CRUD', () => {
+	const validated = validateThingtimeCrystal(['attachment'], {
+		name: '  clip.MP4 ',
+		size: 123,
+		contentType: 'VIDEO/MP4',
+		mediaKind: 'file'
+	});
+	assert.equal(validated.ok, true);
+	if (validated.ok !== true) return;
+	assert.deepEqual(validated.crystal, {
+		name: 'clip.MP4',
+		size: 123,
+		contentType: 'video/mp4',
+		mediaKind: 'video'
+	});
+	assert.equal(isProtectedThingtime(validated.thingtime), true);
+});
+
+test('post attachment preflight allows attachment-only posts without weakening ordinary post validation', () => {
+  const emptyText = { type: 'text', text: '', images: [], listing: null, thing: null };
+  assert.equal(validateThingtimeCrystal(['post'], emptyText).ok, false);
+  assert.equal(
+    validateThingtimeCrystal(['post'], emptyText, {
+      postAttachments: { hasAny: true, hasVisual: false }
+    }).ok,
+    true
+  );
+
+  const emptyImage = { type: 'image', text: '', images: [], listing: null, thing: null };
+  assert.equal(
+    validateThingtimeCrystal(['post'], emptyImage, {
+      postAttachments: { hasAny: true, hasVisual: false }
+    }).ok,
+    false
+  );
+  assert.equal(
+    validateThingtimeCrystal(['post'], emptyImage, {
+      postAttachments: { hasAny: true, hasVisual: true }
+    }).ok,
+    true
+  );
+});
+
+test('server attachment preflight enables attachment-only rich comments', () => {
+  const emptyComment = { type: 'text', text: '', images: [], listing: null, thing: null };
+  assert.equal(
+    validateThingtimeCrystal(['post', 'comment'], emptyComment, {
+      postAttachments: { hasAny: true, hasVisual: true }
+    }).ok,
+		true
+  );
+});
+
+test('post image URLs require parsed credential-free absolute http(s) URLs', () => {
+	const validateImage = (url: string) =>
+		validateThingtimeCrystal(['post'], {
+			type: 'image',
+			text: '',
+			images: [url],
+			listing: null,
+			thing: null
+		});
+	assert.equal(validateImage('https://images.example/photo.jpg').ok, true);
+	assert.equal(validateImage('http://localhost:9999/photo.jpg').ok, true);
+	for (const unsafe of [
+		'https://user:secret@images.example/photo.jpg',
+		'https://images.example/a b.jpg',
+		'https://images.example/a\u202Eb.jpg',
+		'https:\\images.example\\photo.jpg',
+		'https://',
+		'//images.example/photo.jpg',
+		'data:image/png;base64,AAAA',
+		['java', 'script:alert(1)'].join('')
+	]) {
+		const result = validateImage(unsafe);
+		assert.equal(result.ok, false, unsafe);
+		if (!result.ok) assert.equal(result.error, 'Images must be http(s) URLs');
+	}
 });
 
 for (const schema of crystalSchemas) {

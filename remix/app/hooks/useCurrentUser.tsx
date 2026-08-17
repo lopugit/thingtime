@@ -9,6 +9,10 @@ export type CurrentUser = {
   bio: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
+	avatarAttachmentId: string | null;
+	bannerAttachmentId: string | null;
+	avatarLinkedUrl: string | null;
+	bannerLinkedUrl: string | null;
   emailVerified: boolean;
   isAdmin: boolean;
   createdAt: string;

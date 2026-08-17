@@ -17,6 +17,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Accurate attachment quota recovery**: upload preparation now preserves
+  bounded storage failure codes through the API and distinguishes a full
+  account tier from missing environment configuration, temporary private
+  storage outages, and storage-accounting reconciliation. Every shared media
+  picker uses the current account allowance as a safe fallback and tells users
+  to delete stored media or upgrade their tier instead of incorrectly claiming
+  that uploads are unavailable in the environment. File-row errors now span
+  the available width on narrow screens instead of being squeezed between the
+  preview and action controls. Unexpected server, ledger, proxy, and provider
+  detail remains hidden. See the
+  [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
+  — Codex (AI), 2026-08-11
+
 ### Added
 
 - **Recoverable first-session Things space**: a fresh browser can land on
@@ -40,6 +55,62 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   remain explicitly GitHub-only. Fork-safe App permissions, secrets, bootstrap,
   first-Reconcile behavior, and regression checks are documented in
   README/TESTING. — Codex (AI), 2026-08-10
+- **Conversation media, file attachments, and S3 custom reactions**: rich
+  comments and replies now use the same gallery-style linked-media and private
+  upload UI as posts, while DMs, groups, requests, community channels, inline
+  replies, and Slack-style threads can send image, video, audio, or generic
+  files—including attachment-only messages. Stable owner-scoped request ids,
+  atomic purpose/target binding, exact lost-response reconciliation, inherited
+  comment ACLs, current-chat membership checks, nested cascade cleanup, and
+  exact-version deletion keep storage private and tier accounting fail-closed.
+  Custom reaction emoji now bind quota-accounted GIF/PNG/JPEG/WebP uploads
+  instead of accepting new inline base64 payloads; legacy emoji remain
+  read-compatible. See the
+  [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
+  — Codex (AI), 2026-08-10
+- **Gallery-style post and profile media**: post photo links now use responsive
+  preview tiles with stable multi-line URL add, deduplication, credential-free
+  http(s) validation, and no-referrer previews, while private image/video/file
+  uploads use a Facebook-like `🏞️ Add Media` tile without removing the
+  quota-saving URL option. Avatar and banner editors in both Profile and
+  Settings can now upload safe raster images through the same private,
+  checksummed S3 pipeline or retain an external URL. Profile attachment purpose
+  and slot are server-owned; ready media binds to the exact owner/user slot in
+  the profile transaction, renders through the stable same-origin content
+  route, and old bytes remain billed until exact-version cleanup. Ordinary PR
+  Previews now explain that private storage is unavailable there without
+  exposing provider errors; the develop Custom Environment remains the secure
+  positive upload target. See the
+  [PR #232 implementation notes](../PRs/232-codex-media-gallery-profile-attachments--add-media-galleries-and-managed-profile-attachments.md).
+  — Codex (AI), 2026-08-09
+- **Isolated develop S3 attachment environment**: `dev.thingtime.com` now maps
+  to a branch-tracked Vercel Custom Environment named `develop`, with its own
+  private bucket, exact-subject OIDC role, dev-origin-only CORS, Sensitive S3
+  variables, and cleanup secret. Generic feature previews receive no attachment
+  configuration and their shared Preview OIDC identity cannot assume the
+  develop role. Because Vercel Cron runs Production only, a one-purpose AWS
+  EventBridge API Destination is configured to invoke develop cleanup hourly;
+  its first successful invocation and the positive upload/delete smoke wait for
+  this PR's routes to be deployed to `develop`. Production bucket configuration,
+  variables, and objects remain unchanged; its role gained the required
+  `s3:PutObjectTagging` action used by Thingtime's tagged multipart start. —
+  Codex (AI), 2026-08-09
+- **Private S3 post attachments with exact tier accounting**: posts can upload
+  images, video, audio, and generic files directly through checksummed multipart
+  S3 uploads without exposing AWS credentials or public objects. Protected
+  relational attachment Things reserve verified object bytes against the same
+  transactional account storage ledger as Mongo content, stable authorized
+  content routes replace persisted presigned URLs, and unsafe active content is
+  forced to download. S3 VersionIds keep sniff/tag/read/delete pinned to the
+  exact verified object version before quota refund, stable client request ids
+  make ambiguous upload starts idempotent, and an hourly bounded cron safely
+  retries expired or crash-interrupted cleanup behind a lifecycle-backed,
+  two-pass multipart settlement fence. Production uses an exact-subject Vercel
+  OIDC role and server-only `THINGTIME_PRIVATE_*` configuration; comments and
+  messenger/thread surfaces remain intentionally unchanged in this post-only
+  scope. See the
+  [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
+  — Codex (AI), 2026-08-09
 - **One GitHub Actions control plane + Admin CI dashboard**: executable CI,
   promotion, sync, release, rebase, and AI conflict-resolution behavior now
   lives on the protected `github-actions` branch. `main`/`develop` retain only
@@ -169,6 +240,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   warning-only. Incomplete or unavailable changed-file listings safely run the
   full suite instead of stranding the required names. See the
   [PR #222 engineering note](../PRs/222-codex-typecheck-ratchet-warning-main-ci-make-typecheck-ratchet-warning-only.md).
+  — Codex (AI), 2026-08-10
+- **Proxied private-media mutations preserve same-origin protection**:
+  attachment and avatar/banner writes now compare browser origins with the
+  trusted forwarded public host and protocol, so local and reverse-proxied
+  requests no longer fail against the internal Nitro origin while mismatched
+  and explicitly cross-site requests still fail closed. Invalid external
+  profile-image URLs also expose their error state to assistive technology. —
+  Codex (AI), 2026-08-10
+- **Attachment parent refresh preserves deployment and workflow boundaries**:
+  the hourly attachment cleanup and weekly notification digest each appear
+  exactly once in `vercel.json`, with an automated uniqueness contract that
+  prevents duplicate-cron deployment rejection. Product branches also retain
+  only the secret-free develop-preview listener; the privileged controller
+  implementation remains owned by the protected default-branch control plane.
+  See the
+  [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
   — Codex (AI), 2026-08-10
 - **Worktree lint and formatting dependencies now self-heal completely**:
   validation startup probes detect incomplete transitive pnpm links even when
@@ -568,7 +655,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   domain, matching the existing staging pattern while preserving the
   branch-scoped Preview secrets already used by develop deployments. The
   deployment runbook now records the required Cloudflare DNS-only CNAME and
-  ownership-verification flow. — Codex (AI), 2026-08-07
+  ownership-verification flow. This original assignment was superseded on
+  2026-08-09 by the isolated `develop` Custom Environment recorded above. —
+  Codex (AI), 2026-08-07
 
 - **Typed queries across every admin workspace**: Users, Apps, Tiers, rate
   limits, and the administrator roster now share an all-field free-text,
@@ -638,7 +727,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   (`postViews` collection, unique-viewer dedup per salted identity,
   dwell/ratio/position capture via `useViewTracking` on feed/profile/permalink,
   public 👁 viewCount + impressions/avg-read-time on every post). Detailed
-  notes in `PRs/followers-friends-notifications-views.md`.
+  notes in
+  [`PRs/172-followers-friends-notifications-views-4fcfcf-followers-friends-notifications-views.md`](../PRs/172-followers-friends-notifications-views-4fcfcf-followers-friends-notifications-views.md).
   — Claude (AI), 2026-08-03
 
 - **CI conflict-resolver graphify refresh now does LLM semantic extraction**:

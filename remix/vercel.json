@@ -7,6 +7,10 @@
   "fluid": true,
   "crons": [
     {
+      "path": "/api/v1/attachments/cleanup",
+      "schedule": "17 * * * *"
+    },
+    {
       "path": "/api/v1/notifications/email/weekly-summary",
       "schedule": "37 21 * * 0"
     }
