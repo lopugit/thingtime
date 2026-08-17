@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BootstrapResponse, CommanderSettings, SearchHit } from '@commander/protocol';
+import type {
+  BootstrapResponse,
+  CommanderSettings,
+  RecentSearch,
+  RecentSearchCommand,
+  SearchHit,
+} from '@commander/protocol';
 import { addRecentSearch } from '@commander/protocol';
 import { api } from '../lib/api.js';
 
@@ -7,14 +13,14 @@ export interface CommanderState {
   bootstrap: BootstrapResponse | null;
   query: string;
   hits: SearchHit[];
-  recentSearches: string[];
+  recentSearches: RecentSearch[];
   selectedIndex: number;
   actionsOpen: boolean;
   error: string | null;
   setQuery(value: string): void;
   setSelectedIndex(value: number): void;
   setActionsOpen(value: boolean): void;
-  rememberRecentSearch(value: string): Promise<void>;
+  rememberRecentSearch(value: string, command?: RecentSearchCommand): Promise<void>;
   reportError(value: string | null): void;
   saveSettings(settings: CommanderSettings): Promise<void>;
   refresh(): Promise<void>;
@@ -24,14 +30,14 @@ export function useCommander(): CommanderState {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [query, setQueryState] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestSequence = useRef(0);
   const recentSearchSequence = useRef(0);
   const queryRef = useRef('');
-  const recentSearchesRef = useRef<string[]>([]);
+  const recentSearchesRef = useRef<RecentSearch[]>([]);
 
   const setQuery = useCallback((value: string) => {
     queryRef.current = value;
@@ -54,18 +60,15 @@ export function useCommander(): CommanderState {
 
   useEffect(() => void refresh(), [refresh]);
 
-  const rememberRecentSearch = useCallback(async (value: string) => {
-    const next = addRecentSearch(recentSearchesRef.current, value);
-    const unchanged =
-      next.length === recentSearchesRef.current.length &&
-      next.every((query, index) => query === recentSearchesRef.current[index]);
-    if (unchanged) return;
+  const rememberRecentSearch = useCallback(async (value: string, command?: RecentSearchCommand) => {
+    const next = addRecentSearch(recentSearchesRef.current, value, command);
+    if (JSON.stringify(next) === JSON.stringify(recentSearchesRef.current)) return;
 
     recentSearchesRef.current = next;
     setRecentSearches(next);
     const sequence = ++recentSearchSequence.current;
     try {
-      const response = await api.addRecentSearch(value);
+      const response = await api.addRecentSearch(value, command);
       if (sequence !== recentSearchSequence.current) return;
       recentSearchesRef.current = response.recentSearches;
       setRecentSearches(response.recentSearches);

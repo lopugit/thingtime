@@ -49,6 +49,7 @@ Official sources:
 
 Commander's built-in extension uses Raycast-shaped `no-view` manifests for Close Commander, Close Commander Window,
 and Open Commander, then maps those trusted built-ins to the native lifecycle bridge. The repository's existing
-`raycast/` extension also ships a real Raycast `Open Commander` no-view command that launches the installed macOS app
-by bundle identifier. These Commander-owned commands do not expand the compatibility claims for third-party
-extensions in the matrix above.
+Raycast extension now lives at `Commander/extensions/raycast/` and also ships a real Raycast `Open Commander`
+no-view command that launches the installed macOS app by bundle identifier. The complete legacy extension moved
+with it, including its image commands and assets. These Commander-owned commands do not expand the compatibility
+claims for third-party extensions in the matrix above.

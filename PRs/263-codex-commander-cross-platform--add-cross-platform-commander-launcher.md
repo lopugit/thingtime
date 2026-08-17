@@ -98,11 +98,17 @@ environment.
   children; the window command only hides the launcher; Open Commander presents
   and focuses it.
 - Reopening the floating launcher clears its query before presentation. The
-  previous non-empty query is de-duplicated into a bounded, device-local History
-  section that appears before Suggestions and persists across full relaunches.
-- The repository's existing Raycast extension adds a real no-view Open Commander
-  command that opens the installed app by bundle identifier, including after a
-  complete Commander quit.
+  previous non-empty query is de-duplicated into a device-local History section
+  that appears before Suggestions and persists across full relaunches. History
+  is modeled as search sessions: each term owns the de-duplicated commands
+  launched from that term, and those child rows can directly replay their saved
+  action. The newest eight sessions appear initially; Show More expands up to 50
+  retained sessions without turning the initial display cap into data loss.
+- The repository's existing Raycast extension moved intact from root `raycast/`
+  to `Commander/extensions/raycast/`, keeping its image tools, assets, and pinned
+  package alongside the real no-view Open Commander command. That command opens
+  the installed app by bundle identifier, including after a complete Commander
+  quit.
 - Launcher and Settings title chrome now starts an exact-origin native AppKit
   drag operation while leaving inputs and buttons interactive. Shortcut
   recording captures at the window level and resolves physical key codes, so
@@ -117,7 +123,7 @@ environment.
 
 ## Verification
 
-- Commander TypeScript: 43 tests passed across UI, daemon, and compatibility
+- Commander TypeScript: 46 tests passed across UI, daemon, and compatibility
   packages; typecheck, ESLint, Prettier, and package builds passed.
 - Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
   Clippy with warnings denied passed.
@@ -136,7 +142,7 @@ environment.
   full-query Command-A selection, separate Settings presentation, Command-K
   action navigation/execution, menu focus, and daemon exit after a forced host
   termination.
-- The existing root Raycast extension built with its pinned pnpm 8 lockfile,
+- The relocated `Commander/extensions/raycast/` extension built with its pinned pnpm 8 lockfile,
   imported in Raycast development mode, and its Open Commander command
   relaunched the fully quit installed app with persisted History and an empty
   focused query.

@@ -20,7 +20,7 @@ const bootstrap = {
   settings: DEFAULT_SETTINGS,
   accounts: [],
   extensions: [],
-  recentSearches: ['settings'],
+  recentSearches: [{ query: 'settings', commands: [] }],
   capabilities: {
     nativeBridge: true,
     globalHotkey: true,
@@ -35,8 +35,11 @@ describe('useCommander launcher sessions', () => {
     vi.clearAllMocks();
     vi.mocked(api.bootstrap).mockResolvedValue(bootstrap);
     vi.mocked(api.search).mockResolvedValue({ hits: [] });
-    vi.mocked(api.addRecentSearch).mockImplementation(async (query) => ({
-      recentSearches: [query, 'settings'],
+    vi.mocked(api.addRecentSearch).mockImplementation(async (query, command) => ({
+      recentSearches: [
+        { query, commands: command ? [command] : [] },
+        { query: 'settings', commands: [] },
+      ],
     }));
   });
 
@@ -52,7 +55,10 @@ describe('useCommander launcher sessions', () => {
     expect(result.current.query).toBe('');
     expect(result.current.selectedIndex).toBe(0);
     expect(result.current.actionsOpen).toBe(false);
-    await waitFor(() => expect(api.addRecentSearch).toHaveBeenCalledWith('1password'));
-    expect(result.current.recentSearches).toEqual(['1password', 'settings']);
+    await waitFor(() => expect(api.addRecentSearch).toHaveBeenCalledWith('1password', undefined));
+    expect(result.current.recentSearches).toEqual([
+      { query: '1password', commands: [] },
+      { query: 'settings', commands: [] },
+    ]);
   });
 });

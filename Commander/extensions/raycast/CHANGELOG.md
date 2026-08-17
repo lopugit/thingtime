@@ -1,5 +1,10 @@
 # Image Modification Changelog
 
+## [Commander workspace merge] - 2026-08-17
+
+- Moved the complete legacy Raycast extension under `Commander/extensions/raycast/`, preserving its image tools,
+  assets, lockfile, and Open Commander command as one buildable package.
+
 ## [Commander Control] - 2026-08-14
 
 - Added an Open Commander no-view command that launches or focuses the installed Commander macOS app.

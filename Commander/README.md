@@ -11,8 +11,8 @@ portable from day one.
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
 - a searchable Commander Settings command and separate native settings window;
 - a Raycast-shaped built-in Commander extension with separate quit, hide-window, and open-window commands;
-- launcher queries clear on every reopen while private, device-local recent searches remain available in a first
-  History section;
+- launcher queries clear on every reopen while private, device-local search sessions remain available in a first
+  History section, with each search term followed by the commands launched from it;
 - launch-at-login, menu-bar icon, favourites-in-compact-mode, window mode, appearance, and text-size preferences;
 - draggable native launcher and Settings chrome plus physical-key shortcut recording for modified macOS keys;
 - installed extension management, safe folder/ZIP sideloading with opt-in source builds, and live Store browsing;
@@ -81,19 +81,21 @@ The bundled client ID is public by design. Tokens, passwords, and other credenti
 
 ## Raycast companion command
 
-The existing root `raycast/` extension includes an `Open Commander` no-view command. Build it with its pinned pnpm
-8 toolchain, then run the development command once to import it into Raycast:
+The existing Raycast extension now lives with Commander at `extensions/raycast/`. It preserves all of its legacy
+image tools and includes an `Open Commander` no-view command at `extensions/raycast/src/openCommander.ts`. Build it
+with its pinned pnpm 8 toolchain, then run the development command once to import it into Raycast:
 
 ```bash
-corepack pnpm@8.15.9 --dir raycast install --frozen-lockfile
-corepack pnpm@8.15.9 --dir raycast build
-corepack pnpm@8.15.9 --dir raycast dev
+corepack pnpm@8.15.9 --dir extensions/raycast install --frozen-lockfile
+corepack pnpm@8.15.9 --dir extensions/raycast build
+corepack pnpm@8.15.9 --dir extensions/raycast dev
 ```
 
 After Raycast imports the extension, the development process can stop and the command remains available. It opens
 the installed app by bundle identifier, so it can relaunch Commander after `Close Commander` has quit the host and
 daemon. Recent launcher searches stay local to Commander's daemon state and are intentionally excluded from cloud
-settings sync.
+settings sync. The launcher shows the eight newest search sessions initially; Show More expands the retained local
+history, and each session keeps up to eight de-duplicated commands for direct replay.
 
 ## Verification
 

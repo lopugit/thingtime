@@ -1,6 +1,12 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { CommanderAccount, CommanderExtension, CommanderSettings } from '@commander/protocol';
+import type {
+  CommanderAccount,
+  CommanderExtension,
+  CommanderSettings,
+  RecentSearch,
+  RecentSearchCommand,
+} from '@commander/protocol';
 import {
   addRecentSearch as prependRecentSearch,
   DEFAULT_SETTINGS,
@@ -13,7 +19,7 @@ interface PersistentState {
   settings: CommanderSettings;
   accounts: CommanderAccount[];
   extensions: CommanderExtension[];
-  recentSearches: string[];
+  recentSearches: RecentSearch[];
 }
 
 const statePath = () => path.join(commanderDataDirectory(), 'state.json');
@@ -46,14 +52,18 @@ export class PersistentStore {
       const parsed = JSON.parse(await readFile(statePath(), 'utf8')) as Partial<PersistentState>;
       const settings = normalizedSettings(parsed.settings);
       const clientIdNeedsMigration = parsed.settings?.thingtimeClientId !== settings.thingtimeClientId;
+      const recentSearches = normalizeRecentSearches(parsed.recentSearches);
+      const historyNeedsMigration =
+        Array.isArray(parsed.recentSearches) &&
+        JSON.stringify(parsed.recentSearches) !== JSON.stringify(recentSearches);
       this.#state = {
         version: 1,
         settings,
         accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
         extensions: Array.isArray(parsed.extensions) ? parsed.extensions : [],
-        recentSearches: normalizeRecentSearches(parsed.recentSearches),
+        recentSearches,
       };
-      if (clientIdNeedsMigration) await this.#persist();
+      if (clientIdNeedsMigration || historyNeedsMigration) await this.#persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
@@ -111,11 +121,9 @@ export class PersistentStore {
     await this.#persist();
   }
 
-  async addRecentSearch(query: string): Promise<string[]> {
-    const recentSearches = prependRecentSearch(this.#state.recentSearches, query);
-    const unchanged =
-      recentSearches.length === this.#state.recentSearches.length &&
-      recentSearches.every((value, index) => value === this.#state.recentSearches[index]);
+  async addRecentSearch(query: string, command?: RecentSearchCommand): Promise<RecentSearch[]> {
+    const recentSearches = prependRecentSearch(this.#state.recentSearches, query, command);
+    const unchanged = JSON.stringify(recentSearches) === JSON.stringify(this.#state.recentSearches);
     if (!unchanged) {
       this.#state.recentSearches = recentSearches;
       await this.#persist();

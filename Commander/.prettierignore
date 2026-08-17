@@ -3,3 +3,4 @@ dist
 target
 design
 pnpm-lock.yaml
+extensions/raycast

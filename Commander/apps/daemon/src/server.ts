@@ -9,6 +9,7 @@ import type {
   CommanderExtension,
   CommanderSettings,
   NativeRequest,
+  RecentSearchCommand,
   StoreExtension,
 } from '@commander/protocol';
 import { PROTOCOL_VERSION } from '@commander/protocol';
@@ -132,10 +133,10 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       return json(response, 200, { hits });
     }
     if (request.method === 'POST' && url.pathname === '/api/history') {
-      const { query } = await readBody<{ query?: string }>(request);
+      const { query, command } = await readBody<{ query?: string; command?: RecentSearchCommand }>(request);
       if (typeof query !== 'string' || !query.trim())
         return json(response, 400, { error: 'query is required' });
-      return json(response, 200, { recentSearches: await store.addRecentSearch(query) });
+      return json(response, 200, { recentSearches: await store.addRecentSearch(query, command) });
     }
     if (request.method === 'PUT' && url.pathname === '/api/settings')
       return json(response, 200, {

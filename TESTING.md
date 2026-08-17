@@ -110,7 +110,7 @@ is fixed, and cite the checklist you ran in the PR description.
       without copying dependency files from another checkout.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
-      scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+    scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 - [ ] In a disposable worktree, remove one transitive pnpm link required by
       ESLint while leaving every direct dependency link present, then run the
       targeted lint command: the startup probe performs one forced relink and
@@ -325,7 +325,7 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
       `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
-      runner)`, while both required-context companion jobs have distinct
+    runner)`, while both required-context companion jobs have distinct
       skipped names and cannot satisfy a failed real job.
 - [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
       confirm the lightweight companions report both exact required-context
@@ -727,14 +727,18 @@ is fixed, and cite the checklist you ran in the PR description.
       with arrows, execute with Return, open Command-K, traverse actions, and
       dismiss actions/launcher with Escape. Long names must not clip or create
       horizontal scroll in default or compact mode.
-- [ ] Type a unique launcher query, hide and reopen with the global shortcut,
-      and verify the field clears while the query is the first row in the
-      first History section. Return restores that query, and History survives
-      a complete quit/relaunch without entering cloud-synced settings.
+- [ ] Type a unique launcher query, launch a result, then hide and reopen with
+      the global shortcut. Verify the field clears while the query is the first
+      History row and the launched command is its replayable child. Return on
+      the query restores it; Return on the command reruns it. Create nine
+      searches and verify the initial eight-session cap plus interactive Show
+      More/Show Less. History survives a complete quit/relaunch without
+      entering cloud-synced settings.
 - [ ] Run Close Commander Window and verify only the floating launcher hides;
       then run Close Commander and verify the native host, daemon, and Rust
-      child exit and release port 47820. From Raycast, run the root extension's
-      Open Commander no-view command and verify it relaunches the installed app.
+      child exit and release port 47820. From Raycast, run
+      `Commander/extensions/raycast/`'s Open Commander no-view command and
+      verify it relaunches the installed app.
 - [ ] Browse the latest live Raycast Store feed, search a term, open the full
       web catalog, and sideload a valid source folder. Malformed manifests and
       unsupported view commands must show explicit compatibility errors; they
