@@ -1,6 +1,7 @@
 {
   "name": "thingtime",
   "version": "0.0.11",
+  "packageManager": "pnpm@10.12.1",
   "description": "Thing Time",
   "main": "none",
   "scripts": {
@@ -13,6 +14,8 @@
     "web-ports:all": "node remix/scripts/dev-pm2.cjs list",
     "worktree-setup": "node remix/scripts/ensure-dependencies.js --tool=eslint --tool=prettier",
     "build-web": "npm run build --prefix remix",
+    "build:vercel": "node scripts/vercel-build.mjs",
+    "test:vercel-root": "node --test scripts/vercel-root-flow.test.mjs",
     "electron": "pnpm --dir electron dev",
     "build-electron": "pnpm --dir electron build",
     "dist-electron": "pnpm --dir electron dist",
