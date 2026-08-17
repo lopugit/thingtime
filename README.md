@@ -72,3 +72,38 @@ and the routing contracts here assert this branch's.
 
 CI changes are recorded in [`CHANGELOG.md`](CHANGELOG.md) on this branch, not in
 the app changelog — nothing carries an entry from here to a product branch.
+
+## Fork setup: Vercel develop previews
+
+`.github/scripts/deploy-develop-pr-preview.mjs` runs from this branch and needs
+Vercel project settings it cannot infer. Supply them from your own Vercel
+account — every value below is a placeholder:
+
+```sh
+VERCEL_API_TOKEN="<vercel-rest-api-token>"
+VERCEL_PROJECT_ID="prj_<project-id>"
+VERCEL_PROJECT_NAME="<project-name>"
+VERCEL_TEAM_ID="team_<team-id>"
+VERCEL_TEAM_SLUG="<team-or-scope-slug>"
+VERCEL_GITHUB_REPO_ID="<vercel-git-repository-id>"
+VERCEL_CUSTOM_ENVIRONMENT_ID="env_<custom-environment-id>"
+STABLE_DEVELOP_DOMAIN="dev.example.com"
+PREVIEW_ALIAS_SUFFIX="preview.example.com"
+DEVELOP_PREVIEW_TRUSTED_ACTORS="<comma-separated-github-logins>"
+```
+
+### Stable develop domain
+
+For a hosted `develop` URL, create a Vercel Custom Environment with an exact
+`develop` branch matcher and attach the stable domain to that Custom
+Environment. Do not also bind the domain through `gitBranch`; the domain should
+have the Custom Environment id and a null Git branch. This lets Vercel move the
+stable hostname whenever a Git-connected `develop` build becomes ready.
+
+If trusted PR automation creates deployments in that same Custom Environment,
+its deployment payload must set `autoAssignCustomDomains: false` and assign
+only a separate PR alias after validating the exact repository, branch, commit,
+and READY state. Keep the PR wildcard detached from both branches and Custom
+Environments. Use domains and environment ids from your own Vercel project;
+never copy another project's account-specific identifiers or verification
+records.
