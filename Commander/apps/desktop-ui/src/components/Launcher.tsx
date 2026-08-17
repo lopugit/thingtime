@@ -229,9 +229,7 @@ export function Launcher({ state }: { state: CommanderState }) {
                         type="button"
                         role="option"
                         aria-selected={selectedRow}
-                        className={`result-row${commandCount ? ' history-query-row' : ''}${
-                          selectedRow ? ' selected' : ''
-                        }`}
+                        className={selectedRow ? 'result-row selected' : 'result-row'}
                         key={`history:${row.search.query.toLowerCase()}`}
                         onMouseEnter={() => state.setSelectedIndex(index)}
                         onDoubleClick={() => state.setQuery(row.search.query)}

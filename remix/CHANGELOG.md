@@ -936,8 +936,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Commander History now links searches to the commands they launched**:
   each local search session renders its term plus replayable, de-duplicated
   commands, ordered with the newest executed command first and its search term
-  directly beneath it as context. The compact History view keeps the newest
-  eight sessions while Show More expands up to 50 retained sessions, including
+  next as a separate full-width top-level result. The compact History view
+  keeps the newest eight sessions while Show More expands up to 50 retained sessions, including
   migrated string-only history from earlier builds. The complete legacy
   Raycast extension also moved under `Commander/extensions/raycast/`, keeping
   its image tools and real Open Commander command in Commander's extension tree. See the
