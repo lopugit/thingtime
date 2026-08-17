@@ -36,23 +36,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
-- **Thin Web CI promotion no longer blocks on topology contracts**: the stale
-  product-branch copy of the develop-preview controller was removed, the two
-  workflow/topology contract commands were removed from the required unit-test
-  aggregate, and the thin Web CI listener now delegates PR-warning permission
-  to the protected non-blocking advisory job. Real product unit tests, build,
-  typecheck diagnostics, API tests, and security checks remain unchanged.
-  — Codex (AI), 2026-08-17
-
+- **Develop-preview automation no longer breaks product-branch CI**: the thin
+  workflow-caller contract now permits exactly the approved
+  `deploy-develop-pr-preview.mjs` controller introduced on `main`, while still
+  rejecting every other local Actions script. — Codex (AI), 2026-08-10
 - **Required Web CI checks no longer strand non-Remix pull requests**: the
-  pull-request listener now always starts, classifies the complete changed-file
-  list, and assigns both stable ruleset context names to either the real
-  build/API jobs or lightweight no-op companions. The historical build label
-  remains stable even though typecheck growth is warning-only. Incomplete or
-  unavailable changed-file listings safely run the full suite instead of
-  stranding the required names. See the
-  [PR #222 engineering note](../PRs/222-codex-typecheck-ratchet-warning-main-ci-make-typecheck-ratchet-warning-only.md).
-  — Codex (AI), 2026-08-10
+  stable product-branch listener is now path-filter-free and grants only the
+  read access needed by the protected classifier. The control plane assigns
+  both existing `control-plane /` check names to either the real build/API
+  jobs or lightweight no-op companions, without changing their ruleset
+  identity. — Codex (AI), 2026-08-10
 - **Worktree lint and formatting dependencies now self-heal completely**:
   validation startup probes detect incomplete transitive pnpm links even when
   every direct package looks installed, retry once with a forced relink, and

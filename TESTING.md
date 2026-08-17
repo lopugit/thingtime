@@ -326,7 +326,8 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
       `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
       runner)`, while both required-context companion jobs have distinct
-      skipped names and cannot satisfy a failed real job.
+      skipped names and cannot satisfy a failed real job. Reusable callers keep
+      the same inner names under their existing `control-plane /` prefix.
 - [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
       confirm the lightweight companions report both exact required-context
       names successfully and the expensive build/API jobs have distinct
@@ -334,10 +335,6 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Break the path-classification job deliberately in a disposable branch.
       Confirm neither exact required-context name is emitted and branch
       protection blocks the PR instead of treating a skipped job as proof.
-- [ ] Break either product workflow/topology contract in a disposable branch.
-      Confirm neither command runs inside `test:unit`, build/API keep their
-      real result, and the protected `github-actions` advisory updates one
-      warning comment without producing a failing or required status.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
