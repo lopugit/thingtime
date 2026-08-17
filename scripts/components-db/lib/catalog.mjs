@@ -78,7 +78,10 @@ export const ARCHETYPE_ORDER = [
 	'news-reading',
 	'automotive',
 	'streaming-tv',
-	'productivity-notes'
+	'productivity-notes',
+	'security-privacy',
+	'charity-community',
+	'form-flows'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;

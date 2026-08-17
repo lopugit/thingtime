@@ -1,6 +1,6 @@
 {
-	"target": 2560,
-	"count": 2560,
+	"target": 2680,
+	"count": 2680,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -65,18 +65,21 @@
 		"news-reading",
 		"automotive",
 		"streaming-tv",
-		"productivity-notes"
+		"productivity-notes",
+		"security-privacy",
+		"charity-community",
+		"form-flows"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 320,
-		"bootstrap": 320,
-		"mui": 320,
-		"shadcn": 320,
-		"untitled": 320,
-		"daisyui": 320,
-		"reactflow": 320,
-		"thingtime": 320
+		"antd": 335,
+		"bootstrap": 335,
+		"mui": 335,
+		"shadcn": 335,
+		"untitled": 335,
+		"daisyui": 335,
+		"reactflow": 335,
+		"thingtime": 335
 	},
-	"hash": "c4f3d5ef34a26e12"
+	"hash": "b61baf7d0c3333bb"
 }
