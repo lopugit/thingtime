@@ -75,7 +75,10 @@ export const ARCHETYPE_ORDER = [
 	'ai-assistant',
 	'real-estate',
 	'whiteboard-collab',
-	'news-reading'
+	'news-reading',
+	'automotive',
+	'streaming-tv',
+	'productivity-notes'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;

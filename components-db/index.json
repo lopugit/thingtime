@@ -1,6 +1,6 @@
 {
-	"target": 2440,
-	"count": 2440,
+	"target": 2560,
+	"count": 2560,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -62,18 +62,21 @@
 		"ai-assistant",
 		"real-estate",
 		"whiteboard-collab",
-		"news-reading"
+		"news-reading",
+		"automotive",
+		"streaming-tv",
+		"productivity-notes"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 305,
-		"bootstrap": 305,
-		"mui": 305,
-		"shadcn": 305,
-		"untitled": 305,
-		"daisyui": 305,
-		"reactflow": 305,
-		"thingtime": 305
+		"antd": 320,
+		"bootstrap": 320,
+		"mui": 320,
+		"shadcn": 320,
+		"untitled": 320,
+		"daisyui": 320,
+		"reactflow": 320,
+		"thingtime": 320
 	},
-	"hash": "93dad73ed36cbee7"
+	"hash": "c4f3d5ef34a26e12"
 }
