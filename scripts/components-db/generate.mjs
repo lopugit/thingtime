@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import { ARCHETYPE_ORDER, TRANCHE_ONE_TARGET, buildCatalog } from './lib/catalog.mjs';
+import { ARCHETYPE_ORDER, CATALOG_TARGET, buildCatalog } from './lib/catalog.mjs';
 import { validateDefinition } from './lib/validate.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -50,7 +50,7 @@ const run = async () => {
 	}
 
 	console.log(
-		`catalog: ${definitions.length}/${TRANCHE_ONE_TARGET} definitions built` +
+		`catalog: ${definitions.length}/${CATALOG_TARGET} definitions built` +
 			(archetypeScope ? ` (${scoped.length} in scope '${archetypeScope}')` : '') +
 			(missing.length ? ` — ${missing.length} archetypes not yet authored: ${missing.join(', ')}` : ' — all archetypes present')
 	);
@@ -84,7 +84,7 @@ const run = async () => {
 	// Manifest covers the WHOLE built catalog (not just the scoped slice) so
 	// index.json always reflects the true folder-db state.
 	const manifest = {
-		target: TRANCHE_ONE_TARGET,
+		target: CATALOG_TARGET,
 		count: definitions.length,
 		archetypesPresent: ARCHETYPE_ORDER.filter((id) => !missing.includes(id)),
 		archetypesMissing: missing,

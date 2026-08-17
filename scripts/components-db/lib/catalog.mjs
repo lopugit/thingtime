@@ -10,6 +10,9 @@ import path from 'node:path';
 
 import { LIBRARIES, LIBRARY_IDS } from './tokens.mjs';
 
+// Tranche 1: the original 25 archetypes (×8 libraries ×5 variants = 1000).
+// Tranche 2 grows the catalog beyond 1000 — new archetypes append below the
+// TRANCHE_2_START marker so tranche-1 output never reorders.
 export const ARCHETYPE_ORDER = [
 	'button',
 	'badge',
@@ -35,11 +38,18 @@ export const ARCHETYPE_ORDER = [
 	'empty-states',
 	'stat-metric',
 	'marketing',
-	'flow'
+	'flow',
+	// ---- tranche 2 ----
+	'rating',
+	'code-block',
+	'search-command'
 ];
 
 export const VARIANTS_PER_ARCHETYPE = 5;
-export const TRANCHE_ONE_TARGET = ARCHETYPE_ORDER.length * LIBRARY_IDS.length * VARIANTS_PER_ARCHETYPE; // 1000
+export const TRANCHE_ONE_ARCHETYPES = 25;
+export const TRANCHE_ONE_TARGET = TRANCHE_ONE_ARCHETYPES * LIBRARY_IDS.length * VARIANTS_PER_ARCHETYPE; // 1000
+export const trancheOf = (archetypeId) => (ARCHETYPE_ORDER.indexOf(archetypeId) < TRANCHE_ONE_ARCHETYPES ? 1 : 2);
+export const CATALOG_TARGET = ARCHETYPE_ORDER.length * LIBRARY_IDS.length * VARIANTS_PER_ARCHETYPE;
 
 const archetypesDir = fileURLToPath(new URL('./archetypes/', import.meta.url));
 
@@ -109,7 +119,7 @@ export const buildCatalog = async () => {
 				definitions.push({
 					...def,
 					version: 1,
-					source: { kind: 'archetype', archetype: id, variant, tranche: 1 }
+					source: { kind: 'archetype', archetype: id, variant, tranche: trancheOf(id) }
 				});
 			});
 		}
