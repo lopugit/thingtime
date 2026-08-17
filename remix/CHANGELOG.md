@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Each resolver run now owns one visible status comment**: the conflict
+  resolver's hidden marker now includes the immutable GitHub workflow run ID,
+  so a distinct run creates a fresh timeline entry instead of silently editing
+  an old comment. Retries of the same run remain idempotent, and its terminal
+  success or failure updates that run's own comment while preserving the
+  marker. — Codex (AI), 2026-08-17
+
 - **True-union pnpm lock conflicts now finish deterministically after AI**:
   when Claude resolves every source conflict but deliberately leaves one
   pinned `pnpm-lock.yaml` because its adjacent `package.json` needed both

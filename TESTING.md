@@ -316,6 +316,12 @@ is fixed, and cite the checklist you ran in the PR description.
       after all markers are gone. Confirm the PR failure comment lists only the
       actual residual marker-bearing path in the first case and lists no old
       pre-model conflict paths in the second.
+- [ ] Trigger two distinct trusted resolver runs for the same PR, then retry one
+      of those runs. Confirm each distinct `github.run_id` creates a fresh
+      timeline comment with its own `thingtime-ai-resolve-status:v2` marker,
+      the retry updates only its original run comment, and terminal success or
+      failure updates that same comment instead of editing an older run or
+      appending a second result comment.
 
 ## Per-feature develop → main promoter (`.github/scripts/promote-features-to-main.mjs`)
 
