@@ -54,6 +54,11 @@ is fixed, and cite the checklist you ran in the PR description.
       list is empty. Confirm a newly built generic Preview has all current
       `develop` variables plus the six existing Preview-only values, while
       production MongoDB/JWT/S3 values remain absent.
+- [ ] On a `develop` Custom Environment deployment, confirm `/api/root-data`
+      reports `THINGTIME_VERCEL_ENV=develop` and
+      `THINGTIME_SHOW_DEPLOYMENT_STATUS=true`; `/api/v1/vercel/status` returns
+      JSON with HTTP 200, and `/status` renders the deployment status instead of
+      the React Router 404 boundary. Repeat on an ordinary Preview deployment.
 - [ ] Open or update a same-repository, trusted-author PR targeting `develop`:
       the `Develop S3 PR preview` workflow deploys the exact head SHA, the
       one marker comment moves through deploying to ready, the GitHub Deployment

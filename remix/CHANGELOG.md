@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Vercel status in custom environments**: deployment status now checks
+  Vercel's system environment and custom target independently, so the
+  Preview-backed `develop` target keeps `/api/v1/vercel/status`, `/status`, and
+  the footer status enabled without a dashboard override. The API and root-data
+  paths now share one tested feature gate. — Codex (AI), 2026-08-17
+
 ### Added
 
 - **One GitHub Actions control plane + Admin CI dashboard**: executable CI,
