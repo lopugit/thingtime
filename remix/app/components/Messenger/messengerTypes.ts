@@ -9,6 +9,18 @@ export type ChatRole = 'owner' | 'admin' | 'member';
 export type MemberState = 'active' | 'pending' | 'left' | 'declined';
 export type MessengerMode = 'slack' | 'messenger';
 
+export type ExternalAiSource = {
+  provider: 'chatgpt' | 'claude';
+  sourceId: string;
+  label: string;
+  connector: string;
+  readOnly: true;
+  role?: 'user' | 'assistant' | 'system' | 'unknown';
+  authorName?: string | null;
+  segmentIndex?: number;
+  segmentCount?: number;
+};
+
 export type MessengerProfile = {
   id: string;
   username: string;
@@ -39,6 +51,7 @@ export type MessagePreview = {
   systemType: string | null;
 	attachmentCount: number;
   createdAt: string;
+  externalSource?: ExternalAiSource | null;
 };
 
 export type ChatSummary = {
@@ -57,6 +70,7 @@ export type ChatSummary = {
   memberCount: number;
   unreadCount: number;
   lastMessage: MessagePreview | null;
+  externalSource?: ExternalAiSource | null;
 };
 
 export type ChatMessage = {
@@ -78,6 +92,7 @@ export type ChatMessage = {
   threadCount: number;
   threadLastAt: string | null;
   createdAt: string;
+  externalSource?: ExternalAiSource | null;
 };
 
 export type CustomEmojiMap = Record<string, { name: string; image: string; animated: boolean }>;
@@ -102,6 +117,7 @@ export type Community = {
   memberCount: number;
   createdAt: string;
   sections: { id: string; name: string; order: number }[];
+  externalSource?: ExternalAiSource | null;
 };
 
 export type CommunityChannel = {

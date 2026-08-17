@@ -1,6 +1,7 @@
 import { defineHandler } from 'nitro/h3';
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
+import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
@@ -33,6 +34,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms/delete': () => import('../../../app/routes/api/v1/algorithms/delete/_delete'),
   'v1/algorithms/track': () => import('../../../app/routes/api/v1/algorithms/track/_track'),
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
+  'v1/ai/connections': () => import('../../../app/routes/api/v1/ai/connections/_connections'),
   'v1/app-data': () => import('../../../app/routes/api/v1/app-data/_app-data'),
   'v1/app-data/delete': () => import('../../../app/routes/api/v1/app-data/delete/_delete'),
   'v1/app-data/shared': () => import('../../../app/routes/api/v1/app-data/shared/_shared'),
@@ -281,6 +283,9 @@ export default defineHandler(async (event) => {
     if (err instanceof Response) {
       return err;
     }
+		if (err instanceof StorageMutationError) {
+			return jsonResponse({ ok: false, error: err.message }, { status: err.status });
+		}
 
     throw err;
   }

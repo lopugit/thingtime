@@ -3,7 +3,7 @@
 A consent-first local MCP bridge for bringing conversations from AI desktop
 apps into a normalized Thingtime staging format.
 
-## What works in this first slice
+## What works
 
 - Any MCP-capable host can explicitly hand its current conversation to
   `thingtime_ingest_current_chat`.
@@ -16,11 +16,23 @@ apps into a normalized Thingtime staging format.
   implicitly.
 - Relational `ai-chat` + `ai-chat-message` Thingtime ingestion records can be
   previewed without writing to ThingtimeDB.
+- The Electron build bundles a separate desktop connector from this package.
+  With an authenticated Thingtime window it discovers local ChatGPT Work/Codex
+  history, the main Claude desktop profile, and the Claude Thingtime profile;
+  official ChatGPT/Claude JSON or ZIP exports can be selected for cloud history.
+- The bundled connector sends bounded batches through
+  `/api/v1/ai/connections`. Projects become Messenger Spaces, conversations
+  become chats/channels, and messages become relational read-only Messenger
+  rows. Stable owner-scoped source keys make retries and full resyncs
+  idempotent.
 
 MCP does **not** give a server universal access to every connected app's chat
 history, private application storage, cookies, or settings. Apps must hand the
-data to this server or provide an export/connector. This server never scans
-application data directories automatically.
+data to the standalone server or provide an export/connector. The standalone
+MCP server never scans application data directories automatically. The bundled
+Electron connector performs only an explicit, user-triggered read of its
+allowlisted local conversation stores; it filters hidden reasoning, tool
+traffic, and internal context, and never sends raw local paths or credentials.
 
 ## Install and build
 
@@ -64,6 +76,12 @@ Config file locations differ by host and can change; use the host's current MCP
 documentation. The server uses stdio, so the host launches one private local
 process and communicates over JSON-RPC.
 
+This configuration is for the standalone MCP workflow. Thingtime's own
+Electron app needs no MCP config: build/package the desktop app, sign in, open
+Messenger, select **✦ AI**, and choose **Sync local chats** or **Import full
+export…** for each source. The web browser deliberately cannot inspect desktop
+application storage.
+
 ## Safe workflow
 
 1. Call `thingtime_capabilities` to review boundaries and configured roots.
@@ -87,15 +105,18 @@ the selected scope, and write the manifest into an allowed root.
 
 ## ThingtimeDB boundary
 
-Database upload is deliberately disabled in this slice. The existing Thingtime
-API rejects unknown crystal schemas, so enabling upload safely requires:
+The standalone MCP staging tools still do not upload directly to ThingtimeDB.
+The enabled persistence path is the authenticated Electron-to-Messenger bridge:
+the renderer receives only normalized batches over a narrow preload API and
+posts them to `/api/v1/ai/connections` using the current Thingtime session.
+Local sync sessions are in-memory, expiring, cancellation-aware, and expose no
+raw chosen path to the page.
 
-1. registered `ai-chat`, `ai-chat-message`, and attachment/file schemas;
-2. authenticated import endpoints with idempotency, paging, storage quotas,
-   ownership, ACLs, and deletion semantics;
-3. platform views that show imported chats without leaking private content;
-4. an explicit user confirmation before each first sync source.
-
-The prepared records already follow Thingtime's relational child-data rule:
-messages are separate bounded records linked to their chat parent, not an
-unbounded array stored on one Thing.
+The server registers `ai-connection` alongside native Messenger schemas and
+stores every imported message as its own bounded `chat-message` Thing. Source
+ids are hashed with the owner before becoming unique keys. The server enforces
+batch limits, owner ACLs, membership-only reads, read-only provider rows, and
+the same exact transactional account-storage ledger used by posts and native
+Messenger content. Attachment object bytes, when present through Thingtime's
+upload system, are separately charged on protected attachment Things. Replaying
+an identical batch changes neither row count nor storage usage.

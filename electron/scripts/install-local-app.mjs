@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +23,16 @@ function runOptional(command, args) {
   }
 }
 
+function runRequired(command, args, label) {
+  const result = spawnSync(command, args, { stdio: 'inherit' });
+
+  if (result.error || result.status !== 0) {
+    const detail = result.error ? result.error.message : `exit ${result.status}`;
+    console.error(`${label} failed (${detail}).`);
+    process.exit(result.status || 1);
+  }
+}
+
 if (process.platform !== 'darwin') {
   console.error('install:local currently installs the macOS app bundle only.');
   process.exit(1);
@@ -32,6 +42,26 @@ if (!existsSync(sourceApp)) {
   console.error(`Missing ${sourceApp}. Run "pnpm --dir electron build" first.`);
   process.exit(1);
 }
+
+const sourceVerification = spawnSync(
+  'codesign',
+  ['--verify', '--deep', '--strict', sourceApp],
+  { stdio: 'ignore' }
+);
+
+if (sourceVerification.error || sourceVerification.status !== 0) {
+  runRequired(
+    'codesign',
+    ['--force', '--deep', '--sign', '-', sourceApp],
+    'Ad-hoc signing of the local app bundle'
+  );
+}
+
+runRequired(
+  'codesign',
+  ['--verify', '--deep', '--strict', sourceApp],
+  'Source app signature verification'
+);
 
 mkdirSync(targetDir, { recursive: true });
 rmSync(tempApp, { force: true, recursive: true });
@@ -46,6 +76,19 @@ if (copyResult.error || copyResult.status !== 0) {
 
 rmSync(targetApp, { force: true, recursive: true });
 renameSync(tempApp, targetApp);
+
+runRequired(
+  'codesign',
+  ['--verify', '--deep', '--strict', targetApp],
+  'Installed app signature verification'
+);
+
+try {
+  accessSync(join(targetApp, 'Contents', 'MacOS', 'Thingtime'), constants.X_OK);
+} catch {
+  console.error(`Installed app executable is missing or not executable: ${targetApp}`);
+  process.exit(1);
+}
 
 if (existsSync(lsregister)) {
   runOptional(lsregister, ['-f', targetApp]);

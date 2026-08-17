@@ -1,9 +1,10 @@
 // Shared plumbing for the messenger family (chats, communities, emojis,
 // follows). Everything here is a thing in `things` (FUNDAMENTALS §3):
-// messenger docs are private plumbing (acl ["tt:user"]) whose real visibility
-// is chat/community MEMBERSHIP, enforced by these utils on every read and
-// write — the generic /api/v1/things paths refuse the kinds outright (no
-// crystal sanitizers), so nothing here is reachable or forgeable around us.
+// messenger docs are private, quota-accounted user content (acl ["tt:user"])
+// whose real visibility is chat/community MEMBERSHIP, enforced by these utils
+// on every read and write — the generic /api/v1/things paths refuse the kinds
+// outright (no crystal sanitizers), so nothing here is reachable or forgeable
+// around us.
 import { randomUUID } from 'node:crypto';
 import { getThingsCollection } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';

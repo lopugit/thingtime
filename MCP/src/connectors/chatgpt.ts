@@ -33,10 +33,19 @@ export const chatGptConnector: Connector = {
     return first && recordOf(first).mapping ? 90 : 0;
   },
   normalize(input, context): Snapshot {
-    const conversations = arrayOf(input).map(recordOf).map((raw) => ({
-      ...conversationBase(raw, this.id, this.app, context),
-      messages: orderedMessages(raw)
-    }));
+    const conversations = arrayOf(input).map(recordOf).map((raw) => {
+      const base = conversationBase(raw, this.id, this.app, context);
+      const groupId = raw.project_id || raw.project_uuid || raw.workspace_id || null;
+      if (groupId) base.source.workspaceId = String(groupId);
+      base.metadata = groupId
+        ? {
+            groupId: String(groupId),
+            groupName: String(raw.project_name || raw.workspace_name || 'ChatGPT project'),
+            groupKind: raw.workspace_id ? 'workspace' : 'project'
+          }
+        : {};
+      return { ...base, messages: orderedMessages(raw) };
+    });
     return { schemaVersion: 1, sourceApp: this.app, connector: this.id, exportedAt: null, importedAt: context.now, conversations, files: [], settings: {}, metadata: {} };
   }
 };

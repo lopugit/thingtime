@@ -28,6 +28,8 @@ let activeContentOrigin = null;
 let webBuildMetadata = null;
 let mainWindow = null;
 let sessionHash = null;
+let aiConnectorsPromise = null;
+const aiSyncSessions = new Map();
 
 function getSessionHash() {
   if (!sessionHash) {
@@ -643,6 +645,99 @@ function isAllowedContentUrl(targetUrl) {
   }
 }
 
+function trustedAiBridgeOrigins() {
+  const configured = String(process.env.THINGTIME_DESKTOP_AI_TRUSTED_ORIGINS || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return new Set([appOrigin, 'https://thingtime.com', 'https://www.thingtime.com', 'https://dev.thingtime.com', ...configured].filter(Boolean));
+}
+
+function requireTrustedAiBridgeEvent(event) {
+  const frameUrl = event?.senderFrame?.url || event?.sender?.getURL?.() || '';
+  let origin = '';
+  try {
+    origin = new URL(frameUrl).origin;
+  } catch {
+    throw new Error('AI desktop access requires a trusted Thingtime page.');
+  }
+  if (!trustedAiBridgeOrigins().has(origin)) {
+    throw new Error('This page is not allowed to read AI desktop sources.');
+  }
+}
+
+function aiConnectorPath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'ai', 'ai-connectors.mjs')
+    : path.join(__dirname, 'dist', 'ai', 'ai-connectors.mjs');
+}
+
+function loadAiConnectors() {
+  if (!aiConnectorsPromise) aiConnectorsPromise = import(pathToFileURL(aiConnectorPath()).href);
+  return aiConnectorsPromise;
+}
+
+function aiSyncSession(request) {
+  const syncId = typeof request?.syncId === 'string' ? request.syncId : '';
+  const session = syncId ? aiSyncSessions.get(syncId) : null;
+  if (!session) throw new Error('That AI sync session expired. Start it again.');
+  if (Date.now() - session.touchedAt > 30 * 60 * 1000) {
+    aiSyncSessions.delete(syncId);
+    throw new Error('That AI sync session expired. Start it again.');
+  }
+  session.touchedAt = Date.now();
+  return { syncId, session };
+}
+
+async function discoverAiSources(event) {
+  requireTrustedAiBridgeEvent(event);
+  const connectors = await loadAiConnectors();
+  return connectors.discoverDesktopSources();
+}
+
+async function beginAiSync(event, request) {
+  requireTrustedAiBridgeEvent(event);
+  const sourceId = ['chatgpt', 'claude', 'claude-thingtime'].includes(request?.sourceId) ? request.sourceId : null;
+  const mode = request?.mode === 'local' || request?.mode === 'export' ? request.mode : null;
+  if (!sourceId || !mode) throw new Error('Choose a valid AI desktop source and sync mode.');
+  let archivePath = null;
+  if (mode === 'export') {
+    const selection = await dialog.showOpenDialog(mainWindow || undefined, {
+      title: `Choose the official ${sourceId === 'chatgpt' ? 'ChatGPT' : 'Claude'} export`,
+      properties: ['openFile'],
+      filters: [
+        { name: 'Provider export', extensions: ['zip', 'json'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    });
+    if (selection.canceled || !selection.filePaths[0]) return { cancelled: true };
+    archivePath = selection.filePaths[0];
+  }
+  const connectors = await loadAiConnectors();
+  const prepared = await connectors.prepareDesktopSync({ sourceId, mode, archivePath });
+  const syncId = crypto.randomUUID();
+  aiSyncSessions.set(syncId, { prepared, cursor: 0, touchedAt: Date.now() });
+  while (aiSyncSessions.size > 4) aiSyncSessions.delete(aiSyncSessions.keys().next().value);
+  return { syncId, totals: prepared.totals };
+}
+
+async function readAiSyncBatch(event, request) {
+  requireTrustedAiBridgeEvent(event);
+  const { syncId, session } = aiSyncSession(request);
+  const connectors = await loadAiConnectors();
+  const batch = connectors.nextDesktopSyncBatch(session.prepared, session.cursor);
+  session.cursor = batch.nextCursor;
+  const { nextCursor: _nextCursor, ...publicBatch } = batch;
+  return { syncId, ...publicBatch };
+}
+
+async function cancelAiSync(event, request) {
+  requireTrustedAiBridgeEvent(event);
+  const syncId = typeof request?.syncId === 'string' ? request.syncId : '';
+  if (syncId) aiSyncSessions.delete(syncId);
+  return { ok: true };
+}
+
 function getDesktopInfo() {
   return {
     appVersion: getCurrentAppVersion(),
@@ -795,6 +890,10 @@ ipcMain.handle('thingtime-desktop:get-info', () => getDesktopInfo());
 ipcMain.handle('thingtime-desktop:load-url', (_event, url) => loadDesktopUrl(url));
 ipcMain.handle('thingtime-desktop:check-for-updates', () => checkForUpdates());
 ipcMain.handle('thingtime-desktop:download-update-bundle', () => downloadUpdateBundle());
+ipcMain.handle('thingtime-desktop:ai-discover', (event) => discoverAiSources(event));
+ipcMain.handle('thingtime-desktop:ai-begin-sync', (event, request) => beginAiSync(event, request));
+ipcMain.handle('thingtime-desktop:ai-read-batch', (event, request) => readAiSyncBatch(event, request));
+ipcMain.handle('thingtime-desktop:ai-cancel-sync', (event, request) => cancelAiSync(event, request));
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 

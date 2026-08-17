@@ -1161,7 +1161,9 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       per-user sums and initializes aggregate last; two migration runners
       cannot overwrite a now-live aggregate.
 - [ ] Canonical account storage: create, grow, shrink, and delete first-party
-      Things, comments/reactions, themes, algorithms, and registered app data.
+      Things, posts, comments/reactions, themes, algorithms, every user-owned
+      Messenger row (including relationship edges), imported AI history, and
+      registered app data.
       Each mutation changes the protected subscription ledger by exactly the
       UTF-8 byte delta of `JSON.stringify({ crystal, extended, tags })` in the
       same transaction. App data changes the account, whole-app, and app-user
@@ -1713,12 +1715,47 @@ Automated first: `node scripts/verify-messenger.mjs` from `remix/` against the
 running dev stack (86 live-API checks: permissions, requests, receipts,
 reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
+- [ ] Run `npm run test:messenger` and `npm run test:storage` from `remix/`.
+      Against a disposable loopback MongoDB replica set only, run
+      `npm run verify:messenger-storage` with
+      `TT_MESSENGER_STORAGE_TEST_ALLOW_LOCAL=1` and a loopback-only
+      `MONGODB_CONNECTION_STRING`: posts, native Messenger rows, AI
+      projects/chats/messages, and relationship rows all increase the same
+      account ledger; identical re-import adds zero bytes; a 1-byte allowance
+      rolls back the container plus owner membership; the v2 backfill recounts
+      legacy Messenger content.
+
 - [ ] `/messages` requires login (guests bounce to `/login`) and the page owns
       the viewport: no body scroll, no footer under the composer, nav
-      clearance intact at desktop and mobile widths.
+      clearance intact at desktop and mobile widths. In local/dev builds the
+      draggable DevKit trigger is omitted on this full-viewport route, so it
+      cannot cover message actions, Send, attachment, emoji, or textarea
+      controls.
 - [ ] Mode toggle (🏛️ Spaces / 💬 Chats) swaps the SAME conversations between
       Slack-style rows and Messenger bubbles; the choice survives reload
       (per-account localStorage key `tt-messenger-mode:<uid>`).
+- [ ] In the installed Thingtime Electron app, **✦ AI** opens the connection
+      modal in both Spaces and Chats modes. It independently identifies
+      ChatGPT, Claude, and Claude Thingtime; the browser build instead explains
+      that desktop discovery requires the app. At desktop and 390px mobile
+      widths, open every modal state, scroll top-to-bottom, and confirm buttons,
+      provider links, progress, and close controls neither clip nor overlap.
+- [ ] Sync one local source and one official JSON/ZIP export. Projects appear
+      as Spaces, grouped conversations as channels, ungrouped conversations as
+      chats, and user/assistant messages retain order and provider badges.
+      Provider rows cannot be edited/deleted; reactions, threads, and new
+      Thingtime replies work without posting back to the provider.
+- [ ] Repeat the exact sync, interrupt one multi-batch sync and resume it, then
+      compare row counts and account usage: stable source rows are reused,
+      no message is duplicated, read receipts/mute state survive, and quota
+      usage is unchanged after the identical replay. Fill the account and
+      confirm the next transactional unit 507s without an orphan Space/chat,
+      membership, partial invite redemption, or unmetered row.
+- [ ] Inspect the Electron boundary: renderer code receives normalized batches
+      only; the selected export path, app data roots, provider credentials,
+      cookies, hidden reasoning, tool traffic, and internal context do not
+      appear in network payloads, API responses, logs, or persisted connection
+      rows. Expired/cancelled sync ids cannot be read again.
 - [ ] DM flow: search someone → chat opens instantly (optimistic), Enter
       sends, bubble shows yours right/theirs left, conversation pins to the
       BOTTOM of the pane even when short.

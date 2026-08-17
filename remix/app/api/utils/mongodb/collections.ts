@@ -617,6 +617,25 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { 'crystal.followKey': 1 },
       { name: 'things_follow_key_unique', unique: true, partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } }
     ),
+    // Desktop AI imports: stable server hashes make repeat/resume safe without
+    // exposing provider ids in public projections. Each key namespace is
+    // structurally unique across the shared things collection.
+    col.createIndex(
+      { 'crystal.aiConnectionKey': 1 },
+      { name: 'things_ai_connection_key_unique', unique: true, partialFilterExpression: { 'crystal.aiConnectionKey': { $type: 'string' } } }
+    ),
+    col.createIndex(
+      { 'crystal.externalCommunityKey': 1 },
+      { name: 'things_external_community_key_unique', unique: true, partialFilterExpression: { 'crystal.externalCommunityKey': { $type: 'string' } } }
+    ),
+    col.createIndex(
+      { 'crystal.externalConversationKey': 1 },
+      { name: 'things_external_conversation_key_unique', unique: true, partialFilterExpression: { 'crystal.externalConversationKey': { $type: 'string' } } }
+    ),
+    col.createIndex(
+      { 'crystal.externalMessageKey': 1 },
+      { name: 'things_external_message_key_unique', unique: true, partialFilterExpression: { 'crystal.externalMessageKey': { $type: 'string' } } }
+    ),
     // Thread replies list under their root message (main chat pages ride the
     // shared { targetId, thingtime, createdAt, shareId } index above).
     col.createIndex(

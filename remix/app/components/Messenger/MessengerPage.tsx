@@ -7,6 +7,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { ChatDetailsDrawer } from './ChatDetailsDrawer';
+import { AiConnectionsModal } from './AiConnectionsModal';
 import { ChatView } from './ChatView';
 import { InboxSidebar } from './InboxSidebar';
 import {
@@ -59,6 +60,7 @@ export const MessengerPage = () => {
   const [activeCommunityId, setActiveCommunityId] = React.useState<string | null>(null);
   const [showRequests, setShowRequests] = React.useState(searchParams.get('view') === 'requests');
   const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const [aiConnectionsOpen, setAiConnectionsOpen] = React.useState(false);
   const [inputRequest, setInputRequest] = React.useState<InputModalRequest | null>(null);
   const [modal, setModal] = React.useState<
     | { kind: 'new-dm' }
@@ -323,8 +325,26 @@ export const MessengerPage = () => {
             borderRight={{ md: '1px solid var(--tt-border-light, #f3f3f5)' }}
             minHeight={0}
           >
-            <Flex align="center" justify="center" padding={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)">
+            <Flex
+              align="center"
+              justify="center"
+              padding={2}
+              borderBottom="1px solid var(--tt-border-light, #f3f3f5)"
+              position="relative"
+            >
               {modeToggle}
+              <Button
+                size="xs"
+                variant="ghost"
+                position="absolute"
+                right={2}
+                borderRadius="var(--tt-radius-pill, 999px)"
+                onClick={() => setAiConnectionsOpen(true)}
+                aria-label="Connect AI apps"
+                title="Connect ChatGPT and Claude"
+              >
+                ✦ AI
+              </Button>
             </Flex>
             <Box flex={1} minHeight={0}>
               {sidebar}
@@ -383,6 +403,12 @@ export const MessengerPage = () => {
       />
       <InvitePeopleModal isOpen={modal?.kind === 'invite'} onClose={() => setModal(null)} api={api} community={activeCommunity} />
       <InputModal request={inputRequest} onClose={() => setInputRequest(null)} />
+      <AiConnectionsModal
+        isOpen={aiConnectionsOpen}
+        onClose={() => setAiConnectionsOpen(false)}
+        api={api}
+        onSynced={() => void refresh()}
+      />
       {selectedChat ? (
         <ChatDetailsDrawer
           isOpen={detailsOpen}

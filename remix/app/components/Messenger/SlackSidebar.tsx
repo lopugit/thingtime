@@ -140,7 +140,7 @@ export const SlackSidebar = (props: SlackSidebarProps) => {
 
   const channels = props.chats.filter((c) => c.chatType === 'channel' && c.communityId === active?.id);
   const dms = props.chats.filter((c) => c.chatType !== 'channel');
-  const isAdmin = active?.myRole === 'owner' || active?.myRole === 'admin';
+  const isAdmin = !active?.externalSource && (active?.myRole === 'owner' || active?.myRole === 'admin');
 
   const sectionsWithChannels: { id: string | null; name: string; channels: ChatSummary[] }[] = React.useMemo(() => {
     const sections = active?.sections || [];
@@ -214,8 +214,14 @@ export const SlackSidebar = (props: SlackSidebarProps) => {
                 </MenuButton>
                 <Portal>
                   <MenuList zIndex={10260} fontSize="13px">
-                    <MenuItem onClick={props.onInvitePeople}>💌 Invite people</MenuItem>
-                    <MenuItem onClick={props.onBrowseChannels}>🔭 Browse channels</MenuItem>
+                    {active.externalSource ? (
+                      <MenuItem isDisabled>✦ Managed by {active.externalSource.label}</MenuItem>
+                    ) : (
+                      <>
+                        <MenuItem onClick={props.onInvitePeople}>💌 Invite people</MenuItem>
+                        <MenuItem onClick={props.onBrowseChannels}>🔭 Browse channels</MenuItem>
+                      </>
+                    )}
                     {isAdmin ? <MenuItem onClick={props.onCreateSection}>📁 New section</MenuItem> : null}
                     {isAdmin ? <MenuItem onClick={props.onCommunitySettings}>🛠️ Community settings</MenuItem> : null}
                   </MenuList>
@@ -262,10 +268,14 @@ export const SlackSidebar = (props: SlackSidebarProps) => {
                         active={chat.id === props.selectedChatId}
                         unread={chat.unreadCount}
                         onClick={() => props.onSelectChat(chat)}
-                        contextActions={[{ id: 'rename', label: '✏️ Rename channel' }]}
-                        onContextAction={(action) => {
-                          if (action === 'rename') props.onRenameChat(chat);
-                        }}
+                        contextActions={chat.externalSource ? [] : [{ id: 'rename', label: '✏️ Rename channel' }]}
+                        onContextAction={
+                          chat.externalSource
+                            ? undefined
+                            : (action) => {
+                                if (action === 'rename') props.onRenameChat(chat);
+                              }
+                        }
                       >
                         <Box as="span" color="var(--tt-muted, #9a9aa6)" marginRight={1}>
                           #
@@ -276,9 +286,11 @@ export const SlackSidebar = (props: SlackSidebarProps) => {
                   : null}
               </Box>
             ))}
-            <Button size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)" onClick={() => props.onCreateChannel(null)}>
-              ➕ Add channel
-            </Button>
+            {!active.externalSource ? (
+              <Button size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)" onClick={() => props.onCreateChannel(null)}>
+                ➕ Add channel
+              </Button>
+            ) : null}
           </>
         ) : (
           <Box padding={3} fontSize="13px" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">

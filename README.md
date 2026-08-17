@@ -17,12 +17,14 @@ Claude, and other compatible tools read the same instructions. Update
 
 ## Thingtime MCP
 
-The standalone [`MCP/`](MCP/) package is a consent-first bridge for importing
-AI desktop conversations, settings, attachments, and export metadata into a
-private normalized staging format. It supports explicit current-chat handoff
-from any MCP host, ChatGPT and Claude JSON exports, and a portable connector
-manifest for other apps. See [`MCP/README.md`](MCP/README.md) for setup and the
-current ThingtimeDB integration boundary.
+The [`MCP/`](MCP/) package contains Thingtime's consent-first AI conversation
+normalizers. As a standalone MCP server it supports explicit current-chat
+handoff, private local staging, ChatGPT/Claude exports, and a portable connector
+manifest. The Electron app also bundles its read-only desktop connector: it can
+discover local ChatGPT Work/Codex history plus Claude sessions from the main and
+Thingtime desktop profiles, then import projects, chats, and visible messages
+through the authenticated Messenger API. See [`MCP/README.md`](MCP/README.md)
+for both workflows and their privacy boundaries.
 
 ## GitHub Actions control plane
 
@@ -352,6 +354,41 @@ The local Electron shell reads `remix/.env`, `remix/.env.local`, and
 `remix/.env.auto` before starting Nitro. Keep real MongoDB, auth, Vercel, and AI
 tokens in ignored env files or the launch environment only; commit placeholder
 examples in docs, not secrets.
+
+### Connect desktop AI history to Messenger
+
+In the signed-in Thingtime desktop app, open `/messages`, choose either Spaces
+or Chats, and select **✦ AI**. The connector presents three independent sources
+when present on the Mac: ChatGPT, the main Claude profile, and Claude Thingtime.
+
+- **Sync local chats** reads only visible local Work/Codex or Cowork/Claude Code
+  conversation records. It never reads provider cookies, passwords, hidden
+  reasoning, tool traffic, or browser storage, and raw local paths are not sent
+  to Thingtime.
+- **Import full export…** opens a native file chooser for an official ChatGPT
+  or Claude JSON/ZIP export. Cloud-only history is unavailable to the local
+  reader, so use the provider's official export when a conversation is not
+  stored on the Mac.
+- Projects/workspaces become Messenger Spaces, conversations become chats or
+  channels, and provider messages are read-only. Reactions, threads, and new
+  Thingtime replies remain local to Thingtime; they are not posted back to the
+  provider.
+- Sync runs in bounded batches and is idempotent. Repeating the same import
+  updates the same owner-scoped records without duplicating chats, messages, or
+  quota usage.
+
+Imported history is user-owned content and consumes the signed-in account's
+storage allowance just like posts and native Messenger rows. Message JSON is
+metered on the Messenger row; any Thingtime-hosted attachment object remains
+separately metered by its protected attachment record. A quota failure rolls
+back the current transactional unit and returns a storage error rather than
+silently importing unaccounted data.
+
+No connector-specific environment variable is required in the packaged app.
+For a fork/local build, keep the normal authenticated Thingtime origin and
+database configuration in ignored Electron/Remix env files; do not grant the
+web browser filesystem access. The browser version intentionally shows the
+desktop-app requirement instead of attempting local discovery.
 
 ## API self-documentation
 

@@ -40,7 +40,52 @@ export type ThingtimeDesktopUpdateInfo = {
 	updateAvailable?: boolean;
 };
 
+export type ThingtimeAiDesktopSource = {
+	sourceId: 'chatgpt' | 'claude' | 'claude-thingtime';
+	provider: 'chatgpt' | 'claude';
+	label: string;
+	description: string;
+	installed: boolean;
+	localAvailable: boolean;
+	exportSupported: boolean;
+	localDetail?: string | null;
+};
+
+export type ThingtimeAiSyncBatch = {
+	syncId: string;
+	source: {
+		provider: 'chatgpt' | 'claude';
+		sourceId: string;
+		label: string;
+		connector: string;
+		mode: 'local' | 'export';
+	};
+	groups: Array<{ id: string; name: string; kind: 'workspace' | 'project' | 'group' }>;
+	conversations: Array<{
+		id: string;
+		title: string;
+		groupId: string | null;
+		createdAt: string | null;
+		updatedAt: string | null;
+	}>;
+	messages: Array<{
+		id: string;
+		conversationId: string;
+		role: 'user' | 'assistant' | 'system' | 'unknown';
+		authorName: string | null;
+		text: string;
+		createdAt: string | null;
+	}>;
+	final: boolean;
+	totals: { groups: number; conversations: number; messages: number };
+	progress: { completed: number; total: number };
+};
+
 export type ThingtimeDesktopBridge = {
+	discoverAiSources?: () => Promise<{ sources: ThingtimeAiDesktopSource[] }>;
+	beginAiSync?: (request: { sourceId: string; mode: 'local' | 'export' }) => Promise<{ syncId: string; totals: ThingtimeAiSyncBatch['totals'] } | { cancelled: true }>;
+	readAiSyncBatch?: (request: { syncId: string }) => Promise<ThingtimeAiSyncBatch>;
+	cancelAiSync?: (request: { syncId: string }) => Promise<{ ok: true }>;
 	checkForUpdates?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	downloadUpdateBundle?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;

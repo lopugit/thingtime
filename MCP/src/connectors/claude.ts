@@ -22,7 +22,17 @@ export const claudeConnector: Connector = {
         attachments: arrayOf(message.attachments || message.files).map(attachmentOf),
         metadata: {}
       }));
-      return { ...conversationBase(raw, this.id, this.app, context), messages };
+      const base = conversationBase(raw, this.id, this.app, context);
+      const groupId = raw.project_uuid || raw.project_id || raw.workspace_id || null;
+      if (groupId) base.source.workspaceId = String(groupId);
+      base.metadata = groupId
+        ? {
+            groupId: String(groupId),
+            groupName: String(raw.project_name || raw.workspace_name || 'Claude project'),
+            groupKind: raw.workspace_id ? 'workspace' : 'project'
+          }
+        : {};
+      return { ...base, messages };
     });
     return { schemaVersion: 1, sourceApp: this.app, connector: this.id, exportedAt: null, importedAt: context.now, conversations, files: [], settings: {}, metadata: {} };
   }

@@ -7,6 +7,9 @@ const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const repoRoot = path.resolve(electronDir, '..');
 const remixDir = path.join(repoRoot, 'remix');
 const stagedWebDir = path.join(electronDir, 'dist', 'web');
+const stagedAiDir = path.join(electronDir, 'dist', 'ai');
+const mcpDir = path.join(repoRoot, 'MCP');
+const aiBundle = path.join(mcpDir, 'dist-desktop', 'ai-connectors.mjs');
 const remixOutputDir = path.join(remixDir, '.output');
 const desktopReleaseMetadata = {
   baseVersion: process.env.THINGTIME_ELECTRON_BASE_VERSION || null,
@@ -20,7 +23,9 @@ const pnpmExecPath = process.env.npm_execpath && process.env.npm_execpath.includ
   ? process.env.npm_execpath
   : null;
 const pnpmRunner = pnpmExecPath
-  ? { command: process.execPath, args: [pnpmExecPath] }
+  ? /\.(?:cjs|mjs|js)$/i.test(pnpmExecPath)
+    ? { command: process.execPath, args: [pnpmExecPath] }
+    : { command: pnpmExecPath, args: [] }
   : { command: corepackCommand, args: ['pnpm'] };
 
 function run(command, args, options = {}) {
@@ -53,6 +58,7 @@ function runRemixScript(script, options = {}) {
 }
 
 await rm(stagedWebDir, { force: true, recursive: true });
+await rm(stagedAiDir, { force: true, recursive: true });
 await rm(remixOutputDir, { force: true, recursive: true });
 
 runRemixScript('ensure-bcrypt');
@@ -65,8 +71,15 @@ runRemixScript('build:server', {
   }
 });
 
+run(pnpmRunner.command, [...pnpmRunner.args, '--dir', mcpDir, 'run', 'build:desktop']);
+
 await mkdir(stagedWebDir, { recursive: true });
-await cp(remixOutputDir, path.join(stagedWebDir, '.output'), { recursive: true });
+await cp(remixOutputDir, path.join(stagedWebDir, '.output'), {
+  dereference: true,
+  recursive: true
+});
+await mkdir(stagedAiDir, { recursive: true });
+await cp(aiBundle, path.join(stagedAiDir, 'ai-connectors.mjs'));
 
 await writeFile(
   path.join(stagedWebDir, 'metadata.json'),

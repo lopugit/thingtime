@@ -25,14 +25,18 @@ pnpm --dir electron dist:unsigned
 pnpm --dir electron install:local
 ```
 
-`build:web` runs the Remix/Nitro build with `NITRO_PRESET=node_server`, then
-copies `remix/.output` into `electron/dist/web/.output`. `build` creates an
-unsigned unpacked Electron app through `electron-builder --dir`; `dist` creates
-packaged artifacts and can use the host machine's signing/notarization setup.
+`build:web` runs the Remix/Nitro build with `NITRO_PRESET=node_server`,
+materializes `remix/.output` into `electron/dist/web/.output` without external
+worktree symlinks, and bundles the read-only AI connector under
+`electron/dist/ai`. `build` creates an unsigned unpacked Electron app through
+`electron-builder --dir`; `dist` creates packaged artifacts and can use the
+host machine's signing/notarization setup.
 `dist:unsigned` creates packaged artifacts with signing and publishing disabled,
 which is the command used by the GitHub release workflow before uploading the
 bundle to Releases.
-`install:local` copies the latest unsigned macOS app bundle to
+`install:local` preserves a valid build signature or applies an ad-hoc local
+signature to an unsigned build, verifies the source and installed bundles with
+strict deep `codesign`, checks the installed executable, copies the result to
 `~/Applications/Thingtime.app`, registers it with LaunchServices, and asks
 Spotlight to import it so Raycast/Spotlight can discover the app.
 
@@ -42,8 +46,12 @@ The Electron main process starts the bundled Nitro server on a free
 `127.0.0.1` port and opens the desktop window to that local origin. External
 links are opened with the OS browser unless the user has explicitly switched
 the desktop window to that URL's origin. The renderer keeps `nodeIntegration`
-disabled and uses a small preload bridge for desktop metadata and validated URL
-switching only.
+disabled and uses a narrow preload bridge for desktop metadata, validated URL
+switching, and normalized AI source batches. AI discovery and reads accept only
+the bundled app, Thingtime production/dev, or an exact comma-separated origin
+supplied through `THINGTIME_DESKTOP_AI_TRUSTED_ORIGINS` for an intentional local
+test. The bridge never returns provider credentials, cookies, archive paths, or
+raw app-data roots.
 
 On macOS, the desktop window uses a hidden native titlebar so the web UI can
 occupy the titlebar row. The preload metadata exposes titlebar measurements;

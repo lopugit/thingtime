@@ -6,6 +6,7 @@ export type ApiRequestExample = {
   name: string;
   description: string;
   method: ApiHttpMethod;
+  headers?: Record<string, string>;
   query?: Record<string, string | number | boolean | null>;
   body?: unknown;
 };
@@ -2858,6 +2859,91 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'No public or caller-owned theme found.',
         body: { ok: false, error: 'Theme not found' }
       }
+    ]
+  }),
+  endpoint({
+    id: 'ai-connections',
+    group: 'messenger',
+    title: 'AI desktop connections',
+    endpoint: '/api/v1/ai/connections',
+    summary: 'Lists linked ChatGPT/Claude sources or imports one idempotent Messenger sync batch.',
+    detail:
+      'GET lists the authenticated account’s consented AI desktop sources and latest completed counts. POST ' +
+      'accepts one bounded application/json batch from the Thingtime desktop bridge. External projects or ' +
+      'workspaces become private communities, their conversations become private channels, ungrouped ' +
+      'conversations become named group chats, and messages become relational chat-message Things. Provider ' +
+      'credentials, cookies, raw local paths, hidden reasoning and tool traffic are never accepted. Stable ' +
+      'server-hashed source keys make every batch safe to retry. Provider history is read-only; replies stay ' +
+      'inside Thingtime.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires a full Thingtime user account via auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Discover and approve a source in the signed Thingtime desktop app.',
+      'Send project records before their conversations and conversation records before their messages.',
+      'Keep each batch within 80 projects, 120 conversations, 240 messages and the 768 KiB body cap.',
+      'Set final true and include source totals on the last batch.',
+      'Retry an interrupted batch unchanged; source hashes prevent duplicate communities, chats, or messages.'
+    ],
+    requestExamples: [
+      {
+        name: 'Import one Claude batch',
+        description: 'Creates a project channel and its first imported message.',
+        method: 'POST',
+        body: {
+          source: {
+            provider: 'claude',
+            sourceId: 'claude-thingtime',
+            label: 'Claude Thingtime',
+            connector: 'claude-code-local',
+            mode: 'local'
+          },
+          groups: [{ id: 'project_01', name: 'Thingtime', kind: 'project' }],
+          conversations: [{ id: 'conversation_01', title: 'Messenger bridge', groupId: 'project_01' }],
+          messages: [
+            {
+              id: 'message_01',
+              conversationId: 'conversation_01',
+              role: 'assistant',
+              authorName: 'Claude',
+              text: 'The bridge is ready.'
+            }
+          ],
+          final: true,
+          totals: { groups: 1, conversations: 1, messages: 1 }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Batch accepted and connection status updated.',
+        body: {
+          ok: true,
+          connection: {
+            provider: 'claude',
+            sourceId: 'claude-thingtime',
+            label: 'Claude Thingtime',
+            status: 'connected',
+            readOnly: true,
+            groups: 1,
+            conversations: 1,
+            messages: 1
+          },
+          accepted: { groups: 1, conversations: 1, messages: 1, messageSegments: 1 }
+        }
+      },
+      {
+        status: 409,
+        description: 'A batch arrived before a referenced parent record.',
+        body: { ok: false, error: 'An imported message arrived before its conversation; retry the sync batch' }
+      }
+    ],
+    notes: [
+      'POST requires application/json and draws from the ai.sync rate-limit bucket (600 batches per hour).',
+      'Message text over the native chat cap is split into ordered, idempotent segments.'
     ]
   }),
   endpoint({
@@ -7478,7 +7564,7 @@ export const buildPlatformExamples = (doc: ApiEndpointDoc, origin = 'https://thi
   const method = example.method || doc.methods[0];
   const hasBody = example.body !== undefined;
   const url = makeUrl(origin, doc.endpoint, example.query);
-  const headers = buildHeaders(doc, hasBody);
+  const headers = { ...buildHeaders(doc, hasBody), ...(example.headers || {}) };
   const jsonBody = hasBody ? compactJson(example.body) : '';
   const prettyBody = hasBody ? prettyJson(example.body) : '';
   const headerEntries = Object.entries(headers);

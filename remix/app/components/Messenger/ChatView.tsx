@@ -355,7 +355,11 @@ export const ChatView = (props: ChatViewProps) => {
   };
 
   const title = chatDisplayName({ ...chatSummary, members }, userId);
-  const canEditTopic = mode === 'slack' && chatSummary.chatType === 'channel' && (myMember?.role === 'owner' || myMember?.role === 'admin');
+  const canEditTopic =
+    !chatSummary.externalSource &&
+    mode === 'slack' &&
+    chatSummary.chatType === 'channel' &&
+    (myMember?.role === 'owner' || myMember?.role === 'admin');
   const communityEmojiScope = chatSummary.communityId;
 
   return (
@@ -370,6 +374,11 @@ export const ChatView = (props: ChatViewProps) => {
         <Box minWidth={0} flex={1}>
           <Box fontWeight={700} fontSize="15px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
             {title}
+            {chatSummary.externalSource ? (
+              <Box as="span" fontSize="10px" fontWeight={600} color="var(--tt-muted, #777782)" marginLeft={2}>
+                {chatSummary.externalSource.provider === 'chatgpt' ? '◎' : '✦'} {chatSummary.externalSource.label}
+              </Box>
+            ) : null}
           </Box>
           {mode === 'slack' && chatSummary.chatType === 'channel' ? (
             editingTopic ? (
@@ -424,6 +433,21 @@ export const ChatView = (props: ChatViewProps) => {
         </Box>
       ) : null}
 
+      {chatSummary.externalSource ? (
+        <Box
+          paddingX={3}
+          paddingY="6px"
+          fontSize="11px"
+          textAlign="center"
+          background="var(--tt-surface-alt, #f7f7f9)"
+          color="var(--tt-muted, #777782)"
+          borderBottom="1px solid var(--tt-border-light, #f3f3f5)"
+          whiteSpace="normal"
+        >
+          Imported read-only from {chatSummary.externalSource.label}. Reactions, threads and replies stay in Thingtime.
+        </Box>
+      ) : null}
+
       {/* messages + optional thread panel */}
       <Flex flex={1} minHeight={0}>
         <Flex direction="column" flex={1} minWidth={0}>
@@ -452,7 +476,7 @@ export const ChatView = (props: ChatViewProps) => {
             />
           )}
           <Composer
-            placeholder={`Message ${title}`}
+            placeholder={chatSummary.externalSource ? `Reply in Thingtime about ${title}` : `Message ${title}`}
             pickerEmojis={pickerEmojis}
             replyTo={replyTo}
             onCancelReply={() => setReplyTo(null)}

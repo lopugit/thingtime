@@ -19,6 +19,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Posts and Messenger now share the exact account-storage quota**: every
+  user-owned Messenger row—including chats, messages, communities,
+  memberships, follows, and imported AI history—now carries the canonical
+  content-byte stamp and changes the subscription ledger in the same Mongo
+  transaction as its write. Attachments remain separately metered by their
+  protected object-backed Things. Storage accounting v2 forces the idempotent
+  whole-account backfill to recount legacy posts and Messenger content;
+  identical AI re-imports add zero bytes, and quota failures roll back related
+  container/membership, send, delete, invite, and section mutations rather
+  than leaving partial or unmetered rows. See the
+  [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
+  — Codex (AI), 2026-08-17
 - **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
   now lets the controller build an already-previewed commit in the isolated
   `develop` Custom Environment instead of canceling it as a duplicate, while
@@ -44,6 +56,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **ChatGPT and Claude desktop history in Messenger**: the Electron app now
+  discovers local ChatGPT Work/Codex sessions plus the main and Thingtime
+  Claude desktop profiles, accepts official ChatGPT/Claude JSON or ZIP exports,
+  and streams bounded normalized batches through a narrow preload bridge into
+  the authenticated Messenger API. Projects map to Spaces, conversations to
+  chats/channels, and provider messages to read-only relational rows with
+  owner-scoped idempotency keys, native source badges, progress UI, and no
+  credential, cookie, hidden-reasoning, tool-traffic, or raw-path exposure.
+  Users can react, thread, and reply inside Thingtime without posting back to
+  the provider. See the
+  [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
+  — Codex (AI), 2026-08-17
 - **Recoverable first-session Things space**: a fresh browser can land on
   `/things` and immediately receive the real Things UI through a rate-limited
   temporary user Thing, bounded subscription, normal browser session, and

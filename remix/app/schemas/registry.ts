@@ -271,7 +271,11 @@ export const APP_STORAGE_LEDGER_ENVELOPE_VERSION = 1;
 // Generic Thing creation must reserve it so an end user cannot pre-claim a
 // future counter id (including another user's globally-unique shareId).
 export const APP_STORAGE_RESERVED_ID_PREFIX = 'app-storage-';
-export const USER_STORAGE_ACCOUNTING_VERSION = 1;
+// v2 expands the billable source universe to every user-owned Messenger row
+// (including imported AI history and follow edges). Bumping the version keeps
+// already-published v1 ledgers fail-closed until the idempotent storage
+// backfill has stamped/recounted posts, Messenger content, and attachments.
+export const USER_STORAGE_ACCOUNTING_VERSION = 2;
 // Root proof for the server-only user subscription/account-storage ledger.
 // Generic Thing input never copies this marker; exact identity checks also
 // reject extra root/crystal payload before any counter is rendered or mutated.
@@ -1802,8 +1806,9 @@ const appDataSchema: ThingtimeSchema = {
 // /api/v1/emojis and /api/v1/users/follow (no generic-route sanitizers on
 // purpose: membership, roles and request states are server-derived and must
 // not be forgeable through /api/v1/things). Everything is private plumbing
-// (acl ["tt:user"]) — visibility is decided by chat/community MEMBERSHIP,
-// enforced in the messenger utils, never by the generic acl walk.
+// (acl ["tt:user"]) and quota-accounted user content — visibility is decided
+// by chat/community MEMBERSHIP, enforced in the messenger utils, never by the
+// generic acl walk.
 
 const communitySchema: ThingtimeSchema = {
   id: 'community',
@@ -1992,6 +1997,31 @@ const chatMessageSchema: ThingtimeSchema = {
   example: { text: 'hello from the messenger 👋' }
 };
 
+const aiConnectionSchema: ThingtimeSchema = {
+  id: 'ai-connection',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'AI desktop connection',
+  summary: 'One consented ChatGPT or Claude desktop source linked to Thingtime Messenger.',
+  detail:
+    'Created only through /api/v1/ai/connections. It stores bounded sync status and counts, ' +
+    'never provider credentials, cookies, raw local paths or conversation bodies. Projects map ' +
+    'to communities, conversations to chats, and imported messages to relational chat-message ' +
+    'Things with hashed source keys for idempotent resync.',
+  createdVia: 'POST /api/v1/ai/connections',
+  fields: [
+    { name: 'provider', type: 'enum', required: true, values: ['chatgpt', 'claude'], description: 'Source provider.' },
+    { name: 'sourceId', type: 'string', required: true, description: 'Non-secret desktop source identifier.' },
+    { name: 'label', type: 'string', required: true, description: 'User-facing app/profile label.' },
+    { name: 'connectors', type: 'string[]', required: true, description: 'Bounded connector ids seen for this source.' },
+    { name: 'status', type: 'enum', required: true, values: ['syncing', 'connected', 'error'], description: 'Latest sync state.' },
+    { name: 'readOnly', type: 'boolean', required: true, description: 'Provider history is imported read-only.' },
+    { name: 'lastSyncAt', type: 'string', required: false, description: 'Last completed sync timestamp.' }
+  ],
+  example: { provider: 'claude', sourceId: 'claude-thingtime', label: 'Claude Thingtime', connectors: ['claude-code-local'], status: 'connected', readOnly: true }
+};
+
 const customEmojiSchema: ThingtimeSchema = {
   id: 'custom-emoji',
   version: 1,
@@ -2089,6 +2119,7 @@ export const MESSENGER_THINGTIME = [
   'chat',
   'chat-member',
   'chat-message',
+  'ai-connection',
   'custom-emoji',
   'follow'
 ] as const;
@@ -2225,6 +2256,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   chatSchema,
   chatMemberSchema,
   chatMessageSchema,
+  aiConnectionSchema,
   customEmojiSchema,
   followSchema,
   // system kinds (collections collapsing into things — dual-era)

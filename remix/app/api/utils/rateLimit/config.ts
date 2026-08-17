@@ -143,6 +143,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // than things.write; membership/chat mutations share one bounded bucket.
   'chats.message': { limit: 120, windowMs: 60_000, enabled: true },
   'chats.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // A desktop sync is chunked into bounded JSON batches. The wider hourly
+  // window accommodates a first full-history import while still fencing a
+  // runaway renderer or replay loop.
+  'ai.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
   // message reactions mirror things.react but chats toggle faster in practice
   'chats.react': { limit: 120, windowMs: 60_000, enabled: true },
   // read receipts fire on every focused chat scroll — cheap single-doc updates,
