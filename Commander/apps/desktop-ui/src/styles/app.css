@@ -144,26 +144,6 @@
 .result-row.selected {
   background: var(--selected);
 }
-.history-query-row {
-  position: relative;
-  padding-left: 42px;
-}
-.history-query-row::before {
-  position: absolute;
-  top: -4px;
-  bottom: 50%;
-  left: 27px;
-  width: 10px;
-  border-bottom: 1px solid var(--line);
-  border-left: 1px solid var(--line);
-  border-bottom-left-radius: 7px;
-  content: '';
-}
-.history-query-row .result-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-}
 .result-icon {
   display: inline-flex;
   width: 36px;

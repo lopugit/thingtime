@@ -102,7 +102,8 @@ environment.
   that appears before Suggestions and persists across full relaunches. History
   is modeled as search sessions: each term owns the de-duplicated commands
   launched from that term. Each session leads with its newest executed command,
-  followed by older commands and then the search term as context; command rows
+  followed by older commands and then the search term as a separate full-width
+  top-level result; command rows
   directly replay their saved action. The newest eight sessions appear
   initially; Show More expands up to 50 retained sessions without turning the
   initial display cap into data loss.

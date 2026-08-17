@@ -166,7 +166,7 @@ describe('Launcher keyboard navigation', () => {
     expect(hideLauncher).not.toHaveBeenCalled();
   });
 
-  it('shows the newest launched commands before their search term and restores the term with Return', () => {
+  it('shows the newest launched commands before a top-level search term and restores it with Return', () => {
     const commander = state({
       query: '',
       selectedIndex: 2,
@@ -203,7 +203,8 @@ describe('Launcher keyboard navigation', () => {
     expect(options[0]).toHaveTextContent('1Password');
     expect(options[1]).toHaveTextContent('Commander Settings');
     expect(options[2]).toHaveTextContent('1password');
-    expect(options[2]).toHaveClass('history-query-row');
+    expect(options[2]).toHaveClass('result-row', 'selected');
+    expect(options[2]).not.toHaveClass('history-query-row');
     expect(options[4]).toHaveTextContent('Commander Settings');
 
     fireEvent.keyDown(window, { key: 'Enter' });

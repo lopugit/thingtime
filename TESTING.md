@@ -729,8 +729,9 @@ is fixed, and cite the checklist you ran in the PR description.
       horizontal scroll in default or compact mode.
 - [ ] Type a unique launcher query, launch a result, then hide and reopen with
       the global shortcut. Verify the field clears while the launched command
-      is the first History row and its search term is the context row beneath
-      it. Return on the command reruns it; Return on the query restores it.
+      is the first History row and its search term follows as a separate
+      full-width top-level row. Return on the command reruns it; Return on the
+      query restores it.
       Create nine searches and verify the initial eight-session cap plus
       interactive Show More/Show Less. History survives a complete
       quit/relaunch without entering cloud-synced settings.
