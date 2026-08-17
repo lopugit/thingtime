@@ -44,13 +44,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `remix/.vercel/output`. The deployment contract covers both invariants. —
   Codex (AI), 2026-08-17
 - **Vercel builds now start at the repository root without deploying the thin
-  CI branch**: root `vercel.json` installs only the Remix workspace, a tested
-  wrapper preserves the existing Vite/Nitro verification before staging the
-  Build Output API artifact at root `.vercel/output`, and both config and the
-  ignored-build decision exclude `github-actions`. The matching control-plane
-  config disables Git deployments for that branch and its descendants. Setup
-  and live verification steps are recorded in README, TESTING, and
-  VERCEL_DEPLOYMENTS. — Codex (AI), 2026-08-17
+	CI branch**: root `vercel.json` installs only the Remix workspace, a tested
+	wrapper preserves the existing Vite/Nitro verification before staging the
+	Build Output API artifact at root `.vercel/output`, and the attachment-cleanup
+	and weekly-summary crons now live in that same root config. Both config and the
+	ignored-build decision exclude `github-actions`. The matching control-plane
+	config disables Git deployments for that branch and its descendants. Setup
+	and live verification steps are recorded in README, TESTING, and
+	VERCEL_DEPLOYMENTS. — Codex (AI), 2026-08-17
 - **Root bootstrap no longer exposes server secrets**: browser-visible loader
   configuration is now built from an explicit status-origin allowlist instead
   of every `THINGTIME_*` variable, and `/api/root-data` is private, no-store,
