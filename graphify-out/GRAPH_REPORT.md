@@ -9,7 +9,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `65ed1332`
+- Built from commit: `dc0f2583`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -47,27 +47,27 @@
 10. `main()` - 13 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `README — github-actions CI control plane` --references--> `vercel.json Git-deployment kill-switch`  [EXTRACTED]
-  README.md → vercel.json
 - `AI merge-conflict resolver workflow` --references--> `workflow-caller-contract.mjs (thin listener contract)`  [EXTRACTED]
   .github/workflows/resolve-pr-conflicts.yml → remix/scripts/workflow-caller-contract.mjs
+- `README — github-actions CI control plane` --references--> `vercel.json Git-deployment kill-switch`  [EXTRACTED]
+  README.md → vercel.json
 - `AI_ALL.md — canonical Thingtime AI instructions` --references--> `Control-plane changelog`  [INFERRED]
   AI_ALL.md → CHANGELOG.md
+- `product-contract-advisories job` --calls--> `workflow-caller-contract.mjs (thin listener contract)`  [EXTRACTED]
+  .github/workflows/web-ci.yml → remix/scripts/workflow-caller-contract.mjs
 - `README — github-actions CI control plane` --references--> `workflow-caller-contract.mjs (thin listener contract)`  [EXTRACTED]
   README.md → remix/scripts/workflow-caller-contract.mjs
-- `Deterministic delete-shaped conflict settlement` --conceptually_related_to--> `AI rebase conflict round composite action`  [INFERRED]
-  CHANGELOG.md → .github/actions/rebase-conflict-round/action.yml
 
 ## Import Cycles
 - None detected.
 
 ## Hyperedges (group relationships)
 - **Deterministic contract advisory suite run by control-plane CI** — github_workflows_control_plane_ci_contract_advisories, github_scripts_workflow_control_plane_contract, github_scripts_resolve_pr_conflicts_routing_contract, github_scripts_rebase_ownership_routing_contract, github_scripts_promotion_worker_routing_contract, github_scripts_promotion_worker_contract, github_scripts_promotion_pr_changelog, github_scripts_promote_features_to_main, github_scripts_deploy_develop_pr_preview [EXTRACTED 0.90]
-- **Canonical AI instruction file plus its two symlink aliases** — ai_all_thingtime_ai_instructions, agents_thingtime_ai_instructions, claude_thingtime_ai_instructions [EXTRACTED 0.95]
 - **Develop → main promotion flow across router, workflow, scripts and conflict rounds** — github_workflows_promote_develop_to_main_route, github_workflows_ci_provider_router_route, github_workflows_promote_develop_to_main_promotion_pr, github_scripts_promotion_pr_changelog, github_scripts_promote_features_to_main, github_actions_rebase_conflict_round_action [INFERRED 0.80]
 - **develop ↔ main branch automation flow** — github_workflows_promote_features_to_main, github_workflows_promote_develop_to_main, github_workflows_sync_main_into_develop, github_workflows_resolve_pr_conflicts, github_workflows_rebase_pr_stacks [EXTRACTED 0.90]
 - **Disjoint merge-vs-rebase AI conflict ownership** — github_workflows_resolve_pr_conflicts, github_workflows_rebase_pr_stacks, github_workflows_rebase_pr_stacks_no_ai_rebase, github_workflows_resolve_pr_conflicts_no_ai_merge, github_workflows_rebase_pr_stacks_rebase_owner_jq [EXTRACTED 0.85]
 - **Web CI required-context scoping** — github_workflows_web_ci_scope, github_workflows_web_ci_build, github_workflows_web_ci_api_tests, github_workflows_web_ci_required_build_context, github_workflows_web_ci_required_api_context, remix_scripts_web_ci_required_context_contract [EXTRACTED 0.90]
+- **Canonical AI instruction file plus its two symlink aliases** — ai_all_thingtime_ai_instructions, agents_thingtime_ai_instructions, claude_thingtime_ai_instructions [EXTRACTED 0.95]
 
 ## Communities (19 total, 0 thin omitted)
 
