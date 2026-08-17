@@ -71,9 +71,12 @@ jobs:
 
   controller:
     name: Publish or reconcile develop S3 preview
-    # Manual callers provide a positive PR number. The environment's deployment
-    # branch policy remains the authoritative main-only gate for secrets.
-    if: github.event_name != 'pull_request_target' && (github.event_name != 'workflow_dispatch' || inputs.pr_number > 0)
+    # Do not filter manual recovery at the reusable-workflow job boundary:
+    # GitHub can lose the forwarded typed input there and silently create a
+    # failed run with no jobs. The checked-out controller validates the original
+    # workflow_dispatch event input before any mutation. The environment's
+    # deployment branch policy remains the authoritative main-only secrets gate.
+    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment: vercel-develop-pr-control
