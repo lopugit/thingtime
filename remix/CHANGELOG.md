@@ -51,8 +51,44 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   E2E: `pnpm --dir remix run verify:connections` (45 checks; +2 live with
   `TT_VERIFY_LIVE=1`). — Claude (AI), 2026-08-17
 
+### Security
+
+- **New signups no longer receive public upload permissions**: accounts created
+  from this change forward start with `meta.publicUploads: false`, and verifying
+  the email address no longer grants uploads. `POST /api/v1/attachments/uploads`
+  fails closed with `403 public_uploads_not_approved` until an administrator
+  enables the account, so no upload is reserved and no MPU is opened. Once a new
+  account verifies its email, an `admin.new_user` notification carrying the
+  account details goes to `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default
+  `admin@thingtime.com`), and the **/admin → Users** tab gained an Uploads
+  column, a pending-approval banner, and a per-user Enable/Withhold toggle
+  backed by `POST /api/v1/admin/users/public-uploads`. The flag is tri-state:
+  accounts predating the change have no flag and keep uploading, so no data
+  migration is required, and administrators bypass the gate entirely.
+  — Claude (AI), 2026-08-18
+
 ### Fixed
 
+- **PR #99 final security reconciliation**: the current Thingtime serializer
+  now treats persisted state strictly as data—functions are omitted on write,
+  every legacy function tag is removed without compilation, code-defined
+  defaults refill runtime behavior, and graph-aware repair preserves circular
+  aliases. Explicit Date tags and data-first legacy handling stop repeated
+  hydration from changing ordinary text. The strict app CSP now loads preview
+  freshness from external `/tt-preview-freshness.js`, while active Commander
+  assignments parse data literals without `eval`. Registration preserves the
+  existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
+  streaming body cap. — Codex (AI), 2026-08-18
+- **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
+  now lets the controller build an already-previewed commit in the isolated
+  `develop` Custom Environment instead of canceling it as a duplicate, while
+  the thin `github-actions` control plane remains excluded before every other
+  rule. — Codex (AI), 2026-08-17
+- **Manual develop-preview recovery reaches its controller**: the thin `main`
+  listener now converts `workflow_dispatch`'s string PR number to the numeric
+  input required by the protected reusable workflow. Manual recovery no longer
+  fails before GitHub can create a controller job, and the caller contract now
+  locks that typed boundary. — Codex (AI), 2026-08-17
 - **Vercel status in custom environments**: deployment status now checks
   Vercel's system environment and custom target independently, so the
   Preview-backed `develop` target keeps `/api/v1/vercel/status`, `/status`, and
@@ -849,6 +885,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
 
 ### Fixed
+
+- **PR #99 persisted-state, CSP, and registration-body hardening**: persisted
+  Thingtime functions are no longer serialized or revived with `eval`; Dates
+  use explicit tags so ordinary date-like strings retain their type; Vite and
+  Vercel now share a CSP without `unsafe-eval`; and public registration caps
+  request bodies at 16 KiB while continuing to use the IP-based
+  `auth.register` limiter already merged in PR #167. The pre-paint theme and
+  environment title boot moved to a same-origin external script so they still
+  run under the policy; generated design prototypes retain their required
+  runtime compiler and unpkg access through a path-scoped compatibility policy
+  that never applies to the app shell. See the
+  [PR #99 implementation note](../PRs/99-claude-eval-csp-hardening--persisted-state-csp-register-body-cap.md).
+  This consolidates the useful work from closed PRs #94, #96, #98, #103, and
+  #106 plus stacked PR #102; open cross-tab PR #92 remains a separate feature.
+  — Claude (AI) + Codex (AI), 2026-08-08
 
 - **Sync main→develop fallback PR is now PAT-authored**: the **Sync main into
   develop** workflow's "Open (or reuse) the sync PR" step used `GITHUB_TOKEN`,
