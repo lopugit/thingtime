@@ -1070,6 +1070,24 @@ is fixed, and cite the checklist you ran in the PR description.
       unpkg compatibility policy, while `/`, `/authorize`, and ordinary app
       routes keep the strict policy without `unsafe-eval`.
 
+## Cross-tab Thingtime sync (`remix/app/Providers/thingtimeSyncChannel.ts`)
+
+- [ ] `npm run test:autosave` passes, including safe-codec Date/string/cycle
+      round-tripping, runtime-function stripping, explicit `undefined`,
+      malformed/foreign message rejection, self-echo suppression, channel
+      cleanup, and the no-`BroadcastChannel` fallback.
+- [ ] In two same-origin tabs, set a drawer preference in Tab A and a different
+      preference in Tab B. Each change appears in the other tab without reload;
+      then trigger another write from the formerly stale tab and confirm neither
+      preference is reverted by its next full-tree autosave.
+- [ ] Send at least 20 rapid path-level writes from one tab. Both tabs converge,
+      a reload restores the final values, undo/redo remains local to each tab,
+      and neither console shows an echo storm, serialization error, or channel
+      lifecycle error.
+- [ ] Make at least two local edits around an unrelated remote edit, then undo
+      locally. The restored data path reaches the peer, the peer's independent
+      value remains, and root `timemachine` metadata never crosses tabs.
+
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
 - [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"

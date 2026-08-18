@@ -1,5 +1,13 @@
 # 07 — Cross-tab sync for persisted thingtime state
 
+> **Status (reconciled with current `develop` on 2026-08-18): 🟢 Built.**
+> `remix/app/Providers/thingtimeSyncChannel.ts` broadcasts successfully applied
+> local writes on `BroadcastChannel('thingtime')`. Values use the active safe
+> codec in `thingtimeSerialization.ts`; remote writes use the normal mutation
+> queue with `{ ignoreUndoRedo: true, fromRemote: true }`. Unit coverage runs in
+> `test:autosave`; live two-tab results are recorded below. Remaining optional
+> hardening: cold-tab revision reconciliation (implementation item 5).
+
 ## What it's for
 
 Two open tabs on the same origin should share one live thingtime state instead
@@ -8,20 +16,22 @@ width, direction, ordering, commander prefs, Content edits…) made in one tab
 should appear in the other tabs without a reload — and must never be clobbered
 by a stale tab writing its old in-memory tree.
 
-## What already exists
+## Current persistence architecture
 
-- `remix/app/Providers/ThingtimeProvider.tsx` — the single persist path:
-  - Loads thingtime from localforage **once on mount** (restore effect around
-    L369–417, merging stored data over defaults via `smarts.merge`).
-  - Persists the **entire** thingtime object (flatted `stringify` →
-    `localforage.setItem('thingtime', …)`) on **every state change** (effect
-    around L420–450).
-- `setThingtime(path, value, { ignoreUndoRedo, namespace })` — queued writes,
-  processed one per render; already supports skipping the undo timeline.
-- No cross-tab channel of any kind: no `BroadcastChannel`, no `storage`
-  events (localforage uses IndexedDB, which doesn't emit them anyway).
+- `ThingtimeProvider.tsx` loads the LocalForage snapshot once, repairs it with
+  `parseThingtimeWithDiagnostics`, merges code-defined defaults, and keeps the
+  single `localforage.setItem('thingtime', …)` write path.
+- `latestRevisionAutosave.ts` debounces full-tree snapshots, bounds continuous
+  editing with max-wait, serializes only the newest revision, and drains a newer
+  revision after an in-flight write.
+- `thingtimeSerialization.ts` is the active persistence boundary. It preserves
+  explicitly tagged Dates, cycles, and ordinary ISO-looking strings while
+  omitting functions and inertly removing legacy function tags.
+- `setThingtime(path, value, { ignoreUndoRedo, namespace })` batches path-level
+  writes through one microtask queue. Pre-hydration writes wait and then apply
+  on top of the restored root.
 
-## What's missing / broken
+## Original failure
 
 - **Last-writer-wins clobbering.** Each tab holds its own full in-memory tree
   and writes the whole thing on any change. Tab B's next write silently
@@ -31,21 +41,22 @@ by a stale tab writing its old in-memory tree.
   tab (HMR re-render → persist) reverted `thingtime.settings.drawer.*` values
   (width/direction/searchClosesDrawer) that the first tab had just written.
 
-## Plan
+## Implementation
 
-1. **Publish changes.** In `ThingtimeProvider`, open a
-   `BroadcastChannel('thingtime')`. Whenever `setThingtime` applies a write,
-   publish `{ path, value, sourceTabId, timestamp }` (per changed path — the
-   queue already normalises writes to path+value granularity).
+1. **Publish applied changes.** `ThingtimeProvider` opens one
+   `BroadcastChannel('thingtime')` per mount. A local write is published only
+   after the mutation queue applies it successfully, as
+   `{ path, payload, sourceTabId, timestamp }`.
 2. **Apply in other tabs.** On message, apply via the existing `setThingtime`
-   queue with `{ ignoreUndoRedo: true }` and a guard flag so applied remote
-   writes are not re-published (no echo loops). Tag each tab with a session id
-   (e.g. `uuidv4()` at provider init) and ignore self-messages.
+   queue with `{ ignoreUndoRedo: true, fromRemote: true }`. Each provider owns a
+   stable tab id and ignores messages carrying that id.
+   Root `timemachine` metadata (including `tt`/`thingtime` aliases) is rejected
+   in both directions so timelines remain tab-local; ordinary data writes made
+   by undo/redo still broadcast normally.
 3. **Persist ownership.** Keep the single persist path in `ThingtimeProvider`
-   (per `FUNDAMENTALS.md` single-source-of-truth thinking). Remote-applied
-   writes will re-persist the merged tree, which is fine once all tabs
-   converge on the same state; optionally debounce persists to reduce
-   redundant full-tree serialisation.
+   (per `FUNDAMENTALS.md` single-source-of-truth thinking). The channel imports
+   `stringifyThingtime` / `parseThingtime` directly rather than maintaining a
+   second codec. Remote writes join the latest-revision autosave normally.
 4. **Fallback consideration.** If `BroadcastChannel` is unavailable (very old
    WebKit), degrade gracefully to current behaviour — do not add a second
    storage mechanism.
@@ -63,8 +74,20 @@ by a stale tab writing its old in-memory tree.
 - Undo/redo timelines stay per-tab (remote writes use `ignoreUndoRedo`).
 - No echo storms: rapid edits in one tab produce one applied write per change
   in other tabs, and CPU/persist volume stays sane with 3+ tabs open.
-- Verified live in two real browser tabs on `localhost:9999` (desktop) per the
-  repo's browser-verification rule.
+- Verified live in two real browser tabs on the current worktree dev URL
+  (desktop) per the repo's browser-verification rule.
+
+## Validation
+
+- `npm run test:autosave`: 32/32 pass, including safe-codec Date/string/cycle
+  round-tripping, function stripping, malformed messages, self-echo, close,
+  explicit `undefined`, tab-local timeline metadata, and the
+  no-`BroadcastChannel` fallback.
+- Targeted provider/channel ESLint passes.
+- Full unit suite and production/Vercel build pass.
+- Live two-tab verification passed bidirectionally, including a 20-write burst,
+  stale-tab preservation, autosave/reload restoration, and local undo isolation;
+  see PR #92's implementation note in `PRs/`.
 
 ## Notes
 

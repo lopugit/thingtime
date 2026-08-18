@@ -19,6 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Cross-tab persisted Thingtime state (PR #92)**: same-origin tabs now share
+  each successfully applied path-level write through one
+  `BroadcastChannel('thingtime')`, reusing the active safe Thingtime codec and
+  existing mutation queue. Remote writes skip the local undo timeline and
+  cannot echo; root `timemachine` metadata stays tab-local while ordinary paths
+  restored by undo/redo still converge. The debounced latest-revision
+  LocalForage autosave remains the only persistence path. This prevents a stale
+  open tab's next full-tree save from silently reverting newer drawer,
+  Commander, Content, or preference changes made elsewhere. See the
+  [PR #92 implementation note](../PRs/92-claude-cross-tab-thingtime-sync-s4--cross-tab-sync-for-persisted-thingtime-state.md).
+  — Codex (AI), 2026-08-18
 - **PR #99 final security reconciliation**: the current Thingtime serializer
   now treats persisted state strictly as data—functions are omitted on write,
   every legacy function tag is removed without compilation, code-defined
