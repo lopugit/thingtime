@@ -31,7 +31,8 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Non-admins calling `POST /api/v1/admin/users/public-uploads` get `403`;
       a missing `userId` or non-boolean `enabled` gets `400`; an unknown user
       gets `404`.
-- [ ] Run `npm run test:public-uploads` and `npm run test:attachments`.
+- [ ] Run `npm run test:attachments` (it carries the public-upload permission
+      unit tests alongside the upload-gate regression test).
 
 ## Canonical AI instruction links (`AI_ALL.md`)
 
