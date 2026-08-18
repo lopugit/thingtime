@@ -63,7 +63,41 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   confirmed against the production cluster's MongoDB 8.0.1.
   — Claude (AI), 2026-08-18
 
+### Added
+
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
+
 ### Security
+
+- **Upload approval now has public / private / all scopes**: the
+  signup-permissions gate is split into two independent tri-state flags —
+  `meta.publicUploads` (post/comment/custom-emoji attachments) and the new
+  `meta.privateUploads` (message attachments + own profile media) — both
+  stamped `false` at registration and both privileged meta keys. The upload
+  start gate is purpose-aware (`403 public_uploads_not_approved` /
+  `private_uploads_not_approved`), `POST /api/v1/admin/users/public-uploads`
+  accepts `scope: 'public' | 'private' | 'all'` (default `public`, wire-
+  compatible), and the /admin Users tab's control becomes an Approve menu with
+  per-scope and enable/withhold-all actions plus per-scope pending flags.
+  Grandfathering and the admin bypass are unchanged. — Claude (AI), 2026-08-18
 
 - **New signups no longer receive public upload permissions**: accounts created
   from this change forward start with `meta.publicUploads: false`, and verifying

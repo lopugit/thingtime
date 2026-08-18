@@ -17,7 +17,12 @@ import {
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { userSubscriptionLedgerMatch } from '../subscriptions/subscriptionIdentity';
 import { attachmentCascadeCleanupTargets } from '../attachments/attachmentCascadeCore';
-import { toAttachmentPublicMetadata, type AttachmentPublicMetadata, type AttachmentPurpose } from '../attachments/attachmentCore';
+import {
+	orderAttachmentDocsByStoredSort,
+	toAttachmentPublicMetadata,
+	type AttachmentPublicMetadata,
+	type AttachmentPurpose
+} from '../attachments/attachmentCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
@@ -1503,10 +1508,11 @@ const resolvePostAttachments = async (
 	const things = await getThingsCollection();
 	const docs = (await things
 		.find({ thingtime: 'attachment', targetId: { $in: ids }, attachmentState: 'ready' } as any)
-		.project({ shareId: 1, targetId: 1, ownerId: 1, attachmentPurpose: 1, crystal: 1, createdAt: 1 })
+		.project({ shareId: 1, targetId: 1, ownerId: 1, attachmentPurpose: 1, attachmentSortIndex: 1, crystal: 1, createdAt: 1 })
 		.sort({ createdAt: 1, shareId: 1 })
 		.toArray()) as any[];
-	for (const doc of docs) {
+	// stamped display order wins; legacy unstamped docs keep createdAt order
+	for (const doc of orderAttachmentDocsByStoredSort(docs)) {
 		const targetId = typeof doc.targetId === 'string' ? doc.targetId : '';
 		const expected = expectedTargets?.get(targetId);
 		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
@@ -1525,6 +1531,23 @@ const resolvePostAttachments = async (
 		byTarget.set(targetId, current);
 	}
 	return byTarget;
+};
+
+// The trusted attachment context updateThing feeds the crystal validator —
+// the PATCH equivalent of the route-inspected postAttachments hook on create.
+// Bound attachments are server-authored state, so live presence is exactly as
+// trustworthy as the create-time inspection, and an attachment-only post must
+// stay editable (its content IS the bound media).
+const boundAttachmentPresence = async (ownerId: string, targetId: string): Promise<{ hasAny: boolean; hasVisual: boolean }> => {
+	const things = await getThingsCollection();
+	const docs = (await things
+		.find({ thingtime: 'attachment', targetId, ownerId, attachmentState: 'ready' } as any)
+		.project({ 'crystal.mediaKind': 1 })
+		.toArray()) as any[];
+	return {
+		hasAny: docs.length > 0,
+		hasVisual: docs.some((doc) => doc?.crystal?.mediaKind === 'image' || doc?.crystal?.mediaKind === 'video')
+	};
 };
 
 // Total comment count for whole threads (every descendant, not just direct
@@ -3512,7 +3535,12 @@ export const updateThing = async (
   }
   const patch = input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal) ? (input.crystal as Record<string, unknown>) : {};
   const nextCrystal = options.replaceCrystal ? patch : { ...crystalOf(doc), ...patch };
-  const validated = validateThingtimeCrystal(thingtime, nextCrystal);
+	// Post edits validate with the same trusted attachment context creates get:
+	// an attachment-only post's crystal has no text/images, and without this
+	// the sanitizer would reject every edit of it with "Say something first".
+	const postAttachments =
+		thingtime.includes('post') && !isCustomMongoEndpointActive() ? await boundAttachmentPresence(doc.ownerId, doc.shareId) : undefined;
+	const validated = validateThingtimeCrystal(thingtime, nextCrystal, { postAttachments });
   if (isFail(validated)) return validated;
 
   // Re-run the createThing provenance check ONLY when this write changes the
