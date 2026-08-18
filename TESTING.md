@@ -466,6 +466,33 @@ is fixed, and cite the checklist you ran in the PR description.
       storage meter returns to its starting value without touching the
       production bucket.
 
+## Media thing pages — masonry, lightbox, `/media/:id`, annotate (`remix/app/components/Attachments/`, `remix/app/routes/media.tsx`)
+
+- [ ] A post with 3+ images renders the image section as a CSS-columns masonry
+      (natural aspect ratios, `break-inside` avoided) with 1/2/3 responsive
+      columns; at desktop and 375px mobile widths there is no horizontal
+      overflow, and video/file sections keep their existing layouts.
+- [ ] Clicking (and keyboard-activating) a masonry image opens the lightbox:
+      full image, title/description when present, prev/next across only that
+      post's images, an Open-page link to `/media/:id`, a download link, and
+      Esc/backdrop close. Error-state tiles never open a broken lightbox.
+- [ ] `/media/:id` renders inside the Thingtime UI shell (nav, centered
+      max-width): large media, title/description, author, a link back to the
+      parent post, plus working reactions and comments on the media thing
+      itself. Comments/reactions persist after reload, an unknown or private id
+      404s safely, and `GET /api/v1/things?id=<attachmentId>` leaks no private
+      object fields.
+- [ ] As the owner, use the pencil affordance on a ready composer tile, an
+      edit-gallery tile, and the `/media/:id` page to set/edit title (≤200) and
+      description (≤2000). The editor saves via `/api/v1/attachments/annotate`,
+      updates optimistically (revert + Lopu toast on failure), clears fields
+      when emptied, and the saved values survive reload on card, lightbox, and
+      media page. A non-owner and an unauthenticated caller get no pencil and a
+      403/401 from the endpoint.
+- [ ] Deleting the parent post (and separately a single attachment) cascades:
+      the media thing's own comments/reactions are removed, its `/media/:id`
+      404s, and no orphan child things remain.
+
 ## Profile avatar and banner media (`remix/app/components/Profile/`)
 
 - [ ] Open both Edit profile and Settings → Profile. With no saved image, each

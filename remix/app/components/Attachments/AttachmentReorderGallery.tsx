@@ -3,6 +3,7 @@ import { Box, Flex, IconButton, Text } from '@chakra-ui/react';
 import { File as FileIcon, GripVertical } from 'lucide-react';
 
 import { MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
+import { AttachmentAnnotatePopover } from './AttachmentAnnotatePopover';
 import { movedToTargetPosition, nudgeTargetId, useMediaReorder, type MediaReorderNudge } from '~/components/Media/useMediaReorder';
 import { attachmentContentUrl, formatAttachmentBytes } from './attachmentUiCore';
 import type { PublicAttachment } from './attachmentTypes';
@@ -91,6 +92,16 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 	);
 	const { draggingId, dropTargetId, tileProps, gripProps } = useMediaReorder({ disabled, onMove: handleMove, onNudge: handleNudge });
 
+	// annotate saves are already persisted server-side by the popover — this
+	// only reflects the new title/description in the edit panel's local list
+	// (id order is untouched, so it never reads as an order change)
+	const handleAnnotated = React.useCallback(
+		(next: PublicAttachment) => {
+			onChange(attachmentsRef.current.map((attachment) => (attachment.id === next.id ? next : attachment)));
+		},
+		[onChange]
+	);
+
 	if (!attachments.length) return null;
 
 	const reorderable = attachments.length > 1 && !disabled;
@@ -118,25 +129,41 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 								containerProps={tileProps(attachment.id, 'edit-visual')}
 								preview={<AttachmentPreview attachment={attachment} />}
 								action={
-									reorderable && visual.length > 1 ? (
-										<IconButton
-											aria-label={gripLabel(attachment.name, index + 1, visual.length)}
-											title="Drag to reorder"
-											icon={<GripVertical size={14} />}
-											size="sm"
-											minWidth="44px"
-											height="44px"
-											position="absolute"
-											top={1}
-											left={1}
-											variant="solid"
-											background="rgba(255, 255, 255, 0.9)"
-											color={MUTED}
-											borderRadius="999px"
-											cursor={draggingId === attachment.id ? 'grabbing' : 'grab'}
-											{...gripProps(attachment.id, 'edit-visual')}
+									<>
+										{reorderable && visual.length > 1 ? (
+											<IconButton
+												aria-label={gripLabel(attachment.name, index + 1, visual.length)}
+												title="Drag to reorder"
+												icon={<GripVertical size={14} />}
+												size="sm"
+												minWidth="44px"
+												height="44px"
+												position="absolute"
+												top={1}
+												left={1}
+												variant="solid"
+												background="rgba(255, 255, 255, 0.9)"
+												color={MUTED}
+												borderRadius="999px"
+												cursor={draggingId === attachment.id ? 'grabbing' : 'grab'}
+												{...gripProps(attachment.id, 'edit-visual')}
+											/>
+										) : null}
+										<AttachmentAnnotatePopover
+											attachment={attachment}
+											disabled={disabled}
+											onApply={handleAnnotated}
+											triggerProps={{
+												minWidth: '44px',
+												height: '44px',
+												position: 'absolute',
+												top: 1,
+												right: 1,
+												variant: 'solid',
+												background: 'rgba(255, 255, 255, 0.9)'
+											}}
 										/>
-									) : undefined
+									</>
 								}
 							>
 								<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={attachment.name}>
@@ -202,6 +229,12 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 											{formatAttachmentBytes(attachment.size)} · {attachment.contentType || 'File'}
 										</Text>
 									</Box>
+									<AttachmentAnnotatePopover
+										attachment={attachment}
+										disabled={disabled}
+										onApply={handleAnnotated}
+										triggerProps={{ minWidth: '44px', height: '44px', flexShrink: 0 }}
+									/>
 								</Flex>
 							</Box>
 						))}
