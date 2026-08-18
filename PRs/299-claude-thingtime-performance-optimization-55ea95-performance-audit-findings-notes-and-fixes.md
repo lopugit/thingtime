@@ -47,6 +47,11 @@ stack in a browser.
 | 13 | `perf(mongo)` partial index for unread notifications | count stops fetching every notification a user ever received |
 | 14 | `perf(mongo)` `listCollections` nameOnly | status endpoint stops pulling full per-collection metadata |
 | 15 | `perf(messenger)` `buildSummaryContext` 6 serial stages → 3 | chat sidebar, polled by every session |
+| 16 | `perf(messenger)` batch member-existence check | ~100 lookups → 2 on a 50-person create |
+| 17 | `perf(feed)` project the child reads in `resolveRelated` | drops `extended` (≤512KB/doc) + unread crystal fields; removes the $group 100MB failure mode |
+| 18 | `perf(mongo)` index the v1 branch of the dual-era post match | feed plan: blocking SORT over every visible post → SORT_MERGE |
+| 19 | `perf(mongo)` sparse `shareOfId` index | share counts: full COLLSCAN → 6 docs, on every feed/read/reaction |
+| 20 | `perf(feed)` memoize the post row | `PostCard`'s `React.memo` goes from 0% hit rate to actually hitting |
 
 ### Measured bundle result
 
@@ -74,6 +79,20 @@ by every anonymous visitor to the landing page.
 - **`develop` was 85 commits ahead of `main`** when this branch was cut. The
   branch was rebased onto `develop` before auditing, so nothing here reports a
   problem already fixed there.
+
+## Lesson: projections must include the era discriminator
+
+The first attempt at the `resolveRelated` projection silently emptied every
+post's comment and reaction list. `isV2(doc)` reads `doc.schemaVersion`, and
+`thingtimeOf` / `crystalOf` / `targetIdOf` all branch on `isV2()`. Projecting
+`schemaVersion` away made every child doc read as a v1 post, so `thingtimeOf`
+returned `['post']`, neither the comment nor the reaction branch matched, and
+the whole child set vanished — with no error, no type failure and no lint
+complaint. The audit's own suggested field list omitted it too.
+
+It was caught only by diffing live API output against the unprojected code. Any
+future projection over `things` must carry `schemaVersion` plus the v1 fallback
+fields those helpers read (`shareOfId`, `type`, `text`, `images`, `listing`).
 
 ## Deliberately not changed
 

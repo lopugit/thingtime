@@ -44,6 +44,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the messenger access gate resolves chat and membership together; and the
   `/api/docs` render cache is LRU-bounded (it was keyed by the caller-controlled
   Host header). — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round three**: `resolveRelated`'s child reads are
+  projected (dropping each comment's `extended` sidecar, up to 512KB per doc)
+  and the reply aggregate projects before `$group`, removing a 100MB
+  `$group`-cap failure mode on large threads; a `{kind, createdAt, shareId}`
+  index gives the dual-era post match a sortable v1 branch, so the feed stops
+  fetching every visible post and sorting in memory; a sparse `shareOfId` index
+  turns the live share-count aggregation from a full collection scan into an
+  indexed lookup on every feed page, post read and reaction toggle; chat member
+  existence checks batch into two queries; and the feed's post row is memoized
+  so `PostCard`'s `React.memo` actually hits. — Claude (AI), 2026-08-18
 
 ### Security
 
