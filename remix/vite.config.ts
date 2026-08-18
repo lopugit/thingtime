@@ -4,9 +4,10 @@ import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
+import { designBundlesCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
@@ -68,16 +69,40 @@ const rewriteProxyCookieForLocalDev = (cookie: string) => {
 const localApiTarget = `http://127.0.0.1:${devPorts.api}`;
 const shouldUseProductionApiProxy = !hasUsableLocalApiEnv();
 const apiProxyTarget = shouldUseProductionApiProxy ? thingtimeProductionOrigin : localApiTarget;
+const previewFreshnessPath = '/tt-preview-freshness.js';
+const previewFreshnessScript = '(' + installPreviewBuildFreshness.toString() + ')();\n';
 
-const previewFreshnessHtmlPlugin = () => ({
+const previewFreshnessHtmlPlugin = (): Plugin => ({
   name: 'thingtime-preview-freshness-bootstrap',
   enforce: 'pre' as const,
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.split('?')[0] !== previewFreshnessPath) {
+        next();
+        return;
+      }
+
+      res.statusCode = 200;
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+      res.end(previewFreshnessScript);
+    });
+  },
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: previewFreshnessPath.slice(1),
+      source: previewFreshnessScript
+    });
+  },
   transformIndexHtml() {
     return [
       {
         tag: 'script',
-        attrs: { 'data-thingtime-preview-freshness': '' },
-        children: `(${installPreviewBuildFreshness.toString()})();`,
+        attrs: {
+          src: previewFreshnessPath,
+          'data-thingtime-preview-freshness': ''
+        },
         injectTo: 'head-prepend' as const
       }
     ];
@@ -141,6 +166,11 @@ const designDocsStaticPlugin = () => ({
 
       res.statusCode = 200;
       res.setHeader('Cache-Control', 'no-cache');
+      // Repo-controlled generated prototypes compile their Design Components
+      // at runtime. Keep that compatibility exception on this path only; the
+      // application shell continues to use devCsp without unsafe-eval.
+      res.setHeader('Content-Security-Policy', designBundlesCsp);
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Length', String(stats.size));
       res.setHeader('Content-Type', mimeTypes[extname(filePath)] || 'application/octet-stream');
       createReadStream(filePath).pipe(res);
@@ -163,6 +193,12 @@ export default defineConfig({
     host: '127.0.0.1',
     port: devPorts.web,
     strictPort: true,
+    // Same CSP as production (scripts/csp.mjs) with dev-only allowances
+    // (react-refresh inline preamble, HMR websocket) — and still no
+    // 'unsafe-eval', so eval regressions surface in dev too.
+    headers: {
+      'Content-Security-Policy': devCsp
+    },
     allowedHosts: ['lopus-macbook-pro-2.tail9606f9.ts.net'],
     hmr: {
       port: devPorts.hmr
