@@ -64,6 +64,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Native iOS per-branch deployment history**: the Vercel deployments API now
+  preserves its existing latest-per-branch response while optionally returning
+  a bounded newest-first history for each branch. The native Web destination
+  drawer presents that history as a second disclosure level, marks the most
+  recent ready deployment as `Last successful` when a newer build is queued,
+  and keeps every specific deployment URL directly selectable. — Codex (AI),
+  2026-08-18
 - **Recoverable first-session Things space**: a fresh browser can land on
   `/things` and immediately receive the real Things UI through a rate-limited
   temporary user Thing, bounded subscription, normal browser session, and
