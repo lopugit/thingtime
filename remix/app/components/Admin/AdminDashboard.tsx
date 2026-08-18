@@ -55,6 +55,9 @@ type UserRow = {
   createdAt: string | null;
   isAdmin: boolean;
   envAdmin: boolean;
+  emailVerified: boolean;
+  publicUploadsEnabled: boolean;
+  publicUploadsPending: boolean;
   accountKind: 'user' | 'service';
 	storage: AdminStorageProjection;
   storageAllowanceBytes: number | null;
@@ -201,6 +204,9 @@ const USER_QUERY_FIELDS: readonly AdminRowField<UserRow>[] = [
 		sortable: true
 	},
   { id: 'isAdmin', label: 'Administrator', kind: 'boolean', sortable: true },
+  { id: 'emailVerified', label: 'Email verified', kind: 'boolean', sortable: true },
+  { id: 'publicUploadsEnabled', label: 'Public uploads enabled', kind: 'boolean', sortable: true },
+  { id: 'publicUploadsPending', label: 'Public uploads awaiting approval', kind: 'boolean', sortable: true },
   { id: 'envAdmin', label: 'Environment administrator', kind: 'boolean', sortable: true },
 	{ id: 'storage.usedBytes', label: 'Account storage used (bytes)', kind: 'number', sortable: true },
 	{ id: 'storage.allowanceBytes', label: 'Account storage allowance (bytes)', kind: 'number', sortable: true },
@@ -356,6 +362,61 @@ const SnapshotErrorNotice = ({ hasPreviousRows, onRetry }: { hasPreviousRows: bo
   </Alert>
 );
 
+// Public file/media uploads are withheld from every account created since the
+// signup-permissions hotfix — verifying an email address no longer grants them.
+// This is the manual approval control: one row-scoped toggle that hits
+// POST /api/v1/admin/users/public-uploads and refreshes the snapshot.
+//
+// Optimistic per the UI house rule: the badge flips the moment the admin
+// clicks and reverts if the request fails, so approving never shows a spinner
+// where a known state already exists.
+const PublicUploadsControl = ({ row, onChanged }: { row: UserRow; onChanged: () => void }) => {
+  const api = useApi();
+  const lopu = useLopu();
+  const [optimistic, setOptimistic] = React.useState<boolean | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const enabled = optimistic ?? row.publicUploadsEnabled;
+
+  // A fresh snapshot is authoritative again — drop the local override.
+  React.useEffect(() => {
+    setOptimistic(null);
+  }, [row.publicUploadsEnabled]);
+
+  const toggle = async () => {
+    const next = !enabled;
+    setOptimistic(next);
+    setSaving(true);
+    try {
+      const result = await api.v1.admin.setUserPublicUploads({ userId: row.id, enabled: next });
+      if (result?.ok === false) throw new Error(result.error || 'Request failed');
+      lopu({ title: next ? `Public uploads enabled for @${row.username} 🎉` : `Public uploads withheld for @${row.username}` });
+      onChanged();
+    } catch (error: any) {
+      setOptimistic(null);
+      lopu({ title: error?.error || error?.message || 'Could not update upload permission', status: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Flex align="center" gap={2}>
+      <Badge colorScheme={enabled ? 'green' : row.publicUploadsPending ? 'orange' : 'gray'} fontSize="0.6em">
+        {enabled ? 'enabled' : row.publicUploadsPending ? 'pending' : 'off'}
+      </Badge>
+      {row.isAdmin ? (
+        <Text fontSize="10px" opacity={0.55}>
+          admin
+        </Text>
+      ) : (
+        <Button size="xs" variant="outline" isLoading={saving} onClick={toggle}>
+          {enabled ? 'Withhold' : 'Enable'}
+        </Button>
+      )}
+    </Flex>
+  );
+};
+
 const UsersTab = () => {
   const api = useApi();
   const apiRef = React.useRef(api);
@@ -378,6 +439,7 @@ const UsersTab = () => {
   });
   const [subscriptionFor, setSubscriptionFor] = React.useState<UserRow | null>(null);
   const [linksFor, setLinksFor] = React.useState<UserRow | null>(null);
+  const pendingUploadCount = React.useMemo(() => (rows ?? []).filter((row) => row.publicUploadsPending).length, [rows]);
 
   return (
     <Box>
@@ -392,6 +454,13 @@ const UsersTab = () => {
           value={userQuery.query}
         />
       </Box>
+      {pendingUploadCount > 0 && (
+        <Alert status="warning" mb={3} borderRadius="md" fontSize="sm">
+          <AlertIcon />
+          {pendingUploadCount} new {pendingUploadCount === 1 ? 'account is' : 'accounts are'} awaiting public file &amp; media
+          upload approval — sort or search by uploads below and use Enable.
+        </Alert>
+      )}
       {error ? <SnapshotErrorNotice hasPreviousRows={rows !== null} onRetry={refresh} /> : null}
       {loading && !rows ? (
         <Flex justify="center" py={10}>
@@ -404,6 +473,7 @@ const UsersTab = () => {
               <Tr>
                 <Th>User</Th>
                 <Th>Tier</Th>
+                <Th>Uploads</Th>
                 <Th>Created</Th>
 								<Th isNumeric>Account storage</Th>
 								<Th isNumeric>App data subset</Th>
@@ -436,6 +506,9 @@ const UsersTab = () => {
                   </Td>
                   <Td>
                     <TierBadge subscription={row.subscription} />
+                  </Td>
+                  <Td whiteSpace="nowrap">
+                    <PublicUploadsControl row={row} onChanged={refresh} />
                   </Td>
                   <Td fontSize="xs" whiteSpace="nowrap" title={row.createdAt || undefined}>
                     {formatAdminDate(row.createdAt)}
@@ -485,7 +558,7 @@ const UsersTab = () => {
               ))}
               {rows && userQuery.rows.length === 0 && (
                 <Tr>
-                  <Td colSpan={9}>
+                  <Td colSpan={10}>
                     <Text fontSize="sm" opacity={0.6} py={2}>
                       No users match this query.
                     </Text>

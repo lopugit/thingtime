@@ -55,7 +55,7 @@ const defaultDependencies: AttachmentMutationDependencies = {
 };
 
 export const createAttachmentMutationAction = (
-	options: { rateKey: string; service: MutationService },
+	options: { rateKey: string; service: MutationService; requirePublicUploads?: boolean },
 	overrides: Partial<AttachmentMutationDependencies> = {}
 ) => {
 	const dependencies = { ...defaultDependencies, ...overrides };
@@ -75,6 +75,22 @@ export const createAttachmentMutationAction = (
 			if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 			if (user.accountKind !== 'user') {
 				return json({ ok: false, error: 'Attachments require a user account' }, { status: 403 });
+			}
+			// Public file/media uploads are withheld from new accounts until an admin
+			// grants them (see auth/users.ts userPublicUploadsEnabled). Gate the
+			// START of an upload: nothing is reserved, no MPU is opened, and every
+			// downstream part/complete call has no upload id to act on. The already
+			// -uploaded lifecycle calls (parts/complete/abort/delete) stay ungated so
+			// a permission change mid-upload can't strand a paid-for reservation.
+			if (options.requirePublicUploads && !user.publicUploadsEnabled) {
+				return json(
+					{
+						ok: false,
+						error: 'Uploads are awaiting admin approval for this account',
+						code: 'public_uploads_not_approved'
+					},
+					{ status: 403 }
+				);
 			}
 
 			const limit = await dependencies.enforceLimit(request, options.rateKey, `user:${user.id}`, { failClosed: true });
