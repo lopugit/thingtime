@@ -1023,8 +1023,8 @@ hourly:
 - Semantic collisions — two PRs adding the same helper merge textually clean,
   so no git conflict ever exists, yet the union build breaks — are handled by
   the AI **build doctor**: after each input-changed rebuild the union build
-  runs (install → vite client → nitro server, with a mechanical lockfile
-  repair first), and on failure up to three guarded, edit-files-only Claude
+  runs (install, then the full Vercel-parity remix build, with a mechanical
+  lockfile repair first), and on failure up to three guarded, edit-files-only Claude
   rounds (the conflict resolver's action pin, model waterfall, and security
   posture) repair the tree. Out-of-scope edits are reverted, commits are
   credential-scanned, and the build is re-verified mechanically. Doctor
