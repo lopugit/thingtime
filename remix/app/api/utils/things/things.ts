@@ -48,6 +48,7 @@ import {
   validateThingtimeCrystal,
   visibilityFromAcl,
   type NotificationType,
+  type PostMediaLayout,
   type ThingVisibility
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
@@ -228,6 +229,8 @@ export type PublicComment = {
   text: string;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
+	// owner-chosen gallery layout for the visual attachments (null = masonry)
+	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   thing: Record<string, any> | null;
   tags: string[];
@@ -254,6 +257,8 @@ export type PublicPost = {
   text: string;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
+	// owner-chosen gallery layout for the visual attachments (null = masonry)
+	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   // thingtime posts: the free-form structured thing under crystal.thing
   thing: Record<string, any> | null;
@@ -636,6 +641,12 @@ const crystalOf = (doc: ThingDoc): Record<string, any> => {
   if (isV2(doc)) return doc.crystal || {};
   return { type: doc.type, text: doc.text || '', images: doc.images || [], listing: doc.listing || null };
 };
+
+// crystal.mediaLayout is sanitized on write; surface it as-is (null = masonry)
+const mediaLayoutOf = (crystal: Record<string, any>): PostMediaLayout | null =>
+	crystal.mediaLayout && typeof crystal.mediaLayout === 'object' && !Array.isArray(crystal.mediaLayout)
+		? (crystal.mediaLayout as PostMediaLayout)
+		: null;
 
 // shareId of the thing this thing is attached to (comment/reaction/share)
 const targetIdOf = (doc: ThingDoc): string | null => {
@@ -1625,6 +1636,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       text: comment.text,
       images: (commentCrystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(comment.id) || [],
+			mediaLayout: mediaLayoutOf(commentCrystal),
       listing: (commentCrystal.listing as MarketplaceListing) || null,
       thing:
         commentCrystal.thing && typeof commentCrystal.thing === 'object' && !Array.isArray(commentCrystal.thing)
@@ -1664,6 +1676,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       text: String(crystal.text || ''),
       images: (crystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(doc.shareId) || [],
+			mediaLayout: mediaLayoutOf(crystal),
       listing: (crystal.listing as MarketplaceListing) || null,
       thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
       tags: doc.tags || [],
@@ -2876,6 +2889,7 @@ export const addComment = async (
     text: String(crystal.text || ''),
     images: (crystal.images as string[]) || [],
 		attachments: options.attachments || [],
+		mediaLayout: mediaLayoutOf(crystal),
     listing: (crystal.listing as MarketplaceListing) || null,
     thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
     tags: doc.tags || [],
