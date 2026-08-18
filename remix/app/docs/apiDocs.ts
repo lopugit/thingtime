@@ -5999,6 +5999,43 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-trending',
+    group: 'things',
+    title: 'Trending posts',
+    endpoint: '/api/v1/things/trending',
+    summary: 'Returns the explore board: public posts from the last week ranked by time-decayed engagement.',
+    detail:
+      'Candidates are public (tt:all) posts created in the last 7 days — the newest 300 are scored in memory as (reactions×3 + comments×4 + pollVotes×2 + views×0.25 + 1) / (hoursOld + 2)^1.4, so fresh engagement outranks stale piles, and the top 30 come back as the same PublicPost projections the feed returns (reactions, comments, polls, and view stats all batch-aggregated). The pool is public-only regardless of who asks; a session only personalises viewer fields like viewerReactions and poll viewerVote.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers get the same board; authenticated callers additionally get their viewer-specific fields.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET the endpoint — no parameters are required.',
+      'Send anon=1 from logged-out clients so the response is edge-cacheable (it then depends only on the URL).',
+      'Render posts with the same components as the feed; generatedAt timestamps the scoring pass.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read trending',
+        description: 'Fetch the current trending board.',
+        method: 'GET',
+        query: { anon: 1 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Trending board returned.',
+        body: { ok: true, posts: [], generatedAt: '2026-08-19T00:00:00.000Z' }
+      }
+    ],
+    notes: [
+      'Anonymous (anon=1) responses carry Cache-Control: public, s-maxage=300, stale-while-revalidate=900 — the board is served from the Vercel edge and can lag live engagement by a few minutes.'
+    ]
+  }),
+  endpoint({
     id: 'things-react',
     group: 'things',
     title: 'React to post',

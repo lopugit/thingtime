@@ -375,6 +375,9 @@ export function useApi() {
 		},
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
+      // the explore board — public trending posts; `anon: 1` keeps logged-out
+      // requests edge-cacheable, mirroring feed
+      trending: useCallback(async (args?: { anon?: 1 }) => getJson(`/api/v1/things/trending${toQuery(args)}`), []),
 			reveal: useCallback(
 				async (args: { thingId: string; reference: string; password: string }, options?: { signal?: AbortSignal }) =>
 					asyncFetcher.submit(

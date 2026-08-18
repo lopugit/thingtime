@@ -2054,3 +2054,23 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       composition; browse mode filters kinds client-side over loaded pages.
 - [ ] Columns-view folder loading happens in an effect, never during render
       (React "setState while rendering" stays fixed).
+
+## Explore / trending (`remix/app/components/Explore/ExplorePage.tsx`, `remix/app/api/utils/things/trending.ts`)
+
+- [ ] Logged OUT, open `/explore`: the Trending board renders public posts
+      only — no friends/family/private post ever appears, and
+      `GET /api/v1/things/trending` returns the same public-only `posts`
+      array with `ok: true` and a `generatedAt` timestamp.
+- [ ] Cards are real feed PostCards: reacting, commenting, and voting on a
+      poll all work in place on `/explore` (logged in), and the counts match
+      the same post viewed on `/feed`.
+- [ ] Engagement moves the board: a recent post that gains reactions/comments
+      outranks an older post with none, and a week-old post with stale
+      engagement decays below fresh activity (score =
+      (reactions×3 + comments×4 + votes×2 + views×0.25 + 1) / (hours+2)^1.4).
+- [ ] Optimistic first paint: revisit `/explore` after a prior visit — the
+      last-known board paints instantly from the `tt-explore` localStorage
+      cache with NO skeleton flash, then reconciles in the background;
+      skeletons appear only on a true cold start (cleared storage).
+- [ ] The drawer's Feed section shows "Explore 🔥" and navigates to
+      `/explore`; `/feed` itself still loads and paginates normally.

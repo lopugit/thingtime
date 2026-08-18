@@ -16,6 +16,7 @@ import DocsDesign from './routes/docs/design';
 import DocsDesignSystem from './routes/docs/design-system/index';
 import DocsIndex from './routes/docs/index';
 import MigrationsRoute from './routes/migrations';
+import Explore from './routes/explore';
 import Feed from './routes/feed';
 import Messages from './routes/messages';
 import Index from './routes/_index';
@@ -143,6 +144,8 @@ export const router = createBrowserRouter([
           { path: 'schemas', element: <DocsSchemas /> }
         ]
       },
+      // public trending board — guest-visible like /feed
+      { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
       { path: 'messages', element: <Messages />, loader: requireUser('/login') },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },

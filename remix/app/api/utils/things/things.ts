@@ -654,7 +654,9 @@ const folderIdOf = (doc: ThingDoc): string | null => (isV2(doc) ? doc.folderId |
 // thingtime:['post',...]; v1 posts carry kind:'post' (migration unsets kind).
 // Rich comments are ["post","comment"] things — posts by schema, but they live
 // under their target, never in feeds/profiles, so the comment id is excluded.
-const postMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }], thingtime: { $ne: 'comment' } });
+// (exported for things/trending.ts, which selects its candidate window with
+// the exact same era semantics as the feed)
+export const postMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }], thingtime: { $ne: 'comment' } });
 
 // Any post-shaped thing, including rich comments — for share-original lookups,
 // where the target may legitimately be a ["post","comment"] thing.
