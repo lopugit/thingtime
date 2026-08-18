@@ -477,6 +477,22 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { partialFilterExpression: { storageClass: 'content' } }
     ),
     col.createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+    // Live share counts are an $or of the v2 shape ({thingtime:'share',
+    // targetId}) and the v1 shape (a post carrying shareOfId). shareOfId had
+    // no index, and one unindexed branch drags the whole $or down: the
+    // aggregation ran as a full COLLSCAN of `things` on EVERY feed page,
+    // profile page, search page, single-post read, post/comment create,
+    // thing update AND every reaction toggle (resolveRelated runs it for the
+    // reaction's target). Measured locally: 4,846 documents examined and 0
+    // index keys to produce share counts for 20 posts; with this index the
+    // same aggregation examines 6 documents and 6 keys.
+    //
+    // sparse rather than a $type partial filter: sparse is provably usable
+    // for the $in over non-null strings, while $type subsumption proving is
+    // more fragile across server versions. Additive — dropping the v1 branch
+    // instead would be faster still but would silently stop counting
+    // un-migrated v1 shares (thingtimeOf/targetIdOf still read that shape).
+    col.createIndex({ shareOfId: 1 }, { sparse: true }),
     // Private-S3 attachment lifecycle scans. Deliberately NOT a TTL index:
     // expiry cleanup must delete/abort S3 first and refund the user ledger in
     // one Mongo transaction; TTL deletion would orphan bytes and accounting.
