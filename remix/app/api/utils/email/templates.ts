@@ -66,18 +66,18 @@ export const renderNewUserAdminNotificationTemplate = ({
   return {
     subject: `New Thingtime user: @${username}`,
     text: [
-      `A new user verified their email and is awaiting public upload approval.`,
+      `A new user verified their email and is awaiting file/media upload approval (public and private uploads are both withheld).`,
       '',
       ...rows.map(([label, value]) => `${label}: ${value}`),
       '',
-      `Approve or leave withheld in the admin Users tab: ${adminUrl}`
+      `Approve public, private, or all uploads in the admin Users tab: ${adminUrl}`
     ].join('\n'),
     html:
-      `<p>A new user verified their email and is awaiting <strong>public upload approval</strong>.</p>` +
+      `<p>A new user verified their email and is awaiting <strong>file/media upload approval</strong> (public and private uploads are both withheld).</p>` +
       `<table cellpadding="4" style="border-collapse:collapse">${rows
         .map(([label, value]) => `<tr><td><strong>${htmlEscape(label)}</strong></td><td>${htmlEscape(value)}</td></tr>`)
         .join('')}</table>` +
-      `<p><a href="${htmlEscape(adminUrl)}">Open the admin Users tab</a> to enable their file and media uploads.</p>`
+      `<p><a href="${htmlEscape(adminUrl)}">Open the admin Users tab</a> to enable their public, private, or all file and media uploads.</p>`
   };
 };
 

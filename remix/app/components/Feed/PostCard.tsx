@@ -1556,8 +1556,8 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
         {/* body — shares render caption + nested original; the owner's edit
         mode mounts the FULL composer (type tabs, photos, listing, thing,
-        tags, circle) pre-filled from the post. Shares edit their caption
-        only — the shared original is the body. */}
+        tags, circle, attachment order) pre-filled from the post. Shares edit
+        their caption only — the shared original is the body. */}
         {editing && !post.isShare ? (
           <PostComposer
             editPost={post}
