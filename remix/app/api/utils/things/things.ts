@@ -2196,11 +2196,16 @@ export const getThing = async (
   }
 
   const isComment = thingtimeOf(doc).includes('comment');
-  const post = isPostThing(doc) || isComment ? (await toPublicPosts([doc], viewer))[0] : null;
+	// Media attachments are Things with their own /media/:id page: the
+	// post-shaped projection carries their reactions, comments, and view
+	// aggregates (those resolvers are target-generic), and the parent walk
+	// links the page back to the post the media is bound to.
+	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
+	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer))[0] : null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
-  if (isComment && targetIdOf(doc)) {
+	if ((isComment || isMediaAttachment) && targetIdOf(doc)) {
     // walk up the thread — depth is unbounded, no rail: the visited set is
     // the only terminator (finite db + no revisits), and the loop is
     // iterative so chain length never touches the call stack
