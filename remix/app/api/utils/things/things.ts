@@ -26,6 +26,7 @@ import {
   ACL_FRIENDS,
   ACL_INHERIT,
   ACL_OWNER,
+	ACL_EXTACCT_PREFIX,
 	APP_STORAGE_RESERVED_ID_PREFIX,
   COLLECTION_SCHEMA_VERSIONS,
 	EXTERNAL_RESERVED_ID_PREFIX,
@@ -308,6 +309,10 @@ export type Viewer = {
   username?: string | null;
   pat?: { tokenId: string; onlyCreatedThings: boolean } | null;
   friendIds?: ReadonlySet<string>;
+  // external-account shareIds the viewer holds connections links to — serves
+  // tt:extacct/ audiences; loaded LAZILY (ensureExtAccountIds) only when a
+  // doc under evaluation actually carries the prefix
+  extAccountIds?: ReadonlySet<string>;
 } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
 
@@ -318,6 +323,28 @@ export const asViewer = (value: string | Viewer | null | undefined): Viewer => (
 export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
   if (!viewer?.id || viewer.friendIds) return viewer;
   return { ...viewer, friendIds: await friendIdsOf(viewer.id) };
+};
+
+// Lazily attach the viewer's linked external-account ids the first time a doc
+// carrying a tt:extacct/ audience is evaluated. Deliberately MUTATES the
+// enriched viewer object (single monotone assignment): page loops pass the
+// same viewer reference per doc, so the home-DB links query runs at most once
+// per request path instead of once per external post on the page.
+const ensureExtAccountIds = async (viewer: Viewer): Promise<Viewer> => {
+  if (!viewer?.id || viewer.extAccountIds) return viewer;
+  const home = await getHomeThingsCollection();
+  const links = await home
+    .find({ thingtime: 'external-account-link', ownerId: viewer.id }, { projection: { 'crystal.accountId': 1 } })
+    .toArray();
+  (viewer as { extAccountIds?: ReadonlySet<string> }).extAccountIds = new Set(
+    links.map((link: any) => String(link?.crystal?.accountId || '')).filter(Boolean)
+  );
+  return viewer;
+};
+
+const hasExtacctAudience = (doc: ThingDoc): boolean => {
+  const acl = Array.isArray(doc.acl) ? doc.acl : [];
+  return acl.some((entry) => typeof entry === 'string' && entry.includes(ACL_EXTACCT_PREFIX));
 };
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
@@ -1754,7 +1781,12 @@ export const canViewInherited = async (
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
-  return !!terminal && canView(terminal, viewer);
+  if (!terminal) return false;
+  // tt:extacct/ audiences (synced external posts and their comment chains)
+  // resolve against the viewer's linked accounts — loaded lazily here, once
+  // per request path (ensureExtAccountIds memoises on the viewer object)
+  if (hasExtacctAudience(terminal)) await ensureExtAccountIds(viewer);
+  return canView(terminal, viewer);
 };
 
 // Coalescing, memoised shareId lookup for one request: every lookup issued in

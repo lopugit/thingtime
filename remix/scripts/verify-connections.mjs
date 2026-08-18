@@ -306,7 +306,7 @@ const run = async () => {
   );
   check(
     'catalog carries the remaining SSO scaffolds',
-    ['x', 'twitch', 'tumblr', 'pinterest', 'linkedin'].every((id) => (catalog.body?.providers || []).some((provider) => provider.id === id && provider.auth === 'oauth2'))
+    ['x', 'twitch', 'tumblr', 'pinterest', 'linkedin', 'spotify'].every((id) => (catalog.body?.providers || []).some((provider) => provider.id === id && provider.auth === 'oauth2'))
   );
   // stale-while-revalidate: a defer read serves the stored page with ZERO
   // provider fan-out (synced is empty), so first paint never blocks on I/O

@@ -367,6 +367,74 @@ export const oauthCredsFor = (provider: ConnectionProvider): { clientId: string;
   return clientId && clientSecret ? { clientId, clientSecret } : null;
 };
 
+// Form-style OAuth grant factory: one implementation of the
+// authorization-code exchange + refresh for every provider whose token
+// endpoint takes form-encoded grants (Google, TikTok, Twitch, Tumblr, X,
+// Pinterest, Reddit, Spotify). Client auth is either in the body or HTTP
+// Basic; refresh is ROTATION-AWARE by construction — a returned refresh_token
+// always replaces the stored one, otherwise the old one is kept — so a
+// rotating provider (TikTok, X) can never strand its refresh token because a
+// copy-paste kept the wrong template.
+const formOAuthGrant = (config: {
+  tokenUrl: string;
+  authStyle: 'body' | 'basic';
+  // TikTok calls its client id 'client_key'
+  clientIdParam?: string;
+  scopes: string[];
+  // extra exchange params (e.g. PKCE code_verifier)
+  extraExchangeParams?: (input: { codeVerifier?: string }) => Record<string, string>;
+  // post-exchange transform (e.g. capture provider ids from the response)
+  mapExtra?: (data: any, tokens: OAuthTokens) => OAuthTokens;
+}): {
+  exchangeCode: NonNullable<ConnectionProvider['oauth']>['exchangeCode'];
+  refreshTokens: NonNullable<ConnectionProvider['oauth']>['refreshTokens'];
+} => {
+  const idParam = config.clientIdParam || 'client_id';
+  const clientParams = (clientId: string, clientSecret: string): Record<string, string> =>
+    config.authStyle === 'body' ? { [idParam]: clientId, client_secret: clientSecret } : {};
+  const authOpts = (clientId: string, clientSecret: string) =>
+    config.authStyle === 'basic' ? { basicAuth: { user: clientId, pass: clientSecret } } : {};
+  const toTokens = (data: any, previous?: OAuthTokens): OAuthTokens | null => {
+    if (!data?.access_token) return null;
+    const tokens: OAuthTokens = {
+      accessToken: String(data.access_token),
+      refreshToken: data.refresh_token ? String(data.refresh_token) : previous?.refreshToken || null,
+      expiresAt: expiresAtFrom(data.expires_in),
+      scopes: config.scopes
+    };
+    return config.mapExtra ? config.mapExtra(data, tokens) : tokens;
+  };
+  return {
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri, codeVerifier }) => {
+      const exchanged = await postForm(
+        config.tokenUrl,
+        {
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: redirectUri,
+          ...clientParams(clientId, clientSecret),
+          ...(config.extraExchangeParams ? config.extraExchangeParams({ codeVerifier }) : {})
+        },
+        authOpts(clientId, clientSecret)
+      );
+      if (exchanged.ok === false) return exchanged;
+      const tokens = toTokens(exchanged.data);
+      if (!tokens) return fail(502, `${hostOf(config.tokenUrl)} did not return an access token`);
+      return { ok: true, tokens };
+    },
+    refreshTokens: async (tokens, creds) => {
+      if (!tokens.refreshToken) return null;
+      const refreshed = await postForm(
+        config.tokenUrl,
+        { grant_type: 'refresh_token', refresh_token: tokens.refreshToken, ...clientParams(creds.clientId, creds.clientSecret) },
+        authOpts(creds.clientId, creds.clientSecret)
+      );
+      if (refreshed.ok === false) return null;
+      return toTokens(refreshed.data, tokens);
+    }
+  };
+};
+
 // Meta Graph-style paged feed (Facebook + Instagram share the exact loop):
 // follow paging.next (absolute https only — it embeds the access token) until
 // the page target is met, tolerating a mid-pagination error by returning the
@@ -1395,29 +1463,13 @@ const tiktokProvider: ConnectionProvider = {
     clientSecretEnv: 'TIKTOK_CLIENT_SECRET',
     buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
       `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(clientId)}&scope=${encodeURIComponent('user.info.basic,video.list')}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`,
-    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
-      const exchanged = await postForm('https://open.tiktokapis.com/v2/oauth/token/', {
-        client_key: clientId,
-        client_secret: clientSecret,
-        code,
-        grant_type: 'authorization_code',
-        redirect_uri: redirectUri
-      });
-      if (exchanged.ok === false) return exchanged;
-      if (!exchanged.data?.access_token) {
-        return fail(502, `TikTok did not return an access token${exchanged.data?.error_description ? `: ${boundedText(exchanged.data.error_description, 150)}` : ''}`);
-      }
-      return {
-        ok: true,
-        tokens: {
-          accessToken: String(exchanged.data.access_token),
-          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
-          expiresAt: expiresAtFrom(exchanged.data.expires_in),
-          scopes: String(exchanged.data.scope || 'user.info.basic,video.list').split(','),
-          providerUserId: exchanged.data.open_id ? String(exchanged.data.open_id) : null
-        }
-      };
-    },
+    ...formOAuthGrant({
+      tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
+      authStyle: 'body',
+      clientIdParam: 'client_key',
+      scopes: ['user.info.basic', 'video.list'],
+      mapExtra: (data, tokens) => ({ ...tokens, providerUserId: data.open_id ? String(data.open_id) : null })
+    }),
     resolveAccountFromTokens: async (tokens) => {
       const me = await authedJson('https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username', {
         token: tokens.accessToken
@@ -1441,22 +1493,6 @@ const tiktokProvider: ConnectionProvider = {
           profileUrl: user?.username ? `https://www.tiktok.com/@${user.username}` : null,
           config: {}
         }
-      };
-    },
-    refreshTokens: async (tokens, creds) => {
-      if (!tokens.refreshToken) return null;
-      const refreshed = await postForm('https://open.tiktokapis.com/v2/oauth/token/', {
-        client_key: creds.clientId,
-        client_secret: creds.clientSecret,
-        grant_type: 'refresh_token',
-        refresh_token: tokens.refreshToken
-      });
-      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
-      return {
-        ...tokens,
-        accessToken: String(refreshed.data.access_token),
-        refreshToken: refreshed.data.refresh_token ? String(refreshed.data.refresh_token) : tokens.refreshToken,
-        expiresAt: expiresAtFrom(refreshed.data.expires_in)
       };
     }
   },
@@ -1512,26 +1548,11 @@ const youtubeAccountProvider: ConnectionProvider = {
     clientSecretEnv: 'GOOGLE_CLIENT_SECRET',
     buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
       `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('openid profile https://www.googleapis.com/auth/youtube.readonly')}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`,
-    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
-      const exchanged = await postForm('https://oauth2.googleapis.com/token', {
-        client_id: clientId,
-        client_secret: clientSecret,
-        code,
-        grant_type: 'authorization_code',
-        redirect_uri: redirectUri
-      });
-      if (exchanged.ok === false) return exchanged;
-      if (!exchanged.data?.access_token) return fail(502, 'Google did not return an access token');
-      return {
-        ok: true,
-        tokens: {
-          accessToken: String(exchanged.data.access_token),
-          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
-          expiresAt: expiresAtFrom(exchanged.data.expires_in),
-          scopes: String(exchanged.data.scope || '').split(' ').filter(Boolean)
-        }
-      };
-    },
+    ...formOAuthGrant({
+      tokenUrl: 'https://oauth2.googleapis.com/token',
+      authStyle: 'body',
+      scopes: ['openid', 'profile', 'https://www.googleapis.com/auth/youtube.readonly']
+    }),
     resolveAccountFromTokens: async (tokens) => {
       const me = await authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
       if (me.ok === false) return me;
@@ -1548,17 +1569,6 @@ const youtubeAccountProvider: ConnectionProvider = {
         }
       };
     },
-    refreshTokens: async (tokens, creds) => {
-      if (!tokens.refreshToken) return null;
-      const refreshed = await postForm('https://oauth2.googleapis.com/token', {
-        client_id: creds.clientId,
-        client_secret: creds.clientSecret,
-        grant_type: 'refresh_token',
-        refresh_token: tokens.refreshToken
-      });
-      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
-      return { ...tokens, accessToken: String(refreshed.data.access_token), expiresAt: expiresAtFrom(refreshed.data.expires_in) };
-    }
   },
   fetchFeed: async (_account, opts) => {
     if (!opts.tokens?.accessToken) return fail(401, 'YouTube needs a reconnect — its saved sign-in is missing or expired');
@@ -1636,25 +1646,7 @@ const redditAccountProvider: ConnectionProvider = {
     clientSecretEnv: 'REDDIT_CLIENT_SECRET',
     buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
       `https://www.reddit.com/api/v1/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}&duration=permanent&scope=${encodeURIComponent('identity read')}`,
-    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
-      // Reddit authenticates the CLIENT via HTTP Basic on the token endpoint
-      const exchanged = await postForm(
-        'https://www.reddit.com/api/v1/access_token',
-        { grant_type: 'authorization_code', code, redirect_uri: redirectUri },
-        { basicAuth: { user: clientId, pass: clientSecret } }
-      );
-      if (exchanged.ok === false) return exchanged;
-      if (!exchanged.data?.access_token) return fail(502, 'Reddit did not return an access token');
-      return {
-        ok: true,
-        tokens: {
-          accessToken: String(exchanged.data.access_token),
-          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
-          expiresAt: expiresAtFrom(exchanged.data.expires_in),
-          scopes: ['identity', 'read']
-        }
-      };
-    },
+    ...formOAuthGrant({ tokenUrl: 'https://www.reddit.com/api/v1/access_token', authStyle: 'basic', scopes: ['identity', 'read'] }),
     resolveAccountFromTokens: async (tokens) => {
       const me = await authedJson('https://oauth.reddit.com/api/v1/me', { token: tokens.accessToken });
       if (me.ok === false) return me;
@@ -1672,21 +1664,6 @@ const redditAccountProvider: ConnectionProvider = {
         }
       };
     },
-    refreshTokens: async (tokens, creds) => {
-      if (!tokens.refreshToken) return null;
-      const refreshed = await postForm(
-        'https://www.reddit.com/api/v1/access_token',
-        { grant_type: 'refresh_token', refresh_token: tokens.refreshToken },
-        { basicAuth: { user: creds.clientId, pass: creds.clientSecret } }
-      );
-      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
-      return {
-        ...tokens,
-        accessToken: String(refreshed.data.access_token),
-        refreshToken: refreshed.data.refresh_token ? String(refreshed.data.refresh_token) : tokens.refreshToken,
-        expiresAt: expiresAtFrom(refreshed.data.expires_in)
-      };
-    }
   },
   fetchFeed: async (_account, opts) => {
     if (!opts.tokens?.accessToken) return fail(401, 'Reddit needs a reconnect — its saved sign-in is missing or expired');
@@ -1911,26 +1888,7 @@ const twitchProvider: ConnectionProvider = {
     clientSecretEnv: 'TWITCH_CLIENT_SECRET',
     buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
       `https://id.twitch.tv/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('user:read:follows')}&state=${encodeURIComponent(state)}`,
-    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
-      const exchanged = await postForm('https://id.twitch.tv/oauth2/token', {
-        client_id: clientId,
-        client_secret: clientSecret,
-        code,
-        grant_type: 'authorization_code',
-        redirect_uri: redirectUri
-      });
-      if (exchanged.ok === false) return exchanged;
-      if (!exchanged.data?.access_token) return fail(502, 'Twitch did not return an access token');
-      return {
-        ok: true,
-        tokens: {
-          accessToken: String(exchanged.data.access_token),
-          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
-          expiresAt: expiresAtFrom(exchanged.data.expires_in),
-          scopes: ['user:read:follows']
-        }
-      };
-    },
+    ...formOAuthGrant({ tokenUrl: 'https://id.twitch.tv/oauth2/token', authStyle: 'body', scopes: ['user:read:follows'] }),
     resolveAccountFromTokens: async (tokens) => {
       const me = await authedJson('https://api.twitch.tv/helix/users', {
         token: tokens.accessToken,
@@ -1951,22 +1909,6 @@ const twitchProvider: ConnectionProvider = {
         }
       };
     },
-    refreshTokens: async (tokens, creds) => {
-      if (!tokens.refreshToken) return null;
-      const refreshed = await postForm('https://id.twitch.tv/oauth2/token', {
-        client_id: creds.clientId,
-        client_secret: creds.clientSecret,
-        grant_type: 'refresh_token',
-        refresh_token: tokens.refreshToken
-      });
-      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
-      return {
-        ...tokens,
-        accessToken: String(refreshed.data.access_token),
-        refreshToken: refreshed.data.refresh_token ? String(refreshed.data.refresh_token) : tokens.refreshToken,
-        expiresAt: expiresAtFrom(refreshed.data.expires_in)
-      };
-    }
   },
   fetchFeed: async (account, opts) => {
     if (!opts.tokens?.accessToken) return fail(401, 'Twitch needs a reconnect — its saved sign-in is missing or expired');
@@ -2014,24 +1956,12 @@ const xProvider: ConnectionProvider = {
     pkce: true,
     buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge }) =>
       `https://x.com/i/oauth2/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('tweet.read users.read offline.access')}&state=${encodeURIComponent(state)}&code_challenge=${encodeURIComponent(codeChallenge || '')}&code_challenge_method=S256`,
-    exchangeCode: async ({ code, clientId, clientSecret, redirectUri, codeVerifier }) => {
-      const exchanged = await postForm(
-        'https://api.x.com/2/oauth2/token',
-        { code, grant_type: 'authorization_code', redirect_uri: redirectUri, code_verifier: codeVerifier || '' },
-        { basicAuth: { user: clientId, pass: clientSecret } }
-      );
-      if (exchanged.ok === false) return exchanged;
-      if (!exchanged.data?.access_token) return fail(502, 'X did not return an access token');
-      return {
-        ok: true,
-        tokens: {
-          accessToken: String(exchanged.data.access_token),
-          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
-          expiresAt: expiresAtFrom(exchanged.data.expires_in),
-          scopes: String(exchanged.data.scope || '').split(' ').filter(Boolean)
-        }
-      };
-    },
+    ...formOAuthGrant({
+      tokenUrl: 'https://api.x.com/2/oauth2/token',
+      authStyle: 'basic',
+      scopes: ['tweet.read', 'users.read', 'offline.access'],
+      extraExchangeParams: ({ codeVerifier }) => ({ code_verifier: codeVerifier || '' })
+    }),
     resolveAccountFromTokens: async (tokens) => {
       const me = await authedJson('https://api.x.com/2/users/me?user.fields=profile_image_url,name,username', { token: tokens.accessToken });
       if (me.ok === false) return me;
@@ -2049,22 +1979,6 @@ const xProvider: ConnectionProvider = {
         }
       };
     },
-    refreshTokens: async (tokens, creds) => {
-      if (!tokens.refreshToken) return null;
-      const refreshed = await postForm(
-        'https://api.x.com/2/oauth2/token',
-        { grant_type: 'refresh_token', refresh_token: tokens.refreshToken },
-        { basicAuth: { user: creds.clientId, pass: creds.clientSecret } }
-      );
-      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
-      // X ROTATES refresh tokens — always persist the fresh one
-      return {
-        ...tokens,
-        accessToken: String(refreshed.data.access_token),
-        refreshToken: refreshed.data.refresh_token ? String(refreshed.data.refresh_token) : tokens.refreshToken,
-        expiresAt: expiresAtFrom(refreshed.data.expires_in)
-      };
-    }
   },
   fetchFeed: async (account, opts) => {
     if (!opts.tokens?.accessToken) return fail(401, 'X needs a reconnect — its saved sign-in is missing or expired');
@@ -2122,26 +2036,7 @@ const tumblrProvider: ConnectionProvider = {
     clientSecretEnv: 'TUMBLR_CLIENT_SECRET',
     buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
       `https://www.tumblr.com/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&scope=${encodeURIComponent('basic offline_access')}&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
-    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
-      const exchanged = await postForm('https://api.tumblr.com/v2/oauth2/token', {
-        grant_type: 'authorization_code',
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: redirectUri
-      });
-      if (exchanged.ok === false) return exchanged;
-      if (!exchanged.data?.access_token) return fail(502, 'Tumblr did not return an access token');
-      return {
-        ok: true,
-        tokens: {
-          accessToken: String(exchanged.data.access_token),
-          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
-          expiresAt: expiresAtFrom(exchanged.data.expires_in),
-          scopes: ['basic', 'offline_access']
-        }
-      };
-    },
+    ...formOAuthGrant({ tokenUrl: 'https://api.tumblr.com/v2/oauth2/token', authStyle: 'body', scopes: ['basic', 'offline_access'] }),
     resolveAccountFromTokens: async (tokens) => {
       const me = await authedJson('https://api.tumblr.com/v2/user/info', { token: tokens.accessToken });
       if (me.ok === false) return me;
@@ -2159,22 +2054,6 @@ const tumblrProvider: ConnectionProvider = {
         }
       };
     },
-    refreshTokens: async (tokens, creds) => {
-      if (!tokens.refreshToken) return null;
-      const refreshed = await postForm('https://api.tumblr.com/v2/oauth2/token', {
-        grant_type: 'refresh_token',
-        refresh_token: tokens.refreshToken,
-        client_id: creds.clientId,
-        client_secret: creds.clientSecret
-      });
-      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
-      return {
-        ...tokens,
-        accessToken: String(refreshed.data.access_token),
-        refreshToken: refreshed.data.refresh_token ? String(refreshed.data.refresh_token) : tokens.refreshToken,
-        expiresAt: expiresAtFrom(refreshed.data.expires_in)
-      };
-    }
   },
   fetchFeed: async (_account, opts) => {
     if (!opts.tokens?.accessToken) return fail(401, 'Tumblr needs a reconnect — its saved sign-in is missing or expired');
@@ -2228,24 +2107,7 @@ const pinterestProvider: ConnectionProvider = {
     clientSecretEnv: 'PINTEREST_CLIENT_SECRET',
     buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
       `https://www.pinterest.com/oauth/?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('user_accounts:read,pins:read,boards:read')}&state=${encodeURIComponent(state)}`,
-    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
-      const exchanged = await postForm(
-        'https://api.pinterest.com/v5/oauth/token',
-        { grant_type: 'authorization_code', code, redirect_uri: redirectUri },
-        { basicAuth: { user: clientId, pass: clientSecret } }
-      );
-      if (exchanged.ok === false) return exchanged;
-      if (!exchanged.data?.access_token) return fail(502, 'Pinterest did not return an access token');
-      return {
-        ok: true,
-        tokens: {
-          accessToken: String(exchanged.data.access_token),
-          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
-          expiresAt: expiresAtFrom(exchanged.data.expires_in),
-          scopes: ['pins:read']
-        }
-      };
-    },
+    ...formOAuthGrant({ tokenUrl: 'https://api.pinterest.com/v5/oauth/token', authStyle: 'basic', scopes: ['pins:read'] }),
     resolveAccountFromTokens: async (tokens) => {
       const me = await authedJson('https://api.pinterest.com/v5/user_account', { token: tokens.accessToken });
       if (me.ok === false) return me;
@@ -2262,16 +2124,6 @@ const pinterestProvider: ConnectionProvider = {
         }
       };
     },
-    refreshTokens: async (tokens, creds) => {
-      if (!tokens.refreshToken) return null;
-      const refreshed = await postForm(
-        'https://api.pinterest.com/v5/oauth/token',
-        { grant_type: 'refresh_token', refresh_token: tokens.refreshToken },
-        { basicAuth: { user: creds.clientId, pass: creds.clientSecret } }
-      );
-      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
-      return { ...tokens, accessToken: String(refreshed.data.access_token), expiresAt: expiresAtFrom(refreshed.data.expires_in) };
-    }
   },
   fetchFeed: async (_account, opts) => {
     if (!opts.tokens?.accessToken) return fail(401, 'Pinterest needs a reconnect — its saved sign-in is missing or expired');
@@ -2355,6 +2207,104 @@ const linkedinProvider: ConnectionProvider = {
   fetchFeed: async () => ({ ok: true, items: [] })
 };
 
+// --- spotify -----------------------------------------------------------------
+
+const spotifyProvider: ConnectionProvider = {
+  id: 'spotify',
+  name: 'Spotify',
+  icon: '🎧',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  about: 'Sign in with Spotify to sync your recently played tracks and new releases from artists you follow.',
+  configured: () => !!envValue('SPOTIFY_CLIENT_ID') && !!envValue('SPOTIFY_CLIENT_SECRET'),
+  fields: [],
+  oauth: {
+    clientIdEnv: 'SPOTIFY_CLIENT_ID',
+    clientSecretEnv: 'SPOTIFY_CLIENT_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&scope=${encodeURIComponent('user-read-recently-played user-follow-read')}`,
+    ...formOAuthGrant({
+      tokenUrl: 'https://accounts.spotify.com/api/token',
+      authStyle: 'basic',
+      scopes: ['user-read-recently-played', 'user-follow-read']
+    }),
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson('https://api.spotify.com/v1/me', { token: tokens.accessToken });
+      if (me.ok === false) return me;
+      if (!me.data?.id) return fail(502, 'Spotify did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(me.data.id),
+          displayName: boundedText(me.data.display_name, 120) || String(me.data.id),
+          handle: `@${me.data.id}`,
+          avatarUrl: httpsImage(me.data.images?.[0]?.url),
+          profileUrl: typeof me.data.external_urls?.spotify === 'string' ? me.data.external_urls.spotify.slice(0, 1500) : null,
+          config: {}
+        }
+      };
+    }
+  },
+  fetchFeed: async (_account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'Spotify needs a reconnect — its saved sign-in is missing or expired');
+    const token = opts.tokens.accessToken;
+    const items: ExternalFeedItem[] = [];
+    // 1) recently played (the personal listening feed)
+    const recent = await authedJson('https://api.spotify.com/v1/me/player/recently-played?limit=50', { token });
+    if (recent.ok === false) return recent;
+    for (const entry of recent.data?.items || []) {
+      const track = entry?.track;
+      if (!track?.id) continue;
+      const artists = (track.artists || []).map((artist: any) => artist?.name).filter(Boolean).join(', ');
+      items.push({
+        externalId: `spotify-play-${track.id}-${entry.played_at || ''}`,
+        url: typeof track.external_urls?.spotify === 'string' ? track.external_urls.spotify.slice(0, 1500) : null,
+        title: boundedText(track.name, MAX_TITLE_CHARS) || null,
+        text: `🎧 Played ${boundedText(track.name, 150)}${artists ? ` — ${boundedText(artists, 200)}` : ''}${track.album?.name ? ` (${boundedText(track.album.name, 120)})` : ''}`,
+        images: boundedImages([track.album?.images?.[0]?.url]),
+        author: { name: artists || null, handle: null, avatarUrl: null, url: null },
+        publishedAt: dateOrNull(entry.played_at),
+        stats: null
+      });
+    }
+    // 2) fresh releases from followed artists (bounded fan-out)
+    const followed = await authedJson('https://api.spotify.com/v1/me/following?type=artist&limit=8', { token });
+    if (followed.ok !== false) {
+      const artists = (followed.data?.artists?.items || []).slice(0, 8);
+      const releases = await Promise.all(
+        artists.map((artist: any) =>
+          authedJson(`https://api.spotify.com/v1/artists/${artist.id}/albums?limit=3&include_groups=album,single`, { token }).then(
+            (result) => ({ artist, result })
+          )
+        )
+      );
+      for (const { artist, result } of releases) {
+        if (result.ok === false) continue;
+        for (const album of result.data?.items || []) {
+          if (!album?.id) continue;
+          items.push({
+            externalId: `spotify-release-${album.id}`,
+            url: typeof album.external_urls?.spotify === 'string' ? album.external_urls.spotify.slice(0, 1500) : null,
+            title: boundedText(album.name, MAX_TITLE_CHARS) || null,
+            text: `💿 New ${album.album_type || 'release'} from ${boundedText(artist.name, 120)}: ${boundedText(album.name, 150)}`,
+            images: boundedImages([album.images?.[0]?.url]),
+            author: {
+              name: boundedText(artist.name, 120) || null,
+              handle: null,
+              avatarUrl: httpsImage(artist.images?.[0]?.url),
+              url: typeof artist.external_urls?.spotify === 'string' ? artist.external_urls.spotify.slice(0, 1500) : null
+            },
+            publishedAt: dateOrNull(album.release_date),
+            stats: null
+          });
+        }
+      }
+    }
+    items.sort((a, b) => (b.publishedAt?.getTime() || 0) - (a.publishedAt?.getTime() || 0));
+    return { ok: true, items: items.slice(0, targetCount(opts)) };
+  }
+};
+
 // --- registry ---------------------------------------------------------------
 
 export const CONNECTION_PROVIDERS: ConnectionProvider[] = [
@@ -2366,6 +2316,7 @@ export const CONNECTION_PROVIDERS: ConnectionProvider[] = [
   facebookProvider,
   instagramProvider,
   tiktokProvider,
+  spotifyProvider,
   xProvider,
   twitchProvider,
   tumblrProvider,

@@ -137,6 +137,9 @@ export const ACL_FAMILY = 'tt:userFamily';
 export const ACL_INHERIT = 'tt:inherit';
 export const ACL_USER_PREFIX = 'tt:user/';
 export const ACL_APP_PREFIX = 'tt:app/';
+// audience = "holders of a connections link to this external account" —
+// resolved live against the viewer's links (see aclEntryMatches)
+export const ACL_EXTACCT_PREFIX = 'tt:extacct/';
 
 const ACL_ENTRY_PATTERN = /^-?tt:[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const MAX_ACL_ENTRIES = 16;
@@ -187,7 +190,15 @@ export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: num
 // friendIds: shareIds of users the viewer has an ACCEPTED friendship with,
 // preloaded by the read path (one batched query per request) so acl checks
 // stay sync + pure. Absent set = no friend info loaded = circle denies.
-export type AclViewer = { id: string | null; username?: string | null; friendIds?: ReadonlySet<string> } | null;
+export type AclViewer = {
+  id: string | null;
+  username?: string | null;
+  friendIds?: ReadonlySet<string>;
+  // external-account shareIds the viewer holds connections links to — loaded
+  // lazily (things.ts withExtAccountIds) only when a doc carries a
+  // tt:extacct/ entry, exactly like friendIds serves tt:userFriends
+  extAccountIds?: ReadonlySet<string>;
+} | null;
 
 const aclSpecificity = (id: string): number => {
   if (id === ACL_ALL) return 0;
@@ -208,6 +219,13 @@ const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolea
   // friend of the owner (friendship is mutual, so the viewer's own friend set
   // answers for any owner). Owner always counts as their own friend.
   if (id === ACL_FRIENDS) return viewer.id === ownerId || viewer.friendIds?.has(ownerId) === true;
+  // external-account audience (connections): the viewer sees it while they
+  // HOLD a link to that external account — membership is evaluated live, so
+  // unlinking revokes instantly and new links grant instantly, with no
+  // per-member grant materialization on the doc
+  if (id.startsWith(ACL_EXTACCT_PREFIX)) {
+    return viewer.extAccountIds?.has(id.slice(ACL_EXTACCT_PREFIX.length)) === true;
+  }
   // family circle: no family graph yet — owner only
   if (id === ACL_FAMILY) return viewer.id === ownerId;
   return false;

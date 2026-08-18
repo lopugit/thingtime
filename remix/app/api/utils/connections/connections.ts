@@ -20,7 +20,7 @@ import {
   type YoutubeChannelRef
 } from './providers';
 import { fail, sha48, type Fail } from './shared';
-import { ACL_ALL, ACL_OWNER, ACL_USER_PREFIX, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { ACL_ALL, ACL_EXTACCT_PREFIX, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 // Third-party app connections (FUNDAMENTALS.md §3). Three protected kinds:
 //
@@ -36,8 +36,10 @@ import { ACL_ALL, ACL_OWNER, ACL_USER_PREFIX, COLLECTION_SCHEMA_VERSIONS } from 
 //     the source-timestamp not-older guard). Lives on the DATA plane so
 //     Thingtime comments/reactions attach to it by targetId exactly like any
 //     native post, and /post/:id permalinks resolve. Public-content providers
-//     write tt:all posts; personal-algorithm providers grant each linked user
-//     individually (tt:user/<username>, refreshed on every sync).
+//     write tt:all posts; personal-algorithm providers carry ONE
+//     tt:extacct/<accountId> audience entry per source — membership resolves
+//     live against viewers' links at acl evaluation (unlink revokes
+//     instantly, nothing materializes per member).
 //
 // The `ext-` shareId prefix is reserved in sanitizeShareId so clients can
 // never squat a sync destination, and all three kinds are PROTECTED_THINGTIME
@@ -109,7 +111,7 @@ export type PublicConnection = {
   providerName: string;
   providerIcon: string;
   contentVisibility: 'public' | 'personal';
-  auth: 'none' | 'oauth2';
+  auth: 'none' | 'oauth2' | 'credential';
   account: {
     id: string;
     handle: string;
@@ -130,7 +132,7 @@ const toPublicConnection = (linkDoc: any, accountDoc: any, provider: ConnectionP
   providerName: provider?.name || String(linkDoc?.crystal?.provider || ''),
   providerIcon: provider?.icon || '🔌',
   contentVisibility: provider?.contentVisibility === 'personal' ? 'personal' : 'public',
-  auth: provider?.oauth ? 'oauth2' : 'none',
+  auth: provider?.oauth ? 'oauth2' : provider?.auth === 'credential' ? 'credential' : 'none',
   account: {
     id: String(accountDoc?.shareId || linkDoc?.crystal?.accountId || ''),
     handle: String(accountDoc?.crystal?.handle || ''),
@@ -329,22 +331,13 @@ export const unlinkConnection = async (
   await home.deleteOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND, ownerId: user.id });
   const accountId = String(link?.crystal?.accountId || '');
   if (accountId) {
-    // membership IS the authorization: revoke this member's acl grants from
-    // the account's personal posts. (If they still read them through ANOTHER
-    // link whose account also sources a post, ensureViewerGrant re-grants on
-    // their next read of that connection.)
-    const provider = connectionProviderById(link?.crystal?.provider);
-    if (provider?.contentVisibility === 'personal') {
-      const things = await getThingsCollection();
-      const grant = `${ACL_USER_PREFIX}${user.username.toLowerCase()}`;
-      await things.updateMany(
-        { thingtime: EXTERNAL_POST_KIND, sourceIds: accountId, acl: grant },
-        { $pull: { acl: grant } }
-      );
-    }
-    // last link gone → retire the shared account thing (and any credentials in
-    // its secure blob); synced external posts stay — they are inert public/
-    // granted content other users' comments may hang off
+    // membership IS the authorization, and tt:extacct/ audiences evaluate it
+    // LIVE against the viewer's links — deleting the link above already
+    // revoked this member's access to the account's personal posts, with no
+    // grant sweep to run.
+    // Last link gone → retire the shared account thing (and any credentials
+    // in its secure blob); synced external posts stay — they are inert
+    // public/audience content other users' comments may hang off.
     const remaining = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountId });
     if (remaining === 0) {
       await home.deleteOne({ shareId: accountId, thingtime: EXTERNAL_ACCOUNT_KIND });
@@ -382,8 +375,7 @@ const clampPublishedAt = (value: Date | null, now: Date): Date => {
 const upsertExternalPosts = async (
   provider: ConnectionProvider,
   accountShareId: string,
-  items: ExternalFeedItem[],
-  viewerGrant: string | null
+  items: ExternalFeedItem[]
 ): Promise<number> => {
   if (!items.length) return 0;
   const things = await getThingsCollection();
@@ -393,15 +385,17 @@ const upsertExternalPosts = async (
   // account (another user's virtual channel list, a real subscription,
   // another subreddit multi …) lists every source and stays ONE doc —
   // comments and reactions unify on it. One membership object serves the
-  // main path AND the race retry so the two can never diverge.
+  // main path AND the race retry so the two can never diverge. Personal
+  // audiences are ONE tt:extacct/<account> entry per SOURCE (bounded tiny) —
+  // membership resolves live against viewers' links at acl evaluation, so
+  // unlink revokes instantly and no per-member grants ever materialize.
   const membership = {
     sourceIds: accountShareId,
-    ...(viewerGrant && provider.contentVisibility === 'personal' ? { acl: viewerGrant } : {})
+    ...(provider.contentVisibility === 'personal' ? { acl: `${ACL_EXTACCT_PREFIX}${accountShareId}` } : {})
   };
   const operations = items.map((item) => {
     const shareId = externalPostShareId(namespace, item.externalId);
     const publishedAt = clampPublishedAt(item.publishedAt, now);
-    const baseAcl = provider.contentVisibility === 'public' ? [ACL_ALL] : viewerGrant ? [viewerGrant] : [];
     return {
       updateOne: {
         // latest fetch wins by design (each sync fetches CURRENT provider
@@ -439,7 +433,7 @@ const upsertExternalPosts = async (
             shareId,
             thingtime: [EXTERNAL_POST_KIND],
             ownerId: 'system',
-            ...(provider.contentVisibility === 'personal' ? {} : { acl: baseAcl }),
+            ...(provider.contentVisibility === 'personal' ? {} : { acl: [ACL_ALL] }),
             storageClass: 'control',
             targetId: null,
             tags: [],
@@ -465,20 +459,6 @@ const upsertExternalPosts = async (
     await things.updateMany({ shareId: { $in: shareIds }, thingtime: EXTERNAL_POST_KIND }, { $addToSet: membership });
     return 0;
   }
-};
-
-// Personal-visibility accounts grant each linked viewer on THEIR reads, not
-// only on the fetch that first synced a post — the fetch cooldown is shared
-// per account, so a second linked user's read may skip the fetch entirely and
-// must still earn its acl grants. Indexed, idempotent, usually matches zero.
-const ensureViewerGrant = async (accountShareId: string, viewerGrant: string) => {
-  const things = await getThingsCollection();
-  // membership truth is the sourceIds array (crystal.accountId is a last-
-  // writer-wins display field a multi-source post may have flipped)
-  await things.updateMany(
-    { thingtime: EXTERNAL_POST_KIND, sourceIds: accountShareId, acl: { $ne: viewerGrant } },
-    { $addToSet: { acl: viewerGrant } }
-  );
 };
 
 const markAccountSync = async (accountShareId: string, error: string | null) => {
@@ -538,7 +518,6 @@ export const readConnectionsFeed = async (
   const pairs = await linksWithAccounts(user.id, query.connectionId || null);
   if (query.connectionId && !pairs.length) return fail(404, 'Connection not found');
 
-  const viewerGrant = `${ACL_USER_PREFIX}${user.username.toLowerCase()}`;
   const synced: ConnectionsFeedResult['synced'] = [];
 
   // sync pass — per account, cooldown-gated, bounded concurrency. Deepening
@@ -561,9 +540,6 @@ export const readConnectionsFeed = async (
           synced.push({ connectionId, provider: String(account?.crystal?.provider || ''), fetched: 0, skipped: true, error: 'Unknown provider' });
           return;
         }
-        if (provider.contentVisibility === 'personal') {
-          await ensureViewerGrant(String(account.shareId), viewerGrant);
-        }
         const storedDepth = Math.min(Math.max(1, Number(account?.crystal?.syncDepth) || 1), MAX_FEED_PAGES);
         // deepening only bypasses the cooldown while it can actually go
         // deeper — at the cap it degrades to a normal cooldown-gated read so
@@ -585,7 +561,7 @@ export const readConnectionsFeed = async (
           synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: false, error: fetched.error });
           return;
         }
-        const written = await upsertExternalPosts(provider, String(account.shareId), fetched.items, viewerGrant);
+        const written = await upsertExternalPosts(provider, String(account.shareId), fetched.items);
         await markAccountSync(String(account.shareId), null);
         if (canDeepen) {
           const home = await getHomeThingsCollection();

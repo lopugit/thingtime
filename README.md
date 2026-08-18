@@ -1017,6 +1017,9 @@ PINTEREST_CLIENT_SECRET="<pinterest-app-secret>"
 # LinkedIn app (linkedin provider — account linking only; feeds are partner-gated)
 LINKEDIN_CLIENT_ID="<linkedin-client-id>"
 LINKEDIN_CLIENT_SECRET="<linkedin-client-secret>"
+# Spotify app (spotify provider — recently played + followed-artist releases)
+SPOTIFY_CLIENT_ID="<spotify-client-id>"
+SPOTIFY_CLIENT_SECRET="<spotify-client-secret>"
 # Optional: YouTube Data API key — lights up channel NAME search for the
 # Thingtime-managed virtual subscription list (ids/URLs/@handles work keyless)
 YOUTUBE_API_KEY="<youtube-data-api-key>"
