@@ -491,8 +491,6 @@ const buildSummaryContext = async (viewerId: string, memberships: any[]): Promis
   const things = await getThingsCollection();
   const chatIds = memberships.map((m: any) => String(m.targetId));
   const membershipByChat = new Map(memberships.map((m: any) => [String(m.targetId), m]));
-	const chatDocs = chatIds.length ? await things.find({ thingtime: 'chat', shareId: { $in: chatIds } } as any).toArray() : [];
-
   // Unread floor per chat: your receipt, else when you JOINED — history that
   // predates you is not unread, and the clause keeps the scan bounded to
   // recent docs on the { targetId, thingtime, createdAt } index. Newest-
@@ -504,27 +502,43 @@ const buildSummaryContext = async (viewerId: string, memberships: any[]): Promis
     createdAt: { $gt: m.crystal?.lastReadAt ? new Date(m.crystal.lastReadAt) : new Date(m.createdAt) }
   }));
 
-  const unreadAgg = chatIds.length
-    ? await things
-        .aggregate([
-          {
-            $match: {
-              thingtime: 'chat-message',
-              targetId: { $in: chatIds },
-              'crystal.threadRootId': null,
-              // system events (joins, renames) never bold a chat — only real
-              // words from other people count as unread
-              ownerId: { $ne: viewerId },
-              'crystal.deletedAt': null,
-              'crystal.systemType': null,
-              $or: unreadClauses
-            }
-          },
-          { $group: { _id: '$targetId', count: { $sum: 1 } } }
-        ])
-        .toArray()
-    : [];
+  // The chat docs, the unread rollup and the active-member counts are all
+  // keyed off chatIds alone — none reads another's result — so they issue
+  // together. Only the member ROWS below genuinely have to wait, because
+  // which chats need them is derived from the chat docs' chatType.
+  const [chatDocs, unreadAgg, countAgg] = await Promise.all([
+    chatIds.length ? things.find({ thingtime: 'chat', shareId: { $in: chatIds } } as any).toArray() : Promise.resolve([]),
+    chatIds.length
+      ? things
+          .aggregate([
+            {
+              $match: {
+                thingtime: 'chat-message',
+                targetId: { $in: chatIds },
+                'crystal.threadRootId': null,
+                // system events (joins, renames) never bold a chat — only real
+                // words from other people count as unread
+                ownerId: { $ne: viewerId },
+                'crystal.deletedAt': null,
+                'crystal.systemType': null,
+                $or: unreadClauses
+              }
+            },
+            { $group: { _id: '$targetId', count: { $sum: 1 } } }
+          ])
+          .toArray()
+      : Promise.resolve([]),
+    chatIds.length
+      ? things
+          .aggregate([
+            { $match: { thingtime: 'chat-member', targetId: { $in: chatIds }, 'crystal.state': 'active' } },
+            { $group: { _id: '$targetId', count: { $sum: 1 } } }
+          ])
+          .toArray()
+      : Promise.resolve([])
+  ]);
   const unreadByChat = new Map<string, number>(unreadAgg.map((u: any) => [String(u._id), u.count]));
+  const memberCountByChat = new Map<string, number>(countAgg.map((c: any) => [String(c._id), c.count]));
   const lastByChat = new Map<string, any>(
 		chatDocs.filter((c: any) => c.crystal?.lastMessage?.id).map((c: any) => [c.shareId, c.crystal.lastMessage])
   );
@@ -545,23 +559,15 @@ const buildSummaryContext = async (viewerId: string, memberships: any[]): Promis
     memberDocsByChat.get(key)!.push(doc);
   }
 
-  const countAgg = chatIds.length
-    ? await things
-        .aggregate([
-          { $match: { thingtime: 'chat-member', targetId: { $in: chatIds }, 'crystal.state': 'active' } },
-          { $group: { _id: '$targetId', count: { $sum: 1 } } }
-        ])
-        .toArray()
-    : [];
-  const memberCountByChat = new Map<string, number>(countAgg.map((c: any) => [String(c._id), c.count]));
-
   const profileIds = new Set<string>();
   for (const doc of memberDocs) profileIds.add(String((doc as any).ownerId));
   for (const preview of lastByChat.values()) profileIds.add(String(preview.authorId));
-  const profiles = await resolveProfiles(Array.from(profileIds));
 
+  // Profiles and both receipt lookups all read from memberDocs and nothing
+  // else, so the profile pass joins the receipt batch instead of preceding it.
   const receiptUserIds = new Set<string>(memberDocs.map((d: any) => String(d.ownerId)));
-  const [viewerReceipts, memberReceipts] = await Promise.all([
+  const [profiles, viewerReceipts, memberReceipts] = await Promise.all([
+    resolveProfiles(Array.from(profileIds)),
     getUserReadReceiptsEnabled(viewerId),
     getUsersReadReceiptsMap(Array.from(receiptUserIds))
   ]);
