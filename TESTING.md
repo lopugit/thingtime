@@ -255,19 +255,19 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
-- [ ] A freshly registered (non-admin, ungranted) account sees the 🔐
+- [ ] A freshly registered (both-scopes-withheld) account sees the 🔐
       approval-pending card in place of the upload dropzone in the post,
-      comment, and messenger composers, and a direct
-      `POST /api/v1/attachments/uploads` returns 403 with the
-      `media_upload_not_granted` code. Verifying the email records an
+      comment, AND messenger composers (the card is purpose-aware), and a
+      direct `POST /api/v1/attachments/uploads` returns 403 with the
+      purpose-matched `public_uploads_not_approved` /
+      `private_uploads_not_approved` code. Verifying the email records an
       `admin.new_user` alert to the admin inbox in `email_messages` (and does
       NOT unlock uploads).
-- [ ] After an admin enables public uploads from `/admin` → Users (one unified
-      permission — canUploadMedia and publicUploadsEnabled always agree, so a
-      single toggle fully unblocks the account), the same account gets the
-      normal dropzone (after a reload/revalidation) and can start uploads;
-      revoking flips it back while abort/delete of its own drafts keep
-      working.
+- [ ] After an admin approves ONLY private uploads, the messenger composer and
+      profile media upload work while the post/comment composers still show
+      the 🔐 card (and vice-versa for public-only); approving all unlocks
+      everything after a reload/revalidation, and revoking flips surfaces back
+      while abort/delete of in-flight drafts keep working.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich

@@ -65,7 +65,6 @@ type UserRow = {
   privateUploadsEnabled: boolean;
   publicUploadsPending: boolean;
   privateUploadsPending: boolean;
-  mediaUpload: boolean;
   accountKind: 'user' | 'service';
 	storage: AdminStorageProjection;
   storageAllowanceBytes: number | null;
@@ -477,10 +476,6 @@ const UsersTab = () => {
   });
   const [subscriptionFor, setSubscriptionFor] = React.useState<UserRow | null>(null);
   const [linksFor, setLinksFor] = React.useState<UserRow | null>(null);
-  // One permission per scope, one control: the row-scoped UploadApprovalsControl
-  // menu is the only upload grant now (the separate media-upload toggle is
-  // consolidated into it), so this banner is the whole Users-tab surface for
-  // accounts still waiting on approval.
   const pendingUploadCount = React.useMemo(
     () => (rows ?? []).filter((row) => row.publicUploadsPending || row.privateUploadsPending).length,
     [rows]
@@ -595,7 +590,7 @@ const UsersTab = () => {
                     <Button size="xs" variant="outline" mr={1} onClick={() => setSubscriptionFor(row)}>
                       Tier
                     </Button>
-                    <Button size="xs" variant="outline" mr={1} onClick={() => setLinksFor(row)}>
+                    <Button size="xs" variant="outline" onClick={() => setLinksFor(row)}>
                       Links{row.counts.ownedAccounts + row.counts.linkedApps > 0 ? ` (${row.counts.ownedAccounts + row.counts.linkedApps})` : ''}
                     </Button>
                   </Td>

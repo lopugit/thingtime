@@ -47,16 +47,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
-- **Beta media-upload approval gate (consolidated with the PR #301 hotfix)**:
-  media/file uploads require the single admin-granted permission (tri-state
-  `meta.publicUploads` from PR #301 — absent = grandfathered, no migration
-  needed). This PR adds the unified predicate both `canUploadMedia` and
-  `publicUploadsEnabled` derive from (one admin toggle fully unblocks an
-  account — fixes the parallel-gate double-grant hazard), extends gating to
-  uploads parts/complete while abort/delete stay open, keeps the stable
-  `media_upload_not_granted` code alongside `public_uploads_not_approved`,
-  and shows the composer's 🔐 approval-pending card to ungranted users. See
-  the
+- **Beta media-upload approval gate (consolidated with the #301/#310
+  hotfixes)**: uploads are governed by the scoped permissions from PR #310
+  (tri-state `meta.publicUploads` + `meta.privateUploads`; absent =
+  grandfathered, purpose-aware start gate with
+  `public_uploads_not_approved` / `private_uploads_not_approved`). This PR
+  fixes the parallel-gate double-grant hazard by removing its earlier
+  duplicate gate, keeps `PublicUser.canUploadMedia` as the any-scope alias,
+  and ships the composer's purpose-aware 🔐 approval-pending card (public
+  purposes check publicUploadsEnabled, message/profile purposes check
+  privateUploadsEnabled). See the
   [PR #302 implementation notes](../PRs/302-claude-media-upload-permission-gate--beta-media-upload-permission-gate.md).
   — Claude (AI), 2026-08-18
 

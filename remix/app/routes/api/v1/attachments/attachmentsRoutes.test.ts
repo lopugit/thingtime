@@ -168,48 +168,6 @@ test('attachment mutations enforce same-origin JSON, full users, caps, and priva
 	assert.equal(serviceCalls, 0);
 });
 
-test('upload routes require the admin media-upload grant while cleanup mutations stay open', async () => {
-	let serviceCalls = 0;
-	const service = async () => {
-		serviceCalls += 1;
-		return { ok: true };
-	};
-
-	// Ungated user against a grant-required route (uploads/parts/complete): 403
-	// with the stable code the composer maps to its approval-pending copy, and
-	// the service never runs.
-	const gated = createAttachmentMutationAction(
-		{ rateKey: 'attachments.start', service, requireUploadGrant: true },
-		{ getUser: async () => ({ id: 'user-1', accountKind: 'user', canUploadMedia: false } as any), enforceLimit: allowed as any }
-	);
-	const blocked = await gated({ request: post({ filename: 'cat.png' }) });
-	assert.equal(blocked.status, 403);
-	assert.deepEqual(await blocked.json(), {
-		ok: false,
-		error: 'Media uploads require admin approval during the beta',
-		code: 'media_upload_not_granted'
-	});
-	assert.equal(blocked.headers.get('Cache-Control'), 'private, no-store, max-age=0');
-	assert.equal(serviceCalls, 0);
-
-	// Granted user passes the gate.
-	const granted = createAttachmentMutationAction(
-		{ rateKey: 'attachments.start', service, requireUploadGrant: true },
-		{ getUser: async () => ({ id: 'user-1', accountKind: 'user', canUploadMedia: true } as any), enforceLimit: allowed as any }
-	);
-	assert.equal((await granted({ request: post({ filename: 'cat.png' }) })).status, 200);
-	assert.equal(serviceCalls, 1);
-
-	// Routes without requireUploadGrant (abort/delete) stay open to ungated
-	// users so a revoked account can always clean up its own drafts.
-	const ungatedCleanup = createAttachmentMutationAction(
-		{ rateKey: 'attachments.delete', service },
-		{ getUser: async () => ({ id: 'user-1', accountKind: 'user', canUploadMedia: false } as any), enforceLimit: allowed as any }
-	);
-	assert.equal((await ungatedCleanup({ request: post({ uploadId: 'attachment-1' }) })).status, 200);
-	assert.equal(serviceCalls, 2);
-});
-
 test('attachment mutation responses preserve bounded authored retry metadata', async () => {
 	const handler = createAttachmentMutationAction(
 		{

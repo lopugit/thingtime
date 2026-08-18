@@ -626,11 +626,14 @@ test recipient (or a plus alias of it).
 
 ### Private S3 media and attachments
 
-Upload permission is the single beta gate documented under
-[Public upload approval](#public-upload-approval); `PublicUser.canUploadMedia`
-is its alias (the composer's approval-pending card reads it), and ungranted
-starts answer 403 with `media_upload_not_granted` /
-`public_uploads_not_approved` — one permission, two compat codes.
+Upload permission is the scoped beta gate documented under
+[Public upload approval](#public-upload-approval) (public / private / all
+scopes since PR #310). `PublicUser.canUploadMedia` is the any-scope alias; the
+composer's 🔐 approval-pending card is purpose-aware (public purposes check
+`publicUploadsEnabled`, message/profile purposes check
+`privateUploadsEnabled`), and ungranted starts answer 403 with
+`public_uploads_not_approved` / `private_uploads_not_approved` per the
+requested purpose.
 
 Posts, comments and replies, Messenger messages and thread replies, custom
 reaction emoji, and profile avatar/banner images use direct, checksummed

@@ -1139,17 +1139,17 @@ export const apiTests: ApiTestDefinition[] = [
   },
   {
     id: 'attachments-upload-requires-media-grant',
-    name: 'Uploads need the beta media grant',
+    name: 'Uploads need the beta upload approval',
     description:
-      'A freshly registered (non-admin, ungranted) session is blocked from starting an attachment upload with the stable media_upload_not_granted code.',
+      'A freshly registered (both-scopes-withheld) session is blocked from starting a public-purpose attachment upload with the stable public_uploads_not_approved code.',
     group: 'attachments',
     method: 'POST',
     path: '/api/v1/attachments/uploads',
     body: { filename: 'gate-check.png', contentType: 'image/png', sizeBytes: 1024, requestId: 'api-test-media-gate', purpose: 'post' },
     expect: expectJson(
       [401, 403],
-      (body) => body?.ok === false && (body?.code === 'media_upload_not_granted' || typeof body?.error === 'string'),
-      'Ungranted upload start was rejected (media_upload_not_granted once a session exists).'
+      (body) => body?.ok === false && (body?.code === 'public_uploads_not_approved' || typeof body?.error === 'string'),
+      'Ungranted upload start was rejected (public_uploads_not_approved once a session exists).'
     )
   },
   {

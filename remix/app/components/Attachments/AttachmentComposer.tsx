@@ -324,11 +324,18 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 	} = props;
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
 	const lopu = useLopu();
-	// Beta media-upload gate: an explicit false means the server refused the
-	// grant (undefined = stale cached user — let the server 403 decide). The
-	// server re-checks on every upload route regardless of what renders here.
+	// Beta upload-approval gate, purpose-aware (PR #310 scopes): public
+	// purposes (post/comment/custom-emoji) need publicUploadsEnabled, private
+	// purposes (message + own profile media) need privateUploadsEnabled. An
+	// explicit false means the server withheld that scope (undefined = stale
+	// cached user or pre-scope server — fall back to the any-scope alias and
+	// let the server 403 decide). The server re-checks on every upload start.
 	const currentUser = useCurrentUser();
-	const uploadsNotGranted = currentUser?.canUploadMedia === false;
+	const requiresPrivateScope = purpose === 'message' || purpose === 'profile-avatar' || purpose === 'profile-banner';
+	const scopeEnabled = requiresPrivateScope
+		? currentUser?.privateUploadsEnabled ?? currentUser?.canUploadMedia
+		: currentUser?.publicUploadsEnabled ?? currentUser?.canUploadMedia;
+	const uploadsNotGranted = scopeEnabled === false;
 	const [dragging, setDragging] = React.useState(false);
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
 	const emittedSnapshotRef = React.useRef<AttachmentComposerSnapshot | null>(null);

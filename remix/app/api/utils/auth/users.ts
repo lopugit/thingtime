@@ -143,11 +143,7 @@ export type PublicProfile = {
 // own circles see (message attachments, own profile avatar/banner). "All" is
 // simply both flags. Admins are always allowed regardless of the flags, so a
 // locked-out admin can never be unable to fix the account that grants them.
-// The public scope delegates to the unified predicate (auth/mediaUpload.ts —
-// the same tri-state meta.publicUploads read) so this flag,
-// PublicUser.canUploadMedia, and the requireUploadGrant branch of the
-// attachment gates can never drift.
-export const userPublicUploadsEnabled = (user: any): boolean => canUploadMediaDoc(user);
+export const userPublicUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.publicUploads !== false;
 export const userPrivateUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.privateUploads !== false;
 
 export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null): PublicUser => {
@@ -1098,7 +1094,6 @@ export type AdminUserRow = {
 	// signup), so the UI can tell "awaiting approval" from "grandfathered".
 	publicUploadsPending: boolean;
 	privateUploadsPending: boolean;
-	mediaUpload: boolean; // the stored grant flag (admins can upload regardless)
 };
 
 // Escape user-supplied text before embedding it in a Mongo $regex — shared with
@@ -1123,8 +1118,7 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 	publicUploadsEnabled: userPublicUploadsEnabled(doc),
 	privateUploadsEnabled: userPrivateUploadsEnabled(doc),
 	publicUploadsPending: doc?.meta?.publicUploads === false && !isAdminDoc(doc),
-	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc),
-	mediaUpload: doc.meta?.mediaUpload === true
+	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc)
 });
 
 // Set (or clear) a user's stored admin flag. Env-allowlist admins remain admin
@@ -1164,11 +1158,6 @@ export const setUserAdmin = async (userId: string, admin: boolean): Promise<Admi
 // twin left by an interrupted users→things migration would otherwise keep a
 // stale value that the dual-store read resurrects, so a grant would appear not
 // to take. Best-effort per store; either matching counts as applied.
-//
-// This is the ONE upload-permission setter — the parallel media-upload grant is
-// consolidated into it: meta.publicUploads also drives PublicUser.canUploadMedia
-// through the unified predicate (auth/mediaUpload.ts), so a single admin toggle
-// unblocks every upload gate for that scope.
 export type UploadPermissionUpdates = { publicUploads?: boolean; privateUploads?: boolean };
 export const setUserUploadPermissions = async (userId: string, updates: UploadPermissionUpdates): Promise<AdminUserRow | null> => {
 	const keys = (['publicUploads', 'privateUploads'] as const).filter((key) => typeof updates[key] === 'boolean');

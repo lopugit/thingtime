@@ -63,7 +63,7 @@ const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', '
 const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner']);
 
 export const createAttachmentMutationAction = (
-	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean; requireUploadGrant?: boolean },
+	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean },
 	overrides: Partial<AttachmentMutationDependencies> = {}
 ) => {
 	const dependencies = { ...defaultDependencies, ...overrides };
@@ -84,29 +84,6 @@ export const createAttachmentMutationAction = (
 			if (user.accountKind !== 'user') {
 				return json({ ok: false, error: 'Attachments require a user account' }, { status: 403 });
 			}
-			// The two upload-approval gates are CONSOLIDATED on one permission:
-			// canUploadMedia and the PUBLIC scope of the per-scope check below both
-			// derive from the same predicate (auth/mediaUpload.ts → tri-state
-			// meta.publicUploads), so one admin toggle satisfies both branches. Both
-			// option flags + error codes remain so each route keeps its coverage and
-			// clients keep their respective copy.
-			//
-			// Beta media-upload gate: routes that mint new bytes (start/parts/
-			// complete) opt in; abort/delete stay open so an ungated or revoked
-			// user can always clean up their own drafts. canUploadMedia is the
-			// unified permission alias (admins always pass). This is a
-			// PURPOSE-INDEPENDENT account grant, so unlike the per-scope check
-			// below it needs no body and denies before any rate budget is spent —
-			// and it is checked FIRST so an ungranted account gets the code the
-			// composer's approval-pending card and attachmentUiCore copy are
-			// written for.
-			if (options.requireUploadGrant && !user.canUploadMedia) {
-				return json(
-					{ ok: false, error: 'Media uploads require admin approval during the beta', code: 'media_upload_not_granted' },
-					{ status: 403 }
-				);
-			}
-
 			const limit = await dependencies.enforceLimit(request, options.rateKey, `user:${user.id}`, { failClosed: true });
 			if (!limit.allowed) {
 				if (limit.unavailable) {
