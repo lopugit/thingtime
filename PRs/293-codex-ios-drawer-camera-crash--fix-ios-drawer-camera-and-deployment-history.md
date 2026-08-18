@@ -35,6 +35,12 @@ background refreshes.
 - Local managed-stack Vercel API group: 3/3 passing.
 - Local managed-stack API documentation group: 297/297 passing, including the
   generated GET and POST docs checks for the deployments endpoint.
+- Live branch-preview API: 50 deployment groups, 46 with history, and the
+  current branch returning one building deployment followed by six ready
+  immutable deployments.
+- Signed Release IPA: version 1.0, build 15, branch-preview URL, all privacy
+  purpose strings, valid deep signature, and executable present.
+- App Store Connect build 15: `VALID`, `IN_BETA_TESTING`, auto-notify enabled.
 - Graphify structural and semantic refresh using the local Codex proxy.
 
 ## Manual follow-up

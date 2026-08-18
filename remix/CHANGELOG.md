@@ -69,8 +69,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   a bounded newest-first history for each branch. The native Web destination
   drawer presents that history as a second disclosure level, marks the most
   recent ready deployment as `Last successful` when a newer build is queued,
-  and keeps every specific deployment URL directly selectable. — Codex (AI),
-  2026-08-18
+  and keeps every specific deployment URL directly selectable. Signed iOS
+  build 15 targets the matching branch preview and is available to internal
+  TestFlight testers. — Codex (AI), 2026-08-18
 - **Recoverable first-session Things space**: a fresh browser can land on
   `/things` and immediately receive the real Things UI through a rate-limited
   temporary user Thing, bounded subscription, normal browser session, and
