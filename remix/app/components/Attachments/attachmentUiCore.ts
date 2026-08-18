@@ -56,6 +56,15 @@ export const localFileMediaKind = (file: Pick<File, 'type'>): AttachmentMediaKin
 	return 'file';
 };
 
+const MAX_ATTACHMENT_TITLE_CHARS = 200;
+const MAX_ATTACHMENT_DESCRIPTION_CHARS = 2000;
+
+const normalizedOwnerText = (value: unknown, maxChars: number): string | undefined => {
+	if (typeof value !== 'string') return undefined;
+	const trimmed = value.trim();
+	return trimmed ? trimmed.slice(0, maxChars) : undefined;
+};
+
 export const normalizePublicAttachment = (value: unknown): PublicAttachment | null => {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 	const record = value as Record<string, unknown>;
@@ -64,6 +73,8 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 	const contentType = typeof record.contentType === 'string' ? record.contentType.trim().toLowerCase() : 'application/octet-stream';
 	const size = Number(record.size);
 	if (!id || !name || !Number.isSafeInteger(size) || size < 0) return null;
+	const title = normalizedOwnerText(record.title, MAX_ATTACHMENT_TITLE_CHARS);
+	const description = normalizedOwnerText(record.description, MAX_ATTACHMENT_DESCRIPTION_CHARS);
 	const detectedRaw = typeof record.detectedContentType === 'string' ? record.detectedContentType.trim().toLowerCase() : '';
 	const detectedContentType =
 		detectedRaw && detectedRaw !== contentType && detectedRaw !== 'application/octet-stream' && detectedRaw.includes('/') ? detectedRaw : '';
@@ -76,10 +87,15 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		// Audio is valid canonical server metadata, but is intentionally treated as
 		// a generic download until Thingtime ships a vetted inline audio player.
 		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind),
+		...(title ? { title } : {}),
+		...(description ? { description } : {}),
 		// only an explicit server true survives — nothing client-side can set it
 		...(record.nsfw === true ? { nsfw: true } : {})
 	};
 };
+
+// The stable deeplink to a media attachment's own Thing page.
+export const mediaPageUrl = (id: string): string => `/media/${encodeURIComponent(id)}`;
 
 // Display names for containers the server can sniff but never renders inline,
 // plus common claimed types; anything unmapped shows its raw MIME string.

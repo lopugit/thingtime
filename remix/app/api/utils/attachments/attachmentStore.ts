@@ -9,6 +9,7 @@ import {
 	isAttachmentFinalizationLeaseId,
 	isAttachmentObjectVersionId,
 	planAttachmentReorder,
+	sanitizeAttachmentPublicMetadata,
 	type AttachmentCrystal,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
@@ -763,6 +764,72 @@ const bindReadyAttachmentsForPurpose = async (
 		throw new AttachmentBindingError(409, `One or more attachments changed while the ${attachmentPurposeLabel[purpose]} was being created`);
 	}
 };
+
+export type AttachmentAnnotationPatch = {
+	// undefined = leave untouched, null/'' = clear, string = set (trimmed)
+	title?: string | null;
+	description?: string | null;
+};
+
+// Owner-authored title/description on a READY attachment. Ready-only on
+// purpose: finalize (markReady) rebuilds the crystal from the verified S3
+// object, so annotating an in-flight upload would be silently clobbered.
+// Crystal bytes change, so the delta rides the same exact-accounting
+// transaction markReady uses.
+export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch): Promise<AttachmentDoc> =>
+	withHomeMongoTransaction(async (session) => {
+		const things = await getHomeThingsCollection();
+		const before = (await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session })) as any as AttachmentDoc | null;
+		if (!before) throw new AttachmentBindingError(404, 'Attachment not found');
+		if (before.attachmentState !== 'ready') {
+			throw new AttachmentBindingError(409, 'This file is still uploading — try again once it is ready');
+		}
+
+		const merged: Record<string, unknown> = {
+			name: before.crystal.name,
+			size: before.crystal.size,
+			contentType: before.crystal.contentType,
+			...(patch.title === undefined ? (before.crystal.title ? { title: before.crystal.title } : {}) : patch.title ? { title: patch.title } : {}),
+			...(patch.description === undefined
+				? before.crystal.description
+					? { description: before.crystal.description }
+					: {}
+				: patch.description
+				? { description: patch.description }
+				: {})
+		};
+		const sanitized = sanitizeAttachmentPublicMetadata(merged);
+		if (!sanitized.ok) throw new AttachmentBindingError(400, sanitized.error);
+		const nextCrystal: AttachmentCrystal = { ...sanitized.crystal, mediaKind: before.crystal.mediaKind };
+		if (
+			nextCrystal.title === before.crystal.title &&
+			nextCrystal.description === before.crystal.description &&
+			nextCrystal.name === before.crystal.name
+		) {
+			return before;
+		}
+
+		const next: AttachmentDoc = { ...before, crystal: nextCrystal, updatedAt: new Date() };
+		const nextSize = thingStorageSizeBytes(next);
+		const deltaBytes = nextSize - canonicalStoredBytes(before);
+		if (deltaBytes !== 0) await applyUserStorageDelta(ownerId, deltaBytes, session);
+
+		const write = await things.updateOne(
+			{
+				_id: before._id,
+				ownerId,
+				attachmentState: 'ready',
+				updatedAt: before.updatedAt,
+				sizeBytes: before.sizeBytes
+			} as any,
+			{ $set: { crystal: nextCrystal, sizeBytes: nextSize, updatedAt: next.updatedAt } },
+			{ session }
+		);
+		if (write.matchedCount !== 1) {
+			throw new AttachmentBindingError(409, 'Attachment changed while it was being updated — try again');
+		}
+		return { ...next, sizeBytes: nextSize };
+	});
 
 // Re-stamp the display order of the ready attachments already bound to one
 // target. The requested list must be a pure permutation of the bound set —

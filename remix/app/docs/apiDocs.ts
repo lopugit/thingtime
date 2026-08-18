@@ -2712,6 +2712,56 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
+		id: 'attachment-annotate',
+		group: 'attachments',
+		title: 'Annotate attachment',
+		endpoint: '/api/v1/attachments/annotate',
+		summary: 'Sets or clears an owned ready attachment’s title and description.',
+		detail:
+			'Every attachment is a Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation text that page (and the post lightbox) renders: title up to 200 single-line characters, description up to 2000 characters (newlines allowed). Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched. Works on ready drafts before posting and on attachments already bound to a post, comment, or message. Crystal growth is charged to the owner’s storage quota exactly like any other Thing edit.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST the canonical attachment id with title and/or description.',
+			'Omit a field to leave it unchanged; send null or an empty string to clear it.',
+			'Store the returned attachment metadata (it includes the updated title/description).',
+			'Retry a 409 after refreshing — the attachment changed or is still uploading.'
+		],
+		requestExamples: [
+			{
+				name: 'Title a photo',
+				description: 'Set presentation text on an owned ready attachment.',
+				method: 'POST',
+				body: {
+					id: '3bda8208-625c-4f5d-941f-348020021848',
+					title: 'Sunset over the bay',
+					description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Updated public metadata.',
+				body: {
+					ok: true,
+					attachment: {
+						id: '3bda8208-625c-4f5d-941f-348020021848',
+						name: 'sunset.jpg',
+						size: 482133,
+						contentType: 'image/jpeg',
+						mediaKind: 'image',
+						title: 'Sunset over the bay',
+						description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
+					}
+				}
+			}
+		]
+	}),
+	endpoint({
 		id: 'attachment-delete',
 		group: 'attachments',
 		title: 'Delete attachment',
