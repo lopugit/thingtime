@@ -18,7 +18,7 @@
 # second PR lands). The individual PRs keep getting healed one-by-one by the
 # existing AI conflict resolver as they merge; this doctor heals only the
 # union. After each rebuild whose inputs changed, the union build runs
-# (install → vite client build → nitro server build); on failure, up to three
+# (install, then the full Vercel-parity remix build); on failure, up to three
 # edit-files-only Claude rounds (same action pin, model waterfall, and
 # security posture as resolve-pr-conflicts.yml) repair the working tree, a
 # deterministic step guards + commits the edits (out-of-scope paths reverted,

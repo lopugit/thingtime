@@ -731,13 +731,14 @@ function checkMode() {
       stage = "install";
     }
   }
-  if (ok && !runCheckStep("vite client build", "corepack", ["pnpm", "--dir", "remix", "run", "build:client"])) {
+  // The remix `build` script is Vercel's exact chain (pre-dev, client +
+  // embed + verify, nitro-template sync, NITRO_PRESET=vercel server build,
+  // output patch + verify) — anything lighter lets collisions in the later
+  // stages reach the deployment (the preview-freshness plugin drop did
+  // exactly that on the first doctored push).
+  if (ok && !runCheckStep("vercel-parity build (client + embed + nitro + output verify)", "corepack", ["pnpm", "--dir", "remix", "run", "build"])) {
     ok = false;
-    stage = "client-build";
-  }
-  if (ok && !runCheckStep("nitro server build", "corepack", ["pnpm", "--dir", "remix", "run", "build:server"])) {
-    ok = false;
-    stage = "server-build";
+    stage = "build";
   }
   writeState({ ...state, notes, buildOk: ok, stage });
   stepOutput("build_ok", ok ? "true" : "false");
