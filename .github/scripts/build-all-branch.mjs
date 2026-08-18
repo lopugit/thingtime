@@ -35,6 +35,22 @@
 //   Vercel project, and routing unreviewed fork code into it would bypass
 //   Vercel's own fork-authorization step. Label a PR `no-all` to opt it out of
 //   the union explicitly.
+// - Build doctor: textually-clean merges can still collide semantically (two
+//   PRs adding the same helper, duplicate imports), which breaks the union
+//   build even though no git conflict ever existed. The workflow runs the
+//   union build after each rebuild; on failure a capped, edit-files-only AI
+//   round (house resolver pattern) fixes the working tree, this script guards
+//   and commits it, and the build is re-verified mechanically. Doctor commits
+//   ride on `all` itself: the next rebuild cherry-pick-replays them, and a
+//   fixup that stops applying (the source PRs healed) is dropped silently.
+//   Rebuild dedup compares the *manifest commit* trees, so unchanged inputs
+//   skip the build check and AI entirely.
+//
+// Modes (argv[2]): `build` (default) rebuild + replay + dedup decision;
+// `check` run the union build (install → build:client → build:server) with
+// mechanical lockfile repair; `doctor-commit --round N` guard + commit the
+// model's working-tree edits; `doctor-record` note an exhausted doctor;
+// `push` final force-push with the .github re-pin fallback and summary.
 //
 // Requirements: a pushable `origin` checkout of the repo, plus `gh` auth
 // (GH_TOKEN in Actions) for PR listing. Tunables: ALL_BRANCH_NAME (all),
@@ -48,7 +64,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 const ALL_BRANCH = process.env.ALL_BRANCH_NAME || "all";
 const BASE_BRANCHES = (process.env.ALL_BASE_BRANCHES || "develop main")
@@ -59,6 +75,12 @@ const INCLUDE_FORKS = process.env.ALL_INCLUDE_FORKS === "1";
 const PUSH = process.env.ALL_PUSH !== "0";
 const REPOSITORY = process.env.GITHUB_REPOSITORY || "lopugit/thingtime";
 const REMOTE_ALL_REF = "refs/all-build/remote-all";
+const STATE_DIR = ".all-doctor";
+const STATE_FILE = `${STATE_DIR}/state.json`;
+const BUILD_LOG = `${STATE_DIR}/build.log`;
+const DOCTOR_SUBJECT_PREFIX = "all: build doctor";
+const MANIFEST_SUBJECT_PREFIX = "all: manifest (";
+const MAX_REPLAYED_DOCTOR_COMMITS = 30;
 
 // Override the repo's graphify union merge driver (the binary is not
 // installed here) with a take-theirs command matching the global bias.
@@ -80,6 +102,14 @@ const git = (...args) => run("git", args).replace(/\n$/, "");
 const tryGit = (...args) =>
   spawnSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 
+// Checkouts run with persist-credentials: false, so network git operations
+// authenticate through an ephemeral credential helper reading GH_TOKEN from
+// the environment (anonymous outside Actions, where ambient auth applies).
+const gitAuthConfig = () =>
+  process.env.GITHUB_ACTIONS === "true" && process.env.GH_TOKEN
+    ? ["-c", "credential.helper=", "-c", 'credential.helper=!f() { echo "username=x-access-token"; echo "password=${GH_TOKEN}"; }; f']
+    : [];
+
 const singleLine = (text, max = 120) => {
   const flat = String(text ?? "")
     .replace(/\s+/g, " ")
@@ -88,6 +118,65 @@ const singleLine = (text, max = 120) => {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 };
 const tableCell = (text) => singleLine(text).replaceAll("|", "\\|");
+
+// Only commits the doctor itself created are replayed onto the next rebuild;
+// pins, manifests, and human commits never are. Pure: exercised by --self-test.
+export function isReplayableDoctorSubject(subject) {
+  return String(subject ?? "").startsWith(DOCTOR_SUBJECT_PREFIX);
+}
+
+// Paths the doctor may never commit. The action's tool restrictions block the
+// model from editing these; this mechanical layer catches anything that slips
+// through. Pure: exercised by --self-test.
+export function isForbiddenDoctorPath(path) {
+  const p = String(path ?? "");
+  if (
+    p.startsWith(".github/") ||
+    p.startsWith("graphify-out/") ||
+    p.startsWith(`${STATE_DIR}/`) ||
+    p.startsWith("control-plane/")
+  ) {
+    return true;
+  }
+  if (p === ".github" || p === STATE_DIR || p === "control-plane") return true;
+  if (p === "ALL_BRANCH.md" || p === "AGENTS.md" || p === "CLAUDE.md") return true;
+  const base = p.split("/").pop();
+  return base === ".gitattributes" || base === "pnpm-lock.yaml" || base === "package-lock.json";
+}
+
+const readState = () => {
+  try {
+    return JSON.parse(readFileSync(STATE_FILE, "utf8"));
+  } catch {
+    return { notes: [], manifest: "", proceed: false, buildOk: null, stage: "", replayed: 0 };
+  }
+};
+const writeState = (state) => {
+  mkdirSync(STATE_DIR, { recursive: true });
+  writeFileSync(STATE_FILE, `${JSON.stringify(state, null, 2)}\n`);
+};
+const stepOutput = (name, value) => {
+  console.log(`build-all-branch: output ${name}=${value}`);
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
+  }
+};
+const writeSummary = (markdown) => {
+  console.log(`\n${markdown}`);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${markdown}\n`);
+  }
+};
+
+// The workspace must already be the built `all` branch for every post-build
+// mode; guard against running them against a product branch by accident.
+function requireAllBranchCheckout(mode) {
+  const branch = tryGit("branch", "--show-current").stdout?.trim();
+  if (branch !== ALL_BRANCH) {
+    console.error(`build-all-branch ${mode}: expected to run on branch ${ALL_BRANCH}, found ${branch || "detached HEAD"}.`);
+    process.exit(2);
+  }
+}
 
 // Decide which open PRs join the union and in what order. Pure: exercised by
 // --self-test below.
@@ -335,9 +424,41 @@ function selfTest() {
     assert.match(manifest, /dangling/);
     assert.doesNotMatch(manifest, /\d{4}-\d{2}-\d{2}[T ]\d{2}:/);
   }
+
+  // Doctor replay-subject and forbidden-path rules.
+  {
+    assert.equal(isReplayableDoctorSubject("all: build doctor round 1 — fix union build (client-build): a.ts"), true);
+    assert.equal(isReplayableDoctorSubject("all: build doctor — mechanical pnpm lockfile reset to develop"), true);
+    assert.equal(isReplayableDoctorSubject("all: manifest (61 PRs merged, 4 skipped)"), false);
+    assert.equal(isReplayableDoctorSubject("all: union client-build still failing after doctor rounds"), false);
+    assert.equal(isReplayableDoctorSubject("all: pin .github and instruction symlinks to develop"), false);
+    const forbidden = [
+      ".github/workflows/web-ci.yml",
+      "graphify-out/graph.json",
+      ".all-doctor/state.json",
+      "control-plane/.github/scripts/build-all-branch.mjs",
+      "ALL_BRANCH.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".gitattributes",
+      "remix/.gitattributes",
+      "remix/pnpm-lock.yaml",
+      "package-lock.json",
+    ];
+    for (const path of forbidden) assert.equal(isForbiddenDoctorPath(path), true, `${path} must be forbidden`);
+    const allowed = [
+      "remix/app/components/Feed/PostCard.tsx",
+      "README.md",
+      "scripts/vercel-build.mjs",
+      "remix/package.json",
+      "AI_ALL.md",
+    ];
+    for (const path of allowed) assert.equal(isForbiddenDoctorPath(path), false, `${path} must be editable`);
+  }
 }
 
-function main() {
+// Every mode hard-touches the checkout; gate and normalize once.
+function prepare() {
   const inActions = process.env.GITHUB_ACTIONS === "true";
   if (!inActions && process.env.ALL_BRANCH_FORCE !== "1") {
     console.error(
@@ -350,10 +471,14 @@ function main() {
     git("config", "user.name", "github-actions[bot]");
     git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com");
   }
+}
+
+function buildMode() {
 
   run(
     "git",
     [
+      ...gitAuthConfig(),
       "fetch",
       "--no-tags",
       "--force",
@@ -362,7 +487,7 @@ function main() {
     ],
     { stdio: ["ignore", "inherit", "inherit"] }
   );
-  tryGit("fetch", "--no-tags", "--force", "origin", `+refs/heads/${ALL_BRANCH}:${REMOTE_ALL_REF}`);
+  tryGit(...gitAuthConfig(), "fetch", "--no-tags", "--force", "origin", `+refs/heads/${ALL_BRANCH}:${REMOTE_ALL_REF}`);
 
   const pullRequests = JSON.parse(
     run("gh", [
@@ -394,6 +519,7 @@ function main() {
     run(
       "git",
       [
+        ...gitAuthConfig(),
         "fetch",
         "--no-tags",
         "--force",
@@ -445,6 +571,236 @@ function main() {
     run("git", ["commit", "-q", "-m", `all: manifest (${merges.length} PRs merged, ${skipped.length} skipped)`]);
   }
 
+  // Rebuild dedup + doctor-fixup replay against the previously pushed branch.
+  // Comparing MANIFEST-commit trees (both pre-doctor) means unchanged inputs
+  // skip the build check and every AI round outright.
+  const remote = remoteDoctorState();
+  const manifestTree = git("rev-parse", "HEAD^{tree}");
+  if (remote && remote.manifestTree === manifestTree) {
+    const kept = remote.doctorShas.length;
+    writeState({ notes, manifest, proceed: false, buildOk: null, stage: "", replayed: 0, merges: merges.length, skips: skipped.length });
+    writeSummary(
+      [
+        "## Build all branch",
+        "",
+        `No input change — origin/${ALL_BRANCH} already matches this rebuild` +
+          (kept > 0 ? ` (${kept} doctor fixup${kept === 1 ? "" : "s"} preserved).` : "."),
+      ].join("\n")
+    );
+    stepOutput("proceed", "false");
+    return;
+  }
+
+  let replayed = 0;
+  if (remote && remote.doctorShas.length > 0) {
+    const preReplay = git("rev-parse", "HEAD");
+    for (const sha of remote.doctorShas) {
+      if (tryGit("cherry-pick", sha).status === 0) {
+        replayed += 1;
+        continue;
+      }
+      // Stale or now-empty fixup (the source PRs healed): drop it silently.
+      if (tryGit("cherry-pick", "--skip").status !== 0) tryGit("cherry-pick", "--abort");
+      notes.push(`🩺 replay dropped: doctor fixup ${sha.slice(0, 7)} no longer applies`);
+    }
+    if (git("ls-files", "-u") !== "" || tryGit("rev-parse", "-q", "--verify", "CHERRY_PICK_HEAD").status === 0) {
+      tryGit("cherry-pick", "--abort");
+      git("reset", "--hard", preReplay);
+      replayed = 0;
+      notes.push("🩺 replay abandoned: fixups left an inconsistent state and were dropped wholesale");
+    } else if (replayed > 0) {
+      notes.push(`🩺 replayed ${replayed} doctor fixup${replayed === 1 ? "" : "s"} from the previous ${ALL_BRANCH}`);
+    }
+  }
+
+  writeState({ notes, manifest, proceed: true, buildOk: null, stage: "", replayed, doctored: 0, merges: merges.length, skips: skipped.length });
+  stepOutput("proceed", "true");
+  console.log(
+    `build-all-branch: rebuild ready (${merges.length} merged, ${skipped.length} skipped, ${replayed} fixup${replayed === 1 ? "" : "s"} replayed)`
+  );
+}
+
+// Inspect the previously pushed branch: its manifest commit (rebuild identity)
+// and the replayable doctor commits stacked on top of it.
+function remoteDoctorState() {
+  if (tryGit("rev-parse", "-q", "--verify", REMOTE_ALL_REF).status !== 0) return null;
+  const log = tryGit("log", "--first-parent", "-n", "60", "--format=%H%x09%s", REMOTE_ALL_REF);
+  if (log.status !== 0) return null;
+  const rows = (log.stdout || "")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const tab = line.indexOf("\t");
+      return { sha: line.slice(0, tab), subject: line.slice(tab + 1) };
+    });
+  const manifestIndex = rows.findIndex((row) => row.subject.startsWith(MANIFEST_SUBJECT_PREFIX));
+  if (manifestIndex === -1) {
+    return { manifestTree: tryGit("rev-parse", `${REMOTE_ALL_REF}^{tree}`).stdout?.trim() || "", doctorShas: [] };
+  }
+  return {
+    manifestTree: tryGit("rev-parse", `${rows[manifestIndex].sha}^{tree}`).stdout?.trim() || "",
+    doctorShas: rows
+      .slice(0, manifestIndex)
+      .filter((row) => isReplayableDoctorSubject(row.subject))
+      .map((row) => row.sha)
+      .reverse()
+      .slice(0, MAX_REPLAYED_DOCTOR_COMMITS),
+  };
+}
+
+// Run one command for the union build check, teeing a failure's output into
+// BUILD_LOG for the doctor model to read.
+function runCheckStep(label, command, args) {
+  console.log(`build-all-branch check: ${label}...`);
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output = `${result.stdout || ""}${result.stderr || ""}`;
+  if (result.status !== 0) {
+    console.error(output.split("\n").slice(-120).join("\n"));
+    const body = output.length > 1024 * 1024 ? output.slice(-1024 * 1024) : output;
+    writeFileSync(BUILD_LOG, `# Failed command: ${label}\n\n${body}\n`);
+    return false;
+  }
+  console.log(output.split("\n").slice(-20).join("\n"));
+  return true;
+}
+
+// Union build check: install → client build → server build, with a
+// deterministic lockfile repair before any AI is spent. Always exits 0; the
+// verdict travels via step outputs and state.
+function checkMode() {
+  requireAllBranchCheckout("check");
+  mkdirSync(STATE_DIR, { recursive: true });
+  const state = readState();
+  const notes = state.notes || [];
+  const install = () =>
+    runCheckStep("pnpm install (remix)", "corepack", ["pnpm", "--dir", "remix", "install", "--no-frozen-lockfile"]);
+  let ok = true;
+  let stage = "";
+  if (!install()) {
+    // Union lockfiles are frequently unsatisfiable; reset to the primary
+    // base's lockfile and let pnpm re-resolve. Committed mechanically (and
+    // replayed next rebuild) — never a model concern.
+    const restore = tryGit("checkout", `refs/remotes/origin/${BASE_BRANCHES[0]}`, "--", "remix/pnpm-lock.yaml");
+    if (restore.status === 0 && install()) {
+      run("git", ["add", "--", "remix/pnpm-lock.yaml"]);
+      if (tryGit("diff", "--cached", "--quiet").status !== 0) {
+        run("git", ["commit", "-q", "-m", `${DOCTOR_SUBJECT_PREFIX} — mechanical pnpm lockfile reset to ${BASE_BRANCHES[0]}`]);
+        notes.push(`🩺 mechanical repair: remix/pnpm-lock.yaml reset to ${BASE_BRANCHES[0]} so the union installs`);
+      }
+    } else {
+      ok = false;
+      stage = "install";
+    }
+  }
+  if (ok && !runCheckStep("vite client build", "corepack", ["pnpm", "--dir", "remix", "run", "build:client"])) {
+    ok = false;
+    stage = "client-build";
+  }
+  if (ok && !runCheckStep("nitro server build", "corepack", ["pnpm", "--dir", "remix", "run", "build:server"])) {
+    ok = false;
+    stage = "server-build";
+  }
+  writeState({ ...state, notes, buildOk: ok, stage });
+  stepOutput("build_ok", ok ? "true" : "false");
+  // Install-stage failures are not fixable by editing app source; skip AI.
+  stepOutput("ai_eligible", !ok && stage !== "install" ? "true" : "false");
+  if (!ok) console.error(`build-all-branch check: union build failing at ${stage} (log: ${BUILD_LOG})`);
+}
+
+// Guard and commit whatever the doctor model left in the working tree.
+function doctorCommitMode(round) {
+  requireAllBranchCheckout("doctor-commit");
+  const state = readState();
+  const notes = state.notes || [];
+  const porcelain = tryGit("status", "--porcelain=v1", "-z", "--untracked-files=all").stdout || "";
+  const entries = porcelain.split("\0").filter(Boolean);
+  const reverted = [];
+  let index = 0;
+  while (index < entries.length) {
+    const entry = entries[index];
+    const status = entry.slice(0, 2);
+    const path = entry.slice(3);
+    index += status.startsWith("R") || status.startsWith("C") ? 2 : 1;
+    if (!isForbiddenDoctorPath(path)) continue;
+    if (status === "??") rmSync(path, { recursive: true, force: true });
+    else tryGit("checkout", "HEAD", "--", path);
+    reverted.push(path);
+  }
+  if (reverted.length > 0) {
+    notes.push(`🩺 round ${round}: reverted out-of-scope model edits (${singleLine(reverted.join(", "), 180)})`);
+  }
+  run("git", ["add", "-A", "--", ".", `:(exclude)${STATE_DIR}`, ":(exclude)control-plane"]);
+  if (tryGit("diff", "--cached", "--quiet").status === 0) {
+    notes.push(`🩺 round ${round}: the model made no eligible edits`);
+    writeState({ ...state, notes });
+    stepOutput("committed", "false");
+    stepOutput("scrubbed", "false");
+    return;
+  }
+  // House rule: a committed fixup must never contain any credential this job
+  // could see, raw or base64. On a hit, discard the entire round.
+  const staged = tryGit("diff", "--cached").stdout || "";
+  const leaked = ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"].some((name) => {
+    const value = process.env[name];
+    if (!value) return false;
+    return staged.includes(value) || staged.includes(Buffer.from(value, "utf8").toString("base64"));
+  });
+  if (leaked) {
+    tryGit("reset", "-q");
+    tryGit("checkout", "--", ".");
+    tryGit("clean", "-fd", "-e", STATE_DIR, "-e", "control-plane");
+    notes.push(`🩺 round ${round}: DISCARDED — the staged fixup contained credential material`);
+    writeState({ ...state, notes });
+    stepOutput("committed", "false");
+    stepOutput("scrubbed", "true");
+    return;
+  }
+  const files = (tryGit("diff", "--cached", "--name-only").stdout || "").split("\n").filter(Boolean);
+  const shown = singleLine(files.slice(0, 6).join(", "), 140) + (files.length > 6 ? ", …" : "");
+  run("git", ["commit", "-q", "-m", `${DOCTOR_SUBJECT_PREFIX} round ${round} — fix union build (${state.stage || "build"}): ${shown}`]);
+  notes.push(`🩺 round ${round}: committed fixes to ${files.length} file${files.length === 1 ? "" : "s"} (${shown})`);
+  writeState({ ...state, notes, doctored: (state.doctored || 0) + 1 });
+  stepOutput("committed", "true");
+  stepOutput("scrubbed", "false");
+}
+
+// Record how doctoring ended; on an exhausted doctor, leave a human-visible
+// (deliberately non-replayable) marker commit on the branch tip.
+function doctorRecordMode() {
+  requireAllBranchCheckout("doctor-record");
+  const state = readState();
+  const notes = state.notes || [];
+  if (process.env.ALL_DOCTOR_SKIP_REASON) {
+    notes.push(`🩺 doctor skipped: ${singleLine(process.env.ALL_DOCTOR_SKIP_REASON, 200)}`);
+  }
+  if (state.buildOk === false) {
+    run("git", ["commit", "-q", "--allow-empty", "-m", `all: union ${state.stage || "build"} still failing after doctor rounds`]);
+    notes.push(`🩺 rounds exhausted — union build still failing at ${state.stage || "build"}; pushing anyway so the manifest and history stay inspectable`);
+  } else if (state.buildOk === true && (state.doctored || 0) > 0) {
+    notes.push(`🩺 union build green after ${state.doctored} doctor round${state.doctored === 1 ? "" : "s"}`);
+  }
+  writeState({ ...state, notes });
+}
+
+// Final force-push (with the .github re-pin fallback) and the run summary.
+function pushMode() {
+  requireAllBranchCheckout("push");
+  const state = readState();
+  const notes = state.notes || [];
+  if (state.proceed !== true) {
+    console.log("build-all-branch push: nothing to push (build mode decided to skip).");
+    return;
+  }
+  const pushGit = (args) =>
+    spawnSync("git", [...gitAuthConfig(), ...args], {
+      encoding: "utf8",
+      stdio: ["ignore", "inherit", "pipe"],
+      maxBuffer: 64 * 1024 * 1024,
+    });
   let pushLine;
   const builtTree = git("rev-parse", "HEAD^{tree}");
   const remoteTree = tryGit("rev-parse", "-q", "--verify", `${REMOTE_ALL_REF}^{tree}`);
@@ -454,7 +810,7 @@ function main() {
     pushLine = `Build only (ALL_PUSH=0): origin/${ALL_BRANCH} was not updated.`;
   } else {
     const pushArgs = ["push", "--force", "origin", `${ALL_BRANCH}:refs/heads/${ALL_BRANCH}`];
-    let push = spawnSync("git", pushArgs, { encoding: "utf8", stdio: ["ignore", "inherit", "pipe"] });
+    let push = pushGit(pushArgs);
     if (push.status !== 0 && /workflow/i.test(push.stderr || "")) {
       // GITHUB_TOKEN may not change .github/workflows/** content. Re-pin
       // .github to the previously pushed all state so the tip-to-tip workflow
@@ -472,7 +828,7 @@ function main() {
           push = { status: 0 };
           pushLine = `No push needed after re-pin — origin/${ALL_BRANCH} already matches.`;
         } else {
-          push = spawnSync("git", pushArgs, { encoding: "utf8", stdio: ["ignore", "inherit", "pipe"] });
+          push = pushGit(pushArgs);
         }
       }
     }
@@ -481,23 +837,39 @@ function main() {
       process.exitCode = 1;
       pushLine = `❌ Push to origin/${ALL_BRANCH} failed: ${singleLine(push.stderr, 300)}`;
     } else {
-      pushLine = pushLine || `Force-pushed origin/${ALL_BRANCH} (${merges.length} PRs merged, ${skipped.length} skipped).`;
+      pushLine = pushLine || `Force-pushed origin/${ALL_BRANCH} (${state.merges ?? "?"} PRs merged, ${state.skips ?? "?"} skipped).`;
     }
   }
-
-  const summary = ["## Build all branch", "", pushLine, "", ...notes.map((note) => `- ${note}`), "", manifest].join("\n");
-  console.log(`\n${summary}`);
-  if (process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
-  }
+  const doctored = state.doctored || 0;
+  const statusLine =
+    state.buildOk === true
+      ? `✅ Union build: green${doctored > 0 ? ` (after ${doctored} doctor round${doctored === 1 ? "" : "s"})` : (state.replayed || 0) > 0 ? " (replayed fixups held)" : ""}.`
+      : state.buildOk === false
+        ? `❌ Union build: still failing at ${state.stage || "build"} — the branch is pushed regardless; details in the notes.`
+        : "Union build: not checked this run.";
+  writeSummary(
+    ["## Build all branch", "", pushLine, statusLine, "", ...notes.map((note) => `- ${note}`), "", state.manifest || ""].join("\n")
+  );
 }
 
 if (process.argv.includes("--self-test")) {
   selfTest();
   console.log("build-all-branch: self-test OK");
 } else {
+  const mode = process.argv[2] || "build";
   try {
-    main();
+    prepare();
+    if (mode === "build") buildMode();
+    else if (mode === "check") checkMode();
+    else if (mode === "doctor-commit") {
+      const flag = process.argv.indexOf("--round");
+      doctorCommitMode(flag !== -1 && process.argv[flag + 1] ? process.argv[flag + 1] : "1");
+    } else if (mode === "doctor-record") doctorRecordMode();
+    else if (mode === "push") pushMode();
+    else {
+      console.error(`build-all-branch: unknown mode ${mode}`);
+      process.exit(2);
+    }
   } catch (error) {
     console.error(`build-all-branch: fatal: ${error?.message || error}`);
     process.exit(1);
