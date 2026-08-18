@@ -54,6 +54,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   indexed lookup on every feed page, post read and reaction toggle; chat member
   existence checks batch into two queries; and the feed's post row is memoized
   so `PostCard`'s `React.memo` actually hits. — Claude (AI), 2026-08-18
+- **PR #299 independent review**: every push was re-reviewed by a second
+  session (verification record in the PR note's "Review record" section);
+  no invalid changes found. One hardening landed from review:
+  `insertChatMembers` rethrows bulk write-concern failures instead of
+  swallowing them with the benign duplicate-key races, matching the old
+  per-id `insertOne` semantics. The `readAt: null` partial-index spec was
+  confirmed against the production cluster's MongoDB 8.0.1.
+  — Claude (AI), 2026-08-18
 
 ### Security
 

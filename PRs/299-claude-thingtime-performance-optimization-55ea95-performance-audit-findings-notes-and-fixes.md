@@ -898,3 +898,45 @@ Reported by a finder, then rejected on verification against the real source. Rec
 - JSON.stringify of theme overrides runs in a dependency array on every render (Code exists verbatim at remix/app/hooks/useTtTheme.tsx:35-39, but the impact is negligible and the analysis is inverted.)
 - NotificationsBell keeps polling in hidden/background tabs — the only poller in the app without a visibilityState guard (Already fixed in current source. The claimed evidence (an unguarded `window.setInterval(refresh, POLL_MS)` at Notificati)
 - Notification email fan-out is a serial per-recipient loop of countDocuments + SES round trip (The loop exists as quoted (emails.ts:129, sendToTarget:65-71, recentNotificationEmailCount:55-63), but the claimed cost )
+
+## Review record (independent review loop)
+
+A second Claude session reviewed this branch as it was pushed (PR comments of
+2026-08-18). Outcome, so the verification standard is auditable:
+
+**Round 1 — full diff `2322f192..a59b1583`** ([comment](https://github.com/lopugit/thingtime/pull/299#issuecomment-5328516495)):
+no invalid changes. The load-bearing equivalences were re-derived from source
+rather than trusted: `toPublicUserWithStorage` ≡ `toPublicUser(user,
+getSubscription('user', String(user._id)))` with id symmetry across both user
+stores; `findThingByKind` matches `{shareId, thingtime}` only, so the
+`resolveChatAccess` gate's raw-id membership lookup is equivalent;
+`findUsersByIds` set-membership is symmetric with the requested ids; zero
+FontAwesome usages remained; no `remix/public/assets/` collision for the
+immutable-cache rule; the `/api/docs` LRU eviction math is sound; the
+`notification_unread` partial index was tested empirically (creation, planner
+selection with `isPartial: true`, missing-vs-explicit-null counting).
+
+**Round 2 — increment `a59b1583..4251726`**: clean. The
+`RELATED_CHILD_PROJECTION` whitelist was checked against every consumer
+(pass-1/level loops, `buildComment`, `mergedCommentsOf`/`mergedReactionsOf`,
+the attachment target pass, and the v1 fallbacks inside
+`isV2`/`thingtimeOf`/`crystalOf`/`targetIdOf`) — no consumer reads a projected-
+away field; embedded v1 residue is only ever merged off unprojected page-level
+docs. Both round-three indexes are additive and version-safe; `PostRow`
+memoization is identity-correct.
+
+**Caveat closed**: null equality in `partialFilterExpression` was flagged as a
+possible boot-time `ensureIndexes()` risk on older servers. Verified: the
+production Atlas cluster runs **MongoDB 8.0.1** — the same version the index
+was empirically tested on — and CI's API suite (which boots `ensureIndexes()`)
+is green with all three new indexes.
+
+**Fix landed from review**: `insertChatMembers` now rethrows bulk errors that
+carry `writeConcernErrors` before the all-11000 duplicate swallow — a
+write-concern failure means the memberships may not be durably replicated, and
+the old per-id `insertOne` path always rethrew those.
+
+**Considered and deliberately left**: the `useRecentReactions` one-fetch-per-
+session latch (cross-device MRU staleness until reload). It follows the
+optimistic-rendering house rule and `pushRecent` keeps the local list current;
+revalidate-on-`visibilitychange` is the upgrade path if staleness ever matters.

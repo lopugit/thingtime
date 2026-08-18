@@ -221,6 +221,10 @@ const insertChatMembers = async (chatId: string, members: Array<{ userId: string
       { ordered: false }
     );
   } catch (err: any) {
+    // A write-concern failure is not a duplicate: the docs may not be durably
+    // replicated even when every per-doc error is a benign 11000 race, and the
+    // per-id insertOne path always rethrew these.
+    if (err?.writeConcernErrors?.length) throw err;
     // A bulk error whose every write failure is a duplicate key means those
     // memberships already exist (a racing inserter won) — identical outcome to
     // the per-id loop, which swallowed 11000 per id. Anything else is real.
