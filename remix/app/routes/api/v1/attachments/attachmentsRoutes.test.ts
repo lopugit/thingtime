@@ -51,6 +51,46 @@ test('same-origin mutations honor the proxy-owned public origin and still fail c
 	);
 });
 
+// Signup-permissions hotfix: a brand-new account (publicUploadsEnabled false,
+// even once its email is verified) must not be able to START an upload, while
+// an approved account is unaffected — and routes that DON'T opt in stay open so
+// an in-flight upload can still be completed or cancelled after a revoke.
+test('upload starts require the account public-upload permission', async () => {
+	let serviceCalls = 0;
+	const gated = (viewer: any) =>
+		createAttachmentMutationAction(
+			{
+				rateKey: 'attachments.start',
+				service: async () => {
+					serviceCalls += 1;
+					return { ok: true };
+				},
+				requirePublicUploads: true
+			},
+			{ getUser: async () => viewer, enforceLimit: allowed as any }
+		);
+
+	const pending = { id: 'user-new', accountKind: 'user', emailVerified: true, publicUploadsEnabled: false } as any;
+	const denied = await gated(pending)({ request: post({}) });
+	assert.equal(denied.status, 403);
+	assert.equal(serviceCalls, 0);
+	const deniedBody = await denied.json();
+	assert.equal(deniedBody.code, 'public_uploads_not_approved');
+	assert.equal(denied.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+
+	const approved = { id: 'user-ok', accountKind: 'user', publicUploadsEnabled: true } as any;
+	assert.equal((await gated(approved)({ request: post({}) })).status, 200);
+	assert.equal(serviceCalls, 1);
+
+	// Lifecycle routes (parts/complete/abort/delete) never opt in, so a
+	// permission flipped off mid-upload can't strand a reserved MPU.
+	const ungated = createAttachmentMutationAction(
+		{ rateKey: 'attachments.complete', service: async () => ({ ok: true }) },
+		{ getUser: async () => pending, enforceLimit: allowed as any }
+	);
+	assert.equal((await ungated({ request: post({}) })).status, 200);
+});
+
 test('attachment mutations enforce same-origin JSON, full users, caps, and private responses', async () => {
 	let serviceCalls = 0;
 	const handler = createAttachmentMutationAction(
