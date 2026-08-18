@@ -43,10 +43,13 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key === 'ArrowLeft') step(-1);
 			if (event.key === 'ArrowRight') step(1);
+			// autoFocus is off, so focus can sit outside the modal where Chakra's
+			// own closeOnEsc handling never hears the key — close from here too.
+			if (event.key === 'Escape') onClose();
 		};
 		window.addEventListener('keydown', onKeyDown);
 		return () => window.removeEventListener('keydown', onKeyDown);
-	}, [isOpen, step]);
+	}, [isOpen, step, onClose]);
 
 	if (!attachment) return null;
 
