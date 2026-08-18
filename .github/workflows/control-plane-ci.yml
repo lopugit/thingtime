@@ -134,6 +134,8 @@ jobs:
               node .github/scripts/promotion-pr-changelog.mjs --self-test
             run_contract 'Feature promoter examples' \
               node .github/scripts/promote-features-to-main.mjs --self-test
+            run_contract 'All-branch builder examples' \
+              node .github/scripts/build-all-branch.mjs --self-test
           fi
 
           echo "warnings=$warnings" >>"$GITHUB_OUTPUT"
