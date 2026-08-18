@@ -400,7 +400,11 @@ const thingsCollection = (db: any) => db.collection(physicalCollectionName('thin
 //
 // everything in `things` is a thing (see api/utils/things + app/schemas);
 // shareId is included so the (createdAt desc, shareId asc) page sort is
-// fully index-provided instead of an in-memory sort per request. The
+// fully index-provided instead of an in-memory sort per request. That
+// holds only while EVERY branch of a query can provide the sort: the
+// dual-era post match is an $or over thingtime and kind, and a branch
+// with no matching index forces the planner to fetch the whole $or
+// result and sort it in memory — see the kind/createdAt index below. The
 // kind-prefixed indexes serve v1-era docs until the things migration
 // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
 // array), and targetId serves comment/reaction/share lookups.
@@ -422,6 +426,22 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
 		col.createIndex({ secureAdmin: 1 }, { partialFilterExpression: { secureAdmin: true } }),
     col.createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // The feed and profile matches are $or over BOTH eras
+    // ({thingtime:'post'} | {kind:'post'} — see postMatch in things.ts). The
+    // thingtime side had its (createdAt desc, shareId asc) index above; the
+    // kind side had one only when also filtered by visibility or ownerId, so
+    // a plain chronological feed left that branch sortless. The planner then
+    // could not push the limit into the scan: it fetched EVERY post the
+    // viewer can see and sorted them in memory, scaling linearly with the
+    // visible-post count.
+    //
+    // Purely additive — no query changes, both eras stay correct, and
+    // dropping the kind branch instead would silently hide v1-era posts
+    // (custom data-plane endpoints may still hold unmigrated docs).
+    // Verified on a local dataset: the plan goes from SORT <- FETCH <- OR
+    // (67 docs examined to return 21) to LIMIT <- FETCH <- SORT_MERGE with
+    // no blocking sort (38 examined).
+    col.createIndex({ kind: 1, createdAt: -1, shareId: 1 }),
     // Admin user/app snapshots filter by thingtime without ownerId, then
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
