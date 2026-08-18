@@ -61,6 +61,11 @@ jobs:
     if: github.repository == 'lopugit/thingtime'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # The `secrets` context is not available in step `if:` expressions;
+      # step conditions read this job-level flag instead (same pattern as the
+      # resolver's HAS_AI_CREDENTIAL gate).
+      HAS_AI_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     steps:
       - name: Check out develop working tree
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -109,7 +114,7 @@ jobs:
           steps.build.outputs.proceed == 'true'
           && steps.check1.outputs.build_ok != 'true'
           && steps.check1.outputs.ai_eligible == 'true'
-          && (secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '')
+          && env.HAS_AI_CREDENTIAL == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -373,8 +378,7 @@ jobs:
           ALL_DOCTOR_SKIP_REASON: >-
             ${{ steps.check1.outputs.build_ok != 'true'
                 && steps.check1.outputs.ai_eligible == 'true'
-                && secrets.ANTHROPIC_API_KEY == ''
-                && secrets.CLAUDE_CODE_OAUTH_TOKEN == ''
+                && env.HAS_AI_CREDENTIAL != 'true'
                 && 'no ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN secret — union pushed unhealed'
                 || '' }}
         run: node control-plane/.github/scripts/build-all-branch.mjs doctor-record
