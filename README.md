@@ -1020,6 +1020,19 @@ hourly:
 - Fork PRs are excluded (their unreviewed code would otherwise reach this
   repo's Vercel builds without the usual fork-authorization step). Label any
   PR `no-all` to keep it out of the union.
+- Semantic collisions — two PRs adding the same helper merge textually clean,
+  so no git conflict ever exists, yet the union build breaks — are handled by
+  the AI **build doctor**: after each input-changed rebuild the union build
+  runs (install → vite client → nitro server, with a mechanical lockfile
+  repair first), and on failure up to three guarded, edit-files-only Claude
+  rounds (the conflict resolver's action pin, model waterfall, and security
+  posture) repair the tree. Out-of-scope edits are reverted, commits are
+  credential-scanned, and the build is re-verified mechanically. Doctor
+  fixups ride on `all` and are cherry-pick-replayed onto the next rebuild,
+  dropping silently once the source PRs heal for real; an exhausted doctor
+  leaves a marker commit and retries once before waiting for input movement.
+  Needs the resolver's `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`
+  secret; without it the union is pushed unhealed.
 - `.github` on `all` is pinned to `develop`'s copy (workflows never execute on
   `all`, and this keeps force-pushes within the default `GITHUB_TOKEN`'s
   powers). If a rebuild still trips GitHub's workflow-file push restriction,
