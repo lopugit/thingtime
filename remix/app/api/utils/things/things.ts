@@ -1735,7 +1735,7 @@ export const canViewInherited = async (
 // one per doc×hop — the per-doc walks were fine locally but timed the /things
 // function out in production, where each Mongo round trip crosses regions
 // (~200ms Vercel iad1 ↔ Atlas Sydney).
-const batchedThingLookup = (): ((shareId: string) => Promise<ThingDoc | null>) => {
+export const batchedThingLookup = (): ((shareId: string) => Promise<ThingDoc | null>) => {
   const cache = new Map<string, Promise<ThingDoc | null>>();
   let pending: { ids: Set<string>; promise: Promise<Map<string, ThingDoc>> } | null = null;
   return (shareId: string) => {
