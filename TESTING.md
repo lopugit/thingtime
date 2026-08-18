@@ -40,14 +40,20 @@ is fixed, and cite the checklist you ran in the PR description.
 ## Develop-target Vercel PR previews
 
 - [ ] Confirm `.github/workflows/develop-pr-preview.yml` and its controller
-      script are present on the default `main` branch before expecting
-      `pull_request_target` to run; a workflow present only on the feature PR is
-      deliberately inactive.
+      listener are present on the default `main` branch, while the reusable
+      implementation and controller script are present on the protected
+      `github-actions` branch, before expecting `pull_request_target` to run; a
+      listener present only on the feature PR is deliberately inactive.
 - [ ] On a product branch, run
       `node remix/scripts/workflow-caller-contract.mjs` and
       `node --test remix/scripts/vercel-config.test.mjs`: the thin listener
-      checks out the trusted controller from `main`, `.github/scripts/` is
-      empty, and every Vercel cron `(path, schedule)` pair appears exactly once.
+      calls the trusted implementation on `github-actions`, `.github/scripts/`
+      is empty, and every Vercel cron `(path, schedule)` pair appears exactly
+      once.
+- [ ] Manually run `Develop S3 PR preview` from `main` with a valid develop PR
+      number: the caller converts the dispatch string to the reusable
+      workflow's numeric `pr_number`, creates the controller job instead of a
+      zero-job failure, and performs the requested publish or cleanup.
 - [ ] Inspect an eligible PR's two runs: the `pull_request_target` dispatcher
       has no GitHub Environment/Vercel secret, checks out no code, and emits one
       bounded `repository_dispatch`; only the downstream default-branch run
