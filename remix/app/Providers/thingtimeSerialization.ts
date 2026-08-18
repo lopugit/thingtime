@@ -1,15 +1,5 @@
-// @ts-ignore
+// @ts-ignore flatted does not bundle types in this project.
 import { parse as parseAux, stringify as stringifyAux } from 'flatted';
-
-type ThingtimeFunction = ((...args: any[]) => any) & {
-	ttScope?: Record<string, unknown>;
-};
-
-type SerializedThingtimeFunction = {
-	ttype: 'function';
-	code: string;
-	ttScope?: Record<string, unknown>;
-};
 
 export type ParsedThingtime = {
 	value: any;
@@ -17,184 +7,101 @@ export type ParsedThingtime = {
 	removedFunctionCount: number;
 };
 
-const UNREVIVABLE_FUNCTION = Symbol('thingtime-unrevivable-function');
-const IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const RESERVED_IDENTIFIERS = new Set([
-	'await',
-	'break',
-	'case',
-	'catch',
-	'class',
-	'const',
-	'continue',
-	'debugger',
-	'default',
-	'delete',
-	'do',
-	'else',
-	'enum',
-	'export',
-	'extends',
-	'false',
-	'finally',
-	'for',
-	'function',
-	'if',
-	'import',
-	'in',
-	'instanceof',
-	'let',
-	'new',
-	'null',
-	'return',
-	'super',
-	'switch',
-	'this',
-	'throw',
-	'true',
-	'try',
-	'typeof',
-	'var',
-	'void',
-	'while',
-	'with',
-	'yield'
-]);
+const ROOT_RUNTIME_METHODS = new Set<PropertyKey>(['set', 'get']);
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
 	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 };
 
-const isLegacyFailedRevival = (code: string): boolean => {
-	return code.includes('Function could not be revived:') && code.includes('value.code');
+type ParseDiagnostics = {
+	removedFunctionCount: number;
 };
 
-const validateScopeKeys = (scopeKeys: string[]): void => {
-	for (const key of scopeKeys) {
-		if (!IDENTIFIER_PATTERN.test(key) || RESERVED_IDENTIFIERS.has(key)) {
-			throw new SyntaxError(`Thingtime function scope contains an invalid identifier: ${JSON.stringify(key)}`);
-		}
-	}
-};
+const INERT_PERSISTED_FUNCTION = Symbol('thingtime-inert-persisted-function');
 
-const compileFunction = (code: string, scope: Record<string, unknown>): ThingtimeFunction => {
-	if (typeof code !== 'string') {
-		throw new TypeError('Thingtime function source must be a string');
-	}
-	const normalizedCode = code.trim();
-	if (!normalizedCode || isLegacyFailedRevival(normalizedCode)) {
-		throw new SyntaxError('Thingtime function contains an invalid legacy fallback');
-	}
-
-	const scopeKeys = Object.keys(scope);
-	validateScopeKeys(scopeKeys);
-	const scopeValues = scopeKeys.map((key) => scope[key]);
-	let factory: (...values: unknown[]) => unknown;
-
-	try {
-		// eslint-disable-next-line no-new-func -- Thingtime explicitly persists local function source and its allowlisted scope keys.
-		factory = Function(...scopeKeys, `"use strict"; return (${normalizedCode});`) as (...values: unknown[]) => unknown;
-	} catch (expressionError) {
-		// Function.prototype.toString() emits object-method syntax for methods.
-		// It is not a standalone expression, but remains valid inside an object.
-		try {
-			// eslint-disable-next-line no-new-func -- Object-method source needs the same explicit local-function revival path.
-			factory = Function(
-				...scopeKeys,
-				`"use strict"; const holder = ({${normalizedCode}}); return holder[Reflect.ownKeys(holder)[0]];`
-			) as (...values: unknown[]) => unknown;
-		} catch {
-			throw expressionError;
-		}
-	}
-
-	const revived = factory(...scopeValues);
-	if (typeof revived !== 'function') {
-		throw new TypeError('Thingtime function source did not evaluate to a function');
-	}
-
-	const revivedFunction = revived as ThingtimeFunction;
-	if (scopeKeys.length > 0) revivedFunction.ttScope = scope;
-	return revivedFunction;
-};
-
-const revivePersistedValue = (
-	value: any,
-	diagnostics: { removedFunctionCount: number },
-	seen = new WeakMap<object, unknown>()
-): any => {
-	if (typeof value === 'string' && !isNaN(Date.parse(value))) {
-		return new Date(value);
-	}
-
-	if (value?.ttype === 'function') {
-		try {
-			const serialized = value as SerializedThingtimeFunction;
-			const scope = isRecord(serialized.ttScope) ? serialized.ttScope : {};
-			const revived = compileFunction(serialized.code, scope);
-			seen.set(value, revived);
-			return revived;
-		} catch {
-			// A previous serializer stored an executable no-op whenever a function
-			// could not be revived. Invalid persisted source is recoverable browser
-			// data: remove it so current defaults can refill the property, then let
-			// hydration atomically commit the repaired snapshot.
-			diagnostics.removedFunctionCount += 1;
-			return UNREVIVABLE_FUNCTION;
-		}
-	}
+const revivePersistedValue = (value: any, diagnostics: ParseDiagnostics, seen = new WeakMap<object, unknown>()): any => {
+	// Untagged strings are always user data. The legacy serializer made real
+	// Dates indistinguishable from ISO-looking text, so guessing here would
+	// corrupt one of those two cases. Schema-aware callers can migrate known
+	// date fields separately; the generic persistence boundary stays lossless.
+	if (typeof value === 'string') return value;
 
 	if (!value || typeof value !== 'object') return value;
 	if (seen.has(value)) return seen.get(value);
+
+	// Persisted state is data, never a code-delivery mechanism. Every legacy
+	// function tag is removed regardless of whether its source looks valid.
+	if (value.ttype === 'function') {
+		diagnostics.removedFunctionCount += 1;
+		seen.set(value, INERT_PERSISTED_FUNCTION);
+		return INERT_PERSISTED_FUNCTION;
+	}
+
+	if (value.ttype === 'date' && typeof value.iso === 'string') {
+		const revived = new Date(value.iso);
+		if (!isNaN(revived.getTime())) {
+			seen.set(value, revived);
+			return revived;
+		}
+	}
+
 	seen.set(value, value);
 
 	for (const key of Reflect.ownKeys(value)) {
-		const revivedChild = revivePersistedValue((value as Record<PropertyKey, unknown>)[key], diagnostics, seen);
-		if (revivedChild === UNREVIVABLE_FUNCTION) {
-			delete (value as Record<PropertyKey, unknown>)[key];
+		const revived = revivePersistedValue(value[key], diagnostics, seen);
+
+		if (revived === INERT_PERSISTED_FUNCTION) {
+			delete value[key];
 		} else {
-			(value as Record<PropertyKey, unknown>)[key] = revivedChild;
+			value[key] = revived;
 		}
 	}
 
 	return value;
 };
 
-const replacer = (_key: string, value: any): any => {
-	if (value instanceof Date) {
-		return value.toISOString();
-	}
+// Date.toJSON runs before a JSON/flatted replacer, so inspect the holder's
+// original value through this[key]. This must remain a normal function so the
+// serializer supplies that holder as this.
+const replacer = function (this: any, key: string, value: any): any {
+	const original = this?.[key];
 
-	if (typeof value === 'function') {
-		return {
-			ttype: 'function',
-			code: value.toString(),
-			ttScope: value?.ttScope || {}
-		};
+	// JSON/flatted invokes toJSON before the replacer. Check the holder's
+	// original value as well so a Function with a custom toJSON method cannot
+	// smuggle source text or a function-shaped tag into a new snapshot.
+	if (typeof original === 'function' || typeof value === 'function') return undefined;
+
+	if (original instanceof Date && !isNaN(original.getTime())) {
+		return { ttype: 'date', iso: original.toISOString() };
 	}
 
 	return value;
 };
-
-const ROOT_RUNTIME_METHODS = new Set<PropertyKey>(['set', 'get']);
 
 export const hasPersistedThingtimeRuntimeMethods = (value: unknown): boolean => {
 	return isRecord(value) && [...ROOT_RUNTIME_METHODS].some((key) => Object.prototype.hasOwnProperty.call(value, key));
 };
 
 export const parseThingtimeWithDiagnostics = (text: string): ParsedThingtime => {
-	const diagnostics = { removedFunctionCount: 0 };
+	const diagnostics: ParseDiagnostics = {
+		removedFunctionCount: 0
+	};
+
 	try {
 		const parsed = parseAux(text);
-		const revived = revivePersistedValue(parsed, diagnostics);
+		const value = revivePersistedValue(parsed, diagnostics);
 		return {
-			value: revived === UNREVIVABLE_FUNCTION ? null : revived,
+			value: value === INERT_PERSISTED_FUNCTION || value === undefined ? null : value,
 			repaired: diagnostics.removedFunctionCount > 0,
-			removedFunctionCount: diagnostics.removedFunctionCount
+			...diagnostics
 		};
 	} catch (error) {
 		console.error('There was an error parsing the thingtime data:', error);
-		return { value: null, repaired: false, removedFunctionCount: 0 };
+		return {
+			value: null,
+			repaired: false,
+			removedFunctionCount: 0
+		};
 	}
 };
 
@@ -213,11 +120,11 @@ export const stringifyThingtime = (data: any): string => {
 
 export const stringifyThingtimeForStorage = (data: any): string => {
 	try {
-		return stringifyAux(data, function (key, value) {
-			// set/get are live React closures attached to the Thingtime root for its
-			// in-memory API. Nested user properties with those names remain data.
+		return stringifyAux(data, function (this: any, key: string, value: any) {
+			// set/get are live React closures attached to the root. Nested user
+			// properties with those names remain ordinary data.
 			if (this === data && ROOT_RUNTIME_METHODS.has(key)) return undefined;
-			return replacer(key, value);
+			return replacer.call(this, key, value);
 		});
 	} catch (error) {
 		console.error('There was an error stringifying the thingtime data for storage:', error);
