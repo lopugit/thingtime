@@ -10,7 +10,22 @@ type ApiFailureOptions = {
   accounts?: unknown[];
 	adminDetail?: string;
 	diagnosticThingId?: string;
+	attachmentCode?: AttachmentRetryCode;
+	attachmentRetryable?: boolean;
 };
+
+export type AttachmentRetryCode =
+	| 'upload_initializing'
+	| 'upload_parts_retryable'
+	| 'upload_not_ready'
+	| 'upload_unavailable'
+	| 'finalization_settling'
+	| 'quota_exceeded'
+	| 'accounting_unavailable'
+	| 'storage_conflict'
+	| 'storage_invariant'
+	| 'storage_unconfigured'
+	| 'storage_unavailable';
 
 type ApiFailureInput = ApiFailureOptions & {
   payload?: unknown;
@@ -31,6 +46,8 @@ export class ThingtimeApiError extends Error {
   readonly accounts: unknown[] | undefined;
 	readonly adminDetail: string | undefined;
 	readonly diagnosticThingId: string | undefined;
+	readonly code: AttachmentRetryCode | undefined;
+	readonly retryable: boolean | undefined;
 
   constructor(message: string, options: ApiFailureOptions = {}) {
     super(message);
@@ -44,6 +61,8 @@ export class ThingtimeApiError extends Error {
     this.accounts = options.accounts;
 		this.adminDetail = options.adminDetail;
 		this.diagnosticThingId = options.diagnosticThingId;
+		this.code = options.attachmentCode;
+		this.retryable = options.attachmentRetryable;
   }
 }
 
@@ -54,6 +73,28 @@ const payloadRecord = (payload: unknown): Record<string, unknown> | null =>
 
 const DIAGNOSTIC_ID_PATTERN = /^migration-diagnostic-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_ADMIN_DETAIL_CHARS = 64 * 1024;
+const ATTACHMENT_RETRY_CODES = new Set<AttachmentRetryCode>([
+	'upload_initializing',
+	'upload_parts_retryable',
+	'upload_not_ready',
+	'upload_unavailable',
+	'finalization_settling',
+	'quota_exceeded',
+	'accounting_unavailable',
+	'storage_conflict',
+	'storage_invariant',
+	'storage_unconfigured',
+	'storage_unavailable'
+]);
+
+const attachmentRetryMetadata = (record: Record<string, unknown> | null) => {
+	const code = record?.code;
+	if (record?.ok !== false || typeof code !== 'string' || !ATTACHMENT_RETRY_CODES.has(code as AttachmentRetryCode)) return {};
+	return {
+		attachmentCode: code as AttachmentRetryCode,
+		attachmentRetryable: typeof record.retryable === 'boolean' ? record.retryable : undefined
+	};
+};
 
 const diagnosticMetadata = (record: Record<string, unknown> | null) => {
 	if (!record || record.ok !== false || record.unhandled === true) return {};
@@ -125,6 +166,7 @@ export const createApiFailure = (input: ApiFailureInput): ThingtimeApiError => {
   const authored = authoredError(input.payload, status);
   const record = payloadRecord(input.payload);
 	const diagnostic = diagnosticMetadata(record);
+	const attachmentRetry = attachmentRetryMetadata(record);
   const genericUnauthorized = status === 401 && authored?.toLowerCase() === 'unauthorized';
   const message = authored && !genericUnauthorized ? authored : fallbackMessage(status, action, retryAfterSeconds);
 
@@ -137,7 +179,9 @@ export const createApiFailure = (input: ApiFailureInput): ThingtimeApiError => {
     reason: typeof record?.reason === 'string' ? record.reason : undefined,
 		accounts: Array.isArray(record?.accounts) ? record.accounts : undefined,
 		adminDetail: diagnostic.adminDetail,
-		diagnosticThingId: diagnostic.diagnosticThingId
+		diagnosticThingId: diagnostic.diagnosticThingId,
+		attachmentCode: attachmentRetry.attachmentCode,
+		attachmentRetryable: attachmentRetry.attachmentRetryable
   });
 };
 

@@ -1,13 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
+import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
+import { resolveAiPreferredClaudeModel } from '../settings/prConflictResolverModelWaterfallCore';
 import { FALLBACK_MUSINGS } from './fallbacks';
 
 // 🦄 Lopu's musings — a little message generated from the user's real-world
 // context (approximate location + current weather + local time of day).
 //
 // Providers (set either or both env keys):
-//   - ANTHROPIC_API_KEY → Claude (model: LOPU_CLAUDE_MODEL, default claude-opus-4-8)
+//   - ANTHROPIC_API_KEY → Claude (Thingtime's Admin preference; LOPU_CLAUDE_MODEL
+//     is the provider-valid fallback only when the Admin primary is `default`)
 //   - OPENAI_API_KEY    → ChatGPT (model: LOPU_OPENAI_MODEL, default gpt-4o-mini)
 // Preference order via LOPU_PROVIDER = "claude" | "openai" (default: claude first).
 //
@@ -107,10 +110,28 @@ export const fetchWeather = async (lat: string, lon: string): Promise<{ tempC?: 
 
 // --- Streaming providers (each yields text chunks, or throws to fall through) -
 
-async function* streamClaude(system: string, user: string): AsyncGenerator<string> {
+const getDefaultLopuClaudeModel = () => process.env.LOPU_CLAUDE_MODEL?.trim() || 'claude-opus-4-8';
+
+type LopuClaudeModelResolverDependencies = {
+  getPreferredModelWaterfall: typeof getAiPreferredModelWaterfall;
+  getProviderDefaultModel: () => string;
+};
+
+export const createLopuClaudeModelResolver = (dependencies: LopuClaudeModelResolverDependencies) => async () =>
+  resolveAiPreferredClaudeModel(
+    await dependencies.getPreferredModelWaterfall(),
+    dependencies.getProviderDefaultModel()
+  );
+
+const getLopuClaudeModel = createLopuClaudeModelResolver({
+  getPreferredModelWaterfall: getAiPreferredModelWaterfall,
+  getProviderDefaultModel: getDefaultLopuClaudeModel
+});
+
+async function* streamClaude(system: string, user: string, model: string): AsyncGenerator<string> {
   const client = new Anthropic();
   const stream = client.messages.stream({
-    model: process.env.LOPU_CLAUDE_MODEL || 'claude-opus-4-8',
+    model,
     max_tokens: 200, // intentionally short — a musing is one or two sentences
     system,
     messages: [{ role: 'user', content: user }]
@@ -185,7 +206,10 @@ export async function* streamLopuMusing(
     const key = provider === 'claude' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
     if (!key) continue;
     try {
-      const gen = provider === 'claude' ? streamClaude(SYSTEM_PROMPT, user) : streamOpenAI(SYSTEM_PROMPT, user);
+      const gen =
+        provider === 'claude'
+          ? streamClaude(SYSTEM_PROMPT, user, await getLopuClaudeModel())
+          : streamOpenAI(SYSTEM_PROMPT, user);
       // Pull the first chunk inside the try so a failing provider (bad key, no
       // credits) is caught here and we move to the next one cleanly.
       const first = await gen.next();
