@@ -9,9 +9,9 @@ import { Thingtime } from "../Thingtime/Thingtime"
 import { useThingtime } from "../Thingtime/useThingtime"
 
 import { sanitise } from "~/functions/sanitise"
-import { getParentPath } from "~/smarts"
 import { PathArray } from '~/hooks/useThingtimeMachine';
 import { safeJoin, safeSplit } from '~/utils';
+import { parseCommanderLiteral } from './commanderLiteral';
 
 type commanderArgs = {
 	pathPrefix?: PathArray;
@@ -170,22 +170,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 		return command?.[1];
 	}, [command]);
 
-	const validQuotations = React.useMemo(() => {
-		return ['"', "'"];
-	}, []);
-
-	const escapedCommandValue = React.useMemo(() => {
-		// replace quotations with escaped quoations except for first and last quotation
-		const startingQuotation = commandValue?.[0];
-		const endingQuotation = commandValue?.[commandValue?.length - 1];
-		const isQuoted = validQuotations?.includes(startingQuotation) && validQuotations?.includes(endingQuotation);
-		const restOfCommandValue = isQuoted ? commandValue?.slice(1, commandValue?.length - 1) : commandValue;
-		const escaped = restOfCommandValue?.replace(/"/g, '\\"')?.replace(/'/g, "\\'")?.replace(/`/g, '\\`');
-
-		const ret = `\`${escaped}\``;
-		return ret;
-	}, [commandValue, validQuotations]);
-
 	const commandIsAction = React.useMemo(() => {
 		return commandPath && commandValue;
 	}, [safeJoin(commandPath), commandValue]);
@@ -265,37 +249,11 @@ export const CommanderV1 = (props: commanderArgs) => {
 		if (commanderActive) {
 			try {
 				if (commandIsAction) {
-					// nothing
-					const prevVal = getThingtime(commandPath);
-					const parentPath = getParentPath(commandPath) || 'thingtime';
-					try {
-						debug.attemptingToExecuteLiteralJavascript = true;
-						// first try to execute literal javscript
-						const fn = `() => { return ${commandValue} }`;
-						const tt = thingtime;
-						const evalFn = eval(fn);
-						const realVal = evalFn();
-						debug.commandPath = commandPath;
-						debug.realVal = realVal;
-						setThingtime(commandPath, realVal);
-						debug.executedLiteralJavascript = true;
-					} catch (err) {
-						console.log('Caught error after trying to execute literal javascript', err);
-
-						// likely literaly javascript wasn't valid
-						try {
-							const fn = `() => { return ${escapedCommandValue} }`;
-							const tt = thingtime;
-							const evalFn = eval(fn);
-							const realVal = evalFn();
-							const prevVal = getThingtime(commandPath);
-							const parentPath = getParentPath(commandPath);
-							setThingtime(commandPath, realVal);
-						} catch {
-							// something very bad went wrong
-							console.log('Caught error after trying to execute escaped literal javascript', err);
-						}
-					}
+					const realVal = parseCommanderLiteral(commandValue);
+					debug.commandPath = commandPath;
+					debug.realVal = realVal;
+					setThingtime(commandPath, realVal);
+					debug.executedDataLiteral = true;
 					// if (!prevVal) {
 					setContextPath(commandPath);
 					setShowContext(true, 'commandIsAction check');
@@ -321,10 +279,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 		commanderActive,
 		commandIsAction,
 		safeJoin(commandPath),
-		thingtime,
 		commandValue,
-		escapedCommandValue,
-		getThingtime,
 		setThingtime,
 		setContextPath,
 		setShowContext

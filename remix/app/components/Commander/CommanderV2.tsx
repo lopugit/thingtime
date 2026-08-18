@@ -10,9 +10,9 @@ import { useLopu } from '../Lopu/useLopu';
 
 import { sanitise } from '~/functions/sanitise';
 import { usePath } from '~/hooks/usePath';
-import { getParentPath } from '~/smarts';
 import { SECRET_WORDS, partyMode, rainbowFlash, pickSparkle } from '~/eggs/eggs';
 import { CommanderClickAwayBoundary } from './commanderClickAway';
+import { parseCommanderLiteral } from './commanderLiteral';
 
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
@@ -138,21 +138,6 @@ export const CommanderV2 = (props) => {
 	const commandValue = React.useMemo(() => {
 		return command?.[1];
 	}, [command]);
-
-	const validQuotations = React.useMemo(() => {
-		return ['"', "'"];
-	}, []);
-
-	const escapedCommandValue = React.useMemo(() => {
-		// replace quotations with escaped quoations except for first and last quotation
-		const startingQuotation = commandValue?.[0];
-		const endingQuotation = commandValue?.[commandValue?.length - 1];
-		const isQuoted = validQuotations?.includes(startingQuotation) && validQuotations?.includes(endingQuotation);
-		const restOfCommandValue = isQuoted ? commandValue?.slice(1, commandValue?.length - 1) : commandValue;
-		const escaped = restOfCommandValue?.replace(/"/g, '\\"')?.replace(/'/g, "\\'");
-		const ret = `"${escaped}"`;
-		return ret;
-	}, [commandValue, validQuotations]);
 
 	const commandIsAction = React.useMemo(() => {
 		return commandPath && commandValue;
@@ -297,37 +282,9 @@ export const CommanderV2 = (props) => {
 		if (commanderActive) {
 			try {
 				if (commandIsAction) {
-					// nothing
-					const prevVal = getThingtime(commandPath);
-					const parentPath = getParentPath(commandPath) || 'thingtime';
-					try {
-						// first try to execute literal javscript
-						const fn = `() => { return ${commandValue} }`;
-						const tt = thingtime;
-						const evalFn = eval(fn);
-						const realVal = evalFn();
-						setThingtime(commandPath, realVal, {
-							namespace: 'user'
-						});
-					} catch (err) {
-						console.log('Caught error after trying to execute literal javascript', err);
-
-						// likely literaly javascript wasn't valid
-						try {
-							const fn = `() => { return ${escapedCommandValue} }`;
-							const tt = thingtime;
-							const evalFn = eval(fn);
-							const realVal = evalFn();
-							const prevVal = getThingtime(commandPath);
-							const parentPath = getParentPath(commandPath);
-							setThingtime(commandPath, realVal, {
-								namespace: 'user'
-							});
-						} catch {
-							// something very bad went wrong
-							console.log('Caught error after trying to execute escaped literal javascript', err);
-						}
-					}
+					setThingtime(commandPath, parseCommanderLiteral(commandValue), {
+						namespace: 'user'
+					});
 					// if (!prevVal) {
 					setContextPath(commandPath);
 					setShowContext(true, 'commandIsAction check');
@@ -358,15 +315,11 @@ export const CommanderV2 = (props) => {
 	}, [
 		hoveredSuggestion,
 		selectSuggestion,
-		mode,
 		changePath,
 		commanderActive,
 		commandIsAction,
 		commandPath,
-		thingtime,
 		commandValue,
-		escapedCommandValue,
-		getThingtime,
 		setThingtime,
 		setContextPath,
 		setShowContext,
