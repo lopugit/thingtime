@@ -432,6 +432,23 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Control-plane history is relational: one ci-event per provider delivery
     // and parent entity, never an unbounded status array on the current row.
     col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }),
+    // The unread-notification badge counts (thingtime, ownerId, readAt: null).
+    // The general (thingtime, ownerId, createdAt, shareId) index above narrows
+    // to the user's notifications, but readAt is not a key in it, so the count
+    // landed in a FETCH stage that pulled EVERY notification that user had
+    // ever received just to test one field — cost grew with history, on a
+    // badge polled by every session.
+    //
+    // Partial on readAt: null so the index holds only the unread set, which is
+    // normally a handful and empty for a caught-up user. Verified against a
+    // local dataset: the planner selects this index (isPartial) and the same
+    // query drops from fetching every notification to examining none when
+    // there is nothing unread, with counts identical to a collection scan
+    // across every owner.
+    col.createIndex(
+      { thingtime: 1, ownerId: 1 },
+      { name: 'notification_unread', partialFilterExpression: { thingtime: 'notification', readAt: null } }
+    ),
     // Canonical account-storage reconciliation: content allocations are
     // grouped by owner and summed from their exact versioned byte stamps.
     // Control-plane Things never enter this partial index.
