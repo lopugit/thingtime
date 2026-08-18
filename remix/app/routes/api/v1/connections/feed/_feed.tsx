@@ -19,7 +19,9 @@ export const loader = async ({ request }: { request: Request }) => {
     connectionId: url.searchParams.get('connection'),
     cursor: url.searchParams.get('cursor'),
     limit: Number(url.searchParams.get('limit')) || undefined,
-    forceSync: url.searchParams.get('sync') === 'force'
+    forceSync: url.searchParams.get('sync') === 'force',
+    // "I scrolled through what's here" — raise the sync depth and pull older
+    deepen: url.searchParams.get('deepen') === '1'
   });
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

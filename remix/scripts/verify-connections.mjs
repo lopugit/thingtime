@@ -262,8 +262,59 @@ const run = async () => {
   const boFeedAfter = await api('/api/v1/connections/feed', { cookie: bo.cookie });
   check('feed with no connections is an empty page, not an error', boFeedAfter.status === 200 && boFeedAfter.body?.posts?.length === 0);
 
+  console.log('\nH. SSO (OAuth) guardrails');
+  const beginWall = await api('/api/v1/connections/oauth/begin', { method: 'POST', body: { provider: 'facebook' } });
+  check('oauth begin without auth is 401', beginWall.status === 401);
+  const beginUnknown = await api('/api/v1/connections/oauth/begin', { cookie: bo.cookie, method: 'POST', body: { provider: 'nope' } });
+  check('oauth begin with unknown provider is 400', beginUnknown.status === 400);
+  const beginNonOauth = await api('/api/v1/connections/oauth/begin', { cookie: bo.cookie, method: 'POST', body: { provider: 'demo' } });
+  check('oauth begin with a non-SSO provider is 400', beginNonOauth.status === 400);
+  const catalog = await api('/api/v1/connections/providers');
+  const ssoProviders = (catalog.body?.providers || []).filter((provider) => provider.auth === 'oauth2');
+  check('catalog carries the SSO providers (facebook/instagram/tiktok/youtube-account)',
+    ['facebook', 'instagram', 'tiktok', 'youtube-account'].every((id) => ssoProviders.some((provider) => provider.id === id)));
+  for (const provider of ssoProviders) {
+    const begin = await api('/api/v1/connections/oauth/begin', { cookie: bo.cookie, method: 'POST', body: { provider: provider.id } });
+    if (provider.configured) {
+      check(`${provider.id}: begin mints an authorize URL`, begin.status === 200 && /^https:\/\//.test(begin.body?.authorizeUrl || ''));
+    } else {
+      check(`${provider.id}: begin explains the missing credentials`, begin.status === 400 && /not configured/.test(begin.body?.error || ''));
+    }
+  }
+  const fbConnect = await api('/api/v1/connections', { cookie: bo.cookie, method: 'POST', body: { provider: 'facebook', fields: {} } });
+  check('fields-based connect refuses SSO providers', fbConnect.status === 400 && /sign-in/.test(fbConnect.body?.error || ''));
+  const badState = await fetch(`${BASE}/api/v1/connections/oauth/callback?code=x&state=garbage`, {
+    headers: { Cookie: bo.cookie },
+    redirect: 'manual'
+  });
+  check('callback with a forged state redirects with oauthError', badState.status === 302 && /oauthError=/.test(badState.headers.get('location') || ''));
+  const anonCallback = await fetch(`${BASE}/api/v1/connections/oauth/callback?code=x&state=y`, { redirect: 'manual' });
+  check('callback without a session redirects to /login', anonCallback.status === 302 && /\/login/.test(anonCallback.headers.get('location') || ''));
+
+  console.log('\nI. virtual YouTube subscription list');
+  const CH_A = { id: 'UCXuqSBlHAE6Xw-yeJA0Tunw', title: 'Linus Tech Tips', thumbnail: null };
+  const CH_B = { id: 'UCsXVk37bltHxD1rDPwtNM8Q', title: 'Kurzgesagt', thumbnail: null };
+  const sub1 = await api('/api/v1/connections/youtube/channels', { cookie: bo.cookie, method: 'POST', body: { add: CH_A } });
+  check('first subscribe auto-creates the virtual connection', sub1.status === 200 && sub1.body?.channels?.length === 1);
+  const sub2 = await api('/api/v1/connections/youtube/channels', { cookie: bo.cookie, method: 'POST', body: { add: CH_B } });
+  check('second channel joins the list', sub2.status === 200 && sub2.body?.channels?.length === 2);
+  const dupSub = await api('/api/v1/connections/youtube/channels', { cookie: bo.cookie, method: 'POST', body: { add: CH_A } });
+  check('re-subscribing the same channel is idempotent', dupSub.status === 200 && dupSub.body?.channels?.length === 2);
+  const listWithChannels = await api('/api/v1/connections', { cookie: bo.cookie });
+  const ytConnection = (listWithChannels.body?.connections || []).find((connection) => connection.provider === 'youtube');
+  check('connections list carries the channel list + handle', ytConnection?.channels?.length === 2 && /2 channels/.test(ytConnection?.account?.handle || ''));
+  const badChannel = await api('/api/v1/connections/youtube/channels', { cookie: bo.cookie, method: 'POST', body: { add: { id: 'not-a-channel' } } });
+  check('invalid channel ids are refused', badChannel.status === 400);
+  const unsub = await api('/api/v1/connections/youtube/channels', { cookie: bo.cookie, method: 'POST', body: { remove: CH_B.id } });
+  check('unsubscribe removes the channel', unsub.status === 200 && unsub.body?.channels?.length === 1);
+  const otherList = await api('/api/v1/connections', { cookie: outsider.cookie });
+  check('virtual lists are per-user (outsider has none)', (otherList.body?.connections || []).every((connection) => connection.provider !== 'youtube'));
+  const searchWall = await api('/api/v1/connections/youtube/search?q=test');
+  check('channel search requires auth', searchWall.status === 401);
+  await api('/api/v1/connections/unlink', { cookie: bo.cookie, method: 'POST', body: { id: ytConnection?.id } });
+
   if (process.env.TT_VERIFY_LIVE === '1') {
-    console.log('\nH. live network pull (TT_VERIFY_LIVE=1)');
+    console.log('\nJ. live network pull (TT_VERIFY_LIVE=1)');
     const hn = await api('/api/v1/connections', { cookie: bo.cookie, method: 'POST', body: { provider: 'hackernews', fields: { feed: 'top' } } });
     check('hackernews connects', hn.status === 200);
     const hnFeed = await api('/api/v1/connections/feed?limit=10&sync=force', { cookie: bo.cookie });

@@ -450,6 +450,14 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // ("who links this account") both filter one kind + crystal.accountId —
     // thingtime is the only multikey field, so the compound is legal.
     col.createIndex({ thingtime: 1, 'crystal.accountId': 1, createdAt: -1, shareId: 1 }),
+    // One external post can arrive through MANY sources (two users' virtual
+    // channel lists, a real subscription + a public follow, …) — membership
+    // lives in the root sourceIds array. sourceIds is the only multikey field
+    // here (partial: only synced external posts carry it).
+    col.createIndex(
+      { sourceIds: 1, createdAt: -1, shareId: 1 },
+      { partialFilterExpression: { sourceIds: { $exists: true } } }
+    ),
     // acl and thingtime are both arrays — Mongo forbids two multikey fields
     // in one compound index, so the audience index stands alone
     col.createIndex({ acl: 1, createdAt: -1, shareId: 1 }),

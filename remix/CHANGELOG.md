@@ -19,6 +19,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Connections: real SSO account linking + virtual YouTube subscriptions.**
+  OAuth begin/callback endpoints (state = short-lived signed JWT bound to the
+  starting session; token responses sealed in the external-account secure
+  BinData blob, refreshed near expiry) with config-gated SSO providers:
+  Facebook (`FACEBOOK_APP_ID/SECRET`), Instagram (`INSTAGRAM_APP_ID/SECRET`),
+  TikTok (`TIKTOK_CLIENT_KEY/SECRET`), and YouTube account via Google
+  (`GOOGLE_CLIENT_ID/SECRET` — syncs your real subscriptions). Plus the
+  Thingtime-managed **virtual YouTube subscription list** (ytsubber-style):
+  per-user multi-channel list with add/remove + channel name search
+  (`YOUTUBE_API_KEY`/`GOOGLE_API_KEY`; ids/URLs/@handles keyless via RSS),
+  merged uploads feed. External posts now carry a root `sourceIds` array (one
+  video through many sources stays ONE post with unified comments) and the
+  feed deepens on scroll (`deepen=1`, per-account depth cap). Redirect origin
+  pin: `CONNECTIONS_OAUTH_REDIRECT_BASE`. `verify:connections` now 64 checks.
+  — Claude (AI), 2026-08-18
+
 - **Third-party app connections** (`/connections`, `/connections/feed`, API
   family `/api/v1/connections/*`): link external accounts (Reddit, YouTube,
   Mastodon, Bluesky, Lemmy, Hacker News, GitHub, generic RSS/Atom, and a

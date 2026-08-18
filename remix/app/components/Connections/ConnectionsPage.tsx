@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
-import { Link } from 'react-router';
+import { Box, Button, Flex, Image, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
+import { Link, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
@@ -22,13 +22,17 @@ type Provider = {
   fields: { key: string; label: string; placeholder?: string; help?: string; required?: boolean }[];
 };
 
+type ChannelRef = { id: string; title: string; thumbnail: string | null };
+
 type Connection = {
   id: string;
   provider: string;
   providerName: string;
   providerIcon: string;
   contentVisibility: 'public' | 'personal';
+  auth?: 'none' | 'oauth2';
   account: { id: string; handle: string; displayName: string; avatarUrl: string | null; profileUrl: string | null };
+  channels?: ChannelRef[];
   lastSyncedAt: string | null;
   lastSyncError: string | null;
 };
@@ -54,6 +58,7 @@ const cardStyle = {
 export const ConnectionsPage = () => {
   const api = useApi();
   const lopu = useLopu();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // optimistic first paint from the synchronous cache tier (house rule:
   // never flash a loading state when prior state exists)
@@ -103,7 +108,35 @@ export const ConnectionsPage = () => {
     refresh();
   }, [refresh]);
 
-  const openConnect = (provider: Provider) => {
+  // OAuth callback landing: /connections?connected=<provider> or ?oauthError=…
+  React.useEffect(() => {
+    const connected = searchParams.get('connected');
+    const oauthError = searchParams.get('oauthError');
+    if (!connected && !oauthError) return;
+    if (connected) {
+      lopu({ title: `Account linked via ${connected} 🎉`, status: 'success', duration: 6000 });
+      refresh();
+    } else if (oauthError) {
+      lopu({ title: oauthError, status: 'error' });
+    }
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const openConnect = async (provider: Provider) => {
+    // SSO providers hand the browser to their own sign-in — no form here
+    if (provider.auth === 'oauth2') {
+      setBusy(true);
+      try {
+        const resp = await api.v1.connections.oauthBegin({ provider: provider.id });
+        if (resp?.authorizeUrl) window.location.href = resp.authorizeUrl;
+      } catch (err: any) {
+        lopu({ title: err?.error || `Could not start the ${provider.name} sign-in 😞`, status: 'error' });
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     setConnecting(provider);
     setFieldValues({});
   };
@@ -140,6 +173,57 @@ export const ConnectionsPage = () => {
     } catch (err: any) {
       setConnections(previous);
       lopu({ title: err?.error || 'Could not unlink that connection 😞', status: 'error' });
+    }
+  };
+
+  // --- virtual YouTube subscription list (ytsubber-style) ---
+  const [ytQuery, setYtQuery] = React.useState('');
+  const [ytResults, setYtResults] = React.useState<ChannelRef[]>([]);
+  const [ytBusy, setYtBusy] = React.useState(false);
+  const [ytSearchConfigured, setYtSearchConfigured] = React.useState<boolean | null>(null);
+  const youtubeConnection = connections.find((connection) => connection.provider === 'youtube');
+
+  const searchChannels = async () => {
+    if (!ytQuery.trim()) return;
+    setYtBusy(true);
+    try {
+      const resp = await api.v1.connections.youtubeSearch({ q: ytQuery });
+      setYtResults(resp.channels || []);
+      setYtSearchConfigured(resp.searchConfigured !== false);
+      if (!(resp.channels || []).length) {
+        lopu({ title: 'No channels matched that — try a channel ID or URL 🔍', status: 'info', duration: 5000 });
+      }
+    } catch (err: any) {
+      lopu({ title: err?.error || 'Channel search failed 😞', status: 'error' });
+    } finally {
+      setYtBusy(false);
+    }
+  };
+
+  const subscribeChannel = async (channel: ChannelRef) => {
+    setYtBusy(true);
+    try {
+      const resp = await api.v1.connections.youtubeChannels({ add: channel });
+      lopu({ title: `Subscribed to ${channel.title} 📺`, status: 'success', duration: 5000 });
+      setYtResults((current) => current.filter((entry) => entry.id !== channel.id));
+      setConnections((current) => {
+        const others = current.filter((entry) => entry.id !== resp.connection?.id);
+        return resp.connection ? [...others, resp.connection] : current;
+      });
+      await refresh();
+    } catch (err: any) {
+      lopu({ title: err?.error || `Could not subscribe to ${channel.title} 😞`, status: 'error' });
+    } finally {
+      setYtBusy(false);
+    }
+  };
+
+  const unsubscribeChannel = async (channel: ChannelRef) => {
+    try {
+      await api.v1.connections.youtubeChannels({ remove: channel.id });
+      await refresh();
+    } catch (err: any) {
+      lopu({ title: err?.error || `Could not remove ${channel.title} 😞`, status: 'error' });
     }
   };
 
@@ -280,11 +364,11 @@ export const ConnectionsPage = () => {
               <Button
                 size="sm"
                 borderRadius="999px"
-                isDisabled={!provider.configured || signedOut}
+                isDisabled={!provider.configured || signedOut || busy}
                 onClick={() => openConnect(provider)}
                 variant={connecting?.id === provider.id ? 'solid' : 'outline'}
               >
-                {provider.configured ? 'Connect' : 'Needs setup'}
+                {!provider.configured ? 'Needs setup' : provider.auth === 'oauth2' ? `Sign in with ${provider.name}` : 'Connect'}
               </Button>
             </Box>
           ))}
@@ -326,6 +410,54 @@ export const ConnectionsPage = () => {
               Cancel
             </Button>
           </Flex>
+        </Box>
+      ) : null}
+
+      {/* virtual YouTube subscription list */}
+      {!signedOut ? (
+        <Box display="flex" flexDirection="column" rowGap={3}>
+          <Box>
+            <Text fontWeight="600">YouTube channels 📺</Text>
+            <Text fontSize="sm" color="var(--tt-muted, #6b7280)">
+              Your Thingtime-managed subscription list — every channel you add merges into one uploads feed.
+              {ytSearchConfigured === false ? ' Name search needs a YouTube API key; channel IDs, URLs, and @handles work now.' : ''}
+            </Text>
+          </Box>
+          {(youtubeConnection?.channels || []).map((channel) => (
+            <Flex key={channel.id} {...cardStyle} padding={3} alignItems="center" columnGap={3}>
+              {channel.thumbnail ? <Image src={channel.thumbnail} alt="" boxSize="28px" borderRadius="full" /> : <Text fontSize="lg">📺</Text>}
+              <Text flex="1" fontWeight="500">
+                {channel.title}
+              </Text>
+              <Button size="xs" variant="ghost" borderRadius="999px" onClick={() => unsubscribeChannel(channel)}>
+                Unsubscribe
+              </Button>
+            </Flex>
+          ))}
+          <Flex {...cardStyle} padding={3} columnGap={2} alignItems="center" flexWrap="wrap" rowGap={2}>
+            <Input
+              flex="1"
+              minWidth="200px"
+              placeholder="Search channels, or paste a channel ID / URL / @handle"
+              value={ytQuery}
+              onChange={(event) => setYtQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') searchChannels();
+              }}
+            />
+            <Button size="sm" borderRadius="999px" onClick={searchChannels} isLoading={ytBusy}>
+              Search
+            </Button>
+          </Flex>
+          {ytResults.map((channel) => (
+            <Flex key={channel.id} {...cardStyle} padding={3} alignItems="center" columnGap={3}>
+              {channel.thumbnail ? <Image src={channel.thumbnail} alt="" boxSize="28px" borderRadius="full" /> : <Text fontSize="lg">📺</Text>}
+              <Text flex="1">{channel.title}</Text>
+              <Button size="xs" borderRadius="999px" onClick={() => subscribeChannel(channel)} isLoading={ytBusy}>
+                Subscribe ➕
+              </Button>
+            </Flex>
+          ))}
         </Box>
       ) : null}
 

@@ -23,17 +23,31 @@ export type ExternalFeedItem = {
   stats: { likes?: number; comments?: number; shares?: number; score?: number } | null;
 };
 
+// OAuth token bundle stored in the external-account's secure BinData blob —
+// never in crystal, never projected, never sent to a client.
+export type OAuthTokens = {
+  accessToken: string;
+  refreshToken?: string | null;
+  // ISO timestamp; adapters refresh (when the provider supports it) once this
+  // is near/past, otherwise the sync surfaces a "reconnect" error
+  expiresAt?: string | null;
+  scopes?: string[];
+  providerUserId?: string | null;
+};
+
 export type ResolvedExternalAccount = {
   // stable identity WITHIN the provider (two Thingtime users connecting the
-  // same identity converge on one external-account thing)
+  // same identity converge on one external-account thing; per-user virtual
+  // accounts embed the userId here so they never converge)
   providerAccountId: string;
   displayName: string;
   handle: string;
   avatarUrl: string | null;
   profileUrl: string | null;
-  // non-secret provider parameters (subreddits, instance host, …) — secrets
-  // (OAuth tokens) never go here; they belong in the account's secure blob
-  config: Record<string, string>;
+  // non-secret provider parameters (subreddits, instance host, a virtual
+  // channel list, …) — secrets (OAuth tokens) never go here; they belong in
+  // the account's secure blob
+  config: Record<string, any>;
 };
 
 export type ConnectField = {
@@ -56,11 +70,30 @@ export type ConnectionProvider = {
   about: string;
   configured: () => boolean;
   fields: ConnectField[];
-  resolveAccount: (fields: Record<string, string>) => Promise<{ ok: true; account: ResolvedExternalAccount } | Fail>;
+  resolveAccount: (
+    fields: Record<string, string>,
+    ctx: { userId: string }
+  ) => Promise<{ ok: true; account: ResolvedExternalAccount } | Fail>;
   fetchFeed: (
-    account: { providerAccountId: string; config: Record<string, string> },
-    opts: { limit: number }
+    account: { providerAccountId: string; config: Record<string, any> },
+    opts: { limit: number; tokens?: OAuthTokens | null; pages?: number }
   ) => Promise<{ ok: true; items: ExternalFeedItem[] } | Fail>;
+  // SSO providers: click Connect → the provider's own login page → the token
+  // response is saved to the Thingtime account (secure blob) and the
+  // personalized feed syncs with those credentials.
+  oauth?: {
+    clientIdEnv: string;
+    clientSecretEnv: string;
+    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string }) => string;
+    exchangeCode: (input: {
+      code: string;
+      clientId: string;
+      clientSecret: string;
+      redirectUri: string;
+    }) => Promise<{ ok: true; tokens: OAuthTokens } | Fail>;
+    resolveAccountFromTokens: (tokens: OAuthTokens) => Promise<{ ok: true; account: ResolvedExternalAccount } | Fail>;
+    refreshTokens?: (tokens: OAuthTokens, creds: { clientId: string; clientSecret: string }) => Promise<OAuthTokens | null>;
+  };
 };
 
 export const FEED_FETCH_LIMIT = 30;
@@ -93,8 +126,11 @@ const decodeEntities = (value: string): string =>
 
 export const stripHtml = (value: unknown): string => {
   if (typeof value !== 'string') return '';
+  // decode → strip → decode: feeds that double-escape their HTML (Reddit's
+  // Atom bodies carry &lt;div&gt;…&amp;#32;…) unescape to markup on the first
+  // pass, lose the markup on the strip, and surface clean text on the second
   return decodeEntities(
-    value
+    decodeEntities(value)
       .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, '\n')
@@ -157,6 +193,83 @@ const fetchJson = async (url: string): Promise<{ ok: true; data: any } | Fail> =
     return fail(502, 'The provider returned malformed JSON');
   }
 };
+
+// Form-encoded POST (OAuth token endpoints) with bounded JSON response.
+const postForm = async (url: string, form: Record<string, string>): Promise<{ ok: true; data: any } | Fail> => {
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: new URLSearchParams(form).toString(),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+    });
+    const text = await resp.text();
+    if (text.length > 1_000_000) return fail(502, 'The provider response was too large to process');
+    let data: any = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return fail(502, `The provider returned a malformed token response (${new URL(url).host})`);
+    }
+    if (!resp.ok) {
+      const message = data?.error?.message || data?.error_description || data?.error_message || data?.error || `status ${resp.status}`;
+      return fail(502, `Token exchange failed: ${String(message).slice(0, 200)}`);
+    }
+    return { ok: true, data };
+  } catch (err: any) {
+    const reason = err?.name === 'TimeoutError' ? 'timed out' : 'could not be reached';
+    return fail(502, `The provider ${reason} (${new URL(url).host})`);
+  }
+};
+
+// Authenticated JSON GET/POST for provider data APIs. Provider error bodies
+// surface as bounded messages so a revoked token reads as "reconnect", never
+// as a silent empty feed.
+const authedJson = async (
+  url: string,
+  opts: { token?: string; method?: 'GET' | 'POST'; body?: unknown } = {}
+): Promise<{ ok: true; data: any } | Fail> => {
+  try {
+    const resp = await fetch(url, {
+      method: opts.method || 'GET',
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+        ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+        ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {})
+      },
+      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+    });
+    const text = await resp.text();
+    if (text.length > 3_000_000) return fail(502, 'The provider response was too large to process');
+    let data: any = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+    if (!resp.ok) {
+      const message = data?.error?.message || data?.error?.error_user_msg || data?.error_description || data?.error?.code || `status ${resp.status}`;
+      const status = resp.status === 401 || resp.status === 403 ? 401 : 502;
+      return fail(status, `${new URL(url).host}: ${String(message).slice(0, 200)}`);
+    }
+    return { ok: true, data };
+  } catch (err: any) {
+    const reason = err?.name === 'TimeoutError' ? 'timed out' : 'could not be reached';
+    return fail(502, `The provider ${reason} (${new URL(url).host})`);
+  }
+};
+
+const expiresAtFrom = (expiresInSeconds: unknown): string | null => {
+  const seconds = Number(expiresInSeconds);
+  return Number.isFinite(seconds) && seconds > 0 ? new Date(Date.now() + seconds * 1000).toISOString() : null;
+};
+
+const envValue = (name: string): string => (process.env[name] || '').trim();
+
+const ssoOnlyResolveAccount = (name: string) => async (): Promise<Fail> =>
+  fail(400, `${name} links through its own sign-in — use POST /api/v1/connections/oauth/begin`);
 
 // A hostname input like "mastodon.social" — no scheme, no path, no userinfo.
 const sanitizeHost = (value: unknown): string | null => {
@@ -458,47 +571,165 @@ const hackerNewsProvider: ConnectionProvider = {
   }
 };
 
-// --- youtube ----------------------------------------------------------------
+// --- youtube: Thingtime-managed virtual subscriptions (ytsubber-style) ------
+// One connection = YOUR channel list, managed inside Thingtime: add/remove
+// channels any time (name search rides the YouTube Data API when a key is
+// configured; channel IDs, /channel/ URLs, and @handles resolve keylessly via
+// the public uploads feed). The feed merges every channel's uploads newest-
+// first. The account is deliberately PER USER (providerAccountId embeds the
+// userId) — your list is yours; post-level dedupe still unifies a video that
+// several users follow into ONE external-post via its stable video id.
 
-const youtubeProvider: ConnectionProvider = {
-  id: 'youtube',
-  name: 'YouTube',
-  icon: '📺',
-  auth: 'none',
-  contentVisibility: 'public',
-  about: "Follow a channel's uploads via its public feed (channel ID starts with UC…).",
-  configured: () => true,
-  fields: [
-    { key: 'channelId', label: 'Channel ID', placeholder: 'UCXuqSBlHAE6Xw-yeJA0Tunw', help: 'The UC… id from the channel URL or its About page.', required: true }
-  ],
-  resolveAccount: async (fields) => {
-    const channelId = (fields.channelId || '').trim();
-    if (!/^UC[A-Za-z0-9_-]{10,60}$/.test(channelId)) return fail(400, 'channelId must be a YouTube channel id starting with UC');
+export type YoutubeChannelRef = { id: string; title: string; thumbnail: string | null };
+
+const YT_CHANNEL_ID_RE = /^UC[A-Za-z0-9_-]{10,60}$/;
+const MAX_VIRTUAL_CHANNELS = 100;
+const YT_API = 'https://www.googleapis.com/youtube/v3';
+
+export const youtubeApiKey = (): string => envValue('YOUTUBE_API_KEY') || envValue('GOOGLE_API_KEY');
+
+const boundedChannelRef = (id: string, title: unknown, thumbnail: unknown): YoutubeChannelRef => ({
+  id,
+  title: boundedText(title, 120) || id,
+  thumbnail: httpsImage(thumbnail)
+});
+
+export const sanitizeChannelList = (value: unknown): YoutubeChannelRef[] => {
+  if (!Array.isArray(value)) return [];
+  const channels: YoutubeChannelRef[] = [];
+  for (const entry of value) {
+    const id = typeof entry?.id === 'string' ? entry.id.trim() : '';
+    if (!YT_CHANNEL_ID_RE.test(id) || channels.some((channel) => channel.id === id)) continue;
+    channels.push(boundedChannelRef(id, entry?.title, entry?.thumbnail));
+    if (channels.length >= MAX_VIRTUAL_CHANNELS) break;
+  }
+  return channels;
+};
+
+// Resolve free-form input (UC… id, /channel/ URL, @handle, or a name to
+// search) into channel candidates. Data API when a key is set; UC ids and
+// @handles keep a keyless fallback so the system works with zero config.
+export const resolveYoutubeChannelQuery = async (
+  query: string
+): Promise<{ ok: true; channels: YoutubeChannelRef[]; via: 'api' | 'rss' } | Fail> => {
+  const raw = (query || '').trim();
+  if (!raw) return fail(400, 'Give a channel id, URL, @handle, or a name to search');
+  const key = youtubeApiKey();
+
+  const urlMatch = raw.match(/youtube\.com\/channel\/(UC[A-Za-z0-9_-]{10,60})/i);
+  const channelId = urlMatch ? urlMatch[1] : YT_CHANNEL_ID_RE.test(raw) ? raw : null;
+  const handleMatch = raw.match(/(?:youtube\.com\/)?(@[A-Za-z0-9._-]{3,60})/);
+
+  if (key) {
+    let url: string | null = null;
+    if (channelId) url = `${YT_API}/channels?part=snippet&id=${channelId}&key=${key}`;
+    else if (handleMatch) url = `${YT_API}/channels?part=snippet&forHandle=${encodeURIComponent(handleMatch[1])}&key=${key}`;
+    if (url) {
+      const fetched = await fetchJson(url);
+      if (fetched.ok === false) return fetched;
+      const items = Array.isArray(fetched.data?.items) ? fetched.data.items : [];
+      return {
+        ok: true,
+        via: 'api',
+        channels: items.map((item: any) => boundedChannelRef(String(item.id), item.snippet?.title, item.snippet?.thumbnails?.default?.url))
+      };
+    }
+    const search = await fetchJson(`${YT_API}/search?part=snippet&type=channel&maxResults=8&q=${encodeURIComponent(raw)}&key=${key}`);
+    if (search.ok === false) return search;
+    const items = Array.isArray(search.data?.items) ? search.data.items : [];
+    return {
+      ok: true,
+      via: 'api',
+      channels: items
+        .filter((item: any) => typeof item?.snippet?.channelId === 'string')
+        .map((item: any) => boundedChannelRef(String(item.snippet.channelId), item.snippet?.channelTitle || item.snippet?.title, item.snippet?.thumbnails?.default?.url))
+    };
+  }
+
+  // keyless: UC ids probe the public uploads feed for the title; @handles and
+  // names need the Data API key
+  if (channelId) {
     const fetched = await fetchText(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, 'application/atom+xml, application/xml');
     if (fetched.ok === false) return fetched;
     const feed = parseRssOrAtom(fetched.text);
-    if (!feed) return fail(502, 'YouTube did not return a channel feed for that id');
+    if (!feed) return fail(404, 'YouTube did not return a channel feed for that id');
+    return { ok: true, via: 'rss', channels: [boundedChannelRef(channelId, feed.title, null)] };
+  }
+  return fail(400, 'Channel NAME search needs a YouTube Data API key (YOUTUBE_API_KEY) — paste a channel ID or /channel/ URL instead');
+};
+
+const fetchChannelUploads = async (channel: YoutubeChannelRef, perChannel: number): Promise<ExternalFeedItem[]> => {
+  const fetched = await fetchText(`https://www.youtube.com/feeds/videos.xml?channel_id=${channel.id}`, 'application/atom+xml, application/xml');
+  if (fetched.ok === false) return [];
+  const feed = parseRssOrAtom(fetched.text);
+  if (!feed) return [];
+  return feed.items.slice(0, perChannel).map((item) => ({
+    ...item,
+    author: { name: feed.title || channel.title, handle: channel.title, avatarUrl: channel.thumbnail, url: `https://www.youtube.com/channel/${channel.id}` }
+  }));
+};
+
+const youtubeProvider: ConnectionProvider = {
+  id: 'youtube',
+  name: 'YouTube channels',
+  icon: '📺',
+  auth: 'none',
+  contentVisibility: 'public',
+  about: 'Your Thingtime-managed channel list — follow any set of YouTube channels as one merged uploads feed, and grow it any time.',
+  configured: () => true,
+  fields: [
+    {
+      key: 'channel',
+      label: 'First channel (optional)',
+      placeholder: 'UC… id, youtube.com/channel/… URL, or @handle',
+      help: youtubeApiKey()
+        ? 'Also searchable by name — you can add more channels after connecting.'
+        : 'Add more channels after connecting. Name search lights up once a YouTube Data API key is configured.'
+    }
+  ],
+  resolveAccount: async (fields, ctx) => {
+    const channels: YoutubeChannelRef[] = [];
+    const first = (fields.channel || '').trim();
+    if (first) {
+      const resolved = await resolveYoutubeChannelQuery(first);
+      if (resolved.ok === false) return resolved;
+      if (!resolved.channels.length) return fail(404, 'No channel matched that input');
+      channels.push(resolved.channels[0]);
+    }
     return {
       ok: true,
       account: {
-        providerAccountId: channelId,
-        displayName: feed.title || channelId,
-        handle: feed.title || channelId,
-        avatarUrl: null,
-        profileUrl: `https://www.youtube.com/channel/${channelId}`,
-        config: { channelId }
+        // per-user virtual account — never shared, unlike real identities
+        providerAccountId: `subs:${ctx.userId}`,
+        displayName: 'My YouTube channels',
+        handle: `${channels.length} channel${channels.length === 1 ? '' : 's'}`,
+        avatarUrl: channels[0]?.thumbnail || null,
+        profileUrl: null,
+        config: { channels }
       }
     };
   },
   fetchFeed: async (account, opts) => {
-    const fetched = await fetchText(
-      `https://www.youtube.com/feeds/videos.xml?channel_id=${account.config.channelId}`,
-      'application/atom+xml, application/xml'
-    );
-    if (fetched.ok === false) return fetched;
-    const feed = parseRssOrAtom(fetched.text);
-    if (!feed) return fail(502, 'The channel feed could not be parsed');
-    return { ok: true, items: feed.items.slice(0, opts.limit) };
+    let channels = sanitizeChannelList(account.config.channels);
+    // fold-in: pre-virtual single-channel connections carried config.channelId
+    if (!channels.length && typeof account.config.channelId === 'string' && YT_CHANNEL_ID_RE.test(account.config.channelId)) {
+      channels = [boundedChannelRef(account.config.channelId, account.config.channelId, null)];
+    }
+    if (!channels.length) return { ok: true, items: [] };
+    // uploads feed per channel (keyless, always fresh), bounded fan-out; a
+    // deeper page pulls more videos per channel from the same feeds
+    const perChannel = Math.min(15, Math.max(5, Math.ceil((opts.limit * (opts.pages || 1)) / Math.min(channels.length, 25))));
+    const active = channels.slice(0, 25);
+    const batches: ExternalFeedItem[][] = [];
+    const CONCURRENCY = 8;
+    for (let start = 0; start < active.length; start += CONCURRENCY) {
+      batches.push(...(await Promise.all(active.slice(start, start + CONCURRENCY).map((channel) => fetchChannelUploads(channel, perChannel)))));
+    }
+    const merged = batches
+      .flat()
+      .sort((a, b) => (b.publishedAt?.getTime() || 0) - (a.publishedAt?.getTime() || 0))
+      .slice(0, Math.max(opts.limit * (opts.pages || 1), opts.limit));
+    return { ok: true, items: merged };
   }
 };
 
@@ -803,18 +1034,435 @@ const githubProvider: ConnectionProvider = {
   }
 };
 
+// --- SSO providers -----------------------------------------------------------
+// Click Connect → the provider's own sign-in → the token response is saved to
+// the Thingtime account (external-account secure blob) → the personalized
+// feed syncs with those credentials. Each is config-gated: without its env
+// credentials the catalog reports configured:false and the UI shows "Needs
+// setup". Honesty notes live in each provider's `about`: official APIs bound
+// what is fetchable (Meta removed the friends News Feed API in 2015; TikTok
+// and Instagram expose your own content, not the For You/home feed).
+
+const GRAPH = 'https://graph.facebook.com/v23.0';
+
+const facebookProvider: ConnectionProvider = {
+  id: 'facebook',
+  name: 'Facebook',
+  icon: '📘',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  about: 'Sign in with Facebook to link your account and sync your own timeline posts. (Meta’s API no longer exposes the friends News Feed — this pulls your posts and tagged posts.)',
+  configured: () => !!envValue('FACEBOOK_APP_ID') && !!envValue('FACEBOOK_APP_SECRET'),
+  fields: [],
+  resolveAccount: ssoOnlyResolveAccount('Facebook'),
+  oauth: {
+    clientIdEnv: 'FACEBOOK_APP_ID',
+    clientSecretEnv: 'FACEBOOK_APP_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://www.facebook.com/v23.0/dialog/oauth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&response_type=code&scope=${encodeURIComponent('public_profile,user_posts')}`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
+      const short = await fetchJson(
+        `${GRAPH}/oauth/access_token?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${encodeURIComponent(clientSecret)}&code=${encodeURIComponent(code)}`
+      );
+      if (short.ok === false) return short;
+      if (!short.data?.access_token) return fail(502, 'Facebook did not return an access token');
+      // upgrade to a ~60-day long-lived token (best-effort — the short token works either way)
+      const long = await fetchJson(
+        `${GRAPH}/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}&fb_exchange_token=${encodeURIComponent(short.data.access_token)}`
+      );
+      const winner = long.ok !== false && long.data?.access_token ? long.data : short.data;
+      return {
+        ok: true,
+        tokens: { accessToken: String(winner.access_token), expiresAt: expiresAtFrom(winner.expires_in), scopes: ['public_profile', 'user_posts'] }
+      };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson(`${GRAPH}/me?fields=id,name,picture.width(200)&access_token=${encodeURIComponent(tokens.accessToken)}`);
+      if (me.ok === false) return me;
+      if (!me.data?.id) return fail(502, 'Facebook did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(me.data.id),
+          displayName: boundedText(me.data.name, 120) || 'Facebook account',
+          handle: boundedText(me.data.name, 120) || String(me.data.id),
+          avatarUrl: httpsImage(me.data.picture?.data?.url),
+          profileUrl: `https://www.facebook.com/${me.data.id}`,
+          config: {}
+        }
+      };
+    }
+  },
+  fetchFeed: async (_account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'Facebook needs a reconnect — its saved sign-in is missing or expired');
+    const items: ExternalFeedItem[] = [];
+    let url: string | null =
+      `${GRAPH}/me/posts?fields=id,message,story,created_time,permalink_url,full_picture,shares,likes.summary(true),comments.summary(true)&limit=25&access_token=${encodeURIComponent(opts.tokens.accessToken)}`;
+    for (let page = 0; page < Math.max(1, Math.min(opts.pages || 1, 5)) && url; page += 1) {
+      const fetched = await authedJson(url);
+      if (fetched.ok === false) return items.length ? { ok: true, items } : fetched;
+      for (const post of fetched.data?.data || []) {
+        if (!post?.id) continue;
+        items.push({
+          externalId: `fb-${post.id}`,
+          url: typeof post.permalink_url === 'string' ? post.permalink_url.slice(0, 1500) : null,
+          title: null,
+          text: boundedText(post.message || post.story || '', MAX_TEXT_CHARS),
+          images: boundedImages([post.full_picture]),
+          author: { name: null, handle: null, avatarUrl: null, url: null },
+          publishedAt: dateOrNull(post.created_time),
+          stats: {
+            likes: post.likes?.summary?.total_count,
+            comments: post.comments?.summary?.total_count,
+            shares: post.shares?.count
+          }
+        });
+        if (items.length >= opts.limit * Math.max(1, opts.pages || 1)) break;
+      }
+      url = typeof fetched.data?.paging?.next === 'string' ? fetched.data.paging.next : null;
+    }
+    return { ok: true, items };
+  }
+};
+
+const instagramProvider: ConnectionProvider = {
+  id: 'instagram',
+  name: 'Instagram',
+  icon: '📷',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  about: 'Sign in with Instagram (professional account) to link and sync your own media. (Instagram’s API exposes your posts — not the home feed of accounts you follow.)',
+  configured: () => !!envValue('INSTAGRAM_APP_ID') && !!envValue('INSTAGRAM_APP_SECRET'),
+  fields: [],
+  resolveAccount: ssoOnlyResolveAccount('Instagram'),
+  oauth: {
+    clientIdEnv: 'INSTAGRAM_APP_ID',
+    clientSecretEnv: 'INSTAGRAM_APP_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://www.instagram.com/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('instagram_business_basic')}&response_type=code&state=${encodeURIComponent(state)}`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
+      const short = await postForm('https://api.instagram.com/oauth/access_token', {
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+        code
+      });
+      if (short.ok === false) return short;
+      if (!short.data?.access_token) return fail(502, 'Instagram did not return an access token');
+      // upgrade to a 60-day token; refreshable while in use
+      const long = await fetchJson(
+        `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(clientSecret)}&access_token=${encodeURIComponent(short.data.access_token)}`
+      );
+      const winner = long.ok !== false && long.data?.access_token ? long.data : short.data;
+      return {
+        ok: true,
+        tokens: {
+          accessToken: String(winner.access_token),
+          expiresAt: expiresAtFrom(winner.expires_in),
+          scopes: ['instagram_business_basic'],
+          providerUserId: short.data?.user_id ? String(short.data.user_id) : null
+        }
+      };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson(
+        `https://graph.instagram.com/v23.0/me?fields=user_id,username,name,profile_picture_url&access_token=${encodeURIComponent(tokens.accessToken)}`
+      );
+      if (me.ok === false) return me;
+      const id = me.data?.user_id || me.data?.id || tokens.providerUserId;
+      if (!id) return fail(502, 'Instagram did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(id),
+          displayName: boundedText(me.data?.name || me.data?.username, 120) || 'Instagram account',
+          handle: me.data?.username ? `@${me.data.username}` : String(id),
+          avatarUrl: httpsImage(me.data?.profile_picture_url),
+          profileUrl: me.data?.username ? `https://www.instagram.com/${me.data.username}/` : null,
+          config: {}
+        }
+      };
+    },
+    refreshTokens: async (tokens) => {
+      const refreshed = await fetchJson(
+        `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(tokens.accessToken)}`
+      );
+      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
+      return { ...tokens, accessToken: String(refreshed.data.access_token), expiresAt: expiresAtFrom(refreshed.data.expires_in) };
+    }
+  },
+  fetchFeed: async (_account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'Instagram needs a reconnect — its saved sign-in is missing or expired');
+    const items: ExternalFeedItem[] = [];
+    let url: string | null =
+      `https://graph.instagram.com/v23.0/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=25&access_token=${encodeURIComponent(opts.tokens.accessToken)}`;
+    for (let page = 0; page < Math.max(1, Math.min(opts.pages || 1, 5)) && url; page += 1) {
+      const fetched = await authedJson(url);
+      if (fetched.ok === false) return items.length ? { ok: true, items } : fetched;
+      for (const media of fetched.data?.data || []) {
+        if (!media?.id) continue;
+        const image = media.media_type === 'VIDEO' ? media.thumbnail_url : media.media_url;
+        items.push({
+          externalId: `ig-${media.id}`,
+          url: typeof media.permalink === 'string' ? media.permalink.slice(0, 1500) : null,
+          title: null,
+          text: boundedText(media.caption || '', MAX_TEXT_CHARS),
+          images: boundedImages([image]),
+          author: { name: null, handle: null, avatarUrl: null, url: null },
+          publishedAt: dateOrNull(media.timestamp),
+          stats: { likes: media.like_count, comments: media.comments_count }
+        });
+        if (items.length >= opts.limit * Math.max(1, opts.pages || 1)) break;
+      }
+      url = typeof fetched.data?.paging?.next === 'string' ? fetched.data.paging.next : null;
+    }
+    return { ok: true, items };
+  }
+};
+
+const tiktokProvider: ConnectionProvider = {
+  id: 'tiktok',
+  name: 'TikTok',
+  icon: '🎵',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  about: 'Sign in with TikTok to link your account and sync your own videos. (TikTok’s API exposes your videos — the For You feed is not available to apps.)',
+  configured: () => !!envValue('TIKTOK_CLIENT_KEY') && !!envValue('TIKTOK_CLIENT_SECRET'),
+  fields: [],
+  resolveAccount: ssoOnlyResolveAccount('TikTok'),
+  oauth: {
+    clientIdEnv: 'TIKTOK_CLIENT_KEY',
+    clientSecretEnv: 'TIKTOK_CLIENT_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(clientId)}&scope=${encodeURIComponent('user.info.basic,video.list')}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
+      const exchanged = await postForm('https://open.tiktokapis.com/v2/oauth/token/', {
+        client_key: clientId,
+        client_secret: clientSecret,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri
+      });
+      if (exchanged.ok === false) return exchanged;
+      if (!exchanged.data?.access_token) {
+        return fail(502, `TikTok did not return an access token${exchanged.data?.error_description ? `: ${boundedText(exchanged.data.error_description, 150)}` : ''}`);
+      }
+      return {
+        ok: true,
+        tokens: {
+          accessToken: String(exchanged.data.access_token),
+          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
+          expiresAt: expiresAtFrom(exchanged.data.expires_in),
+          scopes: String(exchanged.data.scope || 'user.info.basic,video.list').split(','),
+          providerUserId: exchanged.data.open_id ? String(exchanged.data.open_id) : null
+        }
+      };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson('https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username', {
+        token: tokens.accessToken
+      });
+      if (me.ok === false) return me;
+      const user = me.data?.data?.user;
+      const id = user?.union_id || user?.open_id || tokens.providerUserId;
+      if (!id) return fail(502, 'TikTok did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(id),
+          displayName: boundedText(user?.display_name, 120) || 'TikTok account',
+          handle: user?.username ? `@${user.username}` : String(id).slice(0, 20),
+          avatarUrl: httpsImage(user?.avatar_url),
+          profileUrl: user?.username ? `https://www.tiktok.com/@${user.username}` : null,
+          config: {}
+        }
+      };
+    },
+    refreshTokens: async (tokens, creds) => {
+      if (!tokens.refreshToken) return null;
+      const refreshed = await postForm('https://open.tiktokapis.com/v2/oauth/token/', {
+        client_key: creds.clientId,
+        client_secret: creds.clientSecret,
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refreshToken
+      });
+      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
+      return {
+        ...tokens,
+        accessToken: String(refreshed.data.access_token),
+        refreshToken: refreshed.data.refresh_token ? String(refreshed.data.refresh_token) : tokens.refreshToken,
+        expiresAt: expiresAtFrom(refreshed.data.expires_in)
+      };
+    }
+  },
+  fetchFeed: async (_account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'TikTok needs a reconnect — its saved sign-in is missing or expired');
+    const items: ExternalFeedItem[] = [];
+    let cursor: number | undefined;
+    for (let page = 0; page < Math.max(1, Math.min(opts.pages || 1, 5)); page += 1) {
+      const fetched = await authedJson(
+        'https://open.tiktokapis.com/v2/video/list/?fields=id,title,video_description,create_time,cover_image_url,share_url,like_count,comment_count,share_count,view_count',
+        { token: opts.tokens.accessToken, method: 'POST', body: { max_count: 20, ...(cursor ? { cursor } : {}) } }
+      );
+      if (fetched.ok === false) return items.length ? { ok: true, items } : fetched;
+      if (fetched.data?.error?.code && fetched.data.error.code !== 'ok') {
+        return items.length ? { ok: true, items } : fail(502, `TikTok: ${boundedText(fetched.data.error.message || fetched.data.error.code, 150)}`);
+      }
+      for (const video of fetched.data?.data?.videos || []) {
+        if (!video?.id) continue;
+        items.push({
+          externalId: `tt-${video.id}`,
+          url: typeof video.share_url === 'string' ? video.share_url.slice(0, 1500) : null,
+          title: boundedText(video.title, MAX_TITLE_CHARS) || null,
+          text: boundedText(video.video_description || '', MAX_TEXT_CHARS),
+          images: boundedImages([video.cover_image_url]),
+          author: { name: null, handle: null, avatarUrl: null, url: null },
+          publishedAt: typeof video.create_time === 'number' ? new Date(video.create_time * 1000) : null,
+          stats: { likes: video.like_count, comments: video.comment_count, shares: video.share_count }
+        });
+      }
+      if (!fetched.data?.data?.has_more || items.length >= opts.limit * Math.max(1, opts.pages || 1)) break;
+      cursor = Number(fetched.data?.data?.cursor) || undefined;
+      if (!cursor) break;
+    }
+    return { ok: true, items };
+  }
+};
+
+const youtubeAccountProvider: ConnectionProvider = {
+  id: 'youtube-account',
+  name: 'YouTube account',
+  icon: '▶️',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  about: 'Sign in with Google to link your real YouTube account and sync the latest uploads from your actual subscriptions.',
+  configured: () => !!envValue('GOOGLE_CLIENT_ID') && !!envValue('GOOGLE_CLIENT_SECRET'),
+  fields: [],
+  resolveAccount: ssoOnlyResolveAccount('YouTube'),
+  oauth: {
+    clientIdEnv: 'GOOGLE_CLIENT_ID',
+    clientSecretEnv: 'GOOGLE_CLIENT_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('openid profile https://www.googleapis.com/auth/youtube.readonly')}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
+      const exchanged = await postForm('https://oauth2.googleapis.com/token', {
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri
+      });
+      if (exchanged.ok === false) return exchanged;
+      if (!exchanged.data?.access_token) return fail(502, 'Google did not return an access token');
+      return {
+        ok: true,
+        tokens: {
+          accessToken: String(exchanged.data.access_token),
+          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
+          expiresAt: expiresAtFrom(exchanged.data.expires_in),
+          scopes: String(exchanged.data.scope || '').split(' ').filter(Boolean)
+        }
+      };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
+      if (me.ok === false) return me;
+      if (!me.data?.sub) return fail(502, 'Google did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(me.data.sub),
+          displayName: boundedText(me.data.name, 120) || 'YouTube account',
+          handle: boundedText(me.data.name, 120) || 'YouTube account',
+          avatarUrl: httpsImage(me.data.picture),
+          profileUrl: null,
+          config: {}
+        }
+      };
+    },
+    refreshTokens: async (tokens, creds) => {
+      if (!tokens.refreshToken) return null;
+      const refreshed = await postForm('https://oauth2.googleapis.com/token', {
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refreshToken
+      });
+      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
+      return { ...tokens, accessToken: String(refreshed.data.access_token), expiresAt: expiresAtFrom(refreshed.data.expires_in) };
+    }
+  },
+  fetchFeed: async (_account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'YouTube needs a reconnect — its saved sign-in is missing or expired');
+    const token = opts.tokens.accessToken;
+    // 1) real subscriptions, YouTube's own relevance order (1 quota unit)
+    const subs = await authedJson(`${YT_API}/subscriptions?part=snippet&mine=true&maxResults=50`, { token });
+    if (subs.ok === false) return subs;
+    const channelIds: string[] = (subs.data?.items || [])
+      .map((item: any) => item?.snippet?.resourceId?.channelId)
+      .filter((id: unknown): id is string => typeof id === 'string')
+      .slice(0, 12 * Math.max(1, Math.min(opts.pages || 1, 3)));
+    if (!channelIds.length) return { ok: true, items: [] };
+    // 2) uploads playlists for ALL channels in one call (1 unit)
+    const details = await authedJson(`${YT_API}/channels?part=snippet,contentDetails&id=${channelIds.join(',')}&maxResults=50`, { token });
+    if (details.ok === false) return details;
+    const channels = (details.data?.items || [])
+      .map((item: any) => ({
+        id: String(item?.id || ''),
+        title: boundedText(item?.snippet?.title, 120),
+        thumbnail: httpsImage(item?.snippet?.thumbnails?.default?.url),
+        uploads: item?.contentDetails?.relatedPlaylists?.uploads
+      }))
+      .filter((channel: any) => typeof channel.uploads === 'string');
+    // 3) latest uploads per channel (1 unit each), merged newest-first
+    const perChannel = Math.max(3, Math.min(10, 5 * (opts.pages || 1)));
+    const lists = await Promise.all(
+      channels.map((channel: any) =>
+        authedJson(`${YT_API}/playlistItems?part=snippet,contentDetails&playlistId=${channel.uploads}&maxResults=${perChannel}`, { token }).then(
+          (result) => ({ channel, result })
+        )
+      )
+    );
+    const items: ExternalFeedItem[] = [];
+    for (const { channel, result } of lists) {
+      if (result.ok === false) continue;
+      for (const entry of result.data?.items || []) {
+        const videoId = entry?.contentDetails?.videoId;
+        if (typeof videoId !== 'string') continue;
+        items.push({
+          externalId: `yt-${videoId}`,
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          title: boundedText(entry?.snippet?.title, MAX_TITLE_CHARS) || null,
+          text: boundedText(entry?.snippet?.description || '', 500),
+          images: boundedImages([entry?.snippet?.thumbnails?.high?.url || entry?.snippet?.thumbnails?.default?.url]),
+          author: { name: channel.title || null, handle: channel.title || null, avatarUrl: channel.thumbnail, url: `https://www.youtube.com/channel/${channel.id}` },
+          publishedAt: dateOrNull(entry?.contentDetails?.videoPublishedAt || entry?.snippet?.publishedAt),
+          stats: null
+        });
+      }
+    }
+    items.sort((a, b) => (b.publishedAt?.getTime() || 0) - (a.publishedAt?.getTime() || 0));
+    return { ok: true, items: items.slice(0, Math.max(opts.limit * (opts.pages || 1), opts.limit)) };
+  }
+};
+
 // --- registry ---------------------------------------------------------------
 
 export const CONNECTION_PROVIDERS: ConnectionProvider[] = [
-  demoProvider,
-  rssProvider,
-  redditProvider,
-  hackerNewsProvider,
   youtubeProvider,
+  youtubeAccountProvider,
+  facebookProvider,
+  instagramProvider,
+  tiktokProvider,
+  redditProvider,
   mastodonProvider,
   blueskyProvider,
+  hackerNewsProvider,
   lemmyProvider,
-  githubProvider
+  githubProvider,
+  rssProvider,
+  demoProvider
 ];
 
 export const connectionProviderById = (id: unknown): ConnectionProvider | null =>

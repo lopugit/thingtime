@@ -1,14 +1,21 @@
 import { createHash } from 'node:crypto';
+import { Binary } from 'mongodb';
 
+import { fromBin } from '../auth/users';
 import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
 import { toPublicPosts, viewerOf, type PublicPost } from '../things/things';
 import {
   connectionProviderById,
   publicProviders,
+  resolveYoutubeChannelQuery,
+  sanitizeChannelList,
+  youtubeApiKey,
   FEED_FETCH_LIMIT,
   type ConnectionProvider,
   type ExternalFeedItem,
-  type ResolvedExternalAccount
+  type OAuthTokens,
+  type ResolvedExternalAccount,
+  type YoutubeChannelRef
 } from './providers';
 import { ACL_ALL, ACL_OWNER, ACL_USER_PREFIX, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
@@ -68,6 +75,31 @@ export const externalPostShareId = (provider: string, externalId: string): strin
 
 type SessionUser = { id: string; username: string };
 
+// --- secure token blob ------------------------------------------------------
+// OAuth token responses live under the account's root `secure` field as ONE
+// BinData blob (users.ts precedent: the $** wildcard text index tokenizes
+// string fields only, so a binary blob is entirely unsearchable). Never in
+// crystal, never projected, never sent to a client. Last connector wins —
+// several Thingtime users linking the same external account share its
+// freshest credentials, exactly like the shared profile crystal.
+type ConnectionSecurePayload = { tokens?: OAuthTokens | null };
+
+const packConnectionSecure = (payload: ConnectionSecurePayload): Binary => new Binary(Buffer.from(JSON.stringify(payload), 'utf8'));
+
+const unpackConnectionSecure = (value: unknown): ConnectionSecurePayload => {
+  const raw = fromBin(value as any);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as ConnectionSecurePayload) : {};
+  } catch {
+    return {};
+  }
+};
+
+const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
+const MAX_SYNC_DEPTH = 5;
+
 // --- projections ------------------------------------------------------------
 
 export type PublicConnection = {
@@ -76,6 +108,7 @@ export type PublicConnection = {
   providerName: string;
   providerIcon: string;
   contentVisibility: 'public' | 'personal';
+  auth: 'none' | 'oauth2';
   account: {
     id: string;
     handle: string;
@@ -83,6 +116,8 @@ export type PublicConnection = {
     avatarUrl: string | null;
     profileUrl: string | null;
   };
+  // youtube virtual-subscription connections carry their managed channel list
+  channels?: YoutubeChannelRef[];
   lastSyncedAt: string | null;
   lastSyncError: string | null;
   createdAt: string | null;
@@ -94,6 +129,7 @@ const toPublicConnection = (linkDoc: any, accountDoc: any, provider: ConnectionP
   providerName: provider?.name || String(linkDoc?.crystal?.provider || ''),
   providerIcon: provider?.icon || '🔌',
   contentVisibility: provider?.contentVisibility === 'personal' ? 'personal' : 'public',
+  auth: provider?.oauth ? 'oauth2' : 'none',
   account: {
     id: String(accountDoc?.shareId || linkDoc?.crystal?.accountId || ''),
     handle: String(accountDoc?.crystal?.handle || ''),
@@ -101,6 +137,7 @@ const toPublicConnection = (linkDoc: any, accountDoc: any, provider: ConnectionP
     avatarUrl: typeof accountDoc?.crystal?.avatarUrl === 'string' ? accountDoc.crystal.avatarUrl : null,
     profileUrl: typeof accountDoc?.crystal?.profileUrl === 'string' ? accountDoc.crystal.profileUrl : null
   },
+  ...(provider?.id === 'youtube' ? { channels: sanitizeChannelList(accountDoc?.crystal?.config?.channels) } : {}),
   lastSyncedAt: accountDoc?.crystal?.lastSyncedAt instanceof Date ? accountDoc.crystal.lastSyncedAt.toISOString() : null,
   lastSyncError: typeof accountDoc?.crystal?.lastSyncError === 'string' && accountDoc.crystal.lastSyncError ? accountDoc.crystal.lastSyncError : null,
   createdAt: linkDoc?.createdAt instanceof Date ? linkDoc.createdAt.toISOString() : null
@@ -110,36 +147,26 @@ export const listProviders = () => publicProviders();
 
 // --- connect / list / unlink ------------------------------------------------
 
-export const connectProvider = async (
+// Shared by the fields-based connect AND the OAuth callback: upsert the
+// (possibly shared) external account — sealing fresh OAuth tokens into its
+// secure blob when given — then the caller's link. Idempotent end to end.
+export const upsertAccountAndLink = async (
   user: SessionUser,
-  input: { provider?: unknown; fields?: unknown }
+  provider: ConnectionProvider,
+  account: ResolvedExternalAccount,
+  tokens?: OAuthTokens | null
 ): Promise<{ ok: true; connection: PublicConnection; alreadyLinked: boolean } | Fail> => {
-  const provider = connectionProviderById(input.provider);
-  if (!provider) return fail(400, 'Unknown provider');
-  if (!provider.configured()) return fail(400, `${provider.name} is not configured on this deployment yet`);
-
-  const rawFields = input.fields && typeof input.fields === 'object' && !Array.isArray(input.fields) ? (input.fields as Record<string, unknown>) : {};
-  const fields: Record<string, string> = {};
-  for (const field of provider.fields) {
-    const value = rawFields[field.key];
-    if (typeof value === 'string' && value.trim()) fields[field.key] = value.trim().slice(0, 1500);
-    else if (field.required) return fail(400, `${field.label} is required`);
-  }
-
   const home = await getHomeThingsCollection();
   const existingCount = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, ownerId: user.id });
   if (existingCount >= MAX_LINKS_PER_USER) return fail(400, `You can hold at most ${MAX_LINKS_PER_USER} connections`);
 
-  const resolved = await provider.resolveAccount(fields);
-  if (resolved.ok === false) return resolved;
-
-  const account = resolved.account;
   const accountShareId = externalAccountShareId(provider.id, account.providerAccountId);
   const linkId = externalLinkShareId(user.id, accountShareId);
   const now = new Date();
 
   // account first (shared across all linking users — refresh the public
-  // profile crystal on every connect, identity only on insert)
+  // profile crystal and, for SSO, the sealed tokens on every connect;
+  // identity only on insert)
   await home.updateOne(
     { shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND },
     {
@@ -149,6 +176,8 @@ export const connectProvider = async (
         'crystal.avatarUrl': account.avatarUrl,
         'crystal.profileUrl': account.profileUrl,
         'crystal.config': account.config,
+        // a fresh sign-in clears any stale reconnect-needed state
+        ...(tokens ? { secure: packConnectionSecure({ tokens }), 'crystal.lastSyncError': null } : {}),
         updatedAt: now
       },
       $setOnInsert: {
@@ -204,6 +233,32 @@ export const connectProvider = async (
     home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND })
   ]);
   return { ok: true, connection: toPublicConnection(linkDoc, accountDoc, provider), alreadyLinked };
+};
+
+export const connectProvider = async (
+  user: SessionUser,
+  input: { provider?: unknown; fields?: unknown }
+): Promise<{ ok: true; connection: PublicConnection; alreadyLinked: boolean } | Fail> => {
+  const provider = connectionProviderById(input.provider);
+  if (!provider) return fail(400, 'Unknown provider');
+  // SSO providers never take fields — point at the OAuth flow whether or not
+  // their credentials are configured yet
+  if (provider.oauth) {
+    return fail(400, `${provider.name} links through its own sign-in — use POST /api/v1/connections/oauth/begin`);
+  }
+  if (!provider.configured()) return fail(400, `${provider.name} is not configured on this deployment yet`);
+
+  const rawFields = input.fields && typeof input.fields === 'object' && !Array.isArray(input.fields) ? (input.fields as Record<string, unknown>) : {};
+  const fields: Record<string, string> = {};
+  for (const field of provider.fields) {
+    const value = rawFields[field.key];
+    if (typeof value === 'string' && value.trim()) fields[field.key] = value.trim().slice(0, 1500);
+    else if (field.required) return fail(400, `${field.label} is required`);
+  }
+
+  const resolved = await provider.resolveAccount(fields, { userId: user.id });
+  if (resolved.ok === false) return resolved;
+  return upsertAccountAndLink(user, provider, resolved.account);
 };
 
 const linksWithAccounts = async (userId: string, linkId?: string | null) => {
@@ -311,7 +366,14 @@ const upsertExternalPosts = async (
             },
             updatedAt: now
           },
-          ...(viewerGrant && provider.contentVisibility === 'personal' ? { $addToSet: { acl: viewerGrant } } : {}),
+          // one post, many sources: the SAME video/post reached through a
+          // second account (another user's virtual channel list, a real
+          // subscription, another subreddit multi …) lists every source and
+          // stays ONE doc — comments and reactions unify on it
+          $addToSet: {
+            sourceIds: accountShareId,
+            ...(viewerGrant && provider.contentVisibility === 'personal' ? { acl: viewerGrant } : {})
+          },
           $setOnInsert: {
             schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
             shareId,
@@ -334,15 +396,19 @@ const upsertExternalPosts = async (
     return (result.upsertedCount || 0) + (result.modifiedCount || 0);
   } catch (err: any) {
     // duplicate-key races (two linked users syncing the same account at once)
-    // mean the other sync landed the doc — the $addToSet grant retries below
+    // mean the other sync landed the doc — the membership retry keeps this
+    // sync's source + grant additions
     if (err?.code !== 11000 && !err?.writeErrors?.every?.((error: any) => error?.code === 11000)) throw err;
-    if (viewerGrant && provider.contentVisibility === 'personal') {
-      const shareIds = items.map((item) => externalPostShareId(provider.id, item.externalId));
-      await things.updateMany(
-        { shareId: { $in: shareIds }, thingtime: EXTERNAL_POST_KIND },
-        { $addToSet: { acl: viewerGrant } }
-      );
-    }
+    const shareIds = items.map((item) => externalPostShareId(provider.id, item.externalId));
+    await things.updateMany(
+      { shareId: { $in: shareIds }, thingtime: EXTERNAL_POST_KIND },
+      {
+        $addToSet: {
+          sourceIds: accountShareId,
+          ...(viewerGrant && provider.contentVisibility === 'personal' ? { acl: viewerGrant } : {})
+        }
+      }
+    );
     return 0;
   }
 };
@@ -375,9 +441,31 @@ export type ConnectionsFeedResult = {
   synced: { connectionId: string; provider: string; fetched: number; skipped: boolean; error: string | null }[];
 };
 
+// Unseal, and when near expiry re-mint, an SSO account's tokens. Refreshed
+// tokens persist back into the secure blob so every linked user benefits.
+const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any): Promise<OAuthTokens | null> => {
+  if (!provider.oauth) return null;
+  const tokens = unpackConnectionSecure(accountDoc?.secure).tokens || null;
+  if (!tokens?.accessToken) return null;
+  const expiresAt = tokens.expiresAt ? Date.parse(tokens.expiresAt) : NaN;
+  const expiring = Number.isFinite(expiresAt) && expiresAt - Date.now() < TOKEN_REFRESH_MARGIN_MS;
+  if (!expiring || !provider.oauth.refreshTokens) return tokens;
+  const clientId = (process.env[provider.oauth.clientIdEnv] || '').trim();
+  const clientSecret = (process.env[provider.oauth.clientSecretEnv] || '').trim();
+  if (!clientId || !clientSecret) return tokens;
+  const refreshed = await provider.oauth.refreshTokens(tokens, { clientId, clientSecret });
+  if (!refreshed) return tokens; // expired + unrefreshable → the fetch's 401 surfaces "reconnect"
+  const home = await getHomeThingsCollection();
+  await home.updateOne(
+    { shareId: String(accountDoc.shareId), thingtime: EXTERNAL_ACCOUNT_KIND },
+    { $set: { secure: packConnectionSecure({ tokens: refreshed }), updatedAt: new Date() } }
+  );
+  return refreshed;
+};
+
 export const readConnectionsFeed = async (
   user: SessionUser,
-  query: { connectionId?: string | null; cursor?: string | null; limit?: number; forceSync?: boolean }
+  query: { connectionId?: string | null; cursor?: string | null; limit?: number; forceSync?: boolean; deepen?: boolean }
 ): Promise<ConnectionsFeedResult | Fail> => {
   const pairs = await linksWithAccounts(user.id, query.connectionId || null);
   if (query.connectionId && !pairs.length) return fail(404, 'Connection not found');
@@ -385,7 +473,9 @@ export const readConnectionsFeed = async (
   const viewerGrant = `${ACL_USER_PREFIX}${user.username.toLowerCase()}`;
   const synced: ConnectionsFeedResult['synced'] = [];
 
-  // sync pass — per account, cooldown-gated, bounded concurrency
+  // sync pass — per account, cooldown-gated, bounded concurrency. Deepening
+  // ("fetch older — I scrolled through what's here") raises the account's
+  // stored page depth and bypasses the cooldown for this pass.
   const syncTargets = pairs.filter(({ account }) => !!account);
   const CONCURRENCY = 4;
   for (let start = 0; start < syncTargets.length; start += CONCURRENCY) {
@@ -400,14 +490,17 @@ export const readConnectionsFeed = async (
         if (provider.contentVisibility === 'personal') {
           await ensureViewerGrant(String(account.shareId), viewerGrant);
         }
+        const storedDepth = Math.min(Math.max(1, Number(account?.crystal?.syncDepth) || 1), MAX_SYNC_DEPTH);
+        const pages = query.deepen ? Math.min(storedDepth + 1, MAX_SYNC_DEPTH) : storedDepth;
         const lastSyncedAt = account?.crystal?.lastSyncedAt instanceof Date ? account.crystal.lastSyncedAt.getTime() : 0;
-        if (!query.forceSync && Date.now() - lastSyncedAt < SYNC_COOLDOWN_MS) {
+        if (!query.forceSync && !query.deepen && Date.now() - lastSyncedAt < SYNC_COOLDOWN_MS) {
           synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: true, error: null });
           return;
         }
+        const tokens = await liveTokensFor(provider, account);
         const fetched = await provider.fetchFeed(
           { providerAccountId: String(account?.crystal?.providerAccountId || ''), config: account?.crystal?.config || {} },
-          { limit: FEED_FETCH_LIMIT }
+          { limit: FEED_FETCH_LIMIT, tokens, pages }
         );
         if (fetched.ok === false) {
           await markAccountSync(String(account.shareId), fetched.error);
@@ -416,6 +509,13 @@ export const readConnectionsFeed = async (
         }
         const written = await upsertExternalPosts(provider, String(account.shareId), fetched.items, viewerGrant);
         await markAccountSync(String(account.shareId), null);
+        if (query.deepen && pages > storedDepth) {
+          const home = await getHomeThingsCollection();
+          await home.updateOne(
+            { shareId: String(account.shareId), thingtime: EXTERNAL_ACCOUNT_KIND },
+            { $set: { 'crystal.syncDepth': pages } }
+          );
+        }
         synced.push({ connectionId, provider: provider.id, fetched: written, skipped: false, error: null });
       })
     );
@@ -428,11 +528,16 @@ export const readConnectionsFeed = async (
   let nextCursor: string | null = null;
   if (accountIds.length) {
     const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_PAGE), MAX_FEED_PAGE);
-    const match: Record<string, any> = { thingtime: EXTERNAL_POST_KIND, 'crystal.accountId': { $in: accountIds } };
+    // membership rides the root sourceIds array (one post can arrive through
+    // several accounts); crystal.accountId keeps pre-sourceIds rows readable
+    const match: Record<string, any> = {
+      thingtime: EXTERNAL_POST_KIND,
+      $and: [{ $or: [{ sourceIds: { $in: accountIds } }, { 'crystal.accountId': { $in: accountIds } }] }]
+    };
     const cursorMatch = typeof query.cursor === 'string' ? query.cursor.match(/^(\d{1,16})_(.+)$/) : null;
     if (cursorMatch) {
       const ts = new Date(Number(cursorMatch[1]));
-      match.$or = [{ createdAt: { $lt: ts } }, { createdAt: ts, shareId: { $gt: cursorMatch[2] } }];
+      match.$and.push({ $or: [{ createdAt: { $lt: ts } }, { createdAt: ts, shareId: { $gt: cursorMatch[2] } }] });
     }
     const things = await getThingsCollection();
     const docs: any[] = await things
@@ -456,4 +561,92 @@ export const readConnectionsFeed = async (
     connections: pairs.map(({ link, account }) => toPublicConnection(link, account, connectionProviderById(link?.crystal?.provider))),
     synced
   };
+};
+
+// --- virtual YouTube subscriptions (ytsubber-style) --------------------------
+// The user's Thingtime-managed channel list: search (Data API when a key is
+// configured), then add/remove channels on the per-user virtual account. The
+// first add auto-creates the connection, so "Subscribe" works from a search
+// result with nothing linked yet.
+
+export const searchYoutubeChannels = async (query: unknown) => {
+  const result = await resolveYoutubeChannelQuery(typeof query === 'string' ? query : '');
+  if (result.ok === false) return result;
+  return { ok: true as const, channels: result.channels, via: result.via, searchConfigured: !!youtubeApiKey() };
+};
+
+export const updateYoutubeChannels = async (
+  user: SessionUser,
+  input: { add?: unknown; remove?: unknown }
+): Promise<{ ok: true; connection: PublicConnection; channels: YoutubeChannelRef[] } | Fail> => {
+  const provider = connectionProviderById('youtube');
+  if (!provider) return fail(500, 'The YouTube provider is unavailable');
+
+  const removeId = typeof input.remove === 'string' ? input.remove.trim() : '';
+  let addChannel: YoutubeChannelRef | null = null;
+  if (input.add !== undefined && input.add !== null) {
+    // a search result passes {id,title,thumbnail}; free text resolves here
+    if (typeof input.add === 'object' && typeof (input.add as any).id === 'string') {
+      const [sanitized] = sanitizeChannelList([input.add]);
+      if (!sanitized) return fail(400, 'add must carry a valid YouTube channel id');
+      addChannel = sanitized;
+    } else if (typeof input.add === 'string' && input.add.trim()) {
+      const resolved = await resolveYoutubeChannelQuery(input.add);
+      if (resolved.ok === false) return resolved;
+      if (!resolved.channels.length) return fail(404, 'No channel matched that input');
+      addChannel = resolved.channels[0];
+    } else {
+      return fail(400, 'add must be a channel reference or a search string');
+    }
+  }
+  if (!addChannel && !removeId) return fail(400, 'Nothing to change — pass add and/or remove');
+
+  // the per-user virtual account; first add auto-creates the connection
+  const accountShareId = externalAccountShareId(provider.id, `subs:${user.id}`);
+  const home = await getHomeThingsCollection();
+  let accountDoc: any = await home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND });
+  if (!accountDoc) {
+    if (!addChannel) return fail(404, 'No YouTube channel list yet — add a channel first');
+    const created = await upsertAccountAndLink(user, provider, {
+      providerAccountId: `subs:${user.id}`,
+      displayName: 'My YouTube channels',
+      handle: '0 channels',
+      avatarUrl: null,
+      profileUrl: null,
+      config: { channels: [] }
+    });
+    if (created.ok === false) return created;
+    accountDoc = await home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND });
+  }
+
+  let channels = sanitizeChannelList(accountDoc?.crystal?.config?.channels);
+  if (removeId) channels = channels.filter((channel) => channel.id !== removeId);
+  if (addChannel && !channels.some((channel) => channel.id === addChannel!.id)) {
+    channels = sanitizeChannelList([...channels, addChannel]);
+    if (!channels.some((channel) => channel.id === addChannel!.id)) {
+      return fail(400, `You can follow at most ${100} channels in one list`);
+    }
+  }
+
+  await home.updateOne(
+    { shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND },
+    {
+      $set: {
+        'crystal.config.channels': channels,
+        'crystal.handle': `${channels.length} channel${channels.length === 1 ? '' : 's'}`,
+        'crystal.avatarUrl': channels[0]?.thumbnail || null,
+        // a changed list should sync fresh on the next read
+        'crystal.lastSyncedAt': null,
+        updatedAt: new Date()
+      }
+    }
+  );
+
+  const linkId = externalLinkShareId(user.id, accountShareId);
+  const [linkDoc, refreshedAccount] = await Promise.all([
+    home.findOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND }),
+    home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND })
+  ]);
+  if (!linkDoc) return fail(404, 'No YouTube connection found for this account');
+  return { ok: true, connection: toPublicConnection(linkDoc, refreshedAccount, provider), channels };
 };

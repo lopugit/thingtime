@@ -7614,6 +7614,174 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'connections-oauth-begin',
+    group: 'connections',
+    title: 'Begin SSO connect',
+    endpoint: '/api/v1/connections/oauth/begin',
+    summary: 'Starts an SSO account link with an OAuth provider (Facebook, Instagram, TikTok, YouTube account).',
+    detail:
+      'Returns the provider’s authorize URL for the requested SSO provider. Send the browser there; the provider’s ' +
+      'own sign-in page collects credentials (Thingtime never sees a third-party password) and returns to the ' +
+      'callback endpoint, which saves the token response into the linked external account’s sealed secure storage. ' +
+      'The state parameter is a short-lived signed JWT bound to the beginning session. Providers report ' +
+      'configured:false in the catalog until their app credentials are set in the environment.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the provider id (an oauth2 provider from /api/v1/connections/providers).',
+      'Navigate the browser to the returned authorizeUrl.',
+      'The provider redirects to /api/v1/connections/oauth/callback, which finishes the link and lands on /connections.',
+      'Handle 400 for unconfigured providers (the error names the env credentials to set).'
+    ],
+    requestExamples: [
+      {
+        name: 'Begin Facebook link',
+        description: 'Ask for the Facebook authorize URL.',
+        method: 'POST',
+        body: { provider: 'facebook' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Authorize URL minted.',
+        body: { ok: true, provider: 'facebook', authorizeUrl: 'https://www.facebook.com/v23.0/dialog/oauth?...' }
+      },
+      {
+        status: 400,
+        description: 'Provider not configured on this deployment.',
+        body: { ok: false, error: 'Facebook is not configured on this deployment yet (set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET)' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-oauth-callback',
+    group: 'connections',
+    title: 'SSO connect callback',
+    endpoint: '/api/v1/connections/oauth/callback',
+    summary: 'Completes an SSO account link after the provider’s sign-in.',
+    detail:
+      'The OAuth redirect target. Verifies the signed state belongs to the current session, exchanges the code ' +
+      'server-side, resolves the external identity, seals the token response into the external account’s secure ' +
+      'storage, links the account, and redirects the browser back to /connections (connected=<provider> on ' +
+      'success, oauthError=<message> on failure). No token material ever reaches the client.',
+    auth: {
+      mode: 'session',
+      description: 'The browser session that began the link (redirects to /login when signed out).'
+    },
+    methods: ['GET'],
+    steps: [
+      'Register this exact URL as the OAuth redirect URI in the provider’s app settings.',
+      'The provider calls it with code and state after sign-in.',
+      'The browser lands on /connections with connected or oauthError set.'
+    ],
+    requestExamples: [
+      {
+        name: 'Provider redirect',
+        description: 'What the provider’s redirect looks like.',
+        method: 'GET',
+        query: { code: '<provider code>', state: '<signed state>' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 302,
+        description: 'Redirects to /connections?connected=facebook on success.',
+        body: {}
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-youtube-search',
+    group: 'connections',
+    title: 'YouTube channel search',
+    endpoint: '/api/v1/connections/youtube/search',
+    summary: 'Resolves or searches YouTube channels for the virtual subscription list.',
+    detail:
+      'Accepts a channel id (UC…), a /channel/ URL, an @handle, or free text. Ids resolve keylessly via the public ' +
+      'uploads feed; @handles and name search use the YouTube Data API when YOUTUBE_API_KEY (or GOOGLE_API_KEY) is ' +
+      'configured — searchConfigured reports which mode is active.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with q set to an id, URL, @handle, or channel name.',
+      'Offer the returned channels as Subscribe candidates.',
+      'POST a chosen channel to /api/v1/connections/youtube/channels.'
+    ],
+    requestExamples: [
+      {
+        name: 'Search by name',
+        description: 'Find channels matching a name (needs the API key).',
+        method: 'GET',
+        query: { q: 'veritasium' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Channel candidates returned.',
+        body: {
+          ok: true,
+          via: 'api',
+          searchConfigured: true,
+          channels: [{ id: 'UCHnyfMqiRRG1u-2MsSQLbXA', title: 'Veritasium', thumbnail: 'https://yt3.ggpht.com/…' }]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-youtube-channels',
+    group: 'connections',
+    title: 'YouTube channel list',
+    endpoint: '/api/v1/connections/youtube/channels',
+    summary: 'Manages the caller’s Thingtime-managed virtual YouTube subscription list.',
+    detail:
+      'Adds and removes channels on the per-user virtual YouTube connection (one merged uploads feed across the ' +
+      'whole list). add accepts a channel reference from /youtube/search or free text to resolve; remove takes a ' +
+      'channel id. The first add auto-creates the connection. Lists hold up to 100 channels.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST add with a channel reference (or search text) to subscribe.',
+      'POST remove with a channel id to unsubscribe.',
+      'Read the current list from GET /api/v1/connections (the youtube connection carries channels).'
+    ],
+    requestExamples: [
+      {
+        name: 'Subscribe',
+        description: 'Add a channel from a search result.',
+        method: 'POST',
+        body: { add: { id: 'UCHnyfMqiRRG1u-2MsSQLbXA', title: 'Veritasium' } }
+      },
+      {
+        name: 'Unsubscribe',
+        description: 'Remove a channel by id.',
+        method: 'POST',
+        body: { remove: 'UCHnyfMqiRRG1u-2MsSQLbXA' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'List updated.',
+        body: {
+          ok: true,
+          channels: [{ id: 'UCHnyfMqiRRG1u-2MsSQLbXA', title: 'Veritasium', thumbnail: null }],
+          connection: { id: 'ext-link-…', provider: 'youtube', account: { handle: '1 channel' } }
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'connections-filters',
     group: 'connections',
     title: 'Feed filters',

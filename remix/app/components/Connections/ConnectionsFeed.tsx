@@ -68,9 +68,12 @@ export const ConnectionsFeedPage = () => {
   const [revealed, setRevealed] = React.useState<Set<string>>(() => new Set());
   const [signedOut, setSignedOut] = React.useState(false);
   const requestSeq = React.useRef(0);
+  // one provider-deepening pass per exhausted scroll — reset when the tab
+  // changes or fresh pages arrive
+  const deepenedRef = React.useRef(false);
 
   const load = React.useCallback(
-    async (connection: string | null, cursor: string | null) => {
+    async (connection: string | null, cursor: string | null, deepen = false) => {
       const seq = ++requestSeq.current;
       setLoading(true);
       const startedAt = Date.now();
@@ -78,7 +81,8 @@ export const ConnectionsFeedPage = () => {
         const resp = await api.v1.connections.feed({
           connection: connection || undefined,
           cursor: cursor || undefined,
-          limit: PAGE_SIZE
+          limit: PAGE_SIZE,
+          ...(deepen ? { deepen: '1' } : {})
         });
         if (seq !== requestSeq.current) return;
         const merged = mergeReactionOverlays(startedAt, (resp.posts || []) as PublicPost[]);
@@ -112,6 +116,7 @@ export const ConnectionsFeedPage = () => {
     // reseed from the per-tab cache when the tab changes
     setPosts(readLocalCache<PublicPost[]>(feedCacheKey(activeConnection)) || []);
     setNextCursor(null);
+    deepenedRef.current = false;
     load(activeConnection, null);
   }, [activeConnection, load]);
 
@@ -128,11 +133,32 @@ export const ConnectionsFeedPage = () => {
   const hiddenCount = posts.filter((post) => hideMatches(post).length > 0).length;
   const visible = posts.filter((post) => hideMatches(post).length === 0);
 
-  // infinite scroll sentinel
+  // infinite scroll sentinel: page through what's synced; once the local
+  // store runs dry, ask the providers for older content (deepen), then keep
+  // paging from where the reader already is — never resetting their scroll
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
+  const deepenAndContinue = React.useCallback(async () => {
+    try {
+      // sync side effect only: raises the account sync depth and pulls older
+      // items into the store (server caps the depth)
+      await api.v1.connections.feed({ connection: activeConnection || undefined, limit: 1, deepen: '1' });
+    } catch {
+      return;
+    }
+    const last = posts[posts.length - 1];
+    const syntheticCursor = last ? `${new Date(last.createdAt).getTime()}_${last.id}` : null;
+    await load(activeConnection, syntheticCursor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConnection, posts, load]);
   const loadMoreRef = React.useRef<() => void>(() => {});
   loadMoreRef.current = () => {
-    if (!loading && nextCursor) load(activeConnection, nextCursor);
+    if (loading) return;
+    if (nextCursor) {
+      load(activeConnection, nextCursor);
+    } else if (posts.length && !deepenedRef.current) {
+      deepenedRef.current = true;
+      deepenAndContinue();
+    }
   };
   React.useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -250,6 +276,19 @@ export const ConnectionsFeedPage = () => {
       {nextCursor ? (
         <Button size="sm" variant="outline" borderRadius="999px" onClick={() => loadMoreRef.current()} isLoading={loading}>
           Load more
+        </Button>
+      ) : visible.length ? (
+        <Button
+          size="sm"
+          variant="outline"
+          borderRadius="999px"
+          isLoading={loading}
+          onClick={() => {
+            deepenedRef.current = true;
+            deepenAndContinue();
+          }}
+        >
+          Fetch older from your apps 📡
         </Button>
       ) : null}
     </Box>

@@ -941,9 +941,46 @@ deployment end to end with:
 pnpm --dir remix run verify:connections
 ```
 
-(45 real-API checks against the local nitro port; `TT_VERIFY_LIVE=1` adds a
-live Hacker News pull. OAuth-based providers land config-gated behind
-placeholder env credentials and report `configured: false` until set.)
+(64 real-API checks against the local nitro port; `TT_VERIFY_LIVE=1` adds a
+live Hacker News pull.)
+
+### SSO account linking (Facebook, Instagram, TikTok, YouTube account)
+
+SSO providers use real OAuth sign-in: Connect sends the browser to the
+provider's own login, and the token response is sealed into the linked
+account's secure storage server-side (no token ever reaches a client). Each
+provider stays `configured: false` (UI: "Needs setup") until its app
+credentials are set:
+
+```sh
+# Meta app (facebook provider — scopes public_profile,user_posts)
+FACEBOOK_APP_ID="<meta-app-id>"
+FACEBOOK_APP_SECRET="<meta-app-secret>"
+# Instagram API with Instagram Login (professional accounts)
+INSTAGRAM_APP_ID="<instagram-app-id>"
+INSTAGRAM_APP_SECRET="<instagram-app-secret>"
+# TikTok Login Kit (scopes user.info.basic,video.list)
+TIKTOK_CLIENT_KEY="<tiktok-client-key>"
+TIKTOK_CLIENT_SECRET="<tiktok-client-secret>"
+# Google OAuth client (youtube-account provider — youtube.readonly)
+GOOGLE_CLIENT_ID="<google-oauth-client-id>"
+GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
+# Optional: YouTube Data API key — lights up channel NAME search for the
+# Thingtime-managed virtual subscription list (ids/URLs/@handles work keyless)
+YOUTUBE_API_KEY="<youtube-data-api-key>"
+# Optional: pin the OAuth redirect origin when the app runs behind a proxy or
+# tunnel (must match the redirect URI registered with each provider app)
+CONNECTIONS_OAUTH_REDIRECT_BASE="https://your-host.example.com"
+```
+
+Register `https://<your-host>/api/v1/connections/oauth/callback` as the OAuth
+redirect URI in each provider app's settings (Meta and TikTok require https —
+a tunnel origin works for local dev). Official-API honesty notes: Meta removed
+the friends News Feed API in 2015, so the facebook provider syncs your own
+timeline posts; Instagram and TikTok expose your own media/videos, not the
+home/For You feed; the youtube-account provider syncs the latest uploads from
+your real subscriptions. Reddit/Mastodon/Bluesky personalized home timelines
+are the follow-up (their public APIs do expose them).
 
 ## Branch automation: develop → main promotion
 

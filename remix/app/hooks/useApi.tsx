@@ -527,6 +527,22 @@ export function useApi() {
         [asyncFetcher]
       ),
       unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
+      // SSO account linking: begin returns the provider's authorize URL — send
+      // the browser there; the callback lands back on /connections
+      oauthBegin: useCallback(
+        async (args) => asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }),
+        [asyncFetcher]
+      ),
+      // the Thingtime-managed virtual YouTube subscription list
+      youtubeSearch: useCallback(async (args) => getJson(`/api/v1/connections/youtube/search${toQuery({ q: args?.q })}`), []),
+      youtubeChannels: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { ...(args && 'add' in args ? { add: args.add } : {}), ...(args?.remove ? { remove: args.remove } : {}) },
+            { action: '/api/v1/connections/youtube/channels' }
+          ),
+        [asyncFetcher]
+      ),
       feed: useCallback(
         async (args) =>
           getJson(
@@ -534,7 +550,8 @@ export function useApi() {
               connection: args?.connection,
               cursor: args?.cursor,
               limit: args?.limit,
-              sync: args?.sync
+              sync: args?.sync,
+              deepen: args?.deepen
             })}`
           ),
         []
