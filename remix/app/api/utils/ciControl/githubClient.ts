@@ -1,7 +1,11 @@
 import { createSign } from 'node:crypto';
 
-import { recordCiEvent, upsertCiEntity } from './store';
+import type { CiWorkflowKey } from './automationPolicy';
+import { ciProviderReadiness } from './providerReadiness';
+import { getCiAutomationPolicy, recordCiEvent, upsertCiEntity } from './store';
 import { ciFeatureIdentity } from './webhooks';
+
+export type { CiWorkflowKey } from './automationPolicy';
 
 const API_VERSION = '2022-11-28';
 const DEFAULT_REPOSITORY = 'lopugit/thingtime';
@@ -85,7 +89,7 @@ export const githubRequest = async <T = any>(
   return payload as T;
 };
 
-const repositoryName = () =>
+export const repositoryName = () =>
   (process.env.THINGTIME_GITHUB_REPOSITORY ?? DEFAULT_REPOSITORY).trim() || DEFAULT_REPOSITORY;
 
 const workflowFileByKey = {
@@ -98,11 +102,9 @@ const workflowFileByKey = {
   'electron-release': 'electron-release.yml'
 } as const;
 
-export type CiWorkflowKey = keyof typeof workflowFileByKey;
-
 const inputAllowlist: Record<CiWorkflowKey, readonly string[]> = {
   'resolve-conflicts': ['pr_number', 'branch'],
-  'rebase-stack': ['pr_number', 'cascade'],
+  'rebase-stack': ['pr_number', 'branch', 'cascade'],
   'promote-features': ['dry_run', 'lookback'],
   'promote-develop': [],
   'sync-main': [],
@@ -134,6 +136,8 @@ export const dispatchCiWorkflow = async (input: {
   ref?: string;
   inputs?: Record<string, unknown>;
   actorId: string;
+  externalId?: string;
+  requestedAt?: Date;
 }) => {
   const workflowFile = workflowFileByKey[input.workflow];
   if (!workflowFile) throw new Error('Unsupported CI workflow');
@@ -148,8 +152,10 @@ export const dispatchCiWorkflow = async (input: {
       .map(([key, value]) => [key, typeof value === 'boolean' ? value : String(value ?? '').slice(0, 300)])
   );
   const repository = repositoryName();
-  const requestedAt = new Date();
-  const externalId = `${input.workflow}:${requestedAt.toISOString()}:${input.actorId}`;
+  const policy = await getCiAutomationPolicy(repository, input.workflow);
+  if (!policy.enabled) throw new Error(`The ${input.workflow} automation is disabled`);
+  const requestedAt = input.requestedAt ?? new Date();
+  const externalId = input.externalId ?? `${input.workflow}:${requestedAt.toISOString()}:${input.actorId}`;
   const dispatch = await upsertCiEntity({
     kind: 'ci-dispatch',
     provider: 'thingtime',
@@ -163,12 +169,76 @@ export const dispatchCiWorkflow = async (input: {
       workflowFile,
       ref,
       controlPlaneRef: DEFAULT_CONTROL_REF,
+      executionProvider: policy.executionProvider,
       inputs,
       actorId: input.actorId
     }
   });
 
   try {
+    if (policy.executionProvider === 'vercel-sandbox') {
+      const { startCiOnVercel, vercelRunnerConfigured } = await import('./vercelRunner');
+      if (!policy.vercelSupported || !vercelRunnerConfigured()) {
+        throw new Error('Vercel Sandbox execution is not configured for this automation');
+      }
+      const workflowRun = await startCiOnVercel({
+        repository,
+        workflow: input.workflow,
+        workflowFile,
+        inputs,
+        actorId: input.actorId,
+        dispatchExternalId: externalId,
+        dispatchThingId: dispatch.id,
+        requestedAt: requestedAt.toISOString()
+      });
+      await upsertCiEntity({
+        kind: 'ci-dispatch',
+        provider: 'thingtime',
+        repository,
+        externalId,
+        title: `Dispatch ${input.workflow}`,
+        status: 'accepted',
+        occurredAt: new Date(),
+        data: {
+          workflow: input.workflow,
+          workflowFile,
+          ref: DEFAULT_CONTROL_REF,
+          controlPlaneRef: DEFAULT_CONTROL_REF,
+          executionProvider: policy.executionProvider,
+          workflowRunId: workflowRun.runId,
+          inputs,
+          actorId: input.actorId
+        }
+      });
+      await recordCiEvent({
+        provider: 'thingtime',
+        repository,
+        deliveryId: externalId,
+        eventType: 'workflow_dispatch',
+        action: input.workflow,
+        parentId: dispatch.id,
+        actor: input.actorId,
+        statusFrom: 'requested',
+        statusTo: 'accepted',
+        occurredAt: requestedAt,
+        data: {
+          workflowFile,
+          ref: DEFAULT_CONTROL_REF,
+          controlPlaneRef: DEFAULT_CONTROL_REF,
+          executionProvider: policy.executionProvider,
+          workflowRunId: workflowRun.runId
+        }
+      });
+      return {
+        ok: true as const,
+        dispatchId: dispatch.id,
+        workflowFile,
+        ref: DEFAULT_CONTROL_REF,
+        controlPlaneRef: DEFAULT_CONTROL_REF,
+        executionProvider: policy.executionProvider,
+        workflowRunId: workflowRun.runId
+      };
+    }
     await githubRequest<void>(
       `/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`,
       { method: 'POST', body: { ref, inputs } }
@@ -186,6 +256,7 @@ export const dispatchCiWorkflow = async (input: {
         workflowFile,
         ref,
         controlPlaneRef: DEFAULT_CONTROL_REF,
+        executionProvider: policy.executionProvider,
         inputs,
         actorId: input.actorId
       }
@@ -201,9 +272,16 @@ export const dispatchCiWorkflow = async (input: {
       statusFrom: 'requested',
       statusTo: 'accepted',
       occurredAt: requestedAt,
-      data: { workflowFile, ref, controlPlaneRef: DEFAULT_CONTROL_REF }
+      data: { workflowFile, ref, controlPlaneRef: DEFAULT_CONTROL_REF, executionProvider: policy.executionProvider }
     });
-    return { ok: true as const, dispatchId: dispatch.id, workflowFile, ref, controlPlaneRef: DEFAULT_CONTROL_REF };
+    return {
+      ok: true as const,
+      dispatchId: dispatch.id,
+      workflowFile,
+      ref,
+      controlPlaneRef: DEFAULT_CONTROL_REF,
+      executionProvider: policy.executionProvider
+    };
   } catch (error) {
     await upsertCiEntity({
       kind: 'ci-dispatch',
@@ -218,6 +296,7 @@ export const dispatchCiWorkflow = async (input: {
         workflowFile,
         ref,
         controlPlaneRef: DEFAULT_CONTROL_REF,
+        executionProvider: policy.executionProvider,
         inputs,
         actorId: input.actorId
       }
@@ -233,7 +312,7 @@ export const dispatchCiWorkflow = async (input: {
       statusFrom: 'requested',
       statusTo: 'failed',
       occurredAt: new Date(),
-      data: { workflowFile, ref, controlPlaneRef: DEFAULT_CONTROL_REF }
+      data: { workflowFile, ref, controlPlaneRef: DEFAULT_CONTROL_REF, executionProvider: policy.executionProvider }
     });
     throw error;
   }
@@ -498,8 +577,4 @@ export const reconcileGitHubRepository = async (actorId: string) => {
 };
 
 export const githubAppConfigured = () =>
-  Boolean(
-    process.env.THINGTIME_GITHUB_APP_ID &&
-      process.env.THINGTIME_GITHUB_APP_INSTALLATION_ID &&
-      process.env.THINGTIME_GITHUB_APP_PRIVATE_KEY
-  );
+  ciProviderReadiness().githubAppConfigured;

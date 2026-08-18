@@ -1,5 +1,6 @@
 import { json } from './api/http';
 import { getCurrentUser } from './api/utils/auth/getCurrentUser';
+import { isVercelStatusEnabled } from './api/utils/vercel/environment';
 import { Session } from './cookies.server';
 
 export type RootLoaderData = {
@@ -28,17 +29,6 @@ const getDeploymentBranchName = () => {
     process.env.VERCEL_GIT_COMMIT_REF ||
     process.env.THINGTIME_BRANCH_NAME ||
     'git/unknown'
-  );
-};
-
-const shouldShowDeploymentStatus = () => {
-  const vercelEnvironment = process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
-
-  return (
-    process.env.NODE_ENV === 'development' ||
-    vercelEnvironment === 'preview' ||
-    vercelEnvironment === 'production' ||
-    process.env.THINGTIME_SHOW_DEPLOYMENT_STATUS === 'true'
   );
 };
 
@@ -71,7 +61,7 @@ export async function loadRootData(request: Request) {
   processEnv.THINGTIME_VERCEL_URL = process.env.VERCEL_URL;
   processEnv.THINGTIME_VERCEL_BRANCH_URL = process.env.VERCEL_BRANCH_URL;
   processEnv.THINGTIME_VERCEL_GIT_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
-  processEnv.THINGTIME_SHOW_DEPLOYMENT_STATUS = shouldShowDeploymentStatus() ? 'true' : 'false';
+  processEnv.THINGTIME_SHOW_DEPLOYMENT_STATUS = isVercelStatusEnabled() ? 'true' : 'false';
 
   return {
     data: {
