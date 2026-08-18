@@ -106,7 +106,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and log a `moderationFlag` thing. New `/admin` → Moderation tab reviews
   flags (Clear/NSFW/Block overrides, audit-stamped) and runs a bounded
   analysis sweep via `GET/POST /api/v1/admin/moderation`. See the
-  [PR note](../PRs/pending-nsfw-tos-media-moderation.md).
+  [PR #308 implementation notes](../PRs/308-claude-nsfw-tos-media-moderation--nsfw-tos-media-moderation-pipeline.md).
   — Claude (AI), 2026-08-18
 
 ### Fixed
