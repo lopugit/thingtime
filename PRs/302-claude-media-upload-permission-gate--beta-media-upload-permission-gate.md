@@ -1,4 +1,6 @@
-# PR (pending number) — Beta media-upload permission gate + admin approval flow
+# PR #302 — Beta media-upload permission gate + admin approval flow
+
+- **PR**: https://github.com/lopugit/thingtime/pull/302
 
 - **Branch**: `claude/media-upload-permission-gate` (cut from `origin/main` so the diff is clean for a hotfix merge into `main`)
 - **Base**: `develop`

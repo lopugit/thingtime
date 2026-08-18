@@ -57,7 +57,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the composer shows an approval-pending card to ungranted users; and the
   `grant-media-upload-to-existing-users` migration grandfathers pre-gate
   accounts. See the
-  [pending PR note](../PRs/pending-media-upload-permission-gate.md).
+  [PR #302 implementation notes](../PRs/302-claude-media-upload-permission-gate--beta-media-upload-permission-gate.md).
   — Claude (AI), 2026-08-18
 
 ### Fixed
