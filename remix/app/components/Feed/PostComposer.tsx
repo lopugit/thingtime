@@ -6,7 +6,7 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
 import { AttachmentReorderGallery } from '~/components/Attachments/AttachmentReorderGallery';
-import { MediaLayoutPicker, SpanCycleButton, parseLayoutPattern, type ComposerLayoutMode } from '~/components/Attachments/MediaLayoutControls';
+import { MediaLayoutCanvas, MediaLayoutPicker, SpanCycleButton, parseLayoutPattern, type ComposerLayoutMode } from '~/components/Attachments/MediaLayoutControls';
 import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 import {
@@ -838,6 +838,20 @@ export const PostComposer = (props: PostComposerProps) => {
 						columns={layoutColumns}
 						onColumns={setLayoutColumns}
 						imageCount={visualLayoutCount}
+					/>
+				)}
+
+				{/* tier 3: the grid canvas — live preview with drag-resize handles */}
+				{visualLayoutCount >= 2 && layoutMode === 'grid' && (
+					<MediaLayoutCanvas
+						attachments={(isEdit ? editAttachments : attachmentSnapshot.attachments).filter(
+							(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
+						)}
+						columns={layoutColumns}
+						onColumns={setLayoutColumns}
+						spans={layoutSpans}
+						onSpanChange={(id, span) => setLayoutSpans((current) => ({ ...current, [id]: span }))}
+						disabled={posting || submissionUncertain}
 					/>
 				)}
 

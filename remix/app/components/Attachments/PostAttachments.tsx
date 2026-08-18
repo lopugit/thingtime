@@ -36,9 +36,9 @@ export const mediaLayoutRows = (count: number, pattern: number[]): number[] => {
 const rowAspectRatio = (size: number): string => (size === 1 ? '16 / 9' : size === 2 ? '4 / 3' : '1 / 1');
 
 const spanFor = (layout: PostMediaLayout, id: string): MediaLayoutSpan => layout.spans?.[id] || 'normal';
-const spanColumns = (span: MediaLayoutSpan, columns: number): number => (span === 'wide' || span === 'big' ? Math.min(2, columns) : 1);
-const spanRows = (span: MediaLayoutSpan): number => (span === 'tall' || span === 'big' ? 2 : 1);
-const spanAspect = (span: MediaLayoutSpan, columns: number): string => {
+export const spanColumns = (span: MediaLayoutSpan, columns: number): number => (span === 'wide' || span === 'big' ? Math.min(2, columns) : 1);
+export const spanRows = (span: MediaLayoutSpan): number => (span === 'tall' || span === 'big' ? 2 : 1);
+export const spanAspect = (span: MediaLayoutSpan, columns: number): string => {
 	const cols = spanColumns(span, columns);
 	const rows = spanRows(span);
 	return `${cols} / ${rows}`;

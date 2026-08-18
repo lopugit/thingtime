@@ -1,9 +1,11 @@
 import React from 'react';
-import { Box, Button, Flex, IconButton, Input, Text } from '@chakra-ui/react';
-import { Minus, Plus } from 'lucide-react';
+import { Box, Button, Flex, IconButton, Input, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
+import { Minus, MoveDiagonal, Plus } from 'lucide-react';
 
 import { MAX_MEDIA_LAYOUT_ENTRIES, MAX_MEDIA_LAYOUT_TRACK, MEDIA_LAYOUT_SPAN_VALUES, type MediaLayoutSpan } from '~/schemas/registry';
-import { mediaLayoutRows } from './PostAttachments';
+import { attachmentContentUrl } from './attachmentUiCore';
+import { mediaLayoutRows, spanAspect, spanColumns, spanRows } from './PostAttachments';
+import type { PublicAttachment } from './attachmentTypes';
 
 const BORDER = '1px solid var(--tt-border, #ececef)';
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -185,5 +187,192 @@ export const SpanCycleButton = ({
 		>
 			{SPAN_GLYPHS[span]}
 		</Button>
+	);
+};
+
+// ————— Tier 3: the drag-resize canvas editor (grid mode) ————————————————————
+// A live preview of the real grid. Each tile carries a corner handle: drag it
+// (mouse OR touch — pointer events + touchAction none) and the tile snaps
+// between the four cell sizes; a slider relayouts the column count live.
+// Keyboard fallback on the handle: arrows resize, matching the drag semantics.
+
+const spanFromCells = (cols: number, rows: number): MediaLayoutSpan =>
+	cols > 1 && rows > 1 ? 'big' : cols > 1 ? 'wide' : rows > 1 ? 'tall' : 'normal';
+
+export const MediaLayoutCanvas = ({
+	attachments,
+	columns,
+	onColumns,
+	spans,
+	onSpanChange,
+	disabled
+}: {
+	attachments: PublicAttachment[];
+	columns: number;
+	onColumns: (columns: number) => void;
+	spans: Record<string, MediaLayoutSpan>;
+	onSpanChange: (id: string, span: MediaLayoutSpan) => void;
+	disabled?: boolean;
+}) => {
+	const gridColumns = Math.max(1, Math.min(columns, attachments.length, MAX_MEDIA_LAYOUT_TRACK));
+	// live drag preview: the candidate span tracks the pointer between snaps
+	const [dragPreview, setDragPreview] = React.useState<{ id: string; span: MediaLayoutSpan } | null>(null);
+	const dragRef = React.useRef<{
+		id: string;
+		pointerId: number;
+		startX: number;
+		startY: number;
+		cellSize: number;
+		startSpan: MediaLayoutSpan;
+	} | null>(null);
+
+	const spanOf = (id: string): MediaLayoutSpan => (dragPreview?.id === id ? dragPreview.span : spans[id] || 'normal');
+
+	const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>, attachment: PublicAttachment) => {
+		if (disabled) return;
+		event.preventDefault();
+		event.stopPropagation();
+		const tile = (event.currentTarget as HTMLElement).closest('[data-layout-tile]') as HTMLElement | null;
+		if (!tile) return;
+		const startSpan = spans[attachment.id] || 'normal';
+		// one grid cell ≈ tile width divided by the columns it currently spans
+		const cellSize = Math.max(40, tile.getBoundingClientRect().width / spanColumns(startSpan, gridColumns));
+		dragRef.current = { id: attachment.id, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, cellSize, startSpan };
+		event.currentTarget.setPointerCapture(event.pointerId);
+		setDragPreview({ id: attachment.id, span: startSpan });
+	};
+
+	const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+		const drag = dragRef.current;
+		if (!drag || event.pointerId !== drag.pointerId) return;
+		const dx = event.clientX - drag.startX;
+		const dy = event.clientY - drag.startY;
+		const startCols = spanColumns(drag.startSpan, gridColumns);
+		const startRows = spanRows(drag.startSpan);
+		// snap threshold: moving ~45% of a cell toward a direction toggles it
+		const step = drag.cellSize * 0.45;
+		const cols = Math.max(1, Math.min(2, startCols + (dx > step ? 1 : dx < -step ? -1 : 0)));
+		const rows = Math.max(1, Math.min(2, startRows + (dy > step ? 1 : dy < -step ? -1 : 0)));
+		const candidate = spanFromCells(gridColumns > 1 ? cols : 1, rows);
+		setDragPreview((current) => (current?.id === drag.id && current.span === candidate ? current : { id: drag.id, span: candidate }));
+	};
+
+	const handlePointerEnd = (event: React.PointerEvent<HTMLButtonElement>, attachment: PublicAttachment) => {
+		const drag = dragRef.current;
+		if (!drag || event.pointerId !== drag.pointerId) return;
+		dragRef.current = null;
+		setDragPreview((current) => {
+			if (current && current.id === attachment.id && current.span !== drag.startSpan) onSpanChange(attachment.id, current.span);
+			return null;
+		});
+	};
+
+	const handleKeyResize = (event: React.KeyboardEvent<HTMLButtonElement>, attachment: PublicAttachment) => {
+		if (disabled) return;
+		const span = spans[attachment.id] || 'normal';
+		let cols = spanColumns(span, gridColumns);
+		let rows = spanRows(span);
+		if (event.key === 'ArrowRight') cols = 2;
+		else if (event.key === 'ArrowLeft') cols = 1;
+		else if (event.key === 'ArrowDown') rows = 2;
+		else if (event.key === 'ArrowUp') rows = 1;
+		else return;
+		event.preventDefault();
+		event.stopPropagation();
+		onSpanChange(attachment.id, spanFromCells(gridColumns > 1 ? cols : 1, rows));
+	};
+
+	return (
+		<Flex flexDirection="column" rowGap={2} border={BORDER} borderRadius="var(--tt-radius-md, 12px)" padding={2.5} background="var(--tt-surface, #fafafb)">
+			<Flex alignItems="center" columnGap={3} flexWrap="wrap" rowGap={1.5}>
+				<Text fontSize="11px" fontWeight={700} letterSpacing="0.08em" color={MUTED}>
+					GRID CANVAS
+				</Text>
+				<Flex alignItems="center" columnGap={2} flex="1" minWidth="140px" maxWidth="240px">
+					<Slider
+						aria-label="Grid columns"
+						min={1}
+						max={MAX_MEDIA_LAYOUT_TRACK}
+						step={1}
+						value={columns}
+						onChange={onColumns}
+						isDisabled={disabled}
+					>
+						<SliderTrack>
+							<SliderFilledTrack />
+						</SliderTrack>
+						<SliderThumb boxSize={4} />
+					</Slider>
+					<Text fontSize="11px" fontWeight={700} color={INK} width="18px" textAlign="center" aria-live="polite">
+						{columns}
+					</Text>
+				</Flex>
+				<Text fontSize="11px" color={MUTED}>
+					drag a tile&apos;s ⤡ corner to resize ✨
+				</Text>
+			</Flex>
+			<Box display="grid" gridTemplateColumns={`repeat(${gridColumns}, minmax(0, 1fr))`} gap="6px" sx={{ gridAutoFlow: 'dense' }}>
+				{attachments.map((attachment) => {
+					const span = spanOf(attachment.id);
+					return (
+						<Box
+							key={attachment.id}
+							data-layout-tile
+							position="relative"
+							borderRadius="var(--tt-radius-md, 12px)"
+							overflow="hidden"
+							minWidth={0}
+							gridColumn={`span ${spanColumns(span, gridColumns)}`}
+							gridRow={`span ${spanRows(span)}`}
+							aspectRatio={spanAspect(span, gridColumns)}
+							outline={dragPreview?.id === attachment.id ? '2px solid var(--tt-link, #2f8fd6)' : 'none'}
+							transition="outline-color 80ms ease"
+						>
+							<Box
+								as="img"
+								src={attachmentContentUrl(attachment.id)}
+								alt={attachment.title || attachment.name}
+								loading="lazy"
+								referrerPolicy="no-referrer"
+								position="absolute"
+								inset={0}
+								width="100%"
+								height="100%"
+								objectFit="cover"
+								background="var(--tt-surface-alt, #e9e9ee)"
+								draggable={false}
+							/>
+							<IconButton
+								aria-label={`Resize ${attachment.name} on the grid — currently ${span}. Drag, or use arrow keys: right wider, left narrower, down taller, up shorter.`}
+								title="Drag to resize"
+								icon={<MoveDiagonal size={13} />}
+								size="xs"
+								variant="solid"
+								background="rgba(255, 255, 255, 0.92)"
+								color={INK}
+								borderRadius="999px"
+								position="absolute"
+								bottom={1}
+								right={1}
+								minWidth="34px"
+								height="34px"
+								cursor={dragPreview?.id === attachment.id ? 'grabbing' : 'grab'}
+								isDisabled={disabled}
+								sx={{ touchAction: 'none' }}
+								onPointerDown={(event) => handlePointerDown(event, attachment)}
+								onPointerMove={handlePointerMove}
+								onPointerUp={(event) => handlePointerEnd(event, attachment)}
+								onPointerCancel={(event) => handlePointerEnd(event, attachment)}
+								onKeyDown={(event) => handleKeyResize(event, attachment)}
+								onClick={(event) => {
+									event.preventDefault();
+									event.stopPropagation();
+								}}
+							/>
+						</Box>
+					);
+				})}
+			</Box>
+		</Flex>
 	);
 };
