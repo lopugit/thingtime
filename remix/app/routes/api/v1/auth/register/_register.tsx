@@ -5,6 +5,9 @@ import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
 import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { registerUser } from '~/api/utils/auth/registerUser';
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { prepareUnboundAttachmentCleanupForSessionReplacement } from '~/api/utils/attachments/attachments';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // POST /api/v1/auth/register — { username, password, email, displayName? }
 // On success: creates the user, logs them in (sets the httpOnly auth cookie),
@@ -18,6 +21,12 @@ import { registerUser } from '~/api/utils/auth/registerUser';
 // a caller could mass-assign themselves admin. Legit meta is set later via its
 // own authenticated endpoints.
 export const action = async ({ request }: { request: Request }) => {
+  // anonymous by definition — throttle by IP before the bcrypt + insert +
+  // verification-email work (and before the awaited ensureIndexes bootstrap)
+  const limit = await enforceRateLimit(request, 'auth.register', null);
+  if (!limit.allowed) {
+		return json({ ok: false, error: 'Too many sign-up attempts — take a breather 🌸' }, rateLimitedResponseInit(limit));
+  }
   const body = await request.json().catch(() => ({}));
   const origin = resolveTrustedOrigin(request);
 
@@ -38,6 +47,11 @@ export const action = async ({ request }: { request: Request }) => {
   // Surface the link only in local + Vercel preview so production never returns
   // raw verification tokens to the browser.
   const showLink = shouldShowDevVerificationLink();
+
+	const outgoingUser = await getCurrentUser(request).catch(() => null);
+	if (outgoingUser && outgoingUser.id !== result.user.id) {
+		await prepareUnboundAttachmentCleanupForSessionReplacement(outgoingUser.id).catch(() => null);
+	}
 
   const rosterCookies = await mergeAccountSession(request, { userId: result.user.id, jti: result.jti });
 

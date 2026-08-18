@@ -179,6 +179,15 @@ commits.
 
 ## GitHub push and PR publishing
 
+- All pull requests must target the `develop` branch, not `main`. `develop` is
+  the integration base for every feature, fix, docs, and chore branch. Stacked
+  branch → branch PRs keep their parent feature branch as base. Target `main`
+  only when the user explicitly authorizes that exact PR against `main` (for
+  example a `develop` → `main` promotion PR).
+- When you find an open PR still based on `main` that is not an authorized
+  promotion PR, retarget it to `develop` (`gh pr edit <n> --base develop`).
+  GitHub refuses base changes on PRs that belong to a native stack; report
+  those to the user instead of forcing them.
 - The repository may not have a configured Git remote in a cloud checkout. The
   canonical repository URL from `package.json` is
   `https://github.com/lopugit/thingtime.git`.
