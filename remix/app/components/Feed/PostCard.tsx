@@ -171,6 +171,10 @@ export type PostCardProps = {
   onEngagement?: (event: EngagementEvent) => void;
   // the /post/:id page opens with the conversation expanded
   defaultCommentsOpen?: boolean;
+	// the /media/:id page projects a protected attachment Thing as this card:
+	// interactions stay live, but the owner menu drops edit/privacy/delete
+	// (title/description edit via annotate; lifecycle belongs to the parent post)
+	mediaThing?: boolean;
 };
 
 const authorName = (author: FeedAuthor | null) => (author ? getUserDisplayName(author) : 'Anonymous 👻');
@@ -1064,7 +1068,7 @@ const CommentRow = (props: {
 // memoised: engagement telemetry re-renders the feed page frequently, and an
 // unchanged post reference should never re-render its card
 export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
-  const { post, onChanged, onEngagement, defaultCommentsOpen } = props;
+  const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing } = props;
 
   const api = useApi();
   const user = useCurrentUser();
@@ -1510,29 +1514,35 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 borderRadius="8px"
               />
               <MenuList minWidth="190px" borderRadius={RADIUS_MD} zIndex={10}>
-                <MenuItem fontSize="sm" onClick={handleEditStart}>
-                  Edit ✏️
-                </MenuItem>
+                {!mediaThing && (
+                  <MenuItem fontSize="sm" onClick={handleEditStart}>
+                    Edit ✏️
+                  </MenuItem>
+                )}
                 <MenuItem fontSize="sm" onClick={handleCopyLink}>
                   Copy link 🔗
                 </MenuItem>
-                <MenuDivider />
-                <MenuOptionGroup
-                  title="Privacy"
-                  type="radio"
-                  value={post.visibility}
-                  onChange={(value) => handleVisibilityChange(value as PostVisibility)}
-                >
-                  {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
-                    <MenuItemOption key={key} value={key} fontSize="sm">
-                      {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
-                    </MenuItemOption>
-                  ))}
-                </MenuOptionGroup>
-                <MenuDivider />
-                <MenuItem fontSize="sm" color="var(--tt-danger, #e5484d)" onClick={handleDelete}>
-                  Delete 🗑️
-                </MenuItem>
+                {!mediaThing && (
+                  <>
+                    <MenuDivider />
+                    <MenuOptionGroup
+                      title="Privacy"
+                      type="radio"
+                      value={post.visibility}
+                      onChange={(value) => handleVisibilityChange(value as PostVisibility)}
+                    >
+                      {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
+                        <MenuItemOption key={key} value={key} fontSize="sm">
+                          {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+                        </MenuItemOption>
+                      ))}
+                    </MenuOptionGroup>
+                    <MenuDivider />
+                    <MenuItem fontSize="sm" color="var(--tt-danger, #e5484d)" onClick={handleDelete}>
+                      Delete 🗑️
+                    </MenuItem>
+                  </>
+                )}
               </MenuList>
             </Menu>
           )}
