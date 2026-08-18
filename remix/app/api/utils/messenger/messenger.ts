@@ -16,7 +16,7 @@ import {
 	inspectReadyAttachmentsForMessage,
 	prepareAttachmentCascadeForThing
 } from '../attachments/attachments';
-import { getUsersReadReceiptsMap, getUserReadReceiptsEnabled, pushUserRecentReaction, findUserById } from '../auth/users';
+import { getUsersReadReceiptsMap, getUserReadReceiptsEnabled, pushUserRecentReaction, findUsersByIds } from '../auth/users';
 import {
 	MAX_CHAT_MEMBERS,
 	MAX_CHAT_MEMBERS_PER_ADD,
@@ -342,10 +342,14 @@ export const createChat = async (
       ).filter((id) => id !== viewerId)
     : [];
   if (memberIds.length > MAX_CHAT_MEMBERS_PER_ADD) return fail(400, `Add at most ${MAX_CHAT_MEMBERS_PER_ADD} people at once`);
-  // everyone being added must actually exist — one lookup each is fine at ≤50,
-  // but do them in parallel and fail with the missing id named
-  const found = await Promise.all(memberIds.map((id) => findUserById(id)));
-  const missing = memberIds.filter((_, i) => !found[i]);
+  // Everyone being added must actually exist. findUsersByIds resolves the
+  // whole set in 2 queries (things-era + legacy) instead of 2 per id, so a
+  // 50-person create drops from ~100 lookups to 2. It DROPS rows it cannot
+  // find rather than returning nulls in place, so membership is tested
+  // through the id set, not by position — and the first missing id is still
+  // the one named.
+  const foundIds = new Set((await findUsersByIds(memberIds)).map((user: any) => String(user._id)));
+  const missing = memberIds.filter((id) => !foundIds.has(id));
   if (missing.length) return fail(404, `No such user: ${missing[0]}`);
 
   if (chatType === 'dm') {
@@ -826,8 +830,9 @@ export const manageChatMembers = async (
     ).filter((id) => id !== viewerId);
     if (!ids.length) return fail(400, 'Nobody to add');
     if (ids.length > MAX_CHAT_MEMBERS_PER_ADD) return fail(400, `Add at most ${MAX_CHAT_MEMBERS_PER_ADD} people at once`);
-    const found = await Promise.all(ids.map((id) => findUserById(id)));
-    const missing = ids.filter((_, i) => !found[i]);
+    // one batched existence check, not 2 queries per id — see createChat
+    const foundIds = new Set((await findUsersByIds(ids)).map((user: any) => String(user._id)));
+    const missing = ids.filter((id) => !foundIds.has(id));
     if (missing.length) return fail(404, `No such user: ${missing[0]}`);
     // channel access must never outrun the community's invite gate: everyone
     // added to a channel has to already be a community member (the same wall
