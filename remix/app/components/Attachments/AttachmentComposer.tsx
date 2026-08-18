@@ -3,6 +3,7 @@ import { Box, Button, Flex, IconButton, Image, Progress, Text } from '@chakra-ui
 import { CheckCircle2, File as FileIcon, GripVertical, Image as ImageIcon, RotateCcw, UploadCloud, Video as VideoIcon, X } from 'lucide-react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MediaAddTile, MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
 import { nudgeTargetId, useMediaReorder, type MediaReorderNudge, type MediaReorderTileProps } from '~/components/Media/useMediaReorder';
 import { formatAttachmentBytes, localFileMediaKind, MAX_POST_ATTACHMENTS, sameAttachmentSnapshot } from './attachmentUiCore';
@@ -323,6 +324,11 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 	} = props;
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
 	const lopu = useLopu();
+	// Beta media-upload gate: an explicit false means the server refused the
+	// grant (undefined = stale cached user — let the server 403 decide). The
+	// server re-checks on every upload route regardless of what renders here.
+	const currentUser = useCurrentUser();
+	const uploadsNotGranted = currentUser?.canUploadMedia === false;
 	const [dragging, setDragging] = React.useState(false);
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
 	const emittedSnapshotRef = React.useRef<AttachmentComposerSnapshot | null>(null);
@@ -390,6 +396,24 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		},
 		[addFiles]
 	);
+
+	// Ungated accounts see a quiet approval-pending card instead of a dropzone
+	// that would only collect per-file 403s.
+	if (uploadsNotGranted) {
+		return (
+			<Flex flexDirection="column" rowGap={2} role="group" aria-label={ariaLabel}>
+				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
+					Media & files 📎
+				</Text>
+				<Box border={BORDER} borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
+					<Text fontSize="12px" color={MUTED} whiteSpace="normal">
+						🔐 Media uploads need admin approval during the beta. An admin has been notified about your account — uploads unlock as
+						soon as you&#39;re approved.
+					</Text>
+				</Box>
+			</Flex>
+		);
+	}
 
 	const storageLabel =
 		storageStatus === 'reconciling'

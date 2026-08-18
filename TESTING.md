@@ -255,6 +255,17 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] A freshly registered (non-admin, ungranted) account sees the 🔐
+      approval-pending card in place of the upload dropzone in the post,
+      comment, and messenger composers, and a direct
+      `POST /api/v1/attachments/uploads` returns
+      `403 { code: "media_upload_not_granted" }`. Registering also records an
+      `admin.media_upload_request` email to the admin inbox in
+      `email_messages`.
+- [ ] After an admin grants media uploads from `/admin` → Users, the same
+      account gets the normal dropzone (after a reload/revalidation) and can
+      start uploads; revoking flips it back while abort/delete of its own
+      drafts keep working.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
@@ -1421,6 +1432,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       (companion to `scripts/verify-app-namespaces.mjs`).
 
 ## Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`)
+
+- [ ] `/admin` → Users shows the purple `media` badge for granted users and
+      admins; **Grant media / Revoke media** toggles the flag with a Lopu toast
+      and the badge updates after refresh. Non-admin sessions get 403 from
+      `POST /api/v1/admin/set-media-upload`.
 
 Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
 restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a

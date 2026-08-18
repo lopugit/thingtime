@@ -4,7 +4,8 @@ import { signAttachmentUploadParts } from '~/api/utils/attachments/attachments';
 // POST /api/v1/attachments/uploads/parts — sign a bounded checksum-locked part batch.
 export const action = createAttachmentMutationAction({
 	rateKey: 'attachments.parts',
-	service: signAttachmentUploadParts
+	service: signAttachmentUploadParts,
+	requireUploadGrant: true
 });
 
 export const loader = attachmentPostOnlyLoader;

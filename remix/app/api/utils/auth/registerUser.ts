@@ -3,7 +3,7 @@ import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import { isEnvAdmin } from './admin';
 import { createEmailVerification } from './emailVerifications';
-import { sendVerificationEmail } from './email';
+import { sendAdminMediaUploadRequestEmail, sendVerificationEmail } from './email';
 import { signJwt } from './jwt';
 import { hashPassword } from './passwords';
 import { createSession } from './sessions';
@@ -216,6 +216,18 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   // a registration whose user + session are already committed — the dev link is
   // returned regardless and the user can resend from Settings.
   void sendVerificationEmail({ to: email, link: verificationLink }).catch(() => {});
+
+  // Beta media-upload approvals: alert the admin inbox so a human can grant
+  // meta.mediaUpload from /admin. Fire-and-forget like the verification send —
+  // registration never fails on an email outage. Lives here (not
+  // createUserAccount) so service accounts and temporary users don't page the
+  // admin; they can't upload regardless (accountKind / no-grant gates).
+  void sendAdminMediaUploadRequestEmail({
+    username: user.username,
+    email,
+    userId,
+    origin: input.origin
+  }).catch(() => {});
 
 	return { ok: true, user: created.publicUser, jwt, jti: session.jti, verificationLink };
 };

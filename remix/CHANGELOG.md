@@ -45,6 +45,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   migration is required, and administrators bypass the gate entirely.
   — Claude (AI), 2026-08-18
 
+### Added
+
+- **Beta media-upload approval gate**: media/file uploads now require a
+  per-account admin grant (`meta.mediaUpload` / root `secureMediaUpload`,
+  mirroring the admin flag). Upload start/parts/complete return
+  `403 { code: "media_upload_not_granted" }` for ungranted accounts while
+  abort/delete stay open; every registration emails `THINGTIME_ADMIN_EMAIL`
+  (default `admin@thingtime.com`) requesting a grant; `/admin` → Users gains a
+  Grant/Revoke media toggle backed by `POST /api/v1/admin/set-media-upload`;
+  the composer shows an approval-pending card to ungranted users; and the
+  `grant-media-upload-to-existing-users` migration grandfathers pre-gate
+  accounts. See the
+  [pending PR note](../PRs/pending-media-upload-permission-gate.md).
+  — Claude (AI), 2026-08-18
+
 ### Fixed
 
 - **PR #99 final security reconciliation**: the current Thingtime serializer

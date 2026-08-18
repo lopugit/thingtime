@@ -65,6 +65,7 @@ type UserRow = {
   privateUploadsEnabled: boolean;
   publicUploadsPending: boolean;
   privateUploadsPending: boolean;
+  mediaUpload: boolean;
   accountKind: 'user' | 'service';
 	storage: AdminStorageProjection;
   storageAllowanceBytes: number | null;
@@ -480,6 +481,30 @@ const UsersTab = () => {
     () => (rows ?? []).filter((row) => row.publicUploadsPending || row.privateUploadsPending).length,
     [rows]
   );
+  const lopu = useLopu();
+  const [mediaBusyId, setMediaBusyId] = React.useState<string | null>(null);
+  // Grant/revoke the beta media-upload permission (meta.mediaUpload). Admins
+  // can always upload regardless of the stored flag, so the toggle is mostly
+  // meaningful for regular accounts.
+  const toggleMediaUpload = async (row: UserRow) => {
+    setMediaBusyId(row.id);
+    try {
+      const resp = await apiRef.current.v1.admin.setMediaUpload({ userId: row.id, granted: !row.mediaUpload });
+      if (resp?.ok) {
+        lopu({
+          title: resp.user?.mediaUpload ? `Media uploads granted for @${row.username} ✅` : `Media uploads revoked for @${row.username}`,
+          status: 'success'
+        });
+        refresh();
+      } else {
+        lopu({ title: resp?.error || 'Could not update media uploads', status: 'error' });
+      }
+    } catch {
+      lopu({ title: 'Could not update media uploads', status: 'error' });
+    } finally {
+      setMediaBusyId(null);
+    }
+  };
 
   return (
     <Box>
@@ -539,6 +564,11 @@ const UsersTab = () => {
                           service
                         </Badge>
                       )}
+                      {(row.mediaUpload || row.isAdmin) && (
+                        <Badge ml={1} colorScheme="purple" fontSize="0.6em" title="Can upload media and files">
+                          media
+                        </Badge>
+                      )}
                     </Text>
                     <Text fontSize="xs" opacity={0.6} overflow="hidden" textOverflow="ellipsis" maxW="220px">
                       {row.displayName || row.email}
@@ -590,8 +620,17 @@ const UsersTab = () => {
                     <Button size="xs" variant="outline" mr={1} onClick={() => setSubscriptionFor(row)}>
                       Tier
                     </Button>
-                    <Button size="xs" variant="outline" onClick={() => setLinksFor(row)}>
+                    <Button size="xs" variant="outline" mr={1} onClick={() => setLinksFor(row)}>
                       Links{row.counts.ownedAccounts + row.counts.linkedApps > 0 ? ` (${row.counts.ownedAccounts + row.counts.linkedApps})` : ''}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      isLoading={mediaBusyId === row.id}
+                      onClick={() => toggleMediaUpload(row)}
+                      title={row.mediaUpload ? 'Revoke the beta media-upload permission' : 'Grant the beta media-upload permission'}
+                    >
+                      {row.mediaUpload ? 'Revoke media' : 'Grant media'}
                     </Button>
                   </Td>
                 </Tr>

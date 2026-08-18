@@ -574,6 +574,7 @@ THINGTIME_EMAIL_FAIL_CLOSED="false"     # fail-open unless "true"
 SES_SANDBOX="1"                         # test throttle (1 msg/sec) for /tests
 THINGTIME_EMAIL_TEST_RECIPIENT="support@thingtime.com"
 THINGTIME_ADMIN_NOTIFICATION_EMAIL="admin@thingtime.com"  # "new user" ops mail
+THINGTIME_ADMIN_EMAIL="admin@thingtime.com" # destination for admin alerts (new-user media-grant requests)
 ```
 
 `THINGTIME_ADMIN_NOTIFICATION_EMAIL` is where the internal **new user**
@@ -624,6 +625,16 @@ a dev/preview-only helper for the `/tests` page restricted to the configured
 test recipient (or a plus alias of it).
 
 ### Private S3 media and attachments
+
+During the beta, media/file uploads are admin-approved per account: new
+registrations default to no upload permission, every registration emails
+`THINGTIME_ADMIN_EMAIL` (default `admin@thingtime.com`) requesting a grant, and
+an admin flips **Grant media** on the `/admin` Users tab (or POSTs
+`/api/v1/admin/set-media-upload`). Ungranted upload attempts return
+`403 { code: "media_upload_not_granted" }`; admins can always upload. To let
+accounts that existed before the gate keep uploading, run the
+`grant-media-upload-to-existing-users` migration once from the migrations
+panel.
 
 Posts, comments and replies, Messenger messages and thread replies, custom
 reaction emoji, and profile avatar/banner images use direct, checksummed

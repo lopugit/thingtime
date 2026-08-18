@@ -15,6 +15,9 @@ export type CurrentUser = {
 	bannerLinkedUrl: string | null;
   emailVerified: boolean;
   isAdmin: boolean;
+	// Beta media-upload gate: false until an admin grants meta.mediaUpload
+	// (admins are always true). Optional so cached pre-gate payloads type-check.
+	canUploadMedia?: boolean;
   createdAt: string;
   accountKind: 'user' | 'service';
   emailVerificationRequiredBy: string | null;

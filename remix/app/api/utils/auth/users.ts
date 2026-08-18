@@ -25,6 +25,7 @@ import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, MAX_BIO_CHARS, MAX_DISPLAY_NAME_CH
 import { AttachmentBindingError, reconcileReadyProfileAttachmentsToUser, type ProfileAttachmentRefs } from '../attachments/attachmentStore';
 import { effectiveProfileMediaUrl, linkedProfileMediaUrl, profileAttachmentIdFromRecord } from '~/utils/profileMediaUrl';
 import { isAdminDoc, isEnvAdmin } from './admin';
+import { canUploadMediaDoc } from './mediaUpload';
 import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 
@@ -112,6 +113,10 @@ export type PublicUser = {
 	// true when meta.admin OR the ADMIN_USERNAMES env allowlist — the client uses
 	// it to reveal the admin panel; the server always re-checks server-side.
 	isAdmin: boolean;
+	// true when meta.mediaUpload OR the user is an admin — during the beta,
+	// media/file uploads require this admin-granted permission. The client uses
+	// it to disable the upload UI; the server re-checks on every upload route.
+	canUploadMedia: boolean;
 };
 
 // Minimal projection safe to show OTHER users (public profiles, post authors).
@@ -184,7 +189,8 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		activeFeedAlgorithmId: typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
 		publicUploadsEnabled: userPublicUploadsEnabled(user),
 		privateUploadsEnabled: userPrivateUploadsEnabled(user),
-		isAdmin: isAdminDoc(user)
+		isAdmin: isAdminDoc(user),
+		canUploadMedia: canUploadMediaDoc(user)
 	};
 };
 
@@ -310,7 +316,7 @@ const userThingToDoc = (thing: any): any => {
 		emailVerified: !!secure.emailVerified,
 		accountKind: secure.accountKind === 'service' ? 'service' : 'user',
 		emailVerificationRequiredBy: secure.emailVerificationRequiredBy ? new Date(secure.emailVerificationRequiredBy) : null,
-		meta: { ...(secure.meta || {}), admin: !!thing.secureAdmin },
+		meta: { ...(secure.meta || {}), admin: !!thing.secureAdmin, mediaUpload: !!thing.secureMediaUpload },
 		schemaVersion: thing.schemaVersion,
 		createdAt: thing.createdAt,
 		updatedAt: thing.updatedAt
@@ -326,10 +332,12 @@ export const buildUserSecure = (
 		storageAllowanceBytes?: number;
 		storageUsedBytes?: number;
 	}
-): { secure: Binary; admin: boolean; recentReactions: string[] } => {
+): { secure: Binary; admin: boolean; mediaUpload: boolean; recentReactions: string[] } => {
 	const meta = { ...(doc.meta || {}) };
 	const admin = meta.admin === true;
 	delete meta.admin; // admin is the root boolean, not blob content
+	const mediaUpload = meta.mediaUpload === true;
+	delete meta.mediaUpload; // mediaUpload is the root secureMediaUpload boolean, not blob content
 	// recentReactions is the root secureRecentReactions array, not blob content —
 	// strip it here so a migrated user's legacy meta.recentReactions moves to the
 	// atomic field instead of bloating the CAS-serialized blob.
@@ -347,7 +355,7 @@ export const buildUserSecure = (
 	};
 	if (doc.storageAllowanceBytes !== undefined) payload.storageAllowanceBytes = doc.storageAllowanceBytes;
 	if (doc.storageUsedBytes !== undefined) payload.storageUsedBytes = doc.storageUsedBytes;
-	return { secure: packSecure(payload), admin, recentReactions };
+	return { secure: packSecure(payload), admin, mediaUpload, recentReactions };
 };
 
 const findUserThing = async (filter: Record<string, unknown>) => (await getThingsCollection()).findOne({ thingtime: 'user', ...filter } as any);
@@ -538,7 +546,7 @@ export const insertUser = async (
 ) => {
 	const shareId = new ObjectId().toHexString();
 	const now = doc.createdAt instanceof Date ? doc.createdAt : new Date();
-	const { secure, admin, recentReactions } = buildUserSecure(doc);
+	const { secure, admin, mediaUpload, recentReactions } = buildUserSecure(doc);
 
 	const thing = {
 		shareId,
@@ -567,6 +575,9 @@ export const insertUser = async (
 		...(options.initialSubscription ? { initialSubscription: { ...options.initialSubscription } } : {}),
 		// sparse boolean, queryable by listAdmins (booleans aren't text-indexed)
 		...(admin ? { secureAdmin: true } : {}),
+		// sparse boolean mirroring secureAdmin — the admin-granted media-upload
+		// permission (never set at self-registration; granted via setUserMediaUpload)
+		...(mediaUpload ? { secureMediaUpload: true } : {}),
 		// reaction MRU as a BinData array (text-index-invisible, atomically mutable);
 		// only present when a migrated account arrives with prior recents
 		...(recentReactions.length ? { secureRecentReactions: packRecentReactions(recentReactions) } : {}),
@@ -1088,6 +1099,7 @@ export type AdminUserRow = {
 	// signup), so the UI can tell "awaiting approval" from "grandfathered".
 	publicUploadsPending: boolean;
 	privateUploadsPending: boolean;
+	mediaUpload: boolean; // the stored grant flag (admins can upload regardless)
 };
 
 // Escape user-supplied text before embedding it in a Mongo $regex — shared with
@@ -1112,7 +1124,8 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 	publicUploadsEnabled: userPublicUploadsEnabled(doc),
 	privateUploadsEnabled: userPrivateUploadsEnabled(doc),
 	publicUploadsPending: doc?.meta?.publicUploads === false && !isAdminDoc(doc),
-	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc)
+	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc),
+	mediaUpload: doc.meta?.mediaUpload === true
 });
 
 // Set (or clear) a user's stored admin flag. Env-allowlist admins remain admin
@@ -1177,6 +1190,26 @@ export const setUserUploadPermissions = async (userId: string, updates: UploadPe
 	return updated ? toAdminRow(updated) : null;
 };
 
+// Set (or clear) a user's stored media-upload grant (meta.mediaUpload /
+// root secureMediaUpload on user things). Mirrors setUserAdmin's dual-store
+// write so an interrupted-migration twin can't resurrect a stale flag.
+// Admins keep upload access regardless (canUploadMediaDoc ORs isAdminDoc),
+// so revoking one only clears the stored flag.
+export const setUserMediaUpload = async (userId: string, granted: boolean): Promise<AdminUserRow | null> => {
+	const now = new Date();
+	const [thingRes, legacyRes] = await Promise.all([
+		getThingsCollection().then((c) =>
+			c.updateOne({ shareId: String(userId), thingtime: 'user' } as any, { $set: { secureMediaUpload: granted === true, updatedAt: now } })
+		),
+		ObjectId.isValid(userId)
+			? getUsersCollection().then((c) => c.updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.mediaUpload': granted === true, updatedAt: now } }))
+			: Promise.resolve({ matchedCount: 0 } as { matchedCount: number })
+	]);
+	if (!thingRes.matchedCount && !legacyRes.matchedCount) return null;
+	const updated = await findUserById(userId);
+	return updated ? toAdminRow(updated) : null;
+};
+
 // merge things-era + legacy results, dedup by id (things win). NO capping here —
 // callers sort THEN slice, so a legacy user who sorts first is never starved by
 // a full things-first page (the cap-before-sort bug).
@@ -1210,7 +1243,7 @@ const searchUsersForAdminCapped = async (query: string, limit: number, hardCap: 
 	const [thingRaw, exact, legacyDocs] = await Promise.all([
 		things
 			.find(thingFilter as any)
-			.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1, createdAt: 1 })
+			.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1, secureMediaUpload: 1, createdAt: 1 })
 			.limit(capped)
 			.toArray(),
 		q.includes('@') ? things.findOne({ uniqueKeys: userEmailKey(q) } as any) : Promise.resolve(null),
@@ -1324,6 +1357,7 @@ export const searchUsersForAdminOverviewPage = async (query: string, limit = 20,
 		'crystal.displayName': 1,
 		secure: 1,
 		secureAdmin: 1,
+		secureMediaUpload: 1,
 		createdAt: 1
 	};
 
@@ -1487,7 +1521,7 @@ export const listAdmins = async (): Promise<AdminListSnapshot> => {
 	const [thingRaw, legacyDocs] = await Promise.all([
 		things
 			.find({ thingtime: 'user', secureAdmin: true } as any)
-			.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1, createdAt: 1 })
+			.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1, secureMediaUpload: 1, createdAt: 1 })
 			.sort({ createdAt: -1, shareId: 1 })
 			.limit(ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT)
 			.toArray(),

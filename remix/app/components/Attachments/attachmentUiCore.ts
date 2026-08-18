@@ -96,6 +96,9 @@ export const attachmentUploadError = (
 		Number(context.remainingBytes) >= 0 &&
 		Number(context.fileSizeBytes) > Number(context.remainingBytes);
 	if (status === 401) return 'Your session expired. Log in again before uploading this file.';
+	if (code === 'media_upload_not_granted') {
+		return 'Media uploads need admin approval during the beta. An admin has been notified — you can upload once your account is approved.';
+	}
 	if (status === 403) return 'This account is not allowed to upload that file.';
 	if (status === 413) return 'This file is larger than Thingtime can accept.';
 	if (status === 429) return 'Uploads are moving too quickly. Wait a moment, then retry this file.';

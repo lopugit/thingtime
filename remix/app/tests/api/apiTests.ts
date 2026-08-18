@@ -1138,6 +1138,31 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin promote attempt was rejected.')
   },
   {
+    id: 'admin-set-media-upload-guarded',
+    name: 'Media-upload grant is admin-only',
+    description: 'Granting the beta media-upload permission requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/set-media-upload',
+    body: { userId: '000000000000000000000000', granted: true },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin media-grant attempt was rejected.')
+  },
+  {
+    id: 'attachments-upload-requires-media-grant',
+    name: 'Uploads need the beta media grant',
+    description:
+      'A freshly registered (non-admin, ungranted) session is blocked from starting an attachment upload with the stable media_upload_not_granted code.',
+    group: 'attachments',
+    method: 'POST',
+    path: '/api/v1/attachments/uploads',
+    body: { filename: 'gate-check.png', contentType: 'image/png', sizeBytes: 1024, requestId: 'api-test-media-gate', purpose: 'post' },
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && (body?.code === 'media_upload_not_granted' || typeof body?.error === 'string'),
+      'Ungranted upload start was rejected (media_upload_not_granted once a session exists).'
+    )
+  },
+  {
     id: 'admin-users-overview-guarded',
     name: 'Users overview is admin-only',
     description: 'The /admin Users tab data requires an admin session.',
