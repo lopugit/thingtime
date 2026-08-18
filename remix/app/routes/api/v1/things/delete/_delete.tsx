@@ -2,6 +2,7 @@ import { json } from '~/api/http';
 
 import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
 import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
+import { prepareAttachmentCascadeForThing } from '~/api/utils/attachments/attachments';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { deletePost, viewerOf } from '~/api/utils/things/things';
 
@@ -33,7 +34,11 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBodyWithCors(request, 64 * 1024, cors);
-  const result = await deletePost(viewerOf(user, actorPat(actor)), body.id, app);
+  const attachmentHooks =
+    actor.kind !== 'app' && user.accountKind === 'user'
+      ? { beforeCascade: prepareAttachmentCascadeForThing }
+      : undefined;
+  const result = await deletePost(viewerOf(user, actorPat(actor)), body.id, app, attachmentHooks);
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });

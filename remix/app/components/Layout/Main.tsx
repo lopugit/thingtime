@@ -1,12 +1,20 @@
 import { Flex } from '@chakra-ui/react';
+import { useLocation } from 'react-router';
 
 import { Footer } from '../Nav/Footer';
 import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from '../Nav/Drawer/useDrawer';
+
+// Full-bleed app surfaces own the whole viewport (fixed-height panes with
+// their own internal scroll), so the footer and its tail spacer stay off —
+// a chat that scrolls the page under the composer is unusable.
+const FULL_BLEED_PATHS = ['/messages'];
 
 export const Main = (props) => {
 	const { loading, open, direction } = useDrawer();
 	const { width: drawerWidth, resizing } = useDrawerLiveWidth();
 	const isMobile = useIsMobileViewport();
+	const { pathname } = useLocation();
+	const fullBleed = FULL_BLEED_PATHS.includes(pathname);
 
 	// viewport-clamped drawer width shared with NavDrawer/Nav
 	const shiftCss = drawerWidthCss(drawerWidth);
@@ -62,7 +70,7 @@ export const Main = (props) => {
 				>
 					{props.children}
 				</Flex>
-				<Footer></Footer>
+				{fullBleed ? null : <Footer></Footer>}
 			</Flex>
 		</Flex>
 	);
