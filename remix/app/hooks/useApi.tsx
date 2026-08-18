@@ -360,6 +360,20 @@ export function useApi() {
 					return ret;
 				},
 				[asyncFetcher]
+			),
+			// owner title/description on a ready attachment (media page + lightbox
+			// text) — omit a field to keep it, null/'' clears it
+			annotate: useCallback(
+				async (args: { id: string; title?: string | null; description?: string | null }) =>
+					asyncFetcher.submit(
+						{
+							id: args?.id,
+							...(args && 'title' in args ? { title: args.title } : {}),
+							...(args && 'description' in args ? { description: args.description } : {})
+						},
+						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details' }
+					),
+				[asyncFetcher]
 			)
 		},
     things: {

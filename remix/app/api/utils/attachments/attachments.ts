@@ -25,6 +25,7 @@ import {
 	bindReadyCommentAttachmentsToTarget,
 	bindReadyEmojiAttachmentToTarget,
 	bindReadyMessageAttachmentsToTarget,
+	annotateOwnedAttachment,
 	bindReadyAttachmentsToTarget,
 	reorderBoundTargetAttachments,
 	type AttachmentDoc,
@@ -1232,6 +1233,40 @@ export const createReadyAttachmentPostInsertHook =
 	async (doc: { shareId: string; ownerId: string }, session: any) => {
 		await bind(doc.ownerId, attachmentIds, doc.shareId, session);
 	};
+
+// POST /api/v1/attachments/annotate — owner-authored title/description on a
+// ready attachment (draft or bound). The media's own Thing page and the post
+// lightbox render these; binding, audience, and object bytes are untouched.
+export const annotateAttachment = async (
+	ownerId: string,
+	input: unknown
+): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+	try {
+		if (isCustomMongoEndpointActive()) {
+			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+		}
+		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+		const id = normalizeId(record.id);
+		if (!id) return fail(400, 'Invalid attachment id');
+		const patchField = (value: unknown, label: string): string | null | undefined => {
+			if (value === undefined) return undefined;
+			if (value === null) return null;
+			if (typeof value !== 'string') throw new AttachmentServiceError(400, `Attachment ${label} must be text`);
+			return value;
+		};
+		const title = patchField(record.title, 'title');
+		const description = patchField(record.description, 'description');
+		if (title === undefined && description === undefined) {
+			return fail(400, 'Provide a title or description to update');
+		}
+		const doc = await annotateOwnedAttachment(ownerId, id, { title, description });
+		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
+		if (!attachment) return fail(409, 'Attachment metadata failed validation after update');
+		return { ok: true, attachment };
+	} catch (error) {
+		return knownFailure(error) || unavailable('annotate', error);
+	}
+};
 
 // PATCH-time reorder: re-stamp the display order of a target's already-bound
 // attachments. Pure permutations only — the store helper rejects any set

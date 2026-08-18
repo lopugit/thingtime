@@ -195,3 +195,57 @@ test('an attachment reorder must be a pure permutation of the bound set', () => 
 	const overCap = planAttachmentReorder(['a', 'b', 'c'], ['a', 'b', 'c'], 2);
 	assert.equal(overCap.ok === false && overCap.status, 400);
 });
+
+test('owner title/description are optional, bounded, hygienic, and never stored empty', () => {
+	const annotated = sanitizeAttachmentPublicMetadata({
+		name: 'sunset.jpg',
+		size: 42,
+		contentType: 'image/jpeg',
+		title: '  Sunset over the bay  ',
+		description: 'Line one\nline two 🍉'
+	});
+	assert.deepEqual(annotated, {
+		ok: true,
+		crystal: {
+			name: 'sunset.jpg',
+			size: 42,
+			contentType: 'image/jpeg',
+			mediaKind: 'image',
+			title: 'Sunset over the bay',
+			description: 'Line one\nline two 🍉'
+		}
+	});
+	// blanks collapse to ABSENT keys
+	const blank = sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: '   ', description: '' });
+	assert.equal(blank.ok, true);
+	if (blank.ok) {
+		assert.equal('title' in blank.crystal, false);
+		assert.equal('description' in blank.crystal, false);
+	}
+	// titles are single-line; descriptions allow newlines but no other controls
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'two\nlines' }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', description: 'bad\ttab' }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'bad‮title' }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'x'.repeat(201) }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', description: 'x'.repeat(2001) }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 42 }).ok, false);
+});
+
+test('annotated crystals stay canonical for projection and accounting; foreign keys still fail closed', () => {
+	const crystal = {
+		name: 'photo.png',
+		size: 42,
+		contentType: 'image/png',
+		mediaKind: 'image',
+		title: 'A title',
+		description: 'A description'
+	};
+	assert.deepEqual(toAttachmentPublicMetadata('attachment-id', crystal), { id: 'attachment-id', ...crystal });
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ crystal })), 42);
+	// untrimmed or empty stored owner text is NOT canonical
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...crystal, title: ' padded ' }), null);
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...crystal, title: '' }), null);
+	// unknown keys stay rejected
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...crystal, objectKey: 'leak' }), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ crystal: { ...crystal, extra: true } })), null);
+});

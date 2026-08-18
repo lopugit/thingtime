@@ -21,6 +21,9 @@ export type PublicAttachment = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	// owner-authored presentation text (media page + lightbox); absent = none
+	title?: string;
+	description?: string;
 };
 
 export type AttachmentUploadStatus = 'queued' | 'preparing' | 'uploading' | 'finalizing' | 'ready' | 'error';
