@@ -170,9 +170,22 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
         [asyncFetcher]
       ),
+      // Alias endpoint used by the older AdminPanel switch. Both routes write
+      // the same meta.publicUploads flag via setUserPublicUploads.
       setPublicUploads: useCallback(
         async (args: { userId: string; enabled: boolean }) =>
           asyncFetcher.submit({ userId: args?.userId, enabled: args?.enabled === true }, { action: '/api/v1/admin/set-public-uploads' }),
+        [asyncFetcher]
+      ),
+      setUserPublicUploads: useCallback(
+        async (args: { userId: string; enabled: boolean }) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, enabled: args?.enabled },
+            {
+              action: '/api/v1/admin/users/public-uploads',
+              errorContext: args?.enabled ? 'approve public uploads' : 'withhold public uploads'
+            }
+          ),
         [asyncFetcher]
       ),
       migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),

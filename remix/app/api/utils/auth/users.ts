@@ -101,14 +101,17 @@ export type PublicUser = {
 	};
 	activeThemeId: string | null;
 	activeFeedAlgorithmId: string | null;
+	// Whether this account may upload PUBLIC files/media (post, comment, and
+	// custom-emoji attachments; message + profile uploads are never gated by
+	// it). Public uploads are OFF for every account created after the
+	// signup-permissions hotfix, and stay off through email verification — an
+	// admin turns them on per user from /admin (see setUserPublicUploads).
+	// Accounts predating the flag have no meta.publicUploads and stay enabled —
+	// absence means "grandfathered".
+	publicUploadsEnabled: boolean;
 	// true when meta.admin OR the ADMIN_USERNAMES env allowlist — the client uses
 	// it to reveal the admin panel; the server always re-checks server-side.
 	isAdmin: boolean;
-	// whether this account may upload public files/media (post, comment, and
-	// custom-emoji attachments). New signups start false and stay false through
-	// email verification — only an admin (set-public-uploads) turns it on.
-	// Accounts created before the flag existed (meta key absent) stay allowed.
-	publicUploadsEnabled: boolean;
 };
 
 // Minimal projection safe to show OTHER users (public profiles, post authors).
@@ -124,16 +127,20 @@ export type PublicProfile = {
 	temporary?: boolean;
 };
 
-// Public-upload permission for a user doc. Grandfathering rule: only an
-// EXPLICIT meta.publicUploadsEnabled === false blocks — accounts created before
-// the flag existed keep uploading. New signups are stamped false at creation
-// (registerUser.ts), and email verification never touches this flag. Admins are
-// always allowed.
-export const userDocPublicUploadsAllowed = (doc: any): boolean => {
-	if (!doc) return false;
-	if (isAdminDoc(doc)) return true;
-	return doc.meta?.publicUploadsEnabled !== false;
-};
+// Public file/media upload permission. Tri-state on purpose:
+//   meta.publicUploads === false  → withheld (every account created since the
+//                                   signup-permissions hotfix starts here,
+//                                   INCLUDING after the email is verified)
+//   meta.publicUploads === true   → granted by an admin from /admin
+//   absent                        → grandfathered account, still allowed
+// Admins are always allowed regardless of the flag, so a locked-out admin can
+// never be unable to fix the account that grants the permission.
+export const userPublicUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.publicUploads !== false;
+
+// Same rule for a doc that may not exist. A user we cannot find fails CLOSED —
+// "absent doc" is not the same as "absent flag" (which is the grandfathering
+// case above), so a deleted/unresolvable owner never inherits the allowance.
+export const userDocPublicUploadsAllowed = (doc: any): boolean => (doc ? userPublicUploadsEnabled(doc) : false);
 
 // Async lookup used by the attachment service gate (it only has an ownerId).
 export const userPublicUploadsAllowed = async (userId: string): Promise<boolean> => {
@@ -183,7 +190,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null,
 		activeFeedAlgorithmId: typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
 		isAdmin: isAdminDoc(user),
-		publicUploadsEnabled: userDocPublicUploadsAllowed(user)
+		publicUploadsEnabled: userPublicUploadsEnabled(user)
 	};
 };
 
@@ -1079,7 +1086,13 @@ export type AdminUserRow = {
 	createdAt: string | null;
 	isAdmin: boolean;
 	envAdmin: boolean; // admin via ADMIN_USERNAMES — can't be demoted from the UI
-	publicUploadsEnabled: boolean; // may upload public files/media (post/comment/emoji)
+	emailVerified: boolean;
+	// may upload public files/media (post/comment/emoji); false while the
+	// account waits for an admin to grant public uploads
+	publicUploadsEnabled: boolean;
+	// true only when the flag was explicitly withheld (i.e. a post-hotfix
+	// signup), so the UI can tell "awaiting approval" from "grandfathered".
+	publicUploadsPending: boolean;
 };
 
 // Escape user-supplied text before embedding it in a Mongo $regex — shared with
@@ -1100,31 +1113,10 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 	createdAt: adminCreatedAt(doc.createdAt),
 	isAdmin: isAdminDoc(doc),
 	envAdmin: isEnvAdmin(doc.username),
-	publicUploadsEnabled: userDocPublicUploadsAllowed(doc)
+	emailVerified: !!doc.emailVerified,
+	publicUploadsEnabled: userPublicUploadsEnabled(doc),
+	publicUploadsPending: doc?.meta?.publicUploads === false && !isAdminDoc(doc)
 });
-
-// Set (or clear) a user's public file/media upload permission
-// (meta.publicUploadsEnabled). Admin-gated (admin/set-public-uploads route).
-// Dual-store write for the same interrupted-migration reason as setUserAdmin:
-// the flag lives in the things-era secure blob's meta AND the legacy doc's
-// root meta, so a stale twin can never resurrect the old value.
-export const setUserPublicUploads = async (userId: string, enabled: boolean): Promise<AdminUserRow | null> => {
-	const result = await mutateUserThingSecure(userId, (secure) => {
-		if (!secure.meta) secure.meta = {};
-		secure.meta.publicUploadsEnabled = enabled === true;
-	});
-	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	let legacyMatched = 0;
-	if (ObjectId.isValid(userId)) {
-		const res = await (
-			await getUsersCollection()
-		).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.publicUploadsEnabled': enabled === true, updatedAt: new Date() } });
-		legacyMatched = res.matchedCount;
-	}
-	if (result !== 'mutated' && !legacyMatched) return null;
-	const updated = await findUserById(userId);
-	return updated ? toAdminRow(updated) : null;
-};
 
 // Set (or clear) a user's stored admin flag. Env-allowlist admins remain admin
 // regardless (isAdminDoc ORs the env check), so demoting one only clears the
@@ -1148,6 +1140,40 @@ export const setUserAdmin = async (userId: string, admin: boolean): Promise<Admi
 			: Promise.resolve({ matchedCount: 0 } as { matchedCount: number })
 	]);
 	if (!thingRes.matchedCount && !legacyRes.matchedCount) return null;
+	const updated = await findUserById(userId);
+	return updated ? toAdminRow(updated) : null;
+};
+
+// Grant or withhold a user's public file/media upload permission. Single
+// writer of meta.publicUploads: BOTH admin routes (admin/users/public-uploads
+// and the admin/set-public-uploads alias) land here, so the two surfaces can
+// never drift onto different keys.
+//
+// Unlike `secureAdmin` this is NOT a queryable root boolean — the admin dashboard
+// already loads a complete user snapshot and filters client-side, so the flag
+// rides inside the CAS-guarded secure blob's `meta` (same home as
+// activeThemeId) and needs no new index or collection generation.
+//
+// Both stores are written for the same reason setUserAdmin does it: a dual-era
+// twin left by an interrupted users→things migration would otherwise keep a
+// stale value that the dual-store read resurrects, so a grant would appear not
+// to take. Best-effort per store; either matching counts as applied.
+export const setUserPublicUploads = async (userId: string, enabled: boolean): Promise<AdminUserRow | null> => {
+	let applied = false;
+	const result = await mutateUserThingSecure(userId, (secure) => {
+		secure.meta = { ...(secure.meta || {}), publicUploads: enabled === true };
+	});
+	if (result === 'contended') throw new SecureWriteContendedError(userId);
+	if (result === 'mutated') applied = true;
+
+	if (ObjectId.isValid(userId)) {
+		const legacy = await (
+			await getUsersCollection()
+		).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.publicUploads': enabled === true, updatedAt: new Date() } });
+		if (legacy.matchedCount) applied = true;
+	}
+
+	if (!applied) return null;
 	const updated = await findUserById(userId);
 	return updated ? toAdminRow(updated) : null;
 };

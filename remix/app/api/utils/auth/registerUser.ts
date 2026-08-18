@@ -36,6 +36,9 @@ export type CreateUserAccountInput = {
   accountKind?: 'user' | 'service';
   emailVerificationRequiredBy?: Date | null;
   storageAllowanceBytes?: number;
+  // Opt a creation path INTO public uploads (admin-provisioned accounts only).
+  // Public signup never sets it — see the meta assignment below.
+  publicUploads?: boolean;
   meta?: Record<string, any>;
 };
 
@@ -44,8 +47,10 @@ export type CreateUserAccountResult = { ok: false; status: number; error: string
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 // Privileged meta keys that must never be set at account creation (only via
-// their own admin-gated / authenticated endpoints).
-const PRIVILEGED_META_KEYS = ['admin', 'publicUploadsEnabled'];
+// their own admin-gated / authenticated endpoints). `publicUploads` joins
+// `admin` here: a public signup body must not be able to hand itself the
+// upload permission this hotfix exists to withhold.
+const PRIVILEGED_META_KEYS = ['admin', 'publicUploads'];
 
 // Drop privileged keys from any caller-supplied meta before it's persisted.
 const sanitizeCreateMeta = (meta: unknown): Record<string, any> => {
@@ -97,11 +102,15 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     accountKind: input.accountKind ?? 'user',
     // Defense-in-depth: privileged flags can never be set at creation time,
     // even if a caller sneaks them into meta. `admin` is granted only via the
-    // admin-gated setUserAdmin (auth/admin.ts), and public file/media uploads
-    // start EXPLICITLY disabled — email verification never enables them; only
-    // the admin-gated setUserPublicUploads does. (Pre-flag accounts, where the
-    // key is absent, stay grandfathered-allowed.)
-    meta: { ...sanitizeCreateMeta(input.meta), publicUploadsEnabled: false }
+    // admin-gated setUserAdmin (auth/admin.ts).
+    // Public file/media uploads start WITHHELD for every newly created account
+    // — verifying the email address no longer grants them; only the admin-gated
+    // setUserPublicUploads does. An admin turns them on per user from /admin
+    // (POST /api/v1/admin/users/public-uploads) after the "new user"
+    // notification lands. `publicUploads` is stripped from any caller-supplied
+    // meta above, so this is the only writer at creation time. Accounts that
+    // predate the hotfix have no flag at all and stay grandfathered-allowed.
+    meta: { ...sanitizeCreateMeta(input.meta), publicUploads: input.publicUploads === true }
   };
 
   if (input.emailVerificationRequiredBy !== undefined) {

@@ -865,13 +865,66 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-users-public-uploads',
+    group: 'admin',
+    title: 'Approve public uploads',
+    endpoint: '/api/v1/admin/users/public-uploads',
+    summary: 'Grant or withhold a user’s public file and media upload permission (admin only).',
+    detail:
+      'POST { userId, enabled } to set meta.publicUploads. Accounts created after the signup-permissions hotfix start ' +
+      'withheld — verifying their email address does NOT grant uploads — so this endpoint is the manual approval step ' +
+      'an admin performs after the “new user” notification email. While withheld, POST /api/v1/attachments/uploads ' +
+      'returns 403 public_uploads_not_approved and no upload can start. Accounts that predate the flag have no ' +
+      'meta.publicUploads and remain enabled; admins are always allowed regardless of the flag.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'POST userId + enabled:true to approve uploads, enabled:false to withhold them again.',
+      'Read the returned user row (publicUploadsEnabled, publicUploadsPending) to update the UI.',
+      'The /admin Users tab lists pending accounts — publicUploadsPending is true while approval is outstanding.',
+      'Non-admins receive 403; missing userId or a non-boolean enabled 400; unknown user 404.'
+    ],
+    requestExamples: [
+      {
+        name: 'Approve uploads',
+        description: 'Enable public file and media uploads for a new user.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', enabled: true }
+      },
+      {
+        name: 'Withhold uploads',
+        description: 'Revoke the permission again.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', enabled: false }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated user row.',
+        body: {
+          ok: true,
+          user: {
+            id: '64f000000000000000000002',
+            username: 'nik',
+            emailVerified: true,
+            publicUploadsEnabled: true,
+            publicUploadsPending: false
+          }
+        }
+      },
+      { status: 400, description: 'Missing userId.', body: { ok: false, error: 'userId is required' } },
+      { status: 404, description: 'Unknown user.', body: { ok: false, error: 'User not found' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-set-public-uploads',
     group: 'admin',
-    title: 'Enable / disable public uploads',
+    title: 'Enable / disable public uploads (alias)',
     endpoint: '/api/v1/admin/set-public-uploads',
     summary: 'Set a user’s public file/media upload permission (admin only).',
     detail:
-      'POST { userId, enabled } to grant or revoke meta.publicUploadsEnabled. New signups start disabled and stay disabled through email verification — post, comment, and custom-emoji attachment uploads 403 until an admin enables the account here. Message and profile uploads are unaffected. Accounts created before the flag existed (key absent) remain allowed.',
+      'Alias of /api/v1/admin/users/public-uploads kept for the admin panel’s per-user switch — both routes write the same meta.publicUploads flag. POST { userId, enabled } to grant or revoke it. New signups start disabled and stay disabled through email verification — post, comment, and custom-emoji attachment uploads 403 until an admin enables the account. Message and profile uploads are unaffected. Accounts created before the flag existed (key absent) remain allowed. Unlike the users route, a non-boolean enabled is coerced to false rather than rejected.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
     steps: [

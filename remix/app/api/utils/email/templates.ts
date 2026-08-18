@@ -36,8 +36,10 @@ export const renderEmailOtpTemplate = ({
   html: `<p>Your Thingtime security code is <strong>${htmlEscape(code)}</strong>.</p><p>It expires in ${expiresMinutes} minutes.</p>`
 });
 
-// Admin heads-up sent for every new signup (recipient is the operator, not the
-// user — it never routes through per-user notification prefs/unsubscribes).
+// Admin heads-up sent at SIGNUP for every new account (recipient is the
+// operator, not the user — it never routes through per-user notification
+// prefs/unsubscribes). Its counterpart below fires later, once the account
+// finishes email verification.
 export const renderAdminNewUserSignupTemplate = ({
   username,
   displayName,
@@ -71,6 +73,51 @@ export const renderAdminNewUserSignupTemplate = ({
         .join('')}</ul>`,
       '<p>Public file and media uploads are <strong>disabled</strong> for this account until an admin enables them in the admin panel (System → Public uploads).</p>'
     ].join('')
+  };
+};
+
+// Internal ops mail: a new account finished email verification and is waiting
+// for an admin to grant public file/media uploads. Sent to the admin inbox
+// (THINGTIME_ADMIN_NOTIFICATION_EMAIL, default admin@thingtime.com), never to
+// the user, so it carries the account details an admin needs to decide.
+export const renderNewUserAdminNotificationTemplate = ({
+  username,
+  email,
+  displayName,
+  userId,
+  createdAt,
+  adminUrl
+}: {
+  username: string;
+  email: string;
+  displayName?: string | null;
+  userId: string;
+  createdAt?: string | null;
+  adminUrl: string;
+}) => {
+  const rows: Array<[string, string]> = [
+    ['Username', `@${username}`],
+    ['Display name', displayName || '—'],
+    ['Email', email],
+    ['User id', userId],
+    ['Signed up', createdAt || '—'],
+    ['Email verified', 'yes']
+  ];
+  return {
+    subject: `New Thingtime user: @${username}`,
+    text: [
+      `A new user verified their email and is awaiting public upload approval.`,
+      '',
+      ...rows.map(([label, value]) => `${label}: ${value}`),
+      '',
+      `Approve or leave withheld in the admin Users tab: ${adminUrl}`
+    ].join('\n'),
+    html:
+      `<p>A new user verified their email and is awaiting <strong>public upload approval</strong>.</p>` +
+      `<table cellpadding="4" style="border-collapse:collapse">${rows
+        .map(([label, value]) => `<tr><td><strong>${htmlEscape(label)}</strong></td><td>${htmlEscape(value)}</td></tr>`)
+        .join('')}</table>` +
+      `<p><a href="${htmlEscape(adminUrl)}">Open the admin Users tab</a> to enable their file and media uploads.</p>`
   };
 };
 

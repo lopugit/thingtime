@@ -19,14 +19,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Security
 
-- New signups no longer receive public file/media upload permission — accounts
-  are created with `meta.publicUploadsEnabled: false` and post/comment/emoji
-  attachment upload starts 403 until an admin enables the account via the new
-  Admin → System → "Public uploads" section
-  (`POST /api/v1/admin/set-public-uploads`). Email verification never enables
-  it; message + profile uploads and pre-flag accounts (key absent) are
-  unaffected. Every registration now also sends a "new user" notification
-  email to `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default admin@thingtime.com).
+- **New signups no longer receive public upload permissions**: accounts created
+  from this change forward start with `meta.publicUploads: false`, and verifying
+  the email address no longer grants uploads. `POST /api/v1/attachments/uploads`
+  fails closed with `403 public_uploads_not_approved` until an administrator
+  enables the account, so no upload is reserved and no MPU is opened. Message
+  and profile uploads are not gated. Two admin surfaces flip the same flag
+  through the single `setUserPublicUploads` writer: the **/admin → Users** tab
+  gained an Uploads column, a pending-approval banner, and a per-user
+  Enable/Withhold toggle backed by `POST /api/v1/admin/users/public-uploads`,
+  and the admin panel's **System → "Public uploads"** switch keeps working via
+  the `POST /api/v1/admin/set-public-uploads` alias. Admins are notified twice
+  at `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default `admin@thingtime.com`): an
+  `admin.new_user_signup` heads-up when the account registers, and an
+  `admin.new_user` approval prompt once it verifies its email. The flag is
+  tri-state: accounts predating the change have no flag and keep uploading, so
+  no data migration is required, and administrators bypass the gate entirely.
   — Claude (AI), 2026-08-18
 
 ### Fixed
