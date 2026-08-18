@@ -1,4 +1,4 @@
-import { json } from '~/api/http';
+import { json, readJsonBody } from '~/api/http';
 
 import { mergeAccountSession } from '~/api/utils/auth/accounts';
 import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
@@ -8,6 +8,8 @@ import { registerUser } from '~/api/utils/auth/registerUser';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { prepareUnboundAttachmentCleanupForSessionReplacement } from '~/api/utils/attachments/attachments';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+
+const MAX_BODY_BYTES = 16 * 1024;
 
 // POST /api/v1/auth/register — { username, password, email, displayName? }
 // On success: creates the user, logs them in (sets the httpOnly auth cookie),
@@ -27,7 +29,7 @@ export const action = async ({ request }: { request: Request }) => {
   if (!limit.allowed) {
 		return json({ ok: false, error: 'Too many sign-up attempts — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonBody(request, MAX_BODY_BYTES);
   const origin = resolveTrustedOrigin(request);
 
   // (Env-allowlist admin usernames are reserved in createUserAccount — the
