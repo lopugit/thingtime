@@ -4,12 +4,12 @@
 - cluster-only mode — file stats not available
 
 ## Summary
-- 26780 nodes · 65941 edges · 1083 communities (662 shown, 421 thin omitted)
+- 26780 nodes · 65941 edges · 1084 communities (662 shown, 422 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 1157 edges (avg confidence: 0.57)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `27fa524e`
+- Built from commit: `a68b4b87`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -459,7 +459,6 @@
 - [[_COMMUNITY_.sendToWeb|.sendToWeb]]
 - [[_COMMUNITY_PR 30 — Add iOS web destination picker (branch `codexios-deployment-url-picker`)|PR #30 — Add iOS web destination picker (branch `codex/ios-deployment-url-picker`)]]
 - [[_COMMUNITY_DevKit.tsx|DevKit.tsx]]
-- [[_COMMUNITY_providerRouter.ts|providerRouter.ts]]
 - [[_COMMUNITY_Followersfriends + notifications + post views + multi-emoji fix|Followers/friends + notifications + post views + multi-emoji fix]]
 - [[_COMMUNITY_verify-vercel-output.mjs|verify-vercel-output.mjs]]
 - [[_COMMUNITY_🦄 Handoff Schema browser  builder  search-by-schema|🦄 Handoff: Schema browser / builder / search-by-schema]]
@@ -467,21 +466,20 @@
 - [[_COMMUNITY__musing.tsx|_musing.tsx]]
 - [[_COMMUNITY__pr-conflict-auto-resolver-model-waterfall.tsx|_pr-conflict-auto-resolver-model-waterfall.tsx]]
 - [[_COMMUNITY_workflow-caller-contract.mjs|workflow-caller-contract.mjs]]
-- [[_COMMUNITY_package.json|package.json]]
 - [[_COMMUNITY_09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)|09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)]]
+- [[_COMMUNITY_createContext|createContext]]
 - [[_COMMUNITY_Unreleased|[Unreleased]]]
-- [[_COMMUNITY_rules|rules]]
 - [[_COMMUNITY_verify-app-storage.mjs|verify-app-storage.mjs]]
 - [[_COMMUNITY_vercel.json|vercel.json]]
 - [[_COMMUNITY_PR 170 — real app-data quotas + app-owner storage manager|PR #170 — real app-data quotas + app-owner storage manager]]
-- [[_COMMUNITY_PR 220 — CI provider control plane and Vercel runners|PR #220 — CI provider control plane and Vercel runners]]
 - [[_COMMUNITY_providerReadiness.ts|providerReadiness.ts]]
 - [[_COMMUNITY_useStyleConfigImpl|useStyleConfigImpl]]
+- [[_COMMUNITY_routes.tsx|routes.tsx]]
 - [[_COMMUNITY_16 — Full-power app namespaces|16 — Full-power app namespaces]]
 - [[_COMMUNITY_buildSVGAttrs|buildSVGAttrs]]
 - [[_COMMUNITY_React Component|React Component]]
 - [[_COMMUNITY_describeNativeComponentFrame|describeNativeComponentFrame]]
-- [[_COMMUNITY_buildSVGAttrs|buildSVGAttrs]]
+- [[_COMMUNITY_scrapeMotionValuesFromProps|scrapeMotionValuesFromProps]]
 - [[_COMMUNITY_buildSVGAttrs|buildSVGAttrs]]
 - [[_COMMUNITY_useStyleConfigImpl|useStyleConfigImpl]]
 - [[_COMMUNITY_PR 174 — Thingtime Messenger platform (`claudethingtime-messenger-platform-c9c2b5`)|PR #174 — Thingtime Messenger platform (`claude/thingtime-messenger-platform-c9c2b5`)]]
@@ -502,6 +500,7 @@
 - [[_COMMUNITY_RawResults.tsx|RawResults.tsx]]
 - [[_COMMUNITY_web-ci-required-context-contract.mjs|web-ci-required-context-contract.mjs]]
 - [[_COMMUNITY_vercel-build.mjs|vercel-build.mjs]]
+- [[_COMMUNITY_03 — Auth Login  Register  Sessions  JWT 🟢|03 — Auth: Login / Register / Sessions / JWT 🟢]]
 - [[_COMMUNITY_package.json|package.json]]
 - [[_COMMUNITY_buildSVGAttrs|buildSVGAttrs]]
 - [[_COMMUNITY_build-web.mjs|build-web.mjs]]
@@ -516,12 +515,14 @@
 - [[_COMMUNITY_typecheck-ratchet.mjs|typecheck-ratchet.mjs]]
 - [[_COMMUNITY_DeploymentSummary|DeploymentSummary]]
 - [[_COMMUNITY_merge|merge]]
+- [[_COMMUNITY_componentDidMount|componentDidMount]]
 - [[_COMMUNITY_install-local-app.mjs|install-local-app.mjs]]
 - [[_COMMUNITY_PR 13 - Hydration, Vercel Status, and Deployment Hygiene|PR #13 - Hydration, Vercel Status, and Deployment Hygiene]]
 - [[_COMMUNITY_07 — Cross-tab sync for persisted thingtime state|07 — Cross-tab sync for persisted thingtime state]]
 - [[_COMMUNITY_parse|parse]]
 - [[_COMMUNITY_parsePropertyPath|parsePropertyPath]]
 - [[_COMMUNITY_Thingtime HTML Application Shell|Thingtime HTML Application Shell]]
+- [[_COMMUNITY_12 — Everything is a thing collapse the satellite collections|12 — Everything is a thing: collapse the satellite collections]]
 - [[_COMMUNITY_scrapeMotionValuesFromProps|scrapeMotionValuesFromProps]]
 - [[_COMMUNITY_scrapeMotionValuesFromProps|scrapeMotionValuesFromProps]]
 - [[_COMMUNITY_scrapeMotionValuesFromProps|scrapeMotionValuesFromProps]]
@@ -544,14 +545,16 @@
 - [[_COMMUNITY_promote|promote]]
 - [[_COMMUNITY_thingIn|thingIn]]
 - [[_COMMUNITY_stringify|stringify]]
-- [[_COMMUNITY_PR 183 — Add automatic AI rebase support for PRs and stacks|PR #183 — Add automatic AI rebase support for PRs and stacks]]
 - [[_COMMUNITY_08 — Drawer nav & editor UX follow-ups|08 — Drawer nav & editor UX follow-ups]]
+- [[_COMMUNITY_Tiny UX And Product Polish|Tiny UX And Product Polish]]
 - [[_COMMUNITY_Technical Next Steps|Technical Next Steps]]
 - [[_COMMUNITY_promote|promote]]
 - [[_COMMUNITY_promote|promote]]
 - [[_COMMUNITY_promote|promote]]
 - [[_COMMUNITY_isVercelStatusEnabled|isVercelStatusEnabled]]
 - [[_COMMUNITY_promote|promote]]
+- [[_COMMUNITY_promote|promote]]
+- [[_COMMUNITY_PR 229 — Keep develop Web CI required contexts reportable|PR #229 — Keep develop Web CI required contexts reportable]]
 - [[_COMMUNITY_promote|promote]]
 - [[_COMMUNITY_promote|promote]]
 - [[_COMMUNITY_Security Follow-Up - 2026-06-23|Security Follow-Up - 2026-06-23]]
@@ -576,7 +579,6 @@
 - [[_COMMUNITY_Thingtime iOS Agent Runbook|Thingtime iOS Agent Runbook]]
 - [[_COMMUNITY_PR 163 — Fix worktree setup and unify AI instructions|PR #163 — Fix worktree setup and unify AI instructions]]
 - [[_COMMUNITY_PR 164 — Crypto password hasher + paste-ready mongosh rotate snippet 🔐|PR #164 — Crypto: password hasher + paste-ready mongosh rotate snippet 🔐]]
-- [[_COMMUNITY_PR 171 — admin dashboard subscription tiers, quotas, app suspension & ownership links|PR #171 — /admin dashboard: subscription tiers, quotas, app suspension & ownership links]]
 - [[_COMMUNITY_PR 197 — Fix builtin schema storage accounting and add secure diagnostic reveals|PR 197 — Fix builtin schema storage accounting and add secure diagnostic reveals]]
 - [[_COMMUNITY_CHANGELOG|CHANGELOG.md]]
 - [[_COMMUNITY_PR 233 — Fix develop preview wildcard DNS verification|PR #233 — Fix develop preview wildcard DNS verification]]
@@ -653,16 +655,15 @@
 - [[_COMMUNITY_card|card]]
 - [[_COMMUNITY_Find Conflicting PRs Job|Find Conflicting PRs Job]]
 - [[_COMMUNITY_Thingtime App Icon Logo|Thingtime App Icon Logo]]
-- [[_COMMUNITY_index.js|index.js]]
 - [[_COMMUNITY_Protected GitHub Actions Control Plane|Protected GitHub Actions Control Plane]]
 - [[_COMMUNITY_Email Delivery (Owned Email Layer)|Email Delivery (Owned Email Layer)]]
 - [[_COMMUNITY_usersStorageLegacy.test.ts|usersStorageLegacy.test.ts]]
+- [[_COMMUNITY_global-types.d.ts|global-types.d.ts]]
 - [[_COMMUNITY_react-dom.js|react-dom.js]]
 - [[_COMMUNITY_manifest.json|manifest.json]]
 - [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
 - [[_COMMUNITY_00-vibe-map|00-vibe-map.md]]
 - [[_COMMUNITY_README|README.md]]
-- [[_COMMUNITY_codex-gh-setup|codex-gh-setup.md]]
 - [[_COMMUNITY_Bundled Page Design Mockup|Bundled Page Design Mockup]]
 - [[_COMMUNITY_inline-dc.py|inline-dc.py]]
 - [[_COMMUNITY_Launch Celebration DC Component|Launch Celebration DC Component]]
@@ -677,8 +678,7 @@
 - [[_COMMUNITY_build.sh|build.sh]]
 - [[_COMMUNITY_test.sh|test.sh]]
 - [[_COMMUNITY_testflight-beta.sh|testflight-beta.sh]]
-- [[_COMMUNITY__xcode-common.sh|_xcode-common.sh]]
-- [[_COMMUNITY_userGenerateJWT.ts|userGenerateJWT.ts]]
+- [[_COMMUNITY_§1 The API Is the Only Gateway to Data|§1 The API Is the Only Gateway to Data]]
 - [[_COMMUNITY_App Namespaces (Login with Thingtime)|App Namespaces (Login with Thingtime)]]
 - [[_COMMUNITY_ecosystem.config.js|ecosystem.config.js]]
 - [[_COMMUNITY_Anti Displacement SVG|Anti Displacement SVG]]
@@ -1073,7 +1073,8 @@
 - [[_COMMUNITY_PR 258 Thin-listener Promotion Repair|PR 258 Thin-listener Promotion Repair]]
 - [[_COMMUNITY_PR 26 Environment Aware Footer Status Checks|PR 26 Environment Aware Footer Status Checks]]
 - [[_COMMUNITY_PR 39 Add API Self-Documentation Routes|PR 39 Add API Self-Documentation Routes]]
-- [[_COMMUNITY_PR 64 Add No-Code MongoDB Query Workbench|PR #64 Add No-Code MongoDB Query Workbench]]
+- [[_COMMUNITY_root-data.server.ts|root-data.server.ts]]
+- [[_COMMUNITY_promote|promote]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `json()` - 292 edges
@@ -1104,11 +1105,12 @@
 - 2-file cycle: `remix/app/api/utils/ciControl/githubClient.ts -> remix/app/api/utils/ciControl/vercelRunner.ts -> remix/app/api/utils/ciControl/githubClient.ts`
 
 ## Hyperedges (group relationships)
+- **iOS Native Deployment History Flow** — prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_native_web_destination_drawer, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_vercel_deployments_endpoint, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_deployment_groups_contract, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_preview_api_fallback [EXTRACTED 0.98]
+- **iOS Build 15 Release Scope** — prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_ios_build_15, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_ios_media_permissions, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_shared_mobile_drawer_trigger, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_deployment_groups_contract [EXTRACTED 0.96]
+- **Thingtime Automated Delivery Control Plane** — remix_changelog_admin_ci_control_plane, remix_changelog_ai_conflict_resolution, remix_changelog_graphify_semantic_refresh, remix_changelog_vercel_status_custom_environments [INFERRED 0.82]
 - **Private Media End-to-end System** — testing_attachment_system, ios_project_privacy_usage_descriptions, remix_changelog_native_ios_drawer_and_media_capture, remix_changelog_private_media_attachments [INFERRED 0.92]
 - **Protected Delivery and AI Resolution Control Plane** — testing_repository_root_vercel_builds, testing_develop_target_vercel_pr_previews, testing_ai_conflict_resolution_control_plane, remix_changelog_ci_control_plane, remix_changelog_ai_pr_resolution [INFERRED 0.90]
 - **iOS Native Shell Delivery and Destination Flow** — ios_readme_thingtime_ios, ios_readme_web_destination_drawer, ios_readme_testflight_workflow, ios_project_thingtime_application, remix_changelog_native_ios_deployment_history [INFERRED 0.94]
-- **Vercel Deployment History Flow** — prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_vercel_endpoint, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_deployment_groups_contract, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_native_client, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_native_web_destination_drawer [EXTRACTED 0.98]
-- **Backward-Compatible Deployment Contracts** — prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_vercel_endpoint, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_deployments_contract, prs_293_codex_ios_drawer_camera_crash_fix_ios_drawer_camera_and_deployment_history_deployment_groups_contract [EXTRACTED 0.99]
 - **PR #99 Persisted-State, CSP, and Registration Hardening** — prs_99_claude_eval_csp_hardening_persisted_state_csp_register_body_cap_pr_99_reconciliation, prs_99_claude_eval_csp_hardening_persisted_state_csp_register_body_cap_safe_persisted_state, prs_99_claude_eval_csp_hardening_persisted_state_csp_register_body_cap_strict_app_csp, prs_99_claude_eval_csp_hardening_persisted_state_csp_register_body_cap_registration_hardening, remix_changelog_pr_99_security_reconciliation [EXTRACTED 1.00]
 - **Canonical storage ledger across content, attachments, and app namespaces** — fundamentals_account_storage_ledger, fundamentals_app_namespaces, readme_private_s3_attachments, testing_post_and_comment_attachments, testing_app_owner_storage_manager, testing_shared_app_data [INFERRED 0.85]
 - **Auth flow: cookie JWT, Mongo sessions, rosters, PATs, and service accounts** — fundamentals_auth_cookie_jwt_session, fundamentals_multi_account_roster, readme_auth_and_lopu_ai, readme_password_reset_email_2fa, readme_service_account_provisioning, testing_token_minter_pat [INFERRED 0.80]
@@ -1131,71 +1133,71 @@
 - **Thingtime Favicon Size Family** — remix_public_favicon_16x16_image, remix_public_favicon_32x32_image, remix_public_favicon_96x96_image [EXTRACTED 1.00]
 - **Thingtime application and favicon image set** — remix_public_ms_icon_144x144_image, remix_public_ms_icon_150x150_image, remix_public_ms_icon_310x310_image, remix_public_ms_icon_70x70_image, resources_favicon_favicon_io_2_android_chrome_192x192_image, resources_favicon_favicon_io_2_android_chrome_512x512_image, resources_favicon_favicon_io_2_apple_touch_icon_image, resources_favicon_favicon_io_2_favicon_16x16_image, resources_favicon_favicon_io_2_favicon_32x32_image [INFERRED 0.95]
 
-## Communities (1083 total, 421 thin omitted)
+## Communities (1084 total, 422 thin omitted)
 
 ### Community 0 - "react.js"
-Cohesion: 0.02
-Nodes (162): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer(), appendInitialChild() (+154 more)
+Cohesion: 0.01
+Nodes (175): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), basicStateReducer(), batchedUpdates(), callCallback() (+167 more)
 
 ### Community 1 - "react.js"
-Cohesion: 0.03
-Nodes (156): io, server, smarts, json(), JsonInit, readJsonBody(), app data API utils, AppRequestContext (+148 more)
+Cohesion: 0.01
+Nodes (191): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), assertIsMounted(), attemptExplicitHydrationTarget() (+183 more)
 
 ### Community 2 - "react.js"
 Cohesion: 0.02
-Nodes (153): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), callCallback(), canHydrateInstance(), canHydrateSuspenseInstance() (+145 more)
+Nodes (173): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), assertIsMounted(), attachPingListener() (+165 more)
 
 ### Community 3 - "react.js"
-Cohesion: 0.02
-Nodes (170): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), assertIsMounted(), attemptExplicitHydrationTarget() (+162 more)
+Cohesion: 0.03
+Nodes (150): io, server, smarts, json(), JsonInit, readJsonBody(), app data API utils, AppRequestContext (+142 more)
 
 ### Community 4 - "react.js"
 Cohesion: 0.02
-Nodes (176): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), assertIsMounted(), attachPingListener() (+168 more)
+Nodes (183): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer() (+175 more)
 
 ### Community 5 - "react.js"
 Cohesion: 0.02
-Nodes (150): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer(), appendInitialChild() (+142 more)
+Nodes (163): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer(), appendInitialChild() (+155 more)
 
 ### Community 6 - "react.js"
-Cohesion: 0.01
-Nodes (192): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer() (+184 more)
+Cohesion: 0.02
+Nodes (179): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), assertIsMounted(), attachPingListener() (+171 more)
 
 ### Community 7 - "react.js"
-Cohesion: 0.02
-Nodes (154): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), callCallback(), canHydrateInstance(), canHydrateSuspenseInstance() (+146 more)
+Cohesion: 0.01
+Nodes (189): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), assertIsMounted(), attemptExplicitHydrationTarget() (+181 more)
 
 ### Community 8 - "thingtime-bundle.js"
 Cohesion: 0.02
-Nodes (158): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer(), appendInitialChild() (+150 more)
+Nodes (157): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), callCallback(), canHydrateInstance(), canHydrateSuspenseInstance() (+149 more)
 
 ### Community 9 - "thingtime-bundle.js"
-Cohesion: 0.01
-Nodes (56): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+48 more)
+Cohesion: 0.02
+Nodes (162): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer(), appendInitialChild() (+154 more)
 
 ### Community 10 - "thingtime-bundle.js"
-Cohesion: 0.01
-Nodes (56): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+48 more)
+Cohesion: 0.02
+Nodes (177): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer() (+169 more)
 
 ### Community 11 - "thingtime-bundle.js"
 Cohesion: 0.02
-Nodes (179): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer() (+171 more)
+Nodes (181): accumulateOrCreateContinuousQueuedReplayableEvent(), addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer() (+173 more)
 
 ### Community 12 - "thingtime-bundle.js"
+Cohesion: 0.02
+Nodes (156): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), attachRetryListener(), callCallback(), canHydrateInstance() (+148 more)
+
+### Community 13 - "thingtime-bundle.js"
 Cohesion: 0.01
 Nodes (56): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+48 more)
 
-### Community 13 - "thingtime-bundle.js"
-Cohesion: 0.02
-Nodes (151): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer(), appendInitialChild() (+143 more)
-
 ### Community 14 - "react.js"
-Cohesion: 0.02
-Nodes (164): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer(), appendInitialChild() (+156 more)
+Cohesion: 0.01
+Nodes (67): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+59 more)
 
 ### Community 15 - "react.js"
-Cohesion: 0.02
-Nodes (158): addEventBubbleListener(), addEventBubbleListenerWithPassiveFlag(), addEventCaptureListener(), addEventCaptureListenerWithPassiveFlag(), addTrappedEventListener(), appendChild(), appendChildToContainer(), appendInitialChild() (+150 more)
+Cohesion: 0.01
+Nodes (67): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+59 more)
 
 ### Community 16 - "thingtime-bundle.js"
 Cohesion: 0.01
@@ -1203,11 +1205,11 @@ Nodes (67): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngul
 
 ### Community 17 - "react.js"
 Cohesion: 0.01
-Nodes (56): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+48 more)
+Nodes (65): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+57 more)
 
 ### Community 18 - "react.js"
 Cohesion: 0.01
-Nodes (67): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+59 more)
+Nodes (66): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+58 more)
 
 ### Community 19 - "thingtime-bundle.js"
 Cohesion: 0.01
@@ -1215,7 +1217,7 @@ Nodes (56): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngul
 
 ### Community 20 - "thingtime-bundle.js"
 Cohesion: 0.01
-Nodes (67): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+59 more)
+Nodes (56): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+48 more)
 
 ### Community 21 - "thingtime-bundle.js"
 Cohesion: 0.01
@@ -1223,7 +1225,7 @@ Nodes (56): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngul
 
 ### Community 22 - "thingtime-bundle.js"
 Cohesion: 0.01
-Nodes (66): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+58 more)
+Nodes (67): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+59 more)
 
 ### Community 23 - "thingtime-bundle.js"
 Cohesion: 0.01
@@ -1231,467 +1233,467 @@ Nodes (56): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngul
 
 ### Community 24 - "getThingsCollection"
 Cohesion: 0.01
-Nodes (66): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+58 more)
+Nodes (67): AlertIcon(), approximateRoot(), axisEquals(), boxEquals(), calcAngularFreq(), checkVariantsDidChange(), convertOffsetToTimes(), copyAxisInto() (+59 more)
 
 ### Community 25 - "json"
-Cohesion: 0.03
-Nodes (146): appsExist(), appControlThingMatch(), AppLifecycleSessions, AppLifecycleThings, deleteAppLifecycleInSession(), DeleteAppLifecycleResult, liveAppSessionsMatch(), findOneAndDelete() (+138 more)
-
-### Community 26 - "users.ts"
-Cohesion: 0.02
-Nodes (123): AttachmentAccessDocument, AttachmentAccessViewer, attachmentRootAclAllows(), AttachmentTargetAccessDependencies, attachmentTargetAclAllows(), AttachmentTargetAclDoc, canViewCommentAttachment(), canViewEmojiAttachment() (+115 more)
-
-### Community 27 - "error"
 Cohesion: 0.02
 Nodes (145): storedAlgorithmSizeBytes(), appStorageCounterShareId, appThingSizeBytes, canonicalStoredBytes(), clearUserActiveTheme(), profileAttachmentRefsForUserRoot(), setUserActiveTheme(), builtinSchemaSeedNeedsRefresh() (+137 more)
 
+### Community 26 - "users.ts"
+Cohesion: 0.05
+Nodes (74): appendChild(), appendChildToContainer(), appendInitialChild(), assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), commitPlacement(), commitReconciliationEffects() (+66 more)
+
+### Community 27 - "error"
+Cohesion: 0.02
+Nodes (123): AttachmentAccessDocument, AttachmentAccessViewer, attachmentRootAclAllows(), AttachmentTargetAccessDependencies, attachmentTargetAclAllows(), AttachmentTargetAclDoc, canViewCommentAttachment(), canViewEmojiAttachment() (+115 more)
+
 ### Community 28 - "error"
 Cohesion: 0.04
-Nodes (139): createReadyAttachmentEmojiInsertHook(), createReadyAttachmentInsertHook(), createReadyAttachmentMessageInsertHook(), getUserReadReceiptsEnabled(), getUsersReadReceiptsMap(), toPublicProfile(), CommunityChannel, ListChannelsResult (+131 more)
+Nodes (142): createReadyAttachmentEmojiInsertHook(), createReadyAttachmentInsertHook(), createReadyAttachmentMessageInsertHook(), findUserByUsername(), findUserThing(), getUserReadReceiptsEnabled(), getUsersReadReceiptsMap(), toPublicProfile() (+134 more)
 
 ### Community 29 - "captureCommitPhaseError"
 Cohesion: 0.04
-Nodes (134): act(), adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext() (+126 more)
+Nodes (103): appMatch(), clearSubscription(), defaultSubscription(), Fail, getSubscription(), getSubscriptions(), hasOwn(), initialSubscriptionSnapshot() (+95 more)
 
 ### Community 30 - "EditorSplit.tsx"
 Cohesion: 0.04
-Nodes (73): addFiberToLanesMap(), attachRetryListener(), cancelCallback$1(), captureCommitPhaseErrorOnRoot(), computeExpirationTime(), createCapturedValueAtFiber(), createRootErrorUpdate(), enqueueCapturedUpdate() (+65 more)
+Nodes (96): attachSuspenseRetryListeners(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete() (+88 more)
 
 ### Community 31 - "patTokens.ts"
-Cohesion: 0.04
-Nodes (101): callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete(), commitBeforeMutationEffectsOnFiber() (+93 more)
-
-### Community 32 - "captureCommitPhaseError"
-Cohesion: 0.04
-Nodes (114): CookieOptions, createCookie(), AppTokenContext, AppTokenGrant, EmbedUser, resolveAppToken(), toEmbedUser(), thirdPartyProfileMediaUrl() (+106 more)
-
-### Community 33 - "endpoint.ts"
-Cohesion: 0.04
-Nodes (88): attachSuspenseRetryListeners(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete(), commitBeforeMutationEffectsOnFiber() (+80 more)
-
-### Community 34 - "useThingtime"
-Cohesion: 0.04
-Nodes (89): attachSuspenseRetryListeners(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete(), commitBeforeMutationEffectsOnFiber() (+81 more)
-
-### Community 35 - "error"
-Cohesion: 0.04
-Nodes (114): act(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), coerceRef(), commitAttachRef() (+106 more)
-
-### Community 36 - "namespace.ts"
-Cohesion: 0.05
-Nodes (75): addFiberToLanesMap(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), cancelCallback$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates() (+67 more)
-
-### Community 37 - "captureCommitPhaseError"
-Cohesion: 0.04
-Nodes (89): addFiberToLanesMap(), cancelCallback$1(), commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), computeExpirationTime() (+81 more)
-
-### Community 38 - "useLopu"
-Cohesion: 0.04
-Nodes (100): attachSuspenseRetryListeners(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete() (+92 more)
-
-### Community 39 - "beginWork"
-Cohesion: 0.04
-Nodes (97): AdminAppOverviewRow, AdminAppOverviewSnapshot, AdminAppsCursor, AdminStorageOverview, AdminUserOverviewRow, AdminUserOverviewSnapshot, listAdminAppsOverview(), listAdminUsersOverview() (+89 more)
-
-### Community 40 - "commitRootImpl"
 Cohesion: 0.05
 Nodes (94): RowAvatar(), EntryCard(), AttachmentComposer, AttachmentComposerHandle, AttachmentComposerSnapshot, PublicAttachment, useRecentReactions(), timeAgo() (+86 more)
 
-### Community 41 - "kindRenderersCommerce.tsx"
-Cohesion: 0.06
-Nodes (59): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength(), getEventListenerSet() (+51 more)
-
-### Community 42 - "error"
+### Community 32 - "captureCommitPhaseError"
 Cohesion: 0.04
-Nodes (59): Icon(), inputSx, Register(), RainbowText(), Safe(), Splash(), TextAnimation1(), EditorSplit Component (+51 more)
+Nodes (106): act(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), coerceRef(), commitAttachRef(), commitBeforeMutationEffects_complete(), commitBeforeMutationEffectsOnFiber() (+98 more)
 
-### Community 43 - "react"
-Cohesion: 0.05
-Nodes (100): appMatch(), clearSubscription(), defaultSubscription(), Fail, getSubscription(), getSubscriptions(), hasOwn(), initialSubscriptionSnapshot() (+92 more)
-
-### Community 44 - "scheduleUpdateOnFiber"
-Cohesion: 0.03
-Nodes (135): act(), attachSuspenseRetryListeners(), callComponentWillMount(), captureCommitPhaseError(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion() (+127 more)
-
-### Community 45 - "error"
-Cohesion: 0.03
-Nodes (106): captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete(), commitBeforeMutationEffectsOnFiber(), commitDeletionEffects() (+98 more)
-
-### Community 46 - "beginWork"
-Cohesion: 0.04
-Nodes (99): mongodb, addUserMongoEndpoint(), getUserMongoEndpoints(), normalizeSavedMongoEndpoints(), removeUserMongoEndpoint(), SavedMongoEndpoint, base64UrlToBase64(), configuredPublicPem() (+91 more)
-
-### Community 47 - "error"
+### Community 33 - "endpoint.ts"
 Cohesion: 0.03
 Nodes (137): act(), attachSuspenseRetryListeners(), callComponentWillMount(), captureCommitPhaseError(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion() (+129 more)
 
-### Community 48 - "registry.ts"
+### Community 34 - "useThingtime"
+Cohesion: 0.04
+Nodes (87): attachRetryListener(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates(), checkIfSnapshotChanged() (+79 more)
+
+### Community 35 - "error"
+Cohesion: 0.03
+Nodes (130): act(), attachSuspenseRetryListeners(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), cloneElement() (+122 more)
+
+### Community 36 - "namespace.ts"
+Cohesion: 0.04
+Nodes (90): addFiberToLanesMap(), cancelCallback$1(), commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), computeExpirationTime() (+82 more)
+
+### Community 37 - "captureCommitPhaseError"
+Cohesion: 0.03
+Nodes (126): addFiberToLanesMap(), attachRetryListener(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), cancelCallback$1(), captureCommitPhaseErrorOnRoot() (+118 more)
+
+### Community 38 - "useLopu"
 Cohesion: 0.06
-Nodes (93): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+85 more)
+Nodes (47): createClassErrorUpdate(), createContainer(), createFiberRoot(), createHostRootFiber(), createHydrationContainer(), createPortal(), createPortal$1(), createRoot() (+39 more)
+
+### Community 39 - "beginWork"
+Cohesion: 0.04
+Nodes (103): attachSuspenseRetryListeners(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete() (+95 more)
+
+### Community 40 - "commitRootImpl"
+Cohesion: 0.04
+Nodes (103): AdminAppOverviewRow, AdminAppOverviewSnapshot, AdminAppsCursor, AdminStorageOverview, AdminUserOverviewRow, AdminUserOverviewSnapshot, listAdminAppsOverview(), listAdminUsersOverview() (+95 more)
+
+### Community 41 - "kindRenderersCommerce.tsx"
+Cohesion: 0.04
+Nodes (99): mongodb, addUserMongoEndpoint(), getUserMongoEndpoints(), normalizeSavedMongoEndpoints(), removeUserMongoEndpoint(), SavedMongoEndpoint, base64UrlToBase64(), configuredPublicPem() (+91 more)
+
+### Community 42 - "error"
+Cohesion: 0.05
+Nodes (72): addFiberToLanesMap(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), cancelCallback$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates() (+64 more)
+
+### Community 43 - "react"
+Cohesion: 0.03
+Nodes (73): clamp(), clampPanelPosition(), clampTriggerPosition(), DevKit(), FixedPosition, getDevKitBottomGuard(), getDevKitRightGuard(), getViewportSize() (+65 more)
+
+### Community 44 - "scheduleUpdateOnFiber"
+Cohesion: 0.04
+Nodes (96): attachSuspenseRetryListeners(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete() (+88 more)
+
+### Community 45 - "error"
+Cohesion: 0.03
+Nodes (126): act(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), coerceRef(), commitAttachRef() (+118 more)
+
+### Community 46 - "beginWork"
+Cohesion: 0.03
+Nodes (128): act(), adoptClassInstance(), applyDerivedStateFromProps(), attachPingListener(), cacheContext(), callComponentWillMount(), callComponentWillReceiveProps(), checkClassInstance() (+120 more)
+
+### Community 47 - "error"
+Cohesion: 0.04
+Nodes (95): appsExist(), appStoragePolicyOf(), findAppsByClientIds(), admitAppAndUserStorage(), AppStorageReservation, DualStorageAdmission, effectiveAppUserAllowance(), FiniteStorageUsage (+87 more)
+
+### Community 48 - "registry.ts"
+Cohesion: 0.05
+Nodes (107): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillMount() (+99 more)
 
 ### Community 49 - "captureCommitPhaseError"
-Cohesion: 0.06
-Nodes (93): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+85 more)
+Cohesion: 0.04
+Nodes (96): attachSuspenseRetryListeners(), captureCommitPhaseError(), captureCommitPhaseErrorOnRoot(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete() (+88 more)
 
 ### Community 50 - "beginWork"
-Cohesion: 0.04
-Nodes (81): AttachmentComposerInner, AttachmentComposerProps, UploadFileRow, UploadVisualPreview(), UploadVisualTile, AttachmentDraftCleanup, cleanups, flushAttachmentDraftCleanups() (+73 more)
+Cohesion: 0.05
+Nodes (59): attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), checkForNestedUpdates(), checkIfSnapshotChanged(), claimNextTransitionLane(), createFiberRoot() (+51 more)
 
 ### Community 51 - "captureCommitPhaseError"
 Cohesion: 0.04
-Nodes (84): HtmlThingNode, dndHighlight(), dndProps(), FolderTree(), FolderTreeDnd, FolderTreeProps, TreeNode(), FILE_LIKE_KINDS (+76 more)
+Nodes (97): captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete(), commitBeforeMutationEffectsOnFiber(), commitDeletionEffects() (+89 more)
 
 ### Community 52 - "error"
-Cohesion: 0.04
-Nodes (99): captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete(), commitBeforeMutationEffectsOnFiber(), commitDeletionEffects() (+91 more)
+Cohesion: 0.05
+Nodes (63): attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates(), checkIfSnapshotChanged(), claimNextRetryLane() (+55 more)
 
 ### Community 53 - "beginWork"
 Cohesion: 0.06
-Nodes (91): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+83 more)
+Nodes (95): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+87 more)
 
 ### Community 54 - "beginWork"
 Cohesion: 0.06
-Nodes (93): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+85 more)
+Nodes (52): bubbleProperties(), checkForUnmatchedText(), commitUpdate(), compare(), completeDehydratedSuspenseBoundary(), completeWork(), createInstance(), createTextInstance() (+44 more)
 
 ### Community 55 - "beginWork"
-Cohesion: 0.05
-Nodes (105): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillMount() (+97 more)
+Cohesion: 0.04
+Nodes (84): HtmlThingNode, dndHighlight(), dndProps(), FolderTree(), FolderTreeDnd, FolderTreeProps, TreeNode(), FILE_LIKE_KINDS (+76 more)
 
 ### Community 56 - "beginWork"
-Cohesion: 0.06
-Nodes (96): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+88 more)
-
-### Community 57 - "beginWork"
-Cohesion: 0.06
-Nodes (93): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+85 more)
-
-### Community 58 - "beginWork"
-Cohesion: 0.05
-Nodes (107): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillMount() (+99 more)
-
-### Community 59 - "beginWork"
-Cohesion: 0.04
-Nodes (99): attachSuspenseRetryListeners(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete() (+91 more)
-
-### Community 60 - "scheduleUpdateOnFiber"
-Cohesion: 0.04
-Nodes (99): attachSuspenseRetryListeners(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete() (+91 more)
-
-### Community 61 - "legacyCreateRootFromDOMContainer"
-Cohesion: 0.05
-Nodes (107): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillMount() (+99 more)
-
-### Community 62 - "error"
-Cohesion: 0.03
-Nodes (109): addFiberToLanesMap(), attachRetryListener(), cancelCallback$1(), captureCommitPhaseErrorOnRoot(), commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot() (+101 more)
-
-### Community 63 - "useApi"
-Cohesion: 0.06
-Nodes (95): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+87 more)
-
-### Community 64 - "legacyCreateRootFromDOMContainer"
-Cohesion: 0.05
-Nodes (64): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), compare(), createAndAccumulateChangeEvent() (+56 more)
-
-### Community 65 - "error"
-Cohesion: 0.06
-Nodes (87): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+79 more)
-
-### Community 66 - "scheduleUpdateOnFiber"
-Cohesion: 0.04
-Nodes (90): attachPingListener(), attachRetryListener(), attachSuspenseRetryListeners(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), captureCommitPhaseErrorOnRoot() (+82 more)
-
-### Community 67 - "legacyCreateRootFromDOMContainer"
-Cohesion: 0.04
-Nodes (91): attachPingListener(), attachRetryListener(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates() (+83 more)
-
-### Community 68 - "commitRootImpl"
-Cohesion: 0.03
-Nodes (109): attachSuspenseRetryListeners(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete(), commitBeforeMutationEffectsOnFiber() (+101 more)
-
-### Community 69 - "ensureRootIsScheduled"
-Cohesion: 0.04
-Nodes (91): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+83 more)
-
-### Community 70 - "algorithms.ts"
-Cohesion: 0.04
-Nodes (92): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+84 more)
-
-### Community 71 - "diffHydratedProperties"
-Cohesion: 0.04
-Nodes (93): act(), checkAttributeStringCoercion(), checkClassInstance(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion() (+85 more)
-
-### Community 72 - "error"
-Cohesion: 0.05
-Nodes (48): accumulateOrCreateContinuousQueuedReplayableEvent(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), attemptSynchronousHydration(), batchedUpdates() (+40 more)
-
-### Community 73 - "quota.ts"
-Cohesion: 0.04
-Nodes (88): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+80 more)
-
-### Community 74 - "beginWork"
-Cohesion: 0.07
-Nodes (83): migrateLegacyServiceQuotaThings(), childHistorySizeExpression(), claimedChildCountExpression(), documentToState(), getServiceQuotaStatus(), initializeQuotaThing(), mutateServiceQuota(), normalizePipeline() (+75 more)
-
-### Community 75 - "ensureRootIsScheduled"
-Cohesion: 0.05
-Nodes (68): attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), checkForNestedUpdates(), checkIfSnapshotChanged(), claimNextTransitionLane(), createContainer() (+60 more)
-
-### Community 76 - "ensureRootIsScheduled"
-Cohesion: 0.03
-Nodes (104): attachPingListener(), attachRetryListener(), attachSuspenseRetryListeners(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), callComponentWillMount() (+96 more)
-
-### Community 77 - "beginWork"
-Cohesion: 0.05
-Nodes (72): shouldShowDevVerificationLink(), sendEmailOtp(), sendNewsletterEmail(), sendPasswordResetEmail(), EmailNotificationTarget, getEmailNotificationTargets(), setUserNotificationPrefs(), EmailConfig (+64 more)
-
-### Community 78 - "completeWork"
-Cohesion: 0.07
-Nodes (46): bubbleProperties(), commitUpdate(), compare(), completeDehydratedSuspenseBoundary(), completeWork(), createInstance(), createTextInstance(), createTextNode() (+38 more)
-
-### Community 79 - "scheduleUpdateOnFiber"
-Cohesion: 0.05
-Nodes (74): algorithmThingToDoc(), assertLegacyAlgorithmMutationAllowed(), createAlgorithm(), CreateAlgorithmInput, deleteAlgorithm(), Fail, FeedAlgorithmDoc, findOwnedAlgorithm() (+66 more)
-
-### Community 80 - "migrationDiagnostics.ts"
-Cohesion: 0.04
-Nodes (86): addFiberToLanesMap(), cancelCallback$1(), commitRoot(), commitRootImpl(), computeExpirationTime(), createContext(), createFactoryWithValidation(), discreteUpdates() (+78 more)
-
-### Community 81 - "completeWork"
-Cohesion: 0.05
-Nodes (65): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), createDangerousStringForStyles(), dangerousStyleValue(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren() (+57 more)
-
-### Community 82 - "mergeLanes"
-Cohesion: 0.04
-Nodes (66): EmojiData, EmojiEntry, EmojiGroup, GROUP_TAB_EMOJI, loadEmojiData(), RawGroup, searchEmojis(), cellSx (+58 more)
-
-### Community 83 - "ensureRootIsScheduled"
-Cohesion: 0.04
-Nodes (82): addFiberToLanesMap(), cancelCallback$1(), commitRoot(), commitRootImpl(), computeExpirationTime(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent() (+74 more)
-
-### Community 84 - "updateDehydratedSuspenseComponent"
-Cohesion: 0.05
-Nodes (60): checkForUnmatchedText(), commitUpdate(), completeWork(), createInstance(), createTextInstance(), createTextNode(), cutOffTailIfNeeded(), didNotMatchHydratedContainerTextInstance() (+52 more)
-
-### Community 85 - "completeWork"
-Cohesion: 0.05
-Nodes (53): addSubtreeSuspenseContext(), cloneChildFibers(), createCapturedValue(), createFiberFromElement(), createFiberFromFragment(), createFiberFromOffscreen(), createFiberFromProfiler(), createFiberFromSuspense() (+45 more)
-
-### Community 86 - "completeWork"
-Cohesion: 0.04
-Nodes (59): COMMANDER_CLICK_AWAY_EVENTS, CommanderClickAwayBoundary(), shouldCloseCommanderForTarget(), ThreadPanel(), InboxSidebar(), Rainbow(), buildPermissionsSubmenu(), buildTemplatesSubmenu() (+51 more)
-
-### Community 87 - "diffHydratedProperties"
-Cohesion: 0.05
-Nodes (77): Avatar(), BodyText(), cardShell, CardTitle(), DateBlock(), formatDateTime(), KindBadge(), KindCard() (+69 more)
-
-### Community 88 - "diffHydratedProperties"
 Cohesion: 0.04
 Nodes (81): AccountSwitcher(), OwnedAccount, SwitcherAccount, SwitcherAccountUser, useAccountSwitcher(), DecoratedLink, LinkManagerModal(), SearchPicker() (+73 more)
 
-### Community 89 - "SearchPage.tsx"
+### Community 57 - "beginWork"
 Cohesion: 0.04
-Nodes (81): addFiberToLanesMap(), cancelCallback$1(), commitRoot(), commitRootImpl(), computeExpirationTime(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent() (+73 more)
+Nodes (96): attachSuspenseRetryListeners(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete() (+88 more)
 
-### Community 90 - "mergeLanes"
+### Community 58 - "beginWork"
 Cohesion: 0.05
-Nodes (79): assertValidProps(), checkAttributeStringCoercion(), checkControlledValueProps(), checkCSSPropertyStringCoercion(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+71 more)
+Nodes (110): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillMount() (+102 more)
 
-### Community 91 - "commitRootImpl"
+### Community 59 - "beginWork"
 Cohesion: 0.06
-Nodes (59): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength(), getEventListenerSet() (+51 more)
+Nodes (47): attachPingListener(), attachRetryListener(), attachSuspenseRetryListeners(), enqueueCapturedUpdate(), errorHydratingContainer(), finishQueueingConcurrentUpdates(), getLanesToRetrySynchronouslyOnError(), getNearestSuspenseBoundaryToCapture() (+39 more)
 
-### Community 92 - "diffHydratedProperties"
-Cohesion: 0.04
-Nodes (77): bubbleProperties(), commitUpdate(), compare(), completeDehydratedSuspenseBoundary(), completeWork(), createFiberFromHostInstanceForDeletion(), createInstance(), createTextInstance() (+69 more)
-
-### Community 93 - "diffHydratedProperties"
+### Community 60 - "scheduleUpdateOnFiber"
 Cohesion: 0.05
-Nodes (65): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), detachTracker(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength() (+57 more)
+Nodes (72): shouldShowDevVerificationLink(), sendEmailOtp(), sendNewsletterEmail(), sendPasswordResetEmail(), EmailNotificationTarget, getEmailNotificationTargets(), setUserNotificationPrefs(), EmailConfig (+64 more)
 
-### Community 94 - "commitRootImpl"
-Cohesion: 0.05
-Nodes (56): account links API utils, applyAdminPrivateHeaders(), withAdminPrivateResponse(), findAppByClientId(), confirmCurrentPassword(), defaultDependencies, PasswordConfirmationDependencies, PasswordConfirmationResult (+48 more)
-
-### Community 95 - "migrations.ts"
+### Community 61 - "legacyCreateRootFromDOMContainer"
 Cohesion: 0.04
-Nodes (54): AdvancedFilters Component, AlgorithmMenu(), AlgorithmMenuProps, InlineModal(), ModalMode, EMPTY_FILTERS, FeedPage(), DatePreset (+46 more)
+Nodes (84): act(), checkAttributeStringCoercion(), checkClassInstance(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion() (+76 more)
 
-### Community 96 - "diffHydratedProperties"
-Cohesion: 0.04
-Nodes (92): attachRetryListener(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates(), checkIfSnapshotChanged() (+84 more)
-
-### Community 97 - "Composer — Thingtime tab checklist"
+### Community 62 - "error"
 Cohesion: 0.06
-Nodes (62): assertValidProps(), checkControlledValueProps(), createDangerousStringForStyles(), dangerousStyleValue(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength() (+54 more)
+Nodes (93): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+85 more)
 
-### Community 98 - "ensureRootIsScheduled"
+### Community 63 - "useApi"
+Cohesion: 0.04
+Nodes (88): attachSuspenseRetryListeners(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitAttachRef(), commitBeforeMutationEffects_complete(), commitBeforeMutationEffectsOnFiber() (+80 more)
+
+### Community 64 - "legacyCreateRootFromDOMContainer"
 Cohesion: 0.05
-Nodes (63): adminFilterValueForOperatorChange(), adminRowFieldExists(), AdminRowFieldKind, AdminRowFieldOption, adminRowMatchesFilter(), AdminRowQuery, AdminRowSort, applyAdminRowQuery() (+55 more)
+Nodes (98): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+90 more)
 
-### Community 99 - "dependencies"
-Cohesion: 0.08
-Nodes (35): commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent() (+27 more)
+### Community 65 - "error"
+Cohesion: 0.06
+Nodes (93): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+85 more)
 
-### Community 100 - "diffHydratedProperties"
-Cohesion: 0.05
-Nodes (72): attachRetryListener(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates(), checkIfSnapshotChanged() (+64 more)
+### Community 66 - "scheduleUpdateOnFiber"
+Cohesion: 0.04
+Nodes (114): act(), callComponentWillMount(), captureCommitPhaseError(), clearContainer(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), coerceRef(), commitAttachRef() (+106 more)
 
-### Community 101 - "ensureRootIsScheduled"
+### Community 67 - "legacyCreateRootFromDOMContainer"
+Cohesion: 0.06
+Nodes (96): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+88 more)
+
+### Community 68 - "commitRootImpl"
+Cohesion: 0.04
+Nodes (91): attachPingListener(), attachRetryListener(), attachSuspenseRetryListeners(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), captureCommitPhaseErrorOnRoot() (+83 more)
+
+### Community 69 - "ensureRootIsScheduled"
+Cohesion: 0.06
+Nodes (93): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+85 more)
+
+### Community 70 - "algorithms.ts"
+Cohesion: 0.06
+Nodes (88): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+80 more)
+
+### Community 71 - "diffHydratedProperties"
 Cohesion: 0.07
-Nodes (42): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markWorkInProgressReceivedUpdate(), mountCallback() (+34 more)
+Nodes (83): migrateLegacyServiceQuotaThings(), childHistorySizeExpression(), claimedChildCountExpression(), documentToState(), getServiceQuotaStatus(), initializeQuotaThing(), mutateServiceQuota(), normalizePipeline() (+75 more)
 
-### Community 102 - "dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay"
-Cohesion: 0.04
-Nodes (52): apiEndpointDocs, DocsDesign(), designSystemEntries, DesignSystemEntry, DesignSystemStatus, designSystemStatusColors, getDesignSystemEntryBySlug(), KeyboardRow (+44 more)
-
-### Community 103 - "completeWork"
-Cohesion: 0.04
-Nodes (73): addFiberToLanesMap(), attachRetryListener(), cancelCallback$1(), captureCommitPhaseErrorOnRoot(), computeExpirationTime(), createCapturedValueAtFiber(), createRootErrorUpdate(), enqueueCapturedUpdate() (+65 more)
-
-### Community 104 - "popHydrationState"
-Cohesion: 0.05
-Nodes (73): AdminDiagnosticRevealable, AdminDiagnosticRevealContext, AdminErrorDiagnostic, captureAdminErrorDiagnostic(), captureObjectId(), CaptureState, createCaptureState(), CREDENTIAL_COMPONENTS (+65 more)
-
-### Community 105 - "push"
-Cohesion: 0.03
-Nodes (48): AdminDashboard(), TestAPI(), Editor(), TopSpacing(), Raw(), RawResults(), AuthorizePage(), cardSx (+40 more)
-
-### Community 106 - "PostCard.tsx"
-Cohesion: 0.05
-Nodes (54): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), constructSelectEvent(), createAndAccumulateChangeEvent(), createDispatchListener(), createLaneMap() (+46 more)
-
-### Community 107 - "push"
+### Community 72 - "error"
 Cohesion: 0.06
-Nodes (60): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength(), getCurrentFiberOwnerNameInDevOrNull() (+52 more)
+Nodes (93): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+85 more)
 
-### Community 108 - "TESTING.md — per-area manual test checklists"
-Cohesion: 0.03
-Nodes (64): dependencies, @anthropic-ai/sdk, @aws-sdk/client-s3, @aws-sdk/client-sesv2, @aws-sdk/s3-request-presigner, axios, bcrypt, @chakra-ui/react (+56 more)
+### Community 73 - "quota.ts"
+Cohesion: 0.06
+Nodes (86): adoptClassInstance(), applyDerivedStateFromProps(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), cacheContext(), callComponentWillReceiveProps() (+78 more)
 
-### Community 109 - "completeWork"
+### Community 74 - "beginWork"
 Cohesion: 0.04
-Nodes (98): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkForNestedUpdates(), checkHtmlStringCoercion(), checkKeyStringCoercion() (+90 more)
+Nodes (66): EmojiData, EmojiEntry, EmojiGroup, GROUP_TAB_EMOJI, loadEmojiData(), RawGroup, searchEmojis(), cellSx (+58 more)
 
-### Community 110 - "push"
-Cohesion: 0.07
-Nodes (39): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+31 more)
+### Community 75 - "ensureRootIsScheduled"
+Cohesion: 0.04
+Nodes (89): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+81 more)
 
-### Community 111 - "commitRootImpl"
+### Community 76 - "ensureRootIsScheduled"
 Cohesion: 0.05
 Nodes (55): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), compare(), constructSelectEvent(), createAndAccumulateChangeEvent(), createDispatchListener() (+47 more)
 
-### Community 112 - "utils.ts"
+### Community 77 - "beginWork"
 Cohesion: 0.05
-Nodes (66): addSubtreeSuspenseContext(), completeWork(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), cutOffTailIfNeeded(), findFirstSuspended(), findLastContentRow() (+58 more)
+Nodes (77): Avatar(), BodyText(), cardShell, CardTitle(), DateBlock(), formatDateTime(), KindBadge(), KindCard() (+69 more)
 
-### Community 113 - "PostComposer.tsx"
-Cohesion: 0.06
-Nodes (53): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), compare(), constructSelectEvent(), createAndAccumulateChangeEvent(), createDispatchListener() (+45 more)
-
-### Community 114 - "push"
-Cohesion: 0.05
-Nodes (60): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), constructSelectEvent(), createAndAccumulateChangeEvent() (+52 more)
-
-### Community 115 - "diffHydratedProperties"
-Cohesion: 0.07
-Nodes (49): bubbleProperties(), checkForUnmatchedText(), commitUpdate(), completeDehydratedSuspenseBoundary(), completeWork(), createInstance(), createTextInstance(), createTextNode() (+41 more)
-
-### Community 116 - "push"
-Cohesion: 0.07
-Nodes (43): isUnknownReactionFailure(), reactionFailureMessage(), shouldReconcileReactionFailure(), MigrationsPanel Component, sensitiveRevealErrorMessage(), SensitiveRevealFailure, SensitiveRevealRecovery, RevealedValue (+35 more)
-
-### Community 117 - "diffHydratedProperties"
-Cohesion: 0.10
-Nodes (31): checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion(), cloneAndReplaceKey() (+23 more)
-
-### Community 118 - "push"
-Cohesion: 0.05
-Nodes (54): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), compare(), constructSelectEvent(), createAndAccumulateChangeEvent(), createDispatchListener() (+46 more)
-
-### Community 119 - "push"
-Cohesion: 0.05
-Nodes (65): attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), checkForNestedUpdates(), checkIfSnapshotChanged(), claimNextTransitionLane(), createFiberRoot() (+57 more)
-
-### Community 120 - "diffHydratedProperties"
-Cohesion: 0.05
-Nodes (60): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), constructSelectEvent(), createAndAccumulateChangeEvent() (+52 more)
-
-### Community 121 - "scheduleUpdateOnFiber"
-Cohesion: 0.05
-Nodes (63): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), compare(), constructSelectEvent() (+55 more)
-
-### Community 122 - "diffHydratedProperties"
-Cohesion: 0.06
-Nodes (59): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength(), getCurrentFiberOwnerNameInDevOrNull() (+51 more)
-
-### Community 123 - "push"
-Cohesion: 0.05
-Nodes (81): addFiberToLanesMap(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), cancelCallback$1(), captureCommitPhaseErrorOnRoot(), checkIfSnapshotChanged() (+73 more)
-
-### Community 124 - "push"
-Cohesion: 0.07
-Nodes (42): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markWorkInProgressReceivedUpdate(), mountCallback() (+34 more)
-
-### Community 125 - "updateWorkInProgressHook"
-Cohesion: 0.04
-Nodes (86): addFiberToLanesMap(), cancelCallback$1(), commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), computeExpirationTime() (+78 more)
-
-### Community 126 - "musing.ts"
-Cohesion: 0.06
-Nodes (50): DrawerContent(), DrawerContentProps, UserAvatarCircle(), applyDrawerOrdering(), buildDrawerSubSections(), DRAWER_KEEP_OPEN_DEFAULT_IDS, drawerItemClosesOnClick(), drawerMenuItems (+42 more)
-
-### Community 127 - "ChakraThingRenderer.tsx"
+### Community 78 - "completeWork"
 Cohesion: 0.03
-Nodes (59): scripts, build, build:client, build:server, dev, dev:nitro, dev:vite, ensure-bcrypt (+51 more)
+Nodes (124): act(), assertValidProps(), checkAttributeStringCoercion(), checkControlledValueProps(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion() (+116 more)
 
-### Community 128 - "diffHydratedProperties"
-Cohesion: 0.06
-Nodes (58): assertValidProps(), checkControlledValueProps(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength(), getCurrentFiberOwnerNameInDevOrNull(), getEventListenerSet() (+50 more)
-
-### Community 129 - "unstable_scheduleCallback"
-Cohesion: 0.07
-Nodes (36): clamp(), clampPanelPosition(), clampTriggerPosition(), DevKit(), FixedPosition, getDevKitBottomGuard(), getDevKitRightGuard(), getViewportSize() (+28 more)
-
-### Community 130 - "updateWorkInProgressHook"
-Cohesion: 0.06
-Nodes (60): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength(), getCurrentFiberOwnerNameInDevOrNull() (+52 more)
-
-### Community 131 - "AdminDashboard.tsx"
-Cohesion: 0.06
-Nodes (60): attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), checkForNestedUpdates(), checkIfSnapshotChanged(), claimNextTransitionLane(), createUpdate() (+52 more)
-
-### Community 132 - "scripts"
+### Community 79 - "scheduleUpdateOnFiber"
 Cohesion: 0.04
-Nodes (78): advanceTimers(), bubbleProperties(), cancelHostTimeout(), commitUpdate(), completeDehydratedSuspenseBoundary(), completeWork(), createFiberFromHostInstanceForDeletion(), createInstance() (+70 more)
+Nodes (103): addFiberToLanesMap(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), cancelCallback$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates() (+95 more)
 
-### Community 133 - "support.js"
+### Community 80 - "migrationDiagnostics.ts"
+Cohesion: 0.04
+Nodes (81): addFiberToLanesMap(), cancelCallback$1(), commitRoot(), commitRootImpl(), computeExpirationTime(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent() (+73 more)
+
+### Community 81 - "completeWork"
+Cohesion: 0.06
+Nodes (59): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength(), getEventListenerSet() (+51 more)
+
+### Community 82 - "mergeLanes"
+Cohesion: 0.07
+Nodes (35): attachRetryListener(), createCapturedValueAtFiber(), createClassErrorUpdate(), createRootErrorUpdate(), createUpdate(), describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber() (+27 more)
+
+### Community 83 - "ensureRootIsScheduled"
+Cohesion: 0.07
+Nodes (51): attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates(), checkIfSnapshotChanged(), claimNextRetryLane() (+43 more)
+
+### Community 84 - "updateDehydratedSuspenseComponent"
+Cohesion: 0.07
+Nodes (40): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+32 more)
+
+### Community 85 - "completeWork"
+Cohesion: 0.04
+Nodes (91): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+83 more)
+
+### Community 86 - "completeWork"
+Cohesion: 0.07
+Nodes (40): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+32 more)
+
+### Community 87 - "diffHydratedProperties"
+Cohesion: 0.03
+Nodes (94): COMMANDER_CLICK_AWAY_EVENTS, CommanderClickAwayBoundary(), shouldCloseCommanderForTarget(), ThreadPanel(), InboxSidebar(), DrawerContent(), DrawerContentProps, UserAvatarCircle() (+86 more)
+
+### Community 88 - "diffHydratedProperties"
+Cohesion: 0.07
+Nodes (40): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+32 more)
+
+### Community 89 - "SearchPage.tsx"
+Cohesion: 0.07
+Nodes (40): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+32 more)
+
+### Community 90 - "mergeLanes"
+Cohesion: 0.07
+Nodes (38): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+30 more)
+
+### Community 91 - "commitRootImpl"
+Cohesion: 0.05
+Nodes (60): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), constructSelectEvent(), createAndAccumulateChangeEvent() (+52 more)
+
+### Community 92 - "diffHydratedProperties"
+Cohesion: 0.06
+Nodes (64): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), createDangerousStringForStyles(), dangerousStyleValue(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren() (+56 more)
+
+### Community 93 - "diffHydratedProperties"
+Cohesion: 0.05
+Nodes (62): addFiberToLanesMap(), attachPingListener(), attachSuspenseRetryListeners(), cancelCallback$1(), completeUnitOfWork(), computeExpirationTime(), ensureRootIsScheduled(), errorHydratingContainer() (+54 more)
+
+### Community 94 - "commitRootImpl"
+Cohesion: 0.12
+Nodes (20): attachRetryListener(), createClassErrorUpdate(), createRootErrorUpdate(), createUpdate(), enqueueCapturedUpdate(), enqueueUpdate(), getNearestSuspenseBoundaryToCapture(), includesSyncLane() (+12 more)
+
+### Community 95 - "migrations.ts"
 Cohesion: 0.07
 Nodes (38): APP_QUERY_FIELDS, AppRow, appRowId(), AppsTab(), QUOTA_FIELDS, QUOTA_QUERY_LABELS, StorageUsage(), subscriptionQueryFields() (+30 more)
 
-### Community 134 - "push"
+### Community 96 - "diffHydratedProperties"
+Cohesion: 0.05
+Nodes (63): adminFilterValueForOperatorChange(), adminRowFieldExists(), AdminRowFieldKind, AdminRowFieldOption, adminRowMatchesFilter(), AdminRowQuery, AdminRowSort, applyAdminRowQuery() (+55 more)
+
+### Community 97 - "Composer — Thingtime tab checklist"
+Cohesion: 0.04
+Nodes (82): addFiberToLanesMap(), attachRetryListener(), cancelCallback$1(), captureCommitPhaseErrorOnRoot(), computeExpirationTime(), createCapturedValueAtFiber(), createClassErrorUpdate(), createRootErrorUpdate() (+74 more)
+
+### Community 98 - "ensureRootIsScheduled"
+Cohesion: 0.03
+Nodes (104): addFiberToLanesMap(), areHookInputsEqual(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), basicStateReducer(), batchedUpdates$1(), cancelCallback$1() (+96 more)
+
+### Community 99 - "dependencies"
+Cohesion: 0.05
+Nodes (73): AdminDiagnosticRevealable, AdminDiagnosticRevealContext, AdminErrorDiagnostic, captureAdminErrorDiagnostic(), captureObjectId(), CaptureState, createCaptureState(), CREDENTIAL_COMPONENTS (+65 more)
+
+### Community 100 - "diffHydratedProperties"
+Cohesion: 0.06
+Nodes (57): attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), checkForNestedUpdates(), checkIfSnapshotChanged(), claimNextTransitionLane(), createContainer() (+49 more)
+
+### Community 101 - "ensureRootIsScheduled"
+Cohesion: 0.04
+Nodes (54): AdvancedFilters Component, AlgorithmMenu(), AlgorithmMenuProps, InlineModal(), ModalMode, EMPTY_FILTERS, FeedPage(), DatePreset (+46 more)
+
+### Community 102 - "dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay"
+Cohesion: 0.06
+Nodes (58): assertValidProps(), checkControlledValueProps(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength(), getCurrentFiberOwnerNameInDevOrNull(), getEventListenerSet() (+50 more)
+
+### Community 103 - "completeWork"
+Cohesion: 0.06
+Nodes (20): Branding(), Logo(), Attention(), Hamburger(), BrutalButton(), BrutalVariant, DemoSection(), ECOSYSTEM (+12 more)
+
+### Community 104 - "popHydrationState"
+Cohesion: 0.06
+Nodes (64): assertValidProps(), checkAttributeStringCoercion(), checkControlledValueProps(), checkCSSPropertyStringCoercion(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+56 more)
+
+### Community 105 - "push"
+Cohesion: 0.03
+Nodes (64): dependencies, @anthropic-ai/sdk, @aws-sdk/client-s3, @aws-sdk/client-sesv2, @aws-sdk/s3-request-presigner, axios, bcrypt, @chakra-ui/react (+56 more)
+
+### Community 106 - "PostCard.tsx"
+Cohesion: 0.06
+Nodes (67): assertValidProps(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion(), createDangerousStringForStyles() (+59 more)
+
+### Community 107 - "push"
+Cohesion: 0.05
+Nodes (65): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), detachTracker(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength() (+57 more)
+
+### Community 108 - "TESTING.md — per-area manual test checklists"
+Cohesion: 0.09
+Nodes (30): checkDepsAreArrayDev(), cloneAndReplaceKey(), cloneElementWithValidation(), createContext(), createElementWithValidation(), createFactoryWithValidation(), escape(), escapeUserProvidedKey() (+22 more)
+
+### Community 109 - "completeWork"
+Cohesion: 0.05
+Nodes (55): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), compare(), constructSelectEvent(), createAndAccumulateChangeEvent(), createDispatchListener() (+47 more)
+
+### Community 110 - "push"
+Cohesion: 0.03
+Nodes (48): AdminDashboard(), TestAPI(), Editor(), TopSpacing(), Raw(), RawResults(), AuthorizePage(), cardSx (+40 more)
+
+### Community 111 - "commitRootImpl"
+Cohesion: 0.05
+Nodes (63): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), compare(), constructSelectEvent() (+55 more)
+
+### Community 112 - "utils.ts"
+Cohesion: 0.04
+Nodes (85): attachRetryListener(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates(), checkIfSnapshotChanged() (+77 more)
+
+### Community 113 - "PostComposer.tsx"
+Cohesion: 0.08
+Nodes (33): createContainer(), createContext(), createFactoryWithValidation(), createPortal(), createPortal$1(), createRoot(), createRoot$1(), getPublicRootInstance() (+25 more)
+
+### Community 114 - "push"
+Cohesion: 0.03
+Nodes (95): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateOrCreateContinuousQueuedReplayableEvent(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget() (+87 more)
+
+### Community 115 - "diffHydratedProperties"
+Cohesion: 0.08
+Nodes (37): bubbleProperties(), completeDehydratedSuspenseBoundary(), createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance() (+29 more)
+
+### Community 116 - "push"
+Cohesion: 0.05
+Nodes (61): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), constructSelectEvent(), createAndAccumulateChangeEvent() (+53 more)
+
+### Community 117 - "diffHydratedProperties"
+Cohesion: 0.06
+Nodes (38): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+30 more)
+
+### Community 118 - "push"
+Cohesion: 0.05
+Nodes (52): addSubtreeSuspenseContext(), cloneChildFibers(), createCapturedValue(), createFiberFromElement(), createFiberFromFragment(), createFiberFromOffscreen(), createFiberFromProfiler(), createFiberFromSuspense() (+44 more)
+
+### Community 119 - "push"
+Cohesion: 0.05
+Nodes (60): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), constructSelectEvent(), createAndAccumulateChangeEvent() (+52 more)
+
+### Community 120 - "diffHydratedProperties"
+Cohesion: 0.05
+Nodes (82): assertValidProps(), checkAttributeStringCoercion(), checkControlledValueProps(), checkCSSPropertyStringCoercion(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+74 more)
+
+### Community 121 - "scheduleUpdateOnFiber"
+Cohesion: 0.06
+Nodes (60): assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), diffHydratedProperties(), diffProperties(), finalizeInitialChildren(), getBitLength(), getCurrentFiberOwnerNameInDevOrNull() (+52 more)
+
+### Community 122 - "diffHydratedProperties"
+Cohesion: 0.04
+Nodes (81): AttachmentComposerInner, AttachmentComposerProps, UploadFileRow, UploadVisualPreview(), UploadVisualTile, AttachmentDraftCleanup, cleanups, flushAttachmentDraftCleanups() (+73 more)
+
+### Community 123 - "push"
+Cohesion: 0.05
+Nodes (81): assertValidProps(), checkAttributeStringCoercion(), checkControlledValueProps(), checkCSSPropertyStringCoercion(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+73 more)
+
+### Community 124 - "push"
+Cohesion: 0.04
+Nodes (115): CookieOptions, createCookie(), AppTokenContext, AppTokenGrant, EmbedUser, resolveAppToken(), toEmbedUser(), thirdPartyProfileMediaUrl() (+107 more)
+
+### Community 125 - "updateWorkInProgressHook"
+Cohesion: 0.06
+Nodes (43): FALLBACK_MUSINGS, wishSlotMusing(), ALL_MODES, buildContextLine(), buildUserPrompt(), createLopuClaudeModelResolver(), fetchWeather(), generateLopuMusing() (+35 more)
+
+### Community 126 - "musing.ts"
+Cohesion: 0.03
+Nodes (59): scripts, build, build:client, build:server, dev, dev:nitro, dev:vite, ensure-bcrypt (+51 more)
+
+### Community 127 - "ChakraThingRenderer.tsx"
+Cohesion: 0.06
+Nodes (50): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markSkippedUpdateLanes(), markWorkInProgressReceivedUpdate() (+42 more)
+
+### Community 128 - "diffHydratedProperties"
+Cohesion: 0.07
+Nodes (43): isUnknownReactionFailure(), reactionFailureMessage(), shouldReconcileReactionFailure(), MigrationsPanel Component, sensitiveRevealErrorMessage(), SensitiveRevealFailure, SensitiveRevealRecovery, RevealedValue (+35 more)
+
+### Community 129 - "unstable_scheduleCallback"
 Cohesion: 0.07
 Nodes (41): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+33 more)
+
+### Community 130 - "updateWorkInProgressHook"
+Cohesion: 0.05
+Nodes (63): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), compare(), constructSelectEvent() (+55 more)
+
+### Community 131 - "AdminDashboard.tsx"
+Cohesion: 0.05
+Nodes (60): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), constructSelectEvent(), createAndAccumulateChangeEvent() (+52 more)
+
+### Community 132 - "scripts"
+Cohesion: 0.07
+Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
+
+### Community 133 - "support.js"
+Cohesion: 0.06
+Nodes (52): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), isSubsetOfLanes(), markSkippedUpdateLanes() (+44 more)
+
+### Community 134 - "push"
+Cohesion: 0.07
+Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
 
 ### Community 135 - "push"
 Cohesion: 0.07
 Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
 
 ### Community 136 - "support.js"
-Cohesion: 0.03
-Nodes (95): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateOrCreateContinuousQueuedReplayableEvent(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget() (+87 more)
+Cohesion: 0.06
+Nodes (42): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+34 more)
 
 ### Community 137 - "push"
-Cohesion: 0.05
-Nodes (60): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), constructSelectEvent(), createAndAccumulateChangeEvent() (+52 more)
+Cohesion: 0.07
+Nodes (36): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+28 more)
 
 ### Community 138 - "support.js"
-Cohesion: 0.07
-Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
+Cohesion: 0.05
+Nodes (52): addSubtreeSuspenseContext(), cloneChildFibers(), createCapturedValue(), createFiberFromElement(), createFiberFromFragment(), createFiberFromOffscreen(), createFiberFromProfiler(), createFiberFromSuspense() (+44 more)
 
 ### Community 139 - "support.js"
-Cohesion: 0.05
-Nodes (65): appendChild(), appendChildToContainer(), appendInitialChild(), assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), createDangerousStringForStyles(), dangerousStyleValue() (+57 more)
+Cohesion: 0.07
+Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
 
 ### Community 140 - "support.js"
 Cohesion: 0.07
@@ -1702,116 +1704,116 @@ Cohesion: 0.07
 Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
 
 ### Community 142 - "support.js"
-Cohesion: 0.06
-Nodes (42): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+34 more)
+Cohesion: 0.03
+Nodes (128): addFiberToLanesMap(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), cancelCallback$1(), checkForNestedUpdates(), claimNextRetryLane() (+120 more)
 
 ### Community 143 - "support.js"
 Cohesion: 0.06
-Nodes (61): appendChild(), appendChildToContainer(), appendInitialChild(), assertValidProps(), checkControlledValueProps(), checkSelectPropTypes(), diffHydratedProperties(), diffProperties() (+53 more)
+Nodes (53): bubbleProperties(), checkForUnmatchedText(), commitUpdate(), completeDehydratedSuspenseBoundary(), completeWork(), createInstance(), createTextInstance(), createTextNode() (+45 more)
 
 ### Community 144 - "unstable_scheduleCallback"
-Cohesion: 0.07
-Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
+Cohesion: 0.05
+Nodes (56): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), compare(), constructSelectEvent(), createAndAccumulateChangeEvent(), createDispatchListener() (+48 more)
 
 ### Community 145 - "support.js"
-Cohesion: 0.07
-Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
+Cohesion: 0.06
+Nodes (52): bubbleProperties(), checkForUnmatchedText(), commitUpdate(), compare(), completeDehydratedSuspenseBoundary(), completeWork(), createInstance(), createTextInstance() (+44 more)
 
 ### Community 146 - "support.js"
-Cohesion: 0.07
-Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
+Cohesion: 0.08
+Nodes (36): commitPassiveEffectDurations(), commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), discreteUpdates(), dispatchContinuousEvent() (+28 more)
 
 ### Community 147 - "support.js"
-Cohesion: 0.07
-Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
+Cohesion: 0.05
+Nodes (63): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), createAndAccumulateChangeEvent(), createDispatchListener() (+55 more)
 
 ### Community 148 - "updateDehydratedSuspenseComponent"
-Cohesion: 0.06
-Nodes (39): ApiAuthMode, apiDocMap, ApiEndpointDoc, ApiHttpMethod, ApiPlatformExamples, ApiRequestExample, ApiResponseExample, apiV1DocsRouteKeys (+31 more)
+Cohesion: 0.05
+Nodes (61): bubbleProperties(), checkForUnmatchedText(), cloneElement(), commitUpdate(), completeDehydratedSuspenseBoundary(), completeWork(), createElement(), createInstance() (+53 more)
 
 ### Community 149 - "dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay"
-Cohesion: 0.05
-Nodes (64): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), advanceTimers(), cancelHostTimeout(), compare(), constructSelectEvent() (+56 more)
-
-### Community 150 - "updateDehydratedSuspenseComponent"
-Cohesion: 0.06
-Nodes (57): addFiberToLanesMap(), cancelCallback$1(), computeExpirationTime(), ensureRootIsScheduled(), errorHydratingContainer(), finishConcurrentRender(), finishQueueingConcurrentUpdates(), getBumpedLaneForHydration() (+49 more)
-
-### Community 151 - "mergeLanes"
-Cohesion: 0.09
-Nodes (35): areHookInputsEqual(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), isSubsetOfLanes(), markSkippedUpdateLanes(), markWorkInProgressReceivedUpdate() (+27 more)
-
-### Community 152 - "createElement"
 Cohesion: 0.16
 Nodes (41): getEditorJsDoc(), AddChildButton(), ConceptCrumbs(), ConceptViewerProps, DeleteButton(), KindFlip(), LeafValueEditor(), useConceptLayout() (+33 more)
 
+### Community 150 - "updateDehydratedSuspenseComponent"
+Cohesion: 0.06
+Nodes (53): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), isSubsetOfLanes(), markSkippedUpdateLanes() (+45 more)
+
+### Community 151 - "mergeLanes"
+Cohesion: 0.07
+Nodes (42): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), compare(), createAndAccumulateChangeEvent(), createDispatchListener(), createLaneMap() (+34 more)
+
+### Community 152 - "createElement"
+Cohesion: 0.07
+Nodes (36): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+28 more)
+
 ### Community 153 - "popHydrationState"
-Cohesion: 0.07
-Nodes (36): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+28 more)
-
-### Community 154 - "completeWork"
-Cohesion: 0.07
-Nodes (36): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+28 more)
-
-### Community 155 - "animateTarget"
 Cohesion: 0.07
 Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
 
-### Community 156 - "mergeLanes"
+### Community 154 - "completeWork"
+Cohesion: 0.09
+Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
+
+### Community 155 - "animateTarget"
 Cohesion: 0.10
 Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
 
+### Community 156 - "mergeLanes"
+Cohesion: 0.08
+Nodes (34): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle(), getTheme3(), getVariableValue() (+26 more)
+
 ### Community 157 - "updateWorkInProgressHook"
-Cohesion: 0.06
-Nodes (49): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), finishConcurrentRender(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), includesOnlyRetries() (+41 more)
+Cohesion: 0.05
+Nodes (60): areHookInputsEqual(), attachRetryListener(), createClassErrorUpdate(), createFunctionComponentUpdateQueue(), createRootErrorUpdate(), createUpdate(), enqueueCapturedUpdate(), getNearestSuspenseBoundaryToCapture() (+52 more)
 
 ### Community 158 - "updateWorkInProgressHook"
-Cohesion: 0.05
-Nodes (61): attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), captureCommitPhaseErrorOnRoot(), checkForNestedUpdates(), checkIfSnapshotChanged(), claimNextRetryLane() (+53 more)
+Cohesion: 0.10
+Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
 
 ### Community 159 - "updateWorkInProgressHook"
-Cohesion: 0.06
-Nodes (43): accumulateOrCreateContinuousQueuedReplayableEvent(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), attemptSynchronousHydration(), batchedUpdates() (+35 more)
+Cohesion: 0.16
+Nodes (17): createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), mountEffect(), mountEffectImpl(), mountImperativeHandle(), mountInsertionEffect(), mountLayoutEffect() (+9 more)
 
 ### Community 160 - "stop"
-Cohesion: 0.06
-Nodes (48): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getBitLength(), getLeadingBit(), getTreeId(), getWorkInProgressRoot(), includesBlockingLane() (+40 more)
+Cohesion: 0.05
+Nodes (72): assertValidProps(), checkAttributeStringCoercion(), checkControlledValueProps(), checkCSSPropertyStringCoercion(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+64 more)
 
 ### Community 161 - "mergeLanes"
 Cohesion: 0.06
-Nodes (48): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getBitLength(), getLeadingBit(), getTreeId(), getWorkInProgressRoot(), includesBlockingLane() (+40 more)
+Nodes (34): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+26 more)
 
 ### Community 162 - "updateWorkInProgressHook"
 Cohesion: 0.06
-Nodes (34): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+26 more)
+Nodes (48): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getBitLength(), getLeadingBit(), getTreeId(), getWorkInProgressRoot(), includesBlockingLane() (+40 more)
 
 ### Community 163 - "conceptData.ts"
-Cohesion: 0.07
-Nodes (42): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markWorkInProgressReceivedUpdate(), mountCallback() (+34 more)
+Cohesion: 0.05
+Nodes (41): animateList(), calcGeneratorVelocity(), componentWillUnmount(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D() (+33 more)
 
 ### Community 164 - "commitRootImpl"
-Cohesion: 0.10
-Nodes (31): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markSkippedUpdateLanes(), markWorkInProgressReceivedUpdate() (+23 more)
+Cohesion: 0.06
+Nodes (50): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), isSubsetOfLanes(), markSkippedUpdateLanes() (+42 more)
 
 ### Community 165 - "update"
 Cohesion: 0.06
-Nodes (39): LongTextEditor Component, getKindRenderers(), sanitizeParsedJson(), BLOCK_TYPE_META, BlockPickerStory(), columnsStories, ColumnsStory(), ConceptStory (+31 more)
+Nodes (34): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+26 more)
 
 ### Community 166 - "completeWork"
-Cohesion: 0.19
-Nodes (14): createCapturedValueAtFiber(), describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber(), describeFunctionComponentFrame(), describeNativeComponentFrame(), describeUnknownElementTypeFrameInDEV(), disabledLog() (+6 more)
+Cohesion: 0.04
+Nodes (79): bubbleProperties(), checkForUnmatchedText(), commitUpdate(), completeDehydratedSuspenseBoundary(), completeWork(), createFiberFromHostInstanceForDeletion(), createInstance(), createTextInstance() (+71 more)
 
 ### Community 167 - "commanderTrim.tsx"
-Cohesion: 0.05
-Nodes (36): EasterEggs(), BrutalButton(), BrutalVariant, burstAtEvent(), burstConfetti(), DemoSection(), ECOSYSTEM, FAQS (+28 more)
+Cohesion: 0.04
+Nodes (80): addSubtreeSuspenseContext(), commitUpdate(), completeWork(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), createInstance(), createTextInstance() (+72 more)
 
 ### Community 168 - "commitRootImpl"
 Cohesion: 0.05
 Nodes (46): toArray(), addPrefix(), addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), cssVar() (+38 more)
 
 ### Community 169 - "DocsLayout.tsx"
-Cohesion: 0.05
-Nodes (46): toArray(), addPrefix(), addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), cssVar() (+38 more)
+Cohesion: 0.07
+Nodes (42): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markWorkInProgressReceivedUpdate(), mountCallback() (+34 more)
 
 ### Community 170 - "dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay"
 Cohesion: 0.05
@@ -1822,20 +1824,20 @@ Cohesion: 0.05
 Nodes (46): toArray(), addPrefix(), addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), cssVar() (+38 more)
 
 ### Community 172 - "animateTarget"
-Cohesion: 0.03
-Nodes (94): accumulateEnterLeaveListenersForEvent(), accumulateEnterLeaveTwoPhaseListeners(), accumulateOrCreateContinuousQueuedReplayableEvent(), accumulateSinglePhaseListeners(), accumulateTwoPhaseListeners(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget() (+86 more)
+Cohesion: 0.10
+Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
 
 ### Community 173 - "ConceptStories.tsx"
-Cohesion: 0.08
-Nodes (37): bubbleProperties(), completeDehydratedSuspenseBoundary(), createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance() (+29 more)
+Cohesion: 0.05
+Nodes (46): toArray(), addPrefix(), addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), cssVar() (+38 more)
 
 ### Community 174 - "dependencies"
 Cohesion: 0.05
 Nodes (46): toArray(), addPrefix(), addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), cssVar() (+38 more)
 
 ### Community 175 - "replace"
-Cohesion: 0.07
-Nodes (43): attachPingListener(), attachRetryListener(), attachSuspenseRetryListeners(), enqueueCapturedUpdate(), errorHydratingContainer(), finishQueueingConcurrentUpdates(), getLanesToRetrySynchronouslyOnError(), getNearestSuspenseBoundaryToCapture() (+35 more)
+Cohesion: 0.05
+Nodes (46): toArray(), addPrefix(), addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), cssVar() (+38 more)
 
 ### Community 176 - "replace"
 Cohesion: 0.05
@@ -1850,12 +1852,12 @@ Cohesion: 0.05
 Nodes (46): toArray(), addPrefix(), addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), cssVar() (+38 more)
 
 ### Community 179 - "completeWork"
-Cohesion: 0.07
-Nodes (27): toArray(), addPrefix(), analyzeBreakpoints(), createResolver(), createThemeVars(), cssVar(), defineCssVars(), extractSemanticTokens() (+19 more)
+Cohesion: 0.10
+Nodes (26): isEnabled(), add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild() (+18 more)
 
 ### Community 180 - "replace"
 Cohesion: 0.05
-Nodes (48): isEnabled(), add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild() (+40 more)
+Nodes (46): toArray(), addPrefix(), addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), cssVar() (+38 more)
 
 ### Community 181 - "replace"
 Cohesion: 0.05
@@ -1866,8 +1868,8 @@ Cohesion: 0.05
 Nodes (46): toArray(), addPrefix(), addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), cssVar() (+38 more)
 
 ### Community 183 - "replace"
-Cohesion: 0.05
-Nodes (46): toArray(), addPrefix(), addPrefix2(), analyzeBreakpoints(), analyzeCSSValue(), createResolver(), createThemeVars(), cssVar() (+38 more)
+Cohesion: 0.08
+Nodes (36): commitLayoutEffects(), commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), discreteUpdates(), dispatchContinuousEvent() (+28 more)
 
 ### Community 184 - "replace"
 Cohesion: 0.04
@@ -1875,143 +1877,143 @@ Nodes (44): author, bugs, url, dependencies, axios, bcrypt, body-parser, cors (+
 
 ### Community 185 - "replace"
 Cohesion: 0.06
-Nodes (39): animateList(), calcGeneratorVelocity(), componentWillUnmount(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D() (+31 more)
+Nodes (35): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+27 more)
 
 ### Community 186 - "replace"
-Cohesion: 0.04
-Nodes (91): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+83 more)
+Cohesion: 0.10
+Nodes (26): applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode() (+18 more)
 
 ### Community 187 - "replace"
 Cohesion: 0.06
-Nodes (39): animateList(), calcGeneratorVelocity(), componentWillUnmount(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D() (+31 more)
+Nodes (34): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+26 more)
 
 ### Community 188 - "attachments.ts"
-Cohesion: 0.05
-Nodes (41): animateList(), calcGeneratorVelocity(), componentWillUnmount(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D() (+33 more)
+Cohesion: 0.07
+Nodes (32): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+24 more)
 
 ### Community 189 - "kindRenderersMedia.tsx"
-Cohesion: 0.18
-Nodes (19): advanceTimers(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), cancelHostTimeout(), flushWork(), handleTimeout(), markTaskErrored(), peek() (+11 more)
+Cohesion: 0.10
+Nodes (26): applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode() (+18 more)
 
 ### Community 190 - "completeWork"
-Cohesion: 0.07
-Nodes (42): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markWorkInProgressReceivedUpdate(), mountCallback() (+34 more)
+Cohesion: 0.06
+Nodes (34): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+26 more)
 
 ### Community 191 - "constructor"
-Cohesion: 0.07
-Nodes (43): CoverArea(), maybeTimeAgo(), PostRenderer(), VideoRenderer(), ArticleRenderer(), ArticleValue, AudioRenderer(), AudioValue (+35 more)
+Cohesion: 0.05
+Nodes (72): algorithmThingToDoc(), assertLegacyAlgorithmMutationAllowed(), createAlgorithm(), CreateAlgorithmInput, deleteAlgorithm(), Fail, FeedAlgorithmDoc, findOwnedAlgorithm() (+64 more)
 
 ### Community 192 - "constructor"
-Cohesion: 0.08
-Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
+Cohesion: 0.06
+Nodes (38): LongTextEditor Component, getKindRenderers(), sanitizeParsedJson(), BLOCK_TYPE_META, BlockPickerStory(), columnsStories, ColumnsStory(), ConceptStory (+30 more)
 
 ### Community 193 - "constructor"
-Cohesion: 0.07
-Nodes (43): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), cancelTreeOptimisedTransformAnimations() (+35 more)
+Cohesion: 0.04
+Nodes (44): Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`), Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`), Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`), AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`), AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`), App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`), Canonical AI instruction links (`AI_ALL.md`), Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`) (+36 more)
 
 ### Community 194 - "forEach"
-Cohesion: 0.04
-Nodes (76): addSubtreeSuspenseContext(), bubbleProperties(), checkForUnmatchedText(), commitUpdate(), completeDehydratedSuspenseBoundary(), completeWork(), createCapturedValue(), createInstance() (+68 more)
+Cohesion: 0.05
+Nodes (48): accumulateOrCreateContinuousQueuedReplayableEvent(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), attemptSynchronousHydration(), batchedUpdates() (+40 more)
 
 ### Community 195 - "status.ts"
-Cohesion: 0.10
-Nodes (25): addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), cancelTreeOptimisedTransformAnimations(), getAnimationState() (+17 more)
+Cohesion: 0.07
+Nodes (44): commitUpdate(), compare(), completeWork(), createInstance(), createTextInstance(), createTextNode(), cutOffTailIfNeeded(), getChildHostContext() (+36 more)
 
 ### Community 196 - "tests.tsx"
 Cohesion: 0.08
-Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
+Nodes (34): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle(), getTheme3(), getVariableValue() (+26 more)
 
 ### Community 197 - "stop"
-Cohesion: 0.07
-Nodes (43): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), cancelTreeOptimisedTransformAnimations() (+35 more)
+Cohesion: 0.08
+Nodes (34): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle(), getTheme3(), getVariableValue() (+26 more)
 
 ### Community 198 - "trim"
 Cohesion: 0.10
-Nodes (25): calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode(), eachAxis() (+17 more)
+Nodes (26): applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode() (+18 more)
 
 ### Community 199 - "animateTarget"
-Cohesion: 0.08
-Nodes (38): ChakraThingNode, ensureBuiltinKinds(), getKindRenderer(), isKindSafeForUntrusted(), KindRenderer, registerKindRenderer(), registry, RenderThing() (+30 more)
+Cohesion: 0.06
+Nodes (49): addValueToWillChange(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints() (+41 more)
 
 ### Community 200 - "popHydrationState"
-Cohesion: 0.05
-Nodes (58): areHookInputsEqual(), attachRetryListener(), createClassErrorUpdate(), createFunctionComponentUpdateQueue(), createRootErrorUpdate(), createUpdate(), enqueueCapturedUpdate(), enterDisallowedContextReadInDEV() (+50 more)
+Cohesion: 0.08
+Nodes (35): commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent() (+27 more)
 
 ### Community 201 - "animateTarget"
-Cohesion: 0.05
-Nodes (53): accumulateOrCreateContinuousQueuedReplayableEvent(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), attemptSynchronousHydration(), batchedUpdates() (+45 more)
+Cohesion: 0.07
+Nodes (42): addValue(), analyseComplexValue(), animateSingleValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle() (+34 more)
 
 ### Community 202 - "unstable_scheduleCallback"
 Cohesion: 0.07
-Nodes (42): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markWorkInProgressReceivedUpdate(), mountCallback() (+34 more)
+Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
 
 ### Community 203 - "updateDehydratedSuspenseComponent"
-Cohesion: 0.07
-Nodes (43): areHookInputsEqual(), basicStateReducer(), claimNextTransitionLane(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markWorkInProgressReceivedUpdate() (+35 more)
+Cohesion: 0.10
+Nodes (26): applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode() (+18 more)
 
 ### Community 204 - "getProps"
-Cohesion: 0.03
-Nodes (136): addFiberToLanesMap(), attachRetryListener(), attemptContinuousHydration$1(), attemptHydrationAtCurrentPriority$1(), attemptSynchronousHydration$1(), batchedUpdates$1(), cancelCallback$1(), captureCommitPhaseErrorOnRoot() (+128 more)
+Cohesion: 0.12
+Nodes (27): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), getAnimationState() (+19 more)
 
 ### Community 205 - "cryptoTools.server.ts"
-Cohesion: 0.05
-Nodes (41): animateList(), calcGeneratorVelocity(), componentWillUnmount(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D() (+33 more)
+Cohesion: 0.04
+Nodes (73): addFiberToLanesMap(), attachRetryListener(), cancelCallback$1(), captureCommitPhaseErrorOnRoot(), computeExpirationTime(), createCapturedValueAtFiber(), createRootErrorUpdate(), enqueueCapturedUpdate() (+65 more)
 
 ### Community 206 - "SchemasBrowsePage.tsx"
-Cohesion: 0.07
-Nodes (32): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+24 more)
+Cohesion: 0.05
+Nodes (51): addValueToWillChange(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints() (+43 more)
 
 ### Community 207 - "updateWorkInProgressHook"
-Cohesion: 0.07
-Nodes (32): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+24 more)
+Cohesion: 0.06
+Nodes (48): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getBitLength(), getLeadingBit(), getTreeId(), getWorkInProgressRoot(), includesBlockingLane() (+40 more)
 
 ### Community 208 - "mergeLanes"
-Cohesion: 0.06
-Nodes (34): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+26 more)
+Cohesion: 0.07
+Nodes (42): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), markWorkInProgressReceivedUpdate(), mountCallback() (+34 more)
 
 ### Community 209 - "mergeLanes"
 Cohesion: 0.06
-Nodes (39): animateList(), calcGeneratorVelocity(), componentWillUnmount(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D() (+31 more)
+Nodes (52): bubbleProperties(), checkForUnmatchedText(), commitUpdate(), compare(), completeDehydratedSuspenseBoundary(), completeWork(), createInstance(), createTextInstance() (+44 more)
 
 ### Community 210 - "trim"
-Cohesion: 0.06
-Nodes (34): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+26 more)
+Cohesion: 0.07
+Nodes (43): CoverArea(), maybeTimeAgo(), PostRenderer(), VideoRenderer(), ArticleRenderer(), ArticleValue, AudioRenderer(), AudioValue (+35 more)
 
 ### Community 211 - "constructor"
 Cohesion: 0.06
-Nodes (39): animateList(), calcGeneratorVelocity(), componentWillUnmount(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D() (+31 more)
+Nodes (34): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+26 more)
 
 ### Community 212 - "kindRenderers.tsx"
 Cohesion: 0.06
 Nodes (34): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+26 more)
 
 ### Community 213 - "error"
-Cohesion: 0.05
-Nodes (40): author, bugs, url, dependencies, smarts, ts-node, typescript, description (+32 more)
+Cohesion: 0.06
+Nodes (39): animateList(), calcGeneratorVelocity(), componentWillUnmount(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D() (+31 more)
 
 ### Community 214 - "constructor"
 Cohesion: 0.07
-Nodes (39): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+31 more)
+Nodes (32): animateList(), calcGeneratorVelocity(), constructor(), createAnimationState(), createState(), createTypeState(), distance2D(), end() (+24 more)
 
 ### Community 215 - "constructor"
-Cohesion: 0.08
-Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
+Cohesion: 0.07
+Nodes (40): boot(), collectProps(), compileAttr(), compileTemplate(), contentKey(), createComponentFactory(), createExternalModules(), createHelmetManager() (+32 more)
 
 ### Community 216 - "constructor"
-Cohesion: 0.07
-Nodes (40): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+32 more)
+Cohesion: 0.05
+Nodes (40): author, bugs, url, dependencies, smarts, ts-node, typescript, description (+32 more)
 
 ### Community 217 - "constructor"
-Cohesion: 0.08
-Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
+Cohesion: 0.07
+Nodes (40): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+32 more)
 
 ### Community 218 - "constructor"
 Cohesion: 0.08
 Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
 
 ### Community 219 - "constructor"
-Cohesion: 0.04
-Nodes (77): addSubtreeSuspenseContext(), commitUpdate(), completeWork(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), createInstance(), createTextInstance() (+69 more)
+Cohesion: 0.08
+Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
 
 ### Community 220 - "support.js"
 Cohesion: 0.08
@@ -2022,16 +2024,16 @@ Cohesion: 0.08
 Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
 
 ### Community 222 - "requireAdmin"
-Cohesion: 0.08
-Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
+Cohesion: 0.07
+Nodes (40): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+32 more)
 
 ### Community 223 - "commitDeletionEffectsOnFiber"
 Cohesion: 0.08
 Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
 
 ### Community 224 - "Setup for Forks"
-Cohesion: 0.13
-Nodes (21): cloneChildFibers(), createFiberFromElement(), createFiberFromFragment(), createFiberFromOffscreen(), createFiberFromProfiler(), createFiberFromSuspense(), createFiberFromSuspenseList(), createFiberFromTypeAndProps() (+13 more)
+Cohesion: 0.08
+Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
 
 ### Community 225 - "parse"
 Cohesion: 0.08
@@ -2042,492 +2044,492 @@ Cohesion: 0.08
 Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
 
 ### Community 227 - "parse"
+Cohesion: 0.04
+Nodes (88): addFiberToLanesMap(), cancelCallback$1(), commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), computeExpirationTime() (+80 more)
+
+### Community 228 - "completeWork"
 Cohesion: 0.08
 Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
 
-### Community 228 - "completeWork"
-Cohesion: 0.15
-Nodes (7): Any, Int, Destination, String, URL, ThingtimeWebDestination, ThingtimeWebDestinationTests
-
 ### Community 229 - "parse"
-Cohesion: 0.07
-Nodes (40): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+32 more)
+Cohesion: 0.11
+Nodes (25): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getTheme3(), getVariableValue(), guard() (+17 more)
 
 ### Community 230 - "parse"
-Cohesion: 0.04
-Nodes (83): addSubtreeSuspenseContext(), bubbleProperties(), completeDehydratedSuspenseBoundary(), completeWork(), createCapturedValue(), createFiberFromHostInstanceForDeletion(), cutOffTailIfNeeded(), deleteHydratableInstance() (+75 more)
+Cohesion: 0.08
+Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
 
 ### Community 231 - "updateDehydratedSuspenseComponent"
-Cohesion: 0.05
-Nodes (38): author, categories, commands, contributors, dependencies, fuse.js, mathjs, @raycast/api (+30 more)
+Cohesion: 0.08
+Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
 
 ### Community 232 - "parse"
 Cohesion: 0.08
-Nodes (38): addSubtreeSuspenseContext(), cloneChildFibers(), createCapturedValue(), createFiberFromElement(), createFiberFromFragment(), createFiberFromOffscreen(), createFiberFromProfiler(), createFiberFromSuspense() (+30 more)
+Nodes (40): alloc(), append(), asRGBA(), caret(), char(), charat(), comment(), commenter() (+32 more)
 
 ### Community 233 - "updateDehydratedSuspenseComponent"
-Cohesion: 0.07
-Nodes (40): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+32 more)
+Cohesion: 0.08
+Nodes (28): redirect(), applyPrivateHeaders(), withAttachmentPrivateResponse(), consumeEmailVerification(), ConsumeResult, applyPasswordReset(), consumePasswordReset(), ConsumePasswordResetResult (+20 more)
 
 ### Community 234 - "parse"
-Cohesion: 0.09
-Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
+Cohesion: 0.12
+Nodes (24): checkDepsAreArrayDev(), cloneAndReplaceKey(), cloneElementWithValidation(), createElementWithValidation(), escapeUserProvidedKey(), getCurrentComponentErrorInfo(), getDeclarationErrorAddendum(), getIteratorFn() (+16 more)
 
 ### Community 235 - "parse"
-Cohesion: 0.08
-Nodes (37): bubbleProperties(), completeDehydratedSuspenseBoundary(), createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance() (+29 more)
+Cohesion: 0.04
+Nodes (102): addSubtreeSuspenseContext(), attemptEarlyBailoutIfNoScheduledUpdate(), bailoutHooks(), bailoutOnAlreadyFinishedWork(), beginWork(), checkDidRenderIdHook(), checkPropTypes(), checkScheduledUpdateOrContext() (+94 more)
 
 ### Community 236 - "updateDehydratedSuspenseComponent"
-Cohesion: 0.09
-Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
+Cohesion: 0.05
+Nodes (38): author, categories, commands, contributors, dependencies, fuse.js, mathjs, @raycast/api (+30 more)
 
 ### Community 237 - "parse"
-Cohesion: 0.08
-Nodes (34): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle(), getTheme3(), getVariableValue() (+26 more)
-
-### Community 238 - "parse"
-Cohesion: 0.09
-Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
-
-### Community 239 - "commitRootImpl"
-Cohesion: 0.09
-Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
-
-### Community 240 - "updateDehydratedSuspenseComponent"
-Cohesion: 0.09
-Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
-
-### Community 241 - "parse"
-Cohesion: 0.10
-Nodes (33): blocksToText(), checklistItems(), EDITOR_JS_AUTO_DETECT_LIMITS, EDITOR_JS_HEADING_FONT_SIZES, EDITOR_JS_HEADING_LEVELS, EditorJsBlock, EditorJsDoc, EditorJsHeadingLevel (+25 more)
-
-### Community 242 - "updateDehydratedSuspenseComponent"
-Cohesion: 0.09
-Nodes (24): ColorControl(), CustomisePanel(), CustomiseToggle(), isHexColor(), THINGS_BADGE_PADDING_OPTIONS, ThingsBadgePaddingControl(), curatedFontNames, STATIC_FONTS (+16 more)
-
-### Community 243 - "parse"
-Cohesion: 0.11
-Nodes (25): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getTheme3(), getVariableValue(), guard() (+17 more)
-
-### Community 244 - "scheduleUpdateOnFiber"
-Cohesion: 0.06
-Nodes (56): bubbleProperties(), checkForUnmatchedText(), commitUpdate(), compare(), completeDehydratedSuspenseBoundary(), completeWork(), createInstance(), createTextInstance() (+48 more)
-
-### Community 245 - "parse"
-Cohesion: 0.06
-Nodes (51): bubbleProperties(), checkForUnmatchedText(), commitUpdate(), completeDehydratedSuspenseBoundary(), completeWork(), createInstance(), createTextInstance(), createTextNode() (+43 more)
-
-### Community 246 - "forEach"
-Cohesion: 0.08
-Nodes (35): commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent() (+27 more)
-
-### Community 247 - "constructor"
-Cohesion: 0.11
-Nodes (25): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getTheme3(), getVariableValue(), guard() (+17 more)
-
-### Community 248 - "support.js"
-Cohesion: 0.17
-Nodes (24): flip(), pad(), resize(), rotate(), scale(), stripEXIF(), copyImagesAtPathsToClipboard(), getClipboardFiles() (+16 more)
-
-### Community 249 - "package.json"
 Cohesion: 0.11
 Nodes (41): appendDeploymentIdToDashboardUrl(), clampPercent(), deploymentPageCache, formatBuildPhase(), formatRelativeTime(), getBuildProgressFromChecks(), getCachedJson(), getDashboardOwnerSlug() (+33 more)
 
+### Community 238 - "parse"
+Cohesion: 0.07
+Nodes (38): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+30 more)
+
+### Community 239 - "commitRootImpl"
+Cohesion: 0.07
+Nodes (38): addValueToWillChange(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), cancelTreeOptimisedTransformAnimations() (+30 more)
+
+### Community 240 - "updateDehydratedSuspenseComponent"
+Cohesion: 0.14
+Nodes (8): Any, Int, Destination, Set, String, URL, ThingtimeWebDestination, ThingtimeWebDestinationTests
+
+### Community 241 - "parse"
+Cohesion: 0.08
+Nodes (37): bubbleProperties(), completeDehydratedSuspenseBoundary(), createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance() (+29 more)
+
+### Community 242 - "updateDehydratedSuspenseComponent"
+Cohesion: 0.09
+Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
+
+### Community 243 - "parse"
+Cohesion: 0.09
+Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
+
+### Community 244 - "scheduleUpdateOnFiber"
+Cohesion: 0.05
+Nodes (61): bubbleProperties(), checkForUnmatchedText(), cloneElement(), commitUpdate(), completeDehydratedSuspenseBoundary(), completeWork(), createElement(), createInstance() (+53 more)
+
+### Community 245 - "parse"
+Cohesion: 0.08
+Nodes (35): commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent() (+27 more)
+
+### Community 246 - "forEach"
+Cohesion: 0.05
+Nodes (74): bubbleProperties(), commitUpdate(), completeDehydratedSuspenseBoundary(), completeWork(), createFiberFromHostInstanceForDeletion(), createInstance(), createTextInstance(), createTextNode() (+66 more)
+
+### Community 247 - "constructor"
+Cohesion: 0.10
+Nodes (33): blocksToText(), checklistItems(), EDITOR_JS_AUTO_DETECT_LIMITS, EDITOR_JS_HEADING_FONT_SIZES, EDITOR_JS_HEADING_LEVELS, EditorJsBlock, EditorJsDoc, EditorJsHeadingLevel (+25 more)
+
+### Community 248 - "support.js"
+Cohesion: 0.08
+Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
+
+### Community 249 - "package.json"
+Cohesion: 0.08
+Nodes (32): checkClassInstance(), checkDepsAreArrayDev(), cloneAndReplaceKey(), cloneElementWithValidation(), createCapturedValueAtFiber(), describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber() (+24 more)
+
 ### Community 250 - "completeWork"
-Cohesion: 0.06
-Nodes (43): accumulateOrCreateContinuousQueuedReplayableEvent(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), attemptSynchronousHydration(), batchedUpdates() (+35 more)
+Cohesion: 0.08
+Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
 
 ### Community 251 - "constructor"
-Cohesion: 0.06
-Nodes (49): attachPingListener(), attachRetryListener(), attachSuspenseRetryListeners(), enqueueCapturedUpdate(), errorHydratingContainer(), finishQueueingConcurrentUpdates(), getLanesToRetrySynchronouslyOnError(), getNearestSuspenseBoundaryToCapture() (+41 more)
+Cohesion: 0.09
+Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
 
 ### Community 252 - "commitRootImpl"
+Cohesion: 0.17
+Nodes (24): flip(), pad(), resize(), rotate(), scale(), stripEXIF(), copyImagesAtPathsToClipboard(), getClipboardFiles() (+16 more)
+
+### Community 253 - "forEach"
+Cohesion: 0.10
+Nodes (31): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), getAnimationState() (+23 more)
+
+### Community 254 - "popHydrationState"
+Cohesion: 0.04
+Nodes (88): addFiberToLanesMap(), cancelCallback$1(), commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), computeExpirationTime() (+80 more)
+
+### Community 255 - "popHydrationState"
+Cohesion: 0.12
+Nodes (27): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), getAnimationState() (+19 more)
+
+### Community 256 - "appLifecycleCore.ts"
+Cohesion: 0.11
+Nodes (25): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getTheme3(), getVariableValue(), guard() (+17 more)
+
+### Community 257 - "LongTextEditor.tsx"
+Cohesion: 0.04
+Nodes (66): commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), createContainer(), createContext(), createFactoryWithValidation() (+58 more)
+
+### Community 258 - "useApi.tsx"
 Cohesion: 0.18
 Nodes (24): Command(), convertFormats, formats, Command(), convertFormats, formats, Command(), convertFormats (+16 more)
 
-### Community 253 - "forEach"
+### Community 259 - "commitRootImpl"
 Cohesion: 0.09
 Nodes (33): browseLibrary(), browseMine(), browsePopular(), BrowseSchemaEntry, browseSchemas(), BrowseSchemasQuery, BrowseSchemasResult, cappedCount() (+25 more)
 
-### Community 254 - "popHydrationState"
+### Community 260 - "ImagePatternGrid.tsx"
 Cohesion: 0.07
 Nodes (16): babelPlugin(), createObjectProperties(), deepForEach(), ee(), epp(), escapeEscapes(), escapePropertyPath(), forEachArray() (+8 more)
 
-### Community 255 - "popHydrationState"
-Cohesion: 0.11
-Nodes (19): Context, Coordinator, Any, Bool, CGFloat, String, URL, ThingtimeWKWebView (+11 more)
-
-### Community 256 - "appLifecycleCore.ts"
-Cohesion: 0.19
-Nodes (14): createCapturedValueAtFiber(), describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber(), describeFunctionComponentFrame(), describeNativeComponentFrame(), describeUnknownElementTypeFrameInDEV(), disabledLog() (+6 more)
-
-### Community 257 - "LongTextEditor.tsx"
-Cohesion: 0.09
-Nodes (29): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getBaseTarget(), getBaseTargetFromProps(), getTheme3() (+21 more)
-
-### Community 258 - "useApi.tsx"
-Cohesion: 0.11
-Nodes (25): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getTheme3(), getVariableValue(), guard() (+17 more)
-
-### Community 259 - "commitRootImpl"
-Cohesion: 0.07
-Nodes (42): addValue(), analyseComplexValue(), animateSingleValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle() (+34 more)
-
-### Community 260 - "ImagePatternGrid.tsx"
-Cohesion: 0.08
-Nodes (34): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle(), getTheme3(), getVariableValue() (+26 more)
-
 ### Community 261 - "forEach"
 Cohesion: 0.11
-Nodes (25): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getTheme3(), getVariableValue(), guard() (+17 more)
+Nodes (19): Context, Coordinator, Any, Bool, CGFloat, String, URL, ThingtimeWKWebView (+11 more)
 
 ### Community 262 - "update"
 Cohesion: 0.08
 Nodes (34): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle(), getTheme3(), getVariableValue() (+26 more)
 
 ### Community 263 - "commitRootImpl"
-Cohesion: 0.06
-Nodes (33): build, appId, asar, directories, extraResources, files, mac, productName (+25 more)
+Cohesion: 0.09
+Nodes (26): animateChildren(), clear(), clearListeners(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget(), getBaseTargetFromProps() (+18 more)
 
 ### Community 264 - "popHydrationState"
 Cohesion: 0.12
-Nodes (27): MongoStatus(), pulse, STATUS_COLORS, StoredEnvironmentSelection, FrontendStatus(), NitroStatus(), pulse, ServiceStatus() (+19 more)
+Nodes (23): checkDepsAreArrayDev(), cloneAndReplaceKey(), cloneElementWithValidation(), createElementWithValidation(), escapeUserProvidedKey(), getCurrentComponentErrorInfo(), getDeclarationErrorAddendum(), getIteratorFn() (+15 more)
 
 ### Community 265 - "mapIntoArray"
-Cohesion: 0.09
-Nodes (32): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), complete(), duration() (+24 more)
+Cohesion: 0.07
+Nodes (45): addValue(), analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle(), getStaticValue() (+37 more)
 
 ### Community 266 - "mapIntoArray"
-Cohesion: 0.10
-Nodes (28): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), complete(), finish(), flatten() (+20 more)
+Cohesion: 0.06
+Nodes (33): build, appId, asar, directories, extraResources, files, mac, productName (+25 more)
 
 ### Community 267 - "commitRootImpl"
-Cohesion: 0.08
-Nodes (35): commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent() (+27 more)
+Cohesion: 0.05
+Nodes (45): EasterEggs(), ElectronBridgeHost(), burstAtEvent(), burstConfetti(), CONFETTI_COLORS, ConfettiCanvas(), Particle, FULL_BLEED_PATHS (+37 more)
 
 ### Community 268 - "PR #154 — Unified Things page"
-Cohesion: 0.10
-Nodes (28): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), complete(), finish(), flatten() (+20 more)
+Cohesion: 0.08
+Nodes (33): createContainer(), createContext(), createFactoryWithValidation(), createFiberRoot(), createHostRootFiber(), createHydrationContainer(), createPortal(), createPortal$1() (+25 more)
 
 ### Community 269 - "githubClient.ts"
-Cohesion: 0.10
-Nodes (28): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), complete(), finish(), flatten() (+20 more)
+Cohesion: 0.09
+Nodes (32): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), complete(), duration() (+24 more)
 
 ### Community 270 - "things.ts"
 Cohesion: 0.09
 Nodes (32): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), complete(), duration() (+24 more)
 
 ### Community 271 - "apiDocs.ts"
-Cohesion: 0.10
-Nodes (28): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), complete(), finish(), flatten() (+20 more)
+Cohesion: 0.09
+Nodes (32): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), complete(), duration() (+24 more)
 
 ### Community 272 - "animateTarget"
 Cohesion: 0.09
 Nodes (32): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), complete(), duration() (+24 more)
 
 ### Community 273 - "getValue"
-Cohesion: 0.07
-Nodes (39): commitLayoutEffects(), commitLayoutEffects_begin(), commitPassiveEffectDurations(), commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl() (+31 more)
+Cohesion: 0.21
+Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commitPlacement(), commitReconciliationEffects(), getHostParentFiber(), getHostSibling(), insertBefore() (+5 more)
 
 ### Community 274 - "trim"
+Cohesion: 0.10
+Nodes (28): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), complete(), finish(), flatten() (+20 more)
+
+### Community 275 - "trim"
 Cohesion: 0.09
 Nodes (32): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), complete(), duration() (+24 more)
 
-### Community 275 - "trim"
-Cohesion: 0.10
-Nodes (29): createContainer(), createFiberRoot(), createHostRootFiber(), createHydrationContainer(), createPortal(), createPortal$1(), createRoot(), createRoot$1() (+21 more)
-
 ### Community 276 - "legacyCreateRootFromDOMContainer"
-Cohesion: 0.10
-Nodes (28): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), complete(), finish(), flatten() (+20 more)
+Cohesion: 0.09
+Nodes (32): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), complete(), duration() (+24 more)
 
 ### Community 277 - "describeNativeComponentFrame"
 Cohesion: 0.09
-Nodes (33): commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent() (+25 more)
-
-### Community 278 - "trim"
-Cohesion: 0.09
 Nodes (32): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), complete(), duration() (+24 more)
 
-### Community 279 - "package.json"
-Cohesion: 0.10
-Nodes (23): cloneElement(), commitUpdate(), createElement(), createInstance(), createTextInstance(), createTextNode(), defineKeyPropWarningGetter(), defineRefPropWarningGetter() (+15 more)
-
-### Community 280 - "FooterStatusPanel.tsx"
-Cohesion: 0.09
-Nodes (26): ACTIVE_STATUSES, AutomationProvidersProps, CIControlDashboard(), CONFLICT_STATUSES, defaultWorkflowRef(), DetailProps, DispatchModal(), DispatchModalProps (+18 more)
-
-### Community 281 - "index.tsx"
-Cohesion: 0.04
-Nodes (66): commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), createContainer(), createContext(), createFactoryWithValidation() (+58 more)
-
-### Community 282 - "stop"
-Cohesion: 0.09
-Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
-
-### Community 283 - "stop"
-Cohesion: 0.07
-Nodes (38): addSubtreeSuspenseContext(), createCapturedValue(), createFiberFromFragment(), createFiberFromOffscreen(), findFirstSuspended(), findLastContentRow(), getRemainingWorkInPrimaryTree(), getSuspendedCache() (+30 more)
-
-### Community 284 - "stop"
-Cohesion: 0.33
-Nodes (9): didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance(), warnForInsertedHydratedElement(), warnForInsertedHydratedText() (+1 more)
-
-### Community 285 - "stop"
-Cohesion: 0.33
-Nodes (9): didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance(), warnForInsertedHydratedElement(), warnForInsertedHydratedText() (+1 more)
-
-### Community 286 - "stop"
-Cohesion: 0.09
-Nodes (30): createContainer(), createFiberRoot(), createHostRootFiber(), createPortal(), createPortal$1(), createRoot(), createRoot$1(), getPublicRootInstance() (+22 more)
-
-### Community 287 - "error"
-Cohesion: 0.09
-Nodes (20): createApiTestContext(), createPayloadTexts(), EmailTestConfig, ResultMap, RunOptions, TestsPage(), ApiTestContext, ApiTestDefinition (+12 more)
-
-### Community 288 - "stop"
-Cohesion: 0.12
-Nodes (27): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), getAnimationState() (+19 more)
-
-### Community 289 - "stop"
-Cohesion: 0.11
-Nodes (28): normalized(), aggregationStageSet, ALL_PROBE_PREDICATES, blockedKeySet, boundedInteger(), collectionSet, COMPUTE_PROBE_PREDICATES, fail() (+20 more)
-
-### Community 290 - "CIControlDashboard.tsx"
-Cohesion: 0.12
-Nodes (27): ALLOWED_COMPONENTS, BLOCKED_PROPS, ChakraThingRenderer(), CHILDLESS_COMPONENTS, OUT_OF_FLOW_POSITIONS, POSITION_PROPS, renderChildren(), renderNode() (+19 more)
-
-### Community 291 - "popHydrationState"
-Cohesion: 0.04
-Nodes (85): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+77 more)
-
-### Community 292 - "legacyCreateRootFromDOMContainer"
-Cohesion: 0.10
-Nodes (28): checkDepsAreArrayDev(), cloneAndReplaceKey(), cloneElementWithValidation(), createContext(), createElementWithValidation(), createFactoryWithValidation(), escapeUserProvidedKey(), getCurrentComponentErrorInfo() (+20 more)
-
-### Community 293 - "popHydrationState"
-Cohesion: 0.10
-Nodes (29): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle(), getTheme3(), getVariableValue() (+21 more)
-
-### Community 294 - "popHydrationState"
-Cohesion: 0.14
-Nodes (19): AlignKey, FONT_STACKS, FontKey, hasStyleTokens(), sanitizeAlign(), sanitizeColor(), sanitizeFont(), sanitizeSize() (+11 more)
-
-### Community 295 - "popHydrationState"
+### Community 278 - "trim"
 Cohesion: 0.10
 Nodes (28): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), complete(), finish(), flatten() (+20 more)
 
+### Community 279 - "package.json"
+Cohesion: 0.11
+Nodes (28): normalized(), aggregationStageSet, ALL_PROBE_PREDICATES, blockedKeySet, boundedInteger(), collectionSet, COMPUTE_PROBE_PREDICATES, fail() (+20 more)
+
+### Community 280 - "FooterStatusPanel.tsx"
+Cohesion: 0.12
+Nodes (27): ALLOWED_COMPONENTS, BLOCKED_PROPS, ChakraThingRenderer(), CHILDLESS_COMPONENTS, OUT_OF_FLOW_POSITIONS, POSITION_PROPS, renderChildren(), renderNode() (+19 more)
+
+### Community 281 - "index.tsx"
+Cohesion: 0.12
+Nodes (27): MongoStatus(), pulse, STATUS_COLORS, StoredEnvironmentSelection, FrontendStatus(), NitroStatus(), pulse, ServiceStatus() (+19 more)
+
+### Community 282 - "stop"
+Cohesion: 0.05
+Nodes (61): bubbleProperties(), checkForUnmatchedText(), cloneElement(), commitUpdate(), completeDehydratedSuspenseBoundary(), completeWork(), createElement(), createInstance() (+53 more)
+
+### Community 283 - "stop"
+Cohesion: 0.08
+Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
+
+### Community 284 - "stop"
+Cohesion: 0.09
+Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
+
+### Community 285 - "stop"
+Cohesion: 0.08
+Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
+
+### Community 286 - "stop"
+Cohesion: 0.09
+Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
+
+### Community 287 - "error"
+Cohesion: 0.09
+Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
+
+### Community 288 - "stop"
+Cohesion: 0.18
+Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
+
+### Community 289 - "stop"
+Cohesion: 0.09
+Nodes (26): ACTIVE_STATUSES, AutomationProvidersProps, CIControlDashboard(), CONFLICT_STATUSES, defaultWorkflowRef(), DetailProps, DispatchModal(), DispatchModalProps (+18 more)
+
+### Community 290 - "CIControlDashboard.tsx"
+Cohesion: 0.07
+Nodes (39): UserSettingsModal(), ColorControl(), CustomisePanel(), CustomiseToggle(), isHexColor(), THINGS_BADGE_PADDING_OPTIONS, ThingsBadgePaddingControl(), curatedFontNames (+31 more)
+
+### Community 291 - "popHydrationState"
+Cohesion: 0.09
+Nodes (20): createApiTestContext(), createPayloadTexts(), EmailTestConfig, ResultMap, RunOptions, TestsPage(), ApiTestContext, ApiTestDefinition (+12 more)
+
+### Community 292 - "legacyCreateRootFromDOMContainer"
+Cohesion: 0.08
+Nodes (35): commitPassiveMountEffects(), commitPassiveMountEffects_begin(), commitPassiveUnmountEffects(), commitRoot(), commitRootImpl(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent() (+27 more)
+
+### Community 293 - "popHydrationState"
+Cohesion: 0.07
+Nodes (43): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), cancelTreeOptimisedTransformAnimations() (+35 more)
+
+### Community 294 - "popHydrationState"
+Cohesion: 0.25
+Nodes (11): describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber(), describeFunctionComponentFrame(), describeNativeComponentFrame(), describeUnknownElementTypeFrameInDEV(), disabledLog(), disableLogs() (+3 more)
+
+### Community 295 - "popHydrationState"
+Cohesion: 0.04
+Nodes (92): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+84 more)
+
 ### Community 296 - "popHydrationState"
+Cohesion: 0.08
+Nodes (34): createContainer(), createContext(), createFactoryWithValidation(), createFiberRoot(), createHostRootFiber(), createPortal(), createPortal$1(), createRoot() (+26 more)
+
+### Community 297 - "getProps"
+Cohesion: 0.07
+Nodes (36): checkDepsAreArrayDev(), cloneAndReplaceKey(), cloneElementWithValidation(), createElementWithValidation(), describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber(), describeFunctionComponentFrame() (+28 more)
+
+### Community 298 - "querySafety.ts"
+Cohesion: 0.14
+Nodes (19): AlignKey, FONT_STACKS, FontKey, hasStyleTokens(), sanitizeAlign(), sanitizeColor(), sanitizeFont(), sanitizeSize() (+11 more)
+
+### Community 299 - "README.md"
 Cohesion: 0.09
 Nodes (32): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), complete(), duration() (+24 more)
 
-### Community 297 - "getProps"
-Cohesion: 0.10
-Nodes (31): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), getAnimationState() (+23 more)
-
-### Community 298 - "querySafety.ts"
-Cohesion: 0.04
-Nodes (90): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+82 more)
-
-### Community 299 - "README.md"
-Cohesion: 0.12
-Nodes (24): addValue(), animateSingleValue(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), getComputedStyle(), getStaticValue() (+16 more)
-
 ### Community 300 - "trim"
-Cohesion: 0.08
-Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
+Cohesion: 0.11
+Nodes (25): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getTheme3(), getVariableValue(), guard() (+17 more)
 
 ### Community 301 - "store.ts"
 Cohesion: 0.10
-Nodes (27): addValue(), animateSingleValue(), copyRawValuesOnly(), getComputedStyle(), getStaticValue(), getValue(), hasValue(), isForcedMotionValue() (+19 more)
+Nodes (28): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), complete(), finish(), flatten() (+20 more)
 
 ### Community 302 - "Raw.tsx"
-Cohesion: 0.08
-Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
+Cohesion: 0.09
+Nodes (34): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), cancelTreeOptimisedTransformAnimations() (+26 more)
 
 ### Community 303 - "vite.config.ts"
-Cohesion: 0.10
-Nodes (29): addValueToWillChange(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), cancelTreeOptimisedTransformAnimations(), clearAnimation(), duration() (+21 more)
+Cohesion: 0.09
+Nodes (32): attachTimeline(), calcGeneratorDuration(), calcStartTime(), canAnimate(), cancel(), clearAnimation(), complete(), duration() (+24 more)
 
 ### Community 304 - "unstable_scheduleCallback"
 Cohesion: 0.08
 Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
 
 ### Community 305 - "animateTarget"
-Cohesion: 0.12
-Nodes (27): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), getAnimationState() (+19 more)
+Cohesion: 0.06
+Nodes (47): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getBitLength(), getLeadingBit(), getTreeId(), getWorkInProgressRoot(), includesBlockingLane() (+39 more)
 
 ### Community 306 - "styleTokens.ts"
-Cohesion: 0.08
-Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
+Cohesion: 0.09
+Nodes (14): createViewportSubscription(), EDITOR_JS_POPOVER_VIEWPORT_CSS_VARS, EditorJsPopoverViewportHolder, EditorJsPopoverViewportInput, EditorJsPopoverViewportMetrics, EditorJsPopoverViewportSubscription, finiteNonNegative(), getEditorJsPopoverViewportMetrics() (+6 more)
 
 ### Community 307 - "getProps"
-Cohesion: 0.07
-Nodes (43): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), cancelTreeOptimisedTransformAnimations() (+35 more)
-
-### Community 308 - "trim"
-Cohesion: 0.08
-Nodes (37): bubbleProperties(), completeDehydratedSuspenseBoundary(), createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance() (+29 more)
-
-### Community 309 - "stop"
-Cohesion: 0.08
-Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
-
-### Community 310 - "initPlayback"
-Cohesion: 0.10
-Nodes (25): addPrefix2(), analyseComplexValue(), analyzeCSSValue(), createTransformer(), cssVar2(), escape(), escape2(), escapeDot() (+17 more)
-
-### Community 311 - "initPlayback"
-Cohesion: 0.08
-Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
-
-### Community 312 - "stop"
 Cohesion: 0.12
 Nodes (27): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), getAnimationState() (+19 more)
+
+### Community 308 - "trim"
+Cohesion: 0.13
+Nodes (25): formatPrice(), Sparkline(), StepTracker(), ListingRenderer(), BudgetRenderer(), BudgetValue, CouponRenderer(), CouponValue (+17 more)
+
+### Community 309 - "stop"
+Cohesion: 0.18
+Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
+
+### Community 310 - "initPlayback"
+Cohesion: 0.08
+Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
+
+### Community 311 - "initPlayback"
+Cohesion: 0.10
+Nodes (28): createContainer(), createFiberRoot(), createHostRootFiber(), createPortal(), createPortal$1(), createRoot(), createRoot$1(), getReactRootElementInContainer() (+20 more)
+
+### Community 312 - "stop"
+Cohesion: 0.08
+Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
 
 ### Community 313 - "stop"
 Cohesion: 0.08
 Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
 
 ### Community 314 - "mapIntoArray"
-Cohesion: 0.04
-Nodes (44): Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`), Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`), Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`), AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`), AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`), App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`), Canonical AI instruction links (`AI_ALL.md`), Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`) (+36 more)
+Cohesion: 0.10
+Nodes (31): commitLayoutEffects(), commitLayoutEffects_begin(), commitRoot(), commitRootImpl(), discreteUpdates(), dispatchContinuousEvent(), dispatchDiscreteEvent(), dispatchEvent() (+23 more)
 
 ### Community 315 - "editorJsPopoverViewport.ts"
-Cohesion: 0.10
-Nodes (19): MONGO_BLOCKED_QUERY_KEYS, MONGO_PROTECTED_THING_FIELDS, MONGO_QUERY_COLLECTIONS, MONGO_QUERY_OPERATIONS, MONGO_READ_ONLY_AGGREGATION_STAGES, MongoQueryCollection, MongoQueryOperation, MongoReadOnlyAggregationStage (+11 more)
-
-### Community 316 - "inlineHtmlText.ts"
-Cohesion: 0.09
-Nodes (14): createViewportSubscription(), EDITOR_JS_POPOVER_VIEWPORT_CSS_VARS, EditorJsPopoverViewportHolder, EditorJsPopoverViewportInput, EditorJsPopoverViewportMetrics, EditorJsPopoverViewportSubscription, finiteNonNegative(), getEditorJsPopoverViewportMetrics() (+6 more)
-
-### Community 317 - "describeNativeComponentFrame"
 Cohesion: 0.13
 Nodes (13): Binding, CGFloat, EdgeInsets, Gesture, DeploymentLoadStatus, DestinationPickerDrawer, DestinationPickerHeader, Bool (+5 more)
 
+### Community 316 - "inlineHtmlText.ts"
+Cohesion: 0.10
+Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
+
+### Community 317 - "describeNativeComponentFrame"
+Cohesion: 0.10
+Nodes (26): applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode() (+18 more)
+
 ### Community 318 - "forEach"
-Cohesion: 0.05
-Nodes (49): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), animateChildren() (+41 more)
+Cohesion: 0.10
+Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
 
 ### Community 319 - "animateTarget"
-Cohesion: 0.07
-Nodes (38): addValueToWillChange(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), cancelTreeOptimisedTransformAnimations() (+30 more)
+Cohesion: 0.10
+Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
 
 ### Community 320 - "forEach"
 Cohesion: 0.10
 Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
 
 ### Community 321 - "animateTarget"
-Cohesion: 0.06
-Nodes (49): addValueToWillChange(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints() (+41 more)
+Cohesion: 0.10
+Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
 
 ### Community 322 - "describeNativeComponentFrame"
-Cohesion: 0.10
-Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
-
-### Community 323 - "PR #201 — Add private S3 post attachments with tier accounting"
-Cohesion: 0.11
-Nodes (22): calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode(), eachAxis() (+14 more)
-
-### Community 324 - "scrapeMotionValuesFromProps"
-Cohesion: 0.10
-Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
-
-### Community 325 - "getProps"
-Cohesion: 0.10
-Nodes (26): applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode() (+18 more)
-
-### Community 326 - "eachAxis"
-Cohesion: 0.10
-Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
-
-### Community 327 - "forEach"
-Cohesion: 0.10
-Nodes (25): calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode(), eachAxis() (+17 more)
-
-### Community 328 - "animateTarget"
-Cohesion: 0.07
-Nodes (43): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), cancelTreeOptimisedTransformAnimations() (+35 more)
-
-### Community 329 - "forEach"
-Cohesion: 0.10
-Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
-
-### Community 330 - "update"
-Cohesion: 0.06
-Nodes (46): isEnabled(), add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild() (+38 more)
-
-### Community 331 - "commitPlacement"
-Cohesion: 0.10
-Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
-
-### Community 332 - "update"
-Cohesion: 0.10
-Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
-
-### Community 333 - "getProps"
-Cohesion: 0.10
-Nodes (26): applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode() (+18 more)
-
-### Community 334 - "update"
 Cohesion: 0.14
 Nodes (17): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), generatePlaceholder(), generatePreview(), generators, getCheckerboardOptions(), getLenticularHaloOptions(), getLinearGradientOptions() (+9 more)
 
-### Community 335 - "update"
+### Community 323 - "PR #201 — Add private S3 post attachments with tier accounting"
 Cohesion: 0.08
 Nodes (25): Admin access, AI agent instructions, API self-documentation, Auth and Lopu AI, Branch Automation: develop → main Promotion, Trusted develop-Target PR Deployments, 💹 Donate on Indiegogo to save humanity 🩷, Electron desktop app (+17 more)
 
-### Community 336 - "getProps"
-Cohesion: 0.13
-Nodes (25): formatPrice(), Sparkline(), StepTracker(), ListingRenderer(), BudgetRenderer(), BudgetValue, CouponRenderer(), CouponValue (+17 more)
+### Community 324 - "scrapeMotionValuesFromProps"
+Cohesion: 0.21
+Nodes (21): BsonEntry, compileBsonValue(), compileFilterGroup(), compileMongoQueryRequest(), compilePipeline(), compileProjection(), compileRule(), compileSort() (+13 more)
 
-### Community 337 - "update"
+### Community 325 - "getProps"
+Cohesion: 0.06
+Nodes (39): ApiAuthMode, apiDocMap, ApiEndpointDoc, ApiHttpMethod, ApiPlatformExamples, ApiRequestExample, ApiResponseExample, apiV1DocsRouteKeys (+31 more)
+
+### Community 326 - "eachAxis"
 Cohesion: 0.08
 Nodes (26): devDependencies, @emotion/styled, eslint, eslint-config-prettier, eslint-loader, eslint-plugin-chakra-ui, eslint-plugin-hydrogen, eslint-plugin-prettier (+18 more)
 
-### Community 338 - "getProps"
+### Community 327 - "forEach"
+Cohesion: 0.05
+Nodes (49): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), animateChildren() (+41 more)
+
+### Community 328 - "animateTarget"
+Cohesion: 0.10
+Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
+
+### Community 329 - "forEach"
+Cohesion: 0.08
+Nodes (34): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle(), getTheme3(), getVariableValue() (+26 more)
+
+### Community 330 - "update"
+Cohesion: 0.12
+Nodes (27): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), getAnimationState() (+19 more)
+
+### Community 331 - "commitPlacement"
 Cohesion: 0.11
 Nodes (25): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getTheme3(), getVariableValue(), guard() (+17 more)
 
-### Community 339 - "update"
-Cohesion: 0.10
-Nodes (25): calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode(), eachAxis() (+17 more)
+### Community 332 - "update"
+Cohesion: 0.18
+Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
 
-### Community 340 - "update"
-Cohesion: 0.07
-Nodes (42): addValue(), copyRawValuesOnly(), get(), getComputedStyle(), getStaticValue(), getTheme3(), getValue(), getVariableValue() (+34 more)
+### Community 333 - "getProps"
+Cohesion: 0.08
+Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
 
-### Community 341 - "update"
-Cohesion: 0.09
-Nodes (29): calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode(), eachAxis() (+21 more)
+### Community 334 - "update"
+Cohesion: 0.08
+Nodes (34): analyseComplexValue(), createTransformer(), get(), getAnimatableNone(), getAnimatableNone2(), getComputedStyle(), getTheme3(), getVariableValue() (+26 more)
 
-### Community 342 - "update"
+### Community 335 - "update"
 Cohesion: 0.18
 Nodes (18): Command(), Command(), runOperation(), Command(), Command(), Command(), Command(), Command() (+10 more)
 
-### Community 343 - "update"
-Cohesion: 0.08
-Nodes (28): redirect(), applyPrivateHeaders(), withAttachmentPrivateResponse(), consumeEmailVerification(), ConsumeResult, applyPasswordReset(), consumePasswordReset(), ConsumePasswordResetResult (+20 more)
-
-### Community 344 - "getProps"
+### Community 336 - "getProps"
 Cohesion: 0.16
 Nodes (21): byKey, CI_AUTOMATION_DEFINITIONS, CI_WORKFLOW_KEYS, CiAutomationDefinition, CiAutomationPolicy, defaultCiAutomationPolicy(), isCiExecutionProvider(), isCiWorkflowKey() (+13 more)
 
-### Community 345 - "describeNativeComponentFrame"
+### Community 337 - "update"
+Cohesion: 0.19
+Nodes (22): dateFrom(), recordCiEvent(), stableShareId(), upsertCiEntity(), cleanupRunner(), createRunner(), dispatchToRunner(), fallbackToGithub() (+14 more)
+
+### Community 338 - "getProps"
+Cohesion: 0.08
+Nodes (38): ChakraThingNode, ensureBuiltinKinds(), getKindRenderer(), isKindSafeForUntrusted(), KindRenderer, registerKindRenderer(), registry, RenderThing() (+30 more)
+
+### Community 339 - "update"
 Cohesion: 0.10
 Nodes (23): Agent roles, AI Advice: Agents And Councils, Branch strategy, Core idea, Council patterns, Customer Support Agent, Customer Support Council, Feature Implementation Council (+15 more)
 
+### Community 340 - "update"
+Cohesion: 0.04
+Nodes (82): act(), checkAttributeStringCoercion(), checkCSSPropertyStringCoercion(), checkDepsAreArrayDev(), checkFormFieldValueStringCoercion(), checkHtmlStringCoercion(), checkKeyStringCoercion(), checkPropStringCoercion() (+74 more)
+
+### Community 341 - "update"
+Cohesion: 0.09
+Nodes (23): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+15 more)
+
+### Community 342 - "update"
+Cohesion: 0.12
+Nodes (24): addValue(), animateSingleValue(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), getComputedStyle(), getStaticValue() (+16 more)
+
+### Community 343 - "update"
+Cohesion: 0.06
+Nodes (45): addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints() (+37 more)
+
+### Community 344 - "getProps"
+Cohesion: 0.12
+Nodes (27): addValue(), addValueToWillChange(), animateSingleValue(), animateTarget(), animateVariant(), animateVisualElement(), cancelTreeOptimisedTransformAnimations(), getAnimationState() (+19 more)
+
+### Community 345 - "describeNativeComponentFrame"
+Cohesion: 0.04
+Nodes (53): apiEndpointDocs, conceptEntries, DocsDesign(), designSystemEntries, DesignSystemEntry, DesignSystemStatus, designSystemStatusColors, getDesignSystemEntryBySlug() (+45 more)
+
 ### Community 346 - "entry.client.tsx"
-Cohesion: 0.10
-Nodes (26): add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild(), bindToMotionValue() (+18 more)
+Cohesion: 0.08
+Nodes (25): [1.0.0] - YYYY-MM-DD, Added, Added, Added, Added, Added, Changed, Changed (+17 more)
 
 ### Community 347 - "devDependencies"
 Cohesion: 0.09
 Nodes (23): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+15 more)
 
 ### Community 348 - "trim"
-Cohesion: 0.19
-Nodes (22): dateFrom(), recordCiEvent(), stableShareId(), upsertCiEntity(), cleanupRunner(), createRunner(), dispatchToRunner(), fallbackToGithub() (+14 more)
+Cohesion: 0.06
+Nodes (54): bubbleProperties(), checkForUnmatchedText(), commitUpdate(), compare(), completeDehydratedSuspenseBoundary(), completeWork(), createInstance(), createTextInstance() (+46 more)
 
 ### Community 349 - "createElementWithValidation"
 Cohesion: 0.09
@@ -2538,8 +2540,8 @@ Cohesion: 0.09
 Nodes (23): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+15 more)
 
 ### Community 351 - "eachAxis"
-Cohesion: 0.09
-Nodes (23): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+15 more)
+Cohesion: 0.10
+Nodes (26): applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode() (+18 more)
 
 ### Community 352 - "trim"
 Cohesion: 0.09
@@ -2558,140 +2560,140 @@ Cohesion: 0.09
 Nodes (23): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+15 more)
 
 ### Community 356 - "AI Advice: Agents And Councils"
-Cohesion: 0.09
-Nodes (23): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+15 more)
+Cohesion: 0.06
+Nodes (46): isEnabled(), add(), addDomEvent(), addListeners(), addPointerEvent(), addScaleCorrector(), addUniqueItem(), addVariantChild() (+38 more)
 
 ### Community 357 - "test"
-Cohesion: 0.08
-Nodes (24): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+16 more)
-
-### Community 358 - "[...].ts"
 Cohesion: 0.09
 Nodes (23): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+15 more)
+
+### Community 358 - "[...].ts"
+Cohesion: 0.08
+Nodes (24): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+16 more)
 
 ### Community 359 - "mapIntoArray"
 Cohesion: 0.09
 Nodes (23): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+15 more)
 
 ### Community 360 - "commitPlacement"
-Cohesion: 0.21
-Nodes (21): BsonEntry, compileBsonValue(), compileFilterGroup(), compileMongoQueryRequest(), compilePipeline(), compileProjection(), compileRule(), compileSort() (+13 more)
+Cohesion: 0.09
+Nodes (23): applyDefaultFilter(), createMotionComponentFactory(), createRendererMotionComponent(), createTransform(), createUseRender(), degree(), getMixer(), getRadius() (+15 more)
 
 ### Community 361 - "ensure-dependencies.js"
+Cohesion: 0.18
+Nodes (19): advanceTimers(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), cancelHostTimeout(), flushWork(), handleTimeout(), markTaskErrored(), peek() (+11 more)
+
+### Community 362 - "equal"
 Cohesion: 0.19
 Nodes (13): averageSegmentJoins(), getData(), outlineStrokes(), strokeToFill(), constructor(), render(), Sample, Segment (+5 more)
 
-### Community 362 - "equal"
+### Community 363 - "test"
 Cohesion: 0.13
 Nodes (21): apiDocContent(), buildDocs(), buildSnippet(), countOccurrences(), DocsSearchArea, docsSearchAreaColors, DocsSearchDoc, DocsSearchResult (+13 more)
 
-### Community 363 - "test"
+### Community 364 - "test"
 Cohesion: 0.09
 Nodes (18): children, devContext, { ensureDependencies }, loadLocalEnv(), parseEnvValue(), require, { resolveDevContext }, initial (+10 more)
 
-### Community 364 - "test"
+### Community 365 - "test"
 Cohesion: 0.13
 Nodes (22): API To GUI Mapping, Car Thing Demo, 1a Classic Centered Direction, 1c Crowdfund Campaign Direction, Thingtime Directions Design Doc, 1d Developer First Direction, Thingtime Ecosystem Surfaces, Everything Is A Thing (+14 more)
 
-### Community 365 - "test"
-Cohesion: 0.10
-Nodes (26): applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode() (+18 more)
-
 ### Community 366 - "test"
-Cohesion: 0.09
-Nodes (21): compilerOptions, allowImportingTsExtensions, allowJs, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx (+13 more)
+Cohesion: 0.10
+Nodes (25): calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode(), eachAxis() (+17 more)
 
 ### Community 367 - "test"
-Cohesion: 0.25
-Nodes (17): ciFeatureIdentity(), constantTimeEqual(), eventBase(), ingestGitHubWebhook(), ingestVercelWebhook(), labelsFrom(), promotionGroupFrom(), promotionSourceFromBody() (+9 more)
+Cohesion: 0.23
+Nodes (12): MONGO_QUERY_LIMITS, MongoQueryRequest, MongoQuerySuccess, baseOptions(), boundedDistinctPipeline(), collectValues(), Fail, runMongoQuery() (+4 more)
 
 ### Community 368 - "test"
+Cohesion: 0.10
+Nodes (19): MONGO_BLOCKED_QUERY_KEYS, MONGO_PROTECTED_THING_FIELDS, MONGO_QUERY_COLLECTIONS, MONGO_QUERY_OPERATIONS, MONGO_READ_ONLY_AGGREGATION_STAGES, MongoQueryCollection, MongoQueryOperation, MongoReadOnlyAggregationStage (+11 more)
+
+### Community 369 - "createRoot"
 Cohesion: 0.11
 Nodes (15): MONGO_BSON_VALUE_TYPES, MONGO_FILTER_OPERATORS, MongoBsonValueType, BsonValueEditorComponent(), inputStyles, isLiteralType(), placeholderFor(), Props (+7 more)
 
-### Community 369 - "createRoot"
+### Community 370 - "test"
+Cohesion: 0.09
+Nodes (21): compilerOptions, allowImportingTsExtensions, allowJs, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx (+13 more)
+
+### Community 371 - "test"
+Cohesion: 0.25
+Nodes (17): ciFeatureIdentity(), constantTimeEqual(), eventBase(), ingestGitHubWebhook(), ingestVercelWebhook(), labelsFrom(), promotionGroupFrom(), promotionSourceFromBody() (+9 more)
+
+### Community 372 - "test"
 Cohesion: 0.10
 Nodes (18): apiIndex, appEntryTag, appScriptSources, authorizeHeadersIndex, bootScript, config, cspHeadersIndex, designBundlesHeadersIndex (+10 more)
 
-### Community 370 - "test"
-Cohesion: 0.08
-Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
-
-### Community 371 - "test"
+### Community 373 - "test"
 Cohesion: 0.14
 Nodes (16): VercelDeploymentsOverview, BRANCH_LIMIT_OPTIONS, buildDefaultSelectedStates(), buildStatusOptions(), dateLabel(), DeploymentRow(), DeploymentSort, DeploymentState (+8 more)
 
-### Community 372 - "test"
+### Community 374 - "Vercel Deployments"
 Cohesion: 0.12
 Nodes (15): ApiResponse, CryptoPage(), CryptoStandard, encodingLabel(), formatJson(), generatedEnvValue(), generatedKeyValue(), JsonOutput() (+7 more)
 
-### Community 373 - "test"
-Cohesion: 0.06
-Nodes (52): bubbleProperties(), checkForUnmatchedText(), commitUpdate(), compare(), completeDehydratedSuspenseBoundary(), completeWork(), createInstance(), createTextInstance() (+44 more)
-
-### Community 374 - "Vercel Deployments"
-Cohesion: 0.29
-Nodes (13): advanceTimers(), cancelHostTimeout(), flushWork(), handleTimeout(), markTaskErrored(), peek(), requestHostCallback(), requestHostTimeout() (+5 more)
-
 ### Community 375 - "queryBuilderState.ts"
-Cohesion: 0.06
-Nodes (43): FALLBACK_MUSINGS, wishSlotMusing(), ALL_MODES, buildContextLine(), buildUserPrompt(), createLopuClaudeModelResolver(), fetchWeather(), generateLopuMusing() (+35 more)
+Cohesion: 0.18
+Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
 
 ### Community 376 - "GradientPath.js"
-Cohesion: 0.11
-Nodes (18): compilerOptions, allowJs, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx, lib (+10 more)
+Cohesion: 0.07
+Nodes (42): accumulateOrCreateContinuousQueuedReplayableEvent(), advanceTimers(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), attemptSynchronousHydration() (+34 more)
 
 ### Community 377 - "thingtimeSerialization.ts"
-Cohesion: 0.07
-Nodes (37): checkDepsAreArrayDev(), cloneAndReplaceKey(), cloneElementWithValidation(), createCapturedValueAtFiber(), createContext(), createFactoryWithValidation(), describeBuiltInComponentFrame(), describeClassComponentFrame() (+29 more)
+Cohesion: 0.09
+Nodes (29): calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode(), eachAxis() (+21 more)
 
 ### Community 378 - "docsSearchIndex.ts"
+Cohesion: 0.07
+Nodes (43): attachPingListener(), attachRetryListener(), attachSuspenseRetryListeners(), enqueueCapturedUpdate(), errorHydratingContainer(), finishQueueingConcurrentUpdates(), getLanesToRetrySynchronouslyOnError(), getNearestSuspenseBoundaryToCapture() (+35 more)
+
+### Community 379 - "getProps"
+Cohesion: 0.18
+Nodes (19): advanceTimers(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), cancelHostTimeout(), flushWork(), handleTimeout(), markTaskErrored(), peek() (+11 more)
+
+### Community 380 - "tt-logo Custom Element"
 Cohesion: 0.18
 Nodes (16): appJwt(), appPrivateKey(), CachedToken, encode(), githubRequest(), graphQl(), inputAllowlist, installationId() (+8 more)
 
-### Community 379 - "getProps"
+### Community 381 - "webhooks.ts"
+Cohesion: 0.25
+Nodes (11): describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber(), describeFunctionComponentFrame(), describeNativeComponentFrame(), describeUnknownElementTypeFrameInDEV(), disabledLog(), disableLogs() (+3 more)
+
+### Community 382 - "FilterBuilder.tsx"
+Cohesion: 0.11
+Nodes (18): compilerOptions, allowJs, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx, lib (+10 more)
+
+### Community 383 - "ThingsPage.tsx"
+Cohesion: 0.16
+Nodes (20): advanceTimers(), cancelHostTimeout(), clearSuspenseBoundary(), clearSuspenseBoundaryFromContainer(), commitHydratedContainer(), commitHydratedSuspenseInstance(), commitSuspenseHydrationCallbacks(), flushWork() (+12 more)
+
+### Community 384 - "compilerOptions"
+Cohesion: 0.18
+Nodes (19): advanceTimers(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), cancelHostTimeout(), flushWork(), handleTimeout(), markTaskErrored(), peek() (+11 more)
+
+### Community 385 - "ThingtimeWebView"
 Cohesion: 0.11
 Nodes (17): 0. TL;DR — where things stand, 1. What Lopu asked for (verbatim intent) — all delivered, 2. What was built (file inventory), 3. Live verification already done (so you know the happy paths work), 4. 🔧 THE FIX LIST — 12 review findings (do these next), 5. Grounding + gotchas (things that bit us — don't relearn the hard way), 6. How to resume (checklist for the next chat), FIX 1 — `crystal: { schema, ...value }` spread lets a field named "schema" clobber the scope tag  *(CONFIRMED; findings #2, #11)* (+9 more)
 
-### Community 380 - "tt-logo Custom Element"
-Cohesion: 0.36
-Nodes (7): Session, getDeploymentBranchName(), loadRootData(), PUBLIC_THINGTIME_ENV_KEYS, rootDataResponse(), TEST_ENV_KEYS, withTestEnv()
+### Community 386 - "collections.ts"
+Cohesion: 0.30
+Nodes (13): Decodable, Equatable, Identifiable, DeploymentGroup, DeploymentOption, DeploymentSection, DeploymentsOverview, DeploymentSummary (+5 more)
 
-### Community 381 - "webhooks.ts"
+### Community 387 - "vercel.tsx"
+Cohesion: 0.06
+Nodes (50): areHookInputsEqual(), basicStateReducer(), createFunctionComponentUpdateQueue(), getWorkInProgressRoot(), includesBlockingLane(), includesOnlyNonUrgentLanes(), isSubsetOfLanes(), markSkippedUpdateLanes() (+42 more)
+
+### Community 388 - "embed.tsx"
 Cohesion: 0.14
 Nodes (11): ChakraWrapper(), chakras, chakrasDark, chakrasLight, colors, g, greys, ChakraButton (+3 more)
 
-### Community 382 - "FilterBuilder.tsx"
+### Community 389 - "commitPlacement"
 Cohesion: 0.22
 Nodes (13): jsonResponse(), normalizeResponse(), RouteModule, routeModules, cloneProxyRequestHeaders(), getApiFallbackOrigin(), getMissingSelfHostedApiEnv(), getSetCookieHeaders() (+5 more)
-
-### Community 383 - "ThingsPage.tsx"
-Cohesion: 0.13
-Nodes (16): applyAxisDelta(), applyBoxDelta(), applyPointDelta(), applyTreeDeltas(), has2DTranslate(), hasScale(), hasTransform(), is2DTranslate() (+8 more)
-
-### Community 384 - "compilerOptions"
-Cohesion: 0.14
-Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelta(), calcBoxDelta(), calcLength(), calcOrigin2(), calcRelativeAxis() (+8 more)
-
-### Community 385 - "ThingtimeWebView"
-Cohesion: 0.13
-Nodes (16): applyAxisDelta(), applyBoxDelta(), applyPointDelta(), applyTreeDeltas(), has2DTranslate(), hasScale(), hasTransform(), is2DTranslate() (+8 more)
-
-### Community 386 - "collections.ts"
-Cohesion: 0.14
-Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelta(), calcBoxDelta(), calcLength(), calcOrigin2(), calcRelativeAxis() (+8 more)
-
-### Community 387 - "vercel.tsx"
-Cohesion: 0.07
-Nodes (36): checkDepsAreArrayDev(), cloneAndReplaceKey(), cloneElementWithValidation(), createElementWithValidation(), describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber(), describeFunctionComponentFrame() (+28 more)
-
-### Community 388 - "embed.tsx"
-Cohesion: 0.13
-Nodes (16): applyAxisDelta(), applyBoxDelta(), applyPointDelta(), applyTreeDeltas(), has2DTranslate(), hasScale(), hasTransform(), is2DTranslate() (+8 more)
-
-### Community 389 - "commitPlacement"
-Cohesion: 0.14
-Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelta(), calcBoxDelta(), calcLength(), calcOrigin2(), calcRelativeAxis() (+8 more)
 
 ### Community 390 - "commitPlacement"
 Cohesion: 0.13
@@ -2766,168 +2768,160 @@ Cohesion: 0.14
 Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelta(), calcBoxDelta(), calcLength(), calcOrigin2(), calcRelativeAxis() (+8 more)
 
 ### Community 408 - "theme.tsx"
-Cohesion: 0.15
-Nodes (15): MagicInput, MagicInputProps, addBindingsToContext(), context(), contextObject(), createContext(), createInlineContext(), getNodeUUID() (+7 more)
+Cohesion: 0.13
+Nodes (16): applyAxisDelta(), applyBoxDelta(), applyPointDelta(), applyTreeDeltas(), has2DTranslate(), hasScale(), hasTransform(), is2DTranslate() (+8 more)
 
 ### Community 409 - "applyAxisDelta"
 Cohesion: 0.14
-Nodes (11): createLatestRevisionAutosave(), defaultTimers, LatestRevisionAutosaveCoordinator, LatestRevisionAutosaveErrorContext, LatestRevisionAutosaveOptions, LatestRevisionAutosavePhase, LatestRevisionAutosaveState, LatestRevisionAutosaveTimers (+3 more)
+Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelta(), calcBoxDelta(), calcLength(), calcOrigin2(), calcRelativeAxis() (+8 more)
 
 ### Community 410 - "notifyLayoutUpdate"
+Cohesion: 0.13
+Nodes (16): applyAxisDelta(), applyBoxDelta(), applyPointDelta(), applyTreeDeltas(), has2DTranslate(), hasScale(), hasTransform(), is2DTranslate() (+8 more)
+
+### Community 411 - "applyAxisDelta"
+Cohesion: 0.14
+Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelta(), calcBoxDelta(), calcLength(), calcOrigin2(), calcRelativeAxis() (+8 more)
+
+### Community 412 - "notifyLayoutUpdate"
+Cohesion: 0.13
+Nodes (16): applyAxisDelta(), applyBoxDelta(), applyPointDelta(), applyTreeDeltas(), has2DTranslate(), hasScale(), hasTransform(), is2DTranslate() (+8 more)
+
+### Community 413 - "applyAxisDelta"
+Cohesion: 0.14
+Nodes (16): aspectRatio(), axisEqualsRounded(), boxEqualsRounded(), calcAxisDelta(), calcBoxDelta(), calcLength(), calcOrigin2(), calcRelativeAxis() (+8 more)
+
+### Community 414 - "notifyLayoutUpdate"
+Cohesion: 0.15
+Nodes (15): MagicInput, MagicInputProps, addBindingsToContext(), context(), contextObject(), createContext(), createInlineContext(), getNodeUUID() (+7 more)
+
+### Community 415 - "applyAxisDelta"
+Cohesion: 0.14
+Nodes (11): createLatestRevisionAutosave(), defaultTimers, LatestRevisionAutosaveCoordinator, LatestRevisionAutosaveErrorContext, LatestRevisionAutosaveOptions, LatestRevisionAutosavePhase, LatestRevisionAutosaveState, LatestRevisionAutosaveTimers (+3 more)
+
+### Community 416 - "notifyLayoutUpdate"
 Cohesion: 0.18
 Nodes (16): addOpt(), anyOptsIn(), anyThingsIn(), optIn(), optIndex(), optsIn(), popOpt(), popOpts() (+8 more)
 
-### Community 411 - "applyAxisDelta"
-Cohesion: 0.26
-Nodes (14): Decodable, Equatable, Identifiable, DeploymentGroup, DeploymentOption, DeploymentSection, DeploymentsOverview, DeploymentSummary (+6 more)
+### Community 417 - "applyAxisDelta"
+Cohesion: 0.33
+Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
 
-### Community 412 - "notifyLayoutUpdate"
-Cohesion: 0.19
-Nodes (14): createCapturedValueAtFiber(), describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber(), describeFunctionComponentFrame(), describeNativeComponentFrame(), describeUnknownElementTypeFrameInDEV(), disabledLog() (+6 more)
-
-### Community 413 - "applyAxisDelta"
+### Community 418 - "notifyLayoutUpdate"
 Cohesion: 0.13
 Nodes (14): compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx, lib, module, resolveJsonModule (+6 more)
 
-### Community 414 - "notifyLayoutUpdate"
+### Community 419 - "applyAxisDelta"
 Cohesion: 0.24
 Nodes (12): backwardBoundaryKeys, ClosestEventTarget, EDITOR_JS_NATIVE_TEXT_FIELD_KEYS, editorJsNativeTextFieldKeys, getEditorJsArrowMovement(), getEditorJsTextField(), isAtTrueTextFieldBoundary(), nodeBoundaryLength() (+4 more)
 
-### Community 415 - "applyAxisDelta"
+### Community 420 - "notifyLayoutUpdate"
 Cohesion: 0.19
 Nodes (12): ClientCacheProvider(), root, createEmotionCache(), defaultEmotionCache, EmotionCacheFactory, getExport(), resolveEmotionCacheFactory(), ClientStyleContext (+4 more)
 
-### Community 416 - "notifyLayoutUpdate"
+### Community 421 - "mapIntoArray"
 Cohesion: 0.21
 Nodes (11): apiDocsSmokeTests, apiTestGroups, apiTests, appShapedDataCrystal, plusAlias(), sixDigitCode(), uniqueEmailOtpBody(), uniqueEmailRegisterBody() (+3 more)
 
-### Community 417 - "applyAxisDelta"
+### Community 422 - "applyAxisDelta"
 Cohesion: 0.19
 Nodes (12): buildForVercel(), remixOutputDirectory, repositoryRoot, rootOutputDirectory, run(), scriptPath, stageVercelOutput(), verifyVercelOutput() (+4 more)
 
-### Community 418 - "notifyLayoutUpdate"
-Cohesion: 0.08
-Nodes (27): animateChildren(), clear(), clearListeners(), destroy(), filterEvents(), flushKeyframeResolvers(), forEach(), getBaseTarget() (+19 more)
+### Community 423 - "notifyLayoutUpdate"
+Cohesion: 0.33
+Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
 
-### Community 419 - "applyAxisDelta"
-Cohesion: 0.13
-Nodes (21): cloneChildFibers(), createFiberFromElement(), createFiberFromFragment(), createFiberFromOffscreen(), createFiberFromProfiler(), createFiberFromSuspense(), createFiberFromSuspenseList(), createFiberFromTypeAndProps() (+13 more)
-
-### Community 420 - "notifyLayoutUpdate"
-Cohesion: 0.18
-Nodes (19): advanceTimers(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), cancelHostTimeout(), flushWork(), handleTimeout(), markTaskErrored(), peek() (+11 more)
-
-### Community 421 - "mapIntoArray"
+### Community 424 - "applyAxisDelta"
 Cohesion: 0.22
 Nodes (8): DeploymentOptionRow, DeploymentSectionDisclosure, DestinationContextMenu, DestinationRow, Bool, String, Void, UIKit
 
-### Community 422 - "applyAxisDelta"
+### Community 425 - "notifyLayoutUpdate"
 Cohesion: 0.14
 Nodes (13): Authorization boundaries, Cleanup and deletion, Deployment contract, Develop attachment environment (2026-08-09), Develop conflict refresh (2026-08-09), Multipart and race safety, Parent refresh deployment repair (2026-08-10), PR #201 — Add private S3 post attachments with tier accounting (+5 more)
 
-### Community 423 - "notifyLayoutUpdate"
-Cohesion: 0.23
-Nodes (10): FORMATS, any(), convert(), optimize(), optimizeJPEG(), optimizeSVG(), optimizeWEBP(), ImageResultHandling (+2 more)
+### Community 426 - "applyAxisDelta"
+Cohesion: 0.39
+Nodes (5): FORMATS, any(), convert(), convertPDF(), convertSVG()
 
-### Community 424 - "applyAxisDelta"
-Cohesion: 0.31
-Nodes (11): CiWorkflowKey, dispatchCiWorkflow(), repositoryName(), bounded(), CiProviderRouteRequest, equalText(), parseCiProviderRouteRequest(), routeCiProviderRequest() (+3 more)
-
-### Community 425 - "notifyLayoutUpdate"
+### Community 427 - "notifyLayoutUpdate"
 Cohesion: 0.19
 Nodes (12): buildCsp(), designBundlesCsp, devCsp, directives(), prodCsp, serialize(), apiCatchAllRoute, apiRootDataRoute (+4 more)
 
-### Community 426 - "applyAxisDelta"
+### Community 428 - "applyAxisDelta"
 Cohesion: 0.14
 Nodes (13): 0. TL;DR, 1. What Lopu asked for (verbatim intent), 2. Grounding (where things live — verified this session), 3. What's DONE (committed on `claude/schema-browser-builder`, `99c313f`), 4. What's NEXT (not started), 5. House rules that bit us before (don't relearn the hard way), Backend, Dev environment (+5 more)
 
-### Community 427 - "notifyLayoutUpdate"
+### Community 429 - "notifyLayoutUpdate"
 Cohesion: 0.15
 Nodes (10): app, ThingtimeApp, DeploymentsLoadState, failed, idle, loaded, loading, StorageKey (+2 more)
 
-### Community 428 - "applyAxisDelta"
-Cohesion: 0.18
-Nodes (19): advanceTimers(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), cancelHostTimeout(), flushWork(), handleTimeout(), markTaskErrored(), peek() (+11 more)
+### Community 430 - "applyAxisDelta"
+Cohesion: 0.60
+Nodes (5): optimize(), optimizeJPEG(), optimizeSVG(), optimizeWEBP(), ImageResultHandling
 
-### Community 429 - "notifyLayoutUpdate"
+### Community 431 - "notifyLayoutUpdate"
 Cohesion: 0.21
 Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commitPlacement(), commitReconciliationEffects(), getHostParentFiber(), getHostSibling(), insertBefore() (+5 more)
 
-### Community 430 - "applyAxisDelta"
-Cohesion: 0.21
-Nodes (13): describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber(), describeFunctionComponentFrame(), describeNativeComponentFrame(), describeUnknownElementTypeFrameInDEV(), disabledLog(), disableLogs() (+5 more)
-
-### Community 431 - "notifyLayoutUpdate"
-Cohesion: 0.18
-Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
-
 ### Community 432 - "applyAxisDelta"
+Cohesion: 0.21
+Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commitPlacement(), commitReconciliationEffects(), getHostParentFiber(), getHostSibling(), insertBefore() (+5 more)
+
+### Community 434 - "useStyleConfigImpl"
+Cohesion: 0.21
+Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commitPlacement(), commitReconciliationEffects(), getHostParentFiber(), getHostSibling(), insertBefore() (+5 more)
+
+### Community 435 - "optIn"
 Cohesion: 0.15
 Nodes (12): author, dependencies, speed-test, speedtest-net, description, keywords, license, main (+4 more)
 
-### Community 433 - "notifyLayoutUpdate"
+### Community 436 - "ThingtimeWebView.swift"
 Cohesion: 0.26
 Nodes (12): Follow-up: anonymous session presentation, Follow-up: atomic first-load Feed input recovery, Follow-up: Mobile Safari compatibility-click recovery, Follow-up: persisted Thingtime function recovery, Follow-up: persistent browse toolbar during selection, Follow-up: populated kind-group runtime crash, Follow-up: recoverable first-session Things space, Follow-up: Safari page-cache and pre-React recovery hardening (+4 more)
 
-### Community 434 - "useStyleConfigImpl"
+### Community 437 - "index.js"
 Cohesion: 0.15
 Nodes (11): Activation gates, Live setup completed during implementation, PR #212 — Secure develop-target PR Previews, Security design, Verification completed, Why this exists, Activation boundary, Fix (+3 more)
 
-### Community 435 - "optIn"
-Cohesion: 0.23
-Nodes (12): MONGO_QUERY_LIMITS, MongoQueryRequest, MongoQuerySuccess, baseOptions(), boundedDistinctPipeline(), collectValues(), Fail, runMongoQuery() (+4 more)
+### Community 438 - "compilerOptions"
+Cohesion: 0.31
+Nodes (11): CiWorkflowKey, dispatchCiWorkflow(), repositoryName(), bounded(), CiProviderRouteRequest, equalText(), parseCiProviderRouteRequest(), routeCiProviderRequest() (+3 more)
 
-### Community 436 - "ThingtimeWebView.swift"
-Cohesion: 0.08
-Nodes (25): [1.0.0] - YYYY-MM-DD, Added, Added, Added, Added, Added, Changed, Changed (+17 more)
-
-### Community 437 - "index.js"
+### Community 439 - "editorJsKeyboard.ts"
 Cohesion: 0.26
 Nodes (9): assetPath(), installPreviewBuildFreshness(), isStalePreviewEntry(), isVercelPreviewHost(), previewEntryAssetFromHtml(), previewEntryAssetFromSources(), PreviewFreshnessRuntime, previewRefreshUrl() (+1 more)
 
-### Community 438 - "compilerOptions"
+### Community 440 - "PR #232 — Add media galleries and managed profile attachments"
 Cohesion: 0.15
 Nodes (12): extends, root, rules, import/no-duplicates, no-eval, no-unused-vars, @typescript-eslint/no-extra-semi, @typescript-eslint/no-unused-expressions (+4 more)
 
-### Community 439 - "editorJsKeyboard.ts"
+### Community 441 - "dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay"
 Cohesion: 0.22
 Nodes (11): api(), authorize(), deleteEntry(), failures, finalRaceBytes, individuallyManaged, listedApp, racingValues (+3 more)
 
-### Community 440 - "PR #232 — Add media galleries and managed profile attachments"
+### Community 442 - ".sendToWeb"
 Cohesion: 0.15
 Nodes (11): 12 — Multi-emoji reactions, custom emoji picker, optimistic UI 🟢, Built this round, ✅ Decisions (locked), Goal, Still TODO, 13 — Admin role + admin-configurable rate limits 🟢, Bootstrap order (important), Built this round (+3 more)
 
-### Community 441 - "dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay"
+### Community 443 - "PR #30 — Add iOS web destination picker (branch `codex/ios-deployment-url-picker`)"
 Cohesion: 0.15
 Nodes (12): buildCommand, crons, github-actions, fluid, framework, git, deploymentEnabled, ignoreCommand (+4 more)
 
-### Community 442 - ".sendToWeb"
+### Community 444 - "DevKit.tsx"
 Cohesion: 0.17
 Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
-### Community 443 - "PR #30 — Add iOS web destination picker (branch `codex/ios-deployment-url-picker`)"
-Cohesion: 0.25
-Nodes (11): describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber(), describeFunctionComponentFrame(), describeNativeComponentFrame(), describeUnknownElementTypeFrameInDEV(), disabledLog(), disableLogs() (+3 more)
-
-### Community 444 - "DevKit.tsx"
-Cohesion: 0.18
-Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
-
-### Community 445 - "providerRouter.ts"
+### Community 446 - "Followers/friends + notifications + post views + multi-emoji fix"
 Cohesion: 0.17
 Nodes (11): 2. Seed and test through the real API (functionality cohesion) ⭐, 3. One database: `thingtime` — and (almost) one collection, Account Storage Is One Exact Transactional Ledger, §1 The API Is the Only Gateway to Data, App Namespaces (Login with Thingtime), Appended/child data is relational — never an unbounded embedded array, §5 Auth = httpOnly Cookie + Revocable JWT + Mongo Session, §7 One Notification: Lopu (+3 more)
 
-### Community 446 - "Followers/friends + notifications + post views + multi-emoji fix"
+### Community 447 - "verify-vercel-output.mjs"
 Cohesion: 0.17
 Nodes (11): Admin all-field querying, Atomic quota model, Billing boundary, Operational boundaries, Outcome, Owner/co-manager surface, PR #170 — real app-data quotas + app-owner storage manager, Stack integration (+3 more)
 
-### Community 447 - "verify-vercel-output.mjs"
-Cohesion: 0.10
-Nodes (25): calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode(), eachAxis() (+17 more)
-
 ### Community 448 - "🦄 Handoff: Schema browser / builder / search-by-schema"
-Cohesion: 0.18
-Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
+Cohesion: 0.06
+Nodes (56): account links API utils, appControlThingMatch(), AppLifecycleSessions, AppLifecycleThings, deleteAppLifecycleInSession(), DeleteAppLifecycleResult, liveAppSessionsMatch(), findOneAndDelete() (+48 more)
 
 ### Community 449 - "PR #237 — Add media attachments across conversations"
 Cohesion: 0.32
@@ -2945,63 +2939,59 @@ Nodes (10): 16 — Full-power app namespaces, Consent surface (unchanged — del
 Cohesion: 0.22
 Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
 
-### Community 453 - "package.json"
+### Community 454 - "09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)"
 Cohesion: 0.18
 Nodes (11): Component.prototype.setState, React Component, ReactNoopUpdateQueue, React Component, React Component, React Component, React Component, React Component (+3 more)
 
-### Community 454 - "09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)"
-Cohesion: 0.22
-Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
+### Community 455 - "createContext"
+Cohesion: 0.18
+Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
 
 ### Community 456 - "[Unreleased]"
 Cohesion: 0.22
 Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
 
-### Community 457 - "rules"
-Cohesion: 0.22
-Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
-
 ### Community 458 - "verify-app-storage.mjs"
-Cohesion: 0.08
-Nodes (32): applyConstraints(), calcRelativeAxisConstraints(), calcRelativeConstraints(), calcViewportAxisConstraints(), calcViewportConstraints(), convertBoundingBoxToBox(), convertBoxToBoundingBox(), createProjectionNode() (+24 more)
+Cohesion: 0.24
+Nodes (10): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+2 more)
 
 ### Community 459 - "vercel.json"
 Cohesion: 0.22
 Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
 
 ### Community 460 - "PR #170 — real app-data quotas + app-owner storage manager"
-Cohesion: 0.06
-Nodes (50): accumulateOrCreateContinuousQueuedReplayableEvent(), advanceTimers(), assertIsMounted(), attemptExplicitHydrationTarget(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), attemptSynchronousHydration(), batchedUpdates() (+42 more)
-
-### Community 461 - "PR #220 — CI provider control plane and Vercel runners"
 Cohesion: 0.22
 Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
 
 ### Community 462 - "providerReadiness.ts"
-Cohesion: 0.07
-Nodes (40): accumulateOrCreateContinuousQueuedReplayableEvent(), assertIsMounted(), attemptExplicitHydrationTarget(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), attemptSynchronousHydration(), batchedUpdates(), clearIfContinuousEvent() (+32 more)
+Cohesion: 0.22
+Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
 
 ### Community 463 - "useStyleConfigImpl"
+Cohesion: 0.36
+Nodes (9): legacyResidue(), classifyPhysicalCollections(), COLLECTIONS, collectionVersion(), isKnownCollection(), knownCollections, PhysicalCollectionInfo, physicalCollectionName() (+1 more)
+
+### Community 464 - "routes.tsx"
 Cohesion: 0.22
 Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
 
 ### Community 465 - "16 — Full-power app namespaces"
-Cohesion: 0.22
-Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
+Cohesion: 0.06
+Nodes (46): applyAdminPrivateHeaders(), withAdminPrivateResponse(), requireAdmin(), setUserAdmin(), getMigrationStatus(), mongoQueryCapabilities(), clampRule(), getRateLimitConfig() (+38 more)
 
 ### Community 466 - "buildSVGAttrs"
-Cohesion: 0.23
-Nodes (7): Branding(), Logo(), Attention(), Hamburger(), ReactiveNav(), ReactiveRightNav(), RainbowSkeleton()
-
-### Community 467 - "React Component"
 Cohesion: 0.22
 Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
 
-### Community 468 - "describeNativeComponentFrame"
-Cohesion: 0.18
-Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
+### Community 467 - "React Component"
+Cohesion: 0.06
+Nodes (43): accumulateOrCreateContinuousQueuedReplayableEvent(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), attemptSynchronousHydration(), batchedUpdates() (+35 more)
 
-### Community 469 - "buildSVGAttrs"
+### Community 468 - "describeNativeComponentFrame"
+Cohesion: 0.22
+Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
+
+### Community 470 - "scrapeMotionValuesFromProps"
 Cohesion: 0.22
 Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTransform(), calcOrigin(), calcSVGTransformOrigin(), getTransformGpuTemplate() (+3 more)
 
@@ -3015,129 +3005,137 @@ Nodes (11): build(), buildHTMLStyles(), buildSVGAttrs(), buildSVGPath(), buildTr
 
 ### Community 473 - "PR #174 — Thingtime Messenger platform (`claude/thingtime-messenger-platform-c9c2b5`)"
 Cohesion: 0.18
-Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
+Nodes (10): Follow-Up Notes From PR #16, P1 - Preview verification links are too easy to mint, P1 - Vercel deployment inventory is public in preview, P2 - Crypto helper endpoint is unauthenticated, P2 - Email verification is still a console stub, P2 - PR #16 added TypeScript errors, P2 - Public auth endpoints have no abuse throttling, PR #17 - Document PR #16 Follow-Up Review Notes (+2 more)
 
 ### Community 474 - "buildSVGAttrs"
 Cohesion: 0.18
-Nodes (10): Follow-Up Notes From PR #16, P1 - Preview verification links are too easy to mint, P1 - Vercel deployment inventory is public in preview, P2 - Crypto helper endpoint is unauthenticated, P2 - Email verification is still a console stub, P2 - PR #16 added TypeScript errors, P2 - Public auth endpoints have no abuse throttling, PR #17 - Document PR #16 Follow-Up Review Notes (+2 more)
+Nodes (10): Browser verification, Latest parent refresh (2026-08-10), Managed profile-media contract, PR #232 — Add media galleries and managed profile attachments, Read and authorization boundaries, Remaining live verification, Reported upload failure, Scope (+2 more)
 
 ### Community 475 - "buildSVGAttrs"
 Cohesion: 0.18
-Nodes (10): Browser verification, Latest parent refresh (2026-08-10), Managed profile-media contract, PR #232 — Add media galleries and managed profile attachments, Read and authorization boundaries, Remaining live verification, Reported upload failure, Scope (+2 more)
-
-### Community 476 - "promote"
-Cohesion: 0.18
 Nodes (10): Consumer compat surface checked, Era compatibility (the important design call), Follow-ups worth considering, Migrations (admin), Post-merge adversarial security review (2026-07-10), PR 59 — Everything is a thing: crystal payloads, thingtime schemas, /schemas browser, admin migrations, Round 2 — ACL permissions + full CRUD on one endpoint (2026-07-10, same PR), Security fixes riding along (+2 more)
 
-### Community 477 - "buildSVGAttrs"
+### Community 476 - "promote"
 Cohesion: 0.25
 Nodes (9): CiExecutionProvider, githubAppConfigured(), ciProviderReadiness(), configured(), ProviderEnvironment, completeEnvironment, validateCiExecutionProvider(), VERCEL_PROVIDER_REQUIRED_ENV (+1 more)
 
-### Community 478 - "throwException"
-Cohesion: 0.36
-Nodes (9): legacyResidue(), classifyPhysicalCollections(), COLLECTIONS, collectionVersion(), isKnownCollection(), knownCollections, PhysicalCollectionInfo, physicalCollectionName() (+1 more)
-
-### Community 479 - "buildSVGAttrs"
+### Community 477 - "buildSVGAttrs"
 Cohesion: 0.18
 Nodes (9): afterPullRequest, nextEventOffsets, pullRequestBlock, pullRequestStart, remixRoot, repositoryRoot, requiredFragments, source (+1 more)
 
-### Community 480 - "buildSVGAttrs"
+### Community 478 - "throwException"
 Cohesion: 0.18
 Nodes (10): 03 — Auth: Login / Register / Sessions / JWT 🟢, Acceptance criteria, Built this round (`remix/app/api/utils/auth/`), Decisions (locked — see FUNDAMENTALS.md §5), Goal, Plan, Problems to fix, Still open (defaults fine for now) (+2 more)
 
-### Community 481 - "promote"
+### Community 479 - "buildSVGAttrs"
 Cohesion: 0.20
 Nodes (9): author, description, license, main, name, scripts, test, type (+1 more)
 
-### Community 482 - "buildSVGAttrs"
+### Community 480 - "buildSVGAttrs"
+Cohesion: 0.25
+Nodes (9): imperativeHandleEffect(), imperativeHandleEffect(), basic(), clone(), create(), dupe(), merge(), mergeall() (+1 more)
+
+### Community 481 - "promote"
 Cohesion: 0.22
 Nodes (8): desktopReleaseMetadata, electronDir, remixDir, remixOutputDir, repoRoot, run(), runRemixScript(), stagedWebDir
 
-### Community 483 - "buildSVGAttrs"
+### Community 482 - "buildSVGAttrs"
 Cohesion: 0.24
 Nodes (8): Error, Foundation, ClientError, invalidResponse, requestFailed, URL, ThingtimeWebDeploymentsClient, URLSession
 
-### Community 484 - "prConflictResolverModelWaterfall.ts"
+### Community 483 - "buildSVGAttrs"
 Cohesion: 0.20
 Nodes (9): Addendum: per-channel toggles (push + email) & SES notification emails (2026-08-03), Design (locked), Develop conflict refresh (2026-08-09), Followers/friends + notifications + post views + multi-emoji fix, New endpoints (each needs: route file + [...].ts import map + apiDocs entry + rate-limit default + useApi method), Progress, Scope (from the ask), Verification log (+1 more)
 
-### Community 485 - "buildSVGAttrs"
+### Community 484 - "prConflictResolverModelWaterfall.ts"
 Cohesion: 0.20
 Nodes (9): PR #211 — Centralize Actions and Add the CI Control Dashboard, Admin CI dashboard, Control-plane architecture, External bootstrap, Goal, Integrations and security, Review notes, Thing model (+1 more)
 
-### Community 486 - "Follow-Up Notes From PR #16"
+### Community 485 - "buildSVGAttrs"
 Cohesion: 0.20
 Nodes (9): Authorization and lifecycle, Context, Live UI validation, PR #237 — Add media attachments across conversations, Product behavior, Regression coverage, Resolution, Stack and rollout (+1 more)
 
-### Community 487 - "PR 59 — Everything is a thing: crystal payloads, thingtime schemas, /schemas browser, admin migrations"
+### Community 486 - "Follow-Up Notes From PR #16"
 Cohesion: 0.20
 Nodes (9): Adversarial review (24 agents: 4 lenses → refuters per finding), API surface, Data model, Known scope edges, PR #40 — Feed with personal doomscroll algorithms, full profiles + dedicated settings, Ranking + training (deterministic, `api/utils/things/feedRanking.ts`), Seeding (FUNDAMENTALS §2), Summary (+1 more)
 
-### Community 488 - "RawResults.tsx"
+### Community 487 - "PR 59 — Everything is a thing: crystal payloads, thingtime schemas, /schemas browser, admin migrations"
 Cohesion: 0.20
 Nodes (9): [Create Images, In-Clipboard Modification] - 2023-07-06, [Filters] - 2023-03-22, Image Modification Changelog, [Initial Version] - 2023-02-23, [Localization Fix] - 2023-03-07, [Optimize Images, SVG Conversion, More Filters] - 2023-04-03, [Padding, Bug Fixes] - 2023-03-15, [Strip EXIF Data] - 2024-01-28 (+1 more)
 
-### Community 489 - "web-ci-required-context-contract.mjs"
+### Community 488 - "RawResults.tsx"
 Cohesion: 0.20
 Nodes (9): Commander, CommanderConvert, CommanderMp4ToMp3, CommanderOpenNewFinderWindow, CommanderRegexToReplacementConverter, CommanderRegexTrim, CommanderTrim, ExtensionPreferences (+1 more)
 
-### Community 490 - "vercel-build.mjs"
+### Community 489 - "web-ci-required-context-contract.mjs"
 Cohesion: 0.36
 Nodes (6): applyFilter(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), Filter
 
-### Community 492 - "package.json"
-Cohesion: 0.21
-Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commitPlacement(), commitReconciliationEffects(), getHostParentFiber(), getHostSibling(), insertBefore() (+5 more)
-
-### Community 493 - "buildSVGAttrs"
+### Community 490 - "vercel-build.mjs"
 Cohesion: 0.38
 Nodes (5): Props, csvCell(), displayMongoResultValue(), serializeMongoResultsCsv(), tabulateMongoResults()
 
-### Community 494 - "build-web.mjs"
-Cohesion: 0.20
-Nodes (10): Thingtime Android App Icon 144×144, Thingtime Android App Icon 192×192, Thingtime Apple Touch Icon 114×114, Thingtime Apple Touch Icon 120×120, Thingtime Apple Touch Icon 144×144, Thingtime Apple Touch Icon 152×152, Thingtime Apple Touch Icon 180×180, Thingtime Apple Touch Icon 57×57 (+2 more)
-
-### Community 495 - "rateLimit.ts"
-Cohesion: 0.20
-Nodes (10): Thingtime App Registration API, guardSandbox, isSandbox, log, optionalScopes, renderLoginButton, requiredScopes, withSession (+2 more)
-
-### Community 496 - "PR #211 — Centralize Actions and add the CI control dashboard"
-Cohesion: 0.27
-Nodes (7): baselinePath, escapeWorkflowCommand(), here, main(), remixDir, reportTypecheckRatchet(), tscBin
-
-### Community 497 - "PR #40 — Feed with personal doomscroll algorithms, full profiles + dedicated settings"
-Cohesion: 0.20
-Nodes (9): CI Control integration, Develop Custom Environment, Develop-target PR previews, Preview, Production, Project, Repository-root build contract, Vercel Deployments (+1 more)
-
-### Community 498 - "Image Modification Changelog"
-Cohesion: 0.39
-Nodes (3): Color, DeploymentPresentation, String
-
-### Community 499 - "raycast-env.d.ts"
-Cohesion: 0.31
-Nodes (9): burst, burstAt, burstSize, componentDidMount, renderVals, setCanvas, sizeCanvas, spawn (+1 more)
-
-### Community 500 - "subscriptions API utils"
-Cohesion: 0.22
-Nodes (7): copyResult, electronDir, scriptDir, sourceApp, targetApp, targetDir, tempApp
-
-### Community 501 - "Favicon Import HTML"
-Cohesion: 0.22
-Nodes (8): Admin controls and state, Execution architecture, Goal, Live bootstrap and acceptance completed — 2026-08-10, PR #220 — CI provider control plane and Vercel runners, Review notes, Security boundaries, Validation
-
-### Community 502 - "renderLoginButton"
+### Community 491 - "03 — Auth: Login / Register / Sessions / JWT 🟢"
 Cohesion: 0.25
 Nodes (9): createScopedEval(), load(), parse(), parser(), play(), primitives(), revive(), safeparse() (+1 more)
 
-### Community 503 - "typecheck-ratchet.mjs"
+### Community 492 - "package.json"
+Cohesion: 0.20
+Nodes (10): Thingtime Android App Icon 144×144, Thingtime Android App Icon 192×192, Thingtime Apple Touch Icon 114×114, Thingtime Apple Touch Icon 120×120, Thingtime Apple Touch Icon 144×144, Thingtime Apple Touch Icon 152×152, Thingtime Apple Touch Icon 180×180, Thingtime Apple Touch Icon 57×57 (+2 more)
+
+### Community 493 - "buildSVGAttrs"
+Cohesion: 0.20
+Nodes (10): Thingtime App Registration API, guardSandbox, isSandbox, log, optionalScopes, renderLoginButton, requiredScopes, withSession (+2 more)
+
+### Community 494 - "build-web.mjs"
+Cohesion: 0.27
+Nodes (7): baselinePath, escapeWorkflowCommand(), here, main(), remixDir, reportTypecheckRatchet(), tscBin
+
+### Community 495 - "rateLimit.ts"
+Cohesion: 0.20
+Nodes (9): CI Control integration, Develop Custom Environment, Develop-target PR previews, Preview, Production, Project, Repository-root build contract, Vercel Deployments (+1 more)
+
+### Community 496 - "PR #211 — Centralize Actions and add the CI control dashboard"
+Cohesion: 0.39
+Nodes (3): Color, DeploymentPresentation, String
+
+### Community 497 - "PR #40 — Feed with personal doomscroll algorithms, full profiles + dedicated settings"
+Cohesion: 0.31
+Nodes (9): burst, burstAt, burstSize, componentDidMount, renderVals, setCanvas, sizeCanvas, spawn (+1 more)
+
+### Community 498 - "Image Modification Changelog"
+Cohesion: 0.22
+Nodes (7): copyResult, electronDir, scriptDir, sourceApp, targetApp, targetDir, tempApp
+
+### Community 499 - "raycast-env.d.ts"
+Cohesion: 0.22
+Nodes (8): Admin controls and state, Execution architecture, Goal, Live bootstrap and acceptance completed — 2026-08-10, PR #220 — CI provider control plane and Vercel runners, Review notes, Security boundaries, Validation
+
+### Community 500 - "subscriptions API utils"
+Cohesion: 0.09
+Nodes (32): createFiberFromHostInstanceForDeletion(), deleteHydratableInstance(), didNotFindHydratableInstance(), didNotFindHydratableInstanceWithinContainer(), didNotFindHydratableInstanceWithinSuspenseInstance(), didNotFindHydratableTextInstance(), didNotFindHydratableTextInstanceWithinContainer(), didNotFindHydratableTextInstanceWithinSuspenseInstance() (+24 more)
+
+### Community 501 - "Favicon Import HTML"
 Cohesion: 0.25
 Nodes (9): deletesmart(), getsmart(), parsePropertyArray(), parsePropertyPath(), pathToArray(), pathToString(), ppa(), ppp() (+1 more)
 
-### Community 504 - "DeploymentSummary"
+### Community 502 - "renderLoginButton"
 Cohesion: 0.25
 Nodes (7): 12 — Everything is a thing: collapse the satellite collections, Dual-era + migration (house pattern, per things v1→v2), Kinds, Map findings that constrain the design (full digest: see PR note / tool-results/b9lnk4rci.txt in session scratch), Model, Safety rails, Status
 
+### Community 503 - "typecheck-ratchet.mjs"
+Cohesion: 0.25
+Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
+
+### Community 504 - "DeploymentSummary"
+Cohesion: 0.25
+Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
+
 ### Community 505 - "merge"
+Cohesion: 0.25
+Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
+
+### Community 506 - "componentDidMount"
 Cohesion: 0.25
 Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
 
@@ -3154,8 +3152,8 @@ Cohesion: 0.25
 Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
 
 ### Community 510 - "parse"
-Cohesion: 0.25
-Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
+Cohesion: 0.10
+Nodes (27): addValue(), animateSingleValue(), copyRawValuesOnly(), getComputedStyle(), getStaticValue(), getValue(), hasValue(), isForcedMotionValue() (+19 more)
 
 ### Community 511 - "parsePropertyPath"
 Cohesion: 0.25
@@ -3165,305 +3163,313 @@ Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromPro
 Cohesion: 0.25
 Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
 
+### Community 513 - "12 — Everything is a thing: collapse the satellite collections"
+Cohesion: 0.25
+Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
+
 ### Community 514 - "scrapeMotionValuesFromProps"
-Cohesion: 0.25
-Nodes (9): imperativeHandleEffect(), imperativeHandleEffect(), basic(), clone(), create(), dupe(), merge(), mergeall() (+1 more)
-
-### Community 515 - "scrapeMotionValuesFromProps"
-Cohesion: 0.25
-Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
-
-### Community 516 - "scrapeMotionValuesFromProps"
-Cohesion: 0.25
-Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
-
-### Community 517 - "scrapeMotionValuesFromProps"
-Cohesion: 0.25
-Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
-
-### Community 518 - "scrapeMotionValuesFromProps"
 Cohesion: 0.25
 Nodes (7): Available Actions, Installation, iOS, ios beta, ios build, ios generate, ios upload
 
-### Community 519 - "scrapeMotionValuesFromProps"
+### Community 515 - "scrapeMotionValuesFromProps"
 Cohesion: 0.25
 Nodes (7): Data model, Debugging log (what bit us and how it ended), Endpoints (23; each = route file + `[...].ts` map + apiDocs entry — the docs entry IS the Nitro registration), Key decisions, PR #174 — Thingtime Messenger platform (`claude/thingtime-messenger-platform-c9c2b5`), UI, Verification
 
-### Community 520 - "scrapeMotionValuesFromProps"
+### Community 516 - "scrapeMotionValuesFromProps"
 Cohesion: 0.25
 Nodes (7): Base integration, Context, Exactness boundary, Operational follow-ups, PR #182 — Unify exact storage accounting, Verification, What changed
 
-### Community 521 - "scrapeMotionValuesFromProps"
+### Community 517 - "scrapeMotionValuesFromProps"
 Cohesion: 0.25
 Nodes (7): 🌈 Design refactor + runtime theming (branch `claude/vigilant-moser-3704e0`), Design sources, Known notes, Shareable themes + waitlist API (FUNDAMENTALS-compliant), Theming system, UI, Verification
 
-### Community 522 - "scrapeMotionValuesFromProps"
+### Community 518 - "scrapeMotionValuesFromProps"
 Cohesion: 0.25
 Nodes (7): API, Data model, Debugging trail, PR #63 — /search: MongoDB-grammar query builder + ranked text search + search-by-schema, UI, Verification (live worktree stack, :13710), What shipped
 
-### Community 523 - "scrapeMotionValuesFromProps"
+### Community 519 - "scrapeMotionValuesFromProps"
 Cohesion: 0.25
 Nodes (7): CSP, boot, and dynamic execution audit, Final reconciliation against current develop, Historical #99 work intentionally dropped or superseded, Persisted state and Dates, PR #99 — Persisted-state, CSP, and register body-cap hardening, Registration reconciliation, Validation
 
-### Community 524 - "🌈 Thingtime Design Language"
+### Community 520 - "scrapeMotionValuesFromProps"
 Cohesion: 0.25
 Nodes (7): env, es2020, node, extends, parser, plugins, root
 
-### Community 525 - "iOS"
+### Community 521 - "scrapeMotionValuesFromProps"
 Cohesion: 0.25
 Nodes (5): { APP_STORAGE_ACCOUNTING_VERSION, appStorageCounterMatch }, match, now, { projectAppDataStorage }, remixRoot
 
-### Community 526 - "PR #182 — Unify exact storage accounting"
+### Community 522 - "scrapeMotionValuesFromProps"
 Cohesion: 0.25
 Nodes (4): CATALOG_BY_ID, PAT_SCOPE_CATALOG, PAT_SCOPE_IDS, PatScopeDescriptor
 
-### Community 527 - "🌈 Design refactor + runtime theming (branch `claude/vigilant-moser-3704e0`)"
-Cohesion: 0.21
-Nodes (13): describeBuiltInComponentFrame(), describeClassComponentFrame(), describeFiber(), describeFunctionComponentFrame(), describeNativeComponentFrame(), describeUnknownElementTypeFrameInDEV(), disabledLog(), disableLogs() (+5 more)
-
-### Community 528 - "PR #63 — /search: MongoDB-grammar query builder + ranked text search + search-by-schema"
-Cohesion: 0.18
-Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
-
-### Community 529 - "PR #64 — Add no-code MongoDB query workbench"
+### Community 523 - "scrapeMotionValuesFromProps"
 Cohesion: 0.36
 Nodes (4): parseCommanderLiteral(), commanderArgs, CommanderV1(), CommanderV2()
 
-### Community 530 - ".eslintrc.json"
+### Community 524 - "🌈 Thingtime Design Language"
 Cohesion: 0.29
 Nodes (4): createOrderedEditorJsChangeQueue(), OrderedEditorJsChangeQueue, OrderedEditorJsChangeQueueOptions, SaveResult
 
-### Community 531 - "browseStorageProjection.test.ts"
+### Community 525 - "iOS"
 Cohesion: 0.29
 Nodes (8): getThing(), popThing(), pushThing(), pushThings(), setThing(), setThings(), thingIn(), thingIndex()
 
-### Community 532 - "promote"
+### Community 526 - "PR #182 — Unify exact storage accounting"
 Cohesion: 0.32
 Nodes (8): pause(), replacer(), safestring(), save(), serialize(), setKnown(), stringifier(), stringify()
 
-### Community 533 - "promote"
+### Community 527 - "🌈 Design refactor + runtime theming (branch `claude/vigilant-moser-3704e0`)"
 Cohesion: 0.25
 Nodes (7): 02 — DB Populate / Seeding 🟡, Acceptance criteria, Decisions (locked — see FUNDAMENTALS.md), Goal, Plan, Problems to fix, What exists
 
-### Community 534 - "thingIn"
+### Community 528 - "PR #63 — /search: MongoDB-grammar query builder + ranked text search + search-by-schema"
 Cohesion: 0.25
 Nodes (7): 07 — Cross-tab sync for persisted thingtime state, Done when, Notes, Plan, What already exists, What it's for, What's missing / broken
 
-### Community 535 - "stringify"
+### Community 529 - "PR #64 — Add no-code MongoDB query workbench"
 Cohesion: 0.25
 Nodes (7): 08 — Drawer nav & editor UX follow-ups, 1. Groups in drawer: click *and* draggable, 2. "Thingtime" brand name in drawer → link home, 3. Fix/finish `/branding` page + SVG → PNG rendering concept, 4. Refine API tests, 5. Improve hover context window on "things" property names/key paths, Notes
 
-### Community 536 - "PR #183 — Add automatic AI rebase support for PRs and stacks"
+### Community 530 - ".eslintrc.json"
 Cohesion: 0.29
 Nodes (6): Crypto and identity helper polish, Everyday user loops, Lopu as the consistent narrator, Status surfaces, Tiny UX And Product Polish, Vercel dashboard polish
 
-### Community 537 - "08 — Drawer nav & editor UX follow-ups"
+### Community 531 - "browseStorageProjection.test.ts"
 Cohesion: 0.29
 Nodes (6): APIs, Data model, Foundations, Security posture, Technical Next Steps, UI
 
-### Community 539 - "Technical Next Steps"
+### Community 532 - "promote"
 Cohesion: 0.29
 Nodes (6): Fable (v2) — landing page tokens, Prism (v1) — product UI tokens, Shared rainbow palette, Theming system contract, Voxel logo, Thingtime Design Language
 
+### Community 533 - "promote"
+Cohesion: 0.33
+Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
+
+### Community 534 - "thingIn"
+Cohesion: 0.21
+Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commitPlacement(), commitReconciliationEffects(), getHostParentFiber(), getHostSibling(), insertBefore() (+5 more)
+
+### Community 535 - "stringify"
+Cohesion: 0.33
+Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
+
+### Community 537 - "08 — Drawer nav & editor UX follow-ups"
+Cohesion: 0.33
+Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
+
+### Community 538 - "Tiny UX And Product Polish"
+Cohesion: 0.21
+Nodes (13): appendChild(), appendChildToContainer(), appendInitialChild(), commitPlacement(), commitReconciliationEffects(), getHostParentFiber(), getHostSibling(), insertBefore() (+5 more)
+
+### Community 539 - "Technical Next Steps"
+Cohesion: 0.33
+Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
+
 ### Community 540 - "promote"
-Cohesion: 0.33
-Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
-
-### Community 541 - "promote"
-Cohesion: 0.18
-Nodes (11): factory(), GlobalStyle(), omitReactElements(), resolveStyleConfig(), styled2(), useChakra(), useColorMode(), useMultiStyleConfig() (+3 more)
-
-### Community 542 - "promote"
-Cohesion: 0.33
-Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
-
-### Community 543 - "isVercelStatusEnabled"
-Cohesion: 0.33
-Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
-
-### Community 545 - "promote"
-Cohesion: 0.33
-Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
-
-### Community 547 - "promote"
-Cohesion: 0.31
-Nodes (6): DeploymentStatusEnvironment, isVercelStatusEnabled(), isVisibleVercelEnvironment(), loader(), action(), loader()
-
-### Community 548 - "promote"
 Cohesion: 0.29
 Nodes (4): ThingtimeAppConfigurationTests, Thingtime, XCTest, XCTestCase
 
-### Community 549 - "Security Follow-Up - 2026-06-23"
+### Community 541 - "promote"
 Cohesion: 0.29
 Nodes (6): PR #183 — Add automatic AI rebase support for PRs and stacks, Rollout, Security and publication boundaries, Verification, What changed, Why this exists
 
-### Community 550 - "PR 190 — Per-feature develop to main promotion PRs with stacks"
+### Community 542 - "promote"
 Cohesion: 0.29
 Nodes (6): Conflict repair, PR 190 — Per-feature develop to main promotion PRs with stacks, Remaining hardening, Resolver control-plane hardening, Verification, Why this repair was needed
 
-### Community 551 - "PR #206 — Keep feature promotion running across historical Git failures"
+### Community 543 - "isVercelStatusEnabled"
 Cohesion: 0.29
 Nodes (6): Context, Diagnostic-side-effect note, PR #206 — Keep feature promotion running across historical Git failures, Regression coverage, Resolution, Validation
 
-### Community 552 - "PR #210 — Promote the Actions control-plane rollup"
+### Community 544 - "promote"
 Cohesion: 0.29
 Nodes (6): Included source PRs, PR #210 — Promote the Actions control-plane rollup, Purpose, Review focus, Validation, Why one promotion PR
 
-### Community 553 - "PR #26 - Environment-Aware Footer Status Checks"
+### Community 545 - "promote"
 Cohesion: 0.29
 Nodes (6): Implementation trail, PR #65 — Everything is a thing: satellite collections collapse into things, Self-review round 1 (8-finder pass, commit 4b56c57), Self-review round 2 (regression pass on round-1 fixes, commit 49c73ae), Shape, Verification highlights (all live against the dev stack)
 
-### Community 554 - "PR #65 — Everything is a thing: satellite collections collapse into things"
+### Community 546 - "PR #229 — Keep develop Web CI required contexts reportable"
 Cohesion: 0.29
 Nodes (6): APIs, Bugs, Discuss, Encoding and Decoding Tools, Files, WebP Codec
 
-### Community 555 - "WebP Codec"
+### Community 547 - "promote"
 Cohesion: 0.29
 Nodes (6): 2023-06-18, 2023-07-05, 2023-07-06, 2024-01-27, 2024-01-28, Image Modification DevLog - A more detailed changelog
 
-### Community 556 - "Image Modification DevLog - A more detailed changelog"
+### Community 548 - "promote"
 Cohesion: 0.43
 Nodes (5): ChainDoc, resolveInheritChain(), chainWorld(), Doc, makeWorld()
 
-### Community 557 - "verify-messenger.mjs"
+### Community 549 - "Security Follow-Up - 2026-06-23"
+Cohesion: 0.31
+Nodes (6): DeploymentStatusEnvironment, isVercelStatusEnabled(), isVisibleVercelEnvironment(), loader(), action(), loader()
+
+### Community 550 - "PR 190 — Per-feature develop to main promotion PRs with stacks"
+Cohesion: 0.67
+Nodes (3): VercelDeploymentStatus, StatusPage(), value()
+
+### Community 551 - "PR #206 — Keep feature promotion running across historical Git failures"
 Cohesion: 0.29
 Nodes (6): engines, node, packageManager, private, sideEffects, version
 
-### Community 558 - "01 — MongoDB Connection Status ✅"
+### Community 552 - "PR #210 — Promote the Actions control-plane rollup"
 Cohesion: 0.29
 Nodes (7): Deform Map Image, Embedded PNG Displacement Gradient 2, Displacement Gradient 2 SVG, Embedded PNG Displacement Gradient, Displacement Gradient SVG, Green Displacement Map Gutter, Displacement Map Gutter SVG
 
-### Community 559 - "Displacement Gradient SVG"
+### Community 553 - "PR #26 - Environment-Aware Footer Status Checks"
 Cohesion: 0.38
 Nodes (3): login(), randomState(), renderButton()
 
-### Community 560 - "thingtime-login.js"
+### Community 554 - "PR #65 — Everything is a thing: satellite collections collapse into things"
 Cohesion: 0.29
 Nodes (5): appRoot, directClientFiles, localGraphify, musing, remixRoot
 
-### Community 561 - "ai-model-routing-contract.mjs"
+### Community 555 - "WebP Codec"
 Cohesion: 0.38
 Nodes (5): adminCookie, api(), authCookieFrom(), failures, registerSession()
 
-### Community 562 - "patch-vercel-output.mjs"
+### Community 556 - "Image Modification DevLog - A more detailed changelog"
 Cohesion: 0.29
 Nodes (6): 04 — Authed DB Read + Query 🔴, Acceptance criteria, Goal, Plan, Security notes, What exists (to build on)
 
-### Community 563 - "verify-admin-subscriptions.mjs"
+### Community 557 - "verify-messenger.mjs"
 Cohesion: 0.29
 Nodes (6): 05 — Authed DB Write (Create / Update / Delete) 🔴, Acceptance criteria, Goal, Plan, Security notes, What exists (to build on)
 
-### Community 564 - "04 — Authed DB Read + Query 🔴"
+### Community 558 - "01 — MongoDB Connection Status ✅"
 Cohesion: 0.29
 Nodes (6): 10 — Delight & growth ideas (features · design · easter eggs), 🎨 Design, Done when, 🥚 Easter eggs, ✨ Features (growth / stickiness), ⌨️ Power user / dev
 
-### Community 565 - "Thingtime iOS"
+### Community 559 - "Displacement Gradient SVG"
+Cohesion: 0.25
+Nodes (8): copyRawValuesOnly(), isForcedMotionValue(), scrapeMotionValuesFromProps(), scrapeMotionValuesFromProps2(), useHTMLProps(), useInitialMotionValues(), useStyle(), useSVGProps()
+
+### Community 560 - "thingtime-login.js"
 Cohesion: 0.33
 Nodes (4): electronDir, indexHtml, serverEntry, webOutputDir
 
-### Community 566 - "10 — Delight & growth ideas (features · design · easter eggs)"
+### Community 561 - "ai-model-routing-contract.mjs"
 Cohesion: 0.33
 Nodes (5): Apple Developer And TestFlight Flow, Common Command, Liquid Glass App Icon (`AppIcon.icon`), Simulator Testing, Thingtime iOS Agent Runbook
 
-### Community 567 - "verify-web-build.mjs"
+### Community 562 - "patch-vercel-output.mjs"
 Cohesion: 0.33
 Nodes (5): Canonical AI instructions, PR #163 — Fix worktree setup and unify AI instructions, Scope, Validation, Worktree dependency bootstrap
 
-### Community 568 - "Thingtime iOS Agent Runbook"
+### Community 563 - "verify-admin-subscriptions.mjs"
 Cohesion: 0.33
 Nodes (5): Design decisions, PR #164 — Crypto: password hasher + paste-ready mongosh rotate snippet 🔐, The "missing local lopu user" question, Verification, What it is
 
-### Community 569 - "PR #163 — Fix worktree setup and unify AI instructions"
+### Community 564 - "04 — Authed DB Read + Query 🔴"
 Cohesion: 0.33
 Nodes (5): Dev runbook additions, Key decisions, PR #171 — /admin dashboard: subscription tiers, quotas, app suspension & ownership links, Shape of the change, Verification log (2026-08-02)
 
-### Community 570 - "PR #164 — Crypto: password hasher + paste-ready mongosh rotate snippet 🔐"
+### Community 565 - "Thingtime iOS"
 Cohesion: 0.33
 Nodes (5): Builtin schema storage repair, Password-confirmed diagnostic reveal, PR 197 — Fix builtin schema storage accounting and add secure diagnostic reveals, Verification, Why
 
-### Community 571 - "PR #171 — /admin dashboard: subscription tiers, quotas, app suspension & ownership links"
+### Community 566 - "10 — Delight & growth ideas (features · design · easter eggs)"
 Cohesion: 0.33
 Nodes (5): Automatic path, PR #213 — Automatically resolve promotion creation conflicts, Problem, Recovery and safety, Verification
 
-### Community 572 - "PR 197 — Fix builtin schema storage accounting and add secure diagnostic reveals"
+### Community 567 - "verify-web-build.mjs"
 Cohesion: 0.33
 Nodes (5): Path-filter repair, PR #222 — Typecheck ratchet warning-only CI, Purpose, Required-context repair, Validation
 
-### Community 573 - "CHANGELOG.md"
+### Community 568 - "Thingtime iOS Agent Runbook"
 Cohesion: 0.33
 Nodes (5): Base-branch compatibility repair, Develop behavior, PR #229 — Keep develop Web CI required contexts reportable, Purpose, Validation
 
-### Community 574 - "PR #233 — Fix develop preview wildcard DNS verification"
+### Community 569 - "PR #163 — Fix worktree setup and unify AI instructions"
 Cohesion: 0.47
 Nodes (4): AttachmentCascadeCandidate, AttachmentCascadeCleanupTarget, attachmentCascadeCleanupTargets(), isAttachmentCandidate()
 
-### Community 575 - "PR #258: Thin-listener promotion repair"
+### Community 570 - "PR #164 — Crypto: password hasher + paste-ready mongosh rotate snippet 🔐"
 Cohesion: 0.53
 Nodes (5): EmailEventInput, normalizeEmail(), recordEmailEvent(), suppressEmailAddress(), unsubscribeEmailAddress()
 
-### Community 576 - "vercel-config.test.mjs"
+### Community 572 - "PR 197 — Fix builtin schema storage accounting and add secure diagnostic reveals"
 Cohesion: 0.33
 Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
 
-### Community 577 - "StyleSheet2"
+### Community 573 - "CHANGELOG.md"
 Cohesion: 0.40
 Nodes (4): drainThingtimeMutationQueue(), State, Update, ThingtimeMutationDrainResult
 
-### Community 579 - "web-ci control-plane job"
+### Community 575 - "PR #258: Thin-listener promotion repair"
 Cohesion: 0.53
 Nodes (5): api(), check(), failures, register(), run()
 
-### Community 580 - "Black and White QR Code SVG"
+### Community 576 - "vercel-config.test.mjs"
 Cohesion: 0.33
 Nodes (6): Black and White QR Code SVG, SVG Rectangular QR Modules, White SVG Background, Pink SVG Fill, Pink QR Code SVG, SVG Rectangular QR Modules
 
-### Community 581 - "PR 12 review actions"
+### Community 577 - "StyleSheet2"
 Cohesion: 0.33
 Nodes (5): 01 — MongoDB Connection Status ✅, Goal, Possible follow-ups (nice-to-have), Verified, What exists
 
-### Community 582 - "TODO.md"
+### Community 578 - "sessions.ts"
 Cohesion: 0.33
 Nodes (5): 1. JWT secret fallback, 2. Production source maps, 3. Atomic email verification token consumption, 4. Unused imports, PR 12 review actions
 
-### Community 583 - "15 — Anti-abuse: global storage budgets + verification gates"
+### Community 579 - "web-ci control-plane job"
 Cohesion: 0.33
 Nodes (6): Authentication Rate Limiting and Body Caps, Date Serialization Integrity, Persisted-state Eval Removal and Strict CSP, Security Hardening Specification, Unauthenticated Admin and Data Endpoints, Security Hardening TODO
 
-### Community 584 - "AI Era Value Moats Light Report"
+### Community 580 - "Black and White QR Code SVG"
 Cohesion: 0.33
 Nodes (5): 11 — Account switcher: multi-account sign-in 🟢, Built this round, ✅ Decisions (locked), Goal, Still TODO
 
-### Community 585 - "Core Thing Loops"
+### Community 581 - "PR 12 review actions"
 Cohesion: 0.33
 Nodes (5): 14 — Editor.js block drag/drop reordering 🔴, Done when, Goal, Risks and guardrails, What already exists
 
-### Community 586 - "Trust, Identity, And Governance"
+### Community 582 - "TODO.md"
 Cohesion: 0.33
 Nodes (5): 15 — Anti-abuse: global storage budgets + verification gates, 1. Global sandbox storage budget (~0.5GB/hour app-wide), 2. Verification gates before storage (mobile within ~1 day), 3. Other vectors spotted during the PR #150/#151 audit, Definition of done
 
-### Community 587 - "Marketplaces And App Store"
+### Community 583 - "15 — Anti-abuse: global storage budgets + verification gates"
 Cohesion: 0.40
 Nodes (5): Thingtime North Star, AI Era Value Moats Light Report, AI Era Value Moats Premium Light Report, AI Era Value Moats Dark Report, AI Era Moats Silver Design With Text Legibility Bug
 
-### Community 588 - "Public Accountability Systems"
+### Community 584 - "AI Era Value Moats Light Report"
 Cohesion: 0.40
 Nodes (4): Core Thing Loops, Thing actions, Thing editor loop, Thing templates
 
-### Community 589 - "Nikolaj Frey — Engineer Decisions"
+### Community 585 - "Core Thing Loops"
 Cohesion: 0.40
 Nodes (4): Claims and attestations, Governance and voting, Identity, Trust Identity And Governance
 
-### Community 590 - "getAll"
+### Community 586 - "Trust, Identity, And Governance"
 Cohesion: 0.40
 Nodes (4): App store, Commerce principles, Marketplaces And App Store, Thing marketplace
 
-### Community 591 - "getAll"
+### Community 587 - "Marketplaces And App Store"
 Cohesion: 0.40
 Nodes (4): Anti-corruption records, Public Accountability Systems, Public memory, Public official tracker
 
-### Community 592 - "getAll"
+### Community 588 - "Public Accountability Systems"
 Cohesion: 0.40
 Nodes (4): Decision log, Decisions, Nikolaj Frey — Engineer Decisions, Recurring principles (the thinking method)
+
+### Community 589 - "Nikolaj Frey — Engineer Decisions"
+Cohesion: 0.50
+Nodes (5): getAll(), setAll(), speed(), startTime(), time()
+
+### Community 590 - "getAll"
+Cohesion: 0.50
+Nodes (5): getAll(), setAll(), speed(), startTime(), time()
+
+### Community 591 - "getAll"
+Cohesion: 0.50
+Nodes (5): getAll(), setAll(), speed(), startTime(), time()
+
+### Community 592 - "getAll"
+Cohesion: 0.50
+Nodes (5): getAll(), setAll(), speed(), startTime(), time()
 
 ### Community 593 - "getAll"
 Cohesion: 0.50
@@ -3494,80 +3500,80 @@ Cohesion: 0.50
 Nodes (5): getAll(), setAll(), speed(), startTime(), time()
 
 ### Community 600 - "getAll"
-Cohesion: 0.50
-Nodes (5): getAll(), setAll(), speed(), startTime(), time()
+Cohesion: 0.40
+Nodes (5): Component, printWarning, PureComponent, ReactNoopUpdateQueue, warnNoop
 
 ### Community 601 - "Component"
 Cohesion: 0.50
 Nodes (5): getAll(), setAll(), speed(), startTime(), time()
 
 ### Community 602 - "getAll"
-Cohesion: 0.50
-Nodes (5): getAll(), setAll(), speed(), startTime(), time()
-
-### Community 603 - "Thingtime Electron"
-Cohesion: 0.50
-Nodes (5): getAll(), setAll(), speed(), startTime(), time()
-
-### Community 604 - "PR #162 — Fix index bootstrap retries after PRs #159 and #161"
-Cohesion: 0.40
-Nodes (5): Component, printWarning, PureComponent, ReactNoopUpdateQueue, warnNoop
-
-### Community 605 - "PR #178 — Configurable PR conflict-resolver model waterfall"
-Cohesion: 0.50
-Nodes (5): getAll(), setAll(), speed(), startTime(), time()
-
-### Community 606 - "PR 195 — Contextual reaction and migration errors"
 Cohesion: 0.40
 Nodes (4): Commands, GitHub Releases, Runtime, Thingtime Electron
 
-### Community 607 - "Three-Place API Endpoint Registration"
+### Community 603 - "Thingtime Electron"
+Cohesion: 0.40
+Nodes (4): Build And Test, Setup, TestFlight Upload, Thingtime iOS
+
+### Community 604 - "PR #162 — Fix index bootstrap retries after PRs #159 and #161"
 Cohesion: 0.40
 Nodes (4): Context, PR #162 — Fix index bootstrap retries after PRs #159 and #161, Resolution, Validation
 
-### Community 608 - "PR #212 — secure `develop`-target PR previews"
+### Community 605 - "PR #178 — Configurable PR conflict-resolver model waterfall"
 Cohesion: 0.40
 Nodes (4): PR #178 — Configurable PR conflict-resolver model waterfall, Security boundaries, Verification, What changed
 
-### Community 609 - "PR 39: Add API self-documentation routes"
+### Community 606 - "PR 195 — Contextual reaction and migration errors"
 Cohesion: 0.40
 Nodes (4): PR 195 — Contextual reaction and migration errors, Private migration diagnostics, Verification, Why
 
-### Community 610 - "2026-07-15 — Native Thingtime rendering for feed things (ThingView)"
+### Community 607 - "Three-Place API Endpoint Registration"
 Cohesion: 0.40
 Nodes (4): Incident, PR #207 — Distinguish empty promotion cherry-picks safely, Repair, Verification
 
-### Community 611 - "getVercelDeploymentsOverview"
+### Community 608 - "PR #212 — secure `develop`-target PR previews"
 Cohesion: 0.40
 Nodes (4): Notes, PR 39 Add API Self-Documentation Routes, Summary, Validation
 
-### Community 612 - "AI_ALL Fundamentals Summary"
+### Community 609 - "PR 39: Add API self-documentation routes"
 Cohesion: 0.40
 Nodes (4): 2026-07-15 — Hardening pass (recursive review follow-up), 2026-07-15 — Native Thingtime rendering for feed things (ThingView), 2026-07-15 — Review rounds 2 & 3 (recursive), PR #69 — Unified: /search platform + profile composer & advanced filters
 
-### Community 613 - "npm run web-pms PM2 Lifecycle Command"
+### Community 610 - "2026-07-15 — Native Thingtime rendering for feed things (ThingView)"
 Cohesion: 0.33
-Nodes (5): Deployment-history design, Manual follow-up, PR #293 — iOS drawer, camera permissions, and deployment history, Scope, Validation
+Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
 
-### Community 614 - "verify-app-namespaces.mjs"
+### Community 611 - "getVercelDeploymentsOverview"
 Cohesion: 0.60
 Nodes (3): acknowledgeLatestEditorJsEcho(), EditorJsSourceRevision, shouldAcceptEditorJsSnapshot()
 
-### Community 616 - "tt-elements.js"
+### Community 613 - "npm run web-pms PM2 Lifecycle Command"
 Cohesion: 0.50
 Nodes (5): React Client Entry, Google Fonts Stylesheet, React Root Mount Element, Thingtime HTML Document Shell, Theme Snapshot and Tab-Title Boot Script
 
-### Community 617 - "Thingtime Landing V2"
+### Community 614 - "verify-app-namespaces.mjs"
 Cohesion: 0.50
 Nodes (3): api(), failures, mint()
 
-### Community 618 - "tt-elements.js"
+### Community 615 - "🌈 Thingtime — Claude prototype landing page"
 Cohesion: 0.40
 Nodes (4): Conventions (see `FUNDAMENTALS.md`), ✅ Decisions (locked), Status board, 🧠 Thingtime × Claude — Feature To-Do
 
-### Community 619 - "tt-elements.js"
+### Community 616 - "tt-elements.js"
 Cohesion: 0.50
 Nodes (3): 1. `index.html` (recommended — zero setup), 2. `source/` (editable source), 🌈 Thingtime — Claude prototype landing page
+
+### Community 617 - "Thingtime Landing V2"
+Cohesion: 0.83
+Nodes (3): defineEl(), ready(), whenReady()
+
+### Community 618 - "tt-elements.js"
+Cohesion: 0.50
+Nodes (4): Thingtime Landing V2, Thing Editor Demo, Car Maintenance Use Case, Tool Sharing Use Case
+
+### Community 619 - "tt-elements.js"
+Cohesion: 0.83
+Nodes (3): defineEl(), ready(), whenReady()
 
 ### Community 620 - "🧭 Thingtime — landing directions"
 Cohesion: 0.83
@@ -3575,7 +3581,7 @@ Nodes (3): defineEl(), ready(), whenReady()
 
 ### Community 621 - "tt-elements.js"
 Cohesion: 0.50
-Nodes (4): Thingtime Landing V2, Thing Editor Demo, Car Maintenance Use Case, Tool Sharing Use Case
+Nodes (3): 1. `index.html` (recommended — zero setup), 2. `Thingtime Directions.dc.html` (editable source), 🧭 Thingtime — landing directions
 
 ### Community 622 - "tt-elements.js"
 Cohesion: 0.83
@@ -3586,8 +3592,8 @@ Cohesion: 0.83
 Nodes (3): defineEl(), ready(), whenReady()
 
 ### Community 624 - "tt-elements.js"
-Cohesion: 0.50
-Nodes (3): 1. `index.html` (recommended — zero setup), 2. `Thingtime Directions.dc.html` (editable source), 🧭 Thingtime — landing directions
+Cohesion: 0.83
+Nodes (3): defineEl(), ready(), whenReady()
 
 ### Community 625 - "tt-elements.js"
 Cohesion: 0.83
@@ -3610,104 +3616,100 @@ Cohesion: 0.83
 Nodes (3): defineEl(), ready(), whenReady()
 
 ### Community 630 - "tt-elements.js"
-Cohesion: 0.83
-Nodes (3): defineEl(), ready(), whenReady()
+Cohesion: 0.50
+Nodes (4): Thingtime Landing Ultra Minimal Voxel HTML Document, Inlined React 18.3.1 Runtime, Thingtime Launch Celebration HTML Document, Inlined React 18.3.1 Runtime
 
 ### Community 631 - "🎉 Thingtime — launch celebration page"
 Cohesion: 0.83
 Nodes (3): defineEl(), ready(), whenReady()
 
 ### Community 632 - "PR #66 — Extended props, schema-less crystals + stranded email/password-reset/2FA port"
-Cohesion: 0.83
-Nodes (3): defineEl(), ready(), whenReady()
-
-### Community 633 - "PR #67 — Profile composer + Thingtime posts 🌀 + Filters ▸ Advanced search"
-Cohesion: 0.50
-Nodes (4): Thingtime Landing Ultra Minimal Voxel HTML Document, Inlined React 18.3.1 Runtime, Thingtime Launch Celebration HTML Document, Inlined React 18.3.1 Runtime
-
-### Community 634 - "Image Modification"
-Cohesion: 0.83
-Nodes (3): defineEl(), ready(), whenReady()
-
-### Community 635 - "namespaceStorageRecovery.test.ts"
 Cohesion: 0.50
 Nodes (3): 1. `index.html` (recommended — zero setup), 2. `Thingtime Launch Celebration.dc.html` (editable source), 🎉 Thingtime — launch celebration page
 
-### Community 636 - "status.tsx"
+### Community 633 - "PR #67 — Profile composer + Thingtime posts 🌀 + Filters ▸ Advanced search"
 Cohesion: 0.50
 Nodes (3): Repair, PR 258 Thin-listener Promotion Repair, Why the historical promotion failed
 
-### Community 637 - "Worktree Port Configuration"
+### Community 634 - "Image Modification"
 Cohesion: 0.50
 Nodes (3): PR #66 — Extended props, schema-less crystals + stranded email/password-reset/2FA port, Verification, What it adds
 
-### Community 638 - "pnpm Workspace Configuration"
+### Community 635 - "namespaceStorageRecovery.test.ts"
 Cohesion: 0.50
 Nodes (3): Debugging log, PR #67 — Profile composer + Thingtime posts 🌀 + Filters ▸ Advanced search, What shipped
 
-### Community 639 - "Remix"
+### Community 636 - "status.tsx"
 Cohesion: 0.50
 Nodes (3): Commands, Features, Image Modification
 
-### Community 640 - "Trust Identity And Governance"
+### Community 637 - "Worktree Port Configuration"
 Cohesion: 0.50
 Nodes (3): NamespaceModule, remixRoot, ThingsModule
 
-### Community 641 - "🌈 Claude Design questionnaire — Thingtime prototype v1"
-Cohesion: 0.67
-Nodes (3): VercelDeploymentStatus, StatusPage(), value()
-
-### Community 643 - "🎨 docs/design — Claude Design exports"
+### Community 639 - "Remix"
 Cohesion: 0.67
 Nodes (4): Allowed Build Dependencies, Non-interactive Modules Purge Policy, Rolldown Release-age Exclusions, pnpm Workspace Configuration
 
-### Community 644 - "render"
+### Community 640 - "Trust Identity And Governance"
 Cohesion: 0.50
 Nodes (3): Deploy Your Own, Development, Remix
 
-### Community 648 - "index.js"
+### Community 644 - "render"
 Cohesion: 0.67
 Nodes (3): Algorithm Growth Mockup, render, stageFor
 
-### Community 649 - "Protected GitHub Actions Control Plane"
+### Community 645 - "card"
 Cohesion: 0.67
 Nodes (3): card, Theme Gallery Mockup, voxel
 
-### Community 650 - "Email Delivery (Owned Email Layer)"
+### Community 646 - "Find Conflicting PRs Job"
 Cohesion: 1.00
 Nodes (3): Find Conflicting PRs Job, PR Conflict Resolver Workflow, Resolve Conflicts Job
 
-### Community 651 - "usersStorageLegacy.test.ts"
+### Community 647 - "Thingtime App Icon Logo"
 Cohesion: 0.67
 Nodes (3): Green Canopy Icon Layer, Brown Trunk Icon Layer, Thingtime App Icon Logo
 
-### Community 661 - "inline-dc.py"
+### Community 651 - "usersStorageLegacy.test.ts"
 Cohesion: 0.33
 Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
 
-### Community 1091 - "PR #64 Add No-Code MongoDB Query Workbench"
-Cohesion: 0.40
-Nodes (4): Build And Test, Setup, TestFlight Upload, Thingtime iOS
+### Community 652 - "global-types.d.ts"
+Cohesion: 0.33
+Nodes (5): Deployment-history design, Manual follow-up, PR #293 — iOS drawer, camera permissions, and deployment history, Scope, Validation
+
+### Community 659 - "Bundled Page Design Mockup"
+Cohesion: 0.06
+Nodes (43): accumulateOrCreateContinuousQueuedReplayableEvent(), assertIsMounted(), attachPingListener(), attemptExplicitHydrationTarget(), attemptReplayContinuousQueuedEvent(), attemptReplayContinuousQueuedEventInMap(), attemptSynchronousHydration(), batchedUpdates() (+35 more)
+
+### Community 1093 - "root-data.server.ts"
+Cohesion: 0.36
+Nodes (7): Session, getDeploymentBranchName(), loadRootData(), PUBLIC_THINGTIME_ENV_KEYS, rootDataResponse(), TEST_ENV_KEYS, withTestEnv()
+
+### Community 1095 - "promote"
+Cohesion: 0.33
+Nodes (7): componentWillUnmount(), getSnapshotBeforeUpdate(), promote(), relegate(), remove(), removeItem(), safeToRemove()
 
 ## Ambiguous Edges - Review These
 - `Bundled Page Design Mockup` → `Flashy SaaS Theme Design Image`  [AMBIGUOUS]
   docs/design/claude-design-mockup-v1/index.html · relation: semantically_similar_to
 
 ## Knowledge Gaps
-- **2401 isolated node(s):** `Scope`, `Deployment-history design`, `Validation`, `Manual follow-up`, `Canonical AI instruction links (`AI_ALL.md`)` (+2396 more)
+- **2401 isolated node(s):** `Scope`, `Deployment-history design`, `Validation`, `Manual follow-up`, `Fixed` (+2396 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **421 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **422 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Bundled Page Design Mockup` and `Flashy SaaS Theme Design Image`?**
   _Edge tagged AMBIGUOUS (relation: semantically_similar_to) - confidence is low._
-- **Why does `create()` connect `scrapeMotionValuesFromProps` to `captureCommitPhaseError`, `patTokens.ts`, `endpoint.ts`, `useThingtime`, `popHydrationState`, `error`, `useLopu`, `querySafety.ts`, `scheduleUpdateOnFiber`, `error`, `error`, `error`, `replace`, `beginWork`, `scheduleUpdateOnFiber`, `commitRootImpl`, `ensureRootIsScheduled`, `algorithms.ts`, `diffHydratedProperties`, `quota.ts`, `popHydrationState`?**
+- **Why does `create()` connect `buildSVGAttrs` to `ImagePatternGrid.tsx`, `EditorSplit.tsx`, `captureCommitPhaseError`, `endpoint.ts`, `error`, `beginWork`, `popHydrationState`, `scheduleUpdateOnFiber`, `error`, `beginWork`, `captureCommitPhaseError`, `captureCommitPhaseError`, `beginWork`, `legacyCreateRootFromDOMContainer`, `useApi`, `scheduleUpdateOnFiber`, `ensureRootIsScheduled`, `completeWork`, `update`, `completeWork`?**
   _High betweenness centrality (0.514) - this node is a cross-community bridge._
-- **Why does `equal()` connect `test` to `trim`, `trim`, `getProps`, `PR #53 — Nested data viewer concepts + kind renderers with live /docs/concepts section`, `AI Advice: Agents And Councils`, `[...].ts`, `mapIntoArray`, `popHydrationState`, `devDependencies`, `createElementWithValidation`, `getValue`, `eachAxis`?**
+- **Why does `equal()` connect `[...].ts` to `trim`, `trim`, `getProps`, `PR #53 — Nested data viewer concepts + kind renderers with live /docs/concepts section`, `ImagePatternGrid.tsx`, `test`, `mapIntoArray`, `commitPlacement`, `update`, `devDependencies`, `createElementWithValidation`, `getValue`?**
   _High betweenness centrality (0.249) - this node is a cross-community bridge._
-- **Why does `asNumber()` connect `ensureRootIsScheduled` to `trim`, `trim`, `getProps`, `PR #53 — Nested data viewer concepts + kind renderers with live /docs/concepts section`, `AI Advice: Agents And Councils`, `test`, `[...].ts`, `mapIntoArray`, `devDependencies`, `createElementWithValidation`, `getValue`, `eachAxis`?**
+- **Why does `asNumber()` connect `diffHydratedProperties` to `trim`, `trim`, `getProps`, `PR #53 — Nested data viewer concepts + kind renderers with live /docs/concepts section`, `test`, `[...].ts`, `mapIntoArray`, `commitPlacement`, `update`, `devDependencies`, `createElementWithValidation`, `getValue`?**
   _High betweenness centrality (0.100) - this node is a cross-community bridge._
 - **Are the 21 inferred relationships involving `error()` (e.g. with `act()` and `commitBeforeMutationEffects_complete()`) actually correct?**
   _`error()` has 21 INFERRED edges - model-reasoned connections that need verification._
