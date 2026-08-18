@@ -17,7 +17,12 @@ import {
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { userSubscriptionLedgerMatch } from '../subscriptions/subscriptionIdentity';
 import { attachmentCascadeCleanupTargets } from '../attachments/attachmentCascadeCore';
-import { toAttachmentPublicMetadata, type AttachmentPublicMetadata, type AttachmentPurpose } from '../attachments/attachmentCore';
+import {
+	orderAttachmentDocsByStoredSort,
+	toAttachmentPublicMetadata,
+	type AttachmentPublicMetadata,
+	type AttachmentPurpose
+} from '../attachments/attachmentCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
@@ -1440,10 +1445,11 @@ const resolvePostAttachments = async (
 	const things = await getThingsCollection();
 	const docs = (await things
 		.find({ thingtime: 'attachment', targetId: { $in: ids }, attachmentState: 'ready' } as any)
-		.project({ shareId: 1, targetId: 1, ownerId: 1, attachmentPurpose: 1, crystal: 1, createdAt: 1 })
+		.project({ shareId: 1, targetId: 1, ownerId: 1, attachmentPurpose: 1, attachmentSortIndex: 1, crystal: 1, createdAt: 1 })
 		.sort({ createdAt: 1, shareId: 1 })
 		.toArray()) as any[];
-	for (const doc of docs) {
+	// stamped display order wins; legacy unstamped docs keep createdAt order
+	for (const doc of orderAttachmentDocsByStoredSort(docs)) {
 		const targetId = typeof doc.targetId === 'string' ? doc.targetId : '';
 		const expected = expectedTargets?.get(targetId);
 		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
