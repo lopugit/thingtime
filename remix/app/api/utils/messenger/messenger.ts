@@ -291,9 +291,15 @@ type ChatAccess = { chat: any; member: any };
 // requireActive.
 const resolveChatAccess = async (viewerId: string, chatId: unknown, opts: { requireActive?: boolean } = {}): Promise<ChatAccess | Fail> => {
   if (typeof chatId !== 'string' || !chatId.trim()) return fail(400, 'Chat id required');
-  const chat = await findThingByKind('chat', chatId.trim());
+  // The membership lookup does not need the chat document — findThingByKind
+  // matches on shareId === id, so chat.shareId is just the trimmed id. Running
+  // both together removes one serial round trip from the gate on every
+  // messenger read and write (11 call sites, and open chats poll every 4s).
+  // On the 404 path the member query is issued and discarded: one wasted
+  // indexed findOne on an error path, no correctness change.
+  const id = chatId.trim();
+  const [chat, member] = await Promise.all([findThingByKind('chat', id), getChatMemberDoc(id, viewerId)]);
   if (!chat) return fail(404, 'Chat not found');
-  const member = await getChatMemberDoc(chat.shareId, viewerId);
   const state = member?.crystal?.state;
   if (!member || state === 'left' || state === 'declined') return fail(403, 'You are not in this chat');
   if (opts.requireActive && state !== 'active') return fail(403, 'Accept the message request first');
