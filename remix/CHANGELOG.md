@@ -19,6 +19,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Security
 
+- **Upload approval now has public / private / all scopes**: the
+  signup-permissions gate is split into two independent tri-state flags —
+  `meta.publicUploads` (post/comment/custom-emoji attachments) and the new
+  `meta.privateUploads` (message attachments + own profile media) — both
+  stamped `false` at registration and both privileged meta keys. The upload
+  start gate is purpose-aware (`403 public_uploads_not_approved` /
+  `private_uploads_not_approved`), `POST /api/v1/admin/users/public-uploads`
+  accepts `scope: 'public' | 'private' | 'all'` (default `public`, wire-
+  compatible), and the /admin Users tab's control becomes an Approve menu with
+  per-scope and enable/withhold-all actions plus per-scope pending flags.
+  Grandfathering and the admin bypass are unchanged. — Claude (AI), 2026-08-18
+
 - **New signups no longer receive public upload permissions**: accounts created
   from this change forward start with `meta.publicUploads: false`, and verifying
   the email address no longer grants uploads. `POST /api/v1/attachments/uploads`
