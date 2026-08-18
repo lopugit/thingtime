@@ -43,8 +43,8 @@ import {
 } from './thingsCore';
 
 const PAGE_SIZE = 50;
-// listing noise: reaction/save things are mechanical children, not content
-const HIDDEN_KINDS = new Set(['reaction', 'save']);
+// listing noise: reaction/save/vote things are mechanical children, not content
+const HIDDEN_KINDS = new Set(['reaction', 'save', 'vote']);
 // custom sort/group loads the whole folder (honest ordering needs the full
 // set) — bounded so a giant folder can't fetch forever
 const MAX_ARRANGE_THINGS = 1000;

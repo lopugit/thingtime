@@ -228,7 +228,7 @@ export const deleteAllAppData = async (userId: string, clientId: unknown): Promi
     // the RIGHT ledgers
     const cascadeFilter = {
       targetId: { $in: ids },
-      thingtime: { $in: ['comment', 'reaction', 'save'] }
+      thingtime: { $in: ['comment', 'reaction', 'save', 'vote'] }
     };
     const cascade = (await things
       .find(cascadeFilter as any)

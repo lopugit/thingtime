@@ -6078,6 +6078,51 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-vote',
+    group: 'things',
+    title: 'Vote on poll',
+    endpoint: '/api/v1/things/vote',
+    summary: 'Casts (or moves, or removes) the current user vote on a visible poll thing.',
+    detail:
+      'Polls are posts (or data things) whose thing carries a string question plus an options ' +
+      'list of 2+ entries. One vote per (user, poll), enforced structurally: votes are standalone ' +
+      'things (thingtime ["vote"], crystal.optionIndex, targetId = the poll, acl ["tt:inherit"]) ' +
+      'deduped by a server-written crystal.voteKey ("<pollId>~<userId>") under a partial unique ' +
+      'index. Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
+      'SAME option again removes it (toggle off, matching reactions). The poll must be visible ' +
+      'to the caller — acl and inherit chains are re-checked on every vote. Live tallies ride ' +
+      'poll posts as pollVotes wherever posts are projected (feed, /post/:id, profiles).',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Anonymous viewers see results only.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the poll thing id and the zero-based optionIndex to vote for.',
+      'The poll must be visible to the current user and optionIndex must be inside its options list.',
+      'Use the returned pollVotes (counts per option, totalVotes, viewerVote) to reconcile the card.',
+      'Handle 401 unauthenticated, 404 for missing or not-visible polls, and 400 for non-polls or out-of-range options.'
+    ],
+    requestExamples: [
+      {
+        name: 'Cast a vote',
+        description: 'Vote for the second option of a poll.',
+        method: 'POST',
+        body: { id: 'poll_123', optionIndex: 1 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Vote recorded — the fresh tally comes back for immediate reconciliation.',
+        body: {
+          ok: true,
+          pollVotes: { counts: [3, 5, 1], totalVotes: 9, viewerVote: 1 }
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'things-reactions-recent',
     group: 'things',
     title: 'Recent reactions',

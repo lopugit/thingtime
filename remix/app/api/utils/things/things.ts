@@ -51,6 +51,7 @@ import {
   type ThingVisibility
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
+import { pollShapeOfCrystal, tallyPollVotes, type PollVoteEntry, type PublicPollVotes } from './pollCore';
 import { resolveInheritChain } from './aclChainCore';
 import {
   appAclEntry,
@@ -271,6 +272,9 @@ export type PublicPost = {
   // (the manipulation-resistant number), impressions/avgDwellMs secondary
   viewCount: number;
   viewStats: { impressions: number; avgDwellMs: number };
+  // poll posts only (crystal.thing carries question/options): live per-option
+  // vote counts + the viewer's own vote, batch-aggregated from vote things
+  pollVotes?: PublicPollVotes;
   extended: unknown | null;
   createdAt: string;
 };
@@ -731,11 +735,11 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 // them, so a folder pointer can never reference another user's folder, a
 // non-folder thing, or (for folder moves) its own descendant.
 
-// Mechanical children (reactions, saves) live under their target and never
-// surface as content — filing them is meaningless. Comments/shares/posts are
-// authored content and CAN be filed: folderId is pure owner-side organization,
-// orthogonal to targetId attachment and inherit visibility.
-const FOLDER_UNFILEABLE = ['reaction', 'save'];
+// Mechanical children (reactions, saves, poll votes) live under their target
+// and never surface as content — filing them is meaningless. Comments/shares/
+// posts are authored content and CAN be filed: folderId is pure owner-side
+// organization, orthogonal to targetId attachment and inherit visibility.
+const FOLDER_UNFILEABLE = ['reaction', 'save', 'vote'];
 // Ancestor-walk bound. Legitimate folder trees are shallow; the walk fails
 // closed at the cap so a corrupt chain can never loop the server.
 const MAX_FOLDER_DEPTH = 64;
@@ -1292,6 +1296,9 @@ type RelatedThings = {
   // keyed by post shareId AND (second pass) by comment shareId — a comment's
   // own reactions live here too
   reactionsByTarget: Map<string, ReactionEntry[]>;
+  // poll vote things per page-doc shareId (see pollCore.ts) — one query for
+  // the whole page, folded into the same fetch as comments/reactions
+  votesByTarget: Map<string, PollVoteEntry[]>;
   shareCountByTarget: Map<string, number>;
   // direct-reply counts per comment shareId
   commentCountByTarget: Map<string, number>;
@@ -1304,14 +1311,15 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   const ids = docs.map((doc) => doc.shareId);
   const commentsByTarget = new Map<string, CommentEntry[]>();
   const reactionsByTarget = new Map<string, ReactionEntry[]>();
+  const votesByTarget = new Map<string, PollVoteEntry[]>();
   const shareCountByTarget = new Map<string, number>();
   const commentCountByTarget = new Map<string, number>();
-  if (!ids.length) return { commentsByTarget, reactionsByTarget, shareCountByTarget, commentCountByTarget };
+  if (!ids.length) return { commentsByTarget, reactionsByTarget, votesByTarget, shareCountByTarget, commentCountByTarget };
 
   const things = await getThingsCollection();
   const [related, legacyRelational, shareCounts] = await Promise.all([
     things
-      .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] } } as any)
+      .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction', 'vote'] } } as any)
       .sort({ createdAt: 1, shareId: 1 })
       .toArray() as Promise<any[]>,
     // interim relational era: kind:'reaction'/'comment' docs linked by parentId
@@ -1355,6 +1363,10 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
       });
     } else if (thingtimeOf(doc).includes('reaction')) {
       pushReaction(target, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
+    } else if (thingtimeOf(doc).includes('vote')) {
+      const list = votesByTarget.get(target) || [];
+      list.push({ userId: String(doc.ownerId), optionIndex: Number(doc.crystal?.optionIndex) });
+      votesByTarget.set(target, list);
     }
   }
   for (const doc of legacyRelational as ThingDoc[]) {
@@ -1429,7 +1441,7 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
     levelIds = nextLevelIds;
   }
 
-  return { commentsByTarget, reactionsByTarget, shareCountByTarget, commentCountByTarget };
+  return { commentsByTarget, reactionsByTarget, votesByTarget, shareCountByTarget, commentCountByTarget };
 };
 
 // Attachments are relational protected Things. Resolve one bounded query for
@@ -1654,6 +1666,11 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     // (its /post/:id page) must not render its parent as a pseudo-share
     const original = withShare && shareTarget && thingtimeOf(doc).includes('share') ? originalsById.get(shareTarget) : null;
 
+    // poll posts carry their live tally (votes were fetched in the same
+    // batched resolveRelated pass as comments/reactions — no extra query)
+    const pollShape = pollShapeOfCrystal(crystal);
+    const pollVotes = pollShape ? tallyPollVotes(pollShape.optionCount, related.votesByTarget.get(doc.shareId) || [], viewerId) : null;
+
     return {
       id: doc.shareId,
       thingtime: thingtimeOf(doc),
@@ -1683,6 +1700,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
           avgDwellMs: stats?.viewCount ? Math.round(stats.totalDwellMs / stats.viewCount) : 0
         };
       })(),
+      ...(pollVotes ? { pollVotes } : {}),
       extended: doc.extended ?? null,
       createdAt: new Date(doc.createdAt).toISOString()
     };
@@ -1827,7 +1845,9 @@ const findThing = async (shareId: unknown): Promise<ThingDoc | null> => {
   return (await things.findOne({ shareId: shareId.trim() } as any)) as any as ThingDoc | null;
 };
 
-const findViewableThing = async (shareId: unknown, viewer: Viewer): Promise<ThingDoc | null> => {
+// exported for the dedicated engagement utils that live outside this module
+// (things/vote.ts) — the ONE visibility gate every interaction path shares
+export const findViewableThing = async (shareId: unknown, viewer: Viewer): Promise<ThingDoc | null> => {
   const doc = await findThing(shareId);
   // friend enrichment happens here so every interaction path (react, comment,
   // share, save, view) resolves friends-only targets for real friends
@@ -2959,7 +2979,7 @@ const cascadeAttachmentFilter = (parentIds: string[]) => ({
 			targetId: { $in: parentIds },
 			// A malformed multi-kind Thing must never turn a share into cascade
 			// garbage: shares intentionally survive their original disappearing.
-			thingtime: { $in: ['attachment', 'comment', 'reaction', 'save'], $nin: ['share'] }
+			thingtime: { $in: ['attachment', 'comment', 'reaction', 'save', 'vote'], $nin: ['share'] }
 		},
 		{
 			parentId: { $in: parentIds },
@@ -2983,7 +3003,7 @@ const cascadeParentIdsOf = (doc: ThingDoc): string[] => {
 	const parents = new Set<string>();
 	const thingtime = Array.isArray(doc.thingtime) ? doc.thingtime : [];
 	if (
-		thingtime.some((entry) => entry === 'attachment' || entry === 'comment' || entry === 'reaction' || entry === 'save') &&
+		thingtime.some((entry) => entry === 'attachment' || entry === 'comment' || entry === 'reaction' || entry === 'save' || entry === 'vote') &&
 		!thingtime.includes('share') &&
 		typeof doc.targetId === 'string' &&
 		doc.targetId
@@ -3777,7 +3797,7 @@ export type BulkItemResult = {
 // Kinds that can't be duplicated: attached children live under their target
 // (a copy would dangle). Folders CAN be copied — the whole subtree is walked
 // through the same per-item create path, skipping these kinds inside.
-const UNCOPYABLE = ['comment', 'reaction', 'save', 'share'];
+const UNCOPYABLE = ['comment', 'reaction', 'save', 'share', 'vote'];
 
 // Recursive folder op bound (copy / recursive share): the subtree walk fails
 // loudly past this many things instead of silently truncating.

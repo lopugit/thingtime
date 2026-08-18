@@ -493,6 +493,12 @@ export function useApi() {
       ),
       // toggle a private "add to my library" save on any visible thing
       save: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }), [asyncFetcher]),
+      // cast/move/remove the caller's vote on a visible poll thing
+      vote: useCallback(
+        async (args: { id: string; optionIndex: number }) =>
+          asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' }),
+        [asyncFetcher]
+      ),
       comment: useCallback(
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/tags/attachments — comments share the post schema

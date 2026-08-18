@@ -976,6 +976,36 @@ const saveThingSchema: ThingtimeSchema = {
   example: {}
 };
 
+// Poll votes: one relational child thing per (user, poll) — FUNDAMENTALS §3.
+// Deduped structurally by crystal.voteKey ('<pollId>~<userId>', written only by
+// the vote endpoint) via the things_vote_key_unique partial index. Re-voting a
+// different option UPDATES the existing doc in place; voting the same option
+// again removes it (toggle off, matching reactions). Deliberately absent from
+// crystalSanitizers: a client-supplied voteKey could squat another user's vote
+// slot or (omitted) escape the one-vote dedupe entirely, so only
+// POST /api/v1/things/vote mints these.
+const voteSchema: ThingtimeSchema = {
+  id: 'vote',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Poll vote',
+  summary: 'One user’s vote on a poll thing — one doc per (user, poll), re-votes update in place.',
+  detail:
+    'Created/changed/removed only by POST /api/v1/things/vote { id, optionIndex }. A standalone ' +
+    'thing pointing at its poll via targetId, carrying acl ["tt:inherit"] so it is visible exactly ' +
+    'when the poll is. crystal.optionIndex is the zero-based option; crystal.voteKey ' +
+    '("<pollId>~<userId>", server-written) makes one-vote-per-user structural via a partial ' +
+    'unique index. Vote counts are batch-aggregated onto poll posts as pollVotes.',
+  requiresTarget: true,
+  createdVia: 'POST /api/v1/things/vote',
+  fields: [
+    { name: 'optionIndex', type: 'number', required: true, min: 0, description: 'Zero-based index into the poll’s options.' },
+    { name: 'voteKey', type: 'string', required: true, description: 'Canonical dedupe key <pollId>~<userId> — unique per (poll, user), server-written.' }
+  ],
+  example: { optionIndex: 1, voteKey: 'poll_123~664f1c2a9d3e5b0012345678' }
+};
+
 const subscriptionSchema: ThingtimeSchema = {
   id: 'subscription',
 	version: 3,
@@ -2200,6 +2230,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   dataSchema,
   schemaThingSchema,
   saveThingSchema,
+  voteSchema,
   folderSchema,
   appSchema,
   appDataSchema,

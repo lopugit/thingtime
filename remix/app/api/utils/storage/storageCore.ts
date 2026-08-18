@@ -109,6 +109,11 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
 	// minted by dedicated home-plane state machines, never generic user CRUD.
 	'friend',
 	'notification',
+	// Poll votes are bounded engagement plumbing: one tiny fixed-shape doc per
+	// (user, poll), minted only by POST /api/v1/things/vote (no generic
+	// sanitizer). Direct-inserted without a storage stamp, so they must stay
+	// out of billable arithmetic like the other dedicated-endpoint kinds.
+	'vote',
 	// Messenger rows are bounded server-managed relationship/index plumbing.
 	// User file bytes live in separately metered attachment Things, so message,
 	// comment and custom-emoji media cannot bypass account storage quotas.

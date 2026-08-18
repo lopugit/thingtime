@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Button, Flex, IconButton, Input, Modal, ModalContent, ModalOverlay, Select, Text } from '@chakra-ui/react';
-import { PictureInPicture2, X } from 'lucide-react';
+import { PictureInPicture2, Plus, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -95,11 +95,27 @@ const thingHasContent = (value: unknown): boolean => {
   return value !== undefined;
 };
 
-const TEXTAREA_PLACEHOLDERS: Record<PostType, string> = {
+// The tabs cover the post types plus the Poll mode — a poll publishes as a
+// thingtime post whose thing is { kind: 'poll', question, options }, so it
+// rides the existing publish path and renders through the poll kind renderer
+// (with live vote bars once the server aggregates vote things onto it).
+type ComposeMode = PostType | 'poll';
+
+const COMPOSE_MODE_META: Record<ComposeMode, { label: string; emoji: string }> = {
+	...POST_TYPE_META,
+	poll: { label: 'Poll', emoji: '🗳️' }
+};
+
+const MIN_POLL_OPTIONS = 2;
+const MAX_POLL_OPTIONS = 6;
+const MAX_POLL_OPTION_CHARS = 80;
+
+const TEXTAREA_PLACEHOLDERS: Record<ComposeMode, string> = {
   text: "What's on your mind? ✨",
   image: 'Say something about these photos… 🖼️',
   marketplace: 'Describe your listing… 🏪',
-  thingtime: 'Say something about this thing… 🌀 (optional)'
+  thingtime: 'Say something about this thing… 🌀 (optional)',
+  poll: 'Ask your question… 🗳️'
 };
 
 export type PostComposerProps = {
@@ -136,8 +152,10 @@ export const PostComposer = (props: PostComposerProps) => {
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
   const [expanded, setExpanded] = React.useState(isComment || isEdit);
-  const [type, setType] = React.useState<PostType>(editPost?.type || 'text');
+  const [type, setType] = React.useState<ComposeMode>(editPost?.type || 'text');
   const [text, setText] = React.useState(editPost?.text || '');
+  // poll mode: the main text box is the question; these are the option rows
+  const [pollOptions, setPollOptions] = React.useState<string[]>(['', '']);
 	// edit mode pre-fills the linked-image rows from the post's saved URLs
 	const [linkedImages, setLinkedImages] = React.useState<LinkedImageItem[]>(() =>
 		(editPost?.images || []).map((url) => createLinkedImageItem(url))
@@ -201,6 +219,9 @@ export const PostComposer = (props: PostComposerProps) => {
 	const parsedTags = canonicalPostTags(tagsInput.split(','));
 
 	const validImages = canonicalLinkedImageUrls(linkedImages);
+
+	// poll mode: trimmed, bounded, non-empty option labels in row order
+	const parsedPollOptions = pollOptions.map((option) => option.trim().slice(0, MAX_POLL_OPTION_CHARS)).filter(Boolean);
 
   // this composer's session-scoped draft home (fresh per mount — see
   // DRAFT_ROOT_KEY above). State, not a const: renaming the draft's root key
@@ -279,7 +300,9 @@ export const PostComposer = (props: PostComposerProps) => {
 			  // A toggled-on Photos group accepts either the existing URL flow
 			  // or a securely uploaded image/video attachment.
 			  (!thingPhotos || validImages.length > 0 || hasReadyVisualAttachment)
-          : listingValid;
+          : type === 'poll'
+            ? text.trim().length > 0 && parsedPollOptions.length >= MIN_POLL_OPTIONS
+            : listingValid;
 	const valid = contentValid && !attachmentSnapshot.blocking;
 
   const reset = () => {
@@ -288,6 +311,7 @@ export const PostComposer = (props: PostComposerProps) => {
     setExpanded(isComment);
     setType('text');
     setText('');
+    setPollOptions(['', '']);
     setComposerSession((session) => session + 1);
 		setLinkedImages([]);
     setTitle('');
@@ -309,6 +333,10 @@ export const PostComposer = (props: PostComposerProps) => {
 
 		const currentAttachmentIds = [...attachmentSnapshot.attachmentIds];
 		const currentPostShareId = crypto.randomUUID();
+		// polls publish as thingtime posts; the question lives on the thing (the
+		// poll card renders it), so the post text stays empty — no double render
+		const apiType: PostType = type === 'poll' ? 'thingtime' : type;
+		const canonicalText = type === 'poll' ? '' : text.trim();
 		const canonicalListing = showListing
 			? {
 					title: title.trim().slice(0, 120),
@@ -321,7 +349,12 @@ export const PostComposer = (props: PostComposerProps) => {
 			  }
 			: null;
 		const canonicalImages = showPhotos ? validImages : [];
-		const canonicalThing = type === 'thingtime' ? draftThing : null;
+		const canonicalThing =
+			type === 'thingtime'
+				? draftThing
+				: type === 'poll'
+					? { kind: 'poll', question: text.trim(), options: parsedPollOptions }
+					: null;
 		const canonicalTags = [...parsedTags, ...(canonicalListing ? [canonicalListing.category] : [])].filter(
 			(tag, index, all) => all.indexOf(tag) === index
 		);
@@ -331,8 +364,8 @@ export const PostComposer = (props: PostComposerProps) => {
 						shareId: currentPostShareId,
 						ownerId: user.id,
 						crystal: {
-							type,
-							text: text.trim(),
+							type: apiType,
+							text: canonicalText,
 							images: canonicalImages,
 							listing: canonicalListing,
 							thing: canonicalThing
@@ -343,8 +376,8 @@ export const PostComposer = (props: PostComposerProps) => {
 				  }
 				: null;
 		const currentPayload: Record<string, unknown> = {
-        type,
-        text: text.trim(),
+        type: apiType,
+        text: canonicalText,
         tags: parsedTags
       };
 		if (currentPostShareId) currentPayload.shareId = currentPostShareId;
@@ -352,7 +385,7 @@ export const PostComposer = (props: PostComposerProps) => {
 		if (!isComment) currentPayload.visibility = visibility;
 		if (currentAttachmentIds.length > 0) currentPayload.attachmentIds = currentAttachmentIds;
 		if (showPhotos) currentPayload.images = canonicalImages;
-		if (type === 'thingtime') currentPayload.thing = canonicalThing;
+		if (apiType === 'thingtime') currentPayload.thing = canonicalThing;
 		if (showListing) currentPayload.listing = canonicalListing;
 
 		if (!pendingPostSubmissionRef.current && currentPostShareId && (isComment || currentCommittedExpectation)) {
@@ -363,7 +396,7 @@ export const PostComposer = (props: PostComposerProps) => {
 				payload: clonePostJson(currentPayload),
 				expectation: clonePostJson(currentCommittedExpectation),
 				attachmentIds: currentAttachmentIds,
-				postType: type,
+				postType: apiType,
 				unknownOutcome: false
         };
       }
@@ -535,11 +568,15 @@ export const PostComposer = (props: PostComposerProps) => {
 				</Flex>
 			)}
 			<Box display="contents" {...((posting || submissionUncertain ? { inert: '' } : {}) as any)}>
-      {/* type tabs — wrap on narrow screens so labels never overlap */}
+      {/* type tabs — wrap on narrow screens so labels never overlap. The Poll
+      tab is compose-only: an existing poll edits through the Thingtime tab
+      (its thing IS the poll), so edit mode keeps the plain type tabs. */}
       <Flex columnGap={1} rowGap={1} alignItems="center" flexWrap="wrap">
-        {(Object.keys(POST_TYPE_META) as PostType[]).map((key) => (
+        {(Object.keys(COMPOSE_MODE_META) as ComposeMode[])
+          .filter((key) => key !== 'poll' || !isEdit)
+          .map((key) => (
 						<Button key={key} size="xs" variant={type === key ? 'solid' : 'ghost'} borderRadius={RADIUS_SM} onClick={() => setType(key)}>
-            {POST_TYPE_META[key].emoji} {POST_TYPE_META[key].label}
+            {COMPOSE_MODE_META[key].emoji} {COMPOSE_MODE_META[key].label}
           </Button>
         ))}
         <IconButton
@@ -565,7 +602,10 @@ export const PostComposer = (props: PostComposerProps) => {
         <UserAvatarCircle size="36px" fontSize="sm" />
         <Box flex="1" minWidth={0}>
           <LongTextEditor
-            key={composerSession}
+            // Editor.js reads its placeholder once at init, so entering/leaving
+            // poll mode remounts the editor (the value prop reseeds the text) —
+            // the question prompt must actually show for polls
+            key={`${composerSession}-${type === 'poll' ? 'poll' : 'post'}`}
             value={text}
             onValueChange={(next) => setText(typeof next === 'string' ? next : '')}
             placeholder={TEXTAREA_PLACEHOLDERS[type]}
@@ -683,6 +723,56 @@ export const PostComposer = (props: PostComposerProps) => {
               </Box>
             </ModalContent>
           </Modal>
+        </Flex>
+      )}
+
+      {/* poll options — the main text box above is the question */}
+      {type === 'poll' && (
+        <Flex flexDirection="column" rowGap={2}>
+          <Eyebrow>Options 🗳️</Eyebrow>
+          {pollOptions.map((option, idx) => (
+            <Flex key={idx} columnGap={2} alignItems="center">
+              <Input
+                size="sm"
+                borderRadius={RADIUS_SM}
+                placeholder={`Option ${idx + 1}`}
+                maxLength={MAX_POLL_OPTION_CHARS}
+                value={option}
+                onChange={(event) => {
+                  const next = [...pollOptions];
+                  next[idx] = event.target.value;
+                  setPollOptions(next);
+                }}
+              />
+              {pollOptions.length > MIN_POLL_OPTIONS && (
+                <IconButton
+                  aria-label={`Remove option ${idx + 1}`}
+                  icon={<X size={13} />}
+                  size="xs"
+                  variant="ghost"
+                  color={MUTED}
+                  borderRadius="8px"
+                  flexShrink={0}
+                  onClick={() => setPollOptions(pollOptions.filter((_entry, index) => index !== idx))}
+                />
+              )}
+            </Flex>
+          ))}
+          {pollOptions.length < MAX_POLL_OPTIONS && (
+            <Button
+              size="xs"
+              variant="ghost"
+              alignSelf="flex-start"
+              borderRadius={RADIUS_SM}
+              leftIcon={<Plus size={13} />}
+              onClick={() => setPollOptions([...pollOptions, ''])}
+            >
+              Add option
+            </Button>
+          )}
+          <Text fontSize="10px" color={MUTED}>
+            {MIN_POLL_OPTIONS}–{MAX_POLL_OPTIONS} options · voters pick one and can change or remove their vote ✨
+          </Text>
         </Flex>
       )}
 

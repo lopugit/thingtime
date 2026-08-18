@@ -661,6 +661,14 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { 'crystal.followKey': 1 },
       { name: 'things_follow_key_unique', unique: true, partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } }
     ),
+    // One poll vote per (poll, user): crystal.voteKey is '<pollId>~<userId>',
+    // written only by the vote endpoint (things/vote.ts). Same single-key
+    // partial-unique pattern as the follow/member keys — re-votes update the
+    // doc in place, insert races 11000 and reconcile onto the winner.
+    col.createIndex(
+      { 'crystal.voteKey': 1 },
+      { name: 'things_vote_key_unique', unique: true, partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } }
+    ),
     // Thread replies list under their root message (main chat pages ride the
     // shared { targetId, thingtime, createdAt, shareId } index above).
     col.createIndex(

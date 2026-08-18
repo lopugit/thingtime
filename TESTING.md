@@ -514,6 +514,39 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] A comment whose parent chain is broken (target deleted) fails closed:
       not viewable, not reactable, permalink 404s.
 
+## Poll voting (`remix/app/api/utils/things/vote.ts`, `PollRenderer`)
+
+- [ ] Compose a poll from the feed composer's 🗳️ Poll tab (question in the
+      main box, 2–6 option rows with add/remove) and post it: the card renders
+      the poll (question + tappable options), NOT the raw Thingtime tree.
+- [ ] Tap an option while logged in: the bar fills and the ✓/accent highlight
+      lands INSTANTLY (optimistic), then the server tally reconciles.
+      Tapping a different option MOVES the vote (totals unchanged); tapping
+      your own option again REMOVES it. `POST /api/v1/things/vote` returns
+      `pollVotes { counts, totalVotes, viewerVote }` matching what renders.
+- [ ] One vote per user per poll survives races: double-tap fast / two tabs —
+      the `things_vote_key_unique` index keeps ONE vote doc per
+      (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge.
+- [ ] Logged out: the poll shows results only (bars + percentages visible,
+      no vote recorded); tapping toasts "Log in to vote 🗳️".
+- [ ] A poll on a private/friends-only post can't be voted on by a viewer
+      outside the audience (404 from the vote endpoint — acl + `tt:inherit`
+      chains re-checked per vote), and out-of-range `optionIndex` 400s.
+- [ ] Generic CRUD refuses the kind: `POST /api/v1/things` with
+      `thingtime: ["vote"]` answers 403 (votes mint only through the vote
+      endpoint, which writes the server-owned `voteKey`).
+- [ ] Vote endpoint failure (devtools: fail `/api/v1/things/vote` once)
+      reverts the optimistic bars to the pre-tap tally and shows a Lopu
+      error toast — never a stuck wrong count.
+- [ ] A shared poll's nested sub-card shows the live tally read-only; voting
+      happens on the original's own card/permalink.
+- [ ] Deleting a poll post cascade-deletes its vote things (no orphan `vote`
+      docs pointing at the gone poll); vote docs never list as /things rows
+      and folder copy skips them like reactions/saves.
+- [ ] A foreign doc squatting the `crystal.voteKey` slot (e.g. a free-form
+      data crystal) makes the vote endpoint answer 409 — never a silent
+      `ok: true` that drops the vote.
+
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
 - [ ] Open the hover (popover) menu from a row inside a SMALL editor box: the

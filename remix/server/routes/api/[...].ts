@@ -150,6 +150,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/things/update': () => import('../../../app/routes/api/v1/things/update/_update'),
   'v1/things/user': () => import('../../../app/routes/api/v1/things/user/_user'),
   'v1/things/views': () => import('../../../app/routes/api/v1/things/views/_views'),
+  'v1/things/vote': () => import('../../../app/routes/api/v1/things/vote/_vote'),
   'v1/users/connections': () => import('../../../app/routes/api/v1/users/connections/_connections'),
   'v1/users/follow': () => import('../../../app/routes/api/v1/users/follow/_follow'),
   'v1/users/friend': () => import('../../../app/routes/api/v1/users/friend/_friend'),

@@ -48,6 +48,7 @@ import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from 
 import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, warmAvatars } from './threadCache';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, timeAgo } from './feedTypes';
 import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost } from './feedTypes';
+import type { PollRenderPollContext } from '~/components/Kinds';
 
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
 // reflects it). Used for optimistic paint + revert against the FRESHEST post, so
@@ -80,6 +81,31 @@ const reconcileReactionToken = <T extends Pick<PublicPost, 'reactionCounts' | 'v
   if (serverHas && !prevHas) viewerReactions = [...prev.viewerReactions, token];
   else if (!serverHas && prevHas) viewerReactions = prev.viewerReactions.filter((entry) => entry !== token);
   return { ...prev, reactionCounts, viewerReactions };
+};
+
+// Apply one poll-vote tap optimistically, on the FRESHEST post: your same
+// option removes the vote, a different option moves it, no vote yet adds it —
+// the exact semantics the server applies, so reconcile is usually a no-op.
+const applyPollVoteToggle = <T extends Pick<PublicPost, 'pollVotes'>>(prev: T, optionIndex: number): T => {
+	const tally = prev.pollVotes;
+	if (!tally || optionIndex < 0 || optionIndex >= tally.counts.length) return prev;
+	const counts = [...tally.counts];
+	let totalVotes = tally.totalVotes;
+	let viewerVote: number | null;
+	if (tally.viewerVote === optionIndex) {
+		counts[optionIndex] = Math.max(0, counts[optionIndex] - 1);
+		totalVotes = Math.max(0, totalVotes - 1);
+		viewerVote = null;
+	} else if (tally.viewerVote !== null && tally.viewerVote >= 0 && tally.viewerVote < counts.length) {
+		counts[tally.viewerVote] = Math.max(0, counts[tally.viewerVote] - 1);
+		counts[optionIndex] += 1;
+		viewerVote = optionIndex;
+	} else {
+		counts[optionIndex] += 1;
+		totalVotes += 1;
+		viewerVote = optionIndex;
+	}
+	return { ...prev, pollVotes: { counts, totalVotes, viewerVote } };
 };
 
 type ReactionTruth = Pick<PublicPost, 'id' | 'reactionCounts' | 'viewerReactions'>;
@@ -364,7 +390,20 @@ const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | '
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
 type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing'>;
-const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact?: boolean; attachments?: PublicPost['attachments'] }) => (
+const PostBody = ({
+	post,
+	compact,
+	attachments,
+	poll
+}: {
+	post: PostBodyShape;
+	compact?: boolean;
+	attachments?: PublicPost['attachments'];
+	// live poll wiring for poll things (tally + optimistic vote handler) —
+	// supplied by the main card; nested/read-only surfaces pass a results-only
+	// context or nothing
+	poll?: PollRenderPollContext;
+}) => (
   <Flex flexDirection="column" rowGap={compact ? 2 : 3}>
     {post.text && (
       <Text fontSize={compact ? 'sm' : 'md'} color={TEXT} whiteSpace="normal">
@@ -378,7 +417,7 @@ const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact
     repeat the first photo). The thing mounts as the NATIVE Thingtime tree
     (sandboxed — see ThingView), rendered through its kind renderer when one
     resolves, with a corner icon flipping between the two views. */}
-    {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} />}
+    {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
     <PostAttachments attachments={attachments} compact={compact} />
@@ -386,6 +425,8 @@ const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact
 );
 
 // Compact bordered sub-card for the original post inside a share (no actions).
+// A shared poll shows its live tally read-only — voting happens on the
+// original's own card/page.
 const SharedPostCard = ({ post }: { post: PublicPost }) => (
   <Box border={BORDER} borderRadius={RADIUS_MD} padding={3}>
     <Flex alignItems="center" columnGap={2} marginBottom={2}>
@@ -400,7 +441,12 @@ const SharedPostCard = ({ post }: { post: PublicPost }) => (
         <TimestampLink id={post.id} createdAt={post.createdAt} />
       </Box>
     </Flex>
-    <PostBody post={post} compact attachments={post.attachments} />
+    <PostBody
+      post={post}
+      compact
+      attachments={post.attachments}
+      poll={post.pollVotes ? { ...post.pollVotes, canVote: false } : undefined}
+    />
   </Box>
 );
 
@@ -1278,6 +1324,43 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
+  // One-tap poll voting — optimistic like reactions: the bars fill
+  // immediately, the server's authoritative tally reconciles when the
+  // response lands, and a failure reverts to the pre-tap tally + toasts.
+  const inFlightVoteRef = React.useRef(false);
+  const handleVote = async (optionIndex: number) => {
+    if (!user) {
+      lopu({ title: 'Log in to vote 🗳️', status: 'info', duration: 6000 });
+      return;
+    }
+    // one vote slot per user — hold off further taps until the active request
+    // settles so response order can never invert the vote
+    if (inFlightVoteRef.current) return;
+    inFlightVoteRef.current = true;
+
+    const prevTally = post.pollVotes;
+    const adding = prevTally?.viewerVote === null;
+    onChanged?.((prev) => applyPollVoteToggle(prev, optionIndex));
+    // a fresh vote is engagement of react strength for the feed algorithms
+    if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
+
+    try {
+      const resp = await api.v1.things.vote({ id: post.id, optionIndex });
+      onChanged?.((prev) => ({ ...prev, pollVotes: resp.pollVotes }));
+    } catch (err: any) {
+      onChanged?.((prev) => (prevTally ? { ...prev, pollVotes: prevTally } : prev));
+      lopu({ title: err?.error || 'Your vote did not go through 😞', status: 'error' });
+    } finally {
+      inFlightVoteRef.current = false;
+    }
+  };
+
+  // wired into the poll renderer through ThingView's context (only poll posts
+  // carry pollVotes) — logged-out viewers get results-only + a login toast
+  const pollContext: PollRenderPollContext | undefined = post.pollVotes
+    ? { ...post.pollVotes, canVote: !!user, onVote: handleVote }
+    : undefined;
+
   // Opening shows the first page of comments (5); "Show more" reveals 5 more
   // per click. The revealed count is REMEMBERED across close/reopen (it's
   // component state); closing exits any drilled-in thread so a reopen starts
@@ -1610,7 +1693,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             )}
           </Flex>
         ) : (
-          <PostBody post={post} attachments={post.attachments} />
+          <PostBody post={post} attachments={post.attachments} poll={pollContext} />
         )}
 
         {/* action row — icons + counts only (X-style, no labels); the merged

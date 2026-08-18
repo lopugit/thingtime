@@ -22,6 +22,8 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
   // library save toggles (POST /api/v1/things/save) — same shape as reactions
   'things.save': { limit: 60, windowMs: 60_000, enabled: true },
+  // poll vote toggles (POST /api/v1/things/vote) — same shape as reactions
+  'things.vote': { limit: 60, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
