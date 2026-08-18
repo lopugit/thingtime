@@ -32,5 +32,7 @@ jobs:
   control-plane:
     uses: lopugit/thingtime/.github/workflows/develop-pr-preview.yml@github-actions
     with:
-      pr_number: ${{ inputs.pr_number || 0 }}
+      # workflow_dispatch values arrive as strings, while workflow_call enforces
+      # the reusable workflow's declared number type before creating any jobs.
+      pr_number: ${{ fromJSON(inputs.pr_number || '0') }}
     secrets: inherit
