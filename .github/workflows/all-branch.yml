@@ -18,7 +18,7 @@
 # second PR lands). The individual PRs keep getting healed one-by-one by the
 # existing AI conflict resolver as they merge; this doctor heals only the
 # union. After each rebuild whose inputs changed, the union build runs
-# (install → vite client build → nitro server build); on failure, up to two
+# (install → vite client build → nitro server build); on failure, up to three
 # edit-files-only Claude rounds (same action pin, model waterfall, and
 # security posture as resolve-pr-conflicts.yml) repair the working tree, a
 # deterministic step guards + commits the edits (out-of-scope paths reverted,
@@ -60,7 +60,7 @@ jobs:
   rebuild:
     if: github.repository == 'lopugit/thingtime'
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     steps:
       - name: Check out develop working tree
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -276,10 +276,11 @@ jobs:
           allowed_bots: "github-actions"
           prompt: |
             You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
-            EDITING FILES ONLY — no shell, no git. This is the SECOND repair round:
-            an earlier round either did not finish or did not fix the build. The
-            current failure's output is in `.all-doctor/build.log` — Read it first;
-            it reflects the tree as it stands now, including any earlier fixes.
+            EDITING FILES ONLY — no shell, no git. This is a FOLLOW-UP repair round:
+            an earlier round either did not finish or did not fix the build (later
+            build stages often reveal new collisions once earlier ones are fixed).
+            The current failure's output is in `.all-doctor/build.log` — Read it
+            first; it reflects the tree as it stands now, including earlier fixes.
 
             Fix each failing file with the smallest edit that preserves both sides'
             intent (dedupe repeated declarations/imports keeping the most complete
@@ -310,6 +311,60 @@ jobs:
       - name: Re-check after round 2
         id: check3
         if: steps.commit2.outputs.committed == 'true'
+        run: node control-plane/.github/scripts/build-all-branch.mjs check
+
+      - name: Build doctor round 3
+        id: doctor3
+        if: >-
+          steps.models.outcome == 'success'
+          && steps.commit1.outputs.scrubbed != 'true'
+          && steps.commit2.outputs.scrubbed != 'true'
+          && steps.check2.outputs.build_ok != 'true'
+          && steps.check3.outputs.build_ok != 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          allowed_bots: "github-actions"
+          prompt: |
+            You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
+            EDITING FILES ONLY — no shell, no git. This is a FOLLOW-UP repair round:
+            an earlier round either did not finish or did not fix the build (later
+            build stages often reveal new collisions once earlier ones are fixed).
+            The current failure's output is in `.all-doctor/build.log` — Read it
+            first; it reflects the tree as it stands now, including earlier fixes.
+
+            Fix each failing file with the smallest edit that preserves both sides'
+            intent (dedupe repeated declarations/imports keeping the most complete
+            variant, reconcile renamed symbols, drop exact-duplicate blocks), then
+            re-scan each edited file for the same collision pattern.
+
+            Rules (violations are reverted mechanically): never touch .github/**,
+            control-plane/**, graphify-out/**, ALL_BRANCH.md, AGENTS.md, CLAUDE.md,
+            any .gitattributes, or any lockfile; no new/renamed/deleted files unless
+            the error demands it; fix only what the log implicates; if it is not
+            fixable by editing app source, make NO edits.
+          claude_args: |
+            ${{ steps.models.outputs.model_args }}
+            --effort max
+            --max-turns 150
+            --allowedTools "Read,Grep,Glob,Edit,Write"
+            --disallowedTools "WebFetch,WebSearch,Bash,Edit(.github/**),Write(.github/**),Edit(control-plane/**),Write(control-plane/**),Edit(graphify-out/**),Write(graphify-out/**),Edit(ALL_BRANCH.md),Write(ALL_BRANCH.md),Edit(AGENTS.md),Write(AGENTS.md),Edit(CLAUDE.md),Write(CLAUDE.md),Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Edit(**/pnpm-lock.yaml),Write(**/pnpm-lock.yaml),Edit(**/package-lock.json),Write(**/package-lock.json),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
+
+      - name: Commit doctor round 3
+        id: commit3
+        if: steps.doctor3.outcome == 'success' || steps.doctor3.outcome == 'failure'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs doctor-commit --round 3
+
+      - name: Re-check after round 3
+        id: check4
+        if: steps.commit3.outputs.committed == 'true'
         run: node control-plane/.github/scripts/build-all-branch.mjs check
 
       - name: Record the doctor outcome

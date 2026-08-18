@@ -125,6 +125,19 @@ export function isReplayableDoctorSubject(subject) {
   return String(subject ?? "").startsWith(DOCTOR_SUBJECT_PREFIX);
 }
 
+// Exhausted-doctor marker commits (deliberately non-replayable). A leading
+// streak of them on the pushed tip is the retry ledger: identical inputs get
+// exactly one more doctoring attempt, then wait for any input change. Pure:
+// exercised by --self-test.
+export function countLeadingFailureMarkers(subjects) {
+  let count = 0;
+  for (const subject of subjects) {
+    if (/still failing after doctor rounds$/.test(String(subject ?? ""))) count += 1;
+    else break;
+  }
+  return count;
+}
+
 // Paths the doctor may never commit. The action's tool restrictions block the
 // model from editing these; this mechanical layer catches anything that slips
 // through. Pure: exercised by --self-test.
@@ -432,6 +445,17 @@ function selfTest() {
     assert.equal(isReplayableDoctorSubject("all: manifest (61 PRs merged, 4 skipped)"), false);
     assert.equal(isReplayableDoctorSubject("all: union client-build still failing after doctor rounds"), false);
     assert.equal(isReplayableDoctorSubject("all: pin .github and instruction symlinks to develop"), false);
+    assert.equal(
+      countLeadingFailureMarkers([
+        "all: union server-build still failing after doctor rounds",
+        "all: union client-build still failing after doctor rounds",
+        "all: build doctor round 1 — fix union build (client-build): a.ts",
+        "all: union install still failing after doctor rounds",
+      ]),
+      2
+    );
+    assert.equal(countLeadingFailureMarkers(["all: manifest (5 PRs merged, 0 skipped)"]), 0);
+    assert.equal(countLeadingFailureMarkers([]), 0);
     const forbidden = [
       ".github/workflows/web-ci.yml",
       "graphify-out/graph.json",
@@ -576,15 +600,20 @@ function buildMode() {
   // skip the build check and every AI round outright.
   const remote = remoteDoctorState();
   const manifestTree = git("rev-parse", "HEAD^{tree}");
-  if (remote && remote.manifestTree === manifestTree) {
+  // Identical inputs skip the build check and every AI round — except when
+  // the pushed tip says the doctor ran out of rounds, which earns exactly one
+  // more attempt (failStreak 1) before waiting for any input change.
+  if (remote && remote.manifestTree === manifestTree && remote.failStreak !== 1) {
     const kept = remote.doctorShas.length;
     writeState({ notes, manifest, proceed: false, buildOk: null, stage: "", replayed: 0, merges: merges.length, skips: skipped.length });
     writeSummary(
       [
         "## Build all branch",
         "",
-        `No input change — origin/${ALL_BRANCH} already matches this rebuild` +
-          (kept > 0 ? ` (${kept} doctor fixup${kept === 1 ? "" : "s"} preserved).` : "."),
+        remote.failStreak >= 2
+          ? "No input change — the doctor already exhausted its rounds on exactly these inputs; waiting for any PR or base movement before retrying."
+          : `No input change — origin/${ALL_BRANCH} already matches this rebuild` +
+            (kept > 0 ? ` (${kept} doctor fixup${kept === 1 ? "" : "s"} preserved).` : "."),
       ].join("\n")
     );
     stepOutput("proceed", "false");
@@ -633,9 +662,14 @@ function remoteDoctorState() {
       const tab = line.indexOf("\t");
       return { sha: line.slice(0, tab), subject: line.slice(tab + 1) };
     });
+  const failStreak = countLeadingFailureMarkers(rows.map((row) => row.subject));
   const manifestIndex = rows.findIndex((row) => row.subject.startsWith(MANIFEST_SUBJECT_PREFIX));
   if (manifestIndex === -1) {
-    return { manifestTree: tryGit("rev-parse", `${REMOTE_ALL_REF}^{tree}`).stdout?.trim() || "", doctorShas: [] };
+    return {
+      manifestTree: tryGit("rev-parse", `${REMOTE_ALL_REF}^{tree}`).stdout?.trim() || "",
+      doctorShas: [],
+      failStreak,
+    };
   }
   return {
     manifestTree: tryGit("rev-parse", `${rows[manifestIndex].sha}^{tree}`).stdout?.trim() || "",
@@ -645,6 +679,7 @@ function remoteDoctorState() {
       .map((row) => row.sha)
       .reverse()
       .slice(0, MAX_REPLAYED_DOCTOR_COMMITS),
+    failStreak,
   };
 }
 
@@ -804,7 +839,9 @@ function pushMode() {
   let pushLine;
   const builtTree = git("rev-parse", "HEAD^{tree}");
   const remoteTree = tryGit("rev-parse", "-q", "--verify", `${REMOTE_ALL_REF}^{tree}`);
-  if (remoteTree.status === 0 && remoteTree.stdout.trim() === builtTree) {
+  // An exhausted doctor pushes even a tree-identical result: the failure
+  // marker on the tip is the retry ledger the next rebuild reads.
+  if (remoteTree.status === 0 && remoteTree.stdout.trim() === builtTree && state.buildOk !== false) {
     pushLine = `No push needed — the rebuilt tree is identical to origin/${ALL_BRANCH}.`;
   } else if (!PUSH) {
     pushLine = `Build only (ALL_PUSH=0): origin/${ALL_BRANCH} was not updated.`;
