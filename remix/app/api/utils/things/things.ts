@@ -2195,10 +2195,16 @@ export const getThing = async (
       if (!thingtimeOf(up).includes('comment')) break;
       cursor = up;
     }
-    const visibleChain: ThingDoc[] = [];
-    for (const entry of chain) {
-      if (await canViewInherited(entry, viewer)) visibleChain.push(entry);
-    }
+    // Each canViewInherited re-walks that entry's own ACL chain, so checking
+    // them one at a time with no shared lookup cost n + n(n-1)/2 sequential
+    // round trips for a comment at depth n — 15 at depth 5, 55 at depth 10,
+    // on top of the walk above that already fetched these same documents.
+    // Nesting is uncapped, so this was a tail-latency cliff on deep threads.
+    // One shared batched lookup, checks concurrent: one round trip per chain
+    // LEVEL, matching listThings and the search path.
+    const lookup = batchedThingLookup();
+    const verdicts = await Promise.all(chain.map((entry) => canViewInherited(entry, viewer, lookup)));
+    const visibleChain = chain.filter((_, index) => verdicts[index]);
     if (visibleChain.length) {
       const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer);
       const byId = new Map(projected.map((entry) => [entry.id, entry]));
