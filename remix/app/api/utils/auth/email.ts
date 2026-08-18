@@ -1,11 +1,59 @@
 import { sendEmail } from '../email/service';
 import {
+  renderAdminNewUserSignupTemplate,
   renderEmailOtpTemplate,
   renderEmailVerificationTemplate,
   renderNewsletterTemplate,
   renderPasswordResetTemplate
 } from '../email/templates';
 import type { EmailSendResult } from '../email/types';
+
+// Operator address that receives the "new user signed up" heads-up. Fork-safe:
+// override with THINGTIME_ADMIN_NOTIFICATION_EMAIL.
+const adminNotificationEmail = (): string =>
+  (process.env.THINGTIME_ADMIN_NOTIFICATION_EMAIL || '').trim() || 'admin@thingtime.com';
+
+// Admin heads-up for every new signup. Deliberately NOT routed through the
+// per-user notification channel layer (notifications/emails.ts) — the
+// recipient is the operator, not the signing-up user, so user prefs,
+// emailVerified guards, and unsubscribe tokens must not apply.
+export const sendNewUserAdminNotificationEmail = async ({
+  userId,
+  username,
+  displayName,
+  email,
+  createdAt
+}: {
+  userId: string;
+  username: string;
+  displayName: string | null;
+  email: string;
+  createdAt: string | Date;
+}): Promise<EmailSendResult> => {
+  const rendered = renderAdminNewUserSignupTemplate({
+    userId,
+    username,
+    displayName,
+    email,
+    createdAt: new Date(createdAt).toISOString()
+  });
+  return sendEmail({
+    to: adminNotificationEmail(),
+    stream: 'notification',
+    templateKey: 'admin.new_user_signup',
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    metadata: {
+      purpose: 'admin_new_user_signup',
+      userId
+    },
+    tags: {
+      stream: 'notification',
+      template: 'admin.new_user_signup'
+    }
+  });
+};
 
 export const sendVerificationEmail = async ({
   to,

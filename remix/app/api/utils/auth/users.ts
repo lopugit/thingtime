@@ -104,6 +104,11 @@ export type PublicUser = {
 	// true when meta.admin OR the ADMIN_USERNAMES env allowlist — the client uses
 	// it to reveal the admin panel; the server always re-checks server-side.
 	isAdmin: boolean;
+	// whether this account may upload public files/media (post, comment, and
+	// custom-emoji attachments). New signups start false and stay false through
+	// email verification — only an admin (set-public-uploads) turns it on.
+	// Accounts created before the flag existed (meta key absent) stay allowed.
+	publicUploadsEnabled: boolean;
 };
 
 // Minimal projection safe to show OTHER users (public profiles, post authors).
@@ -117,6 +122,23 @@ export type PublicProfile = {
 	bannerUrl: string | null;
 	createdAt: string;
 	temporary?: boolean;
+};
+
+// Public-upload permission for a user doc. Grandfathering rule: only an
+// EXPLICIT meta.publicUploadsEnabled === false blocks — accounts created before
+// the flag existed keep uploading. New signups are stamped false at creation
+// (registerUser.ts), and email verification never touches this flag. Admins are
+// always allowed.
+export const userDocPublicUploadsAllowed = (doc: any): boolean => {
+	if (!doc) return false;
+	if (isAdminDoc(doc)) return true;
+	return doc.meta?.publicUploadsEnabled !== false;
+};
+
+// Async lookup used by the attachment service gate (it only has an ownerId).
+export const userPublicUploadsAllowed = async (userId: string): Promise<boolean> => {
+	const doc = await findUserById(userId);
+	return userDocPublicUploadsAllowed(doc);
 };
 
 export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null): PublicUser => {
@@ -160,7 +182,8 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		storage,
 		activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null,
 		activeFeedAlgorithmId: typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
-		isAdmin: isAdminDoc(user)
+		isAdmin: isAdminDoc(user),
+		publicUploadsEnabled: userDocPublicUploadsAllowed(user)
 	};
 };
 
@@ -1056,6 +1079,7 @@ export type AdminUserRow = {
 	createdAt: string | null;
 	isAdmin: boolean;
 	envAdmin: boolean; // admin via ADMIN_USERNAMES — can't be demoted from the UI
+	publicUploadsEnabled: boolean; // may upload public files/media (post/comment/emoji)
 };
 
 // Escape user-supplied text before embedding it in a Mongo $regex — shared with
@@ -1075,8 +1099,32 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 	email: doc.email,
 	createdAt: adminCreatedAt(doc.createdAt),
 	isAdmin: isAdminDoc(doc),
-	envAdmin: isEnvAdmin(doc.username)
+	envAdmin: isEnvAdmin(doc.username),
+	publicUploadsEnabled: userDocPublicUploadsAllowed(doc)
 });
+
+// Set (or clear) a user's public file/media upload permission
+// (meta.publicUploadsEnabled). Admin-gated (admin/set-public-uploads route).
+// Dual-store write for the same interrupted-migration reason as setUserAdmin:
+// the flag lives in the things-era secure blob's meta AND the legacy doc's
+// root meta, so a stale twin can never resurrect the old value.
+export const setUserPublicUploads = async (userId: string, enabled: boolean): Promise<AdminUserRow | null> => {
+	const result = await mutateUserThingSecure(userId, (secure) => {
+		if (!secure.meta) secure.meta = {};
+		secure.meta.publicUploadsEnabled = enabled === true;
+	});
+	if (result === 'contended') throw new SecureWriteContendedError(userId);
+	let legacyMatched = 0;
+	if (ObjectId.isValid(userId)) {
+		const res = await (
+			await getUsersCollection()
+		).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.publicUploadsEnabled': enabled === true, updatedAt: new Date() } });
+		legacyMatched = res.matchedCount;
+	}
+	if (result !== 'mutated' && !legacyMatched) return null;
+	const updated = await findUserById(userId);
+	return updated ? toAdminRow(updated) : null;
+};
 
 // Set (or clear) a user's stored admin flag. Env-allowlist admins remain admin
 // regardless (isAdminDoc ORs the env check), so demoting one only clears the

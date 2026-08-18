@@ -865,6 +865,38 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-set-public-uploads',
+    group: 'admin',
+    title: 'Enable / disable public uploads',
+    endpoint: '/api/v1/admin/set-public-uploads',
+    summary: 'Set a user’s public file/media upload permission (admin only).',
+    detail:
+      'POST { userId, enabled } to grant or revoke meta.publicUploadsEnabled. New signups start disabled and stay disabled through email verification — post, comment, and custom-emoji attachment uploads 403 until an admin enables the account here. Message and profile uploads are unaffected. Accounts created before the flag existed (key absent) remain allowed.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'POST userId + enabled:true to allow public uploads, enabled:false to block them.',
+      'Read the returned user row (id, username, publicUploadsEnabled) to update the UI.',
+      'Non-admins receive 403; missing userId 400; unknown user 404.'
+    ],
+    requestExamples: [
+      {
+        name: 'Enable public uploads',
+        description: 'Allow post/comment/emoji attachment uploads for a vetted new user.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', enabled: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated user row.',
+        body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik', publicUploadsEnabled: true } }
+      },
+      { status: 400, description: 'Missing userId.', body: { ok: false, error: 'userId is required' } }
+    ]
+  }),
+  endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
     group: 'settings',
     title: 'AI workflow model waterfall',

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { userPublicUploadsAllowed } from '../auth/users';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { StorageMutationError } from '../storage/storageCore';
 import {
@@ -76,6 +77,10 @@ type AttachmentServiceDependencies = {
 	customMongoActive: () => boolean;
 	canViewTarget: (viewer: AttachmentViewer, attachment: AttachmentDoc) => Promise<boolean>;
 	clock: () => number;
+	// Per-user gate for PUBLIC upload purposes (post/comment/emoji). New signups
+	// start disabled (meta.publicUploadsEnabled: false) until an admin enables
+	// them; message + profile uploads are not gated by this.
+	publicUploadsAllowed: (ownerId: string) => Promise<boolean>;
 };
 
 class AttachmentServiceError extends Error {
@@ -246,7 +251,8 @@ const defaultDependencies: AttachmentServiceDependencies = {
 	uuid: randomUUID,
 	customMongoActive: isCustomMongoEndpointActive,
 	canViewTarget: canViewHomeAttachmentTarget,
-	clock: Date.now
+	clock: Date.now,
+	publicUploadsAllowed: userPublicUploadsAllowed
 };
 
 export const createAttachmentService = (overrides: Partial<AttachmentServiceDependencies> = {}) => {
@@ -547,6 +553,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			const intent = attachmentUploadIntent(raw.purpose);
 			if (!intent) return fail(400, 'Invalid attachment upload purpose');
+			// Public-purpose uploads (post/comment/emoji land in publicly viewable
+			// surfaces) require the per-user permission an admin grants manually.
+			// New signups start disabled — verifying an email never enables this.
+			// Private message attachments and own-profile media stay ungated.
+			if (
+				(intent.purpose === 'post' || intent.purpose === 'comment' || intent.purpose === 'emoji') &&
+				!(await dependencies.publicUploadsAllowed(ownerId))
+			) {
+				return fail(403, 'Public file and media uploads are not enabled for this account yet');
+			}
 			if (intent.purpose !== 'profile' && dependencies.customMongoActive()) {
 				return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 			}

@@ -36,6 +36,44 @@ export const renderEmailOtpTemplate = ({
   html: `<p>Your Thingtime security code is <strong>${htmlEscape(code)}</strong>.</p><p>It expires in ${expiresMinutes} minutes.</p>`
 });
 
+// Admin heads-up sent for every new signup (recipient is the operator, not the
+// user — it never routes through per-user notification prefs/unsubscribes).
+export const renderAdminNewUserSignupTemplate = ({
+  username,
+  displayName,
+  email,
+  userId,
+  createdAt
+}: {
+  username: string;
+  displayName: string | null;
+  email: string;
+  userId: string;
+  createdAt: string;
+}) => {
+  const lines = [
+    `Username: @${username}`,
+    `Display name: ${displayName || '—'}`,
+    `Email: ${email}`,
+    `User ID: ${userId}`,
+    `Signed up: ${createdAt}`,
+    '',
+    'Public file and media uploads are DISABLED for this account until an admin enables them in the admin panel (System → Public uploads).'
+  ];
+  return {
+    subject: `New Thingtime user: @${username}`,
+    text: ['A new user just signed up on Thingtime.', '', ...lines].join('\n'),
+    html: [
+      '<p>A new user just signed up on Thingtime.</p>',
+      `<ul>${lines
+        .slice(0, 5)
+        .map((line) => `<li>${htmlEscape(line)}</li>`)
+        .join('')}</ul>`,
+      '<p>Public file and media uploads are <strong>disabled</strong> for this account until an admin enables them in the admin panel (System → Public uploads).</p>'
+    ].join('')
+  };
+};
+
 // Activity notification emails (friend requests, reactions, comments, …).
 // Subjects/bodies stay per-type so the inbox line reads like the bell row;
 // every email carries a manage link and a one-click unsubscribe-all link.

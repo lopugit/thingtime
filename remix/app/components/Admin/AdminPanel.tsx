@@ -23,6 +23,7 @@ type AdminRow = {
   email?: string;
   isAdmin: boolean;
   envAdmin: boolean;
+  publicUploadsEnabled?: boolean;
   createdAt?: string | null;
 };
 type RateLimitRow = Rule & { endpoint: string; label: string };
@@ -369,10 +370,119 @@ const AdminManager = () => {
   );
 };
 
+// Manually grant/revoke public file & media upload permission. New signups
+// start disabled (even after verifying their email) — an admin vets them here.
+const PublicUploadsManager = () => {
+  const api = useApi();
+  const lopu = useLopu();
+  const [query, setQuery] = React.useState('');
+  const [results, setResults] = React.useState<AdminRow[]>([]);
+  const [searching, setSearching] = React.useState(false);
+  const [busyId, setBusyId] = React.useState<string | null>(null);
+
+  const apiRef = React.useRef(api);
+  apiRef.current = api;
+
+  const search = async () => {
+    const q = query.trim();
+    if (!q) return;
+    setSearching(true);
+    try {
+      const resp = await apiRef.current.v1.admin.users({ q });
+      if (resp?.ok) setResults(resp.results || []);
+      else lopu({ title: 'Search failed', description: resp?.error, status: 'error' });
+    } catch (err: any) {
+      lopu({ title: 'Search failed', description: err?.error, status: 'error' });
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const setEnabled = async (row: AdminRow, enabled: boolean) => {
+    setBusyId(row.id);
+    try {
+      const resp = await apiRef.current.v1.admin.setPublicUploads({ userId: row.id, enabled });
+      if (resp?.ok) {
+        lopu({
+          title: enabled ? `@${row.username} can now upload public files & media 📁✅` : `Public uploads disabled for @${row.username}`,
+          status: 'success',
+          duration: 5000
+        });
+        setResults((rows) => rows.map((r) => (r.id === row.id ? { ...r, ...(resp.user || {}), publicUploadsEnabled: enabled } : r)));
+      } else {
+        lopu({ title: 'Could not update public uploads', description: resp?.error, status: 'error' });
+      }
+    } catch (err: any) {
+      lopu({ title: 'Could not update public uploads', description: err?.error, status: 'error' });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <Flex flexDirection="column" rowGap={3}>
+      <Text sx={eyebrow}>Public uploads</Text>
+      <Text fontSize="xs" opacity={0.65}>
+        New users can’t upload public files or media (post, comment, or emoji attachments) until enabled here — email verification alone
+        doesn’t enable it. Message and profile uploads are unaffected.
+      </Text>
+      <Flex columnGap={2}>
+        <Input
+          size="sm"
+          placeholder="🔍 username or email"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              search();
+            }
+          }}
+          sx={{ background: 'var(--tt-surface-alt, #f5f5f7)', border: '1px solid transparent', borderRadius: 'var(--tt-radius-sm, 9px)' }}
+        />
+        <Button size="sm" variant="outline" onClick={search} isLoading={searching} flexShrink={0}>
+          Search
+        </Button>
+      </Flex>
+      {results.length > 0 && (
+        <Flex flexDirection="column" rowGap={0}>
+          {results.map((r) => (
+            <Flex
+              key={r.id}
+              alignItems="center"
+              columnGap={2}
+              padding={2}
+              borderRadius="var(--tt-radius-sm, 9px)"
+              _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+            >
+              <Box minWidth={0} flex="1 1 auto">
+                <Text fontSize="sm" fontWeight={600} noOfLines={1}>
+                  {r.displayName || r.username}
+                </Text>
+                <Text fontSize="xs" opacity={0.6} noOfLines={1}>
+                  @{r.username}
+                </Text>
+              </Box>
+              {busyId === r.id ? <Spinner size="sm" /> : null}
+              <Switch
+                isChecked={r.publicUploadsEnabled !== false}
+                isDisabled={busyId === r.id}
+                onChange={(e) => setEnabled(r, e.target.checked)}
+                aria-label={`Public uploads for @${r.username}`}
+              />
+            </Flex>
+          ))}
+        </Flex>
+      )}
+    </Flex>
+  );
+};
+
 export const AdminPanel = () => (
   <Flex flexDirection="column" rowGap={5}>
     <PRConflictResolverModelWaterfallEditor />
     <RateLimitEditor />
     <AdminManager />
+    <PublicUploadsManager />
   </Flex>
 );

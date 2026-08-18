@@ -1925,3 +1925,26 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       composition; browse mode filters kinds client-side over loaded pages.
 - [ ] Columns-view folder loading happens in an effect, never during render
       (React "setState while rendering" stays fixed).
+
+## New-user public upload gating + admin notification
+
+- [ ] Register a fresh user via `POST /api/v1/auth/register`: the created
+      account has `meta.publicUploadsEnabled: false` and the returned
+      PublicUser shows `publicUploadsEnabled: false`; a "new user" email row
+      (template `admin.new_user_signup`) lands in the outbox addressed to
+      `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default admin@thingtime.com), and
+      an email-send failure never fails the registration.
+- [ ] As that fresh user, verify the email: `emailVerified` flips true but
+      public uploads STAY disabled — starting a `post`, `comment`, or
+      `custom-emoji` attachment upload returns 403 ("Public file and media
+      uploads are not enabled for this account yet"), while `message` and
+      `profile-avatar`/`profile-banner` uploads still work.
+- [ ] Callers cannot self-grant: `meta.publicUploadsEnabled` passed to
+      register is stripped (privileged meta key).
+- [ ] As an admin, Admin → System → "Public uploads": search the user, flip
+      the switch on — post uploads now succeed; flip it off — they 403 again.
+      The same round-trips work via
+      `POST /api/v1/admin/set-public-uploads { userId, enabled }` (non-admin
+      403, missing userId 400, unknown user 404).
+- [ ] Grandfathering: a pre-flag account (no `meta.publicUploadsEnabled` key)
+      and admins keep public upload permission.

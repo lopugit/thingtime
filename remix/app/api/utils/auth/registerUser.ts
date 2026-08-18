@@ -3,7 +3,7 @@ import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import { isEnvAdmin } from './admin';
 import { createEmailVerification } from './emailVerifications';
-import { sendVerificationEmail } from './email';
+import { sendNewUserAdminNotificationEmail, sendVerificationEmail } from './email';
 import { signJwt } from './jwt';
 import { hashPassword } from './passwords';
 import { createSession } from './sessions';
@@ -45,7 +45,7 @@ const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 // Privileged meta keys that must never be set at account creation (only via
 // their own admin-gated / authenticated endpoints).
-const PRIVILEGED_META_KEYS = ['admin'];
+const PRIVILEGED_META_KEYS = ['admin', 'publicUploadsEnabled'];
 
 // Drop privileged keys from any caller-supplied meta before it's persisted.
 const sanitizeCreateMeta = (meta: unknown): Record<string, any> => {
@@ -97,8 +97,11 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     accountKind: input.accountKind ?? 'user',
     // Defense-in-depth: privileged flags can never be set at creation time,
     // even if a caller sneaks them into meta. `admin` is granted only via the
-    // admin-gated setUserAdmin (auth/admin.ts).
-    meta: sanitizeCreateMeta(input.meta)
+    // admin-gated setUserAdmin (auth/admin.ts), and public file/media uploads
+    // start EXPLICITLY disabled — email verification never enables them; only
+    // the admin-gated setUserPublicUploads does. (Pre-flag accounts, where the
+    // key is absent, stay grandfathered-allowed.)
+    meta: { ...sanitizeCreateMeta(input.meta), publicUploadsEnabled: false }
   };
 
   if (input.emailVerificationRequiredBy !== undefined) {
@@ -198,6 +201,16 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   // a registration whose user + session are already committed — the dev link is
   // returned regardless and the user can resend from Settings.
   void sendVerificationEmail({ to: email, link: verificationLink }).catch(() => {});
+
+  // Fire-and-forget admin heads-up for every new signup (same rationale: a
+  // notification outage must never fail a committed registration).
+  void sendNewUserAdminNotificationEmail({
+    userId,
+    username: user.username,
+    displayName: user.displayName ?? null,
+    email,
+    createdAt: user.createdAt
+  }).catch(() => {});
 
 	return { ok: true, user: created.publicUser, jwt, jti: session.jti, verificationLink };
 };

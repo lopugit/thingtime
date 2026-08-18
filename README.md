@@ -826,6 +826,27 @@ incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
 
+### New-user signup gating + admin notification
+
+New signups can NOT upload public files or media (post, comment, or
+custom-emoji attachments) — not even after verifying their email. The account
+is created with `meta.publicUploadsEnabled: false`, and public-purpose upload
+starts return 403 until an admin flips the switch in the admin panel
+(Admin → System → Public uploads, backed by
+`POST /api/v1/admin/set-public-uploads { userId, enabled }`). Private message
+attachments and own-profile avatar/banner uploads are unaffected, and accounts
+created before the flag existed (key absent) remain allowed.
+
+Every successful registration also fire-and-forgets a "new user" heads-up
+email (username, display name, email, user id, signup time) on the
+notification stream:
+
+```sh
+THINGTIME_ADMIN_NOTIFICATION_EMAIL="admin@example.com"
+                                        # optional; defaults to
+                                        # admin@thingtime.com
+```
+
 ### Notification emails (SES notification stream)
 
 Activity notifications (friend requests, new followers, comments, replies,

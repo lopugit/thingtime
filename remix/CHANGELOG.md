@@ -17,6 +17,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Security
+
+- New signups no longer receive public file/media upload permission — accounts
+  are created with `meta.publicUploadsEnabled: false` and post/comment/emoji
+  attachment upload starts 403 until an admin enables the account via the new
+  Admin → System → "Public uploads" section
+  (`POST /api/v1/admin/set-public-uploads`). Email verification never enables
+  it; message + profile uploads and pre-flag accounts (key absent) are
+  unaffected. Every registration now also sends a "new user" notification
+  email to `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default admin@thingtime.com).
+  — Claude (AI), 2026-08-18
+
 ### Fixed
 
 - **Manual develop-preview recovery reaches its controller**: the thin `main`
