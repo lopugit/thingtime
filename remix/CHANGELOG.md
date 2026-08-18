@@ -17,6 +17,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Security
+
+- **New signups no longer receive public upload permissions**: accounts created
+  from this change forward start with `meta.publicUploads: false`, and verifying
+  the email address no longer grants uploads. `POST /api/v1/attachments/uploads`
+  fails closed with `403 public_uploads_not_approved` until an administrator
+  enables the account, so no upload is reserved and no MPU is opened. Once a new
+  account verifies its email, an `admin.new_user` notification carrying the
+  account details goes to `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default
+  `admin@thingtime.com`), and the **/admin → Users** tab gained an Uploads
+  column, a pending-approval banner, and a per-user Enable/Withhold toggle
+  backed by `POST /api/v1/admin/users/public-uploads`. The flag is tri-state:
+  accounts predating the change have no flag and keep uploading, so no data
+  migration is required, and administrators bypass the gate entirely.
+  — Claude (AI), 2026-08-18
+
 ### Fixed
 
 - **PR #99 final security reconciliation**: the current Thingtime serializer
