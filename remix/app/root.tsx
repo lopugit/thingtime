@@ -17,6 +17,7 @@ import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHo
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
+import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
 import { rememberAuthReturnTo } from './utils/authReturn';
 
 const setThingtime = (glob: any) => {
@@ -83,13 +84,17 @@ export default function App() {
           ? `${baseTitle} docs`
           : pathname === '/feed'
             ? `${baseTitle} - Feed`
-            : pathname.startsWith('/profile')
+            : pathname === '/messages'
+              ? `${baseTitle} - Messages`
+              : pathname.startsWith('/profile')
               ? `${baseTitle} - Profile`
               : pathname === '/settings'
                 ? `${baseTitle} - Settings`
                 : pathname === '/admin'
                   ? `${baseTitle} - Admin`
-                  : baseTitle;
+                  : pathname === '/things'
+                    ? `${baseTitle} - Things`
+                    : baseTitle;
 
       document.title = routeTitle;
     }
@@ -127,6 +132,8 @@ export default function App() {
           </Main>
         )}
         {isAuthorizePopup ? null : <DrawerSystem />}
+        {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
+        {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
         <ConfettiCanvas />
         {mounted ? <EasterEggs /> : null}

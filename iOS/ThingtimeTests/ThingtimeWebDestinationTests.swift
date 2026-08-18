@@ -85,6 +85,30 @@ final class ThingtimeWebDestinationTests: XCTestCase {
         XCTAssertEqual(destinations.last?.subtitle, "ready - just now - thingtime-git-codex-ios-deployment-url-picker-lopugits-projects.vercel.app")
     }
 
+    func testAvailableDestinationsPreservesLongUniqueDeploymentLists() {
+        let deployments = (0..<50).map { index in
+            ThingtimeWebDestination.DeploymentSummary(
+                branch: "feature/preview-\(index)",
+                commitSha: nil,
+                createdAt: nil,
+                dashboardUrl: nil,
+                environment: "preview",
+                id: "dpl_\(index)",
+                readyAt: nil,
+                readyLabel: nil,
+                state: "ready",
+                url: "https://thingtime-preview-\(index)-lopugits-projects.vercel.app"
+            )
+        }
+
+        let destinations = ThingtimeWebDestination.availableDestinations(vercelDeployments: deployments)
+
+        XCTAssertEqual(destinations.count, 51)
+        XCTAssertEqual(destinations.first, ThingtimeWebDestination.production)
+        XCTAssertEqual(destinations.last?.title, "feature/preview-49")
+        XCTAssertEqual(Set(destinations.map(\.id)).count, destinations.count)
+    }
+
     func testVercelDeploymentDestinationRejectsInvalidAPIURLs() {
         let deployment = ThingtimeWebDestination.DeploymentSummary(
             branch: "main",

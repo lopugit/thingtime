@@ -8,7 +8,13 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW } from '~/theme/rainbow';
 
-import { ColorControl, CustomisePanel, CustomiseToggle, isHexColor } from './controls';
+import {
+	ColorControl,
+	CustomisePanel,
+	CustomiseToggle,
+	isHexColor,
+	ThingsBadgePaddingControl
+} from './controls';
 import { CURATED_FONTS, themeToCssVars, TtTheme } from '~/theme/tokens';
 
 const MONO = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
@@ -357,6 +363,10 @@ export const ThemeStudio = () => {
 	};
 
 	const g = theme.general;
+	const thingsBadgeCustomPadding =
+		typeof overrides.general?.thingsBadgeCustomPadding === 'string'
+			? overrides.general.thingsBadgeCustomPadding
+			: g.thingsBadgeCustomPadding;
 
 	return (
 		<Flex direction="column" alignItems="center" width="100%" paddingX="20px" paddingBottom={40}>
@@ -495,6 +505,14 @@ export const ThemeStudio = () => {
 								Lucide ✦
 							</PillButton>
 						</Flex>
+					</Row>
+					<Row label="Things badge padding" hint="View / Show / Arrange / Kind controls">
+						<ThingsBadgePaddingControl
+							value={g.thingsBadgePadding}
+							customValue={thingsBadgeCustomPadding}
+							onValueChange={(value) => setGeneral('thingsBadgePadding', value)}
+							onCustomValueChange={(value) => setGeneral('thingsBadgeCustomPadding', value)}
+						/>
 					</Row>
 					<Row label="Motion" hint="rainbow animations" customKey="general.motion">
 						<Switch isChecked={g.motion} onChange={(e) => setGeneral('motion', e.target.checked)} />
