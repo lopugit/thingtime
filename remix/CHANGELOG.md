@@ -17,6 +17,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Performance
+
+- **PR #299 performance audit — findings, notes and fixes**: full ten-dimension
+  audit of the codebase with every finding adversarially verified against the
+  real source (74 raw → 63 confirmed, 11 refuted); see
+  `PRs/299-claude-thingtime-performance-optimization-55ea95-performance-audit-findings-notes-and-fixes.md`
+  for the complete record. Landed this round: route-level code splitting plus
+  removal of the never-rendered FontAwesome solid set, taking the entry chunk
+  from 1,165 KB to 168 KB gzipped (−86%); `resolveSessionUser` now resolves
+  session, user and subscription concurrently, turning three sequential Mongo
+  round trips into one on every authenticated request; `useRecentReactions`
+  shares a single fetch across all consumers (8 → 1 identical requests per page,
+  ~40 → 1 on a 20-post feed); chat-member writes batch into one `insertMany`
+  (50 → 1 round trips per add); `toPublicPosts` overlaps attachment and profile
+  resolution; and the notifications bell no longer polls hidden tabs.
+  — Claude (AI), 2026-08-18
+
 ### Fixed
 
 - **PR #99 final security reconciliation**: the current Thingtime serializer
