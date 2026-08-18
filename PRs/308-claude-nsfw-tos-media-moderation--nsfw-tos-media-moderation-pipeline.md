@@ -1,4 +1,6 @@
-# PR (pending number) — NSFW/TOS media moderation pipeline
+# PR #308 — NSFW/TOS media moderation pipeline
+
+- **PR**: https://github.com/lopugit/thingtime/pull/308
 
 - **Branch**: `claude/nsfw-tos-media-moderation-58c301` (stacked on `claude/media-upload-permission-gate`, PR #302)
 - **Base**: `claude/media-upload-permission-gate`
