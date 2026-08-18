@@ -36,7 +36,9 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			}
 
 			const result = await dependencies.download(
-				user ? { id: user.id, username: user.username } : null,
+				// isAdmin rides along so admins can fetch quarantined (blocked)
+				// evidence for moderation review; everyone else 404s on blocked docs.
+				user ? { id: user.id, username: user.username, isAdmin: user.isAdmin } : null,
 				url.searchParams.get('id'),
 				url.searchParams.get('download') === '1'
 			);

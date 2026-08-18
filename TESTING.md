@@ -276,6 +276,13 @@ is fixed, and cite the checklist you ran in the PR description.
       check, mapped to the same 🔐 copy, while abort/delete of that account's
       own drafts keep working. Withholding only one scope must NOT block the
       other scope's in-flight parts/complete.
+- [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
+      `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
+      with a red border, light red wash, centered NSFW badge, and a
+      `Show Anyway` button that reveals it (per attachment, per page view).
+      An image named `tt-test-illegal.png` disappears from public payloads and
+      its `/api/v1/attachments/content` URL 404s for non-admins, while a
+      `moderationFlag` row appears in `/admin` → Moderation.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
@@ -1443,6 +1450,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 
 ## Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`)
 
+- [ ] `/admin` → Moderation lists flags (unreviewed first) with status badges;
+      `View` opens the raw media (blocked media opens for admins only);
+      `Clear` / `NSFW` / `Block` override the verdict with a Lopu toast and
+      stamp reviewedBy; `Run analysis sweep` reports analyzed/flagged/skipped
+      counts and drains pending attachments.
 - [ ] `/admin` → Users shows the public-uploads state per row; the toggle
       flips the single unified permission optimistically and reverts with a
       Lopu toast on failure. Non-admin sessions get 403 from

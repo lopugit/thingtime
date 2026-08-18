@@ -66,6 +66,16 @@ export type AttachmentDoc = {
 	// owner-chosen display position within the bound target (stamped at
 	// bind/reorder time; legacy bound docs without it sort by createdAt)
 	attachmentSortIndex?: number;
+	// Protected moderation stamp (api/utils/moderation) — written only by the
+	// server-side analysis pipeline and admin review, never by upload input.
+	moderation?: {
+		status: 'pending' | 'skipped' | 'clear' | 'nsfw' | 'blocked';
+		categories?: string[];
+		provider?: string;
+		model?: string;
+		analyzedAt?: Date;
+		reason?: string;
+	};
 	createdAt: Date;
 	updatedAt: Date;
 };

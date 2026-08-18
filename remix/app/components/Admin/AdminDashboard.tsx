@@ -31,6 +31,7 @@ import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { CIControlDashboard } from '~/components/Admin/CIControl/CIControlDashboard';
 import { AdminRowQueryControls, useAdminRowQuery } from '~/components/Admin/AdminRowQueryControls';
 import { LinkManagerModal } from '~/components/Admin/LinkManagerModal';
+import { ModerationTab } from '~/components/Admin/ModerationTab';
 import { SubscriptionEditorModal } from '~/components/Admin/SubscriptionEditorModal';
 import { TierManager } from '~/components/Admin/TierManager';
 import { loadCompleteAdminSnapshot, type CompleteAdminSnapshot } from '~/components/Admin/adminDirectoryClient';
@@ -905,6 +906,7 @@ export const AdminDashboard = () => {
         <TabList flexWrap="wrap">
           <Tab>Users</Tab>
           <Tab>Apps</Tab>
+          <Tab>Moderation</Tab>
           <Tab>Tiers</Tab>
           <Tab>CI Control</Tab>
           <Tab>System</Tab>
@@ -915,6 +917,9 @@ export const AdminDashboard = () => {
           </TabPanel>
           <TabPanel px={0}>
             <AppsTab />
+          </TabPanel>
+          <TabPanel px={0}>
+            <ModerationTab />
           </TabPanel>
           <TabPanel px={0}>
             <TierManager />

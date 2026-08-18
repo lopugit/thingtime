@@ -28,6 +28,9 @@ export type AttachmentPublicMetadata = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	// present (true) only when the server-side moderation pipeline stamped the
+	// attachment nsfw — the client renders it blurred behind a consent click
+	nsfw?: boolean;
 };
 
 export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id'>;
@@ -193,9 +196,15 @@ const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null =>
 		: null;
 };
 
-export const toAttachmentPublicMetadata = (id: unknown, crystal: unknown): AttachmentPublicMetadata | null => {
+// `moderation` is the protected root stamp (api/utils/moderation). Blocked
+// attachments never project publicly — they simply vanish from payloads; the
+// content route separately refuses to serve their bytes.
+export const toAttachmentPublicMetadata = (id: unknown, crystal: unknown, moderation?: unknown): AttachmentPublicMetadata | null => {
 	const canonical = canonicalAttachmentCrystal(crystal);
-	return typeof id === 'string' && id && canonical ? { id, ...canonical } : null;
+	if (typeof id !== 'string' || !id || !canonical) return null;
+	const status = (moderation as { status?: unknown } | null | undefined)?.status;
+	if (status === 'blocked') return null;
+	return { id, ...canonical, ...(status === 'nsfw' ? { nsfw: true as const } : {}) };
 };
 
 // The owner-chosen display position, stamped on each bound attachment thing at
