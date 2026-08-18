@@ -865,6 +865,49 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-set-upload-permission',
+    group: 'admin',
+    title: 'Grant / withhold upload permission',
+    endpoint: '/api/v1/admin/set-upload-permission',
+    summary: 'Set a user’s public, private, or all-content upload permission flag (admin only).',
+    detail:
+      'POST { userId, kind, enabled } to grant or withhold a user’s file/media upload permission. `kind` is "public" (uploads that can end up on public-visibility content), "private" (message attachments), or "all" (master override that grants both regardless of the individual flags). New registrations start with public and private withheld pending admin review; this is how an admin approves them.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'POST userId + kind ("public" | "private" | "all") + enabled:true to grant, enabled:false to withhold.',
+      'Read the returned user row (publicUploadEnabled, privateUploadEnabled, allUploadEnabled) to update the UI.',
+      'Non-admins receive 403; missing/invalid userId or kind 400; unknown user 404.'
+    ],
+    requestExamples: [
+      {
+        name: 'Approve a pending signup',
+        description: 'Grant public upload permission after review.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', kind: 'public', enabled: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated user row.',
+        body: {
+          ok: true,
+          user: {
+            id: '64f000000000000000000002',
+            username: 'nik',
+            isAdmin: false,
+            envAdmin: false,
+            publicUploadEnabled: true,
+            privateUploadEnabled: false,
+            allUploadEnabled: false
+          }
+        }
+      },
+      { status: 400, description: 'Missing userId.', body: { ok: false, error: 'userId is required' } }
+    ]
+  }),
+  endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
     group: 'settings',
     title: 'AI workflow model waterfall',

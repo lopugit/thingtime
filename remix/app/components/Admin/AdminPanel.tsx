@@ -24,7 +24,12 @@ type AdminRow = {
   isAdmin: boolean;
   envAdmin: boolean;
   createdAt?: string | null;
+  publicUploadEnabled?: boolean;
+  privateUploadEnabled?: boolean;
+  allUploadEnabled?: boolean;
 };
+
+type UploadPermissionKind = 'public' | 'private' | 'all';
 type RateLimitRow = Rule & { endpoint: string; label: string };
 
 const eyebrow = {
@@ -369,10 +374,146 @@ const AdminManager = () => {
   );
 };
 
+// Lets admins search for a user (e.g. from the "new signup" notification
+// email) and manually enable the public/private/all-content upload
+// permission a new registration starts without (see registerUser.ts).
+const UploadPermissionsManager = () => {
+  const api = useApi();
+  const lopu = useLopu();
+  const [query, setQuery] = React.useState('');
+  const [results, setResults] = React.useState<AdminRow[]>([]);
+  const [searching, setSearching] = React.useState(false);
+  const [busy, setBusy] = React.useState<string | null>(null);
+
+  const apiRef = React.useRef(api);
+  apiRef.current = api;
+
+  const search = async () => {
+    const q = query.trim();
+    if (!q) return;
+    setSearching(true);
+    try {
+      const resp = await apiRef.current.v1.admin.users({ q });
+      if (resp?.ok) setResults(resp.results || []);
+    } catch {
+      // leave last-known
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const setPermission = async (row: AdminRow, kind: UploadPermissionKind, enabled: boolean) => {
+    const busyKey = `${row.id}:${kind}`;
+    setBusy(busyKey);
+    try {
+      const resp = await apiRef.current.v1.admin.setUploadPermission({ userId: row.id, kind, enabled });
+      if (resp?.ok) {
+        setResults((prev) => prev.map((r) => (r.id === row.id ? { ...r, ...resp.user } : r)));
+        lopu({
+          title: `@${row.username}: ${kind} uploads ${enabled ? 'enabled' : 'disabled'} ✨`,
+          status: 'success',
+          duration: 5000
+        });
+      } else {
+        lopu({ title: 'Could not update upload permission', description: resp?.error, status: 'error' });
+      }
+    } catch (err: any) {
+      lopu({ title: 'Could not update upload permission', description: err?.error, status: 'error' });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggleButton = (row: AdminRow, kind: UploadPermissionKind, label: string, enabled: boolean) => (
+    <Button
+      key={kind}
+      size="xs"
+      variant={enabled ? 'solid' : 'outline'}
+      colorScheme={enabled ? 'green' : undefined}
+      isLoading={busy === `${row.id}:${kind}`}
+      onClick={() => setPermission(row, kind, !enabled)}
+    >
+      {label}
+    </Button>
+  );
+
+  const row = (r: AdminRow) => {
+    const pending = !r.allUploadEnabled && (!r.publicUploadEnabled || !r.privateUploadEnabled);
+    return (
+      <Flex
+        key={r.id}
+        alignItems="center"
+        columnGap={2}
+        rowGap={1}
+        flexWrap="wrap"
+        padding={2}
+        borderRadius="var(--tt-radius-sm, 9px)"
+        _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+      >
+        <Box minWidth={0} flex="1 1 auto">
+          <Text fontSize="sm" fontWeight={600} noOfLines={1}>
+            {r.displayName || r.username}
+            {pending && (
+              <Text as="span" fontSize="xs" opacity={0.6} fontWeight={400}>
+                {' '}· pending approval
+              </Text>
+            )}
+          </Text>
+          <Text fontSize="xs" opacity={0.6} noOfLines={1}>
+            @{r.username} {r.email ? `· ${r.email}` : ''}
+          </Text>
+        </Box>
+        <Flex columnGap={1}>
+          {toggleButton(r, 'public', 'Public', r.publicUploadEnabled === true)}
+          {toggleButton(r, 'private', 'Private', r.privateUploadEnabled === true)}
+          {toggleButton(r, 'all', 'All content', r.allUploadEnabled === true)}
+        </Flex>
+      </Flex>
+    );
+  };
+
+  return (
+    <Flex flexDirection="column" rowGap={3}>
+      <Text sx={eyebrow}>Upload permissions</Text>
+      <Text fontSize="xs" opacity={0.65}>
+        New signups start with public and private file/media uploads withheld until approved here.
+      </Text>
+      <Flex columnGap={2}>
+        <Input
+          size="sm"
+          placeholder="🔍 username or email"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              search();
+            }
+          }}
+          sx={{ background: 'var(--tt-surface-alt, #f5f5f7)', border: '1px solid transparent', borderRadius: 'var(--tt-radius-sm, 9px)' }}
+        />
+        <Button size="sm" variant="outline" isLoading={searching} onClick={search} flexShrink={0}>
+          Search
+        </Button>
+      </Flex>
+      {results.length > 0 ? (
+        <Flex flexDirection="column" rowGap={0}>
+          {results.map(row)}
+        </Flex>
+      ) : (
+        <Text fontSize="xs" opacity={0.6}>
+          Search for a user to review their upload permissions.
+        </Text>
+      )}
+    </Flex>
+  );
+};
+
 export const AdminPanel = () => (
   <Flex flexDirection="column" rowGap={5}>
     <PRConflictResolverModelWaterfallEditor />
     <RateLimitEditor />
     <AdminManager />
+    <UploadPermissionsManager />
   </Flex>
 );

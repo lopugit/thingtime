@@ -6,7 +6,7 @@ import {
 	attachmentExpectedPartBytes,
 	attachmentIdForRequest,
 	createReadyAttachmentPostInsertHook,
-	createAttachmentService,
+	createAttachmentService as createAttachmentServiceWithRealDeps,
 	validateCompletedAttachmentParts
 } from './attachments';
 import {
@@ -25,6 +25,13 @@ import { PrivateS3ConfigError } from './config';
 
 const checksum = (byte: number) => Buffer.alloc(32, byte).toString('base64');
 const now = new Date('2026-08-09T00:00:00.000Z');
+
+// Every test in this file exercises attachment mechanics against a mocked
+// store/S3, not real user accounts — default the upload-permission check to
+// "allowed" so callers don't need a real Mongo user doc, while still letting
+// individual tests override it to exercise the pending-approval rejection.
+const createAttachmentService: typeof createAttachmentServiceWithRealDeps = (overrides = {}) =>
+	createAttachmentServiceWithRealDeps({ hasUploadPermission: async () => true, ...overrides });
 
 const attachmentDoc = (overrides: Partial<AttachmentDoc> = {}): AttachmentDoc => ({
 	shareId: 'attachment-1',

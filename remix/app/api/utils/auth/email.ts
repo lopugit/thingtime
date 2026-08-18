@@ -3,9 +3,44 @@ import {
   renderEmailOtpTemplate,
   renderEmailVerificationTemplate,
   renderNewsletterTemplate,
+  renderNewUserAdminNotificationTemplate,
   renderPasswordResetTemplate
 } from '../email/templates';
 import type { EmailSendResult } from '../email/types';
+
+// Admin recipient for the new-user notification below. Not user-configurable —
+// this is the hardcoded ops inbox for signup review, per product decision.
+const NEW_USER_ADMIN_NOTIFICATION_EMAIL = process.env.NEW_USER_ADMIN_NOTIFICATION_EMAIL || 'admin@thingtime.com';
+
+export const sendNewUserAdminNotificationEmail = async ({
+  username,
+  email,
+  displayName,
+  userId
+}: {
+  username: string;
+  email: string;
+  displayName: string | null;
+  userId: string;
+}): Promise<EmailSendResult> => {
+  const rendered = renderNewUserAdminNotificationTemplate({ username, email, displayName, userId });
+  return sendEmail({
+    to: NEW_USER_ADMIN_NOTIFICATION_EMAIL,
+    stream: 'transactional',
+    templateKey: 'admin.new_user_notification',
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    metadata: {
+      purpose: 'new_user_admin_notification',
+      userId
+    },
+    tags: {
+      stream: 'transactional',
+      template: 'admin.new_user_notification'
+    }
+  });
+};
 
 export const sendVerificationEmail = async ({
   to,

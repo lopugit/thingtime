@@ -57,6 +57,12 @@ export type UserDoc = {
 	updatedAt: Date;
 	accountKind?: 'user' | 'service';
 	emailVerificationRequiredBy?: Date | null;
+	// Upload-permission gate (see setUserUploadPermission below). Undefined on
+	// every pre-existing account == grandfathered in (treated as granted);
+	// explicit false is written for new registrations pending admin approval.
+	securePublicUploadEnabled?: boolean;
+	securePrivateUploadEnabled?: boolean;
+	secureAllUploadEnabled?: boolean;
 	meta: Record<string, any>;
 };
 
@@ -287,6 +293,11 @@ const userThingToDoc = (thing: any): any => {
 		accountKind: secure.accountKind === 'service' ? 'service' : 'user',
 		emailVerificationRequiredBy: secure.emailVerificationRequiredBy ? new Date(secure.emailVerificationRequiredBy) : null,
 		meta: { ...(secure.meta || {}), admin: !!thing.secureAdmin },
+		// undefined stays undefined here (not coerced to boolean) so downstream
+		// flag readers can tell "never set" (grandfathered) from "explicitly false"
+		securePublicUploadEnabled: thing.securePublicUploadEnabled,
+		securePrivateUploadEnabled: thing.securePrivateUploadEnabled,
+		secureAllUploadEnabled: thing.secureAllUploadEnabled,
 		schemaVersion: thing.schemaVersion,
 		createdAt: thing.createdAt,
 		updatedAt: thing.updatedAt
@@ -543,6 +554,12 @@ export const insertUser = async (
 		...(options.initialSubscription ? { initialSubscription: { ...options.initialSubscription } } : {}),
 		// sparse boolean, queryable by listAdmins (booleans aren't text-indexed)
 		...(admin ? { secureAdmin: true } : {}),
+		// upload-permission gate — only written when the caller explicitly opts a
+		// new account into the pending-approval state (see registerUser); absent
+		// on every other creation path, which reads as grandfathered/granted
+		...(doc.securePublicUploadEnabled !== undefined ? { securePublicUploadEnabled: doc.securePublicUploadEnabled === true } : {}),
+		...(doc.securePrivateUploadEnabled !== undefined ? { securePrivateUploadEnabled: doc.securePrivateUploadEnabled === true } : {}),
+		...(doc.secureAllUploadEnabled !== undefined ? { secureAllUploadEnabled: doc.secureAllUploadEnabled === true } : {}),
 		// reaction MRU as a BinData array (text-index-invisible, atomically mutable);
 		// only present when a migrated account arrives with prior recents
 		...(recentReactions.length ? { secureRecentReactions: packRecentReactions(recentReactions) } : {}),
@@ -1056,6 +1073,37 @@ export type AdminUserRow = {
 	createdAt: string | null;
 	isAdmin: boolean;
 	envAdmin: boolean; // admin via ADMIN_USERNAMES — can't be demoted from the UI
+	publicUploadEnabled: boolean; // uploads that can end up on public-visibility content
+	privateUploadEnabled: boolean; // uploads on private content (messages)
+	allUploadEnabled: boolean; // master override — true bypasses both checks above
+};
+
+// Undefined (every pre-existing account) reads as granted; explicit false is
+// what a pending-approval new registration writes. See setUserUploadPermission.
+export const uploadPermissionFlagsFromDoc = (
+	doc: Pick<UserDoc, 'securePublicUploadEnabled' | 'securePrivateUploadEnabled' | 'secureAllUploadEnabled'> | Record<string, unknown>
+): { publicUploadEnabled: boolean; privateUploadEnabled: boolean; allUploadEnabled: boolean } => ({
+	publicUploadEnabled: (doc as any).securePublicUploadEnabled !== false,
+	privateUploadEnabled: (doc as any).securePrivateUploadEnabled !== false,
+	allUploadEnabled: (doc as any).secureAllUploadEnabled === true
+});
+
+export type UploadPermissionCategory = 'public' | 'private';
+export type UploadPermissionKind = UploadPermissionCategory | 'all';
+
+const UPLOAD_PERMISSION_FIELD: Record<UploadPermissionKind, 'securePublicUploadEnabled' | 'securePrivateUploadEnabled' | 'secureAllUploadEnabled'> = {
+	public: 'securePublicUploadEnabled',
+	private: 'securePrivateUploadEnabled',
+	all: 'secureAllUploadEnabled'
+};
+
+// Does this user currently have upload permission for the given category? The
+// "all" override grants both regardless of the individual flags.
+export const hasUploadPermission = async (userId: string, category: UploadPermissionCategory): Promise<boolean> => {
+	const user = await findUserById(userId);
+	if (!user) return false;
+	const flags = uploadPermissionFlagsFromDoc(user);
+	return flags.allUploadEnabled || (category === 'public' ? flags.publicUploadEnabled : flags.privateUploadEnabled);
 };
 
 // Escape user-supplied text before embedding it in a Mongo $regex — shared with
@@ -1075,8 +1123,27 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 	email: doc.email,
 	createdAt: adminCreatedAt(doc.createdAt),
 	isAdmin: isAdminDoc(doc),
-	envAdmin: isEnvAdmin(doc.username)
+	envAdmin: isEnvAdmin(doc.username),
+	...uploadPermissionFlagsFromDoc(doc)
 });
+
+// Set (or clear) a user's stored upload-permission flag. Mirrors setUserAdmin
+// (dual-write root boolean + legacy meta field, best-effort per store).
+export const setUserUploadPermission = async (userId: string, kind: UploadPermissionKind, enabled: boolean): Promise<AdminUserRow | null> => {
+	const field = UPLOAD_PERMISSION_FIELD[kind];
+	const now = new Date();
+	const [thingRes, legacyRes] = await Promise.all([
+		getThingsCollection().then((c) =>
+			c.updateOne({ shareId: String(userId), thingtime: 'user' } as any, { $set: { [field]: enabled === true, updatedAt: now } })
+		),
+		ObjectId.isValid(userId)
+			? getUsersCollection().then((c) => c.updateOne({ _id: new ObjectId(userId) }, { $set: { [`meta.${field}`]: enabled === true, updatedAt: now } }))
+			: Promise.resolve({ matchedCount: 0 } as { matchedCount: number })
+	]);
+	if (!thingRes.matchedCount && !legacyRes.matchedCount) return null;
+	const updated = await findUserById(userId);
+	return updated ? toAdminRow(updated) : null;
+};
 
 // Set (or clear) a user's stored admin flag. Env-allowlist admins remain admin
 // regardless (isAdminDoc ORs the env check), so demoting one only clears the

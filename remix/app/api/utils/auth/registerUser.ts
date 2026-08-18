@@ -3,7 +3,7 @@ import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import { isEnvAdmin } from './admin';
 import { createEmailVerification } from './emailVerifications';
-import { sendVerificationEmail } from './email';
+import { sendNewUserAdminNotificationEmail, sendVerificationEmail } from './email';
 import { signJwt } from './jwt';
 import { hashPassword } from './passwords';
 import { createSession } from './sessions';
@@ -37,6 +37,10 @@ export type CreateUserAccountInput = {
   emailVerificationRequiredBy?: Date | null;
   storageAllowanceBytes?: number;
   meta?: Record<string, any>;
+  // When true, the account is created with public/private upload permission
+  // withheld (pending manual admin approval) instead of the default
+  // grandfathered-in behavior. Only the real registration path sets this.
+  uploadPermissionsPending?: boolean;
 };
 
 export type CreateUserAccountResult = { ok: false; status: number; error: string } | { ok: true; user: any; publicUser: PublicUser };
@@ -98,7 +102,14 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     // Defense-in-depth: privileged flags can never be set at creation time,
     // even if a caller sneaks them into meta. `admin` is granted only via the
     // admin-gated setUserAdmin (auth/admin.ts).
-    meta: sanitizeCreateMeta(input.meta)
+    meta: sanitizeCreateMeta(input.meta),
+    // New signups start with upload permissions withheld pending admin review
+    // (setUserUploadPermission grants them later); every other creation path
+    // (service accounts, direct createUserAccount callers) leaves these unset,
+    // which reads as grandfathered/granted.
+    ...(input.uploadPermissionsPending
+      ? { securePublicUploadEnabled: false, securePrivateUploadEnabled: false, secureAllUploadEnabled: false }
+      : {})
   };
 
   if (input.emailVerificationRequiredBy !== undefined) {
@@ -177,7 +188,8 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
     password: input.password,
     email: input.email,
     displayName: input.displayName,
-    meta: input.meta
+    meta: input.meta,
+    uploadPermissionsPending: true
   });
 
   if (created.ok === false) return created;
@@ -198,6 +210,14 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   // a registration whose user + session are already committed — the dev link is
   // returned regardless and the user can resend from Settings.
   void sendVerificationEmail({ to: email, link: verificationLink }).catch(() => {});
+  // Fire-and-forget admin alert: new accounts start with upload permissions
+  // withheld, so admins need a prompt to review + manually enable them.
+  void sendNewUserAdminNotificationEmail({
+    username: user.username,
+    email,
+    displayName: user.displayName ?? null,
+    userId
+  }).catch(() => {});
 
 	return { ok: true, user: created.publicUser, jwt, jti: session.jti, verificationLink };
 };

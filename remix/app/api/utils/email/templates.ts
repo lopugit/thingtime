@@ -12,6 +12,22 @@ export const renderEmailVerificationTemplate = ({ link }: { link: string }) => (
   html: `<p>Welcome to Thingtime.</p><p><a href="${htmlEscape(link)}">Verify your email</a></p>`
 });
 
+export const renderNewUserAdminNotificationTemplate = ({
+  username,
+  email,
+  displayName,
+  userId
+}: {
+  username: string;
+  email: string;
+  displayName: string | null;
+  userId: string;
+}) => ({
+  subject: `New signup: @${username}`,
+  text: `A new user registered and is pending upload-permission review.\n\nUsername: ${username}\nDisplay name: ${displayName || '(none)'}\nEmail: ${email}\nUser ID: ${userId}\n\nPublic and private file/media uploads are disabled until enabled in the admin panel.`,
+  html: `<p>A new user registered and is pending upload-permission review.</p><ul><li><strong>Username:</strong> ${htmlEscape(username)}</li><li><strong>Display name:</strong> ${htmlEscape(displayName || '(none)')}</li><li><strong>Email:</strong> ${htmlEscape(email)}</li><li><strong>User ID:</strong> ${htmlEscape(userId)}</li></ul><p>Public and private file/media uploads are disabled until enabled in the admin panel.</p>`
+});
+
 export const renderPasswordResetTemplate = ({
   link,
   expiresMinutes = 60

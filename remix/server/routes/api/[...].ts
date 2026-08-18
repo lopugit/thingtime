@@ -21,6 +21,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/migrations/run': () => import('../../../app/routes/api/v1/admin/migrations/run/_run'),
   'v1/admin/rate-limits': () => import('../../../app/routes/api/v1/admin/rate-limits/_rate-limits'),
   'v1/admin/set-admin': () => import('../../../app/routes/api/v1/admin/set-admin/_set-admin'),
+  'v1/admin/set-upload-permission': () => import('../../../app/routes/api/v1/admin/set-upload-permission/_set-upload-permission'),
   'v1/admin/subscriptions': () => import('../../../app/routes/api/v1/admin/subscriptions/_subscriptions'),
   'v1/admin/tiers': () => import('../../../app/routes/api/v1/admin/tiers/_tiers'),
   'v1/admin/users': () => import('../../../app/routes/api/v1/admin/users/_users'),

@@ -39,6 +39,7 @@ import {
 } from './attachmentPresentation';
 import { PrivateS3ConfigError } from './config';
 import { getPrivateS3, type AttachmentObjectHead, type AttachmentS3, type AttachmentUploadedPart } from './privateS3';
+import { hasUploadPermission, type UploadPermissionCategory } from '../auth/users';
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_READY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -76,6 +77,7 @@ type AttachmentServiceDependencies = {
 	customMongoActive: () => boolean;
 	canViewTarget: (viewer: AttachmentViewer, attachment: AttachmentDoc) => Promise<boolean>;
 	clock: () => number;
+	hasUploadPermission: (ownerId: string, category: UploadPermissionCategory) => Promise<boolean>;
 };
 
 class AttachmentServiceError extends Error {
@@ -125,6 +127,11 @@ const attachmentUploadIntent = (
 	if (value === 'custom-emoji') return { requestPurpose: value, purpose: 'emoji' };
 	return null;
 };
+
+// Messages are the only inherently private-visibility upload purpose; posts,
+// comments, profile media, and custom emoji can all end up publicly visible.
+const uploadPermissionCategoryForPurpose = (purpose: AttachmentPurpose): UploadPermissionCategory =>
+	purpose === 'message' ? 'private' : 'public';
 
 export const attachmentIdForRequest = (ownerId: string, requestId: string): string =>
 	`att_${createHash('sha256').update('thingtime-attachment-request-v1\0').update(ownerId).update('\0').update(requestId).digest('hex')}`;
@@ -246,7 +253,8 @@ const defaultDependencies: AttachmentServiceDependencies = {
 	uuid: randomUUID,
 	customMongoActive: isCustomMongoEndpointActive,
 	canViewTarget: canViewHomeAttachmentTarget,
-	clock: Date.now
+	clock: Date.now,
+	hasUploadPermission
 };
 
 export const createAttachmentService = (overrides: Partial<AttachmentServiceDependencies> = {}) => {
@@ -547,6 +555,9 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			const intent = attachmentUploadIntent(raw.purpose);
 			if (!intent) return fail(400, 'Invalid attachment upload purpose');
+			if (!(await dependencies.hasUploadPermission(ownerId, uploadPermissionCategoryForPurpose(intent.purpose)))) {
+				return fail(403, 'Uploads are pending admin approval for your account', { code: 'upload_permission_pending' });
+			}
 			if (intent.purpose !== 'profile' && dependencies.customMongoActive()) {
 				return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 			}
