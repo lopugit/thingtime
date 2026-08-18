@@ -33,6 +33,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   (50 → 1 round trips per add); `toPublicPosts` overlaps attachment and profile
   resolution; and the notifications bell no longer polls hidden tabs.
   — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round two**: content-hashed `/assets/` now ship
+  `immutable` caching (index.html's ~80 eagerly-referenced chunks stopped costing
+  a conditional GET per repeat visit, restoring the zero-network disk-cache
+  path); the comment permalink's ancestor ACL checks share one batched lookup
+  (was n + n(n-1)/2 sequential round trips at nesting depth n); search result
+  pages use the same batched walk; a partial index backs the unread-notification
+  badge so the count no longer fetches every notification a user ever received;
+  `buildSummaryContext` resolves in 3 dependency stages instead of 6 serial ones;
+  the messenger access gate resolves chat and membership together; and the
+  `/api/docs` render cache is LRU-bounded (it was keyed by the caller-controlled
+  Host header). — Claude (AI), 2026-08-18
 
 ### Security
 
