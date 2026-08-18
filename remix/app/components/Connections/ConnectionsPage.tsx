@@ -16,11 +16,11 @@ type Provider = {
   id: string;
   name: string;
   icon: string;
-  auth: 'none' | 'oauth2';
+  auth: 'none' | 'oauth2' | 'credential';
   contentVisibility: 'public' | 'personal';
   about: string;
   configured: boolean;
-  fields: { key: string; label: string; placeholder?: string; help?: string; required?: boolean }[];
+  fields: { key: string; label: string; placeholder?: string; help?: string; required?: boolean; secret?: boolean }[];
 };
 
 type FeedFilter = {
@@ -390,6 +390,8 @@ export const ConnectionsPage = () => {
               <Input
                 value={fieldValues[field.key] || ''}
                 placeholder={field.placeholder}
+                type={field.secret ? 'password' : 'text'}
+                autoComplete={field.secret ? 'off' : undefined}
                 onChange={(event) => setFieldValues((current) => ({ ...current, [field.key]: event.target.value }))}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') submitConnect();

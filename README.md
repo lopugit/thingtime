@@ -994,6 +994,14 @@ TIKTOK_CLIENT_SECRET="<tiktok-client-secret>"
 # Google OAuth client (youtube-account provider — youtube.readonly)
 GOOGLE_CLIENT_ID="<google-oauth-client-id>"
 GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
+# Reddit script app (reddit-account provider — syncs your REAL front page)
+REDDIT_CLIENT_ID="<reddit-app-client-id>"
+REDDIT_CLIENT_SECRET="<reddit-app-secret>"
+# Mastodon app registered on ONE instance (mastodon-account provider — syncs
+# your REAL home timeline; users of that instance sign in there)
+MASTODON_INSTANCE="mastodon.social"
+MASTODON_CLIENT_ID="<mastodon-app-client-id>"
+MASTODON_CLIENT_SECRET="<mastodon-app-secret>"
 # Optional: YouTube Data API key — lights up channel NAME search for the
 # Thingtime-managed virtual subscription list (ids/URLs/@handles work keyless)
 YOUTUBE_API_KEY="<youtube-data-api-key>"
@@ -1008,8 +1016,11 @@ a tunnel origin works for local dev). Official-API honesty notes: Meta removed
 the friends News Feed API in 2015, so the facebook provider syncs your own
 timeline posts; Instagram and TikTok expose your own media/videos, not the
 home/For You feed; the youtube-account provider syncs the latest uploads from
-your real subscriptions. Reddit/Mastodon/Bluesky personalized home timelines
-are the follow-up (their public APIs do expose them).
+your real subscriptions. The REAL algorithmic home feeds come from the
+providers whose APIs expose them: `reddit-account` (your front page),
+`mastodon-account` (your home timeline), and `bluesky-account` (your
+following timeline — connects with an app password, no developer app needed:
+the password is exchanged for a session and never stored).
 
 ## Branch automation: develop → main promotion
 

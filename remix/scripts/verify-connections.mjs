@@ -300,6 +300,17 @@ const run = async () => {
   }
   const fbConnect = await api('/api/v1/connections', { cookie: bo.cookie, method: 'POST', body: { provider: 'facebook', fields: {} } });
   check('fields-based connect refuses SSO providers', fbConnect.status === 400 && /sign-in/.test(fbConnect.body?.error || ''));
+  check(
+    'catalog carries the real home-timeline providers',
+    ['reddit-account', 'mastodon-account', 'bluesky-account'].every((id) => (catalog.body?.providers || []).some((provider) => provider.id === id))
+  );
+  const bskyCatalog = (catalog.body?.providers || []).find((provider) => provider.id === 'bluesky-account');
+  check(
+    'bluesky-account is credential-auth with a masked app-password field',
+    bskyCatalog?.auth === 'credential' && bskyCatalog?.configured === true && bskyCatalog?.fields?.some((field) => field.key === 'appPassword' && field.secret === true)
+  );
+  const bskyMissing = await api('/api/v1/connections', { cookie: bo.cookie, method: 'POST', body: { provider: 'bluesky-account', fields: { handle: 'someone.bsky.social' } } });
+  check('bluesky-account requires the app password field', bskyMissing.status === 400 && /App password/i.test(bskyMissing.body?.error || ''));
   const badState = await fetch(`${BASE}/api/v1/connections/oauth/callback?code=x&state=garbage`, {
     headers: { Cookie: bo.cookie },
     redirect: 'manual'

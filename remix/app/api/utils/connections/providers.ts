@@ -54,6 +54,10 @@ export type ResolvedExternalAccount = {
   // channel list, …) — secrets (OAuth tokens) never go here; they belong in
   // the account's secure blob
   config: Record<string, any>;
+  // credential-connect providers (Bluesky app passwords) exchange the typed
+  // secret for session tokens at resolve time — sealed into the secure blob
+  // by upsertAccountAndLink exactly like an OAuth token response
+  tokens?: OAuthTokens | null;
 };
 
 export type ConnectField = {
@@ -62,13 +66,20 @@ export type ConnectField = {
   placeholder?: string;
   help?: string;
   required?: boolean;
+  // secret fields (app passwords) render masked, transit memory only, and
+  // must never be stored — adapters exchange them for session tokens that go
+  // in the secure blob
+  secret?: boolean;
 };
 
 export type ConnectionProvider = {
   id: string;
   name: string;
   icon: string;
-  auth: 'none' | 'oauth2';
+  // 'none' = public content, no account; 'oauth2' = provider SSO; 'credential'
+  // = fields-based connect where a secret field is exchanged for session
+  // tokens server-side (never stored itself)
+  auth: 'none' | 'oauth2' | 'credential';
   // shareId namespace for synced posts — providers that surface the SAME
   // underlying content (the two YouTube providers) share one namespace so a
   // video reached through both stays ONE external-post with unified comments.
@@ -91,6 +102,10 @@ export type ConnectionProvider = {
   // channel list): merge the stored config with the freshly resolved one so a
   // re-connect can never wipe managed state. Default: replace.
   mergeConfig?: (existing: Record<string, any>, next: Record<string, any>) => Record<string, any>;
+  // session refresh for CREDENTIAL providers (Bluesky rotates its session
+  // pair with the refresh JWT — no client credentials involved); OAuth
+  // providers put their refresh grant on oauth.refreshTokens instead
+  refreshTokens?: (tokens: OAuthTokens, creds: { clientId: string; clientSecret: string }) => Promise<OAuthTokens | null>;
   fetchFeed: (
     account: { providerAccountId: string; config: Record<string, any> },
     opts: { limit: number; tokens?: OAuthTokens | null; pages?: number }
@@ -253,11 +268,22 @@ const fetchJson = async (url: string): Promise<{ ok: true; data: any } | Fail> =
 };
 
 // Form-encoded POST (OAuth token endpoints) with bounded JSON response.
-const postForm = async (url: string, form: Record<string, string>): Promise<{ ok: true; data: any } | Fail> => {
+// basicAuth covers providers (Reddit) whose token endpoint authenticates the
+// CLIENT via HTTP Basic instead of body credentials.
+const postForm = async (
+  url: string,
+  form: Record<string, string>,
+  opts: { basicAuth?: { user: string; pass: string } } = {}
+): Promise<{ ok: true; data: any } | Fail> => {
   try {
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        ...(opts.basicAuth ? { Authorization: `Basic ${Buffer.from(`${opts.basicAuth.user}:${opts.basicAuth.pass}`).toString('base64')}` } : {})
+      },
       body: new URLSearchParams(form).toString(),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
     });
@@ -908,27 +934,34 @@ const mastodonProvider: ConnectionProvider = {
     const statuses = Array.isArray(fetched.data) ? fetched.data : [];
     const items: ExternalFeedItem[] = [];
     for (const status of statuses) {
-      if (!status?.id) continue;
-      const src = status.reblog || status;
-      items.push({
-        externalId: `${instance}-${status.id}`,
-        url: typeof src.url === 'string' ? src.url.slice(0, 1500) : null,
-        title: null,
-        text: boundedText(src.content || '', MAX_TEXT_CHARS),
-        images: boundedImages((src.media_attachments || []).map((media: any) => media?.preview_url || media?.url)),
-        author: {
-          name: boundedText(src.account?.display_name, 120) || null,
-          handle: src.account?.acct ? `@${src.account.acct}` : null,
-          avatarUrl: httpsImage(src.account?.avatar),
-          url: typeof src.account?.url === 'string' ? src.account.url.slice(0, 1500) : null
-        },
-        publishedAt: dateOrNull(src.created_at),
-        stats: { likes: src.favourites_count, comments: src.replies_count, shares: src.reblogs_count }
-      });
+      const item = mapMastodonStatus(status, instance);
+      if (item) items.push(item);
       if (items.length >= opts.limit) break;
     }
     return { ok: true, items };
   }
+};
+
+// One status mapper serves the public provider above and the OAuth
+// home-timeline provider below — the item shape can never drift between them.
+const mapMastodonStatus = (status: any, instance: string): ExternalFeedItem | null => {
+  if (!status?.id) return null;
+  const src = status.reblog || status;
+  return {
+    externalId: `${instance}-${status.id}`,
+    url: typeof src.url === 'string' ? src.url.slice(0, 1500) : null,
+    title: null,
+    text: boundedText(src.content || '', MAX_TEXT_CHARS),
+    images: boundedImages((src.media_attachments || []).map((media: any) => media?.preview_url || media?.url)),
+    author: {
+      name: boundedText(src.account?.display_name, 120) || null,
+      handle: src.account?.acct ? `@${src.account.acct}` : null,
+      avatarUrl: httpsImage(src.account?.avatar),
+      url: typeof src.account?.url === 'string' ? src.account.url.slice(0, 1500) : null
+    },
+    publishedAt: dateOrNull(src.created_at),
+    stats: { likes: src.favourites_count, comments: src.replies_count, shares: src.reblogs_count }
+  };
 };
 
 // --- bluesky ----------------------------------------------------------------
@@ -969,29 +1002,36 @@ const blueskyProvider: ConnectionProvider = {
     const entries = Array.isArray(fetched.data?.feed) ? fetched.data.feed : [];
     const items: ExternalFeedItem[] = [];
     for (const entry of entries) {
-      const post = entry?.post;
-      if (!post?.uri) continue;
-      const embedImages = (post.embed?.images || post.record?.embed?.images || []).map((image: any) => image?.fullsize || image?.thumb);
-      const rkey = String(post.uri).split('/').pop();
-      items.push({
-        externalId: String(post.uri).slice(0, 500),
-        url: post.author?.handle && rkey ? `https://bsky.app/profile/${post.author.handle}/post/${rkey}` : null,
-        title: null,
-        text: boundedText(post.record?.text || '', MAX_TEXT_CHARS),
-        images: boundedImages(embedImages),
-        author: {
-          name: boundedText(post.author?.displayName, 120) || null,
-          handle: post.author?.handle ? `@${post.author.handle}` : null,
-          avatarUrl: httpsImage(post.author?.avatar),
-          url: post.author?.handle ? `https://bsky.app/profile/${post.author.handle}` : null
-        },
-        publishedAt: dateOrNull(post.record?.createdAt || post.indexedAt),
-        stats: { likes: post.likeCount, comments: post.replyCount, shares: post.repostCount }
-      });
+      const item = mapBlueskyFeedEntry(entry);
+      if (item) items.push(item);
       if (items.length >= opts.limit) break;
     }
     return { ok: true, items };
   }
+};
+
+// Shared by the public author-feed provider above and the app-password
+// following-timeline provider below.
+const mapBlueskyFeedEntry = (entry: any): ExternalFeedItem | null => {
+  const post = entry?.post;
+  if (!post?.uri) return null;
+  const embedImages = (post.embed?.images || post.record?.embed?.images || []).map((image: any) => image?.fullsize || image?.thumb);
+  const rkey = String(post.uri).split('/').pop();
+  return {
+    externalId: String(post.uri).slice(0, 500),
+    url: post.author?.handle && rkey ? `https://bsky.app/profile/${post.author.handle}/post/${rkey}` : null,
+    title: null,
+    text: boundedText(post.record?.text || '', MAX_TEXT_CHARS),
+    images: boundedImages(embedImages),
+    author: {
+      name: boundedText(post.author?.displayName, 120) || null,
+      handle: post.author?.handle ? `@${post.author.handle}` : null,
+      avatarUrl: httpsImage(post.author?.avatar),
+      url: post.author?.handle ? `https://bsky.app/profile/${post.author.handle}` : null
+    },
+    publishedAt: dateOrNull(post.record?.createdAt || post.indexedAt),
+    stats: { likes: post.likeCount, comments: post.replyCount, shares: post.repostCount }
+  };
 };
 
 // --- lemmy ------------------------------------------------------------------
@@ -1569,9 +1609,289 @@ const youtubeAccountProvider: ConnectionProvider = {
   }
 };
 
+// --- real home timelines -----------------------------------------------------
+// The platforms whose official APIs DO expose the user's actual algorithmic
+// home feed: Reddit's front page, Mastodon's home timeline, Bluesky's
+// following timeline. These deliver the full "your algorithm inside
+// Thingtime" experience end to end.
+
+const redditAccountProvider: ConnectionProvider = {
+  id: 'reddit-account',
+  name: 'Reddit account',
+  icon: '🎯',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  postNamespace: 'reddit',
+  about: 'Sign in with Reddit to sync your REAL personalized front page (the best-of feed your subscriptions and activity shape).',
+  configured: () => !!envValue('REDDIT_CLIENT_ID') && !!envValue('REDDIT_CLIENT_SECRET'),
+  fields: [],
+  oauth: {
+    clientIdEnv: 'REDDIT_CLIENT_ID',
+    clientSecretEnv: 'REDDIT_CLIENT_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://www.reddit.com/api/v1/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}&duration=permanent&scope=${encodeURIComponent('identity read')}`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
+      // Reddit authenticates the CLIENT via HTTP Basic on the token endpoint
+      const exchanged = await postForm(
+        'https://www.reddit.com/api/v1/access_token',
+        { grant_type: 'authorization_code', code, redirect_uri: redirectUri },
+        { basicAuth: { user: clientId, pass: clientSecret } }
+      );
+      if (exchanged.ok === false) return exchanged;
+      if (!exchanged.data?.access_token) return fail(502, 'Reddit did not return an access token');
+      return {
+        ok: true,
+        tokens: {
+          accessToken: String(exchanged.data.access_token),
+          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
+          expiresAt: expiresAtFrom(exchanged.data.expires_in),
+          scopes: ['identity', 'read']
+        }
+      };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson('https://oauth.reddit.com/api/v1/me', { token: tokens.accessToken });
+      if (me.ok === false) return me;
+      if (!me.data?.name) return fail(502, 'Reddit did not return a profile');
+      const avatar = typeof me.data.icon_img === 'string' ? me.data.icon_img.split('?')[0] : null;
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(me.data.id || me.data.name),
+          displayName: `u/${me.data.name}`,
+          handle: `u/${me.data.name}`,
+          avatarUrl: httpsImage(avatar),
+          profileUrl: `https://www.reddit.com/user/${me.data.name}`,
+          config: {}
+        }
+      };
+    },
+    refreshTokens: async (tokens, creds) => {
+      if (!tokens.refreshToken) return null;
+      const refreshed = await postForm(
+        'https://www.reddit.com/api/v1/access_token',
+        { grant_type: 'refresh_token', refresh_token: tokens.refreshToken },
+        { basicAuth: { user: creds.clientId, pass: creds.clientSecret } }
+      );
+      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
+      return {
+        ...tokens,
+        accessToken: String(refreshed.data.access_token),
+        refreshToken: refreshed.data.refresh_token ? String(refreshed.data.refresh_token) : tokens.refreshToken,
+        expiresAt: expiresAtFrom(refreshed.data.expires_in)
+      };
+    }
+  },
+  fetchFeed: async (_account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'Reddit needs a reconnect — its saved sign-in is missing or expired');
+    const items: ExternalFeedItem[] = [];
+    let after: string | null = null;
+    for (let page = 0; page < pageCount(opts); page += 1) {
+      const fetched = await authedJson(`https://oauth.reddit.com/best?limit=25&raw_json=1${after ? `&after=${encodeURIComponent(after)}` : ''}`, {
+        token: opts.tokens.accessToken
+      });
+      if (fetched.ok === false) return items.length ? { ok: true, items } : fetched;
+      for (const child of fetched.data?.data?.children || []) {
+        const post = child?.data;
+        if (!post?.name || post.stickied) continue;
+        const preview = post.preview?.images?.[0]?.source?.url;
+        items.push({
+          externalId: String(post.name),
+          url: post.permalink ? `https://www.reddit.com${post.permalink}` : null,
+          title: boundedText(post.title, MAX_TITLE_CHARS) || null,
+          text: boundedText(post.selftext || '', MAX_TEXT_CHARS),
+          images: boundedImages([preview, post.thumbnail]),
+          author: {
+            name: typeof post.author === 'string' ? post.author : null,
+            handle: post.subreddit ? `r/${post.subreddit}` : null,
+            avatarUrl: null,
+            url: typeof post.author === 'string' ? `https://www.reddit.com/user/${post.author}` : null
+          },
+          publishedAt: typeof post.created_utc === 'number' ? new Date(post.created_utc * 1000) : null,
+          stats: { score: post.score, comments: post.num_comments }
+        });
+        if (items.length >= targetCount(opts)) break;
+      }
+      after = typeof fetched.data?.data?.after === 'string' ? fetched.data.data.after : null;
+      if (!after || items.length >= targetCount(opts)) break;
+    }
+    return { ok: true, items };
+  }
+};
+
+const mastodonInstance = (): string => envValue('MASTODON_INSTANCE').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+
+const mastodonAccountProvider: ConnectionProvider = {
+  id: 'mastodon-account',
+  name: 'Mastodon account',
+  icon: '🐘',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  postNamespace: 'mastodon',
+  about: 'Sign in on your Mastodon instance to sync your REAL home timeline (the accounts you follow).',
+  // the deployment registers one app on ONE instance (MASTODON_INSTANCE) —
+  // users of that instance sign in there
+  configured: () => !!mastodonInstance() && !!envValue('MASTODON_CLIENT_ID') && !!envValue('MASTODON_CLIENT_SECRET'),
+  fields: [],
+  oauth: {
+    clientIdEnv: 'MASTODON_CLIENT_ID',
+    clientSecretEnv: 'MASTODON_CLIENT_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://${mastodonInstance()}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&scope=read&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&state=${encodeURIComponent(state)}`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
+      const exchanged = await postForm(`https://${mastodonInstance()}/oauth/token`, {
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+        code,
+        scope: 'read'
+      });
+      if (exchanged.ok === false) return exchanged;
+      if (!exchanged.data?.access_token) return fail(502, 'The Mastodon instance did not return an access token');
+      // Mastodon tokens do not expire; no refresh grant exists
+      return { ok: true, tokens: { accessToken: String(exchanged.data.access_token), expiresAt: null, scopes: ['read'] } };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const instance = mastodonInstance();
+      const me = await authedJson(`https://${instance}/api/v1/accounts/verify_credentials`, { token: tokens.accessToken });
+      if (me.ok === false) return me;
+      if (!me.data?.id) return fail(502, 'The Mastodon instance did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: `${instance}:id:${me.data.id}`,
+          displayName: boundedText(me.data.display_name, 120) || `@${me.data.acct}`,
+          handle: `@${me.data.acct}@${instance}`,
+          avatarUrl: httpsImage(me.data.avatar),
+          profileUrl: typeof me.data.url === 'string' ? me.data.url.slice(0, 1500) : `https://${instance}/@${me.data.acct}`,
+          config: { instance }
+        }
+      };
+    }
+  },
+  fetchFeed: async (account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'Mastodon needs a reconnect — its saved sign-in is missing or expired');
+    const instance = account.config.instance || mastodonInstance();
+    const items: ExternalFeedItem[] = [];
+    let maxId: string | null = null;
+    for (let page = 0; page < pageCount(opts); page += 1) {
+      const fetched = await authedJson(`https://${instance}/api/v1/timelines/home?limit=40${maxId ? `&max_id=${encodeURIComponent(maxId)}` : ''}`, {
+        token: opts.tokens.accessToken
+      });
+      if (fetched.ok === false) return items.length ? { ok: true, items } : fetched;
+      const statuses = Array.isArray(fetched.data) ? fetched.data : [];
+      if (!statuses.length) break;
+      for (const status of statuses) {
+        const item = mapMastodonStatus(status, instance);
+        if (item) items.push(item);
+        if (items.length >= targetCount(opts)) break;
+      }
+      maxId = statuses[statuses.length - 1]?.id ? String(statuses[statuses.length - 1].id) : null;
+      if (!maxId || items.length >= targetCount(opts)) break;
+    }
+    return { ok: true, items };
+  }
+};
+
+const BSKY_PDS = 'https://bsky.social';
+
+const blueskyAccountProvider: ConnectionProvider = {
+  id: 'bluesky-account',
+  name: 'Bluesky account',
+  icon: '💠',
+  auth: 'credential',
+  contentVisibility: 'personal',
+  postNamespace: 'bluesky',
+  about: 'Connect with a Bluesky app password to sync your REAL following timeline. The app password is exchanged for a session and never stored.',
+  // app passwords need no developer registration — works on any deployment
+  configured: () => true,
+  fields: [
+    { key: 'handle', label: 'Handle', placeholder: 'you.bsky.social', required: true },
+    {
+      key: 'appPassword',
+      label: 'App password',
+      placeholder: 'xxxx-xxxx-xxxx-xxxx',
+      help: 'Create one at bsky.app → Settings → Privacy and security → App passwords. Exchanged for a session, never stored.',
+      required: true,
+      secret: true
+    }
+  ],
+  resolveAccount: async (fields) => {
+    const handle = (fields.handle || '').trim().replace(/^@/, '').toLowerCase();
+    if (!/^[a-z0-9][a-z0-9.-]{2,200}$/.test(handle)) return fail(400, 'handle must be a Bluesky handle like name.bsky.social');
+    const session = await authedJson(`${BSKY_PDS}/xrpc/com.atproto.server.createSession`, {
+      method: 'POST',
+      body: { identifier: handle, password: fields.appPassword || '' }
+    });
+    if (session.ok === false) {
+      return session.status === 401 ? fail(401, 'Bluesky rejected that handle/app password pair') : session;
+    }
+    if (!session.data?.did || !session.data?.accessJwt) return fail(502, 'Bluesky did not return a session');
+    const profile = await authedJson(`${BSKY_PDS}/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(session.data.did)}`, {
+      token: String(session.data.accessJwt)
+    });
+    return {
+      ok: true,
+      account: {
+        providerAccountId: String(session.data.did),
+        displayName: (profile.ok !== false && boundedText(profile.data?.displayName, 120)) || `@${session.data.handle || handle}`,
+        handle: `@${session.data.handle || handle}`,
+        avatarUrl: profile.ok !== false ? httpsImage(profile.data?.avatar) : null,
+        profileUrl: `https://bsky.app/profile/${session.data.handle || handle}`,
+        config: { handle: String(session.data.handle || handle) },
+        tokens: {
+          accessToken: String(session.data.accessJwt),
+          refreshToken: session.data.refreshJwt ? String(session.data.refreshJwt) : null,
+          // access JWTs last ~2h; stamp conservatively so refresh engages
+          expiresAt: new Date(Date.now() + 90 * 60 * 1000).toISOString(),
+          scopes: ['timeline']
+        }
+      }
+    };
+  },
+  // AT proto refresh: the REFRESH JWT authenticates the call and rotates
+  refreshTokens: async (tokens) => {
+    if (!tokens.refreshToken) return null;
+    const refreshed = await authedJson(`${BSKY_PDS}/xrpc/com.atproto.server.refreshSession`, {
+      method: 'POST',
+      token: tokens.refreshToken
+    });
+    if (refreshed.ok === false || !refreshed.data?.accessJwt) return null;
+    return {
+      ...tokens,
+      accessToken: String(refreshed.data.accessJwt),
+      refreshToken: refreshed.data.refreshJwt ? String(refreshed.data.refreshJwt) : tokens.refreshToken,
+      expiresAt: new Date(Date.now() + 90 * 60 * 1000).toISOString()
+    };
+  },
+  fetchFeed: async (_account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'Bluesky needs a reconnect — its saved session is missing or expired');
+    const items: ExternalFeedItem[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < pageCount(opts); page += 1) {
+      const fetched = await authedJson(`${BSKY_PDS}/xrpc/app.bsky.feed.getTimeline?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, {
+        token: opts.tokens.accessToken
+      });
+      if (fetched.ok === false) return items.length ? { ok: true, items } : fetched;
+      for (const entry of fetched.data?.feed || []) {
+        const item = mapBlueskyFeedEntry(entry);
+        if (item) items.push(item);
+        if (items.length >= targetCount(opts)) break;
+      }
+      cursor = typeof fetched.data?.cursor === 'string' ? fetched.data.cursor : null;
+      if (!cursor || items.length >= targetCount(opts)) break;
+    }
+    return { ok: true, items };
+  }
+};
+
 // --- registry ---------------------------------------------------------------
 
 export const CONNECTION_PROVIDERS: ConnectionProvider[] = [
+  redditAccountProvider,
+  blueskyAccountProvider,
+  mastodonAccountProvider,
   youtubeProvider,
   youtubeAccountProvider,
   facebookProvider,

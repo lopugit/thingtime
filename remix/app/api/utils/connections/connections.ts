@@ -289,7 +289,9 @@ export const connectProvider = async (
   if (!provider.resolveAccount) return fail(400, `${provider.name} cannot be connected with form fields`);
   const resolved = await provider.resolveAccount(fields, { userId: user.id });
   if (resolved.ok === false) return resolved;
-  return upsertAccountAndLink(user, provider, resolved.account);
+  // credential providers exchange the typed secret for session tokens —
+  // sealed into the secure blob exactly like an OAuth token response
+  return upsertAccountAndLink(user, provider, resolved.account, resolved.account.tokens || null);
 };
 
 const linksWithAccounts = async (userId: string, linkId?: string | null) => {
@@ -498,17 +500,20 @@ export type ConnectionsFeedResult = {
 // Unseal, and when near expiry re-mint, an SSO account's tokens. Refreshed
 // tokens persist back into the secure blob so every linked user benefits.
 const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any): Promise<OAuthTokens | null> => {
-  if (!provider.oauth) return null;
+  if (!provider.oauth && provider.auth !== 'credential') return null;
   const tokens = unpackConnectionSecure(accountDoc?.secure).tokens || null;
   if (!tokens?.accessToken) return null;
   const expiresAt = tokens.expiresAt ? Date.parse(tokens.expiresAt) : NaN;
   // an unknown expiry counts as expiring — providers with a refresh grant get
   // a chance to mint a token whose lifetime we DO know
   const expiring = !Number.isFinite(expiresAt) || expiresAt - Date.now() < TOKEN_REFRESH_MARGIN_MS;
-  if (!expiring || !provider.oauth.refreshTokens) return tokens;
-  const creds = oauthCredsFor(provider);
+  const refreshFn = provider.oauth?.refreshTokens ?? provider.refreshTokens;
+  if (!expiring || !refreshFn) return tokens;
+  // credential providers (Bluesky sessions) refresh with the token pair
+  // alone; OAuth refresh grants additionally need the client credentials
+  const creds = provider.oauth ? oauthCredsFor(provider) : { clientId: '', clientSecret: '' };
   if (!creds) return tokens;
-  const refreshed = await provider.oauth.refreshTokens(tokens, creds);
+  const refreshed = await refreshFn(tokens, creds);
   if (!refreshed) return tokens; // expired + unrefreshable → the fetch's 401 surfaces "reconnect"
   const home = await getHomeThingsCollection();
   // compare-and-set on the exact blob we read: providers that ROTATE refresh
