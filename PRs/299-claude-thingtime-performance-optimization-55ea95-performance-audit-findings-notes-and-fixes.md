@@ -39,6 +39,14 @@ stack in a browser.
 | 5 | `perf(bundle)` drop unused FontAwesome solid set | ~1 MB of never-rendered icons out of the entry chunk |
 | 6 | `perf(routes)` code-split every non-primary route | **entry chunk 1,165 KB → 168 KB gzipped (−86%)** |
 | 7 | `perf(auth)` concurrent session/user/subscription | 3 → 1 round trips on *every* authenticated request |
+| 8 | `perf(search)` batch the ACL inheritance walk | 50 point lookups → 1 batched `$in` per chain level |
+| 9 | `perf(messenger)` concurrent chat + membership gate | one fewer round trip on all 11 messenger call sites |
+| 10 | `perf(docs)` bound the `/api/docs` render cache | unbounded Host-keyed map of ~300 KB renders → LRU-capped at 8 |
+| 11 | `perf(vercel)` immutable caching for hashed assets | ~80 conditional GETs per repeat visit → 0; restores the disk-cache path |
+| 12 | `perf(things)` batch the comment permalink's ancestor ACL checks | n + n(n-1)/2 round trips → one per chain level |
+| 13 | `perf(mongo)` partial index for unread notifications | count stops fetching every notification a user ever received |
+| 14 | `perf(mongo)` `listCollections` nameOnly | status endpoint stops pulling full per-collection metadata |
+| 15 | `perf(messenger)` `buildSummaryContext` 6 serial stages → 3 | chat sidebar, polled by every session |
 
 ### Measured bundle result
 
@@ -66,6 +74,19 @@ by every anonymous visitor to the landing page.
 - **`develop` was 85 commits ahead of `main`** when this branch was cut. The
   branch was rebased onto `develop` before auditing, so nothing here reports a
   problem already fixed there.
+
+## Deliberately not changed
+
+**`getMongoStatus` opens a fresh MongoClient per call** (flagged Critical). The
+fresh-connect-and-close is *documented as intentional* in the function's own
+header — "Fails fast (2s) and always closes the client so a status check never
+hangs a request or leaks a connection." Reusing the pooled client would remove a
+full SRV + TLS + auth + topology handshake per call, but it also changes what the
+check *tests*: the pooled path cannot detect a cluster that is up but refusing
+new connections, and it inherits the pool's 5s selection timeout rather than the
+deliberate 2s. That is a judgement about what "healthy" should mean for this
+app, so it is left for the owner rather than changed silently. The unambiguous
+half — `listCollections` pulling full metadata to compute a count — is fixed.
 
 ## Confirmed findings not yet fixed
 
