@@ -16,7 +16,7 @@ import {
   Text,
   Textarea
 } from '@chakra-ui/react';
-import { BookOpen, Braces, Columns3, LayoutGrid, Library, Plus, Rows3, Save, Search, SlidersHorizontal } from 'lucide-react';
+import { BookOpen, Braces, Columns3, LayoutGrid, Library, Plus, Rows3, Save, Search, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
@@ -41,6 +41,7 @@ import {
   collapseEntriesByFamily,
   deepLinkKeyFor,
   entryToCardSource,
+  isAttributionTag,
   type BrowseComponentEntry,
   type BrowseComponentsResponse,
   type ComponentCardSource,
@@ -617,6 +618,32 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
               </PopoverBody>
             </PopoverContent>
           </Popover>
+        </Flex>
+      )}
+
+      {source.tags.length > 0 && (
+        <Flex align="center" gap={1.5} wrap="wrap">
+          <Text {...monoLabel}>tags</Text>
+          {[...source.tags].sort((a, b) => Number(isAttributionTag(b)) - Number(isAttributionTag(a))).map((tag) => {
+            const attribution = isAttributionTag(tag);
+            return (
+              <Flex
+                align="center"
+                background={attribution ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
+                border="1px solid var(--tt-border, #ececef)"
+                borderRadius="full"
+                color={attribution ? 'var(--tt-ink, #16161a)' : 'var(--tt-muted, #9a9aa6)'}
+                fontWeight={attribution ? 600 : 400}
+                gap={1}
+                key={tag}
+                paddingX={2}
+                paddingY="1px"
+              >
+                {attribution && <Sparkles size={10} />}
+                <Text fontSize="10px">{tag}</Text>
+              </Flex>
+            );
+          })}
         </Flex>
       )}
 

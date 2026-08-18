@@ -1962,3 +1962,8 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       snippet, and definition; a componentKey slug and a component-<slug>
       shareId resolve to the same family page; unknown keys get the friendly
       not-found panel.
+- [ ] Tags: every seeded component card and detail page shows a tags row led by
+      the "✨ Made by Fable 5 Ultracode" attribution chip (bolder/filled),
+      followed by topical tags (component, library, category, per-component
+      topics); the attribution tag survives a reseed (it is stamped first so
+      per-definition tags can never squeeze it out).

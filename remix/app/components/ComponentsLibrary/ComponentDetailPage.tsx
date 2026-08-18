@@ -17,6 +17,7 @@ import {
   COMPONENT_LIBRARY_LABELS,
   designRank,
   entryToCardSource,
+  isAttributionTag,
   type BrowseComponentEntry,
   type BrowseComponentsResponse,
   type ComponentCardSource
@@ -254,6 +255,29 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
               <Text color="var(--tt-text, #33333c)" fontSize="sm" lineHeight="1.6">
                 {active.description}
               </Text>
+            )}
+
+            {active.tags.length > 0 && (
+              <Flex align="center" gap={1.5} wrap="wrap">
+                {[...active.tags].sort((a, b) => Number(isAttributionTag(b)) - Number(isAttributionTag(a))).map((tag) => {
+                  const attribution = isAttributionTag(tag);
+                  return (
+                    <Badge
+                      background={attribution ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
+                      border="1px solid var(--tt-border, #ececef)"
+                      borderRadius="full"
+                      color={attribution ? 'var(--tt-ink, #16161a)' : 'var(--tt-muted, #9a9aa6)'}
+                      fontSize="10px"
+                      fontWeight={attribution ? 600 : 400}
+                      key={tag}
+                      paddingX={2}
+                      textTransform="none"
+                    >
+                      {attribution ? `✨ ${tag}` : tag}
+                    </Badge>
+                  );
+                })}
+              </Flex>
             )}
 
             {sources.length > 1 && (

@@ -77,6 +77,8 @@ export type ComponentCardSource = {
   entry: BrowseComponentEntry;
   // the family's design roster (>1 → the card shows the designs click-through)
   designs: ComponentDesignRef[];
+  // thing-level tags (provenance + library + category + per-component topics)
+  tags: string[];
 };
 
 // canonical design order: house style first, then the source libraries
@@ -115,9 +117,15 @@ export const entryToCardSource = (entry: BrowseComponentEntry): ComponentCardSou
     forkOf: typeof crystal.forkOf === 'string' ? crystal.forkOf : null,
     origin: entry.author ? 'community' : 'platform',
     entry,
-    designs: Array.isArray(entry.designs) ? entry.designs : []
+    designs: Array.isArray(entry.designs) ? entry.designs : [],
+    tags: Array.isArray(entry.tags) ? entry.tags.filter((tag) => typeof tag === 'string') : []
   };
 };
+
+// Provenance tags read as attribution, not topics — the UI gives them their
+// own chip treatment ahead of the topical tags.
+export const ATTRIBUTION_TAG_PATTERN = /^made by /i;
+export const isAttributionTag = (tag: string): boolean => ATTRIBUTION_TAG_PATTERN.test(tag);
 
 // Client-side family collapse for pages the server can't group (q-search):
 // one source per familyKey from the loaded entries, representative by design

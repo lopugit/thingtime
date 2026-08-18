@@ -39,7 +39,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   fetch, client-side collapse for text search), and every family gets its
   own deep-linked page at `/components/<key>` with a `/docs` twin the
   cards' Docs buttons open. The catalog kept growing meanwhile
-  (tranche 2: 40 archetypes, 1600 components seeded). — Claude (AI), 2026-08-17
+  (tranche 2: 70 archetypes / 350 families / 2800 components seeded, every
+  one tagged "Made by Fable 5 Ultracode" and surfaced as tag chips on cards
+  and detail pages). — Claude (AI), 2026-08-17
 
 ### Fixed
 

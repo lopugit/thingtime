@@ -1,6 +1,6 @@
 {
-	"target": 2680,
-	"count": 2680,
+	"target": 2800,
+	"count": 2800,
 	"archetypesPresent": [
 		"button",
 		"badge",
@@ -68,18 +68,21 @@
 		"productivity-notes",
 		"security-privacy",
 		"charity-community",
-		"form-flows"
+		"form-flows",
+		"logistics",
+		"sports-scores",
+		"accessibility"
 	],
 	"archetypesMissing": [],
 	"libraries": {
-		"antd": 335,
-		"bootstrap": 335,
-		"mui": 335,
-		"shadcn": 335,
-		"untitled": 335,
-		"daisyui": 335,
-		"reactflow": 335,
-		"thingtime": 335
+		"antd": 350,
+		"bootstrap": 350,
+		"mui": 350,
+		"shadcn": 350,
+		"untitled": 350,
+		"daisyui": 350,
+		"reactflow": 350,
+		"thingtime": 350
 	},
-	"hash": "b61baf7d0c3333bb"
+	"hash": "caefb289e2fb03a6"
 }

@@ -22,6 +22,11 @@ import {
 
 const MAX_SEED_BATCH = 100;
 
+// Provenance tag stamped on every seeded catalog component. Seed envelopes are
+// hand-built (never sanitizeTags), so the display casing survives verbatim —
+// user-saved copies ride createThing, which lowercases tags by grammar.
+export const COMPONENT_ATTRIBUTION_TAG = 'Made by Fable 5 Ultracode';
+
 export type SeedComponentsResult = {
 	ok: true;
 	received: number;
@@ -90,13 +95,15 @@ export const seedComponents = async (input: unknown): Promise<SeedFail | SeedCom
 			continue;
 		}
 
-		const tags = ['component'];
+		// attribution leads so it can never be squeezed out by the per-definition
+		// tags below (MAX_TAGS is 12; the definition tags stop at 10)
+		const tags = [COMPONENT_ATTRIBUTION_TAG, 'component'];
 		const library = typeof validated.crystal.library === 'string' ? validated.crystal.library : '';
 		const category = typeof validated.crystal.category === 'string' ? validated.crystal.category : '';
 		if (library) tags.push(library);
 		if (category && !tags.includes(category)) tags.push(category);
 		for (const tag of Array.isArray(def.tags) ? def.tags : []) {
-			if (typeof tag === 'string' && tag.trim() && tag.length <= 40 && tags.length < 10 && !tags.includes(tag)) {
+			if (typeof tag === 'string' && tag.trim() && tag.length <= 40 && tags.length < 11 && !tags.includes(tag)) {
 				tags.push(tag.trim().toLowerCase());
 			}
 		}
