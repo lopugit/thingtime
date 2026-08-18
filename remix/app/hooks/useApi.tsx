@@ -171,12 +171,12 @@ export function useApi() {
         [asyncFetcher]
       ),
       setUserPublicUploads: useCallback(
-        async (args: { userId: string; enabled: boolean }) =>
+        async (args: { userId: string; enabled: boolean; scope?: 'public' | 'private' | 'all' }) =>
           asyncFetcher.submit(
-            { userId: args?.userId, enabled: args?.enabled },
+            { userId: args?.userId, enabled: args?.enabled, scope: args?.scope ?? 'public' },
             {
               action: '/api/v1/admin/users/public-uploads',
-              errorContext: args?.enabled ? 'approve public uploads' : 'withhold public uploads'
+              errorContext: `${args?.enabled ? 'approve' : 'withhold'} ${args?.scope ?? 'public'} uploads`
             }
           ),
         [asyncFetcher]

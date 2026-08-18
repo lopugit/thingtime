@@ -9,11 +9,21 @@ is fixed, and cite the checklist you ran in the PR description.
 ## Public upload approval (new-signup permissions)
 
 - [ ] Register a brand-new account. `POST /api/v1/auth/register` returns
-      `publicUploadsEnabled: false`, and `POST /api/v1/attachments/uploads`
-      answers `403` with `code: "public_uploads_not_approved"`.
-- [ ] Open the verification link. `emailVerified` flips to `true` while
-      `publicUploadsEnabled` stays `false` — verifying an email must never be
+      `publicUploadsEnabled: false` AND `privateUploadsEnabled: false`;
+      `POST /api/v1/attachments/uploads` answers `403` with
+      `code: "public_uploads_not_approved"` for public purposes (`post`,
+      `comment`, `custom-emoji`, or no purpose) and
+      `code: "private_uploads_not_approved"` for private ones (`message`,
+      `profile-avatar`, `profile-banner`).
+- [ ] Open the verification link. `emailVerified` flips to `true` while both
+      `*UploadsEnabled` flags stay `false` — verifying an email must never be
       what grants uploads.
+- [ ] Scopes stay independent: approve only `private`
+      (`POST /api/v1/admin/users/public-uploads` with `scope: "private"`) and
+      confirm `profile-avatar`/`message` starts pass the gate while `post`
+      still 403s; approve only `public` on another account and confirm the
+      reverse; `scope: "all"` enables both, and a request without `scope`
+      keeps the legacy public-only behavior.
 - [ ] Confirm the `admin.new_user` message reaches
       `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default `admin@thingtime.com`) with
       the username, display name, email, user id, and signup time. In dev read
@@ -22,15 +32,19 @@ is fixed, and cite the checklist you ran in the PR description.
       verification still succeeds and still redirects to `/login?verify=success`
       — a mail outage must never fail a committed verification, nor grant the
       permission.
-- [ ] In **/admin → Users**, the account shows a `pending` Uploads badge and the
-      warning banner counts it. Click **Enable**: the badge flips optimistically,
-      a Lopu toast confirms, and the upload start no longer 403s.
-- [ ] Click **Withhold** on the same row: uploads 403 again. An account that
-      predates the change (no `meta.publicUploads`) shows `enabled`, and an
-      admin row shows `enabled` with no toggle.
+- [ ] In **/admin → Users**, the account shows a `pending` Uploads badge and
+      the warning banner counts it. Use the **Approve ▾** menu: "Enable public
+      uploads" / "Enable private uploads" flip only that scope (badge shows
+      `public` or `private`), "Enable all" turns the badge green `all` — each
+      optimistically with a Lopu toast — and the matching upload starts stop
+      403ing.
+- [ ] Withhold from the same menu: that scope 403s again ("Withhold all"
+      returns the badge to `pending`). An account that predates the change (no
+      `meta.publicUploads`/`meta.privateUploads`) shows `all`, and an admin row
+      shows `all` with no menu.
 - [ ] Non-admins calling `POST /api/v1/admin/users/public-uploads` get `403`;
-      a missing `userId` or non-boolean `enabled` gets `400`; an unknown user
-      gets `404`.
+      a missing `userId`, non-boolean `enabled`, or unknown `scope` gets `400`;
+      an unknown user gets `404`.
 - [ ] Run `npm run test:attachments` (it carries the public-upload permission
       unit tests alongside the upload-gate regression test).
 
