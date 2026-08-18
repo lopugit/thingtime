@@ -258,10 +258,13 @@ export const PostComposer = (props: PostComposerProps) => {
   const listingValid =
 		title.trim().length > 0 && price.trim() !== '' && Number.isFinite(Number(price)) && Number(price) >= 0 && !!currency && !!category;
 
-	const hasReadyAttachment = attachmentSnapshot.attachments.length > 0;
-	const hasReadyVisualAttachment = attachmentSnapshot.attachments.some(
-		(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
-	);
+	// edit mode has no upload snapshot — the post's existing bound attachments
+	// are the content (an attachment-only post must stay saveable while its
+	// media is being reordered)
+	const hasReadyAttachment = attachmentSnapshot.attachments.length > 0 || (isEdit && editAttachments.length > 0);
+	const hasReadyVisualAttachment =
+		attachmentSnapshot.attachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video') ||
+		(isEdit && editAttachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'));
 
 	const contentValid =
     type === 'text'
