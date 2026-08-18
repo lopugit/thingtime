@@ -633,7 +633,14 @@ composer's 🔐 approval-pending card is purpose-aware (public purposes check
 `publicUploadsEnabled`, message/profile purposes check
 `privateUploadsEnabled`), and ungranted starts answer 403 with
 `public_uploads_not_approved` / `private_uploads_not_approved` per the
-requested purpose.
+requested purpose. The already-started part/complete calls carry one extra
+any-scope check answering `403 { code: "media_upload_not_granted" }`, while
+abort/delete stay open so a permission change mid-upload cannot strand a
+paid-for reservation. The separate `meta.mediaUpload` flag (**Grant media** on
+the `/admin` Users tab, `POST /api/v1/admin/set-media-upload`, and the
+`grant-media-upload-to-existing-users` migration) is retained as an
+admin-visible grant record only — the scopes above are what enforce. Admins
+can always upload.
 
 Posts, comments and replies, Messenger messages and thread replies, custom
 reaction emoji, and profile avatar/banner images use direct, checksummed

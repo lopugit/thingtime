@@ -24,6 +24,24 @@ export const renderPasswordResetTemplate = ({
   html: `<p>Someone asked to reset your Thingtime password.</p><p><a href="${htmlEscape(link)}">Reset your password</a> (expires in ${expiresMinutes} minutes)</p><p>If this wasn't you, ignore this email — your password is unchanged.</p>`
 });
 
+// Admin alert: a new user registered and needs a manual media-upload grant
+// during the beta. Sent to the admin inbox, never the user.
+export const renderAdminMediaUploadRequestTemplate = ({
+  username,
+  email,
+  userId,
+  adminUrl
+}: {
+  username: string;
+  email: string;
+  userId: string;
+  adminUrl: string;
+}) => ({
+  subject: `New Thingtime user awaiting media-upload approval: ${username}`,
+  text: `A new user registered and needs a manual media-upload grant during the beta.\n\nUsername: ${username}\nEmail: ${email}\nUser id: ${userId}\n\nGrant or deny from the admin panel: ${adminUrl}`,
+  html: `<p>A new user registered and needs a manual media-upload grant during the beta.</p><ul><li>Username: <strong>${htmlEscape(username)}</strong></li><li>Email: ${htmlEscape(email)}</li><li>User id: ${htmlEscape(userId)}</li></ul><p><a href="${htmlEscape(adminUrl)}">Grant or deny from the admin panel</a></p>`
+});
+
 export const renderEmailOtpTemplate = ({
   code,
   expiresMinutes = 10

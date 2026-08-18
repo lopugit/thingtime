@@ -5,10 +5,17 @@
 // true = admin-granted; admins always pass). The purpose-aware upload gate
 // lives in attachmentResponses (requireUploadPermission) and reads the
 // per-scope flags — this predicate only powers PublicUser.canUploadMedia, the
-// composer's approval-pending card fallback, and any other "may upload at
-// least one scope" surface. privateUploads is compared with === true (not
+// composer's approval-pending card fallback, the beta parts/complete grant
+// check (requireUploadGrant), and any other "may upload at least one scope"
+// surface. privateUploads is compared with === true (not
 // !== false) so a pre-scope account stamped only { publicUploads: false }
 // stays fully withheld; grandfathered accounts pass via the public term.
+// The separate admin-managed `meta.mediaUpload` flag (things-era root boolean
+// `secureMediaUpload`, reconstructed into meta by userThingToDoc — mirroring
+// `meta.admin` / `secureAdmin`) is deliberately NOT a term here. It stays an
+// admin-visible grant on the /admin Users tab, but requiring it as well would
+// mean two independent grants for one upload — the parallel-gate double-grant
+// hazard — and every scope-approved account would fail closed on it.
 // Pure predicate (mirrors auth/admin.ts) to stay clear of the
 // users ↔ getCurrentUser import cycle.
 import { isAdminDoc } from './admin';

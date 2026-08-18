@@ -4,7 +4,8 @@ import { completeAttachmentUpload } from '~/api/utils/attachments/attachments';
 // POST /api/v1/attachments/uploads/complete — verify S3 state and publish metadata.
 export const action = createAttachmentMutationAction({
 	rateKey: 'attachments.complete',
-	service: completeAttachmentUpload
+	service: completeAttachmentUpload,
+	requireUploadGrant: true
 });
 
 export const loader = attachmentPostOnlyLoader;

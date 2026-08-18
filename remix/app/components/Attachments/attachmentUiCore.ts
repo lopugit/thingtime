@@ -96,7 +96,10 @@ export const attachmentUploadError = (
 		Number(context.remainingBytes) >= 0 &&
 		Number(context.fileSizeBytes) > Number(context.remainingBytes);
 	if (status === 401) return 'Your session expired. Log in again before uploading this file.';
-	if (code === 'public_uploads_not_approved' || code === 'private_uploads_not_approved') {
+	// The start route answers with the purpose-matched scope code; the
+	// already-started parts/complete calls answer with the any-scope one. All
+	// three mean the same thing to the person holding the file.
+	if (code === 'public_uploads_not_approved' || code === 'private_uploads_not_approved' || code === 'media_upload_not_granted') {
 		return 'Media uploads need admin approval during the beta. An admin has been notified — you can upload here once your account is approved.';
 	}
 	if (status === 403) return 'This account is not allowed to upload that file.';

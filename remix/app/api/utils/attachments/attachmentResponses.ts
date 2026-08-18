@@ -63,7 +63,7 @@ const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', '
 const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner']);
 
 export const createAttachmentMutationAction = (
-	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean },
+	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean; requireUploadGrant?: boolean },
 	overrides: Partial<AttachmentMutationDependencies> = {}
 ) => {
 	const dependencies = { ...defaultDependencies, ...overrides };
@@ -84,6 +84,21 @@ export const createAttachmentMutationAction = (
 			if (user.accountKind !== 'user') {
 				return json({ ok: false, error: 'Attachments require a user account' }, { status: 403 });
 			}
+			// Beta any-scope upload gate: routes that mint new bytes for an ALREADY
+			// started upload (parts/complete) opt in; abort/delete stay open so an
+			// ungated or revoked user can always clean up their own drafts.
+			// canUploadMedia is the any-scope alias over the per-scope permissions
+			// (auth/mediaUpload.ts canUploadMediaDoc; admins always pass), so this is
+			// a cheap pre-rate-limit check, not a second grant: the START route uses
+			// the purpose-aware requireUploadPermission gate below instead, which
+			// answers with the exact scope code rather than this generic one.
+			if (options.requireUploadGrant && !user.canUploadMedia) {
+				return json(
+					{ ok: false, error: 'Media uploads require admin approval during the beta', code: 'media_upload_not_granted' },
+					{ status: 403 }
+				);
+			}
+
 			const limit = await dependencies.enforceLimit(request, options.rateKey, `user:${user.id}`, { failClosed: true });
 			if (!limit.allowed) {
 				if (limit.unavailable) {

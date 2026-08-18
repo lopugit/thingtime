@@ -260,14 +260,22 @@ is fixed, and cite the checklist you ran in the PR description.
       comment, AND messenger composers (the card is purpose-aware), and a
       direct `POST /api/v1/attachments/uploads` returns 403 with the
       purpose-matched `public_uploads_not_approved` /
-      `private_uploads_not_approved` code. Verifying the email records an
-      `admin.new_user` alert to the admin inbox in `email_messages` (and does
-      NOT unlock uploads).
+      `private_uploads_not_approved` code — never the part/complete-only
+      `media_upload_not_granted` code. Registering records an
+      `admin.media_upload_request` email and verifying the email records an
+      `admin.new_user` alert to the admin inbox in `email_messages` (neither
+      unlocks uploads).
 - [ ] After an admin approves ONLY private uploads, the messenger composer and
       profile media upload work while the post/comment composers still show
       the 🔐 card (and vice-versa for public-only); approving all unlocks
       everything after a reload/revalidation, and revoking flips surfaces back
       while abort/delete of in-flight drafts keep working.
+- [ ] Withhold BOTH scopes while an upload is in flight: the already-started
+      `POST /api/v1/attachments/{parts,complete}` calls answer
+      `403 { code: "media_upload_not_granted" }` from the extra any-scope
+      check, mapped to the same 🔐 copy, while abort/delete of that account's
+      own drafts keep working. Withholding only one scope must NOT block the
+      other scope's in-flight parts/complete.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
@@ -1439,6 +1447,10 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       flips the single unified permission optimistically and reverts with a
       Lopu toast on failure. Non-admin sessions get 403 from
       `POST /api/v1/admin/users/public-uploads`.
+- [ ] The same row also shows the purple `media` badge for `meta.mediaUpload`
+      grantees and admins; **Grant media / Revoke media** toggles that separate
+      flag with a Lopu toast and the badge updates after refresh. Non-admin
+      sessions get 403 from `POST /api/v1/admin/set-media-upload`.
 
 Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
 restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a

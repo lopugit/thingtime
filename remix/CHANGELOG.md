@@ -52,11 +52,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   (tri-state `meta.publicUploads` + `meta.privateUploads`; absent =
   grandfathered, purpose-aware start gate with
   `public_uploads_not_approved` / `private_uploads_not_approved`). This PR
-  fixes the parallel-gate double-grant hazard by removing its earlier
-  duplicate gate, keeps `PublicUser.canUploadMedia` as the any-scope alias,
-  and ships the composer's purpose-aware 🔐 approval-pending card (public
-  purposes check publicUploadsEnabled, message/profile purposes check
-  privateUploadsEnabled). See the
+  fixes the parallel-gate double-grant hazard by removing the earlier
+  duplicate gate from the upload START path, keeps
+  `PublicUser.canUploadMedia` as the any-scope alias, and ships the composer's
+  purpose-aware 🔐 approval-pending card (public purposes check
+  publicUploadsEnabled, message/profile purposes check privateUploadsEnabled).
+  The already-started parts/complete calls keep one extra any-scope check that
+  still answers `403 { code: "media_upload_not_granted" }`, while abort/delete
+  stay open. The per-account `meta.mediaUpload` / root `secureMediaUpload`
+  grant (Grant/Revoke media on `/admin` → Users, `POST
+  /api/v1/admin/set-media-upload`, the registration request email to
+  `THINGTIME_ADMIN_EMAIL`, and the `grant-media-upload-to-existing-users`
+  grandfathering migration) is retained as an admin-visible grant record; the
+  scopes are the single enforcement path. See the
   [PR #302 implementation notes](../PRs/302-claude-media-upload-permission-gate--beta-media-upload-permission-gate.md).
   — Claude (AI), 2026-08-18
 

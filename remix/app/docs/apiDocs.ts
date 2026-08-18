@@ -929,6 +929,39 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-set-media-upload',
+    group: 'admin',
+    title: 'Grant / revoke media uploads',
+    endpoint: '/api/v1/admin/set-media-upload',
+    summary: 'Set a user’s media-upload grant flag (admin only).',
+    detail:
+      'POST { userId, granted } to grant or revoke the meta.mediaUpload flag. During the beta, media/file uploads require this admin-granted permission: new registrations default to no grant, and every registration emails the admin inbox (THINGTIME_ADMIN_EMAIL, default admin@thingtime.com) requesting approval. Admins can always upload regardless of the stored flag.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'POST userId + granted:true to allow uploads, granted:false to revoke.',
+      'Read the returned user row (id, username, isAdmin, envAdmin, mediaUpload) to update the UI.',
+      'Ungated users receive 403 { code: "media_upload_not_granted" } from the upload routes.',
+      'Non-admins receive 403; missing userId 400; unknown user 404.'
+    ],
+    requestExamples: [
+      {
+        name: 'Grant media uploads',
+        description: 'Allow a user to upload media and files.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', granted: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated user row.',
+        body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik', isAdmin: false, envAdmin: false, mediaUpload: true } }
+      },
+      { status: 400, description: 'Missing userId.', body: { ok: false, error: 'userId is required' } }
+    ]
+  }),
+  endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
     group: 'settings',
     title: 'AI workflow model waterfall',
