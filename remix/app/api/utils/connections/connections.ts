@@ -533,7 +533,7 @@ const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any): Pro
 
 export const readConnectionsFeed = async (
   user: SessionUser,
-  query: { connectionId?: string | null; cursor?: string | null; limit?: number; forceSync?: boolean; deepen?: boolean }
+  query: { connectionId?: string | null; cursor?: string | null; limit?: number; forceSync?: boolean; deepen?: boolean; deferSync?: boolean }
 ): Promise<ConnectionsFeedResult | Fail> => {
   const pairs = await linksWithAccounts(user.id, query.connectionId || null);
   if (query.connectionId && !pairs.length) return fail(404, 'Connection not found');
@@ -543,8 +543,14 @@ export const readConnectionsFeed = async (
 
   // sync pass — per account, cooldown-gated, bounded concurrency. Deepening
   // ("fetch older — I scrolled through what's here") raises the account's
-  // stored page depth and bypasses the cooldown for this pass.
-  const syncTargets = pairs.filter(({ account }) => !!account);
+  // stored page depth and bypasses the cooldown for this pass. deferSync
+  // skips the pass entirely: the serverless-safe stale-while-revalidate read
+  // (the client paints the stored page instantly, then re-requests without
+  // defer so the provider fan-out never blocks first paint — background work
+  // after the response is not reliable on serverless, so the revalidate is a
+  // second REQUEST, not a dangling promise).
+  const linkedPairs = pairs.filter(({ account }) => !!account);
+  const syncTargets = query.deferSync ? [] : linkedPairs;
   const CONCURRENCY = 4;
   for (let start = 0; start < syncTargets.length; start += CONCURRENCY) {
     await Promise.all(
@@ -595,7 +601,7 @@ export const readConnectionsFeed = async (
 
   // read pass — membership (the link) IS the authorization: only linked
   // accounts' posts are queried, newest first
-  const accountIds = syncTargets.map(({ account }) => String(account.shareId));
+  const accountIds = linkedPairs.map(({ account }) => String(account.shareId));
   let posts: PublicPost[] = [];
   let nextCursor: string | null = null;
   if (accountIds.length) {

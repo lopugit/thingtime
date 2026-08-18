@@ -20,6 +20,9 @@ export const loader = async ({ request }: { request: Request }) => {
     cursor: url.searchParams.get('cursor'),
     limit: Number(url.searchParams.get('limit')) || undefined,
     forceSync: url.searchParams.get('sync') === 'force',
+    // stale-while-revalidate: serve the stored page with NO provider fan-out;
+    // the client re-requests without defer to sync in the background
+    deferSync: url.searchParams.get('sync') === 'defer',
     // "I scrolled through what's here" — raise the sync depth and pull older
     deepen: url.searchParams.get('deepen') === '1'
   });

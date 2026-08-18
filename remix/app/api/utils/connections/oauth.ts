@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import { signJwt, verifyJwt } from '../auth/jwt';
 import { upsertAccountAndLink, type PublicConnection } from './connections';
@@ -50,15 +50,20 @@ export const beginOAuth = async (
   if (!creds) {
     return fail(400, `${provider.name} is not configured on this deployment yet (set ${provider.oauth.clientIdEnv} and ${provider.oauth.clientSecretEnv})`);
   }
+  // PKCE (X requires it): the S256 verifier rides the SIGNED state JWT
+  // through the provider round trip — stateless like the rest of the flow,
+  // and an attacker altering it breaks the signature
+  const codeVerifier = provider.oauth.pkce ? randomBytes(32).toString('base64url') : null;
+  const codeChallenge = codeVerifier ? createHash('sha256').update(codeVerifier).digest('base64url') : undefined;
   const state = await signJwt({
     sub: user.id,
-    jti: `${STATE_JTI_PREFIX}${provider.id}:${randomUUID()}`,
+    jti: `${STATE_JTI_PREFIX}${provider.id}:${randomUUID()}${codeVerifier ? `:${codeVerifier}` : ''}`,
     expiresIn: STATE_TTL
   });
   return {
     ok: true,
     provider: provider.id,
-    authorizeUrl: provider.oauth.buildAuthorizeUrl({ clientId: creds.clientId, redirectUri: redirectUriFor(requestOrigin), state })
+    authorizeUrl: provider.oauth.buildAuthorizeUrl({ clientId: creds.clientId, redirectUri: redirectUriFor(requestOrigin), state, codeChallenge })
   };
 };
 
@@ -80,7 +85,9 @@ export const completeOAuth = async (
   const claims = await verifyJwt(state);
   if (!claims || !claims.jti.startsWith(STATE_JTI_PREFIX)) return fail(400, 'The sign-in state is invalid or expired — start the connect again');
   if (claims.sub !== user.id) return fail(403, 'This sign-in was started from a different Thingtime session');
-  const providerId = claims.jti.slice(STATE_JTI_PREFIX.length).split(':')[0];
+  const stateParts = claims.jti.slice(STATE_JTI_PREFIX.length).split(':');
+  const providerId = stateParts[0];
+  const codeVerifier = stateParts[2] || undefined;
   const provider = connectionProviderById(providerId);
   if (!provider?.oauth) return fail(400, 'The sign-in state names an unknown provider');
   const creds = oauthCredsFor(provider);
@@ -90,7 +97,8 @@ export const completeOAuth = async (
     code,
     clientId: creds.clientId,
     clientSecret: creds.clientSecret,
-    redirectUri: redirectUriFor(requestOrigin)
+    redirectUri: redirectUriFor(requestOrigin),
+    codeVerifier
   });
   if (exchanged.ok === false) return exchanged;
 

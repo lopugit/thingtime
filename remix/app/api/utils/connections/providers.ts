@@ -116,12 +116,16 @@ export type ConnectionProvider = {
   oauth?: {
     clientIdEnv: string;
     clientSecretEnv: string;
-    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string }) => string;
+    // X requires PKCE on its authorization-code flow; the begin/callback core
+    // mints an S256 verifier and threads it through the signed state JWT
+    pkce?: boolean;
+    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string }) => string;
     exchangeCode: (input: {
       code: string;
       clientId: string;
       clientSecret: string;
       redirectUri: string;
+      codeVerifier?: string;
     }) => Promise<{ ok: true; tokens: OAuthTokens } | Fail>;
     resolveAccountFromTokens: (tokens: OAuthTokens) => Promise<{ ok: true; account: ResolvedExternalAccount } | Fail>;
     refreshTokens?: (tokens: OAuthTokens, creds: { clientId: string; clientSecret: string }) => Promise<OAuthTokens | null>;
@@ -311,7 +315,7 @@ const postForm = async (
 // as a silent empty feed.
 const authedJson = async (
   url: string,
-  opts: { token?: string; method?: 'GET' | 'POST'; body?: unknown } = {}
+  opts: { token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string> } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
   try {
     const resp = await fetch(url, {
@@ -320,7 +324,9 @@ const authedJson = async (
         'User-Agent': USER_AGENT,
         Accept: 'application/json',
         ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-        ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {})
+        ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        // provider-specific extras (Twitch helix requires a Client-Id header)
+        ...(opts.headers || {})
       },
       ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
@@ -1886,6 +1892,469 @@ const blueskyAccountProvider: ConnectionProvider = {
   }
 };
 
+// --- remaining SSO scaffolds --------------------------------------------------
+// Config-gated like the rest; each `about` states honestly what the official
+// API exposes (X home timeline needs a paid API tier; Pinterest exposes your
+// pins, not the home feed; LinkedIn exposes identity only to standard apps).
+
+const twitchProvider: ConnectionProvider = {
+  id: 'twitch',
+  name: 'Twitch',
+  icon: '🎮',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  about: 'Sign in with Twitch to sync the channels you follow that are LIVE right now.',
+  configured: () => !!envValue('TWITCH_CLIENT_ID') && !!envValue('TWITCH_CLIENT_SECRET'),
+  fields: [],
+  oauth: {
+    clientIdEnv: 'TWITCH_CLIENT_ID',
+    clientSecretEnv: 'TWITCH_CLIENT_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://id.twitch.tv/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('user:read:follows')}&state=${encodeURIComponent(state)}`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
+      const exchanged = await postForm('https://id.twitch.tv/oauth2/token', {
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri
+      });
+      if (exchanged.ok === false) return exchanged;
+      if (!exchanged.data?.access_token) return fail(502, 'Twitch did not return an access token');
+      return {
+        ok: true,
+        tokens: {
+          accessToken: String(exchanged.data.access_token),
+          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
+          expiresAt: expiresAtFrom(exchanged.data.expires_in),
+          scopes: ['user:read:follows']
+        }
+      };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson('https://api.twitch.tv/helix/users', {
+        token: tokens.accessToken,
+        headers: { 'Client-Id': envValue('TWITCH_CLIENT_ID') }
+      });
+      if (me.ok === false) return me;
+      const user = me.data?.data?.[0];
+      if (!user?.id) return fail(502, 'Twitch did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(user.id),
+          displayName: boundedText(user.display_name, 120) || user.login,
+          handle: `@${user.login}`,
+          avatarUrl: httpsImage(user.profile_image_url),
+          profileUrl: `https://www.twitch.tv/${user.login}`,
+          config: { userId: String(user.id) }
+        }
+      };
+    },
+    refreshTokens: async (tokens, creds) => {
+      if (!tokens.refreshToken) return null;
+      const refreshed = await postForm('https://id.twitch.tv/oauth2/token', {
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refreshToken
+      });
+      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
+      return {
+        ...tokens,
+        accessToken: String(refreshed.data.access_token),
+        refreshToken: refreshed.data.refresh_token ? String(refreshed.data.refresh_token) : tokens.refreshToken,
+        expiresAt: expiresAtFrom(refreshed.data.expires_in)
+      };
+    }
+  },
+  fetchFeed: async (account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'Twitch needs a reconnect — its saved sign-in is missing or expired');
+    const fetched = await authedJson(
+      `https://api.twitch.tv/helix/streams/followed?user_id=${encodeURIComponent(account.config.userId || '')}&first=${Math.min(targetCount(opts), 100)}`,
+      { token: opts.tokens.accessToken, headers: { 'Client-Id': envValue('TWITCH_CLIENT_ID') } }
+    );
+    if (fetched.ok === false) return fetched;
+    const items: ExternalFeedItem[] = [];
+    for (const stream of fetched.data?.data || []) {
+      if (!stream?.id) continue;
+      const thumb = typeof stream.thumbnail_url === 'string' ? stream.thumbnail_url.replace('{width}', '640').replace('{height}', '360') : null;
+      items.push({
+        externalId: `twitch-live-${stream.user_id}-${stream.id}`,
+        url: stream.user_login ? `https://www.twitch.tv/${stream.user_login}` : null,
+        title: boundedText(stream.title, MAX_TITLE_CHARS) || null,
+        text: `🔴 LIVE${stream.game_name ? ` — ${boundedText(stream.game_name, 120)}` : ''} · ${Number(stream.viewer_count) || 0} viewers`,
+        images: boundedImages([thumb]),
+        author: {
+          name: boundedText(stream.user_name, 120) || null,
+          handle: stream.user_login ? `@${stream.user_login}` : null,
+          avatarUrl: null,
+          url: stream.user_login ? `https://www.twitch.tv/${stream.user_login}` : null
+        },
+        publishedAt: dateOrNull(stream.started_at),
+        stats: { likes: stream.viewer_count }
+      });
+    }
+    return { ok: true, items };
+  }
+};
+
+const xProvider: ConnectionProvider = {
+  id: 'x',
+  name: 'X',
+  icon: '𝕏',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  about: 'Sign in with X to sync your home timeline. (X gates timeline reads behind its paid API tiers — a Basic-tier app key or above is required for the pull to work.)',
+  configured: () => !!envValue('X_CLIENT_ID') && !!envValue('X_CLIENT_SECRET'),
+  fields: [],
+  oauth: {
+    clientIdEnv: 'X_CLIENT_ID',
+    clientSecretEnv: 'X_CLIENT_SECRET',
+    pkce: true,
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge }) =>
+      `https://x.com/i/oauth2/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('tweet.read users.read offline.access')}&state=${encodeURIComponent(state)}&code_challenge=${encodeURIComponent(codeChallenge || '')}&code_challenge_method=S256`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri, codeVerifier }) => {
+      const exchanged = await postForm(
+        'https://api.x.com/2/oauth2/token',
+        { code, grant_type: 'authorization_code', redirect_uri: redirectUri, code_verifier: codeVerifier || '' },
+        { basicAuth: { user: clientId, pass: clientSecret } }
+      );
+      if (exchanged.ok === false) return exchanged;
+      if (!exchanged.data?.access_token) return fail(502, 'X did not return an access token');
+      return {
+        ok: true,
+        tokens: {
+          accessToken: String(exchanged.data.access_token),
+          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
+          expiresAt: expiresAtFrom(exchanged.data.expires_in),
+          scopes: String(exchanged.data.scope || '').split(' ').filter(Boolean)
+        }
+      };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson('https://api.x.com/2/users/me?user.fields=profile_image_url,name,username', { token: tokens.accessToken });
+      if (me.ok === false) return me;
+      const user = me.data?.data;
+      if (!user?.id) return fail(502, 'X did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(user.id),
+          displayName: boundedText(user.name, 120) || `@${user.username}`,
+          handle: `@${user.username}`,
+          avatarUrl: httpsImage(user.profile_image_url),
+          profileUrl: `https://x.com/${user.username}`,
+          config: { userId: String(user.id) }
+        }
+      };
+    },
+    refreshTokens: async (tokens, creds) => {
+      if (!tokens.refreshToken) return null;
+      const refreshed = await postForm(
+        'https://api.x.com/2/oauth2/token',
+        { grant_type: 'refresh_token', refresh_token: tokens.refreshToken },
+        { basicAuth: { user: creds.clientId, pass: creds.clientSecret } }
+      );
+      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
+      // X ROTATES refresh tokens — always persist the fresh one
+      return {
+        ...tokens,
+        accessToken: String(refreshed.data.access_token),
+        refreshToken: refreshed.data.refresh_token ? String(refreshed.data.refresh_token) : tokens.refreshToken,
+        expiresAt: expiresAtFrom(refreshed.data.expires_in)
+      };
+    }
+  },
+  fetchFeed: async (account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'X needs a reconnect — its saved sign-in is missing or expired');
+    const items: ExternalFeedItem[] = [];
+    let paginationToken: string | null = null;
+    for (let page = 0; page < pageCount(opts); page += 1) {
+      const fetched = await authedJson(
+        `https://api.x.com/2/users/${encodeURIComponent(account.config.userId || '')}/timelines/reverse_chronological?max_results=50&tweet.fields=created_at,public_metrics&expansions=author_id&user.fields=name,username,profile_image_url${paginationToken ? `&pagination_token=${encodeURIComponent(paginationToken)}` : ''}`,
+        { token: opts.tokens.accessToken }
+      );
+      if (fetched.ok === false) return items.length ? { ok: true, items } : fetched;
+      const users = new Map<string, any>((fetched.data?.includes?.users || []).map((user: any) => [String(user.id), user]));
+      for (const tweet of fetched.data?.data || []) {
+        if (!tweet?.id) continue;
+        const author = users.get(String(tweet.author_id));
+        items.push({
+          externalId: `x-${tweet.id}`,
+          url: author?.username ? `https://x.com/${author.username}/status/${tweet.id}` : null,
+          title: null,
+          text: boundedText(tweet.text || '', MAX_TEXT_CHARS),
+          images: [],
+          author: {
+            name: boundedText(author?.name, 120) || null,
+            handle: author?.username ? `@${author.username}` : null,
+            avatarUrl: httpsImage(author?.profile_image_url),
+            url: author?.username ? `https://x.com/${author.username}` : null
+          },
+          publishedAt: dateOrNull(tweet.created_at),
+          stats: {
+            likes: tweet.public_metrics?.like_count,
+            comments: tweet.public_metrics?.reply_count,
+            shares: tweet.public_metrics?.retweet_count
+          }
+        });
+        if (items.length >= targetCount(opts)) break;
+      }
+      paginationToken = typeof fetched.data?.meta?.next_token === 'string' ? fetched.data.meta.next_token : null;
+      if (!paginationToken || items.length >= targetCount(opts)) break;
+    }
+    return { ok: true, items };
+  }
+};
+
+const tumblrProvider: ConnectionProvider = {
+  id: 'tumblr',
+  name: 'Tumblr',
+  icon: '🌀',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  about: 'Sign in with Tumblr to sync your REAL dashboard (the blogs you follow).',
+  configured: () => !!envValue('TUMBLR_CLIENT_ID') && !!envValue('TUMBLR_CLIENT_SECRET'),
+  fields: [],
+  oauth: {
+    clientIdEnv: 'TUMBLR_CLIENT_ID',
+    clientSecretEnv: 'TUMBLR_CLIENT_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://www.tumblr.com/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&scope=${encodeURIComponent('basic offline_access')}&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
+      const exchanged = await postForm('https://api.tumblr.com/v2/oauth2/token', {
+        grant_type: 'authorization_code',
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri
+      });
+      if (exchanged.ok === false) return exchanged;
+      if (!exchanged.data?.access_token) return fail(502, 'Tumblr did not return an access token');
+      return {
+        ok: true,
+        tokens: {
+          accessToken: String(exchanged.data.access_token),
+          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
+          expiresAt: expiresAtFrom(exchanged.data.expires_in),
+          scopes: ['basic', 'offline_access']
+        }
+      };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson('https://api.tumblr.com/v2/user/info', { token: tokens.accessToken });
+      if (me.ok === false) return me;
+      const user = me.data?.response?.user;
+      if (!user?.name) return fail(502, 'Tumblr did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(user.name),
+          displayName: boundedText(user.name, 120),
+          handle: `@${user.name}`,
+          avatarUrl: null,
+          profileUrl: `https://www.tumblr.com/${user.name}`,
+          config: {}
+        }
+      };
+    },
+    refreshTokens: async (tokens, creds) => {
+      if (!tokens.refreshToken) return null;
+      const refreshed = await postForm('https://api.tumblr.com/v2/oauth2/token', {
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refreshToken,
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret
+      });
+      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
+      return {
+        ...tokens,
+        accessToken: String(refreshed.data.access_token),
+        refreshToken: refreshed.data.refresh_token ? String(refreshed.data.refresh_token) : tokens.refreshToken,
+        expiresAt: expiresAtFrom(refreshed.data.expires_in)
+      };
+    }
+  },
+  fetchFeed: async (_account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'Tumblr needs a reconnect — its saved sign-in is missing or expired');
+    const items: ExternalFeedItem[] = [];
+    let offset = 0;
+    for (let page = 0; page < pageCount(opts); page += 1) {
+      const fetched = await authedJson(`https://api.tumblr.com/v2/user/dashboard?limit=20${offset ? `&offset=${offset}` : ''}`, {
+        token: opts.tokens.accessToken
+      });
+      if (fetched.ok === false) return items.length ? { ok: true, items } : fetched;
+      const posts = fetched.data?.response?.posts || [];
+      if (!posts.length) break;
+      for (const post of posts) {
+        if (!post?.id_string && !post?.id) continue;
+        const photos = (post.photos || []).map((photo: any) => photo?.original_size?.url);
+        items.push({
+          externalId: `tumblr-${post.id_string || post.id}`,
+          url: typeof post.post_url === 'string' ? post.post_url.slice(0, 1500) : null,
+          title: boundedText(post.title, MAX_TITLE_CHARS) || null,
+          text: boundedText(post.summary || post.body || post.caption || '', MAX_TEXT_CHARS),
+          images: boundedImages(photos),
+          author: {
+            name: boundedText(post.blog_name, 120) || null,
+            handle: post.blog_name ? `@${post.blog_name}` : null,
+            avatarUrl: null,
+            url: post.blog_name ? `https://www.tumblr.com/${post.blog_name}` : null
+          },
+          publishedAt: typeof post.timestamp === 'number' ? new Date(post.timestamp * 1000) : null,
+          stats: { likes: post.note_count }
+        });
+        if (items.length >= targetCount(opts)) break;
+      }
+      offset += posts.length;
+      if (items.length >= targetCount(opts)) break;
+    }
+    return { ok: true, items };
+  }
+};
+
+const pinterestProvider: ConnectionProvider = {
+  id: 'pinterest',
+  name: 'Pinterest',
+  icon: '📌',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  about: 'Sign in with Pinterest to sync your own pins. (Pinterest’s API exposes your pins and boards — not the home feed.)',
+  configured: () => !!envValue('PINTEREST_CLIENT_ID') && !!envValue('PINTEREST_CLIENT_SECRET'),
+  fields: [],
+  oauth: {
+    clientIdEnv: 'PINTEREST_CLIENT_ID',
+    clientSecretEnv: 'PINTEREST_CLIENT_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://www.pinterest.com/oauth/?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('user_accounts:read,pins:read,boards:read')}&state=${encodeURIComponent(state)}`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
+      const exchanged = await postForm(
+        'https://api.pinterest.com/v5/oauth/token',
+        { grant_type: 'authorization_code', code, redirect_uri: redirectUri },
+        { basicAuth: { user: clientId, pass: clientSecret } }
+      );
+      if (exchanged.ok === false) return exchanged;
+      if (!exchanged.data?.access_token) return fail(502, 'Pinterest did not return an access token');
+      return {
+        ok: true,
+        tokens: {
+          accessToken: String(exchanged.data.access_token),
+          refreshToken: exchanged.data.refresh_token ? String(exchanged.data.refresh_token) : null,
+          expiresAt: expiresAtFrom(exchanged.data.expires_in),
+          scopes: ['pins:read']
+        }
+      };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson('https://api.pinterest.com/v5/user_account', { token: tokens.accessToken });
+      if (me.ok === false) return me;
+      if (!me.data?.username) return fail(502, 'Pinterest did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(me.data.id || me.data.username),
+          displayName: boundedText(me.data.username, 120),
+          handle: `@${me.data.username}`,
+          avatarUrl: httpsImage(me.data.profile_image),
+          profileUrl: `https://www.pinterest.com/${me.data.username}/`,
+          config: {}
+        }
+      };
+    },
+    refreshTokens: async (tokens, creds) => {
+      if (!tokens.refreshToken) return null;
+      const refreshed = await postForm(
+        'https://api.pinterest.com/v5/oauth/token',
+        { grant_type: 'refresh_token', refresh_token: tokens.refreshToken },
+        { basicAuth: { user: creds.clientId, pass: creds.clientSecret } }
+      );
+      if (refreshed.ok === false || !refreshed.data?.access_token) return null;
+      return { ...tokens, accessToken: String(refreshed.data.access_token), expiresAt: expiresAtFrom(refreshed.data.expires_in) };
+    }
+  },
+  fetchFeed: async (_account, opts) => {
+    if (!opts.tokens?.accessToken) return fail(401, 'Pinterest needs a reconnect — its saved sign-in is missing or expired');
+    const items: ExternalFeedItem[] = [];
+    let bookmark: string | null = null;
+    for (let page = 0; page < pageCount(opts); page += 1) {
+      const fetched = await authedJson(`https://api.pinterest.com/v5/pins?page_size=25${bookmark ? `&bookmark=${encodeURIComponent(bookmark)}` : ''}`, {
+        token: opts.tokens.accessToken
+      });
+      if (fetched.ok === false) return items.length ? { ok: true, items } : fetched;
+      for (const pin of fetched.data?.items || []) {
+        if (!pin?.id) continue;
+        const image = pin.media?.images?.['600x']?.url || pin.media?.images?.originals?.url;
+        items.push({
+          externalId: `pin-${pin.id}`,
+          url: `https://www.pinterest.com/pin/${pin.id}/`,
+          title: boundedText(pin.title, MAX_TITLE_CHARS) || null,
+          text: boundedText(pin.description || '', MAX_TEXT_CHARS),
+          images: boundedImages([image]),
+          author: { name: null, handle: null, avatarUrl: null, url: null },
+          publishedAt: dateOrNull(pin.created_at),
+          stats: null
+        });
+        if (items.length >= targetCount(opts)) break;
+      }
+      bookmark = typeof fetched.data?.bookmark === 'string' ? fetched.data.bookmark : null;
+      if (!bookmark || items.length >= targetCount(opts)) break;
+    }
+    return { ok: true, items };
+  }
+};
+
+const linkedinProvider: ConnectionProvider = {
+  id: 'linkedin',
+  name: 'LinkedIn',
+  icon: '💼',
+  auth: 'oauth2',
+  contentVisibility: 'personal',
+  about: 'Sign in with LinkedIn to link your account. (LinkedIn does not expose feed content to standard API apps — account linking only for now.)',
+  configured: () => !!envValue('LINKEDIN_CLIENT_ID') && !!envValue('LINKEDIN_CLIENT_SECRET'),
+  fields: [],
+  oauth: {
+    clientIdEnv: 'LINKEDIN_CLIENT_ID',
+    clientSecretEnv: 'LINKEDIN_CLIENT_SECRET',
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
+      `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&scope=${encodeURIComponent('openid profile')}`,
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
+      const exchanged = await postForm('https://www.linkedin.com/oauth/v2/accessToken', {
+        grant_type: 'authorization_code',
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri
+      });
+      if (exchanged.ok === false) return exchanged;
+      if (!exchanged.data?.access_token) return fail(502, 'LinkedIn did not return an access token');
+      return {
+        ok: true,
+        tokens: { accessToken: String(exchanged.data.access_token), expiresAt: expiresAtFrom(exchanged.data.expires_in), scopes: ['openid', 'profile'] }
+      };
+    },
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson('https://api.linkedin.com/v2/userinfo', { token: tokens.accessToken });
+      if (me.ok === false) return me;
+      if (!me.data?.sub) return fail(502, 'LinkedIn did not return a profile');
+      return {
+        ok: true,
+        account: {
+          providerAccountId: String(me.data.sub),
+          displayName: boundedText(me.data.name, 120) || 'LinkedIn account',
+          handle: boundedText(me.data.name, 120) || 'LinkedIn account',
+          avatarUrl: httpsImage(me.data.picture),
+          profileUrl: null,
+          config: {}
+        }
+      };
+    }
+  },
+  // LinkedIn's member-feed APIs are partner-gated; an empty sync is the honest
+  // steady state (the about-copy says so) rather than a recurring error
+  fetchFeed: async () => ({ ok: true, items: [] })
+};
+
 // --- registry ---------------------------------------------------------------
 
 export const CONNECTION_PROVIDERS: ConnectionProvider[] = [
@@ -1897,6 +2366,11 @@ export const CONNECTION_PROVIDERS: ConnectionProvider[] = [
   facebookProvider,
   instagramProvider,
   tiktokProvider,
+  xProvider,
+  twitchProvider,
+  tumblrProvider,
+  pinterestProvider,
+  linkedinProvider,
   redditProvider,
   mastodonProvider,
   blueskyProvider,

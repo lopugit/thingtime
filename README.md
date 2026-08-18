@@ -1002,6 +1002,21 @@ REDDIT_CLIENT_SECRET="<reddit-app-secret>"
 MASTODON_INSTANCE="mastodon.social"
 MASTODON_CLIENT_ID="<mastodon-app-client-id>"
 MASTODON_CLIENT_SECRET="<mastodon-app-secret>"
+# X app (x provider — home timeline; requires a PAID X API tier to read)
+X_CLIENT_ID="<x-oauth2-client-id>"
+X_CLIENT_SECRET="<x-oauth2-client-secret>"
+# Twitch app (twitch provider — followed channels that are live)
+TWITCH_CLIENT_ID="<twitch-client-id>"
+TWITCH_CLIENT_SECRET="<twitch-client-secret>"
+# Tumblr app (tumblr provider — your REAL dashboard feed)
+TUMBLR_CLIENT_ID="<tumblr-consumer-key>"
+TUMBLR_CLIENT_SECRET="<tumblr-consumer-secret>"
+# Pinterest app (pinterest provider — your own pins; no home-feed API)
+PINTEREST_CLIENT_ID="<pinterest-app-id>"
+PINTEREST_CLIENT_SECRET="<pinterest-app-secret>"
+# LinkedIn app (linkedin provider — account linking only; feeds are partner-gated)
+LINKEDIN_CLIENT_ID="<linkedin-client-id>"
+LINKEDIN_CLIENT_SECRET="<linkedin-client-secret>"
 # Optional: YouTube Data API key — lights up channel NAME search for the
 # Thingtime-managed virtual subscription list (ids/URLs/@handles work keyless)
 YOUTUBE_API_KEY="<youtube-data-api-key>"

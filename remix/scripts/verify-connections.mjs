@@ -304,6 +304,14 @@ const run = async () => {
     'catalog carries the real home-timeline providers',
     ['reddit-account', 'mastodon-account', 'bluesky-account'].every((id) => (catalog.body?.providers || []).some((provider) => provider.id === id))
   );
+  check(
+    'catalog carries the remaining SSO scaffolds',
+    ['x', 'twitch', 'tumblr', 'pinterest', 'linkedin'].every((id) => (catalog.body?.providers || []).some((provider) => provider.id === id && provider.auth === 'oauth2'))
+  );
+  // stale-while-revalidate: a defer read serves the stored page with ZERO
+  // provider fan-out (synced is empty), so first paint never blocks on I/O
+  const deferRead = await api('/api/v1/connections/feed?limit=5&sync=defer', { cookie: bo.cookie });
+  check('sync=defer read skips the provider fan-out', deferRead.status === 200 && (deferRead.body?.synced || []).length === 0);
   const bskyCatalog = (catalog.body?.providers || []).find((provider) => provider.id === 'bluesky-account');
   check(
     'bluesky-account is credential-auth with a masked app-password field',

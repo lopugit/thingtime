@@ -59,7 +59,7 @@ export const ConnectionsFeedPage = () => {
   const deepenedRef = React.useRef(false);
 
   const load = React.useCallback(
-    async (connection: string | null, cursor: string | null) => {
+    async (connection: string | null, cursor: string | null, deferSync = false) => {
       const seq = ++requestSeq.current;
       setLoading(true);
       const startedAt = Date.now();
@@ -67,7 +67,8 @@ export const ConnectionsFeedPage = () => {
         const resp = await api.v1.connections.feed({
           connection: connection || undefined,
           cursor: cursor || undefined,
-          limit: PAGE_SIZE
+          limit: PAGE_SIZE,
+          ...(deferSync ? { sync: 'defer' } : {})
         });
         if (seq !== requestSeq.current) return;
         const merged = mergeReactionOverlays(startedAt, (resp.posts || []) as PublicPost[]);
@@ -104,7 +105,11 @@ export const ConnectionsFeedPage = () => {
     setPosts(readLocalCache<PublicPost[]>(feedCacheKey(activeConnection)) || []);
     setNextCursor(null);
     deepenedRef.current = false;
-    load(activeConnection, null);
+    // stale-while-revalidate: the defer read paints the stored feed instantly
+    // (no provider fan-out on the request), then the full read syncs fresh —
+    // a second request, because serverless can't background work after a
+    // response. The seq guard makes the fresh read supersede cleanly.
+    load(activeConnection, null, true).then(() => load(activeConnection, null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConnection, load]);
 
