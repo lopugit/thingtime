@@ -29,6 +29,16 @@ for (const filename of callers) {
   assert.equal((source.match(/^\s+uses:/gm) ?? []).length, 1, `${filename} must contain exactly one reusable-workflow call`);
 }
 
+const developPreviewCaller = readFileSync(
+  resolve(workflowsRoot, 'develop-pr-preview.yml'),
+  'utf8'
+);
+assert.match(
+  developPreviewCaller,
+  /^      pr_number: \$\{\{ fromJSON\(inputs\.pr_number \|\| '0'\) \}\}$/m,
+  'develop-pr-preview.yml must convert the manual dispatch string to the reusable workflow number type'
+);
+
 const promotionCaller = readFileSync(
   resolve(workflowsRoot, 'promote-features-to-main.yml'),
   'utf8'
@@ -38,6 +48,15 @@ const promotionJobsStart = promotionCaller.indexOf('\njobs:\n');
 assert.ok(
   promotionPermissionsStart >= 0 && promotionJobsStart > promotionPermissionsStart,
   'promote-features-to-main.yml must retain a top-level permissions block'
+);
+const promotionPermissions = promotionCaller.slice(
+  promotionPermissionsStart,
+  promotionJobsStart
+);
+assert.match(
+  promotionPermissions,
+  /^  actions: write$/m,
+  'promote-features-to-main.yml must grant the protected promoter permission to dispatch its resolver'
 );
 
 const filesUnder = (root) => {
