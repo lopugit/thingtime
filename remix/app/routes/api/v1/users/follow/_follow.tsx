@@ -1,8 +1,9 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { followStatus } from '~/api/utils/messenger/follows';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import { followStatus, toggleFollow } from '~/api/utils/messenger/follows';
+import { resolveSocialTarget, setFollow } from '~/api/utils/users/social';
 
 // GET /api/v1/users/follow?username= | ?userId= — follow relationship between
 // the caller and that user (following / followsYou) plus their counts.
@@ -22,22 +23,57 @@ export const loader = async ({ request }: { request: Request }) => {
   return json(result);
 };
 
-// POST /api/v1/users/follow — { username | userId, follow: boolean } — follow
-// or unfollow. Following someone routes their future DMs straight to your
-// inbox instead of message requests.
+// POST /api/v1/users/follow — { userId | username, follow? } — follow or
+// unfollow another user (one-way, no approval). Omitting `follow` toggles;
+// passing it makes the call idempotent. Edges are minted through the messenger
+// follow graph (crystal.followKey) so DM request bucketing and the social read
+// endpoints (/users/relationships, /users/connections — both filter on
+// ownerId/targetId only) all see the same edge shape; a genuinely NEW follow
+// emits a new-follower notification, and following someone routes their future
+// DMs straight to your inbox instead of message requests.
 export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
+
   const limit = await enforceRateLimit(request, 'users.follow', `user:${user.id}`);
   if (!limit.allowed) {
-    return json({ ok: false, error: 'That is a lot of following 🌸' }, rateLimitedResponseInit(limit));
+    return json(
+      { ok: false, error: 'You’re following very enthusiastically — take a breather 🌸' },
+      rateLimitedResponseInit(limit)
+    );
   }
+
   const body = await readJsonBody(request, 16 * 1024);
-  const result = await toggleFollow(user.id, body);
+  const target = await resolveSocialTarget({ userId: body?.userId, username: body?.username });
+  if (!target?._id) {
+    return json({ ok: false, error: 'User not found' }, { status: 404 });
+  }
+  const targetId = String(target._id);
+  if (targetId === user.id) {
+    return json({ ok: false, error: 'You already have your own undivided attention 💅' }, { status: 400 });
+  }
+
+  // The shared social mutation owns toggle/idempotency, the canonical
+  // home-pinned followKey write, and winner-only notification emission.
+  const result = await setFollow(user, target, body?.follow);
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
-  return json(result);
+
+  // Re-read after the write so the response carries honest post-toggle counts
+  // (the profile UI reconciles its optimistic followerCount from this).
+  const status = await followStatus(user.id, { userId: targetId });
+  if (status.ok === false) {
+    return json(result);
+  }
+  return json({
+    ok: true,
+    following: status.following,
+    followsYou: status.followsYou,
+    followerCount: status.followerCount,
+    followingCount: status.followingCount,
+    user: status.user
+  });
 };

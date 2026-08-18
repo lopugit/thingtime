@@ -73,7 +73,7 @@ export const MessengerNotifications = () => {
           const where = chatDisplayName(chat, user.id);
           lopu({
             title: `💬 ${from}${chat.chatType === 'dm' ? '' : ` in ${where}`}`,
-            description: last.systemType ? undefined : last.text.slice(0, 120) || undefined,
+            description: last.systemType ? undefined : last.text.slice(0, 120) || (last.attachmentCount ? '📎 Attachment' : undefined),
             status: 'info',
             duration: 8000,
             link: { label: 'Open chat', href: `/messages?chat=${chat.id}` }

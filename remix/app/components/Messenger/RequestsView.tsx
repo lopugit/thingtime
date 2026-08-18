@@ -82,7 +82,7 @@ export const RequestsView = ({
                 {chatDisplayName(chat, viewerId)}
               </Box>
               <Box fontSize="12px" color="var(--tt-muted, #9a9aa6)" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
-                {chat.lastMessage?.text || 'Wants to chat with you'}
+                {chat.lastMessage?.text || (chat.lastMessage?.attachmentCount ? '📎 Attachment' : 'Wants to chat with you')}
               </Box>
             </Box>
             <Button

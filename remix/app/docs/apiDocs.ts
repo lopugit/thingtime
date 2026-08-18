@@ -95,7 +95,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             workflowRuns: [{ kind: 'ci-workflow-run', runId: 31303934385, status: 'in_progress' }],
             events: [{ kind: 'ci-event', eventType: 'workflow_run', statusTo: 'in_progress' }]
           },
-          integration: { repository: 'lopugit/thingtime', controlPlaneRef: 'github-actions', githubAppConfigured: true }
+          integration: {
+            repository: 'lopugit/thingtime',
+            controlPlaneRef: 'github-actions',
+            githubAppConfigured: true,
+            providerRouterConfigured: true,
+            vercelRunnerConfigured: true,
+            vercelRunnerReady: true,
+            vercelRunnerMissing: []
+          }
         }
       },
       { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
@@ -111,7 +119,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Admins can request the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. Workflow names and inputs are server-allowlisted; arbitrary workflow paths and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
-    steps: ['Choose an allowlisted workflow and target ref.', 'POST optional allowlisted inputs.', 'Follow the returned dispatch id in /api/v1/admin/ci.'],
+		steps: [
+			'Choose an allowlisted workflow and target ref.',
+			'POST optional allowlisted inputs.',
+			'Follow the returned dispatch id in /api/v1/admin/ci.'
+		],
     requestExamples: [
       {
         name: 'Retry conflict resolution',
@@ -126,7 +138,69 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'GitHub accepted the dispatch.',
         body: { ok: true, dispatchId: 'ci-example', workflowFile: 'resolve-pr-conflicts.yml', ref: 'develop', controlPlaneRef: 'github-actions' }
       },
-      { status: 502, description: 'GitHub could not accept the request.', body: { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' } }
+			{
+				status: 502,
+				description: 'GitHub could not accept the request.',
+				body: { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' }
+			}
+    ]
+  }),
+  endpoint({
+    id: 'admin-ci-automations',
+    group: 'admin',
+    title: 'Set a CI automation execution provider',
+    endpoint: '/api/v1/admin/ci/automations',
+    summary: 'Enable or disable one allowlisted automation and choose GitHub-hosted Actions or Vercel Sandbox compute.',
+    detail:
+      'Stores one protected ci-automation Thing per allowlisted workflow. Vercel execution keeps the reviewed workflow definition on the protected github-actions branch and runs its Linux jobs on a short-lived Vercel Sandbox registered as a uniquely labelled GitHub self-hosted runner. Unsupported workloads remain locked to GitHub.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: ['Choose an allowlisted workflow.', 'Choose github-actions or vercel-sandbox.', 'POST the policy and inspect the resulting audit event in CI Control.'],
+    requestExamples: [
+      {
+        name: 'Run the conflict resolver on Vercel',
+        description: 'Future automatic and manual resolver runs route through Vercel Workflow and Sandbox.',
+        method: 'POST',
+        body: { workflow: 'resolve-conflicts', executionProvider: 'vercel-sandbox', enabled: true }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Policy updated.', body: { ok: true, policy: { key: 'resolve-conflicts', executionProvider: 'vercel-sandbox', enabled: true } } },
+      { status: 409, description: 'Provider unsupported for this workflow.', body: { ok: false, error: 'This automation requires a GitHub-hosted runner' } },
+      {
+        status: 409,
+        description: 'Vercel provider setup is incomplete.',
+        body: {
+          ok: false,
+          error: 'Vercel Sandbox is not ready. Complete the GitHub App, provider router, and Vercel runtime setup first.',
+          missing: ['THINGTIME_GITHUB_APP_PRIVATE_KEY']
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'integration-ci-provider-route',
+    group: 'integrations',
+    title: 'Route trusted CI work to its selected compute provider',
+    endpoint: '/api/v1/integrations/ci/route',
+    summary: 'Accept a short-lived HMAC-signed request from the protected control plane and route or continue the workflow.',
+    detail:
+      'This internal endpoint never accepts arbitrary workflow paths or runners. It validates the signed raw body, freshness window, repository configuration, workflow allowlist, and stored automation policy. Vercel failures fall back to the already-waiting GitHub run and are recorded in ci-event history.',
+    auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
+    methods: ['POST'],
+    steps: ['Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET using HMAC-SHA256.', 'POST within ten minutes of requestedAt.', 'Honor execute and executionProvider in the response.'],
+    requestExamples: [
+      {
+        name: 'Route an automatic resolver trigger',
+        description: 'The protected router job asks Thingtime whether this run should continue on GitHub or move to Vercel.',
+        method: 'POST',
+        headers: { 'X-Thingtime-CI-Signature': 'sha256=<hmac>' },
+        body: { workflow: 'resolve-conflicts', deliveryKey: '123:1:push', actorId: 'github-actions[bot]', requestedAt: '2026-08-10T01:00:00.000Z', inputs: { branch: 'develop' } }
+      }
+    ],
+    responseExamples: [
+      { status: 202, description: 'Routing decision accepted.', body: { ok: true, execute: false, executionProvider: 'vercel-sandbox', dispatchId: 'ci-example' } },
+      { status: 403, description: 'Invalid signature.', body: { ok: false, error: 'Invalid route signature' } }
     ]
   }),
   endpoint({
@@ -143,7 +217,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [{ name: 'Reconcile', description: 'Refresh current GitHub state.', method: 'POST', body: {} }],
     responseExamples: [
       { status: 200, description: 'Reconciliation completed.', body: { ok: true, repository: 'lopugit/thingtime', touched: 72 } },
-      { status: 502, description: 'GitHub could not be queried.', body: { ok: false, error: 'GitHub reconciliation failed. Existing dashboard history was preserved.' } }
+			{
+				status: 502,
+				description: 'GitHub could not be queried.',
+				body: { ok: false, error: 'GitHub reconciliation failed. Existing dashboard history was preserved.' }
+			}
     ]
   }),
   endpoint({
@@ -156,8 +234,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Validates X-Hub-Signature-256 against the raw body with a constant-time HMAC-SHA256 comparison, rejects oversized payloads, allowlists the configured repository, and projects only bounded operational fields into protected Things.',
     auth: { mode: 'none', description: 'Public transport endpoint; every request requires a valid GitHub webhook signature.' },
     methods: ['POST'],
-    steps: ['Configure the GitHub App webhook secret.', 'Subscribe only to the required repository, PR, workflow, check, deployment, push, create, and delete events.', 'POSTs are idempotent by X-GitHub-Delivery.'],
-    requestExamples: [{ name: 'Signed GitHub delivery', description: 'Sent by GitHub App webhooks with signature and delivery headers.', method: 'POST', body: { action: 'synchronize', repository: { full_name: 'lopugit/thingtime' } } }],
+		steps: [
+			'Configure the GitHub App webhook secret.',
+			'Subscribe only to the required repository, PR, workflow, check, deployment, push, create, and delete events.',
+			'POSTs are idempotent by X-GitHub-Delivery.'
+		],
+		requestExamples: [
+			{
+				name: 'Signed GitHub delivery',
+				description: 'Sent by GitHub App webhooks with signature and delivery headers.',
+				method: 'POST',
+				body: { action: 'synchronize', repository: { full_name: 'lopugit/thingtime' } }
+			}
+		],
     responseExamples: [
       { status: 202, description: 'Verified event accepted.', body: { ok: true, accepted: true, touched: ['ci-example'] } },
       { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
@@ -173,10 +262,25 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Validates x-vercel-signature with a constant-time HMAC-SHA1 comparison over the raw body, then stores deployment and preview projections plus relational history Things. The webhook secret is never returned by any API.',
     auth: { mode: 'none', description: 'Public transport endpoint; every request requires a valid Vercel signature.' },
     methods: ['POST'],
-    steps: ['Create a project-scoped Vercel webhook.', 'Subscribe to deployment.created, deployment.ready, deployment.error, deployment.canceled, and deployment.deleted.', 'Store the one-time webhook secret in THINGTIME_VERCEL_WEBHOOK_SECRET.'],
-    requestExamples: [{ name: 'Signed Vercel delivery', description: 'Sent by Vercel with x-vercel-signature.', method: 'POST', body: { type: 'deployment.ready', payload: { deployment: { id: 'dpl_example', url: 'preview.example.app' } } } }],
+		steps: [
+			'Create a project-scoped Vercel webhook.',
+			'Subscribe to deployment.created, deployment.ready, deployment.error, deployment.canceled, and deployment.deleted.',
+			'Store the one-time webhook secret in THINGTIME_VERCEL_WEBHOOK_SECRET.'
+		],
+		requestExamples: [
+			{
+				name: 'Signed Vercel delivery',
+				description: 'Sent by Vercel with x-vercel-signature.',
+				method: 'POST',
+				body: { type: 'deployment.ready', payload: { deployment: { id: 'dpl_example', url: 'preview.example.app' } } }
+			}
+		],
     responseExamples: [
-      { status: 202, description: 'Verified deployment event accepted.', body: { ok: true, accepted: true, touched: ['ci-deployment', 'ci-preview'] } },
+			{
+				status: 202,
+				description: 'Verified deployment event accepted.',
+				body: { ok: true, accepted: true, touched: ['ci-deployment', 'ci-preview'] }
+			},
       { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
     ]
   }),
@@ -1138,6 +1242,59 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-temporary',
+    group: 'auth',
+    title: 'Temporary browser user',
+    endpoint: '/api/v1/auth/temporary',
+    summary: 'Creates or reuses a recoverable temporary browser session user.',
+    detail:
+      'This is the first-session bootstrap used by /things. A genuinely anonymous browser receives a normal, private user Thing, bounded storage subscription, browser session, and account-switcher roster entry. Repeating the request with that live session is idempotent and returns the same user; the endpoint never bypasses ordinary Thing ownership or ACL checks.',
+    auth: {
+      mode: 'optional',
+      description: 'A live cookie session is reused. Without one, the same-origin POST may create a rate-limited temporary account.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST once from a same-origin first-page loader; no body is required.',
+      'Keep the returned httpOnly auth and account-roster cookies so the temporary space survives reloads and later account additions.',
+      'Treat user.temporary as the signal that this is a browser-scoped temporary identity.',
+      'All Thing reads and writes continue through the ordinary authenticated API paths.'
+    ],
+    requestExamples: [
+      {
+        name: 'Start or recover a temporary space',
+        description: 'Idempotently resolve the browser session used by /things.',
+        method: 'POST'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 201,
+        description: 'A temporary account and browser session were created.',
+        body: {
+          ok: true,
+          user: {
+            id: '64f000000000000000000003',
+            username: 'guest-a1b2c3d4e5f6',
+            displayName: 'Anonymous',
+            temporary: true
+          },
+          reused: false
+        }
+      },
+      {
+        status: 200,
+        description: 'The browser already had a live user session.',
+        body: { ok: true, user: { id: '64f000000000000000000003', temporary: true }, reused: true }
+      },
+      {
+        status: 429,
+        description: 'The per-IP temporary-account creation budget was exhausted.',
+        body: { ok: false, error: 'Could not start another temporary space yet — please try again later' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-password-reset',
     group: 'auth',
     title: 'Password reset request',
@@ -1313,10 +1470,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/auth/service-account',
     summary: 'Creates a service-owned account with a non-expiring bearer token and 5 GiB storage allowance.',
     detail:
-      'Use this endpoint to connect other apps to Thingtime backend data. The account is public self-service but must verify its email within seven days.',
+      'Use this endpoint to connect other apps to Thingtime backend data. The account is public self-service but must verify its email within seven days. Provisioning is rate limited per IP (each call mints a permanent token) and the request body is capped at 16 KiB.',
     auth: {
       mode: 'none',
-      description: 'Public endpoint. Email verification is required after creation.'
+      description: 'Public endpoint, rate limited per IP. Email verification is required after creation.'
     },
     methods: ['POST'],
     steps: [
@@ -1372,9 +1529,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 400,
         description: 'A valid email is required.',
         body: { ok: false, error: 'A valid email is required' }
+      },
+      {
+        status: 429,
+        description: 'Too many provisioning requests from this IP inside the window.',
+        body: { ok: false, error: 'Too many service accounts from this address — please wait before provisioning more 🌸' }
       }
     ],
-    notes: ['The bearer token is intentionally non-expiring; rotate it by creating a replacement service account when needed.']
+    notes: [
+      'The bearer token is intentionally non-expiring; rotate it by creating a replacement service account when needed.',
+      'Provisioning is rate limited per IP and fail-closed: if the limiter store is unreachable the route returns 503 rather than minting unmetered tokens.'
+    ]
   }),
   endpoint({
     id: 'auth-two-factor',
@@ -2200,6 +2365,335 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ]
   }),
+	endpoint({
+		id: 'attachment-uploads',
+		group: 'attachments',
+		title: 'Start attachment upload',
+		endpoint: '/api/v1/attachments/uploads',
+		summary: 'Reserves account storage and starts a private, checksummed S3 multipart upload.',
+		detail:
+			'Creates a billable pending attachment before S3 accepts any bytes, preventing concurrent uploads from oversubscribing the account storage tier. ' +
+			'A client-generated requestId makes ambiguous starts idempotent for the same owner, exact metadata, and purpose. The server derives an owner-scoped opaque attachment id, so another account using the same requestId neither collides nor learns that it exists. The object key and multipart id remain private. Request presigned URLs in bounded batches from /uploads/parts.',
+		auth: {
+			mode: 'session-or-bearer',
+			description:
+				'Requires a full revocable user session (httpOnly cookie or its Bearer session JWT); PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST a stable random requestId, filename, browser-reported contentType, exact sizeBytes, and the surface purpose: post, comment, message, profile-avatar, profile-banner, or custom-emoji.',
+			'Split the file using partSizeBytes; the final part may be smaller.',
+			'Compute base64 SHA-256 for each part and request its signed PUT URL.',
+			'Abort unused uploads and honor deferred/retryAt while the conservative storage reservation settles.'
+		],
+		requestExamples: [
+			{
+				name: 'Reserve a video upload',
+				description: 'The MIME value is advisory; final type comes from server-side magic-byte detection.',
+				method: 'POST',
+				body: {
+					requestId: '3bda8208-625c-4f5d-941f-348020021848',
+					filename: 'launch.mp4',
+					contentType: 'video/mp4',
+					sizeBytes: 18874368
+				}
+			},
+			{
+				name: 'Reserve a profile avatar',
+				description: 'Profile media is limited to a supported raster image of at most 64 MiB.',
+				method: 'POST',
+				body: {
+					requestId: '8de83d1a-898b-45ad-b9a2-caf2a99b27e3',
+					filename: 'avatar.webp',
+					contentType: 'image/webp',
+					sizeBytes: 524288,
+					purpose: 'profile-avatar'
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Quota reserved and MPU created.',
+				body: {
+					ok: true,
+					upload: {
+						id: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e',
+						partSizeBytes: 8388608,
+						partCount: 3,
+						expiresAt: '2026-08-10T00:00:00.000Z'
+					}
+				}
+			},
+			{ status: 507, description: 'Storage tier allowance exceeded.', body: { ok: false, error: 'This would exceed the account storage allowance' } }
+		],
+		notes: [
+			'The bucket remains private. Browser uploads use short-lived presigned UploadPart URLs, not public object access.',
+			'Post, comment, message, and custom-emoji attachments are unavailable while a custom MongoDB data endpoint is active. Profile media remains home-pinned identity data and may still use the private profile purposes.',
+			'Custom emojis accept one GIF, PNG, JPEG, or WebP image up to 512 KiB. Profile media accepts one supported raster image up to 64 MiB.'
+		]
+	}),
+	endpoint({
+		id: 'attachment-upload-parts',
+		group: 'attachments',
+		title: 'Sign attachment parts',
+		endpoint: '/api/v1/attachments/uploads/parts',
+		summary: 'Issues checksum-locked presigned UploadPart URLs in bounded batches.',
+		detail:
+			'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'Compute SHA-256 over each raw file slice and base64-encode the 32-byte digest.',
+			'Request at most 20 unique part numbers per call.',
+			'PUT each slice to its URL with only the returned checksum header; use a Blob with an empty MIME type.',
+			'Retry a failed part by requesting a fresh URL before the upload expires.'
+		],
+		requestExamples: [
+			{
+				name: 'Sign two parts',
+				description: 'Checksums are illustrative base64 SHA-256 values.',
+				method: 'POST',
+				body: {
+					uploadId: '3bda8208-625c-4f5d-941f-348020021848',
+					parts: [
+						{ partNumber: 1, checksumSha256: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
+						{ partNumber: 2, checksumSha256: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=' }
+					]
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Signed part URLs.',
+				body: {
+					ok: true,
+					parts: [
+						{
+							partNumber: 1,
+							url: 'https://example-private-bucket.s3.ap-southeast-2.amazonaws.com/objects/example?...',
+							expiresAt: '2026-08-09T00:10:00.000Z',
+							headers: { 'x-amz-checksum-sha256': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }
+						}
+					]
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'attachment-upload-complete',
+		group: 'attachments',
+		title: 'Complete attachment upload',
+		endpoint: '/api/v1/attachments/uploads/complete',
+		summary: 'Verifies every S3 part and publishes canonical attachment metadata idempotently.',
+		detail:
+			'The server lists parts itself, requires consecutive numbers, exact expected sizes, ETags, and SHA-256 checksums, then completes and HEAD-verifies the object. ' +
+			'It reads only a small prefix to detect a narrow inline-safe raster/video type. Active and generic formats stay application/octet-stream downloads. Repeating a successful request is safe.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'Wait for every direct S3 PUT to succeed.',
+			'POST the uploadId; do not send browser-trusted ETags or sizes.',
+			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata.',
+			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields.'
+		],
+		requestExamples: [
+			{
+				name: 'Finalize upload',
+				description: 'The server derives the part manifest from S3.',
+				method: 'POST',
+				body: { uploadId: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e' }
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Ready attachment metadata.',
+				body: {
+					ok: true,
+					attachment: {
+						id: '3bda8208-625c-4f5d-941f-348020021848',
+						name: 'launch.mp4',
+						size: 18874368,
+						contentType: 'video/mp4',
+						mediaKind: 'video'
+					}
+				}
+			},
+			{
+				status: 409,
+				description: 'Parts are incomplete; the same MPU can be retried.',
+				body: {
+					ok: false,
+					error: 'Upload parts are incomplete',
+					code: 'upload_parts_retryable',
+					retryable: true
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'attachment-upload-abort',
+		group: 'attachments',
+		title: 'Cancel attachment upload',
+		endpoint: '/api/v1/attachments/uploads/abort',
+		summary: 'Cancels an unattached upload and safely schedules its reserved-storage refund.',
+		detail:
+			'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Bound files must be removed through their owning post, comment, message, profile, or custom-emoji lifecycle.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST either the returned upload id or the original requestId when the user removes a draft file or abandons composition; lookup remains owner-scoped.',
+			'Treat ok:true as idempotent.',
+			'When deferred is true, quota remains reserved until the cleanup job passes retryAt and completes its separated verification.'
+		],
+		requestExamples: [
+			{
+				name: 'Cancel draft',
+				description: 'Make object bytes inaccessible before refund.',
+				method: 'POST',
+				body: { uploadId: '3bda8208-625c-4f5d-941f-348020021848' }
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Cancellation recorded; quota remains reserved during safe MPU settlement.',
+				body: { ok: true, deferred: true, retryAt: '2026-08-17T00:00:00.000Z' }
+			},
+			{ status: 200, description: 'Already absent or fully refunded.', body: { ok: true, deferred: false } }
+		]
+	}),
+	endpoint({
+		id: 'attachment-delete',
+		group: 'attachments',
+		title: 'Delete attachment',
+		endpoint: '/api/v1/attachments/delete',
+		summary: 'Deletes an owned attachment object before refunding its storage.',
+		detail:
+			'This explicit owner route is idempotent. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota so bucket versioning cannot retain unmetered noncurrent bytes. Post/comment cascades, message deletion, profile replacement, and custom-emoji retirement use the same object-first rule.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST the canonical attachment id.',
+			'On success, remove it from local draft state.',
+			'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
+		],
+		requestExamples: [
+			{
+				name: 'Delete file',
+				description: 'Delete one owned attachment.',
+				method: 'POST',
+				body: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+			}
+		],
+		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
+	}),
+	endpoint({
+		id: 'attachment-content',
+		group: 'attachments',
+		title: 'Read attachment content',
+		endpoint: '/api/v1/attachments/content',
+		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
+		detail:
+			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
+			'Only magic-byte-verified AVIF/GIF/JPEG/PNG/WebP and MP4/WebM may render inline. Add download=1 to force attachment/octet-stream for every type.',
+		auth: {
+			mode: 'optional',
+			description:
+				'Anonymous access works only for a publicly viewable post/comment or public profile slot. Messages and custom emojis require an authenticated eligible viewer.'
+		},
+		methods: ['GET'],
+		steps: [
+			'GET with id; optionally add download=1.',
+			'Follow the 302 to the short-lived private object URL.',
+			'Use the same stable endpoint again after expiry; never persist the presigned target.',
+			'Treat 404 uniformly for missing and unauthorized attachments.'
+		],
+		requestExamples: [
+			{
+				name: 'Inline-safe content',
+				description: 'Render only if the server-vetted mediaKind is image/video.',
+				method: 'GET',
+				query: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+			},
+			{
+				name: 'Force download',
+				description: 'Download any file as opaque bytes.',
+				method: 'GET',
+				query: { id: '3bda8208-625c-4f5d-941f-348020021848', download: 1 }
+			}
+		],
+		responseExamples: [
+			{
+				status: 302,
+				description: 'Authorized short-lived S3 redirect.',
+				headers: {
+					'Cache-Control': 'private, no-store, max-age=0',
+					Location: 'https://example-private-bucket.s3.ap-southeast-2.amazonaws.com/objects/example?...'
+				}
+			},
+			{ status: 404, description: 'Missing or unauthorized.', body: { ok: false, error: 'Attachment not found' } }
+		]
+	}),
+	endpoint({
+		id: 'attachment-cleanup',
+		group: 'attachments',
+		title: 'Reap expired attachment drafts',
+		endpoint: '/api/v1/attachments/cleanup',
+		summary: 'Internal hourly job that deletes expired private objects before refunding reserved storage.',
+		detail:
+			'Vercel Cron calls this bounded, idempotent GET at minute 17 each hour. It scans at most 1,000 cleanup intents in expiry order with five workers and a 25-second wall-clock budget. Pending multipart cancellations that issued a part URL stay billed through an eight-day lifecycle-backed settlement window, then require two empty Abort/ListParts checks at least one hour apart before HEAD verification, exact-version deletion, and refund. MPUs with no issued part URL can refund after one empty verification. Deleting tombstones remain sweepable even after a post cascade crash. ' +
+			'There is no session, PAT, app-token, or service-account fallback.',
+		auth: {
+			mode: 'bearer',
+			description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
+		},
+		methods: ['GET'],
+		steps: [
+			'Configure CRON_SECRET only in the deployment environment.',
+			'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
+			'Monitor failed; a later invocation safely retries rows that remain conservatively charged.'
+		],
+		requestExamples: [
+			{
+				name: 'Scheduled cleanup',
+				description: 'Vercel supplies the private Authorization header automatically.',
+				method: 'GET'
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'One bounded cleanup pass.',
+				body: {
+					ok: true,
+					scanned: 12,
+					deleted: 9,
+					deferred: 1,
+					skipped: 1,
+					failed: 1,
+					hasMore: false,
+					stoppedForTimeBudget: false
+				}
+			},
+			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
+		],
+		notes: ['No response or log contains the cron secret. Mongo TTL deletion is intentionally disabled.']
+	}),
   endpoint({
     id: 'themes',
     group: 'themes',
@@ -2682,8 +3176,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET pages a chat newest-first with cursor and limit (max 100, default 40); pass threadRootId to scope the ' +
       'page to one thread. The response bundles customEmojis (a map of id to name, image, and animated for any ' +
       'custom reaction tokens on the page), nextCursor, threadRoot, members, chat, and myMember so one request ' +
-      'can paint a conversation. POST sends text up to 4000 characters with optional threadRootId or replyToId. ' +
-      'Replying to a pending message request accepts it, and sending marks the chat read up to your own message.',
+			'can paint a conversation. POST sends optional text up to 4000 characters plus as many as 25 purpose-matched private attachments, with optional threadRootId or replyToId. ' +
+			'Attachment messages require a stable client requestId; message insertion, exact attachment binding, pending-request acceptance, preview, and read receipt commit in one home transaction. ' +
+			'Replies and thread messages use the same contract. Every projected attachment contains stable metadata and a same-origin content path, never an S3 key or presigned URL.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -2692,7 +3187,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET with chatId, plus cursor and limit to page older messages newest-first.',
       'Pass threadRootId to read or post inside a single thread.',
-      'POST chatId and text (4000 characters max), with replyToId for inline replies.',
+			'POST chatId and optional text (4000 characters max), with replyToId for inline replies.',
+			'For files, first finish purpose=message uploads, then POST their attachmentIds plus one stable requestId. An attachment-only message is valid.',
       'Resolve custom:<emojiId> reaction tokens through the returned customEmojis map.',
       'Follow nextCursor until it is null to reach the start of history.'
     ],
@@ -2707,7 +3203,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Send a message',
         description: 'Post a message to the chat.',
         method: 'POST',
-        body: { chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', text: 'Shipping the messenger docs today.' }
+				body: {
+					chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001',
+					text: 'Shipping the messenger docs today.',
+					requestId: '9f59e32b-9509-43ef-9a0f-abde27b6d79c',
+					attachmentIds: ['att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e']
+				}
       },
       {
         name: 'Reply in a thread',
@@ -2731,15 +3232,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               id: 'c0ffee12-bbbb-4bbb-8bbb-000000000002',
               senderId: 'c0ffee12-cccc-4ccc-8ccc-000000000003',
               text: 'See you there',
+							attachments: [],
               createdAt: '2026-08-03T10:14:00.000Z'
             }
           ],
           customEmojis: {},
           nextCursor: null,
           threadRoot: null,
-          members: [
-            { user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'member' }
-          ],
+					members: [{ user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'member' }],
           chat: { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', chatType: 'group', name: 'Weekend plans' },
           myMember: { role: 'member', muted: false }
         }
@@ -2750,7 +3250,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'Not a member of this chat' }
       }
     ],
-    notes: ['Sending draws from the chats.message rate-limit bucket (120 messages per minute).']
+		notes: [
+			'Sending draws from the chats.message rate-limit bucket (120 messages per minute).',
+			'Message rows are server-managed conversation plumbing; uploaded object bytes are billed exactly once through their attachment Things and refunded only after exact-version S3 deletion.',
+			'Browser attachment sends require same-origin JSON and a full user account. Text-only session/Bearer clients retain the existing contract.'
+		]
   }),
   endpoint({
     id: 'chats-messages-edit',
@@ -2760,7 +3264,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Edits the text of a message the caller sent.',
     detail:
       'Only the author can edit a message. The new text replaces the old and the message is stamped with ' +
-      'editedAt so clients can show an edited marker. The 4000-character limit applies just as it does on send.',
+			'editedAt so clients can show an edited marker. The 4000-character limit applies just as it does on send. Text may be empty only while at least one existing attachment remains.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -2808,7 +3312,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Soft-deletes a message, leaving a placeholder in the history.',
     detail:
       'The author or a chat admin can delete a message. Deletion is soft: the row stays as a placeholder, its ' +
-      'text is cleared, and its reactions are removed, so conversation flow and reply anchors survive.',
+			'text is cleared, and its reactions are removed, so conversation flow and reply anchors survive. Every bound object version is permanently deleted before its attachment row is removed and account quota is refunded.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -2817,6 +3321,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST the message id to delete.',
       'The author or a chat admin may delete; anyone else gets a 403.',
+			'Wait for exact-version attachment cleanup and quota refund before the placeholder is committed.',
       'Render the surviving placeholder row as a deleted-message marker.',
       'Expect reactions on the message to be removed with it.'
     ],
@@ -3219,13 +3724,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             name: 'Thingtime HQ',
             sections: [{ id: 'c0ffee12-eeee-4eee-8eee-000000000005', name: 'Announcements' }]
           },
-          members: [
-            { user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'owner' }
-          ],
+					members: [{ user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'owner' }],
           memberCount: 12,
-          channels: [
-            { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000002', name: 'general', memberCount: 12, joined: true }
-          ]
+					channels: [{ id: 'c0ffee12-aaaa-4aaa-8aaa-000000000002', name: 'general', memberCount: 12, joined: true }]
         }
       },
       {
@@ -3514,11 +4015,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'GET with chatId or communityId returns the emojis usable in that scope — the community set plus your ' +
       'personal set — and requires membership for community scopes. GET with ids (comma-separated emoji ids) ' +
-      'resolves specific emojis with their image bytes: message payloads reference reacted emojis as ' +
-      '{ name, animated } only, and clients fetch images once by id and cache them. POST uploads one: a name of ' +
-      '2-32 characters matching [a-z0-9_-], an image as a base64 data URI (gif, webp, png, apng, or jpeg, roughly ' +
-      '512 KB of binary), and an optional communityId to share it with a community instead of keeping it ' +
-      'personal. Names are unique per scope, and messages react with the custom:<emoji id> token.',
+			'resolves specific emoji metadata with a stable same-origin content URL: message payloads reference reacted emojis as ' +
+			'{ name, animated } only, and clients fetch authorized images once by id and cache them. POST atomically binds one completed purpose=custom-emoji attachment to a name of ' +
+			'2-32 characters matching [a-z0-9_-] and an optional communityId. Images are private, quota-accounted GIF, PNG, JPEG, or WebP files up to 512 KiB; S3 identifiers never enter the emoji crystal or response. ' +
+			'Names are unique per scope, and messages react with the custom:<emoji id> token. Legacy inline data-URI rows remain read-compatible but cannot be created.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -3526,9 +4026,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with chatId or communityId to list the emojis usable there.',
-      'POST name, image data URI, and optional communityId to upload one.',
+			'Complete one purpose=custom-emoji upload, then POST name, attachmentId, and optional communityId to bind it.',
       'Keep names 2-32 characters of lowercase letters, digits, underscores, and hyphens.',
-      'Stay under the roughly 512 KB binary image cap.',
+			'Use one GIF, PNG, JPEG, or WebP image no larger than 512 KiB.',
       'React with custom:<emoji id> once the upload lands.'
     ],
     requestExamples: [
@@ -3544,7 +4044,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         method: 'POST',
         body: {
           name: 'party-blob',
-          image: 'data:image/gif;base64,R0lGODlh...',
+					attachmentId: 'att_8d9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e',
           communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004'
         }
       }
@@ -3564,7 +4064,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'An emoji with that name already exists here' }
       }
     ],
-    notes: ['Uploads draw from the emojis.write rate-limit bucket (30 uploads per hour).']
+		notes: [
+			'Uploads draw from the emojis.write rate-limit bucket (30 uploads per hour).',
+			'The attachment reservation uses the account storage tier and is refunded only after exact-version deletion.',
+			'POST requires same-origin JSON and a full user account; custom Mongo data planes cannot bind home S3 objects.'
+		]
   }),
   endpoint({
     id: 'emojis-delete',
@@ -3574,7 +4078,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Deletes a custom emoji.',
     detail:
       'The uploader can always delete their own emoji, and community admins can delete any emoji in their ' +
-      'community set. Existing custom:<emoji id> reaction tokens simply stop resolving once the emoji is gone.',
+			'community set. The exact S3 object version is deleted before its quota reservation is refunded and the emoji row is retired. Existing custom:<emoji id> reaction tokens simply stop resolving once the emoji is gone.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -3606,63 +4110,6 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'Not allowed to delete this emoji' }
       }
     ]
-  }),
-  endpoint({
-    id: 'users-follow',
-    group: 'messenger',
-    title: 'Follow user',
-    endpoint: '/api/v1/users/follow',
-    summary: 'Reads or changes the follow relationship with another user.',
-    detail:
-      'GET with username or userId returns the user, whether you follow them (following), whether they follow ' +
-      'you (followsYou), and their follower and following counts. POST with follow: true or false follows or ' +
-      'unfollows. Follow state matters in Messenger: when you follow someone, their DMs arrive straight in your ' +
-      'inbox instead of the message-requests pile.',
-    auth: {
-      mode: 'session-or-bearer',
-      description: 'Requires an auth cookie or Authorization: Bearer token.'
-    },
-    methods: ['GET', 'POST'],
-    steps: [
-      'GET with username or userId to read the relationship and counts.',
-      'POST the same identifier with follow: true to follow or false to unfollow.',
-      'Show followsYou to explain why a DM skipped message requests.',
-      'Handle 404 when the user does not exist.'
-    ],
-    requestExamples: [
-      {
-        name: 'Read a relationship',
-        description: 'Check the follow state with one user.',
-        method: 'GET',
-        query: { username: 'ada-lovelace' }
-      },
-      {
-        name: 'Follow a user',
-        description: 'Start following by username.',
-        method: 'POST',
-        body: { username: 'ada-lovelace', follow: true }
-      }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'Relationship returned.',
-        body: {
-          ok: true,
-          user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' },
-          following: true,
-          followsYou: false,
-          followerCount: 42,
-          followingCount: 17
-        }
-      },
-      {
-        status: 404,
-        description: 'User not found.',
-        body: { ok: false, error: 'User not found' }
-      }
-    ],
-    notes: ['Follow changes draw from the users.follow rate-limit bucket (60 requests per minute).']
   }),
   endpoint({
     id: 'algorithms',
@@ -5270,7 +5717,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/comment',
     summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user.',
     detail:
-      'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can carry photos, marketplace listings, and thingtime things. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing so private or circle-limited posts cannot be commented on by unauthorized viewers.',
+			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can carry linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -5279,8 +5726,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST id and text for a simple comment, or id plus post fields (type, images, listing, thing, tags) for a rich comment.',
+			'For files, finish purpose=comment uploads and POST their attachmentIds with one stable shareId. The full-account browser mutation must be same-origin JSON.',
       'The target thing (post or comment) must be visible to the current user.',
-      'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount) — use it and commentCount to update the card.',
+			'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount, attachments) — use it and commentCount to update the card.',
       'Handle 401 unauthenticated, 404 not visible, and 400 invalid payload.'
     ],
     requestExamples: [
@@ -5295,6 +5743,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Comment with photos, like a full post.',
         method: 'POST',
         body: { id: 'post_123', type: 'image', text: 'Here it is!', images: ['https://example.com/photo.jpg'] }
+			},
+			{
+				name: 'Add attachment reply',
+				description: 'Reply with a private uploaded image and no text.',
+				method: 'POST',
+				body: {
+					id: 'comment_123',
+					shareId: '6db9fbc7-90ec-47ac-878d-3ead5b0ce27d',
+					type: 'text',
+					text: '',
+					attachmentIds: ['att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e']
+				}
       }
     ],
     responseExamples: [
@@ -5311,11 +5771,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             reactionCounts: {},
             viewerReactions: [],
             commentCount: 0,
+						attachments: [],
             targetId: 'post_123'
           },
           commentCount: 1
         }
       }
+		],
+		notes: [
+			'Uploaded bytes reserve the author account storage tier and remain private behind the stable authorized content route.',
+			'Deleting a comment or any ancestor permanently deletes every descendant attachment S3 version before its quota is refunded.',
+			'Custom Mongo data planes cannot bind or authorize home S3 comment attachments.'
     ]
   }),
   endpoint({
@@ -5352,6 +5818,84 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Post deleted.',
         body: { ok: true }
       }
+    ]
+  }),
+  endpoint({
+    id: 'things-bulk',
+    group: 'things',
+    title: 'Bulk move / copy / delete / share',
+    endpoint: '/api/v1/things/bulk',
+    summary: 'Multi-select operations for /things: move, copy, delete, or share up to 100 owned things in one request.',
+    detail:
+      'Each id runs through the exact single-item path the dedicated endpoints use (updateThing, createThing, deleteThing), so every ownership, protected-kind, folder, and validation rule applies identically — bulk is a loop, never a second code path. move rewrites each thing’s folderId (folderId null or omitted = the /things root; the destination must be one of YOUR folder things). copy mints brand-new things through the real create path (fresh shareId, storage accounting, acl preserved) — comment/reaction/save/share things can’t be copied; copying a FOLDER copies its whole subtree (bounded at 500 things), skipping uncopyable kinds with per-item copied/skipped counts. delete cascades like the single delete (attached comments/reactions/saves go with each thing; deleting a folder re-parents its contents to the folder’s parent instead of deleting them). share applies an acl (or legacy visibility circle) to each thing; with recursive true, folders also apply it to everything inside (same 500-thing bound) — inherit-locked things are counted as skipped, never silently changed. Results are per-item: one bad id never fails the batch.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST op (move, copy, delete, or share), ids (1–100 shareIds you own), and folderId for move/copy destinations.',
+      'share additionally takes acl (or legacy visibility) and optional recursive: true to flow a folder’s audience to everything inside.',
+      'Read the per-item results list — each entry carries ok plus error (failures), newId (copies), and copied/applied/skipped counts for recursive folder ops.',
+      'succeeded and failed counts summarise the batch.',
+      'Handle 401 unauthenticated, 400 malformed batches, and 404 for an unknown destination folder.'
+    ],
+    requestExamples: [
+      {
+        name: 'Move things into a folder',
+        description: 'File two things inside an owned folder thing.',
+        method: 'POST',
+        body: { op: 'move', ids: ['thing_1', 'thing_2'], folderId: 'folder_abc' }
+      },
+      {
+        name: 'Copy a folder (recursive)',
+        description: 'Duplicate a folder and everything inside it at the root.',
+        method: 'POST',
+        body: { op: 'copy', ids: ['folder_abc'] }
+      },
+      {
+        name: 'Share a folder and its contents',
+        description: 'Make a folder and everything inside it friends-visible.',
+        method: 'POST',
+        body: { op: 'share', ids: ['folder_abc'], acl: ['-tt:all', 'tt:userFriends', 'tt:user'], recursive: true }
+      },
+      {
+        name: 'Bulk delete',
+        description: 'Delete a selection of owned things.',
+        method: 'POST',
+        body: { op: 'delete', ids: ['thing_1', 'thing_2'] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Batch processed (per-item results).',
+        body: {
+          ok: true,
+          op: 'move',
+          results: [
+            { id: 'thing_1', ok: true },
+            { id: 'thing_2', ok: false, error: 'Thing not found' }
+          ],
+          succeeded: 1,
+          failed: 1
+        }
+      },
+      {
+        status: 200,
+        description: 'Recursive folder copy (copied/skipped count the subtree).',
+        body: {
+          ok: true,
+          op: 'copy',
+          results: [{ id: 'folder_abc', ok: true, newId: 'thing_xyz', copied: 12, skipped: 1 }],
+          succeeded: 1,
+          failed: 0
+        }
+      }
+    ],
+    notes: [
+      'Throttled on the things.write rate limit (things.write.service for service accounts) — one token per batch.',
+      'Folders organise /things: create one via POST /api/v1/things with thingtime ["folder"] and crystal { name, icon?, description? }; move a single thing with PATCH /api/v1/things { id, folderId }.'
     ]
   }),
   endpoint({
@@ -5751,7 +6295,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
-      'GET returns a stripped public projection that never includes email or verification fields. POST updates the caller display name, bio, avatar URL, or banner URL.',
+			'GET returns a stripped public projection that never includes email or verification fields. POST updates the caller display name, bio, avatar, or banner. Avatar/banner may use either one external http(s) URL or a ready private attachment created for the exact profile slot; managed media remains in the private bucket and is served through a stable same-origin content route.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an auth cookie or Authorization: Bearer token.'
@@ -5759,8 +6303,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with username to read a public profile and post count.',
-      'POST displayName, bio, avatarUrl, or bannerUrl to update the current user profile.',
-      'Only http(s) and data:image URLs are accepted for avatar/banner fields.',
+			'POST displayName or bio independently of profile media.',
+			'Use avatarAttachmentId or bannerAttachmentId to bind a ready owner-matched profile upload. Use avatarUrl or bannerUrl for the quota-saving external-link alternative; sending a URL clears that slot’s managed attachment.',
+			'Never send a non-null attachment id with a URL. Send both fields as null to clear a slot, or send only attachmentId:null to remove managed media while preserving its stored external fallback.',
+			'External writes accept structurally valid credential-free http(s) URLs; legacy data:image values remain read-compatible.',
       'Handle 400 missing username or invalid profile fields, 401 anonymous updates, and 404 unknown users.'
     ],
     requestExamples: [
@@ -5775,6 +6321,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Update the caller profile fields.',
         method: 'POST',
         body: { bio: 'Working on Thingtime.', avatarUrl: 'https://example.com/avatar.png' }
+			},
+			{
+				name: 'Use a private uploaded banner',
+				description: 'Bind a completed profile-banner upload to the current user.',
+				method: 'POST',
+				body: { bannerAttachmentId: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e' }
       }
     ],
     responseExamples: [
@@ -5828,6 +6380,519 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           ok: true,
           users: [{ id: '664f…', username: 'lopu', displayName: 'Lopu', bio: 'Making Thingtime 🦄', avatarUrl: null }]
         }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-follow',
+    group: 'social',
+    title: 'Read or change a follow',
+    endpoint: '/api/v1/users/follow',
+    summary: 'Read, follow, or unfollow another user — one-way, no approval needed.',
+    detail:
+      'GET with username or userId returns the public user, both follow directions, and follower/following ' +
+      'counts. POST writes one home-pinned thingtime ["follow"] edge per follower/followed pair, deduped by ' +
+      'its crystal.followKey unique index. Omitting `follow` toggles; passing it explicitly is idempotent. ' +
+      'A new follow emits a new-follower notification to the followed user (respecting their ' +
+      'notification prefs). Follow state also routes Messenger DMs out of the message-requests pile. ' +
+      'Friendships are a separate, approval-based system — see /api/v1/users/friend.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with userId or username to read the relationship, public user, and counts.',
+      'POST { userId } or { username } to toggle that follow.',
+      'Optionally pass follow: true|false for an idempotent set instead of a toggle.',
+      'Read following, followsYou, followerCount, and followingCount back and reconcile the optimistic UI.',
+      'Handle 400 self-follow, 401 unauthenticated, 404 unknown user, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read a relationship',
+        description: 'Check both follow directions and counts for one user.',
+        method: 'GET',
+        query: { username: 'ada-lovelace' }
+      },
+      {
+        name: 'Toggle follow',
+        description: 'Follow (or unfollow, if already following) by user id.',
+        method: 'POST',
+        body: { userId: '664f1c2a9d3e5b0012345678' }
+      },
+      {
+        name: 'Explicit follow',
+        description: 'Idempotent follow by username.',
+        method: 'POST',
+        body: { username: 'lopu', follow: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Relationship returned after a read or mutation.',
+        body: {
+          ok: true,
+          user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' },
+          following: true,
+          followsYou: false,
+          followerCount: 42,
+          followingCount: 17
+        }
+      },
+      {
+        status: 400,
+        description: 'Self-follow.',
+        body: { ok: false, error: 'You already have your own undivided attention 💅' }
+      }
+    ],
+    notes: ['POST changes draw from the users.follow rate-limit bucket (30 requests per minute).']
+  }),
+  endpoint({
+    id: 'users-friend',
+    group: 'social',
+    title: 'Friend request actions',
+    endpoint: '/api/v1/users/friend',
+    summary: 'Drive the friendship state machine: request, cancel, accept, decline, unfriend.',
+    detail:
+      'Friendships need approval (unlike follows): one thing per user pair (thingtime ["friend"], ' +
+      'crystal.friendKey = sorted pair, unique index), status pending until the recipient accepts. ' +
+      'Requesting someone who already requested you accepts instead of duplicating. Requests emit ' +
+      'friend-request notifications; accepts emit friend-accepted. Accepted friendships power the ' +
+      'tt:userFriends acl circle — friends-only posts become visible to real friends.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { userId | username, intent } — intent: request | cancel | accept | decline | unfriend.',
+      'request → pending-outgoing (or friends, if they had already asked you).',
+      'accept/decline act on a pending-incoming request; cancel retracts your own.',
+      'Read { friendState } back: none | pending-outgoing | pending-incoming | friends.',
+      'Handle 400 bad intent/self, 401 unauthenticated, 404 unknown user or no pending request, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Send request',
+        description: 'Ask another user to be friends.',
+        method: 'POST',
+        body: { username: 'lopu', intent: 'request' }
+      },
+      {
+        name: 'Accept request',
+        description: 'Accept a pending incoming request.',
+        method: 'POST',
+        body: { userId: '664f1c2a9d3e5b0012345678', intent: 'accept' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Request sent.',
+        body: { ok: true, friendState: 'pending-outgoing' }
+      },
+      {
+        status: 404,
+        description: 'Nothing to accept.',
+        body: { ok: false, error: 'No pending friend request from that user' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-relationships',
+    group: 'social',
+    title: 'Relationship summary',
+    endpoint: '/api/v1/users/relationships',
+    summary: 'Public follower/following/friend counts for a profile, plus the viewer’s relationship state.',
+    detail:
+      'Counts are public (they render on every profile). When authenticated, `viewer` reports your ' +
+      'relationship to that user: following, followedBy, and friendState (none | pending-outgoing | ' +
+      'pending-incoming | friends). Asking about yourself adds incomingRequests — the pending ' +
+      'friend-request badge count. Logged out, `viewer` is null.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out (counts only); anonymous callers are rate-limited per hashed IP.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?username=<name> (or ?userId=).',
+      'Render counts on the profile header; drive the Follow / Add friend buttons from `viewer`.',
+      'Handle 404 unknown user and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Profile summary',
+        description: 'Counts + viewer state for a profile page.',
+        method: 'GET',
+        query: { username: 'lopu' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Counts and the viewer’s state.',
+        body: {
+          ok: true,
+          userId: '664f…',
+          counts: { followers: 12, following: 34, friends: 5 },
+          viewer: { following: true, followedBy: false, friendState: 'friends' }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-connections',
+    group: 'social',
+    title: 'Connection lists',
+    endpoint: '/api/v1/users/connections',
+    summary: 'Paged public lists of a user’s followers, following, or friends (and your own pending requests).',
+    detail:
+      'type=followers|following|friends return public profile projections for anyone (matching the ' +
+      'public counts). type=requests lists the PENDING incoming friend requests — only for your own ' +
+      'account (403 otherwise). Cursor pagination: pass back `nextBefore` as `before` until it is null.',
+    auth: {
+      mode: 'optional',
+      description: 'Public lists work logged out; type=requests requires auth and your own userId/username.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?username=<name>&type=followers|following|friends&limit=&before=.',
+      'Render as profile rows; page with before=<nextBefore>.',
+      'type=requests (your own account) powers the accept/decline inbox.',
+      'Handle 400 bad type, 403 requests-for-someone-else, 404 unknown user, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Followers list',
+        description: 'First page of a user’s followers.',
+        method: 'GET',
+        query: { username: 'lopu', type: 'followers', limit: 20 }
+      },
+      {
+        name: 'Pending requests',
+        description: 'Your own incoming friend requests.',
+        method: 'GET',
+        query: { username: 'me-myself', type: 'requests' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One page of public profiles.',
+        body: {
+          ok: true,
+          users: [{ id: '664f…', username: 'rick', displayName: 'Rick Deckard', avatarUrl: null }],
+          nextBefore: null
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-list',
+    group: 'notifications',
+    title: 'List notifications',
+    endpoint: '/api/v1/notifications',
+    summary: 'Your notifications, newest first, filtered by your notification prefs — plus the unread count.',
+    detail:
+      'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
+      'replies, reactions, shares, and capped posts-from-followed/friends fan-out). The list is ' +
+      'ALWAYS filtered by your current notification settings, so disabling a type hides even ' +
+      'already-written notifications of that type. unreadCount backs the bell badge. Cursor ' +
+      'pagination via before=<nextBefore>.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?limit=&before= — newest first.',
+      'Show unreadCount on the bell; refetch on window focus.',
+      'Click-through: postId → /post/<id>, otherwise actor → /profile/<username>.',
+      'Handle 401 unauthenticated and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Bell dropdown',
+        description: 'First page for the notifications popover.',
+        method: 'GET',
+        query: { limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Notifications + unread count.',
+        body: {
+          ok: true,
+          notifications: [
+            {
+              id: 'a1b2…',
+              type: 'new-follower',
+              actorId: '664f…',
+              actorUsername: 'rick',
+              actorName: 'Rick Deckard',
+              actorAvatarUrl: null,
+              targetId: '664f…',
+              postId: null,
+              preview: null,
+              readAt: null,
+              createdAt: '2026-08-01T12:00:00.000Z'
+            }
+          ],
+          unreadCount: 1,
+          nextBefore: null
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-read',
+    group: 'notifications',
+    title: 'Mark notifications read',
+    endpoint: '/api/v1/notifications/read',
+    summary: 'Mark some ({ ids }) or all ({ all: true }) of your notifications as read.',
+    detail:
+      'Flips root readAt on your unread notification things; the unread badge recomputes from it. ' +
+      'Already-read ids are skipped (updated counts only fresh flips).',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { all: true } when opening the bell, or { ids: [...] } for targeted marks.',
+      'Optimistically zero the badge; reconcile with the response.',
+      'Handle 400 (neither ids nor all), 401 unauthenticated, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Mark all read',
+        description: 'Zero the bell badge.',
+        method: 'POST',
+        body: { all: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Marked.',
+        body: { ok: true, updated: 3 }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-settings',
+    group: 'notifications',
+    title: 'Notification settings',
+    endpoint: '/api/v1/notifications/settings',
+    summary: 'Read or merge-patch your notification switches — per type, per channel (push + email), plus channel masters.',
+    detail:
+      'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
+      'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
+      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, groups ' +
+      '(reserved), plus the email-only weekly-summary digest. Defaults ON, except email for the two ' +
+      'high-volume post types (post-from-followed / post-from-friend), which are opt-in. GET always ' +
+      'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
+      '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
+      '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +
+      'list and unread count immediately; a disabled email type stops future emails. Emails only go ' +
+      'to verified addresses and are capped per recipient per hour; every one carries a manage link ' +
+      'and a one-click unsubscribe link.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET returns { prefs: { push, email, masters } } with every switch as a boolean.',
+      'POST { prefs: { email: { <type>: boolean } } } (or push / masters) merges just those switches.',
+      'The flat legacy body { prefs: { <type>: boolean } } still works and patches push.',
+      'Flip switches optimistically; revert on failure.',
+      'Handle 400 unknown key / non-boolean, 401 unauthenticated, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Disable follower emails',
+        description: 'Stop new-follower emails only — the bell keeps working.',
+        method: 'POST',
+        body: { prefs: { email: { 'new-follower': false } } }
+      },
+      {
+        name: 'Mute all emails',
+        description: 'Flip the email master off without touching per-type switches.',
+        method: 'POST',
+        body: { prefs: { masters: { email: false } } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The full merged switch matrix.',
+        body: {
+          ok: true,
+          prefs: {
+            push: {
+              'friend-request': true,
+              'friend-accepted': true,
+              'new-follower': true,
+              'post-from-followed': true,
+              'post-from-friend': true,
+              comment: true,
+              reply: true,
+              reaction: true,
+              share: true,
+              groups: true
+            },
+            email: {
+              'friend-request': true,
+              'friend-accepted': true,
+              'new-follower': false,
+              'post-from-followed': false,
+              'post-from-friend': false,
+              comment: true,
+              reply: true,
+              reaction: true,
+              share: true,
+              groups: true,
+              'weekly-summary': true
+            },
+            masters: { push: true, email: true }
+          }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-email-unsubscribe',
+    group: 'notifications',
+    title: 'Email one-click unsubscribe',
+    endpoint: '/api/v1/notifications/email/unsubscribe',
+    summary: 'The one-click link in notification email footers — flips the email master switch off.',
+    detail:
+      'GET with ?uid=<userId>&token=<hmac> (both come pre-built in every notification email footer; ' +
+      'the token is an HMAC over the user id, so a link can only ever mute its own recipient). No ' +
+      'session needed — email clients don’t carry cookies. Responds with a small HTML confirmation ' +
+      'page, is idempotent, and the switch can be flipped back on any time in Settings → ' +
+      'Notifications. Invalid or missing tokens get a 400 page; requests are IP rate-limited.',
+    auth: {
+      mode: 'none',
+      description: 'Authenticated by the HMAC token in the link, not by session.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Click the “Unsubscribe from all” link in any notification email.',
+      'The email master switch flips off; per-type switches are untouched.',
+      'Re-enable any time from Settings → Notifications.'
+    ],
+    requestExamples: [
+      {
+        name: 'One-click unsubscribe',
+        description: 'As clicked from an email footer.',
+        method: 'GET',
+        query: { uid: '664f…', token: '3f2a…' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'HTML confirmation page (text/html, not JSON).',
+        body: { note: 'Returns an HTML page: “You’re unsubscribed 💌”.' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-email-weekly-summary',
+    group: 'notifications',
+    title: 'Weekly summary digest run',
+    endpoint: '/api/v1/notifications/email/weekly-summary',
+    summary: 'Kick off the weekly email digest — cron (CRON_SECRET bearer) or admin only.',
+    detail:
+      'Sends every opted-in, email-verified user a recap of the last seven days around their things ' +
+      '(new followers, friend requests, comments, replies, reactions, shares, post views, posts). ' +
+      'Users with zero activity are skipped, and a six-day per-recipient lookback makes the run ' +
+      'idempotent — a retried cron or a manual admin run never double-sends. The Vercel cron ' +
+      '(remix/vercel.json) calls GET with Authorization: Bearer <CRON_SECRET>; signed-in admins can ' +
+      'also run it, and POST { dryRun: true } (or GET ?dryRun=1) previews counts without sending.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin session, or the CRON_SECRET bearer token Vercel cron attaches.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Configure CRON_SECRET in Vercel so the scheduled cron authenticates.',
+      'GET ?dryRun=1 as an admin to preview who would get a digest.',
+      'POST {} (admin) to run manually; the lookback prevents double-sends.',
+      'Handle 401 unauthenticated / 403 non-admin.'
+    ],
+    requestExamples: [
+      {
+        name: 'Dry run',
+        description: 'Preview counts without sending anything.',
+        method: 'POST',
+        body: { dryRun: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Run summary.',
+        body: {
+          ok: true,
+          considered: 42,
+          eligible: 17,
+          sent: 9,
+          skipped: { alreadySent: 5, noActivity: 3, failed: 0 },
+          truncated: false,
+          dryRun: false
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-views',
+    group: 'things',
+    title: 'Record post views',
+    endpoint: '/api/v1/things/views',
+    summary: 'Batched post view/impression telemetry — unique-viewer deduped, anti-bot filtered, beacon-safe.',
+    detail:
+      'The client reports posts that were ≥50% visible for ≥1s: { events: [{ id, dwellMs, ratio, pos }] } ' +
+      '(dwellMs = on-screen time, ratio = max visible fraction, pos = viewport position 0..1). One doc ' +
+      'per (post, viewer identity) keeps the public viewCount = UNIQUE viewers — replay only bumps ' +
+      'impressions, which the rate limit bounds. Anonymous viewers dedup on a salted hash of IP+UA ' +
+      '(no raw IP stored); UA-less requests are dropped. Owner self-views never count. Views are only ' +
+      'accepted for posts the caller could read. Stats surface publicly on every post payload as ' +
+      'viewCount + viewStats { impressions, avgDwellMs }.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out (anonymous identities dedup per salted IP+UA hash).'
+    },
+    methods: ['POST'],
+    steps: [
+      'Batch events client-side (the app flushes every ~10s and on page hide via sendBeacon).',
+      'POST { events: [{ id, dwellMs?, ratio?, pos? }] } — up to 50 per call.',
+      'The response { counted } is informational; failures are safe to ignore.',
+      'Handle 429 rate-limited by dropping the batch (never retry-loop telemetry).'
+    ],
+    requestExamples: [
+      {
+        name: 'Flush view batch',
+        description: 'Two posts seen this scroll session.',
+        method: 'POST',
+        body: {
+          events: [
+            { id: 'a1b2c3…', dwellMs: 4200, ratio: 1, pos: 0.31 },
+            { id: 'd4e5f6…', dwellMs: 900, ratio: 0.8, pos: 0.66 }
+          ]
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Batch accepted (counted = events that passed validation).',
+        body: { ok: true, counted: 2 }
       }
     ]
   }),
@@ -6250,8 +7315,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ status: 401, description: 'No full live account session.', body: { ok: false, error: 'Unauthorized' } },
 			{ status: 401, description: 'Current-password confirmation failed.', body: { ok: false, error: 'Password confirmation failed' } },
 			{ status: 404, description: 'Missing, expired, inaccessible, or unknown reference.', body: { ok: false, error: 'Sensitive value not found' } },
-			{ status: 429, description: 'The fixed confirmation-request ceiling was reached.', body: { ok: false, error: 'Too many reveal confirmation attempts' } },
-			{ status: 503, description: 'The rate limiter, password verifier, or protected reader is temporarily unavailable.', body: { ok: false, error: 'Sensitive reveal is temporarily unavailable' } }
+			{
+				status: 429,
+				description: 'The fixed confirmation-request ceiling was reached.',
+				body: { ok: false, error: 'Too many reveal confirmation attempts' }
+			},
+			{
+				status: 503,
+				description: 'The rate limiter, password verifier, or protected reader is temporarily unavailable.',
+				body: { ok: false, error: 'Sensitive reveal is temporarily unavailable' }
+			}
 		],
 		notes: [
 			'Content-Type must be application/json. Browser requests with a cross-origin Origin header are rejected.',

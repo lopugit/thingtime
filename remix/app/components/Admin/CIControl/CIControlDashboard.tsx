@@ -30,18 +30,26 @@ import {
   ModalOverlay,
   Select,
   Spinner,
+  Switch,
   Stack,
   Text,
   useDisclosure,
   useMediaQuery
 } from '@chakra-ui/react';
-import { FiExternalLink, FiGitBranch, FiPlay, FiRefreshCw, FiSearch } from 'react-icons/fi';
+import { FiCloud, FiExternalLink, FiGitBranch, FiGithub, FiPlay, FiRefreshCw, FiSearch } from 'react-icons/fi';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 
-import type { CiControlResponse, CiEntity, CiEvent, CiWorkflowKey } from './types';
+import type {
+  CiAutomationPolicy,
+  CiControlResponse,
+  CiEntity,
+  CiEvent,
+  CiExecutionProvider,
+  CiWorkflowKey
+} from './types';
 
 const ACTIVE_STATUSES = new Set(['queued', 'requested', 'waiting', 'in_progress', 'pending']);
 const CONFLICT_STATUSES = new Set(['conflicting', 'dirty', 'blocked', 'failure', 'failed']);
@@ -60,7 +68,7 @@ const statusColor = (status: unknown) => {
 
 const StatusBadge = ({ status }: { status: unknown }) => (
   <Badge colorScheme={statusColor(status)} borderRadius="999px" px={2} py="2px" textTransform="none">
-    {String(status || 'unknown').replaceAll('_', ' ')}
+    {String(status || 'unknown').replace(/_/g, ' ')}
   </Badge>
 );
 
@@ -279,10 +287,19 @@ type DispatchModalProps = {
   initialWorkflow: CiWorkflowKey;
   initialPr: CiEntity | null;
   isSubmitting: boolean;
+  executionProvider: CiExecutionProvider;
   onSubmit: (workflow: CiWorkflowKey, ref: string, inputs: Record<string, unknown>) => Promise<void>;
 };
 
-const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitting, onSubmit }: DispatchModalProps) => {
+const DispatchModal = ({
+  isOpen,
+  onClose,
+  initialWorkflow,
+  initialPr,
+  isSubmitting,
+  executionProvider,
+  onSubmit
+}: DispatchModalProps) => {
   const [workflow, setWorkflow] = React.useState<CiWorkflowKey>(initialWorkflow);
   const [prNumber, setPrNumber] = React.useState(String(initialPr?.number ?? initialPr?.externalId ?? ''));
   const [confirmed, setConfirmed] = React.useState(false);
@@ -315,7 +332,9 @@ const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitti
           <Stack spacing={4}>
             <Alert status="info" borderRadius="md" fontSize="sm">
               <AlertIcon />
-              The thin product-branch listener dispatches the implementation pinned to the protected github-actions branch.
+              {executionProvider === 'vercel-sandbox'
+                ? 'Vercel Workflow will provision an isolated Sandbox runner, then GitHub will execute the exact protected workflow on that Vercel compute.'
+                : 'The thin product-branch listener dispatches the implementation pinned to the protected github-actions branch.'}
             </Alert>
             <FormControl>
               <FormLabel fontSize="sm">Workflow</FormLabel>
@@ -371,6 +390,97 @@ const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitti
   );
 };
 
+type AutomationProvidersProps = {
+  policies: CiAutomationPolicy[];
+  vercelRunnerReady: boolean;
+  vercelRunnerMissing: string[];
+  savingWorkflow: CiWorkflowKey | null;
+  onChange: (workflow: CiWorkflowKey, executionProvider: CiExecutionProvider, enabled: boolean) => Promise<void>;
+};
+
+const AutomationProviders = ({
+  policies,
+  vercelRunnerReady,
+  vercelRunnerMissing,
+  savingWorkflow,
+  onChange
+}: AutomationProvidersProps) => (
+  <Box
+    border="1px solid var(--tt-border, #e7e7eb)"
+    borderRadius="var(--tt-radius-md, 12px)"
+    bg="var(--tt-card, #fff)"
+    mb={4}
+    overflow="hidden"
+  >
+    <Flex px={4} py={3} align={{ base: 'flex-start', md: 'center' }} justify="space-between" gap={3} direction={{ base: 'column', md: 'row' }}>
+      <Box>
+        <Heading size="sm">Automation compute</Heading>
+        <Text mt={1} fontSize="xs" opacity={0.58}>
+          The workflow stays pinned to github-actions; this chooses whether its jobs run on GitHub-hosted compute or an isolated Vercel Sandbox runner.
+        </Text>
+      </Box>
+      <Badge colorScheme={vercelRunnerReady ? 'green' : 'orange'} flex="0 0 auto">
+        {vercelRunnerReady ? 'Vercel runner ready' : 'Vercel runner needs setup'}
+      </Badge>
+    </Flex>
+    {!vercelRunnerReady && (
+      <Text px={4} pb={3} mt={-1} fontSize="xs" color="orange.700" overflowWrap="anywhere">
+        Setup needed: {vercelRunnerMissing.join(', ') || 'server-side Vercel provider configuration'}.
+        {' '}GitHub-hosted Actions remains active until every dependency is ready.
+      </Text>
+    )}
+    <Stack spacing={0} borderTop="1px solid var(--tt-border, #e7e7eb)">
+      {policies.map((policy) => {
+        const saving = savingWorkflow === policy.key;
+        const provider = policy.executionProvider;
+        return (
+          <Grid
+            key={policy.key}
+            templateColumns={{ base: 'minmax(0, 1fr)', md: 'minmax(220px, 1fr) minmax(230px, .8fr) auto' }}
+            gap={3}
+            alignItems="center"
+            px={4}
+            py={3}
+            borderTop="1px solid var(--tt-border, #eeeeF1)"
+            _first={{ borderTop: 0 }}
+            opacity={policy.enabled ? 1 : 0.58}
+          >
+            <Box minW={0}>
+              <Text fontSize="sm" fontWeight="650">{policy.title}</Text>
+              <Text mt="2px" fontSize="xs" opacity={0.55} noOfLines={2}>{policy.summary}</Text>
+            </Box>
+            <Select
+              size="sm"
+              value={provider}
+              isDisabled={saving || !policy.enabled}
+              onChange={(event) => onChange(policy.key, event.target.value as CiExecutionProvider, policy.enabled)}
+              aria-label={`${policy.title} execution provider`}
+            >
+              <option value="github-actions">GitHub Actions hosted</option>
+              <option value="vercel-sandbox" disabled={!policy.vercelSupported || !vercelRunnerReady}>
+                Vercel Workflow + Sandbox{!policy.vercelSupported ? ' (unsupported)' : !vercelRunnerReady ? ' (setup needed)' : ''}
+              </option>
+            </Select>
+            <Flex align="center" justify={{ base: 'space-between', md: 'flex-end' }} gap={2} minW="116px">
+              <Flex align="center" gap={1.5} fontSize="xs" opacity={0.6}>
+                {provider === 'vercel-sandbox' ? <FiCloud /> : <FiGithub />}
+                <Text>{provider === 'vercel-sandbox' ? 'Vercel' : 'GitHub'}</Text>
+              </Flex>
+              <Switch
+                size="sm"
+                isChecked={policy.enabled}
+                isDisabled={saving}
+                onChange={(event) => onChange(policy.key, provider, event.target.checked)}
+                aria-label={`${policy.enabled ? 'Disable' : 'Enable'} ${policy.title}`}
+              />
+            </Flex>
+          </Grid>
+        );
+      })}
+    </Stack>
+  </Box>
+);
+
 export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string }) => {
   const api = useApi();
   const apiRef = React.useRef(api);
@@ -390,6 +500,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
   const [dispatchWorkflow, setDispatchWorkflow] = React.useState<CiWorkflowKey>('resolve-conflicts');
   const [dispatchPr, setDispatchPr] = React.useState<CiEntity | null>(null);
   const [dispatching, setDispatching] = React.useState(false);
+  const [savingWorkflow, setSavingWorkflow] = React.useState<CiWorkflowKey | null>(null);
 
   const load = React.useCallback(async (options?: { signal?: AbortSignal; foreground?: boolean }) => {
     if (options?.foreground) setRefreshing(true);
@@ -427,6 +538,14 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 
   const dashboard = response?.dashboard ?? null;
   const integration = response?.integration ?? null;
+  const policies = dashboard?.automations ?? [];
+  const awaitingInitialReconcile = Boolean(
+    dashboard && dashboard.features.length === 0 && integration?.githubAppConfigured
+  );
+  const setupRequired = Boolean(
+    dashboard && dashboard.features.length === 0 && !integration?.githubAppConfigured
+  );
+  const selectedDispatchPolicy = policies.find((policy) => policy.key === dispatchWorkflow) ?? null;
   const features = React.useMemo(() => {
     if (!dashboard) return [];
     const needle = query.trim().toLowerCase();
@@ -485,7 +604,10 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       dispatchDisclosure.onClose();
       lopu({
         title: `${WORKFLOW_LABELS[workflow]} queued 🙌`,
-        description: 'GitHub accepted the trusted dispatch. Status will update here as webhook events arrive.',
+        description:
+          selectedDispatchPolicy?.executionProvider === 'vercel-sandbox'
+            ? 'Vercel Workflow is provisioning an isolated runner for the protected GitHub workflow. Status will update here automatically.'
+            : 'GitHub accepted the trusted dispatch. Status will update here as webhook events arrive.',
         status: 'success',
         duration: 7000
       });
@@ -498,6 +620,36 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       });
     } finally {
       setDispatching(false);
+    }
+  };
+
+  const updateAutomation = async (
+    workflow: CiWorkflowKey,
+    executionProvider: CiExecutionProvider,
+    enabled: boolean
+  ) => {
+    if (savingWorkflow) return;
+    setSavingWorkflow(workflow);
+    try {
+      const result = await apiRef.current.v1.admin.setCiAutomationPolicy({ workflow, executionProvider, enabled });
+      if (!result?.ok) throw new Error('Automation policy rejected');
+      await load();
+      lopu({
+        title: `${WORKFLOW_LABELS[workflow]} updated ✨`,
+        description: enabled
+          ? `New runs will use ${executionProvider === 'vercel-sandbox' ? 'Vercel Workflow + Sandbox' : 'GitHub-hosted Actions'}.`
+          : 'Automatic and manual dispatches are disabled until you turn this automation back on.',
+        status: 'success',
+        duration: 6000
+      });
+    } catch {
+      lopu({
+        title: 'The execution provider was not changed',
+        description: 'The previous automation policy is still active. Check the GitHub App and Vercel runner setup, then try again.',
+        status: 'error'
+      });
+    } finally {
+      setSavingWorkflow(null);
     }
   };
 
@@ -575,6 +727,22 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         </Alert>
       ) : null}
 
+      {setupRequired || awaitingInitialReconcile ? (
+        <Alert status={setupRequired ? 'warning' : 'info'} mb={4} borderRadius="md" alignItems="flex-start">
+          <AlertIcon mt="2px" />
+          <Box>
+            <Text fontSize="sm" fontWeight="650">
+              {setupRequired ? 'Connect GitHub to populate CI Control' : 'Run the first GitHub reconciliation'}
+            </Text>
+            <Text mt={1} fontSize="xs" opacity={0.72}>
+              {setupRequired
+                ? 'Configure and install the Thingtime GitHub App, add the signed webhooks, then return here and run Reconcile once.'
+                : 'The integration is ready, but no repository state has been imported yet. Click Reconcile to load existing branches, pull requests, Actions runs, deployments, and previews; webhooks will keep them current afterward.'}
+            </Text>
+          </Box>
+        </Alert>
+      ) : null}
+
       <Flex
         border="1px solid var(--tt-border, #e7e7eb)"
         borderRadius="var(--tt-radius-md, 12px)"
@@ -601,12 +769,22 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
             <Badge colorScheme={integration?.githubAppConfigured ? 'green' : 'gray'}>GitHub App</Badge>
             <Badge colorScheme={integration?.githubWebhookConfigured ? 'green' : 'gray'}>GitHub webhook</Badge>
             <Badge colorScheme={integration?.vercelWebhookConfigured ? 'green' : 'gray'}>Vercel webhook</Badge>
+            <Badge colorScheme={integration?.providerRouterConfigured ? 'green' : 'gray'}>Provider router</Badge>
+            <Badge colorScheme={integration?.vercelRunnerReady ? 'green' : 'gray'}>Vercel runner</Badge>
           </Flex>
           <Text textAlign={{ base: 'left', md: 'right' }} mt={1} fontSize="xs" opacity={0.5}>
             Last event {relativeTime(dashboard?.freshness.latestEventAt)}
           </Text>
         </Box>
       </Flex>
+
+      <AutomationProviders
+        policies={policies}
+        vercelRunnerReady={Boolean(integration?.vercelRunnerReady)}
+        vercelRunnerMissing={integration?.vercelRunnerMissing ?? []}
+        savingWorkflow={savingWorkflow}
+        onChange={updateAutomation}
+      />
 
       <Grid templateColumns={{ base: '1fr', lg: 'minmax(0, 1.65fr) minmax(320px, 0.85fr)' }} gap={4}>
         <Box border="1px solid var(--tt-border, #e7e7eb)" borderRadius="var(--tt-radius-md, 12px)" bg="var(--tt-card, #fff)" overflow="hidden">
@@ -677,7 +855,13 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
             {!features.length ? (
               <Box p={8} textAlign="center">
                 <FiGitBranch style={{ margin: '0 auto 8px', opacity: 0.35 }} />
-                <Text fontSize="sm" opacity={0.58}>No features match this view.</Text>
+                <Text fontSize="sm" opacity={0.58}>
+                  {dashboard?.features.length
+                    ? 'No features match this search or status filter.'
+                    : setupRequired
+                      ? 'Repository data will appear here after GitHub setup and the first Reconcile.'
+                      : 'Repository data will appear here after the first Reconcile.'}
+                </Text>
               </Box>
             ) : null}
           </Box>
@@ -738,6 +922,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         initialWorkflow={dispatchWorkflow}
         initialPr={dispatchPr}
         isSubmitting={dispatching}
+        executionProvider={selectedDispatchPolicy?.executionProvider ?? 'github-actions'}
         onSubmit={submitDispatch}
       />
     </Box>

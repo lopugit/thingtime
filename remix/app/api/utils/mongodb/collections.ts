@@ -281,6 +281,10 @@ export const getEmailIdentitiesCollection = async () => getHomeCollection('email
 // TTL-reaped (mirrors emailVerifications).
 export const getPasswordResetsCollection = async () => getHomeCollection('passwordResets');
 export const getAuthOtpsCollection = async () => getHomeCollection('authOtps');
+// Post view telemetry: one doc per (postId, viewerKey) — home-pinned so view
+// counts (an anti-manipulation surface) stay under platform control even when
+// a request carries a custom data-endpoint override.
+export const getPostViewsCollection = async () => getHomeCollection('postViews');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -402,6 +406,9 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // /things folder browsing: one owner's direct children of one folder,
+    // newest first — fully index-provided including the page sort
+    col.createIndex({ ownerId: 1, folderId: 1, createdAt: -1, shareId: 1 }),
     // Control-plane history is relational: one ci-event per provider delivery
     // and parent entity, never an unbounded status array on the current row.
     col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }),
@@ -413,6 +420,25 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { partialFilterExpression: { storageClass: 'content' } }
     ),
     col.createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+    // Private-S3 attachment lifecycle scans. Deliberately NOT a TTL index:
+    // expiry cleanup must delete/abort S3 first and refund the user ledger in
+    // one Mongo transaction; TTL deletion would orphan bytes and accounting.
+    col.createIndex(
+      { ownerId: 1, attachmentState: 1, attachmentExpiresAt: 1, shareId: 1 },
+      { partialFilterExpression: { thingtime: 'attachment' } }
+    ),
+    // Hourly global draft reaper: expiry is the leading key so a bounded scan
+    // across owners never walks the whole attachment partition. Attached
+    // rows clear attachmentExpiresAt when bound and therefore do not enter the
+    // useful key range. This must remain a normal index, never Mongo TTL.
+    col.createIndex(
+      { attachmentExpiresAt: 1, shareId: 1 },
+      { partialFilterExpression: { thingtime: 'attachment' } }
+    ),
+    col.createIndex(
+      { targetId: 1, ownerId: 1, attachmentState: 1, createdAt: 1, shareId: 1 },
+      { partialFilterExpression: { thingtime: 'attachment', targetId: { $type: 'string' } } }
+    ),
     // schema-usage counting (schemas/browse decorate): data things are
     // grouped by crystal.schemaId (stamped) with a crystal.schema name
     // fallback for pre-stamp docs — both need index support or every
@@ -458,6 +484,33 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       },
       ['targetId_1_ownerId_1_crystal.emoji_1']
     ),
+    // One follow edge per (followed, follower): toggle-on is an idempotent
+    // upsert, deduped under races. Only follow things carry crystal.follow
+    // (constant true) — same marker-field trick as the reaction index, since
+    // partial filters can't reliably scope on the multikey thingtime array.
+    createIndexReplacing(
+      col,
+      { targetId: 1, ownerId: 1 },
+      {
+        name: 'things_follow_unique',
+        unique: true,
+        partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.follow': { $exists: true } }
+      }
+    ),
+    // One friendship doc per unordered user pair, regardless of who asked:
+    // crystal.friendKey is '<minId>~<maxId>', written only by the friend
+    // endpoint. Uniqueness kills duplicate/crossed requests structurally.
+    createIndexReplacing(
+      col,
+      { 'crystal.friendKey': 1 },
+      {
+        name: 'things_friend_unique',
+        unique: true,
+        partialFilterExpression: { 'crystal.friendKey': { $exists: true } }
+      }
+    ),
+    // (Notification list/unread queries are served by the general
+    // { thingtime, ownerId, createdAt desc, shareId } index above.)
     // Legacy relational era (kind:'reaction'/'comment' docs written by the
     // pre-unification relational model): aggregation + dedup indexes stay
     // until the things migration converts those docs to thingtime things.
@@ -661,6 +714,10 @@ export const ensureIndexes = async () => {
         col('email_messages').createIndex({ createdAt: -1 }),
         col('email_messages').createIndex({ to: 1 }),
         col('email_messages').createIndex({ stream: 1, status: 1, createdAt: -1 }),
+        // notification-email hourly throttle (stream+to+createdAt) and the
+        // weekly-digest idempotency lookback (templateKey+createdAt+to)
+        col('email_messages').createIndex({ stream: 1, to: 1, createdAt: -1 }),
+        col('email_messages').createIndex({ templateKey: 1, createdAt: -1 }),
         col('email_messages').createIndex({ providerMessageId: 1 }, { sparse: true }),
         col('email_events').createIndex({ emailMessageId: 1 }),
         col('email_events').createIndex({ providerMessageId: 1 }),
@@ -695,7 +752,12 @@ export const ensureIndexes = async () => {
         col('settings').createIndex({ key: 1 }, { unique: true }),
         // general per-endpoint rate-limit windows; TTL reaps expired windows
         col('rateLimits').createIndex({ key: 1 }, { unique: true }),
-        col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+        col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        // post view telemetry: one doc per (post, viewer identity) — the
+        // unique index IS the dedup that keeps unique-viewer counts honest
+        // under racing writes; its postId prefix serves the per-post stats
+        // aggregation on feed reads
+        col('postViews').createIndex({ postId: 1, viewerKey: 1 }, { unique: true })
       ]);
     })().catch((err: any) => {
       // Name the broken index, then clear the failed promise so the next

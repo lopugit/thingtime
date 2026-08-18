@@ -23,6 +23,7 @@ import { useLopu } from '../Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { chatDisplayName, memberDisplayName, type ChatMember, type ChatSummary } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 // The conversation's control room: rename (groups: anyone, channels: admins),
 // member roster with roles/promote/demote/remove, Messenger-style nicknames
@@ -49,7 +50,9 @@ export const ChatDetailsDrawer = ({
   const [name, setName] = React.useState(chat.name || '');
   const [readReceipts, setReadReceipts] = React.useState(true);
   const [addQuery, setAddQuery] = React.useState('');
-  const [addResults, setAddResults] = React.useState<{ id: string; username: string; displayName: string | null }[]>([]);
+  const [addResults, setAddResults] = React.useState<
+    Array<{ id: string; username: string; displayName: string | null; temporary?: boolean }>
+  >([]);
   const [nicknameFor, setNicknameFor] = React.useState<string | null>(null);
   const [nicknameDraft, setNicknameDraft] = React.useState('');
 
@@ -206,7 +209,7 @@ export const ChatDetailsDrawer = ({
                     ) : null}
                   </Flex>
                   <Box fontSize="11px" color="var(--tt-muted, #9a9aa6)" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
-                    @{member.profile?.username || 'ghost'}
+                    {member.profile ? getUserIdentityDetail(member.profile) : '@ghost'}
                     {member.nickname ? ` · “${member.nickname}”` : ''}
                   </Box>
                 </Box>
@@ -289,15 +292,15 @@ export const ChatDetailsDrawer = ({
               {addResults.map((person) => (
                 <Flex key={person.id} align="center" justify="space-between" paddingY="4px" fontSize="13px">
                   <Box>
-                    {person.displayName || person.username}{' '}
+                    {getUserDisplayName(person)}{' '}
                     <Box as="span" color="var(--tt-muted, #9a9aa6)" fontSize="11px">
-                      @{person.username}
+                      {getUserIdentityDetail(person)}
                     </Box>
                   </Box>
                   <Button
                     size="xs"
                     onClick={async () => {
-                      const okRun = await run({ add: [person.id] }, `${person.displayName || person.username} added ✨`);
+                      const okRun = await run({ add: [person.id] }, `${getUserDisplayName(person)} added ✨`);
                       if (okRun) {
                         setAddQuery('');
                         setAddResults([]);
