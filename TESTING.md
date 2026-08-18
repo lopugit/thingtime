@@ -489,6 +489,24 @@ is fixed, and cite the checklist you ran in the PR description.
       when emptied, and the saved values survive reload on card, lightbox, and
       media page. A non-owner and an unauthenticated caller get no pencil and a
       403/401 from the endpoint.
+- [ ] Media layout editor: on a post with 3+ images, switch Layout between
+      Auto 🧱 / Rows 🥞 / Grid 🔳 in the composer AND in edit mode. Rows accepts
+      a pattern like 1-2-3 (hero, two, three; extras repeat the last row size),
+      Grid gets a 1-6 column stepper plus per-tile size badges cycling
+      normal → wide → tall → big. Saved layouts persist through create, edit,
+      reload, and render identically for a non-owner viewer; Auto clears
+      `mediaLayout` from the crystal. Layout controls only appear with 2+
+      visual attachments and never break the drag-reorder grips.
+- [ ] Server bounds: `mediaLayout` rejects pattern rows over 25 entries or
+      outside 1..6, columns outside 1..6, spans maps over 25 entries, and
+      non-object payloads with a 400; unknown keys are stripped; legacy posts
+      without the field stay valid; lightbox order stays attachment order in
+      every mode; desktop and 375px render every mode with no horizontal
+      overflow.
+- [ ] Drag-resize canvas editor (grid mode): dragging a tile's edge handle
+      resizes it snap-to-cell (wide/tall/big), including via touch, with a
+      keyboard fallback on a focused tile; the column slider relayouts live;
+      the resulting layout matches what non-edit viewers see after save.
 - [ ] Deleting the parent post (and separately a single attachment) cascades:
       the media thing's own comments/reactions are removed, its `/media/:id`
       404s, and no orphan child things remain.

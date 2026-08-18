@@ -367,7 +367,7 @@ const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | '
 
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing'>;
+type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing' | 'mediaLayout'>;
 const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact?: boolean; attachments?: PublicPost['attachments'] }) => (
   <Flex flexDirection="column" rowGap={compact ? 2 : 3}>
     {post.text && (
@@ -385,7 +385,7 @@ const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact
     {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
-    <PostAttachments attachments={attachments} compact={compact} />
+    <PostAttachments attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} />
   </Flex>
 );
 
@@ -1602,7 +1602,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 {post.text}
               </Text>
             )}
-            <PostAttachments attachments={post.attachments} />
+            <PostAttachments attachments={post.attachments} mediaLayout={post.mediaLayout} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
             ) : (
