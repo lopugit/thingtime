@@ -181,10 +181,6 @@ export function useApi() {
           ),
         [asyncFetcher]
       ),
-      setMediaUpload: useCallback(
-        async (args) => asyncFetcher.submit({ userId: args?.userId, granted: args?.granted }, { action: '/api/v1/admin/set-media-upload' }),
-        [asyncFetcher]
-      ),
       moderation: useCallback(async () => getJson('/api/v1/admin/moderation'), []),
       moderationReview: useCallback(
         async (args) =>

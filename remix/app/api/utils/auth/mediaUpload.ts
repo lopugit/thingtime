@@ -6,7 +6,7 @@
 // lives in attachmentResponses (requireUploadPermission) and reads the
 // per-scope flags — this predicate only powers PublicUser.canUploadMedia, the
 // composer's approval-pending card fallback, the beta parts/complete grant
-// check (requireUploadGrant), and any other "may upload at least one scope"
+// composer approval-card fallback, and any other "may upload at least one scope"
 // surface. privateUploads is compared with === true (not
 // !== false) so a pre-scope account stamped only { publicUploads: false }
 // stays fully withheld; grandfathered accounts pass via the public term.

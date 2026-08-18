@@ -66,7 +66,6 @@ type UserRow = {
   privateUploadsEnabled: boolean;
   publicUploadsPending: boolean;
   privateUploadsPending: boolean;
-  mediaUpload: boolean;
   accountKind: 'user' | 'service';
 	storage: AdminStorageProjection;
   storageAllowanceBytes: number | null;
@@ -485,30 +484,6 @@ const UsersTab = () => {
     () => (rows ?? []).filter((row) => row.publicUploadsPending || row.privateUploadsPending).length,
     [rows]
   );
-  const lopu = useLopu();
-  const [mediaBusyId, setMediaBusyId] = React.useState<string | null>(null);
-  // Grant/revoke the separate beta media-upload record (meta.mediaUpload).
-  // Enforcement lives in the per-scope Approve menu above; this flag stays an
-  // admin-visible grant record, and admins can upload regardless of it.
-  const toggleMediaUpload = async (row: UserRow) => {
-    setMediaBusyId(row.id);
-    try {
-      const resp = await apiRef.current.v1.admin.setMediaUpload({ userId: row.id, granted: !row.mediaUpload });
-      if (resp?.ok) {
-        lopu({
-          title: resp.user?.mediaUpload ? `Media uploads granted for @${row.username} ✅` : `Media uploads revoked for @${row.username}`,
-          status: 'success'
-        });
-        refresh();
-      } else {
-        lopu({ title: resp?.error || 'Could not update media uploads', status: 'error' });
-      }
-    } catch {
-      lopu({ title: 'Could not update media uploads', status: 'error' });
-    } finally {
-      setMediaBusyId(null);
-    }
-  };
 
   return (
     <Box>
@@ -578,20 +553,6 @@ const UsersTab = () => {
                   </Td>
                   <Td whiteSpace="nowrap">
                     <UploadApprovalsControl row={row} onChanged={refresh} />
-                    <Flex align="center" gap={2} mt={1}>
-                      {(row.mediaUpload || row.isAdmin) && (
-                        <Badge
-                          colorScheme="purple"
-                          fontSize="0.6em"
-                          title="Media-upload grant record (meta.mediaUpload) — the Approve scopes above are what enforce"
-                        >
-                          media
-                        </Badge>
-                      )}
-                      <Button isLoading={mediaBusyId === row.id} onClick={() => toggleMediaUpload(row)} size="xs" variant="ghost">
-                        {row.mediaUpload ? 'Revoke media' : 'Grant media'}
-                      </Button>
-                    </Flex>
                   </Td>
                   <Td fontSize="xs" whiteSpace="nowrap" title={row.createdAt || undefined}>
                     {formatAdminDate(row.createdAt)}
