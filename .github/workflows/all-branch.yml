@@ -1,0 +1,59 @@
+# Build the wildcard `all` branch: develop + main + every open, same-repo pull
+# request (stacked branch → branch PRs included) merged into one generated
+# branch, so all in-progress work can be tried — and Vercel-previewed — in one
+# place.
+#
+# Everything interesting lives in .github/scripts/build-all-branch.mjs (full
+# design notes in its header): deterministic from-scratch rebuilds, stack-aware
+# merge order, `-X theirs` newest-wins conflict policy with a matching
+# theirs-biased fallback for the conflicts strategy options cannot settle,
+# per-PR skip-instead-of-fail, a committed ALL_BRANCH.md manifest, push dedup
+# when the rebuilt tree is identical, and `.github` pinned to develop's copy so
+# the default GITHUB_TOKEN can force-push the result (workflow files never
+# execute on `all`).
+#
+# Token notes: the default GITHUB_TOKEN is enough. Its pushes intentionally
+# trigger no workflows, and Vercel still builds `all` because its GitHub App
+# watches branch pushes regardless of the pushing token. No PAT or inherited
+# secret is read.
+
+name: Build all branch
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+# Standalone dispatches on the github-actions ref dedupe against themselves;
+# called runs dedupe through the caller listener's identical group.
+concurrency:
+  group: all-branch-rebuild
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    if: github.repository == 'lopugit/thingtime'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out develop working tree
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Check out protected build controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: github-actions
+          path: control-plane
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Rebuild and push the all branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node control-plane/.github/scripts/build-all-branch.mjs
