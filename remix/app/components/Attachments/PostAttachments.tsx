@@ -1,12 +1,18 @@
 import React from 'react';
-import { Box, Flex, Grid, Image, Text } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import { Download, File as FileIcon } from 'lucide-react';
 
 import { attachmentContentUrl, formatAttachmentBytes, normalizePublicAttachment } from './attachmentUiCore';
+import { MediaLightbox } from './MediaLightbox';
 import type { PublicAttachment } from './attachmentTypes';
 
 const BORDER = '1px solid var(--tt-border, #ececef)';
 const MUTED = 'var(--tt-muted, #9a9aa6)';
+
+// A post's attachment gallery. Images flow as a natural-aspect masonry (CSS
+// columns — first image top-left, order runs down each column); clicking one
+// opens the MediaLightbox, which deeplinks to each media's own /media/:id
+// Thing page. Videos keep inline players; generic files stay download rows.
 
 export const PostAttachments = ({
 	attachments,
@@ -21,6 +27,7 @@ export const PostAttachments = ({
 		const value = normalizePublicAttachment(attachment);
 		return value ? [value] : [];
 	});
+	const [lightbox, setLightbox] = React.useState<{ open: boolean; index: number }>({ open: false, index: 0 });
 	if (!normalized.length) return null;
 
 	const images = normalized.filter((attachment) => attachment.mediaKind === 'image');
@@ -32,23 +39,61 @@ export const PostAttachments = ({
 	return (
 		<Flex flexDirection="column" rowGap={compact ? 2 : 3} aria-label={ariaLabel}>
 			{images.length > 0 && (
-				<Grid templateColumns={images.length === 1 ? '1fr' : 'repeat(2, minmax(0, 1fr))'} gap={1.5}>
+				<Box
+					sx={{
+						columnCount: images.length === 1 ? 1 : compact ? 2 : { base: 2, sm: Math.min(3, images.length) },
+						columnGap: '6px'
+					}}
+				>
 					{images.map((attachment, index) => (
-						<Image
+						<Box
 							key={attachment.id}
-							src={attachmentContentUrl(attachment.id)}
-							alt={attachment.name || `Post image ${index + 1}`}
-							loading="lazy"
-							referrerPolicy="no-referrer"
+							as="button"
+							type="button"
+							display="block"
 							width="100%"
-							height={images.length === 1 ? 'auto' : compact ? '140px' : ['160px', '220px']}
-							maxHeight={compact ? '320px' : '520px'}
-							objectFit="cover"
+							marginBottom="6px"
+							position="relative"
 							borderRadius="var(--tt-radius-md, 12px)"
-							background="var(--tt-surface-alt, #f5f5f7)"
-						/>
+							overflow="hidden"
+							cursor="zoom-in"
+							sx={{ breakInside: 'avoid' }}
+							aria-label={`View ${attachment.title || attachment.name}`}
+							onClick={() => setLightbox({ open: true, index })}
+						>
+							<Box
+								as="img"
+								src={attachmentContentUrl(attachment.id)}
+								alt={attachment.title || attachment.name || `Post image ${index + 1}`}
+								loading="lazy"
+								referrerPolicy="no-referrer"
+								width="100%"
+								display="block"
+								maxHeight={compact ? '360px' : '640px'}
+								objectFit="cover"
+								background="var(--tt-surface-alt, #f5f5f7)"
+								transition="transform 120ms ease"
+								_hover={{ transform: 'scale(1.015)' }}
+							/>
+							{attachment.title ? (
+								<Box
+									position="absolute"
+									left={0}
+									right={0}
+									bottom={0}
+									paddingX={2.5}
+									paddingY={1.5}
+									background="linear-gradient(transparent, rgba(10, 10, 14, 0.62))"
+									textAlign="left"
+								>
+									<Text fontSize="11px" fontWeight={650} color="white" noOfLines={1}>
+										{attachment.title}
+									</Text>
+								</Box>
+							) : null}
+						</Box>
 					))}
-				</Grid>
+				</Box>
 			)}
 
 			{videos.map((attachment) => (
@@ -56,7 +101,7 @@ export const PostAttachments = ({
 					key={attachment.id}
 					as="video"
 					src={attachmentContentUrl(attachment.id)}
-					aria-label={attachment.name}
+					aria-label={attachment.title || attachment.name}
 					controls
 					playsInline
 					preload="metadata"
@@ -98,8 +143,8 @@ export const PostAttachments = ({
 								<FileIcon size={15} aria-hidden />
 							</Flex>
 							<Box flex="1" minWidth={0}>
-								<Text fontSize={compact ? 'xs' : 'sm'} fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={attachment.name}>
-									{attachment.name}
+								<Text fontSize={compact ? 'xs' : 'sm'} fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={attachment.title || attachment.name}>
+									{attachment.title || attachment.name}
 								</Text>
 								<Text fontSize="10px" color={MUTED} noOfLines={1}>
 									{formatAttachmentBytes(attachment.size)} · {attachment.contentType || 'File'}
@@ -110,6 +155,13 @@ export const PostAttachments = ({
 					))}
 				</Flex>
 			)}
+
+			<MediaLightbox
+				attachments={images}
+				index={lightbox.index}
+				isOpen={lightbox.open}
+				onClose={() => setLightbox((state) => ({ ...state, open: false }))}
+			/>
 		</Flex>
 	);
 };
