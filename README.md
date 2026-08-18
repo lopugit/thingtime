@@ -625,6 +625,20 @@ test recipient (or a plus alias of it).
 
 ### Private S3 media and attachments
 
+Uploaded images are moderated asynchronously after upload: a provider-pluggable
+NSFW/TOS analysis (Claude API vision by default) stamps a protected
+`moderation` field on the attachment thing. NSFW media renders heavily blurred
+behind a "Show Anyway" click; TOS/illegal verdicts quarantine the media (never
+served publicly, admins can open evidence) and log a `moderationFlag` for the
+`/admin` → Moderation review queue, which also offers a retry sweep for
+attachments the async kickoff missed.
+
+```sh
+THINGTIME_MODERATION_PROVIDER="claude"  # 'claude' | 'test' | 'off' (default: claude when ANTHROPIC_API_KEY is set, else off)
+ANTHROPIC_API_KEY="<key>"               # Claude API key used by the moderation provider
+TT_MODERATION_MODEL="claude-opus-5"     # optional model override
+```
+
 Posts, comments and replies, Messenger messages and thread replies, custom
 reaction emoji, and profile avatar/banner images use direct, checksummed
 multipart uploads to a private S3 bucket. The browser receives short-lived part

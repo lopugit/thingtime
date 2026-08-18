@@ -286,6 +286,13 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
+      `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
+      with a red border, light red wash, centered NSFW badge, and a
+      `Show Anyway` button that reveals it (per attachment, per page view).
+      An image named `tt-test-illegal.png` disappears from public payloads and
+      its `/api/v1/attachments/content` URL 404s for non-admins, while a
+      `moderationFlag` row appears in `/admin` → Moderation.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
@@ -1465,6 +1472,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 
 ## Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`)
 
+- [ ] `/admin` → Moderation lists flags (unreviewed first) with status badges;
+      `View` opens the raw media (blocked media opens for admins only);
+      `Clear` / `NSFW` / `Block` override the verdict with a Lopu toast and
+      stamp reviewedBy; `Run analysis sweep` reports analyzed/flagged/skipped
+      counts and drains pending attachments.
 Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
 restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
 name already on the allowlist is refused, so register FIRST). One command

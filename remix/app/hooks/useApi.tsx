@@ -181,6 +181,16 @@ export function useApi() {
           ),
         [asyncFetcher]
       ),
+      moderation: useCallback(async () => getJson('/api/v1/admin/moderation'), []),
+      moderationReview: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { action: 'review', attachmentId: args?.attachmentId, verdict: args?.verdict },
+            { action: '/api/v1/admin/moderation' }
+          ),
+        [asyncFetcher]
+      ),
+      moderationSweep: useCallback(async () => asyncFetcher.submit({ action: 'sweep' }, { action: '/api/v1/admin/moderation' }), [asyncFetcher]),
       migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
 			migrationDiagnostic: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),

@@ -94,6 +94,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   migration is required, and administrators bypass the gate entirely.
   — Claude (AI), 2026-08-18
 
+### Added
+
+- **NSFW/TOS media moderation pipeline**: uploaded images are analyzed
+  asynchronously after `complete` (provider-pluggable: Claude API vision via
+  `THINGTIME_MODERATION_PROVIDER=claude`, deterministic `test` provider, or
+  `off`), stamping a protected `moderation` root field on the attachment
+  thing. NSFW media renders behind a heavy blur + red wash with a centered
+  NSFW badge and "Show Anyway" reveal; TOS/illegal verdicts quarantine the
+  media (dropped from public payloads, content route 404s for non-admins)
+  and log a `moderationFlag` thing. New `/admin` → Moderation tab reviews
+  flags (Clear/NSFW/Block overrides, audit-stamped) and runs a bounded
+  analysis sweep via `GET/POST /api/v1/admin/moderation`. See the
+  [PR note](../PRs/pending-nsfw-tos-media-moderation.md).
+  — Claude (AI), 2026-08-18
+
 ### Fixed
 
 - **PR #99 final security reconciliation**: the current Thingtime serializer

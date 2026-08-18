@@ -929,6 +929,71 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-moderation',
+    group: 'admin',
+    title: 'Moderation review queue',
+    endpoint: '/api/v1/admin/moderation',
+    summary: 'Review NSFW/TOS moderation flags, override verdicts, and sweep unanalyzed media (admin only).',
+    detail:
+      'GET returns the moderationFlag review queue (newest unreviewed first) plus counts of flags and ready attachments still awaiting analysis. POST with { action: "review", attachmentId, verdict: "clear" | "nsfw" | "block" } overrides the protected moderation stamp — blocked media stops being served immediately (admins can still open it for evidence), cleared media serves again. POST with { action: "sweep" } analyzes a bounded batch of ready attachments the async pipeline missed; run repeatedly to drain.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to load flags + counts for the /admin Moderation tab.',
+      'POST { action: "review", attachmentId, verdict } to override a verdict; the flag records reviewedBy/reviewedAt.',
+      'POST { action: "sweep" } after deploys or provider outages to analyze pending/unstamped ready attachments.',
+      'Non-admins receive 403; unknown attachmentId 404; invalid verdict/action 400.'
+    ],
+    requestExamples: [
+      {
+        name: 'Load the review queue',
+        description: 'Flags plus analysis backlog counts.',
+        method: 'GET'
+      },
+      {
+        name: 'Uphold a block',
+        description: 'Confirm a TOS verdict after reviewing the media.',
+        method: 'POST',
+        body: { action: 'review', attachmentId: '64f000000000000000000031', verdict: 'block' }
+      },
+      {
+        name: 'Run an analysis sweep',
+        description: 'Analyze a bounded batch of unanalyzed ready attachments.',
+        method: 'POST',
+        body: { action: 'sweep' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Review queue.',
+        body: {
+          ok: true,
+          flags: [
+            {
+              id: 'modflag-64f000000000000000000031',
+              attachmentId: '64f000000000000000000031',
+              status: 'nsfw',
+              categories: ['explicit-nudity'],
+              reason: 'Detected explicit nudity.',
+              provider: 'claude',
+              model: 'claude-opus-5',
+              attachmentOwnerId: '64f000000000000000000002',
+              attachmentName: 'photo.png',
+              attachmentPurpose: 'post',
+              reviewedBy: null,
+              reviewedAt: null,
+              createdAt: '2026-08-18T00:00:00.000Z',
+              updatedAt: '2026-08-18T00:00:00.000Z'
+            }
+          ],
+          counts: { flags: 1, unanalyzedReady: 0 }
+        }
+      },
+      { status: 400, description: 'Bad action.', body: { ok: false, error: 'action must be review or sweep' } }
+    ]
+  }),
+  endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
     group: 'settings',
     title: 'AI workflow model waterfall',
