@@ -1449,8 +1449,10 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       `POST /api/v1/admin/users/public-uploads`.
 - [ ] The same row also shows the purple `media` badge for `meta.mediaUpload`
       grantees and admins; **Grant media / Revoke media** toggles that separate
-      flag with a Lopu toast and the badge updates after refresh. Non-admin
-      sessions get 403 from `POST /api/v1/admin/set-media-upload`.
+      flag with a Lopu toast and the badge updates after refresh. That grant is
+      a record only — it never gates an upload, so flipping it alone must NOT
+      change any upload's 403. Non-admin sessions get 403 from
+      `POST /api/v1/admin/set-media-upload`.
 
 Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
 restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a

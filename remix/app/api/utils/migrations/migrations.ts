@@ -2559,61 +2559,6 @@ const staleGenerationBlocker = async (physical: string): Promise<string | null> 
   return null;
 };
 
-// During the beta, media/file uploads require an admin-granted per-user
-// permission (meta.mediaUpload — root secureMediaUpload on user things).
-// Accounts created BEFORE the gate shipped were implicitly trusted with
-// uploads, so this migration grandfathers every user account that exists at
-// run time (things-era + legacy stores). New registrations after the gate
-// default to no grant and go through the admin-approval email flow.
-// Idempotent: re-runs only touch users still missing the flag; the cutoff is
-// the run moment, so an account registered mid-run is never blanket-granted
-// by a later re-run (its createdAt is before THAT run's cutoff only if it
-// already existed — admins review those normally via /admin).
-const grantMediaUploadToExistingUsers: Migration = {
-	id: 'grant-media-upload-to-existing-users',
-	collection: 'things',
-	fromVersion: THINGS_VERSION,
-	toVersion: THINGS_VERSION,
-	title: 'Grandfather media uploads for existing users',
-	description:
-		'Sets the admin-granted media-upload flag (root secureMediaUpload on user things, meta.mediaUpload on legacy ' +
-		'users) for every account created before the run, so pre-gate users keep uploading while new registrations ' +
-		'wait for a manual admin grant. Run once when deploying the beta upload gate; skip it to require approval ' +
-		'for EVERY account including existing ones. Idempotent — re-runs only touch users still missing the flag.',
-	pending: async () => {
-		const cutoff = new Date();
-		const things = await getCollection('things');
-		const users = await getCollection('users');
-		const [thingCount, legacyCount] = await Promise.all([
-			things.countDocuments({ thingtime: 'user', createdAt: { $lt: cutoff }, secureMediaUpload: { $ne: true } } as any),
-			users.countDocuments({ createdAt: { $lt: cutoff }, 'meta.mediaUpload': { $ne: true } } as any)
-		]);
-		return thingCount + legacyCount;
-	},
-	run: async ({ dryRun }) => {
-		await ensureIndexes();
-		const cutoff = new Date();
-		const notes = makeNotes();
-		const things = await getCollection('things');
-		const users = await getCollection('users');
-		const thingFilter = { thingtime: 'user', createdAt: { $lt: cutoff }, secureMediaUpload: { $ne: true } } as any;
-		const legacyFilter = { createdAt: { $lt: cutoff }, 'meta.mediaUpload': { $ne: true } } as any;
-		const [thingMatched, legacyMatched] = await Promise.all([things.countDocuments(thingFilter), users.countDocuments(legacyFilter)]);
-		const matched = thingMatched + legacyMatched;
-		let migrated = 0;
-		if (!dryRun && matched > 0) {
-			const now = new Date();
-			const [thingRes, legacyRes] = await Promise.all([
-				things.updateMany(thingFilter, { $set: { secureMediaUpload: true, updatedAt: now } }),
-				users.updateMany(legacyFilter, { $set: { 'meta.mediaUpload': true, updatedAt: now } })
-			]);
-			migrated = (thingRes.modifiedCount || 0) + (legacyRes.modifiedCount || 0);
-			notes.push(`granted media upload to ${thingRes.modifiedCount || 0} user thing(s) and ${legacyRes.modifiedCount || 0} legacy user doc(s)`);
-		}
-		return { dryRun, matched, migrated, created: 0, skipped: 0, notes: notes.list() };
-	}
-};
-
 export const migrations: Migration[] = [
 	// Physical residue must land in the current generation before any logical
 	// shape or byte-ledger migration can declare its source universe complete.
@@ -2634,7 +2579,6 @@ export const migrations: Migration[] = [
   backfillAppNamespaceFields,
   backfillAppStorageAllowances,
 	backfillUserStorageAccounting,
-	grantMediaUploadToExistingUsers,
   dropStaleCollectionGenerations
 ];
 

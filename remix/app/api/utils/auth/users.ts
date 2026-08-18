@@ -144,6 +144,11 @@ export type PublicProfile = {
 // own circles see (message attachments, own profile avatar/banner). "All" is
 // simply both flags. Admins are always allowed regardless of the flags, so a
 // locked-out admin can never be unable to fix the account that grants them.
+// These two flags are the ONE enforcement path, and they also feed the
+// any-scope `canUploadMediaDoc` predicate (auth/mediaUpload.ts) that
+// PublicUser.canUploadMedia and the parts/complete grant check read — so
+// approving a scope needs no second grant, and the separate `meta.mediaUpload`
+// record (its own admin setter) never gates an upload.
 export const userPublicUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.publicUploads !== false;
 export const userPrivateUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.privateUploads !== false;
 
@@ -317,7 +322,7 @@ const userThingToDoc = (thing: any): any => {
 		emailVerified: !!secure.emailVerified,
 		accountKind: secure.accountKind === 'service' ? 'service' : 'user',
 		emailVerificationRequiredBy: secure.emailVerificationRequiredBy ? new Date(secure.emailVerificationRequiredBy) : null,
-		meta: { ...(secure.meta || {}), admin: !!thing.secureAdmin, mediaUpload: !!thing.secureMediaUpload },
+		meta: { ...(secure.meta || {}), admin: !!thing.secureAdmin },
 		schemaVersion: thing.schemaVersion,
 		createdAt: thing.createdAt,
 		updatedAt: thing.updatedAt
@@ -333,12 +338,10 @@ export const buildUserSecure = (
 		storageAllowanceBytes?: number;
 		storageUsedBytes?: number;
 	}
-): { secure: Binary; admin: boolean; mediaUpload: boolean; recentReactions: string[] } => {
+): { secure: Binary; admin: boolean; recentReactions: string[] } => {
 	const meta = { ...(doc.meta || {}) };
 	const admin = meta.admin === true;
 	delete meta.admin; // admin is the root boolean, not blob content
-	const mediaUpload = meta.mediaUpload === true;
-	delete meta.mediaUpload; // mediaUpload is the root secureMediaUpload boolean, not blob content
 	// recentReactions is the root secureRecentReactions array, not blob content —
 	// strip it here so a migrated user's legacy meta.recentReactions moves to the
 	// atomic field instead of bloating the CAS-serialized blob.
@@ -356,7 +359,7 @@ export const buildUserSecure = (
 	};
 	if (doc.storageAllowanceBytes !== undefined) payload.storageAllowanceBytes = doc.storageAllowanceBytes;
 	if (doc.storageUsedBytes !== undefined) payload.storageUsedBytes = doc.storageUsedBytes;
-	return { secure: packSecure(payload), admin, mediaUpload, recentReactions };
+	return { secure: packSecure(payload), admin, recentReactions };
 };
 
 const findUserThing = async (filter: Record<string, unknown>) => (await getThingsCollection()).findOne({ thingtime: 'user', ...filter } as any);
@@ -547,7 +550,7 @@ export const insertUser = async (
 ) => {
 	const shareId = new ObjectId().toHexString();
 	const now = doc.createdAt instanceof Date ? doc.createdAt : new Date();
-	const { secure, admin, mediaUpload, recentReactions } = buildUserSecure(doc);
+	const { secure, admin, recentReactions } = buildUserSecure(doc);
 
 	const thing = {
 		shareId,
@@ -576,9 +579,6 @@ export const insertUser = async (
 		...(options.initialSubscription ? { initialSubscription: { ...options.initialSubscription } } : {}),
 		// sparse boolean, queryable by listAdmins (booleans aren't text-indexed)
 		...(admin ? { secureAdmin: true } : {}),
-		// sparse boolean mirroring secureAdmin — the admin-granted media-upload
-		// permission (never set at self-registration; granted via setUserMediaUpload)
-		...(mediaUpload ? { secureMediaUpload: true } : {}),
 		// reaction MRU as a BinData array (text-index-invisible, atomically mutable);
 		// only present when a migrated account arrives with prior recents
 		...(recentReactions.length ? { secureRecentReactions: packRecentReactions(recentReactions) } : {}),
@@ -1166,6 +1166,10 @@ export const setUserAdmin = async (userId: string, admin: boolean): Promise<Admi
 // twin left by an interrupted users→things migration would otherwise keep a
 // stale value that the dual-store read resurrects, so a grant would appear not
 // to take. Best-effort per store; either matching counts as applied.
+//
+// This is the ONE upload-permission setter: the scopes it writes are what the
+// upload gates enforce (and what PublicUser.canUploadMedia derives from), so
+// no second grant has to be flipped to unblock an account.
 export type UploadPermissionUpdates = { publicUploads?: boolean; privateUploads?: boolean };
 export const setUserUploadPermissions = async (userId: string, updates: UploadPermissionUpdates): Promise<AdminUserRow | null> => {
 	const keys = (['publicUploads', 'privateUploads'] as const).filter((key) => typeof updates[key] === 'boolean');
@@ -1187,26 +1191,6 @@ export const setUserUploadPermissions = async (userId: string, updates: UploadPe
 	}
 
 	if (!applied) return null;
-	const updated = await findUserById(userId);
-	return updated ? toAdminRow(updated) : null;
-};
-
-// Set (or clear) a user's stored media-upload grant (meta.mediaUpload /
-// root secureMediaUpload on user things). Mirrors setUserAdmin's dual-store
-// write so an interrupted-migration twin can't resurrect a stale flag.
-// Admins keep upload access regardless (canUploadMediaDoc ORs isAdminDoc),
-// so revoking one only clears the stored flag.
-export const setUserMediaUpload = async (userId: string, granted: boolean): Promise<AdminUserRow | null> => {
-	const now = new Date();
-	const [thingRes, legacyRes] = await Promise.all([
-		getThingsCollection().then((c) =>
-			c.updateOne({ shareId: String(userId), thingtime: 'user' } as any, { $set: { secureMediaUpload: granted === true, updatedAt: now } })
-		),
-		ObjectId.isValid(userId)
-			? getUsersCollection().then((c) => c.updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.mediaUpload': granted === true, updatedAt: now } }))
-			: Promise.resolve({ matchedCount: 0 } as { matchedCount: number })
-	]);
-	if (!thingRes.matchedCount && !legacyRes.matchedCount) return null;
 	const updated = await findUserById(userId);
 	return updated ? toAdminRow(updated) : null;
 };
@@ -1244,7 +1228,7 @@ const searchUsersForAdminCapped = async (query: string, limit: number, hardCap: 
 	const [thingRaw, exact, legacyDocs] = await Promise.all([
 		things
 			.find(thingFilter as any)
-			.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1, secureMediaUpload: 1, createdAt: 1 })
+			.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1, createdAt: 1 })
 			.limit(capped)
 			.toArray(),
 		q.includes('@') ? things.findOne({ uniqueKeys: userEmailKey(q) } as any) : Promise.resolve(null),
@@ -1358,7 +1342,6 @@ export const searchUsersForAdminOverviewPage = async (query: string, limit = 20,
 		'crystal.displayName': 1,
 		secure: 1,
 		secureAdmin: 1,
-		secureMediaUpload: 1,
 		createdAt: 1
 	};
 
@@ -1522,7 +1505,7 @@ export const listAdmins = async (): Promise<AdminListSnapshot> => {
 	const [thingRaw, legacyDocs] = await Promise.all([
 		things
 			.find({ thingtime: 'user', secureAdmin: true } as any)
-			.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1, secureMediaUpload: 1, createdAt: 1 })
+			.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1, createdAt: 1 })
 			.sort({ createdAt: -1, shareId: 1 })
 			.limit(ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT)
 			.toArray(),

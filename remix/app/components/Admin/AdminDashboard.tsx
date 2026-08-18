@@ -477,6 +477,9 @@ const UsersTab = () => {
   });
   const [subscriptionFor, setSubscriptionFor] = React.useState<UserRow | null>(null);
   const [linksFor, setLinksFor] = React.useState<UserRow | null>(null);
+  // The per-scope Approve menu (UploadApprovalsControl) is the only control
+  // that changes what the upload gates enforce, so this banner counts rows
+  // still waiting on either scope.
   const pendingUploadCount = React.useMemo(
     () => (rows ?? []).filter((row) => row.publicUploadsPending || row.privateUploadsPending).length,
     [rows]
@@ -564,11 +567,6 @@ const UsersTab = () => {
                           service
                         </Badge>
                       )}
-                      {(row.mediaUpload || row.isAdmin) && (
-                        <Badge ml={1} colorScheme="purple" fontSize="0.6em" title="Can upload media and files">
-                          media
-                        </Badge>
-                      )}
                     </Text>
                     <Text fontSize="xs" opacity={0.6} overflow="hidden" textOverflow="ellipsis" maxW="220px">
                       {row.displayName || row.email}
@@ -579,6 +577,20 @@ const UsersTab = () => {
                   </Td>
                   <Td whiteSpace="nowrap">
                     <UploadApprovalsControl row={row} onChanged={refresh} />
+                    <Flex align="center" gap={2} mt={1}>
+                      {(row.mediaUpload || row.isAdmin) && (
+                        <Badge
+                          colorScheme="purple"
+                          fontSize="0.6em"
+                          title="Media-upload grant record (meta.mediaUpload) — the Approve scopes above are what enforce"
+                        >
+                          media
+                        </Badge>
+                      )}
+                      <Button isLoading={mediaBusyId === row.id} onClick={() => toggleMediaUpload(row)} size="xs" variant="ghost">
+                        {row.mediaUpload ? 'Revoke media' : 'Grant media'}
+                      </Button>
+                    </Flex>
                   </Td>
                   <Td fontSize="xs" whiteSpace="nowrap" title={row.createdAt || undefined}>
                     {formatAdminDate(row.createdAt)}
@@ -622,15 +634,6 @@ const UsersTab = () => {
                     </Button>
                     <Button size="xs" variant="outline" mr={1} onClick={() => setLinksFor(row)}>
                       Links{row.counts.ownedAccounts + row.counts.linkedApps > 0 ? ` (${row.counts.ownedAccounts + row.counts.linkedApps})` : ''}
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      isLoading={mediaBusyId === row.id}
-                      onClick={() => toggleMediaUpload(row)}
-                      title={row.mediaUpload ? 'Revoke the beta media-upload permission' : 'Grant the beta media-upload permission'}
-                    >
-                      {row.mediaUpload ? 'Revoke media' : 'Grant media'}
                     </Button>
                   </Td>
                 </Tr>

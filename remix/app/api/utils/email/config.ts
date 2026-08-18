@@ -43,11 +43,6 @@ export const getEmailConfig = (): EmailConfig => ({
   failClosed: process.env.THINGTIME_EMAIL_FAIL_CLOSED === 'true'
 });
 
-// Destination for operational admin alerts (new-user media-grant requests,
-// moderation flags). Env-overridable so forks/previews don't mail the real
-// admin inbox; see README for fork-safe setup.
-export const getAdminNotificationsEmail = () => firstPresent(process.env.THINGTIME_ADMIN_EMAIL) || 'admin@thingtime.com';
-
 export const getFromAddressForStream = (stream: EmailStream, config = getEmailConfig()) => {
   if (stream === 'newsletter') return config.newsletterFrom;
   if (stream === 'notification') return config.notificationFrom;
