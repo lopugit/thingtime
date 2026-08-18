@@ -23,6 +23,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.
   — Codex (AI), 2026-08-18
+- **PR #99 final security reconciliation**: the current Thingtime serializer
+  now treats persisted state strictly as data—functions are omitted on write,
+  every legacy function tag is removed without compilation, code-defined
+  defaults refill runtime behavior, and graph-aware repair preserves circular
+  aliases. Explicit Date tags and data-first legacy handling stop repeated
+  hydration from changing ordinary text. The strict app CSP now loads preview
+  freshness from external `/tt-preview-freshness.js`, while active Commander
+  assignments parse data literals without `eval`. Registration preserves the
+  existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
+  streaming body cap. — Codex (AI), 2026-08-18
 - **Native iOS drawer and media capture**: the iOS WebView now uses the same
   fixed drawer trigger as mobile web, so opening the drawer keeps its close
   control inside the panel instead of translating it with the top nav. The
@@ -830,6 +840,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
 
 ### Fixed
+
+- **PR #99 persisted-state, CSP, and registration-body hardening**: persisted
+  Thingtime functions are no longer serialized or revived with `eval`; Dates
+  use explicit tags so ordinary date-like strings retain their type; Vite and
+  Vercel now share a CSP without `unsafe-eval`; and public registration caps
+  request bodies at 16 KiB while continuing to use the IP-based
+  `auth.register` limiter already merged in PR #167. The pre-paint theme and
+  environment title boot moved to a same-origin external script so they still
+  run under the policy; generated design prototypes retain their required
+  runtime compiler and unpkg access through a path-scoped compatibility policy
+  that never applies to the app shell. See the
+  [PR #99 implementation note](../PRs/99-claude-eval-csp-hardening--persisted-state-csp-register-body-cap.md).
+  This consolidates the useful work from closed PRs #94, #96, #98, #103, and
+  #106 plus stacked PR #102; open cross-tab PR #92 remains a separate feature.
+  — Claude (AI) + Codex (AI), 2026-08-08
 
 - **Sync main→develop fallback PR is now PAT-authored**: the **Sync main into
   develop** workflow's "Open (or reuse) the sync PR" step used `GITHUB_TOKEN`,
