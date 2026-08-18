@@ -170,6 +170,17 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
         [asyncFetcher]
       ),
+      setUserPublicUploads: useCallback(
+        async (args: { userId: string; enabled: boolean }) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, enabled: args?.enabled },
+            {
+              action: '/api/v1/admin/users/public-uploads',
+              errorContext: args?.enabled ? 'approve public uploads' : 'withhold public uploads'
+            }
+          ),
+        [asyncFetcher]
+      ),
       migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
 			migrationDiagnostic: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),
