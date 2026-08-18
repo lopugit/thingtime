@@ -1,22 +1,25 @@
-import { createHash } from 'node:crypto';
-import { Binary } from 'mongodb';
+import type { Binary } from 'mongodb';
 
-import { fromBin } from '../auth/users';
+import { fromBin, toBin } from '../auth/users';
 import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
-import { toPublicPosts, viewerOf, type PublicPost } from '../things/things';
+import { chronoCursorClause, parseChronoCursor, toPublicPosts, viewerOf, type PublicPost } from '../things/things';
 import {
   connectionProviderById,
+  oauthCredsFor,
   publicProviders,
   resolveYoutubeChannelQuery,
   sanitizeChannelList,
   youtubeApiKey,
   FEED_FETCH_LIMIT,
+  MAX_FEED_PAGES,
+  MAX_VIRTUAL_CHANNELS,
   type ConnectionProvider,
   type ExternalFeedItem,
   type OAuthTokens,
   type ResolvedExternalAccount,
   type YoutubeChannelRef
 } from './providers';
+import { fail, sha48, type Fail } from './shared';
 import { ACL_ALL, ACL_OWNER, ACL_USER_PREFIX, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 // Third-party app connections (FUNDAMENTALS.md §3). Three protected kinds:
@@ -41,28 +44,21 @@ import { ACL_ALL, ACL_OWNER, ACL_USER_PREFIX, COLLECTION_SCHEMA_VERSIONS } from 
 // so generic CRUD can't forge links (privilege escalation) or mutate synced
 // content.
 
-type Fail = { ok: false; status: number; error: string };
-const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
-
 export const EXTERNAL_ACCOUNT_KIND = 'external-account';
 export const EXTERNAL_LINK_KIND = 'external-account-link';
 export const EXTERNAL_POST_KIND = 'external-post';
 
 const MAX_LINKS_PER_USER = 50;
+// FUNDAMENTALS §3 bound: each linked user of a personal account adds one acl
+// grant to that account's posts, so linkers-per-account must be finite for the
+// embedded acl array to stay bounded. (The long-term §3-clean evolution is
+// relational per-(post, member) grant docs.)
+const MAX_LINKS_PER_ACCOUNT = 100;
 // don't hammer providers: a per-account fetch at most once per window; reads
 // inside the window serve the already-synced posts
 const SYNC_COOLDOWN_MS = 60_000;
 const DEFAULT_FEED_PAGE = 20;
 const MAX_FEED_PAGE = 50;
-
-const sha48 = (parts: string[]): string => {
-  const hash = createHash('sha256');
-  parts.forEach((part, index) => {
-    if (index) hash.update('\0');
-    hash.update(part);
-  });
-  return hash.digest('hex').slice(0, 48);
-};
 
 export const externalAccountShareId = (provider: string, providerAccountId: string): string =>
   `ext-account-${sha48([provider, providerAccountId])}`;
@@ -70,8 +66,13 @@ export const externalAccountShareId = (provider: string, providerAccountId: stri
 export const externalLinkShareId = (userId: string, accountShareId: string): string =>
   `ext-link-${sha48([userId, accountShareId])}`;
 
-export const externalPostShareId = (provider: string, externalId: string): string =>
-  `ext-post-${sha48([provider, externalId])}`;
+// namespace defaults to the provider id; providers surfacing the same
+// underlying content share one namespace (both YouTube providers → 'youtube')
+// so the same video stays ONE post no matter how it arrived
+export const externalPostShareId = (namespace: string, externalId: string): string =>
+  `ext-post-${sha48([namespace, externalId])}`;
+
+const postNamespaceOf = (provider: ConnectionProvider): string => provider.postNamespace || provider.id;
 
 type SessionUser = { id: string; username: string };
 
@@ -84,7 +85,8 @@ type SessionUser = { id: string; username: string };
 // freshest credentials, exactly like the shared profile crystal.
 type ConnectionSecurePayload = { tokens?: OAuthTokens | null };
 
-const packConnectionSecure = (payload: ConnectionSecurePayload): Binary => new Binary(Buffer.from(JSON.stringify(payload), 'utf8'));
+// shared builder from auth/users.ts — nothing hand-rolls the binary encoding
+const packConnectionSecure = (payload: ConnectionSecurePayload): Binary => toBin(JSON.stringify(payload));
 
 const unpackConnectionSecure = (value: unknown): ConnectionSecurePayload => {
   const raw = fromBin(value as any);
@@ -98,7 +100,6 @@ const unpackConnectionSecure = (value: unknown): ConnectionSecurePayload => {
 };
 
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
-const MAX_SYNC_DEPTH = 5;
 
 // --- projections ------------------------------------------------------------
 
@@ -157,13 +158,42 @@ export const upsertAccountAndLink = async (
   tokens?: OAuthTokens | null
 ): Promise<{ ok: true; connection: PublicConnection; alreadyLinked: boolean } | Fail> => {
   const home = await getHomeThingsCollection();
-  const existingCount = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, ownerId: user.id });
-  if (existingCount >= MAX_LINKS_PER_USER) return fail(400, `You can hold at most ${MAX_LINKS_PER_USER} connections`);
-
   const accountShareId = externalAccountShareId(provider.id, account.providerAccountId);
   const linkId = externalLinkShareId(user.id, accountShareId);
-  const now = new Date();
 
+  // idempotent reconnects (incl. SSO token reseals) must never trip the caps —
+  // only creating a NEW link counts against them
+  const existingLink = await home.findOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND }, { projection: { _id: 1 } });
+  if (!existingLink) {
+    const [userLinks, accountLinks] = await Promise.all([
+      home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, ownerId: user.id }),
+      home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountShareId })
+    ]);
+    if (userLinks >= MAX_LINKS_PER_USER) return fail(400, `You can hold at most ${MAX_LINKS_PER_USER} connections`);
+    if (accountLinks >= MAX_LINKS_PER_ACCOUNT) {
+      return fail(400, `That external account is already linked by ${MAX_LINKS_PER_ACCOUNT} Thingtime accounts — its limit is reached`);
+    }
+  }
+
+  // server-side-mutable config (the virtual channel list) merges on reconnect
+  // instead of being replaced, so re-connecting can never wipe managed state
+  const existingAccount: any = provider.mergeConfig
+    ? await home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND }, { projection: { 'crystal.config': 1 } })
+    : null;
+  const config =
+    provider.mergeConfig && existingAccount?.crystal?.config
+      ? provider.mergeConfig(existingAccount.crystal.config, account.config)
+      : account.config;
+  // display fields derive from the MERGED state, not the fresh resolve
+  let handle = account.handle;
+  let avatarUrl = account.avatarUrl;
+  if (provider.id === 'youtube') {
+    const channels = sanitizeChannelList(config.channels);
+    handle = `${channels.length} channel${channels.length === 1 ? '' : 's'}`;
+    avatarUrl = channels[0]?.thumbnail || null;
+  }
+
+  const now = new Date();
   // account first (shared across all linking users — refresh the public
   // profile crystal and, for SSO, the sealed tokens on every connect;
   // identity only on insert)
@@ -172,10 +202,10 @@ export const upsertAccountAndLink = async (
     {
       $set: {
         'crystal.displayName': account.displayName,
-        'crystal.handle': account.handle,
-        'crystal.avatarUrl': account.avatarUrl,
+        'crystal.handle': handle,
+        'crystal.avatarUrl': avatarUrl,
         'crystal.profileUrl': account.profileUrl,
-        'crystal.config': account.config,
+        'crystal.config': config,
         // a fresh sign-in clears any stale reconnect-needed state
         ...(tokens ? { secure: packConnectionSecure({ tokens }), 'crystal.lastSyncError': null } : {}),
         updatedAt: now
@@ -256,6 +286,7 @@ export const connectProvider = async (
     else if (field.required) return fail(400, `${field.label} is required`);
   }
 
+  if (!provider.resolveAccount) return fail(400, `${provider.name} cannot be connected with form fields`);
   const resolved = await provider.resolveAccount(fields, { userId: user.id });
   if (resolved.ok === false) return resolved;
   return upsertAccountAndLink(user, provider, resolved.account);
@@ -294,11 +325,24 @@ export const unlinkConnection = async (
   const link: any = await home.findOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND, ownerId: user.id });
   if (!link) return fail(404, 'Connection not found');
   await home.deleteOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND, ownerId: user.id });
-  // last link gone → retire the shared account thing (and any credentials in
-  // its secure blob); synced external posts stay — they are inert public/
-  // granted content other users' comments may hang off
   const accountId = String(link?.crystal?.accountId || '');
   if (accountId) {
+    // membership IS the authorization: revoke this member's acl grants from
+    // the account's personal posts. (If they still read them through ANOTHER
+    // link whose account also sources a post, ensureViewerGrant re-grants on
+    // their next read of that connection.)
+    const provider = connectionProviderById(link?.crystal?.provider);
+    if (provider?.contentVisibility === 'personal') {
+      const things = await getThingsCollection();
+      const grant = `${ACL_USER_PREFIX}${user.username.toLowerCase()}`;
+      await things.updateMany(
+        { thingtime: EXTERNAL_POST_KIND, sourceIds: accountId, acl: grant },
+        { $pull: { acl: grant } }
+      );
+    }
+    // last link gone → retire the shared account thing (and any credentials in
+    // its secure blob); synced external posts stay — they are inert public/
+    // granted content other users' comments may hang off
     const remaining = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountId });
     if (remaining === 0) {
       await home.deleteOne({ shareId: accountId, thingtime: EXTERNAL_ACCOUNT_KIND });
@@ -321,6 +365,18 @@ const composePostText = (item: ExternalFeedItem): string => {
 // $setOnInsert stamps identity. Personal-visibility posts additionally
 // $addToSet the syncing viewer's grant so every linked user earns access on
 // their own sync (and never anyone else).
+// Feed ordering rides createdAt; provider dates are attacker-influenced, so
+// clamp them to a sane window — a pre-1970 (or far-future) stamp would mint
+// cursors the pager rejects and loop pagination forever.
+const PUBLISHED_AT_FLOOR = Date.parse('1990-01-01T00:00:00Z');
+const clampPublishedAt = (value: Date | null, now: Date): Date => {
+  const ms = value?.getTime();
+  if (ms === undefined || !Number.isFinite(ms)) return now;
+  if (ms < PUBLISHED_AT_FLOOR) return new Date(PUBLISHED_AT_FLOOR);
+  if (ms > now.getTime() + 24 * 3600 * 1000) return now;
+  return value as Date;
+};
+
 const upsertExternalPosts = async (
   provider: ConnectionProvider,
   accountShareId: string,
@@ -330,17 +386,26 @@ const upsertExternalPosts = async (
   if (!items.length) return 0;
   const things = await getThingsCollection();
   const now = new Date();
+  const namespace = postNamespaceOf(provider);
+  // one post, many sources: the SAME video/post reached through a second
+  // account (another user's virtual channel list, a real subscription,
+  // another subreddit multi …) lists every source and stays ONE doc —
+  // comments and reactions unify on it. One membership object serves the
+  // main path AND the race retry so the two can never diverge.
+  const membership = {
+    sourceIds: accountShareId,
+    ...(viewerGrant && provider.contentVisibility === 'personal' ? { acl: viewerGrant } : {})
+  };
   const operations = items.map((item) => {
-    const shareId = externalPostShareId(provider.id, item.externalId);
-    const publishedAt = item.publishedAt || now;
+    const shareId = externalPostShareId(namespace, item.externalId);
+    const publishedAt = clampPublishedAt(item.publishedAt, now);
     const baseAcl = provider.contentVisibility === 'public' ? [ACL_ALL] : viewerGrant ? [viewerGrant] : [];
     return {
       updateOne: {
-        filter: {
-          shareId,
-          thingtime: EXTERNAL_POST_KIND,
-          $or: [{ 'crystal.sourceUpdatedAt': { $lte: now } }, { 'crystal.sourceUpdatedAt': { $exists: false } }]
-        },
+        // latest fetch wins by design (each sync fetches CURRENT provider
+        // state), so no source-timestamp guard — a guard against wall-clock
+        // time was vacuous and clock-skew could silently drop whole batches
+        filter: { shareId, thingtime: EXTERNAL_POST_KIND },
         update: {
           $set: {
             'crystal.type': 'text',
@@ -366,14 +431,7 @@ const upsertExternalPosts = async (
             },
             updatedAt: now
           },
-          // one post, many sources: the SAME video/post reached through a
-          // second account (another user's virtual channel list, a real
-          // subscription, another subreddit multi …) lists every source and
-          // stays ONE doc — comments and reactions unify on it
-          $addToSet: {
-            sourceIds: accountShareId,
-            ...(viewerGrant && provider.contentVisibility === 'personal' ? { acl: viewerGrant } : {})
-          },
+          $addToSet: membership,
           $setOnInsert: {
             schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
             shareId,
@@ -395,20 +453,14 @@ const upsertExternalPosts = async (
     const result = await things.bulkWrite(operations as any, { ordered: false });
     return (result.upsertedCount || 0) + (result.modifiedCount || 0);
   } catch (err: any) {
-    // duplicate-key races (two linked users syncing the same account at once)
-    // mean the other sync landed the doc — the membership retry keeps this
-    // sync's source + grant additions
-    if (err?.code !== 11000 && !err?.writeErrors?.every?.((error: any) => error?.code === 11000)) throw err;
-    const shareIds = items.map((item) => externalPostShareId(provider.id, item.externalId));
-    await things.updateMany(
-      { shareId: { $in: shareIds }, thingtime: EXTERNAL_POST_KIND },
-      {
-        $addToSet: {
-          sourceIds: accountShareId,
-          ...(viewerGrant && provider.contentVisibility === 'personal' ? { acl: viewerGrant } : {})
-        }
-      }
-    );
+    // Only a batch whose EVERY write error is a duplicate-key race (two
+    // linked users syncing the same account at once) is benign; a mixed batch
+    // hides real failures behind err.code (which mirrors the FIRST error).
+    const writeErrors = Array.isArray(err?.writeErrors) ? err.writeErrors : null;
+    const benign = writeErrors ? writeErrors.every((error: any) => error?.code === 11000) : err?.code === 11000;
+    if (!benign) throw err;
+    const shareIds = items.map((item) => externalPostShareId(namespace, item.externalId));
+    await things.updateMany({ shareId: { $in: shareIds }, thingtime: EXTERNAL_POST_KIND }, { $addToSet: membership });
     return 0;
   }
 };
@@ -419,8 +471,10 @@ const upsertExternalPosts = async (
 // must still earn its acl grants. Indexed, idempotent, usually matches zero.
 const ensureViewerGrant = async (accountShareId: string, viewerGrant: string) => {
   const things = await getThingsCollection();
+  // membership truth is the sourceIds array (crystal.accountId is a last-
+  // writer-wins display field a multi-source post may have flipped)
   await things.updateMany(
-    { thingtime: EXTERNAL_POST_KIND, 'crystal.accountId': accountShareId, acl: { $ne: viewerGrant } },
+    { thingtime: EXTERNAL_POST_KIND, sourceIds: accountShareId, acl: { $ne: viewerGrant } },
     { $addToSet: { acl: viewerGrant } }
   );
 };
@@ -448,18 +502,27 @@ const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any): Pro
   const tokens = unpackConnectionSecure(accountDoc?.secure).tokens || null;
   if (!tokens?.accessToken) return null;
   const expiresAt = tokens.expiresAt ? Date.parse(tokens.expiresAt) : NaN;
-  const expiring = Number.isFinite(expiresAt) && expiresAt - Date.now() < TOKEN_REFRESH_MARGIN_MS;
+  // an unknown expiry counts as expiring — providers with a refresh grant get
+  // a chance to mint a token whose lifetime we DO know
+  const expiring = !Number.isFinite(expiresAt) || expiresAt - Date.now() < TOKEN_REFRESH_MARGIN_MS;
   if (!expiring || !provider.oauth.refreshTokens) return tokens;
-  const clientId = (process.env[provider.oauth.clientIdEnv] || '').trim();
-  const clientSecret = (process.env[provider.oauth.clientSecretEnv] || '').trim();
-  if (!clientId || !clientSecret) return tokens;
-  const refreshed = await provider.oauth.refreshTokens(tokens, { clientId, clientSecret });
+  const creds = oauthCredsFor(provider);
+  if (!creds) return tokens;
+  const refreshed = await provider.oauth.refreshTokens(tokens, creds);
   if (!refreshed) return tokens; // expired + unrefreshable → the fetch's 401 surfaces "reconnect"
   const home = await getHomeThingsCollection();
-  await home.updateOne(
-    { shareId: String(accountDoc.shareId), thingtime: EXTERNAL_ACCOUNT_KIND },
+  // compare-and-set on the exact blob we read: providers that ROTATE refresh
+  // tokens (TikTok) invalidate the used one, so a lost concurrent-refresh race
+  // must never clobber the winner's fresh rotation with a dead token
+  const result = await home.updateOne(
+    { shareId: String(accountDoc.shareId), thingtime: EXTERNAL_ACCOUNT_KIND, secure: accountDoc.secure },
     { $set: { secure: packConnectionSecure({ tokens: refreshed }), updatedAt: new Date() } }
   );
+  if (result.matchedCount === 0) {
+    // another refresh won — serve the winner's tokens
+    const current = await home.findOne({ shareId: String(accountDoc.shareId), thingtime: EXTERNAL_ACCOUNT_KIND }, { projection: { secure: 1 } });
+    return unpackConnectionSecure(current?.secure).tokens || refreshed;
+  }
   return refreshed;
 };
 
@@ -490,10 +553,14 @@ export const readConnectionsFeed = async (
         if (provider.contentVisibility === 'personal') {
           await ensureViewerGrant(String(account.shareId), viewerGrant);
         }
-        const storedDepth = Math.min(Math.max(1, Number(account?.crystal?.syncDepth) || 1), MAX_SYNC_DEPTH);
-        const pages = query.deepen ? Math.min(storedDepth + 1, MAX_SYNC_DEPTH) : storedDepth;
+        const storedDepth = Math.min(Math.max(1, Number(account?.crystal?.syncDepth) || 1), MAX_FEED_PAGES);
+        // deepening only bypasses the cooldown while it can actually go
+        // deeper — at the cap it degrades to a normal cooldown-gated read so
+        // a scroll-happy client can't hammer providers
+        const canDeepen = !!query.deepen && storedDepth < MAX_FEED_PAGES;
+        const pages = canDeepen ? storedDepth + 1 : storedDepth;
         const lastSyncedAt = account?.crystal?.lastSyncedAt instanceof Date ? account.crystal.lastSyncedAt.getTime() : 0;
-        if (!query.forceSync && !query.deepen && Date.now() - lastSyncedAt < SYNC_COOLDOWN_MS) {
+        if (!query.forceSync && !canDeepen && Date.now() - lastSyncedAt < SYNC_COOLDOWN_MS) {
           synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: true, error: null });
           return;
         }
@@ -509,7 +576,7 @@ export const readConnectionsFeed = async (
         }
         const written = await upsertExternalPosts(provider, String(account.shareId), fetched.items, viewerGrant);
         await markAccountSync(String(account.shareId), null);
-        if (query.deepen && pages > storedDepth) {
+        if (canDeepen) {
           const home = await getHomeThingsCollection();
           await home.updateOne(
             { shareId: String(account.shareId), thingtime: EXTERNAL_ACCOUNT_KIND },
@@ -528,26 +595,26 @@ export const readConnectionsFeed = async (
   let nextCursor: string | null = null;
   if (accountIds.length) {
     const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_PAGE), MAX_FEED_PAGE);
-    // membership rides the root sourceIds array (one post can arrive through
-    // several accounts); crystal.accountId keeps pre-sourceIds rows readable
-    const match: Record<string, any> = {
-      thingtime: EXTERNAL_POST_KIND,
-      $and: [{ $or: [{ sourceIds: { $in: accountIds } }, { 'crystal.accountId': { $in: accountIds } }] }]
-    };
-    const cursorMatch = typeof query.cursor === 'string' ? query.cursor.match(/^(\d{1,16})_(.+)$/) : null;
-    if (cursorMatch) {
-      const ts = new Date(Number(cursorMatch[1]));
-      match.$and.push({ $or: [{ createdAt: { $lt: ts } }, { createdAt: ts, shareId: { $gt: cursorMatch[2] } }] });
-    }
+    // membership rides the root sourceIds array ONLY (every sync stamps it,
+    // and a second representation would defeat the partial index — the $or it
+    // replaces forced a whole-partition scan since index-union subplanning
+    // only applies to a rooted $or)
+    const match: Record<string, any> = { thingtime: EXTERNAL_POST_KIND, sourceIds: { $in: accountIds } };
+    // the shared chrono-cursor grammar from things.ts — one parser, one format
+    const parsed = parseChronoCursor(query.cursor);
+    const pageMatch = parsed ? { $and: [match, chronoCursorClause(parsed)] } : match;
     const things = await getThingsCollection();
     const docs: any[] = await things
-      .find(match)
+      .find(pageMatch)
       .sort({ createdAt: -1, shareId: 1 })
       .limit(limit + 1)
       .toArray();
     const page = docs.slice(0, limit);
     const last = page[page.length - 1];
-    nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
+    const lastMs = last ? new Date(last.createdAt).getTime() : NaN;
+    // never mint a cursor the parser would reject (dates are clamped at
+    // upsert, but pre-clamp rows must not wedge pagination into a loop)
+    nextCursor = docs.length > limit && last && Number.isFinite(lastMs) && lastMs > 0 ? `${lastMs}_${last.shareId}` : null;
 
     // toPublicPosts surfaces the third-party author from extended.external
     // (same path the /post/:id permalink uses)
@@ -622,10 +689,10 @@ export const updateYoutubeChannels = async (
   let channels = sanitizeChannelList(accountDoc?.crystal?.config?.channels);
   if (removeId) channels = channels.filter((channel) => channel.id !== removeId);
   if (addChannel && !channels.some((channel) => channel.id === addChannel!.id)) {
-    channels = sanitizeChannelList([...channels, addChannel]);
-    if (!channels.some((channel) => channel.id === addChannel!.id)) {
-      return fail(400, `You can follow at most ${100} channels in one list`);
+    if (channels.length >= MAX_VIRTUAL_CHANNELS) {
+      return fail(400, `You can follow at most ${MAX_VIRTUAL_CHANNELS} channels in one list`);
     }
+    channels = sanitizeChannelList([...channels, addChannel]);
   }
 
   await home.updateOne(

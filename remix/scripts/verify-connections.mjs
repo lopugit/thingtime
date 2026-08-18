@@ -219,6 +219,17 @@ const run = async () => {
   const removed = await api('/api/v1/connections/filters', { cookie: ana.cookie, method: 'POST', body: { id: filterId, remove: true } });
   check('filter deletes', removed.status === 200 && removed.body?.removed === true);
   check('bo never sees ana filters', (await api('/api/v1/connections/filters', { cookie: bo.cookie })).body?.filters?.length === 0);
+  // regression (code-review): partial updates must not clobber other fields
+  const hideFilter = await api('/api/v1/connections/filters', {
+    cookie: ana.cookie,
+    method: 'POST',
+    body: { name: 'Hider', prompt: 'hide test topics', action: 'hide' }
+  });
+  await api('/api/v1/connections/filters', { cookie: ana.cookie, method: 'POST', body: { id: hideFilter.body?.filter?.id, enabled: false } });
+  const afterToggle = await api('/api/v1/connections/filters', { cookie: ana.cookie });
+  const toggled = (afterToggle.body?.filters || []).find((entry) => entry.id === hideFilter.body?.filter?.id);
+  check('enabled-only toggle preserves the hide action', toggled?.action === 'hide' && toggled?.enabled === false);
+  await api('/api/v1/connections/filters', { cookie: ana.cookie, method: 'POST', body: { id: hideFilter.body?.filter?.id, remove: true } });
 
   console.log('\nF. protection walls');
   const squat = await api('/api/v1/things', {
@@ -251,8 +262,14 @@ const run = async () => {
   check('ana unlinks', anaUnlink.status === 200 && anaUnlink.body?.removed === true);
   const anaAfter = await api('/api/v1/connections', { cookie: ana.cookie });
   check('ana list is empty after unlink', anaAfter.body?.connections?.length === 0);
+  // regression (code-review): membership IS the authorization — unlinking
+  // revokes the ex-member's acl grants on the personal posts
+  const anaRevoked = await api(`/api/v1/things?id=${anaPost.id}`, { cookie: ana.cookie });
+  check('unlink revokes the ex-member post access', anaRevoked.status === 404);
   const boStill = await api('/api/v1/connections/feed?limit=5', { cookie: bo.cookie });
   check('bo (still linked) keeps reading the shared account', boStill.status === 200 && (boStill.body?.posts?.length || 0) > 0);
+  const boKeeps = await api(`/api/v1/things?id=${anaPost.id}`, { cookie: bo.cookie });
+  check('remaining members keep their access', boKeeps.status === 200);
   const boUnlink = await api('/api/v1/connections/unlink', {
     cookie: bo.cookie,
     method: 'POST',
@@ -305,6 +322,10 @@ const run = async () => {
   check('connections list carries the channel list + handle', ytConnection?.channels?.length === 2 && /2 channels/.test(ytConnection?.account?.handle || ''));
   const badChannel = await api('/api/v1/connections/youtube/channels', { cookie: bo.cookie, method: 'POST', body: { add: { id: 'not-a-channel' } } });
   check('invalid channel ids are refused', badChannel.status === 400);
+  // regression (code-review): re-connecting the provider must MERGE, never
+  // wipe, the managed channel list
+  const reconnect = await api('/api/v1/connections', { cookie: bo.cookie, method: 'POST', body: { provider: 'youtube', fields: {} } });
+  check('youtube reconnect preserves the channel list', reconnect.status === 200 && (reconnect.body?.connection?.channels?.length || 0) === 2);
   const unsub = await api('/api/v1/connections/youtube/channels', { cookie: bo.cookie, method: 'POST', body: { remove: CH_B.id } });
   check('unsubscribe removes the channel', unsub.status === 200 && unsub.body?.channels?.length === 1);
   const otherList = await api('/api/v1/connections', { cookie: outsider.cookie });

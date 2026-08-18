@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { signJwt, verifyJwt } from '../auth/jwt';
 import { upsertAccountAndLink, type PublicConnection } from './connections';
-import { connectionProviderById, type ConnectionProvider } from './providers';
+import { connectionProviderById, oauthCredsFor } from './providers';
+import { fail, type Fail } from './shared';
 
 // SSO account linking: POST /api/v1/connections/oauth/begin hands the client
 // the provider's authorize URL; the provider's own sign-in page collects the
@@ -11,9 +12,6 @@ import { connectionProviderById, type ConnectionProvider } from './providers';
 // external-account's secure blob. CSRF/state protection rides the house JWT
 // signer: the state is a short-lived signed JWT bound to the beginning user's
 // id, so a callback can only complete for the session that started it.
-
-type Fail = { ok: false; status: number; error: string };
-const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
 
 const STATE_JTI_PREFIX = 'connections-oauth:';
 const STATE_TTL = '15m';
@@ -40,13 +38,6 @@ const redirectUriFor = (requestOrigin: string): string => {
   return `${base}${oauthCallbackPath}`;
 };
 
-const oauthCreds = (provider: ConnectionProvider): { clientId: string; clientSecret: string } | null => {
-  if (!provider.oauth) return null;
-  const clientId = (process.env[provider.oauth.clientIdEnv] || '').trim();
-  const clientSecret = (process.env[provider.oauth.clientSecretEnv] || '').trim();
-  return clientId && clientSecret ? { clientId, clientSecret } : null;
-};
-
 export const beginOAuth = async (
   user: SessionUser,
   input: { provider?: unknown },
@@ -55,7 +46,7 @@ export const beginOAuth = async (
   const provider = connectionProviderById(input.provider);
   if (!provider) return fail(400, 'Unknown provider');
   if (!provider.oauth) return fail(400, `${provider.name} does not use OAuth — connect it via POST /api/v1/connections`);
-  const creds = oauthCreds(provider);
+  const creds = oauthCredsFor(provider);
   if (!creds) {
     return fail(400, `${provider.name} is not configured on this deployment yet (set ${provider.oauth.clientIdEnv} and ${provider.oauth.clientSecretEnv})`);
   }
@@ -92,7 +83,7 @@ export const completeOAuth = async (
   const providerId = claims.jti.slice(STATE_JTI_PREFIX.length).split(':')[0];
   const provider = connectionProviderById(providerId);
   if (!provider?.oauth) return fail(400, 'The sign-in state names an unknown provider');
-  const creds = oauthCreds(provider);
+  const creds = oauthCredsFor(provider);
   if (!creds) return fail(400, `${provider.name} is not configured on this deployment`);
 
   const exchanged = await provider.oauth.exchangeCode({

@@ -8,29 +8,15 @@ import type { FeedFilterMatch, PostChange, PublicPost } from '~/components/Feed/
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
+import { cardStyle, type Connection } from './shared';
 
 // /connections/feed — browse connected third-party feeds as native Thingtime
 // posts. PostCard renders each external post, so comments and reactions work
 // exactly like the home feed. The viewer's AI feed filters veil ('warn' + a
 // Show button) or drop ('hide') matched posts before they render.
 
-type Connection = {
-  id: string;
-  provider: string;
-  providerName: string;
-  providerIcon: string;
-  account: { displayName: string; handle: string };
-  lastSyncError: string | null;
-};
-
 const PAGE_SIZE = 20;
 const feedCacheKey = (connection: string | null) => `tt-connections-feed:${connection || 'all'}`;
-
-const cardStyle = {
-  background: 'var(--tt-card, #ffffff)',
-  border: '1px solid var(--tt-border, #ececef)',
-  borderRadius: 'var(--tt-radius-lg, 16px)'
-} as const;
 
 const warnMatches = (post: PublicPost): FeedFilterMatch[] => (post.feedFilterMatches || []).filter((match) => match.action === 'warn');
 const hideMatches = (post: PublicPost): FeedFilterMatch[] => (post.feedFilterMatches || []).filter((match) => match.action === 'hide');
@@ -73,7 +59,7 @@ export const ConnectionsFeedPage = () => {
   const deepenedRef = React.useRef(false);
 
   const load = React.useCallback(
-    async (connection: string | null, cursor: string | null, deepen = false) => {
+    async (connection: string | null, cursor: string | null) => {
       const seq = ++requestSeq.current;
       setLoading(true);
       const startedAt = Date.now();
@@ -81,15 +67,16 @@ export const ConnectionsFeedPage = () => {
         const resp = await api.v1.connections.feed({
           connection: connection || undefined,
           cursor: cursor || undefined,
-          limit: PAGE_SIZE,
-          ...(deepen ? { deepen: '1' } : {})
+          limit: PAGE_SIZE
         });
         if (seq !== requestSeq.current) return;
         const merged = mergeReactionOverlays(startedAt, (resp.posts || []) as PublicPost[]);
         setPosts((current) => (cursor ? [...current, ...merged] : merged));
         if (!cursor) writeLocalCache(feedCacheKey(connection), merged.slice(0, PAGE_SIZE));
         setNextCursor(resp.nextCursor || null);
-        setConnections(resp.connections || []);
+        // a narrowed read returns only the selected connection — never let it
+        // collapse the tab bar built from the full list
+        if (!connection) setConnections(resp.connections || []);
         setSignedOut(false);
         const failed = (resp.synced || []).filter((entry: any) => entry.error);
         if (failed.length) {
@@ -118,7 +105,25 @@ export const ConnectionsFeedPage = () => {
     setNextCursor(null);
     deepenedRef.current = false;
     load(activeConnection, null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConnection, load]);
+
+  // landing directly on a narrowed URL: the feed response carries only that
+  // connection, so bootstrap the tab bar from the full list once
+  React.useEffect(() => {
+    if (!activeConnection) return;
+    let cancelled = false;
+    api.v1.connections
+      .list()
+      .then((resp: any) => {
+        if (!cancelled && Array.isArray(resp?.connections) && resp.connections.length) setConnections(resp.connections);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConnection]);
 
   const handlePostChanged = (id: string, next: PostChange) => {
     setPosts((current) =>
@@ -146,7 +151,11 @@ export const ConnectionsFeedPage = () => {
       return;
     }
     const last = posts[posts.length - 1];
-    const syntheticCursor = last ? `${new Date(last.createdAt).getTime()}_${last.id}` : null;
+    const lastMs = last ? new Date(last.createdAt).getTime() : NaN;
+    // never send a cursor the server would reject — an ignored cursor returns
+    // page 1, which would APPEND already-rendered posts (duplicate keys)
+    const syntheticCursor = Number.isFinite(lastMs) && lastMs > 0 && last ? `${lastMs}_${last.id}` : null;
+    if (!syntheticCursor) return;
     await load(activeConnection, syntheticCursor);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConnection, posts, load]);

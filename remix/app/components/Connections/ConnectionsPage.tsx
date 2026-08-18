@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { cardStyle, type ChannelRef, type Connection } from './shared';
 
 // /connections — link third-party apps (Reddit, YouTube, Mastodon, Bluesky,
 // RSS, …), manage the linked accounts, and manage AI feed filters. The feeds
@@ -22,21 +23,6 @@ type Provider = {
   fields: { key: string; label: string; placeholder?: string; help?: string; required?: boolean }[];
 };
 
-type ChannelRef = { id: string; title: string; thumbnail: string | null };
-
-type Connection = {
-  id: string;
-  provider: string;
-  providerName: string;
-  providerIcon: string;
-  contentVisibility: 'public' | 'personal';
-  auth?: 'none' | 'oauth2';
-  account: { id: string; handle: string; displayName: string; avatarUrl: string | null; profileUrl: string | null };
-  channels?: ChannelRef[];
-  lastSyncedAt: string | null;
-  lastSyncError: string | null;
-};
-
 type FeedFilter = {
   id: string;
   name: string;
@@ -48,12 +34,6 @@ type FeedFilter = {
 const PROVIDERS_CACHE = 'tt-connections-providers';
 const CONNECTIONS_CACHE = 'tt-connections-list';
 const FILTERS_CACHE = 'tt-connections-filters';
-
-const cardStyle = {
-  background: 'var(--tt-card, #ffffff)',
-  border: '1px solid var(--tt-border, #ececef)',
-  borderRadius: 'var(--tt-radius-lg, 16px)'
-} as const;
 
 export const ConnectionsPage = () => {
   const api = useApi();
@@ -234,8 +214,13 @@ export const ConnectionsPage = () => {
     }
     try {
       const resp = await api.v1.connections.saveFilter({ name: filterName, prompt: filterPrompt, action: filterAction });
-      setFilters((current) => [...current, resp.filter]);
-      writeLocalCache(FILTERS_CACHE, [...filters, resp.filter]);
+      // functional update + cache written from the SAME next array — the
+      // render-time closure may be stale under interleaved mutations
+      setFilters((current) => {
+        const next = [...current, resp.filter];
+        writeLocalCache(FILTERS_CACHE, next);
+        return next;
+      });
       setFilterName('');
       setFilterPrompt('');
       lopu({ title: `Filter “${resp.filter?.name}” is on 🛡️`, status: 'success', duration: 5000 });
@@ -245,25 +230,40 @@ export const ConnectionsPage = () => {
   };
 
   const toggleFilter = async (filter: FeedFilter) => {
-    const next = filters.map((entry) => (entry.id === filter.id ? { ...entry, enabled: !filter.enabled } : entry));
-    setFilters(next);
+    setFilters((current) => {
+      const next = current.map((entry) => (entry.id === filter.id ? { ...entry, enabled: !filter.enabled } : entry));
+      writeLocalCache(FILTERS_CACHE, next);
+      return next;
+    });
     try {
       await api.v1.connections.saveFilter({ id: filter.id, enabled: !filter.enabled });
-      writeLocalCache(FILTERS_CACHE, next);
     } catch (err: any) {
-      setFilters(filters);
+      // revert only THIS filter's toggle — a snapshot restore would discard
+      // concurrent changes to other filters
+      setFilters((current) => {
+        const next = current.map((entry) => (entry.id === filter.id ? { ...entry, enabled: filter.enabled } : entry));
+        writeLocalCache(FILTERS_CACHE, next);
+        return next;
+      });
       lopu({ title: err?.error || 'Could not update that filter 😞', status: 'error' });
     }
   };
 
   const removeFilter = async (filter: FeedFilter) => {
-    const previous = filters;
-    setFilters((current) => current.filter((entry) => entry.id !== filter.id));
+    setFilters((current) => {
+      const next = current.filter((entry) => entry.id !== filter.id);
+      writeLocalCache(FILTERS_CACHE, next);
+      return next;
+    });
     try {
       await api.v1.connections.removeFilter({ id: filter.id });
-      writeLocalCache(FILTERS_CACHE, previous.filter((entry) => entry.id !== filter.id));
     } catch (err: any) {
-      setFilters(previous);
+      // restore only the removed entry
+      setFilters((current) => {
+        const next = current.some((entry) => entry.id === filter.id) ? current : [...current, filter];
+        writeLocalCache(FILTERS_CACHE, next);
+        return next;
+      });
       lopu({ title: err?.error || 'Could not remove that filter 😞', status: 'error' });
     }
   };

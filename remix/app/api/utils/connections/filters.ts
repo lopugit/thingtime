@@ -1,8 +1,7 @@
-import { createHash } from 'node:crypto';
-
 import { generateAiCompletion, hasLopuAiProviderConfigured } from '../lopu/musing';
 import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
 import type { PublicPost } from '../things/things';
+import { fail, sha48, type Fail } from './shared';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 // AI feed filters — user-defined rules layered over connected third-party
@@ -23,17 +22,19 @@ import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 // falls back to a deterministic keyword heuristic so the feature (and its
 // tests) always works.
 
-type Fail = { ok: false; status: number; error: string };
-const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
-
 export const FEED_FILTER_KIND = 'feed-filter';
 export const FEED_FILTER_VERDICT_KIND = 'feed-filter-verdict';
 
 const MAX_FILTERS_PER_USER = 20;
 const MAX_NAME_CHARS = 80;
 const MAX_PROMPT_CHARS = 500;
-const CLASSIFY_BATCH = 20;
+// batch size × per-verdict JSON must fit CLASSIFY_MAX_TOKENS with headroom —
+// a truncated completion loses the closing bracket and the whole batch
+const CLASSIFY_BATCH = 12;
+const CLASSIFY_MAX_TOKENS = 3000;
 const CLASSIFY_TEXT_CHARS = 600;
+// bounded parallelism across filters' independent LLM calls
+const CLASSIFY_CONCURRENCY = 4;
 
 export type FeedFilterAction = 'warn' | 'hide';
 
@@ -52,15 +53,6 @@ export type FeedFilterMatch = {
   action: FeedFilterAction;
   reason: string;
   source: 'claude' | 'openai' | 'heuristic';
-};
-
-const sha48 = (parts: string[]): string => {
-  const hash = createHash('sha256');
-  parts.forEach((part, index) => {
-    if (index) hash.update('\0');
-    hash.update(part);
-  });
-  return hash.digest('hex').slice(0, 48);
 };
 
 const feedFilterShareId = (): string => `ext-filter-${sha48([String(Date.now()), String(Math.random())])}`;
@@ -101,10 +93,21 @@ export const saveFeedFilter = async (
     const id = typeof input.id === 'string' ? input.id.trim() : '';
     const existing: any = id ? await home.findOne({ shareId: id, thingtime: FEED_FILTER_KIND, ownerId: user.id }) : null;
     if (!existing) return fail(404, 'Filter not found');
-    const update: Record<string, any> = { 'crystal.enabled': enabled, 'crystal.action': action, updatedAt: new Date() };
+    // partial update: only fields the caller actually sent change — the UI's
+    // {id, enabled} toggle must never rewrite action, and an action edit must
+    // never re-enable a paused filter
+    const update: Record<string, any> = { updatedAt: new Date() };
+    if (typeof input.enabled === 'boolean') update['crystal.enabled'] = input.enabled;
+    if (input.action === 'warn' || input.action === 'hide') update['crystal.action'] = input.action;
     if (name) update['crystal.name'] = name;
     if (prompt) update['crystal.prompt'] = prompt;
     await home.updateOne({ shareId: id, thingtime: FEED_FILTER_KIND, ownerId: user.id }, { $set: update });
+    // a changed prompt re-keys the revision — reap the old revision's cached
+    // verdicts so they can't linger as orphans
+    if (prompt && prompt !== String(existing?.crystal?.prompt || '')) {
+      const things = await getThingsCollection();
+      await things.deleteMany({ thingtime: FEED_FILTER_VERDICT_KIND, 'crystal.filterId': id });
+    }
     const doc = await home.findOne({ shareId: id, thingtime: FEED_FILTER_KIND, ownerId: user.id });
     return { ok: true, filter: toPublicFilter(doc) };
   }
@@ -138,6 +141,9 @@ export const deleteFeedFilter = async (user: { id: string }, input: { id?: unkno
   const home = await getHomeThingsCollection();
   const result = await home.deleteOne({ shareId: id, thingtime: FEED_FILTER_KIND, ownerId: user.id });
   if (!result.deletedCount) return fail(404, 'Filter not found');
+  // reap the filter's cached verdicts — nothing can ever read them again
+  const things = await getThingsCollection();
+  await things.deleteMany({ thingtime: FEED_FILTER_VERDICT_KIND, 'crystal.filterId': id });
   return { ok: true, removed: true };
 };
 
@@ -194,7 +200,7 @@ const aiVerdicts = async (
   const user =
     `Filter rule: ${prompt}\n\nPosts:\n` +
     JSON.stringify(posts.map((post) => ({ id: post.id, text: post.text.slice(0, CLASSIFY_TEXT_CHARS) })));
-  const completion = await generateAiCompletion({ system: CLASSIFIER_SYSTEM, user, maxTokens: 1500 });
+  const completion = await generateAiCompletion({ system: CLASSIFIER_SYSTEM, user, maxTokens: CLASSIFY_MAX_TOKENS });
   if (!completion) return null;
   const jsonMatch = completion.text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) return null;
@@ -225,20 +231,28 @@ export const applyFeedFilters = async (
   if (!enabled.length || !posts.length) return { matchesByPostId, filters };
 
   const things = await getThingsCollection();
+  const aiConfigured = hasLopuAiProviderConfigured();
   const pushMatch = (postId: string, match: FeedFilterMatch) => {
     const list = matchesByPostId.get(postId) || [];
     list.push(match);
     matchesByPostId.set(postId, list);
   };
 
-  for (const filter of enabled) {
+  // ONE cached-verdict read for every (filter, post) pair — verdict ids are
+  // deterministic, so all filters batch into a single indexed $in
+  const perFilter = enabled.map((filter) => {
     const revisionKey = filterRevisionKey(filter);
-    const verdictIds = new Map(posts.map((post) => [verdictShareId(revisionKey, post.id), post] as const));
-    const cached: any[] = await things
-      .find({ shareId: { $in: [...verdictIds.keys()] }, thingtime: FEED_FILTER_VERDICT_KIND })
-      .toArray();
-    const cachedByShareId = new Map(cached.map((doc) => [String(doc.shareId), doc]));
+    return {
+      filter,
+      revisionKey,
+      verdictIds: new Map(posts.map((post) => [verdictShareId(revisionKey, post.id), post] as const))
+    };
+  });
+  const allVerdictIds = perFilter.flatMap((entry) => [...entry.verdictIds.keys()]);
+  const cached: any[] = await things.find({ shareId: { $in: allVerdictIds }, thingtime: FEED_FILTER_VERDICT_KIND }).toArray();
+  const cachedByShareId = new Map(cached.map((doc) => [String(doc.shareId), doc]));
 
+  const classifyFilter = async ({ filter, revisionKey, verdictIds }: (typeof perFilter)[number]) => {
     const pending: { id: string; text: string; verdictId: string }[] = [];
     for (const [verdictId, post] of verdictIds) {
       const hit = cachedByShareId.get(verdictId);
@@ -257,12 +271,11 @@ export const applyFeedFilters = async (
       }
     }
 
-    // classify the uncached remainder in bounded batches
     for (let start = 0; start < pending.length; start += CLASSIFY_BATCH) {
       const batch = pending.slice(start, start + CLASSIFY_BATCH);
       let verdicts: Map<string, { matched: boolean; reason: string }> | null = null;
       let source: 'claude' | 'openai' | 'heuristic' = 'heuristic';
-      if (hasLopuAiProviderConfigured()) {
+      if (aiConfigured) {
         const ai = await aiVerdicts(filter.prompt, batch);
         if (ai) {
           verdicts = ai.byId;
@@ -270,7 +283,8 @@ export const applyFeedFilters = async (
         }
       }
       const now = new Date();
-      const writes = batch.map((entry) => {
+      const writes: any[] = [];
+      for (const entry of batch) {
         const verdict = verdicts?.get(entry.id) ?? heuristicVerdict(filter.prompt, entry.text);
         const entrySource = verdicts?.has(entry.id) ? source : 'heuristic';
         if (verdict.matched) {
@@ -282,7 +296,12 @@ export const applyFeedFilters = async (
             source: entrySource
           });
         }
-        return {
+        // cache policy: heuristic verdicts persist only when no AI provider
+        // is configured — with AI available, a transient failure/truncation
+        // must degrade THIS response, never poison the cache (the next read
+        // retries the AI classification)
+        if (entrySource === 'heuristic' && aiConfigured) continue;
+        writes.push({
           updateOne: {
             filter: { shareId: entry.verdictId, thingtime: FEED_FILTER_VERDICT_KIND },
             update: {
@@ -290,7 +309,7 @@ export const applyFeedFilters = async (
                 schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
                 shareId: entry.verdictId,
                 thingtime: [FEED_FILTER_VERDICT_KIND],
-                crystal: { revisionKey, postId: entry.id, matched: verdict.matched, reason: verdict.reason, source: entrySource },
+                crystal: { revisionKey, filterId: filter.id, postId: entry.id, matched: verdict.matched, reason: verdict.reason, source: entrySource },
                 ownerId: 'system',
                 acl: [],
                 storageClass: 'control',
@@ -302,16 +321,24 @@ export const applyFeedFilters = async (
             },
             upsert: true
           }
-        };
-      });
+        });
+      }
       if (writes.length) {
         try {
           await things.bulkWrite(writes as any, { ordered: false });
         } catch (err: any) {
-          if (err?.code !== 11000 && !err?.writeErrors?.every?.((error: any) => error?.code === 11000)) throw err;
+          const writeErrors = Array.isArray(err?.writeErrors) ? err.writeErrors : null;
+          const benign = writeErrors ? writeErrors.every((error: any) => error?.code === 11000) : err?.code === 11000;
+          if (!benign) throw err;
         }
       }
     }
+  };
+
+  // filters classify independently — run them with bounded parallelism so a
+  // cold page costs ~one LLM round instead of one per filter
+  for (let start = 0; start < perFilter.length; start += CLASSIFY_CONCURRENCY) {
+    await Promise.all(perFilter.slice(start, start + CLASSIFY_CONCURRENCY).map(classifyFilter));
   }
 
   return { matchesByPostId, filters };

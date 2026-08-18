@@ -211,6 +211,9 @@ export type FeedAuthor = {
   displayName: string | null;
   temporary?: boolean;
   avatarUrl: string | null;
+  // set ONLY for third-party authors of synced external posts — the honest
+  // discriminator consumers use instead of routing to a dead /profile/<handle>
+  externalUrl?: string | null;
 };
 
 // Comments share the post schema (rich comments are ["post","comment"]
@@ -627,6 +630,13 @@ const thingtimeOf = (doc: ThingDoc): string[] => {
 };
 
 export const isPostThing = (doc: ThingDoc): boolean => thingtimeOf(doc).includes('post');
+
+// Post-like for rendering/interaction surfaces (permalink projection, share
+// targets): native posts PLUS synced third-party posts. Deliberately NOT used
+// by feed queries — those match kinds explicitly, so external posts never
+// enter first-party feeds. New "acts like a post" consumers use this, not a
+// per-callsite or-branch.
+export const isPostLikeThing = (doc: ThingDoc): boolean => isPostThing(doc) || thingtimeOf(doc).includes('external-post');
 
 const crystalOf = (doc: ThingDoc): Record<string, any> => {
   if (isV2(doc)) return doc.crystal || {};
@@ -1632,7 +1642,13 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
           username: String(external.author.handle || external.author.name || external.providerName || 'external'),
           displayName: external.author.name || external.author.handle || external.providerName || null,
           temporary: false,
-          avatarUrl: typeof external.author.avatarUrl === 'string' ? external.author.avatarUrl : null
+          avatarUrl: typeof external.author.avatarUrl === 'string' ? external.author.avatarUrl : null,
+          externalUrl:
+            typeof external.author.url === 'string' && external.author.url
+              ? external.author.url
+              : typeof external.url === 'string' && external.url
+                ? external.url
+                : null
         }
       : null;
     const allComments = mergedCommentsOf(doc, related);
@@ -2189,11 +2205,7 @@ export const getThing = async (
   }
 
   const isComment = thingtimeOf(doc).includes('comment');
-  // synced third-party posts render as posts too (their /post/:id permalink
-  // carries the native comment/reaction overlay) — they are deliberately NOT
-  // isPostThing so they never enter the first-party feed queries
-  const isExternalPost = thingtimeOf(doc).includes('external-post');
-  const post = isPostThing(doc) || isComment || isExternalPost ? (await toPublicPosts([doc], viewer))[0] : null;
+  const post = isPostLikeThing(doc) || isComment ? (await toPublicPosts([doc], viewer))[0] : null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
@@ -2902,7 +2914,9 @@ export const sharePost = async (
   if (!viewer?.id) return fail(401, 'Unauthorized');
   const viewerId = viewer.id;
   const original = await findViewableThing(shareId, viewer);
-  if (!original || !isPostThing(original)) return fail(404, 'Post not found');
+  // external posts share like posts (the tt:all-only gate below still keeps
+  // personal external posts unshareable)
+  if (!original || !isPostLikeThing(original)) return fail(404, 'Post not found');
   if (patSandboxBlocks(viewer, original)) return patSandboxFail();
   if (original.ownerId !== viewerId && !aclOf(original).includes(ACL_ALL)) {
     return fail(403, 'Only public posts can be shared');

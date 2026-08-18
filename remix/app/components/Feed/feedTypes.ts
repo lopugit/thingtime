@@ -17,12 +17,15 @@ export type PublicProfile = {
 
 // Lean author embed on posts/comments — identity only (the API never sends
 // bio/bannerUrl inside feed payloads).
+// externalUrl is set ONLY for third-party authors of synced external posts
+// (connections feeds) — consumers link there instead of a dead /profile route
 export type FeedAuthor = {
   id: string;
   username: string;
   displayName: string | null;
   temporary?: boolean;
   avatarUrl: string | null;
+  externalUrl?: string | null;
 };
 
 export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
