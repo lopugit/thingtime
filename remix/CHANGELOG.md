@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `develop` Custom Environment instead of canceling it as a duplicate, while
   the thin `github-actions` control plane remains excluded before every other
   rule. — Codex (AI), 2026-08-17
+- **Manual develop-preview recovery reaches its controller**: the thin `main`
+  listener now converts `workflow_dispatch`'s string PR number to the numeric
+  input required by the protected reusable workflow. Manual recovery no longer
+  fails before GitHub can create a controller job, and the caller contract now
+  locks that typed boundary. — Codex (AI), 2026-08-17
 - **Vercel status in custom environments**: deployment status now checks
   Vercel's system environment and custom target independently, so the
   Preview-backed `develop` target keeps `/api/v1/vercel/status`, `/status`, and
