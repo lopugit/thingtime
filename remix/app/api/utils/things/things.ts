@@ -1295,6 +1295,60 @@ type RelatedThings = {
 // One batched pass for a page of post docs: standalone comment/reaction
 // things for those posts plus live share counts across both eras. Embedded
 // v1 residue on each doc is merged in per-post below.
+// Field whitelists for the child-thing passes below. These reads are
+// unbounded by design — a page's complete comment and reaction set — so what
+// is NOT fetched matters more than what is. Un-projected, a viral post drags
+// its entire `crystal` (rich comment bodies, image lists, arbitrary `thing`
+// payloads) plus `extended` (up to 512KB per doc) and `acl` across the wire to
+// render a handful of comment rows and an emoji tally.
+//
+// Every field here is one the projection's consumers actually read: the
+// pass-1/level loops below, mergedCommentsOf/mergedReactionsOf, and
+// buildComment + the attachment target pass in toPublicPosts. `_id` rides
+// along by default and is what the legacy era keys comments by.
+const RELATED_CHILD_PROJECTION = {
+  // schemaVersion is LOAD-BEARING and easy to miss: isV2() reads it, and
+  // thingtimeOf/crystalOf/targetIdOf all branch on isV2(). Project it away and
+  // every doc silently reads as a v1 post — thingtimeOf returns ['post'], so
+  // neither the comment nor the reaction branch matches and the whole child
+  // set vanishes from the response with no error.
+  schemaVersion: 1,
+  shareId: 1,
+  ownerId: 1,
+  targetId: 1,
+  createdAt: 1,
+  thingtime: 1,
+  tags: 1,
+  'crystal.text': 1,
+  'crystal.type': 1,
+  'crystal.images': 1,
+  'crystal.listing': 1,
+  'crystal.thing': 1,
+  'crystal.emoji': 1,
+  // v1 residue: the fields thingtimeOf/crystalOf/targetIdOf fall back to for
+  // pre-v2 docs, which this collection still legitimately holds.
+  shareOfId: 1,
+  type: 1,
+  text: 1,
+  images: 1,
+  listing: 1
+} as const;
+
+// The interim kind-era docs carry their payload as flat top-level fields.
+const RELATED_LEGACY_PROJECTION = {
+  schemaVersion: 1,
+  parentId: 1,
+  kind: 1,
+  ownerId: 1,
+  commentId: 1,
+  createdAt: 1,
+  text: 1,
+  token: 1
+} as const;
+
+// Reactions only ever contribute (userId, emoji) pairs.
+const RELATED_REACTION_PROJECTION = { schemaVersion: 1, targetId: 1, ownerId: 1, 'crystal.emoji': 1 } as const;
+
 const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   const ids = docs.map((doc) => doc.shareId);
   const commentsByTarget = new Map<string, CommentEntry[]>();
@@ -1307,6 +1361,7 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   const [related, legacyRelational, shareCounts] = await Promise.all([
     things
       .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] } } as any)
+      .project(RELATED_CHILD_PROJECTION)
       .sort({ createdAt: 1, shareId: 1 })
       .toArray() as Promise<any[]>,
     // interim relational era: kind:'reaction'/'comment' docs linked by parentId
@@ -1314,6 +1369,7 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
     // migration, folded here until then)
     things
       .find({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids } } as any)
+      .project(RELATED_LEGACY_PROJECTION)
       .sort({ createdAt: 1 })
       .toArray() as Promise<any[]>,
     things
@@ -1386,6 +1442,7 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
     const [levelReactions, replyGroups] = await Promise.all([
       things
         .find({ targetId: { $in: levelIds }, thingtime: 'reaction' } as any)
+        .project(RELATED_REACTION_PROJECTION)
         .sort({ createdAt: 1, shareId: 1 })
         .toArray() as Promise<any[]>,
       things
@@ -1394,6 +1451,12 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
             ? [
                 { $match: { targetId: { $in: levelIds }, thingtime: 'comment' } },
                 { $sort: { createdAt: -1, shareId: 1 } },
+                // Project BEFORE the $group: $push accumulates every matching
+                // reply into one document, and $group is capped at 100MB with
+                // allowDiskUse unset — pushing whole $$ROOT docs made a large
+                // enough thread fail the request outright, not merely run slow.
+                // Only REPLIES_PER_LEVEL of them survive the $slice anyway.
+                { $project: RELATED_CHILD_PROJECTION },
                 { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
                 { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
               ]
