@@ -22,6 +22,9 @@ export type AttachmentReorderGalleryProps = {
 	onChange: (next: PublicAttachment[]) => void;
 	disabled?: boolean;
 	ariaLabel?: string;
+	// optional per-tile extra control (e.g. the grid-layout size badge) rendered
+	// on visual tiles, bottom-left (grip top-left, pencil top-right)
+	tileExtras?: (attachment: PublicAttachment) => React.ReactNode;
 };
 
 const gripLabel = (name: string, position: number, count: number) =>
@@ -60,7 +63,7 @@ const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => 
 };
 
 export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) => {
-	const { attachments, onChange, disabled, ariaLabel = 'Reorder attachments' } = props;
+	const { attachments, onChange, disabled, ariaLabel = 'Reorder attachments', tileExtras } = props;
 
 	const attachmentsRef = React.useRef(attachments);
 	attachmentsRef.current = attachments;
@@ -163,6 +166,11 @@ export const AttachmentReorderGallery = (props: AttachmentReorderGalleryProps) =
 												background: 'rgba(255, 255, 255, 0.9)'
 											}}
 										/>
+										{tileExtras ? (
+											<Box position="absolute" bottom={1} left={1}>
+												{tileExtras(attachment)}
+											</Box>
+										) : null}
 									</>
 								}
 							>
