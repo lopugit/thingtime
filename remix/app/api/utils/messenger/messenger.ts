@@ -172,32 +172,60 @@ const previewText = (crystal: any): string => {
 
 // ── membership plumbing ──
 
-const insertChatMember = async (
-  chatId: string,
-  userId: string,
-  fields: { role?: ChatRole; state?: MemberState; requestOrigin?: RequestOrigin | null }
-): Promise<boolean> => {
+type ChatMemberFields = { role?: ChatRole; state?: MemberState; requestOrigin?: RequestOrigin | null };
+
+const newChatMemberDoc = (chatId: string, userId: string, fields: ChatMemberFields) =>
+  newThingDoc('chat-member', {
+    ownerId: userId,
+    targetId: chatId,
+    crystal: {
+      memberKey: chatMemberKey(chatId, userId),
+      role: fields.role || 'member',
+      state: fields.state || 'active',
+      requestOrigin: fields.requestOrigin ?? null,
+      nickname: null,
+      lastReadMessageId: null,
+      lastReadAt: null,
+      muted: false
+    }
+  });
+
+const insertChatMember = async (chatId: string, userId: string, fields: ChatMemberFields): Promise<boolean> => {
   const things = await getThingsCollection();
   try {
-    await things.insertOne(
-      newThingDoc('chat-member', {
-        ownerId: userId,
-        targetId: chatId,
-        crystal: {
-          memberKey: chatMemberKey(chatId, userId),
-          role: fields.role || 'member',
-          state: fields.state || 'active',
-          requestOrigin: fields.requestOrigin ?? null,
-          nickname: null,
-          lastReadMessageId: null,
-          lastReadAt: null,
-          muted: false
-        }
-      }) as any
-    );
+    await things.insertOne(newChatMemberDoc(chatId, userId, fields) as any);
     return true;
   } catch (err: any) {
     if (err?.code === 11000) return false;
+    throw err;
+  }
+};
+
+// Batch sibling of insertChatMember: ONE insertMany for a whole membership
+// write instead of a round trip per id. Members carry per-id fields because a
+// single batch mixes roles and states (a DM writes owner + member, a group
+// writes owner + a follow-dependent active/pending mix).
+//
+// `ordered: false` makes the driver attempt every doc and report per-doc
+// failures, so a racing duplicate on one id can never block the rest — the
+// same tolerance the per-id `code === 11000` catch gives, at one round trip
+// instead of up to MAX_CHAT_MEMBERS_PER_ADD (50). Promise.all over insertOne
+// was no substitute: maxPoolSize is 10, so 50 concurrent inserts still drain
+// as 5 sequential pool rounds.
+const insertChatMembers = async (chatId: string, members: Array<{ userId: string; fields: ChatMemberFields }>): Promise<void> => {
+  if (!members.length) return;
+  const things = await getThingsCollection();
+  try {
+    await things.insertMany(
+      members.map(({ userId, fields }) => newChatMemberDoc(chatId, userId, fields)) as any,
+      { ordered: false }
+    );
+  } catch (err: any) {
+    // A bulk error whose every write failure is a duplicate key means those
+    // memberships already exist (a racing inserter won) — identical outcome to
+    // the per-id loop, which swallowed 11000 per id. Anything else is real.
+    const writeErrors = err?.writeErrors || (err?.code !== undefined ? [err] : []);
+    if (writeErrors.length && writeErrors.every((entry: any) => (entry?.code ?? entry?.err?.code) === 11000)) return;
     throw err;
   }
 };
@@ -346,12 +374,18 @@ export const createChat = async (
       }
       throw err;
     }
-    await insertChatMember(chat.shareId, viewerId, { role: 'owner', state: 'active' });
-    await insertChatMember(chat.shareId, otherId, {
-      role: 'member',
-      state: recipientFollowsSender ? 'active' : 'pending',
-      requestOrigin: recipientFollowsSender ? null : senderFollowsRecipient ? 'follower' : 'unknown'
-    });
+    // both sides of the DM in one write
+    await insertChatMembers(chat.shareId, [
+      { userId: viewerId, fields: { role: 'owner', state: 'active' } },
+      {
+        userId: otherId,
+        fields: {
+          role: 'member',
+          state: recipientFollowsSender ? 'active' : 'pending',
+          requestOrigin: recipientFollowsSender ? null : senderFollowsRecipient ? 'follower' : 'unknown'
+        }
+      }
+    ]);
     const entry = await chatListEntryFor(viewerId, chat.shareId);
     if (entry.ok === false) return entry;
     return { ok: true, chat: entry.chat };
@@ -398,25 +432,31 @@ export const createChat = async (
     }
   });
   await things.insertOne(chat as any);
-  await insertChatMember(chat.shareId, viewerId, { role: 'owner', state: 'active' });
+  // owner + every invitee land in ONE membership write
+  const owner = { userId: viewerId, fields: { role: 'owner' as ChatRole, state: 'active' as MemberState } };
   if (chatType === 'group') {
     // groups obey the same request wall as DMs: members who follow the
     // creator land active, everyone else gets a pending request (bucketed by
     // whether the creator follows them) — otherwise groups would be the
     // trivial bypass of the whole anti-harassment gate
 		const [followsCreator, creatorFollows] = await Promise.all([followersOfSet(memberIds, viewerId), followingSet(viewerId, memberIds)]);
-    await Promise.all(
-      memberIds.map((id) =>
-        insertChatMember(chat.shareId, id, {
-          role: 'member',
-          state: followsCreator.has(id) ? 'active' : 'pending',
-          requestOrigin: followsCreator.has(id) ? null : creatorFollows.has(id) ? 'follower' : 'unknown'
-        })
-      )
-    );
+    await insertChatMembers(chat.shareId, [
+      owner,
+      ...memberIds.map((id) => ({
+        userId: id,
+        fields: {
+          role: 'member' as ChatRole,
+          state: (followsCreator.has(id) ? 'active' : 'pending') as MemberState,
+          requestOrigin: followsCreator.has(id) ? null : creatorFollows.has(id) ? ('follower' as RequestOrigin) : ('unknown' as RequestOrigin)
+        }
+      }))
+    ]);
   } else {
     // channels: invitees were verified as community members above
-    await Promise.all(memberIds.map((id) => insertChatMember(chat.shareId, id, { role: 'member', state: 'active' })));
+    await insertChatMembers(chat.shareId, [
+      owner,
+      ...memberIds.map((id) => ({ userId: id, fields: { role: 'member' as ChatRole, state: 'active' as MemberState } }))
+    ]);
   }
   await insertSystemMessage(chat.shareId, viewerId, 'chat-created', { name });
   const entry = await chatListEntryFor(viewerId, chat.shareId);
@@ -802,10 +842,11 @@ export const manageChatMembers = async (
 				$set: { 'crystal.state': 'active', 'crystal.role': 'member', updatedAt: new Date() }
 			});
     }
-    for (const id of toInsert) {
-      // insertChatMember tolerates duplicate-key races per id
-      await insertChatMember(chat.shareId, id, { role: 'member', state: 'active' });
-    }
+    // insertChatMembers tolerates duplicate-key races across the whole batch
+    await insertChatMembers(
+      chat.shareId,
+      toInsert.map((id) => ({ userId: id, fields: { role: 'member' as ChatRole, state: 'active' as MemberState } }))
+    );
     const entered = [...toInsert, ...toRevive.map((doc: any) => String(doc.ownerId))];
     if (entered.length) {
       await insertSystemMessage(chat.shareId, viewerId, 'member-added', entered.length === 1 ? { subjectId: entered[0] } : { subjectIds: entered });
