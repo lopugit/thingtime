@@ -1206,6 +1206,7 @@ export type CreatePostInput = {
   images?: unknown;
   listing?: unknown;
   thing?: unknown;
+	mediaLayout?: unknown;
   extended?: unknown;
   acl?: unknown;
   visibility?: unknown;
@@ -1228,7 +1229,7 @@ export const createPost = async (
     ownerId,
     {
       thingtime: ['post'],
-      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing, thing: input.thing },
+      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing, thing: input.thing, mediaLayout: input.mediaLayout },
       extended: input.extended,
       acl: input.acl,
       visibility: input.visibility,
@@ -2803,12 +2804,13 @@ export const addComment = async (
 		body.images !== undefined ||
 		body.listing !== undefined ||
 		body.thing !== undefined ||
+		body.mediaLayout !== undefined ||
 		options.createHooks?.postAttachments?.hasAny === true;
 
 	const createInput: CreateThingInput = rich
       ? {
           thingtime: ['post', 'comment'],
-          crystal: { type: body.type ?? 'text', text: body.text, images: body.images, listing: body.listing, thing: body.thing },
+          crystal: { type: body.type ?? 'text', text: body.text, images: body.images, listing: body.listing, thing: body.thing, mediaLayout: body.mediaLayout },
           tags: body.tags,
 				shareId: body.shareId,
           targetId: target.shareId

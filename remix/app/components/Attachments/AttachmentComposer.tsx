@@ -26,6 +26,10 @@ export type AttachmentComposerProps = {
 	allowedContentTypes?: readonly string[];
 	ariaLabel?: string;
 	helperText?: string;
+	// optional per-tile extra control (e.g. the grid-layout size badge) rendered
+	// on READY visual tiles only, bottom-left (grip top-left, X top-right,
+	// pencil bottom-right)
+	tileExtras?: (attachment: PublicAttachment) => React.ReactNode;
 };
 
 export type AttachmentComposerHandle = {
@@ -98,8 +102,9 @@ const UploadVisualTile = React.memo(
 		onRetry: (localId: string) => void;
 		onRemove: (localId: string) => void;
 		onAnnotated: (localId: string, attachment: PublicAttachment) => void;
+		tileExtras?: (attachment: PublicAttachment) => React.ReactNode;
 	} & UploadReorderProps) => {
-		const { upload, disabled, onRetry, onRemove, onAnnotated, reorderGroup, reorderPosition, reorderCount, dragging, dropTarget, gripProps, tileProps } =
+		const { upload, disabled, onRetry, onRemove, onAnnotated, tileExtras, reorderGroup, reorderPosition, reorderCount, dragging, dropTarget, gripProps, tileProps } =
 			props;
 		const busy = upload.status !== 'ready' && upload.status !== 'error';
 		const showGrip = !disabled && !!gripProps && !!reorderGroup && (reorderCount ?? 0) > 1;
@@ -147,6 +152,11 @@ const UploadVisualTile = React.memo(
 									background: 'rgba(255, 255, 255, 0.9)'
 								}}
 							/>
+						) : null}
+						{upload.status === 'ready' && upload.attachment && tileExtras ? (
+							<Box position="absolute" bottom={1} left={1}>
+								{tileExtras(upload.attachment)}
+							</Box>
 						) : null}
 						<IconButton
 							aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
@@ -348,7 +358,8 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		maxBytesPerFile,
 		allowedContentTypes,
 		ariaLabel = 'Post attachments',
-		helperText
+		helperText,
+		tileExtras
 	} = props;
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
 	const lopu = useLopu();
@@ -493,6 +504,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 								onRetry={retry}
 								onRemove={remove}
 								onAnnotated={updateAttachment}
+								tileExtras={tileExtras}
 								reorderGroup="composer-visual"
 								reorderPosition={index + 1}
 								reorderCount={visualUploads.length}
