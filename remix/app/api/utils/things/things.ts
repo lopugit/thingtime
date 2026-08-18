@@ -1573,8 +1573,6 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
 			if (entry.doc) expectedAttachmentTargets.set(entry.doc.shareId, { ownerId: String(entry.doc.ownerId), purpose: 'comment' });
 		}
 	}
-	const attachmentsByTarget = await resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets);
-
   const userIds: string[] = [];
   [...docs, ...originals].forEach((doc) => {
     userIds.push(doc.ownerId);
@@ -1584,7 +1582,12 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   for (const entries of related.commentsByTarget.values()) {
     entries.forEach((entry) => userIds.push(entry.userId));
   }
-  const profiles = await resolveProfiles(userIds);
+  // Attachments and profiles both derive from `related`, but NOT from each
+  // other — running them together keeps the second off the critical path.
+  const [attachmentsByTarget, profiles] = await Promise.all([
+    resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets),
+    resolveProfiles(userIds)
+  ]);
 
   // comments share the post schema — surface the post vocabulary (rich
   // ["post","comment"] bodies, reactions, reply counts); legacy-era entries
