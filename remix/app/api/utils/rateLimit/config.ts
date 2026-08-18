@@ -43,6 +43,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // like the other public reads (anonymous callers key by IP)
   'users.relationships': { limit: 120, windowMs: 60_000, enabled: true },
   'users.connections': { limit: 120, windowMs: 60_000, enabled: true },
+  // profile activity heatmap (/api/v1/users/activity) — one aggregation of
+  // day-counts per profile view, bounded like the other public reads
+  'users.activity': { limit: 120, windowMs: 60_000, enabled: true },
   // notifications: list backs the bell (poll + focus refetch), read flips
   // readAt, settings is a rare interactive toggle
   'notifications.list': { limit: 120, windowMs: 60_000, enabled: true },

@@ -6690,6 +6690,53 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'users-activity',
+    group: 'profile',
+    title: 'Activity heatmap',
+    endpoint: '/api/v1/users/activity',
+    summary: 'Day-bucketed counts of a user’s viewer-visible things over the last year (the profile contribution graph).',
+    detail:
+      'Returns `days` — a map of UTC `YYYY-MM-DD` day strings to how many things the user created that ' +
+      'day — plus `total` and `firstDayUtc` (the first counted UTC day — the Sunday opening the 53-week ' +
+      'grid, so the window is exactly the days a Sunday-first contribution grid renders). Counts only: no content, ' +
+      'no kind breakdown. Visibility matches the profile post list exactly: logged out you count public ' +
+      'things only, friends additionally count friends-circle things, and owners count everything they ' +
+      'own. User actions (posts, comments, reactions, saves, poll votes, folders, schemas…) count; ' +
+      'server-minted control-plane records (notifications, friend/subscription state, messenger index ' +
+      'rows…) never do.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out (public activity only); anonymous callers are rate-limited per hashed IP.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?username=<name>.',
+      'Render `days` as a 53×7 contribution grid; missing days mean zero.',
+      'Handle 404 unknown user and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Profile activity',
+        description: 'A year of day-counts for a profile heatmap.',
+        method: 'GET',
+        query: { username: 'lopu' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Day-counts for the last year.',
+        body: {
+          ok: true,
+          days: { '2026-08-01': 3, '2026-08-14': 1 },
+          total: 4,
+          firstDayUtc: '2025-08-17'
+        }
+      },
+      { status: 404, description: 'Unknown user.', body: { ok: false, error: 'User not found' } }
+    ]
+  }),
+  endpoint({
     id: 'users-connections',
     group: 'social',
     title: 'Connection lists',

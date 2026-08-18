@@ -664,6 +664,17 @@ is fixed, and cite the checklist you ran in the PR description.
       Log out 🗝️ (+ Resend verification when unverified): All settings
       navigates to /settings, and the buttons wrap cleanly on mobile with no
       overflow.
+- [ ] Activity heatmap (`ActivityHeatmap.tsx`, `/api/v1/users/activity`):
+      a profile with visible things shows the contribution grid between the
+      header and Posts (month labels, hover tooltip `<n> things · <date>`,
+      `<n> things in the last year 🌱` caption); logged out it counts public
+      things only while the owner's own view also counts private ones (create
+      a public + a private post and compare); a profile with zero visible
+      things renders no Activity section at all; on mobile the grid scrolls
+      inside its own container (auto-scrolled to today) without widening the
+      page; cell colors follow the active theme accent in light and dark
+      themes; server-minted records (the `user` doc, notifications, friend
+      state) never count while reactions/comments/votes do.
 
 ## Required Web CI contexts (`.github/workflows/web-ci.yml`)
 

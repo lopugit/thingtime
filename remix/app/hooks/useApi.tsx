@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
 import { useAsyncFetcher } from './useAsyncFetcher';
+import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 
 const refreshRootData = () => {
@@ -96,6 +97,10 @@ export function useApi() {
       logout: useCallback(
         async (args?: { all?: boolean }) => {
 					await flushAttachmentDraftCleanups();
+          // owner-tier activity day-counts must not outlive the session that
+          // authorized them (shared-browser privacy) — unlike viewer-neutral
+          // tt-* caches (theme vars, emoji recents), which persist by design
+          clearLocalCachePrefix('tt-activity-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -660,6 +665,8 @@ export function useApi() {
     },
     profile: {
       get: useCallback(async (args) => getJson(`/api/v1/users/profile${toQuery(args)}`), []),
+      // day-bucketed viewer-visible thing counts for the profile heatmap ({ username })
+      activity: useCallback(async (args) => getJson(`/api/v1/users/activity${toQuery(args)}`), []),
       // public people search (the /search People rail)
       search: useCallback(async (args) => getJson(`/api/v1/users/search${toQuery(args)}`), []),
       update: useCallback(

@@ -34,3 +34,21 @@ export const clearLocalCache = (key: string): void => {
     // ignore
   }
 };
+
+// Remove every cached entry under a key prefix — for caches that hold
+// session-tier data (e.g. tt-activity-* owner-tier day counts) and must not
+// outlive the session that authorized them. Collect first, then remove:
+// deleting while iterating localStorage.key(i) skips entries.
+export const clearLocalCachePrefix = (prefix: string): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    const doomed: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index++) {
+      const key = window.localStorage.key(index);
+      if (key && key.startsWith(prefix)) doomed.push(key);
+    }
+    for (const key of doomed) window.localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+};

@@ -6,6 +6,7 @@ import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withM
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { findUserByUsername, pushUserRecentReaction, unpackSecure } from '../auth/users';
 import {
+	CONTROL_PLANE_STORAGE_THINGTIMES,
 	StorageMutationError,
 	USER_STORAGE_ACCOUNTING_VERSION,
 	USER_STORAGE_STATUS,
@@ -4010,6 +4011,75 @@ export const bulkThings = async (
 export const countPublicPosts = async (ownerId: string): Promise<number> => {
   const things = await getThingsCollection();
   return things.countDocuments(withMatch(postMatch(), { ownerId }, circleClause('public')) as any);
+};
+
+// Activity heatmap window: exactly the days the client's 53-column
+// Sunday-first UTC grid renders — 52 full weeks plus the current partial week
+// (52*7 + todayDow + 1 days including today), cut at UTC midnight. Matching
+// the grid keeps the caption total equal to the sum of visible cells: no
+// zero-rendered cells older than the window, no counted days the grid never
+// draws, and the oldest day is a full day, not a rolling-instant partial.
+const ACTIVITY_MS_DAY = 86_400_000;
+export const activityWindowStart = (nowMs = Date.now()): Date => {
+  const todayMs = nowMs - (nowMs % ACTIVITY_MS_DAY); // UTC midnight today
+  return new Date(todayMs - (364 + new Date(todayMs).getUTCDay()) * ACTIVITY_MS_DAY);
+};
+
+// What counts as "activity" for the profile heatmap: every thing the user
+// authored (posts, comments, reactions, saves, folders, schemas, data
+// things…) INCLUDING poll votes — explicit user actions are activity even
+// though votes bill as control-plane plumbing. Everything else on the
+// control-plane list (user/friend/notification/subscription/messenger
+// index rows, app-storage counters, migration diagnostics…) is server-minted
+// platform overhead and would inflate the graph meaninglessly, so the
+// storage classification's judgment is reused wholesale minus the vote
+// carve-out.
+const ACTIVITY_EXCLUDED_THINGTIMES: string[] = CONTROL_PLANE_STORAGE_THINGTIMES.filter((kind) => kind !== 'vote');
+
+// Day-bucketed counts of a user's viewer-visible things over the last year —
+// the profile contribution heatmap. COUNTS ONLY: no content, no kind
+// breakdown, so the response is privacy-cheap by construction. Visibility
+// reuses listUserPosts' exact DB tiering for this viewer (owners see every
+// circle, friends see public+friends, everyone else public only). Like
+// countPublicPosts (the profile header's count), the aggregation stays at the
+// DB tier — the coarse circle superset — without the per-doc in-memory canView
+// refinement a fetched page gets, so per-user acl grants/exclusions round to
+// their circle. Kept here so no route touches the things collection directly.
+export const getUserActivity = async (
+  viewerInput: string | Viewer,
+  username: string
+): Promise<{ ok: true; days: Record<string, number>; total: number; firstDayUtc: string } | Fail> => {
+  if (typeof username !== 'string' || !username.trim()) return fail(400, 'username is required');
+  const viewer = await withFriendIds(asViewer(viewerInput));
+  const user = await findUserByUsername(username.trim());
+  if (!user) return fail(404, 'User not found');
+
+  const ownerId = String(user._id);
+  const own = viewer?.id === ownerId;
+  // a friend browsing this profile also sees the owner's friends-circle
+  // activity — the same audience tiers as listUserPosts
+  const friendOfOwner = !!viewer?.friendIds?.has(ownerId);
+  const audience = own ? {} : friendOfOwner ? { $or: [circleClause('public'), circleClause('friends')] } : circleClause('public');
+
+  // index-friendly: ownerId + createdAt lead the match (ownerId-prefixed
+  // index), and $gte on a Date only ever matches BSON dates — so the
+  // $dateToString below never sees a null/absent createdAt
+  const start = activityWindowStart();
+  const match = withMatch({ ownerId, createdAt: { $gte: start } }, { thingtime: { $nin: ACTIVITY_EXCLUDED_THINGTIMES } }, audience);
+
+  const things = await getThingsCollection();
+  // one bounded pipeline: match (indexed superset) → group by UTC day string
+  const rows = (await things
+    .aggregate([{ $match: match }, { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } }])
+    .toArray()) as { _id: string; count: number }[];
+
+  const days: Record<string, number> = {};
+  let total = 0;
+  for (const row of rows) {
+    days[row._id] = row.count;
+    total += row.count;
+  }
+  return { ok: true, days, total, firstDayUtc: start.toISOString().slice(0, 10) };
 };
 
 // Existence probe for idempotent seeding: which of these shareIds already have
