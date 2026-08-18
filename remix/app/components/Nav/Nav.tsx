@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
 import { Icon } from '../Icon/Icon';
+import { NotificationsBell } from './NotificationsBell';
 import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from './Drawer/useDrawer';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -252,7 +253,17 @@ export const Nav = (props) => {
 						</Center>
 					</Center>
 					<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
-					<Center className="nav-right-section" columnGap={[3, 8]} height="100%" marginLeft="auto">
+					{/* relative + above the commander host (zIndex 9999): the centered
+				search pill is absolutely positioned, and long usernames (and now
+				the bell) can extend under it — these controls must stay tappable */}
+				<Center
+					className="nav-right-section"
+					columnGap={[3, 8]}
+					height="100%"
+					marginLeft="auto"
+					position="relative"
+					zIndex={10000}
+				>
 						{inEditMode && (
 							<Center
 								// transform="scaleX(-100%)"
@@ -277,6 +288,11 @@ export const Nav = (props) => {
 									size="12px"
 									name="🎨"
 								></Icon>
+							</Center>
+						)}
+						{claimedUser && (
+							<Center>
+								<NotificationsBell />
 							</Center>
 						)}
 						<Center cursor="pointer">
