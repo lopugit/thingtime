@@ -675,13 +675,29 @@ export const withMatch = (base: Record<string, any>, ...clauses: Record<string, 
   return and.length > 1 ? { $and: and } : and[0] || {};
 };
 
+// The tag cap counts code points, never bisecting a surrogate pair, and lone
+// surrogates are dropped — stored tags must be well-formed UTF-16 so the
+// client's encodeURIComponent on a stored tag can never throw during render.
+// NFC normalization keeps composed and decomposed spellings of one visible
+// tag (NFD 'café' pasted from macOS vs typed NFC) in a single stored bucket.
+// components/Feed/hashtags.ts canonicalHashtag and Attachments/
+// attachmentUiCore.ts canonicalPostTags mirror this exactly.
+const canonicalTag = (value: string): string =>
+  Array.from(value.trim().toLowerCase().normalize('NFC'))
+    .filter((char) => {
+      const codePoint = char.codePointAt(0) ?? 0;
+      return codePoint < 0xd800 || codePoint > 0xdfff;
+    })
+    .slice(0, MAX_TAG_CHARS)
+    .join('');
+
 const sanitizeTags = (value: unknown): string[] | Fail => {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) return fail(400, 'tags must be a list');
   const tags: string[] = [];
   for (const entry of value) {
     if (typeof entry !== 'string') continue;
-    const tag = entry.trim().toLowerCase().slice(0, MAX_TAG_CHARS);
+    const tag = canonicalTag(entry);
     if (tag && !tags.includes(tag)) tags.push(tag);
     if (tags.length >= MAX_TAGS) break;
   }
@@ -2922,7 +2938,7 @@ export const addComment = async (
 export const sharePost = async (
   viewerInput: string | Viewer,
   shareId: unknown,
-  input: { text?: unknown; visibility?: unknown; acl?: unknown }
+  input: { text?: unknown; tags?: unknown; visibility?: unknown; acl?: unknown }
 ): Promise<Fail | { ok: true; post: PublicPost }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
@@ -2935,6 +2951,11 @@ export const sharePost = async (
   }
 
   const text = typeof input.text === 'string' ? input.text.trim().slice(0, MAX_TEXT_CHARS) : '';
+  // the quoter's own tags (the client harvests inline #hashtags from the
+  // caption, exactly like the composer) — without these, a linkified caption
+  // tag's search would exclude the very quote post it was tapped on
+  const inputTags = sanitizeTags(input.tags);
+  if (isFail(inputTags)) return inputTags;
   const originalCrystal = crystalOf(original);
 
   const created = await createThing(
@@ -2944,8 +2965,10 @@ export const sharePost = async (
       crystal: { type: originalCrystal.type || 'text', text, images: [], listing: null },
       acl: input.acl,
       visibility: input.visibility,
-      // never carry a non-public original's tags to audiences that can't view it
-      tags: aclOf(original).includes(ACL_ALL) ? original.tags || [] : [],
+      // caption tags first so the quoter's intent survives the MAX_TAGS cap;
+      // createThing dedupes the merge. Never carry a non-public original's
+      // tags to audiences that can't view it.
+      tags: [...inputTags, ...(aclOf(original).includes(ACL_ALL) ? original.tags || [] : [])],
       targetId: original.shareId
     },
     viewer

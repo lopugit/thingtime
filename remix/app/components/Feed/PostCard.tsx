@@ -46,6 +46,8 @@ import { ReactionControl } from './ReactionControl';
 import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
 import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
 import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, warmAvatars } from './threadCache';
+import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
+import { extractInlineHashtags, searchTagHref, splitHashtagSegments } from './hashtags';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, timeAgo } from './feedTypes';
 import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost } from './feedTypes';
 import type { PollRenderPollContext } from '~/components/Kinds';
@@ -387,9 +389,60 @@ const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | '
   );
 };
 
+// Post text with inline #hashtags rendered as links to /search pre-filtered
+// to that tag. Text is otherwise plain (no markdown/mention layer), so the
+// linkifier IS the rendering layer: non-tag segments pass through verbatim
+// and concatenate back to the exact original string. URL fragments, HTML
+// entities and mid-word hashes never match (word-start rule — hashtags.ts).
+const HashtagText = ({ text }: { text: string }) => {
+	const segments = React.useMemo(() => splitHashtagSegments(text), [text]);
+	return (
+		<>
+			{segments.map((segment, index) =>
+				segment.kind === 'tag' ? (
+					<Link key={`${segment.tag}-${index}`} to={searchTagHref(segment.tag)}>
+						<Text as="span" color={ACCENT} fontWeight={600} _hover={{ textDecoration: 'underline' }}>
+							{segment.text}
+						</Text>
+					</Link>
+				) : (
+					<React.Fragment key={index}>{segment.text}</React.Fragment>
+				)
+			)}
+		</>
+	);
+};
+
+// The post's tags as tappable pills (the composer-preview pill style) linking
+// to /search seeded to filter by that tag. Marketplace category tags are real
+// tags on the doc, so they show — and are tappable — too.
+const TagChipRow = ({ tags, compact }: { tags?: string[]; compact?: boolean }) => {
+	if (!tags?.length) return null;
+	return (
+		<Flex columnGap={1} rowGap={1} flexWrap="wrap">
+			{tags.map((tag) => (
+				<Box
+					key={tag}
+					as={Link}
+					to={searchTagHref(tag)}
+					fontSize={compact ? '11px' : 'xs'}
+					background="var(--tt-surface-alt, #f5f5f7)"
+					color={TEXT}
+					borderRadius="999px"
+					paddingX={2}
+					paddingY="2px"
+					_hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK }}
+				>
+					#{tag}
+				</Box>
+			))}
+		</Flex>
+	);
+};
+
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing'>;
+type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing' | 'tags'>;
 const PostBody = ({
 	post,
 	compact,
@@ -407,7 +460,7 @@ const PostBody = ({
   <Flex flexDirection="column" rowGap={compact ? 2 : 3}>
     {post.text && (
       <Text fontSize={compact ? 'sm' : 'md'} color={TEXT} whiteSpace="normal">
-        {post.text}
+        <HashtagText text={post.text} />
       </Text>
     )}
     {post.type === 'image' && <ImageGrid images={post.images} alt={post.text || 'Post photo'} />}
@@ -421,6 +474,7 @@ const PostBody = ({
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
     <PostAttachments attachments={attachments} compact={compact} />
+    <TagChipRow tags={post.tags} compact={compact} />
   </Flex>
 );
 
@@ -1211,13 +1265,23 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       setEditing(false);
       return;
     }
+    // Inline #hashtags render as live tag links, so an edit must keep the
+    // stored tags in step with the text (the composer harvests on publish —
+    // without this, an added '#newtag' would linkify but its own search would
+    // never find the post). Inline tags dropped from the text drop off; every
+    // other stored tag (explicit composer tags, the folded marketplace
+    // category) survives; canonicalPostTags dedupes the merge and caps it.
+    const prevTags = post.tags;
+    const nextInline = extractInlineHashtags(text);
+    const removedInline = new Set(extractInlineHashtags(prevText).filter((tag) => !nextInline.includes(tag)));
+    const tags = canonicalPostTags([...(prevTags || []).filter((tag) => !removedInline.has(tag)), ...nextInline]);
     setEditing(false);
-    onChanged?.((prev) => ({ ...prev, text }));
+    onChanged?.((prev) => ({ ...prev, text, tags }));
     try {
-      await api.v1.things.update({ id: post.id, crystal: { text } });
+      await api.v1.things.update({ id: post.id, crystal: { text }, tags });
       lopu({ title: 'Post updated ✏️', status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, text: prevText }));
+      onChanged?.((prev) => ({ ...prev, text: prevText, tags: prevTags }));
       setEditText(text); // give the draft back
       setEditing(true);
       lopu({ title: err?.error || 'Could not save that edit 😞', status: 'error' });
@@ -1477,9 +1541,15 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     if (sharing) return;
     setSharing(true);
     try {
+      const caption = quoteText.trim();
       await api.v1.things.share({
         id: post.id,
-        text: quoteText.trim() || undefined,
+        text: caption || undefined,
+        // the caption linkifies #tags (HashtagText), so harvest them into real
+        // tags exactly like the composer — otherwise a tapped caption tag's
+        // own search would exclude the quote post itself. The server merges
+        // these with the tags carried from the original.
+        tags: extractInlineHashtags(caption),
         visibility: quoteVisibility
       });
       lopu({ title: 'Quoted ✨', status: 'success', duration: 6000 });
@@ -1672,7 +1742,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           <Flex flexDirection="column" rowGap={3}>
             {post.text && (
               <Text fontSize="md" color={TEXT} whiteSpace="normal">
-                {post.text}
+                {/* quote captions linkify #tags too; the chip row stays on the
+                nested original (a share copies a public original's tags, so a
+                second chip row here would just duplicate it) */}
+                <HashtagText text={post.text} />
               </Text>
             )}
             <PostAttachments attachments={post.attachments} />

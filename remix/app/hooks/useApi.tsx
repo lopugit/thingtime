@@ -525,7 +525,12 @@ export function useApi() {
       ),
       share: useCallback(
         async (args) =>
-          asyncFetcher.submit({ id: args?.id, text: args?.text, acl: args?.acl, visibility: args?.visibility }, { action: '/api/v1/things/share' }),
+          asyncFetcher.submit(
+            // tags: the quote caption's harvested inline #hashtags — merged
+            // server-side with the tags carried from the original post
+            { id: args?.id, text: args?.text, tags: args?.tags, acl: args?.acl, visibility: args?.visibility },
+            { action: '/api/v1/things/share' }
+          ),
         [asyncFetcher]
       ),
 			remove: useCallback(

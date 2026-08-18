@@ -48,6 +48,43 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Run `npm run test:attachments` (it carries the public-upload permission
       unit tests alongside the upload-gate regression test).
 
+## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`)
+
+Crawlers never run JS, so verify with plain `curl` against the Nitro port (the
+Vite dev port serves the raw shell without injection; in production, Vercel
+routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
+`remix/scripts/patch-vercel-output.mjs`).
+
+- [ ] `curl -s <nitro>/post/<public post id>` returns `og:type article`, an
+      `og:title` carrying the author + truncated text (or the poll question),
+      an `og:description` capped near 200 chars, an absolute `og:url` /
+      `og:image`, and `twitter:card summary` (`summary_large_image` when the
+      post has an image attachment or a legacy `images[0]` URL, which then
+      becomes the `og:image`).
+- [ ] Fail closed: `curl -s <nitro>/post/<private post id>` and
+      `/post/<garbage id>` both return ONLY the generic site block —
+      indistinguishable from each other, and no post text, author, or image
+      may appear anywhere in the HTML. (Status stays 200 by design: h3 treats
+      a 404 Response from this middleware as "unhandled" and would fall
+      through to the raw source template — see `server/routes/[...].ts`.)
+- [ ] `curl -s <nitro>/profile/<username>` returns `og:type profile`, the
+      `displayName (@username)` title, the bio as description, and the avatar
+      as `og:image` when set; an unknown username gets the generic block.
+- [ ] User-authored text with `<`, `>`, `&`, quotes, and newlines arrives
+      HTML-escaped and whitespace-collapsed inside `content="…"`.
+- [ ] `curl -s -H 'x-forwarded-host: thingtime.com' -H 'x-forwarded-proto:
+      https' <nitro>/post/<id>` derives `https://thingtime.com/...` absolute
+      URLs (the request-origin pattern, not a hardcoded host).
+- [ ] Every other page (`/`, `/feed`, deep unknown paths) carries the injected
+      site-default block (site_name Thingtime, generic description, brand
+      image, `twitter:card summary`) with absolute URLs, and responses from
+      the shell handler carry the `X-TT-Shell: social-meta` header.
+- [ ] After `npm run build`, `verify:vercel-output` passes: the permalink
+      routes sit between the API routes and the SPA fallback and point at the
+      Nitro server function.
+- [ ] A normal browser load of `/post/<id>` and `/profile/<username>` still
+      renders the SPA (the injected head block must not break the shell).
+
 ## Canonical AI instruction links (`AI_ALL.md`)
 
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
@@ -1040,6 +1077,24 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] A dead `?schema=` deep link (unknown/invisible shareId) toasts, strips
       the param from the URL, and fires NO fallback search; while a live
       `?schema=` resolves, no empty-state copy shows at all.
+
+## Hashtags & tag chips (`remix/app/components/Feed/hashtags.ts`, `PostCard.tsx`, `PostComposer.tsx`)
+
+- [ ] Publishing a post whose body contains inline `#tags` stores them in the
+      post's `tags` array (lowercased, deduped case-insensitively, merged
+      after any comma-separated explicit tags, 12-tag cap) while the literal
+      `#Text` stays in the post body. The composer's chip preview shows
+      inline tags live as you type.
+- [ ] PostCard renders `post.tags` as tappable pill chips (feed, /explore,
+      /post/:id, comments with tags — all PostCard surfaces) and linkifies
+      inline `#tags` in post text and quote captions. Both land on
+      `/search?tags=<tag>` with a visible `tags is <tag>` filter row seeded
+      and the search already run; tapping the same chip twice in a row still
+      re-runs (the post-search URL cleanup resets the deep-link guard).
+- [ ] The linkifier never matches URL fragments (`example.com/page#section`),
+      HTML entities (`&#39;`), mid-word hashes (`foo#bar`), or pure numbers
+      (`#42`) — those render as plain text — and Unicode tags (`#日本語`)
+      linkify correctly (unit-tested in `hashtags.test.ts`; spot-check one).
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 

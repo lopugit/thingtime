@@ -6205,17 +6205,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
-      'POST the post id plus optional text and visibility.',
+      'POST the post id plus optional text, tags, and visibility.',
       'The source post must be public or owned/visible to the current user.',
+      'Optional tags (e.g. inline #hashtags harvested from the caption) merge with the tags carried from the original.',
       'Use the returned share post to update feed state.',
       'Handle 401 unauthenticated and 404 for missing or not-visible posts.'
     ],
     requestExamples: [
       {
         name: 'Share post',
-        description: 'Create a repost with optional commentary.',
+        description: 'Create a repost with optional commentary — caption hashtags ride along as tags.',
         method: 'POST',
-        body: { id: 'post_123', text: 'Worth saving', visibility: 'public' }
+        body: { id: 'post_123', text: 'Worth saving #vibes', tags: ['vibes'], visibility: 'public' }
       },
       {
         name: 'Share to your friends only',

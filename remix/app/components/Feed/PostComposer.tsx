@@ -24,6 +24,7 @@ import { ThingView } from '~/components/Thingtime/ThingView';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { RAINBOW } from '~/theme/rainbow';
+import { extractInlineHashtags } from './hashtags';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
 import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from './feedTypes';
 
@@ -216,7 +217,11 @@ export const PostComposer = (props: PostComposerProps) => {
 		editAttachments.length === editAttachmentsSeedRef.current.length &&
 		editAttachments.some((attachment, index) => attachment.id !== editAttachmentsSeedRef.current[index].id);
 
-	const parsedTags = canonicalPostTags(tagsInput.split(','));
+	// explicit comma-separated tags first, then #hashtags typed inline in the
+	// body (the literal #text stays in the post — PostCard linkifies it);
+	// canonicalPostTags dedupes the merge and enforces the 12-tag/40-char caps.
+	// Poll questions keep their hashtags too — the question renders on the card.
+	const parsedTags = canonicalPostTags([...tagsInput.split(','), ...extractInlineHashtags(text)]);
 
 	const validImages = canonicalLinkedImageUrls(linkedImages);
 
