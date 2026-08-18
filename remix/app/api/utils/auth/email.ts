@@ -1,7 +1,5 @@
 import { sendEmail } from '../email/service';
-import { getAdminNotificationsEmail } from '../email/config';
 import {
-  renderAdminMediaUploadRequestTemplate,
   renderEmailOtpTemplate,
   renderEmailVerificationTemplate,
   renderNewUserAdminNotificationTemplate,
@@ -31,41 +29,6 @@ export const sendVerificationEmail = async ({
     tags: {
       stream: 'transactional',
       template: 'auth.verify_email'
-    }
-  });
-};
-
-// Beta media-upload approvals: every new registration alerts the admin inbox
-// (THINGTIME_ADMIN_EMAIL, default admin@thingtime.com) so an admin can grant
-// meta.mediaUpload from /admin. Transactional stream — admin alerts are
-// operational, never preference-gated like the notification stream.
-export const sendAdminMediaUploadRequestEmail = async ({
-  username,
-  email,
-  userId,
-  origin
-}: {
-  username: string;
-  email: string;
-  userId: string;
-  origin?: string;
-}): Promise<EmailSendResult> => {
-  const base = origin || process.env.APP_URL || 'http://localhost:9999';
-  const rendered = renderAdminMediaUploadRequestTemplate({ username, email, userId, adminUrl: `${base}/admin` });
-  return sendEmail({
-    to: getAdminNotificationsEmail(),
-    stream: 'transactional',
-    templateKey: 'admin.media_upload_request',
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    metadata: {
-      purpose: 'admin_media_upload_request',
-      userId
-    },
-    tags: {
-      stream: 'transactional',
-      template: 'admin.media_upload_request'
     }
   });
 };

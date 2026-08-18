@@ -1138,16 +1138,6 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin promote attempt was rejected.')
   },
   {
-    id: 'admin-set-media-upload-guarded',
-    name: 'Media-upload grant is admin-only',
-    description: 'Granting the beta media-upload permission requires an admin session.',
-    group: 'admin',
-    method: 'POST',
-    path: '/api/v1/admin/set-media-upload',
-    body: { userId: '000000000000000000000000', granted: true },
-    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin media-grant attempt was rejected.')
-  },
-  {
     id: 'attachments-upload-requires-media-grant',
     name: 'Uploads need the beta media grant',
     description:

@@ -1,12 +1,14 @@
-// Media-upload grant. During the beta, uploading media/files requires a
-// per-user permission granted manually by an admin: user doc
-// `meta.mediaUpload === true` (things-era root boolean `secureMediaUpload`,
-// reconstructed into meta by userThingToDoc — mirroring `meta.admin` /
-// `secureAdmin`). Admins can always upload. Pure predicate (mirrors
-// auth/admin.ts) so it stays clear of the users ↔ getCurrentUser import
-// cycle; routes gate on the `canUploadMedia` flag that toPublicUser stamps
-// onto every PublicUser.
+// Media-upload permission. Two beta gates landed in parallel (this branch's
+// meta.mediaUpload and PR #301's meta.publicUploads hotfix, now on main);
+// they are consolidated on #301's storage: tri-state `meta.publicUploads`
+// (absent = account predates the gate, grandfathered enabled; false =
+// withheld at signup; true = granted by an admin from /admin). Admins always
+// pass. This predicate is THE single source both PublicUser flags
+// (`canUploadMedia`, `publicUploadsEnabled`) and both upload-gate branches
+// read, so one admin toggle fully unblocks an account. Pure predicate
+// (mirrors auth/admin.ts) to stay clear of the users ↔ getCurrentUser
+// import cycle.
 import { isAdminDoc } from './admin';
 
 export const canUploadMediaDoc = (user: { username?: string; meta?: Record<string, any> } | null | undefined): boolean =>
-	!!user && (user.meta?.mediaUpload === true || isAdminDoc(user));
+	!!user && (isAdminDoc(user) || user.meta?.publicUploads !== false);

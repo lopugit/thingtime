@@ -626,15 +626,11 @@ test recipient (or a plus alias of it).
 
 ### Private S3 media and attachments
 
-During the beta, media/file uploads are admin-approved per account: new
-registrations default to no upload permission, every registration emails
-`THINGTIME_ADMIN_EMAIL` (default `admin@thingtime.com`) requesting a grant, and
-an admin flips **Grant media** on the `/admin` Users tab (or POSTs
-`/api/v1/admin/set-media-upload`). Ungranted upload attempts return
-`403 { code: "media_upload_not_granted" }`; admins can always upload. To let
-accounts that existed before the gate keep uploading, run the
-`grant-media-upload-to-existing-users` migration once from the migrations
-panel.
+Upload permission is the single beta gate documented under
+[Public upload approval](#public-upload-approval); `PublicUser.canUploadMedia`
+is its alias (the composer's approval-pending card reads it), and ungranted
+starts answer 403 with `media_upload_not_granted` /
+`public_uploads_not_approved` — one permission, two compat codes.
 
 Posts, comments and replies, Messenger messages and thread replies, custom
 reaction emoji, and profile avatar/banner images use direct, checksummed

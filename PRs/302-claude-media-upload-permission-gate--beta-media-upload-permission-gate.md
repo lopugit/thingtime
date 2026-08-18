@@ -6,6 +6,36 @@
 - **Base**: `develop`
 - **Why**: media/file attachments are now public content; during the beta every new account must be manually approved by an admin before it can upload anything, so spam raids can't publish media.
 
+## Consolidation with PR #301 (2026-08-18)
+
+A parallel session shipped the same feature as
+[PR #301](https://github.com/lopugit/thingtime/pull/301) (tri-state
+`meta.publicUploads`, verification-time `admin.new_user` alert,
+`/api/v1/admin/users/public-uploads`, optimistic /admin toggle) and it merged
+to `main` first. The repo's AI resolver then merged `develop` into this branch
+leaving BOTH gates enforced — a double-grant hazard where no single admin
+toggle unblocked a new account. This branch now consolidates on #301's
+storage/admin surface as canonical and keeps this PR's unique value:
+
+- **One predicate** (`auth/mediaUpload.ts` `canUploadMediaDoc` — tri-state
+  `meta.publicUploads`, admins always pass). `userPublicUploadsEnabled`
+  delegates to it, so `PublicUser.canUploadMedia` and
+  `publicUploadsEnabled` can never drift and either gate branch passes once
+  an admin grants the one toggle.
+- **Kept from this PR**: the composer's 🔐 approval-pending card
+  (`canUploadMedia === false`), `attachmentUiCore` copy for the stable
+  `media_upload_not_granted` code, `requireUploadGrant` on uploads
+  parts/complete (revocation bites mid-upload; abort/delete stay open), and
+  the route-level gate tests.
+- **Removed as duplicates**: `meta.mediaUpload` / `secureMediaUpload`
+  storage, `setUserMediaUpload`, `POST /api/v1/admin/set-media-upload`
+  (+docs/useApi/UI button/guard test), the registration-time
+  `admin.media_upload_request` email (+template/env), and the
+  `grant-media-upload-to-existing-users` migration (#301's absent =
+  grandfathered makes it unnecessary).
+
+The sections below describe the original pre-consolidation shape.
+
 ## Shape of the change
 
 | Layer | What |
