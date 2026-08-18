@@ -587,21 +587,34 @@ receive automatically — see
 
 ### Public upload approval
 
-New accounts start **without** permission to upload public files or media, and
-verifying the email address does not grant it. The account carries
-`meta.publicUploads: false` from registration; `POST /api/v1/attachments/uploads`
-answers `403 public_uploads_not_approved` until an administrator flips it from
-the **/admin → Users** tab (`POST /api/v1/admin/users/public-uploads`).
+New accounts start **without** permission to upload files or media, and
+verifying the email address does not grant it. The permission has two
+independent scopes, so an administrator can approve the **public**, **private**,
+or **all** variation per user:
 
-The flag is deliberately tri-state, so nothing here needs a data migration:
+| Scope | Covers | Flag |
+| --- | --- | --- |
+| `public` | post, comment, and custom-emoji attachments | `meta.publicUploads` |
+| `private` | message attachments + the user's own profile avatar/banner | `meta.privateUploads` |
+| `all` | both of the above in one write | both flags |
 
-| `meta.publicUploads` | Meaning |
+The account carries `meta.publicUploads: false` and `meta.privateUploads:
+false` from registration; `POST /api/v1/attachments/uploads` answers
+`403 public_uploads_not_approved` or `403 private_uploads_not_approved`
+(depending on the requested purpose) until an administrator approves that
+scope from the **/admin → Users** tab's per-row **Approve** menu
+(`POST /api/v1/admin/users/public-uploads { userId, enabled, scope }`; scope
+defaults to `public` for pre-scope callers).
+
+Each flag is deliberately tri-state, so nothing here needs a data migration:
+
+| flag value | Meaning |
 | --- | --- |
 | absent | account predates the change — uploads stay enabled |
 | `false` | withheld, awaiting admin approval (every new signup) |
 | `true` | granted by an administrator |
 
-Administrators bypass the flag entirely, so the account that grants the
+Administrators bypass the flags entirely, so the account that grants the
 permission can never be locked out of the surface that grants it.
 
 Use the SES **API** with an IAM key scoped to `ses:SendEmail` — do not create
