@@ -8,6 +8,8 @@ pointed at a Vercel preview or branch deployment for TestFlight builds. A
 left-edge swipe opens the in-app web destination drawer, where production,
 the configured build URL, and deployments returned by
 `/api/v1/vercel/deployments` can be selected without rebuilding the app. It
+keeps the controls pinned while the destination rows scroll lazily, so long
+preview histories remain usable on every supported screen size. It
 does not include any LiDAR, ARKit,
 scanning, mesh, storage, or export functionality.
 
