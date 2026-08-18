@@ -17,6 +17,26 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **Open Graph / Twitter cards for shared links**: the Nitro page catch-all
+  (`server/routes/[...].ts`) now injects per-request social meta into the SPA
+  shell's new `tt-social-meta` head block (`remix/index.html`), built by
+  `app/api/utils/meta/socialMeta.ts` — `/post/:id` gets author + text/poll
+  tags with the first image attachment (public `tt:all` posts only; private or
+  missing posts fail closed to the generic site block), `/profile/:username`
+  gets displayName/bio/avatar tags, and every other page gets site defaults
+  with request-derived absolute URLs. Deployment wiring:
+  `scripts/patch-vercel-output.mjs` routes the two permalink patterns to the
+  Nitro `__server` function (everything else stays on the static shell),
+  `scripts/verify-vercel-output.mjs` asserts that routing, and
+  `nitro.config.ts` gained an explicit `assets:shell` server-assets mount
+  because nitro 3's default `assets:server` mount no longer resolves to
+  `server/assets`. Note: the shell handler always answers 200 — h3 2.x treats
+  a 404 middleware Response as "unhandled" and would fall through to the raw
+  source template. Verification recipe lives in `TESTING.md` ("Social meta /
+  link unfurls"). — Claude (AI), 2026-08-19
+
 ### Security
 
 - **Upload approval now has public / private / all scopes**: the

@@ -75,7 +75,12 @@ const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
 const rootIndex = routes.findIndex((route) => route.src === '^/$' && route.dest === '/index.html');
 const directIndex = routes.findIndex((route) => route.src === '^/index\\.html$' && route.dest === '/index.html');
 const spaIndex = routes.findIndex((route) => route.src === '/(?:.*)' && route.dest === '/index.html');
-const serverFallbackIndex = routes.findIndex((route) => route.dest === '/__server');
+// the social-permalink routes share the /__server dest, so the final Nitro
+// fallback is the one that is NOT a permalink rewrite
+const isPermalinkSrc = (src) => typeof src === 'string' && /^\^\/(?:post|profile)\//.test(src);
+const serverFallbackIndex = routes.findIndex((route) => route.dest === '/__server' && !isPermalinkSrc(route.src));
+const postPermalinkIndex = routes.findIndex((route) => route.src === '^/post/[^/]+/?$' && route.dest === '/__server');
+const profilePermalinkIndex = routes.findIndex((route) => route.src === '^/profile/[^/]+/?$' && route.dest === '/__server');
 
 if (spaIndex === -1) {
 	throw new Error('Vercel output config does not route non-API app paths to /index.html.');
@@ -119,6 +124,29 @@ if (rootIndex > spaIndex) {
 
 if (serverFallbackIndex !== -1 && serverFallbackIndex < spaIndex) {
 	throw new Error('Vercel output checks the Nitro server fallback before the SPA shell.');
+}
+
+// Social permalinks must reach the Nitro shell handler (crawler-visible Open
+// Graph tags — server/routes/[...].ts) instead of the meta-less static shell.
+if (serverFallbackIndex !== -1) {
+	for (const [name, index] of [
+		['post permalink', postPermalinkIndex],
+		['profile permalink', profilePermalinkIndex]
+	]) {
+		if (index === -1) {
+			throw new Error(`Vercel output config does not route the ${name} pages to the Nitro social-meta handler.`);
+		}
+		if (index > spaIndex) {
+			throw new Error(`Vercel output checks the SPA fallback before the ${name} social-meta route.`);
+		}
+		if (index < apiIndex || index < filesystemIndex) {
+			throw new Error(`Vercel output routes ${name} pages to the Nitro social-meta handler before filesystem/API routes.`);
+		}
+		const headers = routes[index]?.headers;
+		if (headers?.['Cache-Control'] !== expectedAppShellCacheControl) {
+			throw new Error(`Vercel output ${name} route does not disable browser caching for the HTML shell.`);
+		}
+	}
 }
 
 const authorizeHeadersIndex = routes.findIndex(
