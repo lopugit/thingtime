@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_INDEXING_RESOURCE_LIMITS,
   DEFAULT_INDEXING_SETTINGS,
+  fuzzyTextScore,
+  INDEXING_SETTINGS_VERSION,
   normalizeIndexingSettings,
+  normalizeSearchPreferences,
+  recordSearchPreference,
 } from './index.js';
 
 describe('normalizeIndexingSettings', () => {
@@ -33,6 +37,7 @@ describe('normalizeIndexingSettings', () => {
         },
       }),
     ).toEqual({
+      version: INDEXING_SETTINGS_VERSION,
       enabled: false,
       roots: ['~/Documents', '/Volumes/Work'],
       respectGitIgnore: false,
@@ -42,7 +47,7 @@ describe('normalizeIndexingSettings', () => {
         { kind: 'regex', pattern: '(^|/)scratch-[0-9]+' },
       ],
       refreshIntervalMinutes: 5,
-      maxEntries: 10_000_000,
+      maxEntries: 99_000_000,
       resourceLimits: {
         maxThreads: 64,
         maxParallelism: 1,
@@ -86,6 +91,85 @@ describe('normalizeIndexingSettings', () => {
     });
     expect(migrated.customIgnores).toEqual(DEFAULT_INDEXING_SETTINGS.customIgnores);
     expect(migrated.refreshIntervalMinutes).toBe(360);
-    expect(migrated.maxEntries).toBe(500_000);
+    expect(migrated.maxEntries).toBeNull();
+    expect(migrated.includeHidden).toBe(true);
+    expect(migrated.version).toBe(INDEXING_SETTINGS_VERSION);
+  });
+
+  it('migrates former built-in caps and hidden-file defaults while preserving current choices', () => {
+    const legacy = normalizeIndexingSettings({
+      includeHidden: false,
+      maxEntries: 500_000,
+      customIgnores: DEFAULT_INDEXING_SETTINGS.customIgnores,
+    });
+    expect(legacy).toMatchObject({ includeHidden: true, maxEntries: null });
+
+    const versionTwo = normalizeIndexingSettings({
+      version: 2,
+      includeHidden: false,
+      maxEntries: 500_000,
+      customIgnores: [{ kind: 'regex', pattern: '^custom/' }],
+    });
+    expect(versionTwo).toMatchObject({ includeHidden: true, maxEntries: null });
+
+    const explicit = normalizeIndexingSettings({
+      version: INDEXING_SETTINGS_VERSION,
+      includeHidden: false,
+      maxEntries: 250_000,
+      customIgnores: DEFAULT_INDEXING_SETTINGS.customIgnores,
+    });
+    expect(explicit).toMatchObject({ includeHidden: false, maxEntries: 250_000 });
+  });
+});
+
+describe('search preference learning', () => {
+  it('normalizes query casing and increments only the selected query/item/action tuple', () => {
+    const first = recordSearchPreference([], ' RayCast Start ', 'index:file:raycast', 'open', 100);
+    const second = recordSearchPreference(first, 'raycast start', 'index:file:raycast', 'open', 200);
+    const third = recordSearchPreference(second, 'raycast start', 'index:file:other', 'open', 300);
+
+    expect(third).toEqual([
+      {
+        query: 'raycast start',
+        itemId: 'index:file:other',
+        actionId: 'open',
+        count: 1,
+        lastSelectedAtMs: 300,
+      },
+      {
+        query: 'raycast start',
+        itemId: 'index:file:raycast',
+        actionId: 'open',
+        count: 2,
+        lastSelectedAtMs: 200,
+      },
+    ]);
+  });
+
+  it('drops malformed preference rows and merges duplicate persisted rows', () => {
+    expect(
+      normalizeSearchPreferences([
+        { query: 'SET', itemId: 'settings', actionId: 'open', count: 2, lastSelectedAtMs: 10 },
+        { query: 'set', itemId: 'settings', actionId: 'open', count: 3, lastSelectedAtMs: 20 },
+        { query: 'set', itemId: '', actionId: 'open', count: 999, lastSelectedAtMs: 30 },
+      ]),
+    ).toEqual([
+      {
+        query: 'set',
+        itemId: 'settings',
+        actionId: 'open',
+        count: 5,
+        lastSelectedAtMs: 20,
+      },
+    ]);
+  });
+});
+
+describe('fuzzyTextScore', () => {
+  it('matches omissions, substitutions, and transpositions but rejects unrelated text', () => {
+    expect(fuzzyTextScore('settngs', 'Commander Settings')).toBeGreaterThanOrEqual(0);
+    expect(fuzzyTextScore('nite', 'note')).toBeGreaterThanOrEqual(0);
+    expect(fuzzyTextScore('raycsat', 'raycast-start')).toBeGreaterThanOrEqual(0);
+    expect(fuzzyTextScore('raycsat', 'unrelated')).toBe(-1);
   });
 });

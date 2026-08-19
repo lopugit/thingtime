@@ -1735,6 +1735,22 @@ is fixed, and cite the checklist you ran in the PR description.
       with arrows, execute with Return, open Command-K, traverse actions, and
       dismiss actions/launcher with Escape. Long names must not clip or create
       horizontal scroll in default or compact mode.
+- [ ] Search typo variants such as `settngs`, `extensoin`, and `raycsat` across
+      apps, commands, extensions, files, and folders. Repeatedly choose a lower
+      equivalent result, rerun the same query, and verify device-local learned
+      ranking promotes it after a full Commander relaunch without changing an
+      unrelated query.
+- [ ] Open Search Settings. Verify hidden files and unlimited entries are the
+      migrated defaults, the SQLite database footprint uses B/KB/MB/GB, and a
+      custom cap persists and can be cleared back to Unlimited. Index a hidden
+      file, extensionless executable, broken symlink, special Unix file, and
+      nested `.app`; verify each reference is searchable without following links
+      or recursively indexing package contents.
+- [ ] With more than one million indexed records, leave Search Settings open
+      across at least four two-second polls. Counts and database size must remain
+      populated without a five-second timeout or zero-state flash. Search a long
+      nonexistent term and verify the reader remains responsive or self-recovers
+      before the next status request.
 - [ ] Search `accessibility`; verify Accessibility Settings is the first
       `System` result and Return opens the exact Privacy & Security →
       Accessibility pane without changing any permission. Repeat with Screen

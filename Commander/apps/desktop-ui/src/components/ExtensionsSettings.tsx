@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   extensionCommandItemId,
+  fuzzyTextScore,
   type CommanderExtension,
   type CommanderSettings,
   type ExtensionCommand,
@@ -187,18 +188,15 @@ export function ExtensionsSettings({
   };
 
   const normalizedQuery = query.trim().toLowerCase();
+  const fuzzyMatches = (value: string) => !normalizedQuery || fuzzyTextScore(normalizedQuery, value) >= 0;
   const visibleInstalled = installed.flatMap((extension) => {
     const extensionMatches =
       !normalizedQuery ||
-      `${extension.title} ${extension.description} ${extension.author ?? ''}`
-        .toLowerCase()
-        .includes(normalizedQuery);
+      fuzzyMatches(`${extension.title} ${extension.description} ${extension.author ?? ''}`);
     const commands = extension.commands.filter(
       (command) =>
         extensionMatches ||
-        `${command.title} ${command.description ?? ''} ${command.keywords.join(' ')}`
-          .toLowerCase()
-          .includes(normalizedQuery),
+        fuzzyMatches(`${command.title} ${command.description ?? ''} ${command.keywords.join(' ')}`),
     );
     return extensionMatches || commands.length ? [{ extension, commands }] : [];
   });
@@ -206,14 +204,12 @@ export function ExtensionsSettings({
     (extension) =>
       extension.source === 'builtin' &&
       bundledRaycastExtensionIds.has(extension.id) &&
-      `${extension.title} ${extension.description} ${extension.commands.map((command) => command.title).join(' ')}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
+      fuzzyMatches(
+        `${extension.title} ${extension.description} ${extension.commands.map((command) => command.title).join(' ')}`,
+      ),
   );
   const visibleRaycast = raycast.filter((extension) =>
-    `${extension.title} ${extension.name} ${extension.description}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
+    fuzzyMatches(`${extension.title} ${extension.name} ${extension.description}`),
   );
 
   return (

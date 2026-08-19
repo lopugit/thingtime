@@ -47,10 +47,10 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(settings),
     }),
-  execute: (itemId: string, actionId: string) =>
+  execute: (itemId: string, actionId: string, searchQuery = '') =>
     request<ExecuteResponse>('/api/execute', {
       method: 'POST',
-      body: JSON.stringify({ itemId, actionId }),
+      body: JSON.stringify({ itemId, actionId, query: searchQuery }),
     }),
   indexingStatus: () => request<IndexingStatus>('/api/index/status'),
   indexNow: (scope: IndexScope) =>

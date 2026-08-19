@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { isSettingsTab, type CommanderSettings, type SettingsTab } from '@commander/protocol';
-import { Box, Cloud, Info, KeyRound, Settings2, SlidersHorizontal, UserRound } from 'lucide-react';
+import { Box, Cloud, Info, KeyRound, Search, Settings2, SlidersHorizontal, UserRound } from 'lucide-react';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { AccountSettings } from './AccountSettings.js';
 import { CloudSyncSettings } from './CloudSyncSettings.js';
@@ -12,6 +12,7 @@ import { beginWindowDrag } from '../lib/nativeBridge.js';
 const tabs: Array<{ id: SettingsTab; title: string; Icon: typeof Settings2 }> = [
   { id: 'general', title: 'General', Icon: Settings2 },
   { id: 'extensions', title: 'Extensions', Icon: Box },
+  { id: 'search', title: 'Search', Icon: Search },
   { id: 'sync', title: 'Cloud Sync', Icon: Cloud },
   { id: 'account', title: 'Account', Icon: UserRound },
   { id: 'advanced', title: 'Advanced', Icon: SlidersHorizontal },
@@ -72,6 +73,13 @@ export function Settings({ state }: { state: CommanderState }) {
             onError={state.reportError}
           />
         ) : null}
+        {tab === 'search' ? (
+          <SearchSettings
+            settings={bootstrap.settings}
+            onChange={(next) => void state.saveSettings(next)}
+            onError={state.reportError}
+          />
+        ) : null}
         {tab === 'sync' ? (
           <CloudSyncSettings
             accounts={bootstrap.accounts}
@@ -91,7 +99,6 @@ export function Settings({ state }: { state: CommanderState }) {
           <AdvancedSettings
             settings={bootstrap.settings}
             onChange={(next) => void state.saveSettings(next)}
-            onError={state.reportError}
           />
         ) : null}
         {tab === 'about' ? <AboutSettings platform={bootstrap.platform} /> : null}
@@ -108,11 +115,9 @@ export function Settings({ state }: { state: CommanderState }) {
 function AdvancedSettings({
   settings,
   onChange,
-  onError,
 }: {
   settings: CommanderSettings;
   onChange(next: CommanderSettings): void;
-  onError(value: string | null): void;
 }) {
   const [baseUrl, setBaseUrl] = useState(settings.thingtimeBaseUrl);
   const [clientId, setClientId] = useState(settings.thingtimeClientId);
@@ -167,6 +172,38 @@ function AdvancedSettings({
           <span>
             Commander ships with this public client registration and uses Authorization Code + PKCE. Access
             tokens stay in the macOS Keychain.
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SearchSettings({
+  settings,
+  onChange,
+  onError,
+}: {
+  settings: CommanderSettings;
+  onChange(next: CommanderSettings): void;
+  onError(value: string | null): void;
+}) {
+  return (
+    <div className="settings-page search-settings">
+      <div className="search-settings-heading">
+        <Search />
+        <div>
+          <h2>Search</h2>
+          <p>Control Commander’s local indexes and adaptive result ranking.</p>
+        </div>
+      </div>
+      <div className="search-ranking-card">
+        <Search />
+        <div>
+          <strong>Fuzzy and adaptive everywhere</strong>
+          <span>
+            Apps, commands, extensions, files, and folders tolerate spelling mistakes. Choices made for each
+            search are learned locally so Commander ranks your preferred results first over time.
           </span>
         </div>
       </div>

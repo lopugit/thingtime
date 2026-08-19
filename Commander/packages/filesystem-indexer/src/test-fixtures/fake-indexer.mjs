@@ -6,7 +6,7 @@ input.on('line', (line) => {
   if (request.operation === 'index' && request.configuration?.sources?.[0]?.id === 'hang') return;
   const result =
     request.operation === 'status'
-      ? { schemaVersion: 1, totalRecords: 3, kinds: [] }
+      ? { schemaVersion: 1, totalRecords: 3, databaseSizeBytes: 4096, kinds: [] }
       : request.operation === 'query'
         ? {
             records: [

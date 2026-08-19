@@ -188,13 +188,13 @@ export const builtins: SearchItem[] = [
   },
   {
     id: 'builtin:indexing',
-    title: 'Indexing Settings',
+    title: 'Search Settings',
     subtitle: 'Configure file roots, ignore rules, and refresh the search index',
     kind: 'builtin',
-    keywords: ['index', 'indexing', 'files', 'folders', 'ignore', 'gitignore', 'regex', 'wildcard'],
+    keywords: ['search', 'index', 'indexing', 'files', 'folders', 'ignore', 'gitignore', 'regex', 'wildcard'],
     icon: 'search',
     favourite: false,
-    actions: [{ id: 'open-settings', title: 'Open Indexing Settings', shortcut: '↵' }],
+    actions: [{ id: 'open-settings', title: 'Open Search Settings', shortcut: '↵' }],
   },
   {
     id: 'builtin:accounts',

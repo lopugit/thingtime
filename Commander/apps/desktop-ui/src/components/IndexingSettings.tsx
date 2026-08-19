@@ -8,6 +8,7 @@ import type {
 } from '@commander/protocol';
 import {
   INDEXING_MAX_CPU_PERCENT,
+  INDEXING_MAX_ENTRIES_LIMIT,
   INDEXING_MAX_MEMORY_MIB,
   INDEXING_MAX_OPEN_DIRECTORIES_LIMIT,
   INDEXING_MAX_PARALLELISM_LIMIT,
@@ -153,9 +154,14 @@ export function IndexingSettings({
       </div>
 
       <div className="index-refresh-copy">
-        Applications refresh every {status?.automaticRefresh.applicationsMinutes ?? 5} minutes; files and
-        folders reconcile every {formatInterval(draft.refreshIntervalMinutes)} and whenever their settings
-        change.
+        <span>
+          Applications refresh every {status?.automaticRefresh.applicationsMinutes ?? 5} minutes; files and
+          folders reconcile every {formatInterval(draft.refreshIntervalMinutes)} and whenever their settings
+          change.
+        </span>
+        <strong aria-label="Search index database size">
+          Database {status ? formatBytes(status.databaseSizeBytes) : '—'}
+        </strong>
       </div>
 
       <div className="index-privacy-note">
@@ -247,8 +253,23 @@ export function IndexingSettings({
           />
           <span>
             <strong>Include hidden files</strong>
-            <small>Off by default to keep the index focused and lightweight.</small>
+            <small>On by default so dotfiles and hidden folders remain searchable.</small>
           </span>
+        </div>
+      </div>
+
+      <div className="index-settings-section">
+        <div className="index-section-heading">
+          <div>
+            <strong>Index capacity</strong>
+            <span>Leave the entry limit blank to index every matching item.</span>
+          </div>
+        </div>
+        <div className="index-resource-grid single">
+          <OptionalEntryLimitInput
+            value={draft.maxEntries}
+            onCommit={(maxEntries) => commit({ ...draft, maxEntries })}
+          />
         </div>
       </div>
 
@@ -428,9 +449,63 @@ function ResourceLimitInput({
   );
 }
 
+function OptionalEntryLimitInput({
+  value,
+  onCommit,
+}: {
+  value: number | null;
+  onCommit(value: number | null): void;
+}) {
+  const [draftValue, setDraftValue] = useState(value === null ? '' : String(value));
+  useEffect(() => setDraftValue(value === null ? '' : String(value)), [value]);
+  const commitValue = () => {
+    const normalized = draftValue.trim();
+    if (!normalized) {
+      setDraftValue('');
+      if (value !== null) onCommit(null);
+      return;
+    }
+    const parsed = Number(normalized);
+    const next = Number.isSafeInteger(parsed)
+      ? Math.min(INDEXING_MAX_ENTRIES_LIMIT, Math.max(1, parsed))
+      : value;
+    setDraftValue(next === null ? '' : String(next));
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <label className="index-resource-field">
+      <span>
+        <strong>Maximum entries</strong>
+        <small>Blank means unlimited. Set a whole number to constrain disk use.</small>
+      </span>
+      <span className="index-resource-input wide">
+        <input
+          aria-label="Maximum index entries"
+          type="number"
+          min={1}
+          max={INDEXING_MAX_ENTRIES_LIMIT}
+          step={1}
+          value={draftValue}
+          placeholder="Unlimited"
+          spellCheck={false}
+          onChange={(event) => setDraftValue(event.currentTarget.value)}
+          onBlur={commitValue}
+          onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
+        />
+      </span>
+    </label>
+  );
+}
+
 function formatBytes(value: number): string {
+  if (value < 1024) return `${Math.max(0, Math.round(value))} B`;
   if (value < 1024 * 1024) return `${Math.max(0, Math.round(value / 1024))} KB`;
-  return `${Math.max(0, Math.round(value / 1024 / 1024))} MB`;
+  if (value < 1024 * 1024 * 1024) return `${formatUnit(value / 1024 / 1024)} MB`;
+  return `${formatUnit(value / 1024 / 1024 / 1024)} GB`;
+}
+
+function formatUnit(value: number): string {
+  return value >= 100 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, '');
 }
 
 function formatDuration(value: number): string {

@@ -19,6 +19,7 @@ vi.mock('../lib/api.js', () => ({
       available: true,
       running: [],
       totalRecords: 0,
+      databaseSizeBytes: 734_003_200,
       kinds: [],
       commands: { count: 0 },
       automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 30 },
@@ -47,6 +48,7 @@ vi.mock('../lib/api.js', () => ({
         available: true,
         running: [scope],
         totalRecords: 0,
+        databaseSizeBytes: 734_003_200,
         kinds: [],
         commands: { count: 0 },
         automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 30 },
@@ -116,22 +118,27 @@ describe('Commander settings deep links', () => {
   });
 
   it('shows indexing roots and ignore rules and can request a scoped refresh', async () => {
-    window.history.replaceState({}, '', '/settings.html?tab=advanced');
+    window.history.replaceState({}, '', '/settings.html?tab=search');
     const commander = state();
     render(<Settings state={commander} />);
 
     expect(screen.getByRole('heading', { name: 'Search Index' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Search' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByText('Fuzzy and adaptive everywhere')).toBeVisible();
     expect(screen.getByDisplayValue('~')).toBeVisible();
     expect(screen.getByDisplayValue('**/node_modules/**')).toBeVisible();
     expect(screen.getByDisplayValue('**/*.noindex/**')).toBeVisible();
     expect(screen.getByText(/files and folders reconcile every 6 hours/i)).toBeVisible();
     expect(screen.getByRole('spinbutton', { name: 'Scanner threads' })).toHaveValue(2);
     expect(screen.getByRole('spinbutton', { name: 'Max CPU' })).toHaveValue(60);
+    expect(screen.getByRole('spinbutton', { name: 'Maximum index entries' })).toHaveValue(null);
+    expect(screen.getByRole('checkbox', { name: 'Include hidden files' })).toBeChecked();
     await waitFor(() =>
       expect(screen.getByLabelText('Last index resource usage')).toHaveTextContent(
         /last run used 4 workers, averaged 23% cpu/i,
       ),
     );
+    expect(screen.getByLabelText('Search index database size')).toHaveTextContent('Database 700 MB');
 
     fireEvent.click(screen.getByRole('button', { name: 'Files' }));
     await waitFor(() => expect(api.indexNow).toHaveBeenCalledWith('files'));
@@ -155,6 +162,13 @@ describe('Commander settings deep links', () => {
           resourceLimits: expect.objectContaining({ maxThreads: 3 }),
         }),
       }),
+    );
+
+    const capacity = screen.getByRole('spinbutton', { name: 'Maximum index entries' });
+    fireEvent.change(capacity, { target: { value: '750000' } });
+    fireEvent.blur(capacity);
+    expect(commander.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ indexing: expect.objectContaining({ maxEntries: 750_000 }) }),
     );
   });
 });

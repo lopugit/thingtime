@@ -91,9 +91,9 @@ final class CommanderWebViewTests: XCTestCase {
   }
 
   func testSettingsDeepLinkDispatchesOnlyKnownTabs() {
-    let script = SettingsWindowController.settingsTabScriptForTesting(.extensions)
+    let script = SettingsWindowController.settingsTabScriptForTesting(.search)
     XCTAssertTrue(script.contains("commander:settings-tab"))
-    XCTAssertTrue(script.contains("detail:'extensions'"))
+    XCTAssertTrue(script.contains("detail:'search'"))
     XCTAssertNil(CommanderSettingsTab(rawValue: "not-a-tab"))
   }
 

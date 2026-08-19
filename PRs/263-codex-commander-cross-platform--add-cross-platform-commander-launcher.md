@@ -205,21 +205,32 @@ environment.
   compiles custom wildcard and regex rules before traversal; treats application
   and macOS document/media bundles as opaque; and avoids hydrating dataless File
   Provider folders. A name-only trigram FTS schema keeps large indexes compact,
-  migrates the earlier path-token schema transactionally, and falls back to path
-  substring matching only when a name query has no hit.
+  migrates the earlier path-token schema transactionally, and uses time-bounded
+  coarse-name/path fallbacks only when indexed name candidates have no hit.
 - Application roots now refresh from native directory watchers with a five-minute
   reconciliation, replacing the former startup-only snapshot that missed newly
   installed apps. Files/folders reconcile every six hours by default. The
   built-in Commander extension exposes Index All plus separate Apps, Commands,
-  Files, and Directories commands; Advanced Settings exposes the same controls,
-  roots, ignore rules, and status cards.
-- Commander defaults to a 500,000-entry safety cap and commits a searchable
-  partial snapshot with an actionable warning. Whole-home macOS indexing links
-  directly to Full Disk Access; a privacy-blocked scan is terminated after 90
-  seconds, its isolated writer is restarted, and the prior committed snapshot
-  stays searchable. The standalone engine remains configurable up to ten million
-  entries for other Thingtime/Electron hosts.
-- Advanced Settings now exposes five persisted machine-resource ceilings:
+  Files, and Directories commands; dedicated Search Settings exposes the same
+  controls, roots, ignore rules, and status cards.
+- Commander now defaults to unlimited entries and includes hidden files. The
+  versioned migration removes the former 500,000 default cap while preserving
+  future explicit caps; Search Settings exposes a blank-means-Unlimited input
+  and the live SQLite/WAL/SHM footprint. A configured cap still commits a
+  searchable partial snapshot with an actionable warning. Unlimited scans get
+  a bounded 15-minute writer window, while capped scans retain the shorter
+  privacy-blocked deadline and prior-snapshot recovery.
+- Root and extension-settings search, Raycast Store discovery, apps, built-ins,
+  extension commands, and filesystem results now tolerate bounded omissions,
+  substitutions, and adjacent transpositions. Executed query/item/action counts
+  persist in bounded device-local state; exact-query frequency, global usage,
+  and recency apply a capped ranking boost after relaunch without entering cloud
+  settings sync.
+- Filesystem classification now retains extensionless executables, aliases and
+  hard links, file/directory symlinks (including broken links), sockets, FIFOs,
+  device nodes, and `.app` bundles outside standard application roots as safe
+  metadata-only references. Links remain untraversed and packages remain opaque.
+- Search Settings now exposes five persisted machine-resource ceilings:
   scanner threads, parallel directory tasks, open directory handles, total-machine
   CPU share, and resident RAM. The reusable Rust protocol applies the strictest
   concurrency ceiling, sizes its bounded channel and SQLite cache from the RAM
@@ -234,15 +245,18 @@ environment.
 - Filesystem schema 3 migrates the FTS update trigger in place and fires it only
   when a filename actually changes. Scheduled generation reconciliation can
   still delete vanished paths without deleting and recreating every unchanged
-  trigram row.
+  trigram row. Status now uses indexed row counts rather than repeated distinct
+  scans, retains its last good snapshot across a transient failure, and restarts
+  a protocol child after timeout so a pathological query cannot poison later
+  searches or status polls.
 
 ## Verification
 
-- Commander TypeScript: 99 tests passed across protocol (5), filesystem client
-  (3), compatibility (18), UI (49), and daemon (24) packages; typecheck,
+- Commander TypeScript: 109 tests passed across protocol (9), filesystem client
+  (3), compatibility (19), UI (49), and daemon (29) packages; typecheck,
   ESLint, Prettier, and package builds passed.
-- Rust: 48 tests passed across command search (21 unit + 5 JSONL) and filesystem
-  indexing (21 unit + 1 JSONL); formatting and strict Clippy with warnings
+- Rust: 54 tests passed across command search (23 unit + 5 JSONL) and filesystem
+  indexing (25 unit + 1 JSONL); formatting and strict Clippy with warnings
   denied passed.
 - Swift: ten WebKit/panel, settings-deep-link, file-drag, and command-hotkey
   regressions passed; the release build passed with warnings treated as errors.
@@ -252,26 +266,37 @@ environment.
 - The installed signature, stable designated requirement, Node JIT
   entitlements, process ancestry, daemon health, and bundled executable paths
   were verified.
-- The optimized standalone indexer scanned 500,000 real home metadata entries in
+- Before the unlimited migration, the optimized standalone indexer scanned
+  500,000 real home metadata entries in
   15.6–17.0 seconds with the measured two-worker default (versus 21.9 seconds at
   one worker, 16.5 at three, 16.8 at four, and the earlier 29.0-second baseline).
   An unchanged schema-3 reconciliation completed in 12.4 seconds instead of
   rewriting the full trigram index. A separate 100,000-entry stress run held its
   configured whole-machine CPU average at exactly 5%, recorded 4.5 seconds of
-  throttling, and stayed below its 512 MiB RAM ceiling. The installed database
+  throttling, and stayed below its 512 MiB RAM ceiling. That capped database
   upgraded in place to schema 3, retained all 500,340 records, and committed
   387,797 files and 112,203 directories alongside 340
   applications, checkpointed its WAL to zero, and retained `0600` permissions on
-  the database and live sidecars. Installed-WebKit QA then returned 30 native-icon
-  file results for `package.json`; Advanced showed all live counts, the six-hour
-  cadence, Full Disk Access guidance, six default ignores, and the cap warning
-  without clipping while scrolling top to bottom.
+  the database and live sidecars.
+- Final unlimited migration indexed 1,191,259 real metadata rows in 51.5 seconds:
+  944,242 files, 246,484 directories, and 533 application-source records. The
+  database plus live sidecars measured 1,111,007,232 bytes, retained
+  `raycast-start` as both its executable file and nested `.app`, and included
+  hidden entries. Eight consecutive installed-daemon status polls completed in
+  131–187 ms with stable counts and no error; standalone cold-process benchmarks
+  completed status in 0.59 s, `nite` fuzzy search in 0.50 s, and a long missing
+  query in 1.38 s.
+- Installed-WebKit QA rendered the dedicated Search tab top-to-bottom with
+  unlimited capacity, hidden files enabled, 1 GB database size, live counts,
+  resource usage, and ignore rules without clipping. The launcher ranked Search
+  Settings first for `serch setings` and returned both the application and
+  executable `raycast-start` results for `raycsat strt` with native icons.
 - A separate 129-sample OS audit of the live Rust PID observed exactly two
   traversal workers, no more than two numeric directory handles, and four total
   process threads (main SQLite writer, walker coordinator, and the two workers),
   matching the documented distinction between traversal-worker and mandatory
   process threads.
-- Installed Advanced QA rendered and persisted the measured defaults (2 scanner
+- Earlier resource-control QA rendered and persisted the measured defaults (2 scanner
   threads, 2 parallel tasks, 16 open folders, 60% CPU, 512 MiB RAM), showed the
   real last-run worker/CPU/RSS/throttle report, visibly entered and exited the
   Apps `Indexing…` state, and remained aligned while scrolling through the final

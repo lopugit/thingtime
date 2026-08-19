@@ -182,6 +182,9 @@ describe('Your Raycast extensions', () => {
     expect(screen.queryByText('macOS System')).not.toBeInTheDocument();
     expect(screen.getByText('1 bundled command · by Thingtime')).toBeVisible();
     expect(screen.getByText('Built in')).toBeVisible();
+
+    fireEvent.change(screen.getByPlaceholderText('Search…'), { target: { value: 'emjoi' } });
+    expect(screen.getByText('Emoji & Symbols')).toBeVisible();
   });
 
   it('click-records and natively validates a per-command shortcut before saving it', async () => {

@@ -45,4 +45,9 @@ describe('filesystem index resource scheduling', () => {
     expect(indexTimeoutMs(20)).toBe(112_500);
     expect(indexTimeoutMs(5)).toBe(450_000);
   });
+
+  it('allows an unlimited whole-home scan to run for the full bounded indexing window', () => {
+    expect(indexTimeoutMs(100, true)).toBe(15 * 60_000);
+    expect(indexTimeoutMs(5, true)).toBe(15 * 60_000);
+  });
 });

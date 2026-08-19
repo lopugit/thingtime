@@ -68,6 +68,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   const nativeToken = randomBytes(32).toString('base64url');
   const store = new PersistentStore();
   await store.load();
+  const indexingSettingsMigrated = store.consumeIndexingMigration();
   const platform = options.platform ?? currentPlatform();
   const search = new SearchService(options.rustBinary);
   const extensions = new RaycastExtensionRuntime();
@@ -102,6 +103,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   });
   applications = await indexing.initialize();
   refreshCatalog();
+  if (indexingSettingsMigrated) void indexing.start('all').catch(() => undefined);
 
   const server = http.createServer(async (request, response) => {
     try {
@@ -159,7 +161,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     if (request.method === 'GET' && url.pathname === '/api/search') {
       const query = url.searchParams.get('q') ?? '';
       const indexedItems = await indexing.queryItems(query);
-      let hits = await search.search(query, 30, indexedItems);
+      let hits = await search.search(query, 30, indexedItems, store.preferenceScores(query));
       if (
         !query.trim() &&
         state.settings.windowMode === 'compact' &&
@@ -288,10 +290,19 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       });
     }
     if (request.method === 'POST' && url.pathname === '/api/execute') {
-      const { itemId, actionId } = await readBody<{ itemId: string; actionId: string }>(request);
+      const {
+        itemId,
+        actionId,
+        query = '',
+      } = await readBody<{
+        itemId: string;
+        actionId: string;
+        query?: string;
+      }>(request);
       const item =
         search.items().find((candidate) => candidate.id === itemId) ?? (await indexing.resolveItem(itemId));
       if (!item) return json(response, 404, { error: 'Search item not found' });
+      await store.recordSearchSelection(typeof query === 'string' ? query : '', itemId, actionId);
       if (actionId === 'open-settings')
         return json(response, 200, {
           ok: true,
@@ -304,7 +315,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
                   : item.id === 'builtin:accounts'
                     ? 'account'
                     : item.id === 'builtin:indexing'
-                      ? 'advanced'
+                      ? 'search'
                       : 'general',
             },
           } satisfies Omit<NativeRequest, 'id'>,

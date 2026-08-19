@@ -188,7 +188,9 @@ describe('Launcher keyboard navigation', () => {
     const commander = state({ selectedIndex: 1 });
     render(<Launcher state={commander} />);
     fireEvent.keyDown(window, { key: 'Enter' });
-    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith('app:notes', 'open'));
+    await waitFor(() =>
+      expect(commander.executeCommand).toHaveBeenCalledWith('app:notes', 'open', 'settings'),
+    );
     expect(commander.rememberRecentSearch).toHaveBeenCalledWith(
       'settings',
       expect.objectContaining({
@@ -221,7 +223,7 @@ describe('Launcher keyboard navigation', () => {
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith(item.id, 'run'));
+    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith(item.id, 'run', 'settings'));
   });
 
   it('renders and executes a macOS System shortcut as a System result', async () => {
@@ -241,7 +243,7 @@ describe('Launcher keyboard navigation', () => {
     expect(screen.getByRole('option', { name: /Accessibility Settings/ })).toHaveTextContent('System');
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith(item.id, 'run'));
+    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith(item.id, 'run', 'settings'));
   });
 
   it('opens a bundled command view without hiding the launcher', async () => {
@@ -260,7 +262,7 @@ describe('Launcher keyboard navigation', () => {
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith(item.id, 'run'));
+    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith(item.id, 'run', 'settings'));
   });
 
   it('shows the newest launched commands before a top-level search term and restores it with Return', () => {
@@ -328,7 +330,9 @@ describe('Launcher keyboard navigation', () => {
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith('app:1password', 'open'));
+    await waitFor(() =>
+      expect(commander.executeCommand).toHaveBeenCalledWith('app:1password', 'open', 'passwords'),
+    );
     expect(commander.rememberRecentSearch).toHaveBeenCalledWith('passwords', search.commands[0]);
   });
 
@@ -371,7 +375,9 @@ describe('Launcher keyboard navigation', () => {
     render(<Launcher state={commander} />);
     fireEvent.keyDown(window, { key: 'ArrowDown' });
     fireEvent.keyDown(window, { key: 'Enter' });
-    await waitFor(() => expect(commander.executeCommand).toHaveBeenCalledWith('app:notes', 'copy-path'));
+    await waitFor(() =>
+      expect(commander.executeCommand).toHaveBeenCalledWith('app:notes', 'copy-path', 'settings'),
+    );
   });
 
   it('prepares a native file drag only for a result with an explicit source path', async () => {

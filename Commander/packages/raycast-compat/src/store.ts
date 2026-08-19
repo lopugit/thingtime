@@ -13,7 +13,7 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import type { StoreExtension } from '@commander/protocol';
+import { fuzzyTextScore, type StoreExtension } from '@commander/protocol';
 import { inspectRaycastExtensionSource, type RaycastExtensionSourceReport } from './manifest.js';
 
 const RAYCAST_STORE = 'https://www.raycast.com/store';
@@ -73,9 +73,14 @@ export async function browseRaycastStore(query: string): Promise<StoreExtension[
   const value = query.trim().toLocaleLowerCase();
   const items = await latestStoreItems().catch(() => []);
   const matches = value
-    ? items.filter((item) =>
-        `${item.title} ${item.description} ${item.author} ${item.name}`.toLocaleLowerCase().includes(value),
-      )
+    ? items
+        .map((item) => ({
+          item,
+          score: fuzzyTextScore(value, `${item.title} ${item.description} ${item.author} ${item.name}`),
+        }))
+        .filter(({ score }) => score >= 0)
+        .sort((left, right) => right.score - left.score || left.item.title.localeCompare(right.item.title))
+        .map(({ item }) => item)
     : items;
   const result = matches.slice(0, 40);
   if (value) result.push(searchAllEntry(query.trim()));

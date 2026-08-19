@@ -6,10 +6,14 @@
 
 #![forbid(unsafe_code)]
 
+use commander_core::fuzzy_text_score;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use ignore::{WalkBuilder, WalkState};
 use regex::RegexSet;
-use rusqlite::{params, Connection, ErrorCode, OptionalExtension, Transaction};
+use rusqlite::{
+    params, params_from_iter, types::Value as SqlValue, Connection, ErrorCode, OptionalExtension,
+    Transaction,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
@@ -28,14 +32,16 @@ use resources::{validate_resource_limits, ResourceGovernor};
 pub use resources::{EffectiveResourceLimits, IndexResourceLimits, IndexResourceUsage};
 
 const SCHEMA_VERSION: i64 = 3;
-const DEFAULT_MAX_ENTRIES: usize = 2_000_000;
-const HARD_MAX_ENTRIES: usize = 10_000_000;
 const MAX_SOURCES: usize = 128;
 const MAX_IGNORE_RULES: usize = 512;
 const MAX_QUERY_RESULTS: usize = 1_000;
+const MAX_FUZZY_CANDIDATES: usize = 12_000;
+const MAX_COARSE_QUERY_CHARACTERS: usize = 16;
 const MAX_DIAGNOSTICS: usize = 20;
 const DATABASE_OPEN_RETRY_ATTEMPTS: usize = 100;
 const DATABASE_OPEN_RETRY_DELAY: Duration = Duration::from_millis(25);
+const COARSE_FUZZY_BUDGET: Duration = Duration::from_millis(350);
+const PATH_FALLBACK_BUDGET: Duration = Duration::from_millis(250);
 const DATABASE_JOURNAL_SIZE_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_RESOURCE_MEMORY_MIB: usize = 131_072;
 
@@ -112,7 +118,7 @@ pub struct IndexSource {
     pub kinds: Vec<IndexKind>,
     #[serde(default = "default_true")]
     pub respect_git_ignore: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub include_hidden: bool,
     #[serde(default)]
     pub follow_symlinks: bool,
@@ -140,8 +146,8 @@ pub struct IndexConfiguration {
     pub sources: Vec<IndexSource>,
     #[serde(default)]
     pub custom_ignores: Vec<IgnoreRule>,
-    #[serde(default = "default_max_entries")]
-    pub max_entries: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_entries: Option<usize>,
     #[serde(default)]
     pub resource_limits: IndexResourceLimits,
 }
@@ -195,6 +201,7 @@ pub struct KindStatus {
 pub struct IndexStatus {
     pub schema_version: i64,
     pub total_records: usize,
+    pub database_size_bytes: u64,
     pub kinds: Vec<KindStatus>,
 }
 
@@ -267,6 +274,7 @@ pub struct IndexerErrorResponse {
 
 pub struct IndexDatabase {
     connection: Connection,
+    database_path: PathBuf,
 }
 
 impl IndexDatabase {
@@ -298,7 +306,10 @@ impl IndexDatabase {
         )?;
         initialize_schema(&connection)?;
         secure_database_files(path)?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            database_path: path.to_path_buf(),
+        })
     }
 
     pub fn index(
@@ -362,14 +373,23 @@ impl IndexDatabase {
             ));
         }
         let kinds = normalized_kinds(&request.kinds);
-        let mut records = if request.query.trim().chars().count() >= 3 {
-            let mut matches = self.query_fts(request.query.trim(), &kinds, request.limit)?;
+        let query = request.query.trim();
+        let mut records = if query.chars().count() >= 3 {
+            let mut matches = self.query_fts(query, &kinds, request.limit)?;
+            rank_records(&mut matches, query);
             if matches.is_empty() {
-                matches = self.query_like(request.query.trim(), &kinds, request.limit)?;
+                matches = self.query_coarse_fuzzy(query, &kinds, request.limit)?;
+                rank_records(&mut matches, query);
+            }
+            if matches.is_empty() {
+                matches = self.query_path_fallback(query, &kinds, request.limit)?;
+                rank_records(&mut matches, query);
             }
             matches
         } else {
-            self.query_like(request.query.trim(), &kinds, request.limit)?
+            let mut matches = self.query_like(query, &kinds, request.limit)?;
+            rank_records(&mut matches, query);
+            matches
         };
         deduplicate_records(&mut records, request.limit);
         Ok(QueryResponse { records })
@@ -387,11 +407,9 @@ impl IndexDatabase {
     }
 
     pub fn status(&self) -> Result<IndexStatus, IndexerError> {
-        let total_records: i64 = self.connection.query_row(
-            "SELECT COUNT(DISTINCT path || char(0) || kind) FROM records",
-            [],
-            |row| row.get(0),
-        )?;
+        let total_records: i64 =
+            self.connection
+                .query_row("SELECT COUNT(*) FROM records", [], |row| row.get(0))?;
         let mut kinds = Vec::new();
         for kind in [
             IndexKind::Application,
@@ -399,7 +417,7 @@ impl IndexDatabase {
             IndexKind::Directory,
         ] {
             let count: i64 = self.connection.query_row(
-                "SELECT COUNT(DISTINCT path) FROM records WHERE kind = ?1",
+                "SELECT COUNT(*) FROM records WHERE kind = ?1",
                 [kind.as_str()],
                 |row| row.get(0),
             )?;
@@ -427,6 +445,7 @@ impl IndexDatabase {
         Ok(IndexStatus {
             schema_version: SCHEMA_VERSION,
             total_records: usize::try_from(total_records).unwrap_or(usize::MAX),
+            database_size_bytes: database_size_bytes(&self.database_path),
             kinds,
         })
     }
@@ -457,7 +476,7 @@ impl IndexDatabase {
         &mut self,
         source: &IndexSource,
         matcher: Arc<CustomIgnoreMatcher>,
-        max_entries: usize,
+        max_entries: Option<usize>,
         governor: Arc<ResourceGovernor>,
     ) -> Result<SourceReport, IndexerError> {
         let root = fs::canonicalize(&source.root).map_err(|error| {
@@ -552,40 +571,31 @@ impl IndexDatabase {
         kinds: &[IndexKind],
         limit: usize,
     ) -> Result<Vec<IndexRecord>, IndexerError> {
-        let fts_query = format!("\"{}\"", query.replace('"', "\"\""));
-        let expanded_limit = limit.saturating_mul(4).min(MAX_QUERY_RESULTS * 4);
+        let Some(fts_query) = fuzzy_fts_query(query) else {
+            return Ok(Vec::new());
+        };
+        let expanded_limit = limit.saturating_mul(12).min(MAX_FUZZY_CANDIDATES);
         let mut statement = self.connection.prepare(
-            "SELECT r.path, r.name, r.parent, r.kind, r.modified_at_ms, r.size,
-                    CASE
-                      WHEN lower(r.name) = lower(?2) THEN 100000
-                      WHEN lower(r.name) LIKE lower(?2) || '%' THEN 80000 - length(r.name)
-                      WHEN instr(lower(r.name), lower(?2)) > 0 THEN 60000 - instr(lower(r.name), lower(?2))
-                      ELSE 30000 - MIN(instr(lower(r.path), lower(?2)), 20000)
-                    END AS result_score
+            "SELECT r.path, r.name, r.parent, r.kind, r.modified_at_ms, r.size
              FROM records_fts
              JOIN records r ON r.rowid = records_fts.rowid
              WHERE records_fts MATCH ?1
-               AND ((?3 = 1 AND r.kind = 'application')
-                 OR (?4 = 1 AND r.kind = 'file')
-                 OR (?5 = 1 AND r.kind = 'directory'))
-             ORDER BY result_score DESC, bm25(records_fts), lower(r.name), r.path
-             LIMIT ?6",
+               AND ((?2 = 1 AND r.kind = 'application')
+                 OR (?3 = 1 AND r.kind = 'file')
+                 OR (?4 = 1 AND r.kind = 'directory'))
+             ORDER BY bm25(records_fts), lower(r.name), r.path
+             LIMIT ?5",
         )?;
         let flags = kind_flags(kinds);
         let rows = statement.query_map(
             params![
                 fts_query,
-                query,
                 flags.0,
                 flags.1,
                 flags.2,
                 i64::try_from(expanded_limit).unwrap_or(i64::MAX)
             ],
-            |row| {
-                let mut record = row_to_record(row)?;
-                record.score = row.get(6)?;
-                Ok(record)
-            },
+            row_to_record,
         )?;
         collect_rows(rows)
     }
@@ -635,6 +645,128 @@ impl IndexDatabase {
             },
         )?;
         collect_rows(rows)
+    }
+
+    fn query_coarse_fuzzy(
+        &self,
+        query: &str,
+        kinds: &[IndexKind],
+        limit: usize,
+    ) -> Result<Vec<IndexRecord>, IndexerError> {
+        let mut seen = HashSet::new();
+        let prefixes = query
+            .to_lowercase()
+            .chars()
+            .filter(|character| character.is_alphanumeric())
+            .filter(|character| seen.insert(*character))
+            .take(MAX_COARSE_QUERY_CHARACTERS)
+            .map(|character| format!("{character}%"))
+            .collect::<Vec<_>>();
+        if prefixes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let query_length = query
+            .chars()
+            .filter(|character| character.is_alphanumeric())
+            .count();
+        let prefix_matches = prefixes
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                let parameter = index + 1;
+                format!("name LIKE ?{parameter} COLLATE NOCASE")
+            })
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        let application_parameter = prefixes.len() + 1;
+        let file_parameter = application_parameter + 1;
+        let directory_parameter = file_parameter + 1;
+        let length_parameter = directory_parameter + 1;
+        let limit_parameter = length_parameter + 1;
+        let sql = format!(
+            "SELECT path, name, parent, kind, modified_at_ms, size
+             FROM records
+             WHERE ({prefix_matches})
+               AND ((?{application_parameter} = 1 AND kind = 'application')
+                 OR (?{file_parameter} = 1 AND kind = 'file')
+                 OR (?{directory_parameter} = 1 AND kind = 'directory'))
+             ORDER BY abs(length(name) - ?{length_parameter}), lower(name), path
+             LIMIT ?{limit_parameter}"
+        );
+        let flags = kind_flags(kinds);
+        let expanded_limit = limit.saturating_mul(12).min(MAX_FUZZY_CANDIDATES);
+        let mut parameters = prefixes.into_iter().map(SqlValue::Text).collect::<Vec<_>>();
+        parameters.extend([
+            SqlValue::Integer(flags.0),
+            SqlValue::Integer(flags.1),
+            SqlValue::Integer(flags.2),
+            SqlValue::Integer(i64::try_from(query_length).unwrap_or(i64::MAX)),
+            SqlValue::Integer(i64::try_from(expanded_limit).unwrap_or(i64::MAX)),
+        ]);
+        Ok(self
+            .run_bounded_query(COARSE_FUZZY_BUDGET, || {
+                let mut statement = self.connection.prepare(&sql)?;
+                let rows =
+                    statement.query_map(params_from_iter(parameters.iter()), row_to_record)?;
+                rows.collect()
+            })?
+            .unwrap_or_default())
+    }
+
+    fn query_path_fallback(
+        &self,
+        query: &str,
+        kinds: &[IndexKind],
+        limit: usize,
+    ) -> Result<Vec<IndexRecord>, IndexerError> {
+        Ok(self
+            .run_bounded_query(PATH_FALLBACK_BUDGET, || {
+                let contains = format!("%{}%", escape_like(query));
+                let expanded_limit = limit.saturating_mul(4).min(MAX_QUERY_RESULTS * 4);
+                let flags = kind_flags(kinds);
+                let mut statement = self.connection.prepare(
+                    "SELECT path, name, parent, kind, modified_at_ms, size
+                     FROM records
+                     WHERE path LIKE ?1 ESCAPE '\\' COLLATE NOCASE
+                       AND ((?2 = 1 AND kind = 'application')
+                         OR (?3 = 1 AND kind = 'file')
+                         OR (?4 = 1 AND kind = 'directory'))
+                     LIMIT ?5",
+                )?;
+                let rows = statement.query_map(
+                    params![
+                        contains,
+                        flags.0,
+                        flags.1,
+                        flags.2,
+                        i64::try_from(expanded_limit).unwrap_or(i64::MAX)
+                    ],
+                    row_to_record,
+                )?;
+                rows.collect()
+            })?
+            .unwrap_or_default())
+    }
+
+    fn run_bounded_query<T>(
+        &self,
+        budget: Duration,
+        query: impl FnOnce() -> rusqlite::Result<T>,
+    ) -> Result<Option<T>, IndexerError> {
+        let deadline = Instant::now() + budget;
+        self.connection
+            .progress_handler(10_000, Some(move || Instant::now() >= deadline));
+        let result = query();
+        self.connection.progress_handler(0, None::<fn() -> bool>);
+        match result {
+            Ok(value) => Ok(Some(value)),
+            Err(rusqlite::Error::SqliteFailure(failure, _))
+                if failure.code == ErrorCode::OperationInterrupted =>
+            {
+                Ok(None)
+            }
+            Err(error) => Err(error.into()),
+        }
     }
 }
 
@@ -833,7 +965,7 @@ struct ScanContext<'a> {
     root: &'a Path,
     root_text: &'a str,
     matcher: Arc<CustomIgnoreMatcher>,
-    max_entries: usize,
+    max_entries: Option<usize>,
     generation: i64,
     governor: Arc<ResourceGovernor>,
 }
@@ -936,11 +1068,13 @@ fn scan_and_store(
                         }
                     };
                     if let Some(candidate) = candidate {
-                        let next = discovered.fetch_add(1, Ordering::Relaxed) + 1;
-                        if next > max_entries {
-                            cancelled.store(true, Ordering::Relaxed);
-                            let _ = sender.send(ScanMessage::LimitExceeded);
-                            return WalkState::Quit;
+                        if let Some(max_entries) = max_entries {
+                            let next = discovered.fetch_add(1, Ordering::Relaxed) + 1;
+                            if next > max_entries {
+                                cancelled.store(true, Ordering::Relaxed);
+                                let _ = sender.send(ScanMessage::LimitExceeded(max_entries));
+                                return WalkState::Quit;
+                            }
                         }
                         if sender.send(ScanMessage::Record(candidate)).is_err() {
                             cancelled.store(true, Ordering::Relaxed);
@@ -1004,7 +1138,7 @@ fn scan_and_store(
                         report.diagnostics.push(message);
                     }
                 }
-                ScanMessage::LimitExceeded => {
+                ScanMessage::LimitExceeded(max_entries) => {
                     cancelled.store(true, Ordering::Relaxed);
                     if !limit_reported {
                         limit_reported = true;
@@ -1035,7 +1169,7 @@ enum ScanMessage {
     Record(CandidateRecord),
     Skipped,
     WalkError(String),
-    LimitExceeded,
+    LimitExceeded(usize),
     Fatal(IndexerError),
 }
 
@@ -1062,16 +1196,27 @@ fn candidate_from_entry(
         .and_then(|value| value.to_str())
         .unwrap_or_else(|| path.to_str().unwrap_or(""));
     let metadata = entry.metadata().ok();
-    let application = application_kind(path, file_type.is_dir(), file_type.is_file());
-    let opaque_package = file_type.is_dir() && opaque_package_directory(path);
-    let dataless_directory =
-        file_type.is_dir() && metadata.as_ref().is_some_and(metadata_is_dataless);
-    let skip_children = file_type.is_dir() && (application || opaque_package || dataless_directory);
+    let target_metadata = if file_type.is_symlink() {
+        fs::metadata(path).ok()
+    } else {
+        None
+    };
+    let is_directory =
+        file_type.is_dir() || target_metadata.as_ref().is_some_and(fs::Metadata::is_dir);
+    let is_regular_file =
+        file_type.is_file() || target_metadata.as_ref().is_some_and(fs::Metadata::is_file);
+    let application = application_kind(path, is_directory, is_regular_file);
+    let opaque_package = is_directory && opaque_package_directory(path);
+    let dataless_directory = is_directory && metadata.as_ref().is_some_and(metadata_is_dataless);
+    let skip_children = is_directory && (application || opaque_package || dataless_directory);
     let kind = if application && kinds.contains(&IndexKind::Application) {
         Some(IndexKind::Application)
-    } else if file_type.is_dir() && kinds.contains(&IndexKind::Directory) && !application {
+    } else if is_directory && kinds.contains(&IndexKind::Directory) && !application {
         Some(IndexKind::Directory)
-    } else if file_type.is_file() && kinds.contains(&IndexKind::File) && !application {
+    } else if !is_directory && kinds.contains(&IndexKind::File) && !application {
+        // A searchable file reference includes regular files, symbolic links,
+        // sockets, FIFOs, and device nodes. Commander stores metadata only and
+        // never opens these during indexing.
         Some(IndexKind::File)
     } else {
         None
@@ -1265,10 +1410,10 @@ fn validate_configuration(configuration: &IndexConfiguration) -> Result<(), Inde
             format!("at most {MAX_IGNORE_RULES} custom ignore rules are allowed"),
         ));
     }
-    if configuration.max_entries == 0 || configuration.max_entries > HARD_MAX_ENTRIES {
+    if configuration.max_entries == Some(0) {
         return Err(IndexerError::new(
             "invalid_configuration",
-            format!("maxEntries must be between 1 and {HARD_MAX_ENTRIES}"),
+            "maxEntries must be null/omitted for unlimited indexing or at least 1",
         ));
     }
     validate_resource_limits(&configuration.resource_limits)?;
@@ -1366,6 +1511,63 @@ fn deduplicate_records(records: &mut Vec<IndexRecord>, limit: usize) {
     records.truncate(limit);
 }
 
+fn rank_records(records: &mut Vec<IndexRecord>, query: &str) {
+    if query.is_empty() {
+        records.sort_by(|left, right| {
+            left.name
+                .to_lowercase()
+                .cmp(&right.name.to_lowercase())
+                .then_with(|| left.path.cmp(&right.path))
+        });
+        return;
+    }
+    records.retain_mut(|record| {
+        let name_score = fuzzy_text_score(query, &record.name);
+        let parent_score = fuzzy_text_score(query, &record.parent).map(|score| score * 35 / 100);
+        let Some(score) = name_score.into_iter().chain(parent_score).max() else {
+            return false;
+        };
+        record.score = i64::try_from(score).unwrap_or(i64::MAX);
+        true
+    });
+    records.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| left.path.cmp(&right.path))
+    });
+}
+
+fn fuzzy_fts_query(query: &str) -> Option<String> {
+    let characters: Vec<char> = query.to_lowercase().chars().collect();
+    if characters.len() < 3 {
+        return None;
+    }
+    let mut seen = HashSet::new();
+    let terms = characters
+        .windows(3)
+        .map(|window| window.iter().collect::<String>())
+        .filter(|term| seen.insert(term.clone()))
+        .take(64)
+        .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+        .collect::<Vec<_>>();
+    (!terms.is_empty()).then(|| terms.join(" OR "))
+}
+
+fn database_size_bytes(path: &Path) -> u64 {
+    ["", "-wal", "-shm"]
+        .into_iter()
+        .filter_map(|suffix| {
+            let mut candidate = path.as_os_str().to_os_string();
+            candidate.push(suffix);
+            fs::metadata(PathBuf::from(candidate))
+                .ok()
+                .map(|item| item.len())
+        })
+        .sum()
+}
+
 fn path_text(path: &Path) -> Result<String, IndexerError> {
     path.to_str().map(ToOwned::to_owned).ok_or_else(|| {
         IndexerError::new(
@@ -1407,10 +1609,6 @@ fn duration_ms(started: Instant) -> u64 {
 
 fn default_true() -> bool {
     true
-}
-
-fn default_max_entries() -> usize {
-    DEFAULT_MAX_ENTRIES
 }
 
 fn default_query_limit() -> usize {
@@ -1489,7 +1687,7 @@ mod tests {
                 max_depth: None,
             }],
             custom_ignores: Vec::new(),
-            max_entries: 10_000,
+            max_entries: Some(10_000),
             resource_limits: IndexResourceLimits::default(),
         }
     }
@@ -1770,6 +1968,58 @@ mod tests {
         assert!(files.records.is_empty());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn indexes_executables_symlinks_and_special_file_references_without_traversing_them() {
+        use std::os::unix::fs::symlink;
+        use std::os::unix::net::UnixListener;
+
+        let temp = TempDir::new().expect("tempdir");
+        write(temp.path().join("raycast-start"), "#!/bin/sh\n").expect("executable script");
+        create_dir_all(temp.path().join("target-folder")).expect("target directory");
+        symlink("raycast-start", temp.path().join("script-link")).expect("file symlink");
+        symlink("target-folder", temp.path().join("folder-link")).expect("directory symlink");
+        symlink("missing-target", temp.path().join("broken-link")).expect("broken symlink");
+        let socket_path = temp.path().join("commander.sock");
+        let _socket = UnixListener::bind(&socket_path).expect("unix socket");
+
+        let mut database = database(&temp);
+        database
+            .index(&configuration(
+                temp.path(),
+                vec![IndexKind::File, IndexKind::Directory],
+            ))
+            .expect("index references");
+        let files = database
+            .query(&QueryRequest {
+                query: String::new(),
+                kinds: vec![IndexKind::File],
+                limit: 20,
+            })
+            .expect("files")
+            .records;
+        let file_names = files
+            .iter()
+            .map(|record| record.name.as_str())
+            .collect::<HashSet<_>>();
+        assert!(file_names.contains("raycast-start"));
+        assert!(file_names.contains("script-link"));
+        assert!(file_names.contains("broken-link"));
+        assert!(file_names.contains("commander.sock"));
+
+        let directories = database
+            .query(&QueryRequest {
+                query: String::new(),
+                kinds: vec![IndexKind::Directory],
+                limit: 20,
+            })
+            .expect("directories")
+            .records;
+        assert!(directories
+            .iter()
+            .any(|record| record.name == "folder-link"));
+    }
+
     #[test]
     fn macos_package_directories_are_indexed_without_walking_their_contents() {
         let temp = TempDir::new().expect("tempdir");
@@ -1865,6 +2115,48 @@ mod tests {
     }
 
     #[test]
+    fn filesystem_query_uses_shared_typo_and_transposition_ranking() {
+        let temp = TempDir::new().expect("tempdir");
+        write(temp.path().join("raycast-start"), "script").expect("raycast script");
+        write(temp.path().join("settings-notes.txt"), "notes").expect("settings notes");
+        write(temp.path().join("note"), "note").expect("short note");
+        let mut database = database(&temp);
+        database
+            .index(&configuration(temp.path(), vec![IndexKind::File]))
+            .expect("index");
+
+        let transposed = database
+            .query(&QueryRequest {
+                query: "raycsat".to_owned(),
+                kinds: vec![IndexKind::File],
+                limit: 20,
+            })
+            .expect("transposition query")
+            .records;
+        assert_eq!(transposed[0].name, "raycast-start");
+
+        let omitted = database
+            .query(&QueryRequest {
+                query: "settngs".to_owned(),
+                kinds: vec![IndexKind::File],
+                limit: 20,
+            })
+            .expect("omission query")
+            .records;
+        assert_eq!(omitted[0].name, "settings-notes.txt");
+
+        let short_substitution = database
+            .query(&QueryRequest {
+                query: "nite".to_owned(),
+                kinds: vec![IndexKind::File],
+                limit: 20,
+            })
+            .expect("short substitution query")
+            .records;
+        assert_eq!(short_substitution[0].name, "note");
+    }
+
+    #[test]
     fn path_search_falls_back_when_no_name_matches() {
         let temp = TempDir::new().expect("tempdir");
         create_dir_all(temp.path().join("invoices")).expect("folder");
@@ -1893,7 +2185,7 @@ mod tests {
             write(temp.path().join(name), name).expect("file");
         }
         let mut config = configuration(temp.path(), vec![IndexKind::File]);
-        config.max_entries = 2;
+        config.max_entries = Some(2);
         let mut database = database(&temp);
         let report = database.index(&config).expect("capped index");
 
@@ -1910,6 +2202,23 @@ mod tests {
             .last_error
             .as_deref()
             .is_some_and(|message| message.contains("Index capped at 2 entries")));
+    }
+
+    #[test]
+    fn omitted_entry_cap_indexes_every_matching_record_and_reports_database_size() {
+        let temp = TempDir::new().expect("tempdir");
+        for name in ["one.txt", "two.txt", "three.txt"] {
+            write(temp.path().join(name), name).expect("file");
+        }
+        let mut config = configuration(temp.path(), vec![IndexKind::File]);
+        config.max_entries = None;
+        let mut database = database(&temp);
+        let report = database.index(&config).expect("unlimited index");
+
+        assert_eq!(report.indexed, 3);
+        assert_eq!(report.errors, 0);
+        assert_eq!(report.status.total_records, 3);
+        assert!(report.status.database_size_bytes > 0);
     }
 
     #[test]
@@ -1985,6 +2294,28 @@ mod tests {
         }))
         .expect("legacy configuration");
         assert_eq!(parsed.resource_limits, IndexResourceLimits::default());
+        assert_eq!(parsed.max_entries, Some(1_000));
+        assert!(parsed.sources[0].include_hidden);
+    }
+
+    #[test]
+    fn omitted_or_null_entry_cap_deserializes_as_unlimited() {
+        for max_entries in [None, Some(serde_json::Value::Null)] {
+            let mut value = serde_json::json!({
+                "sources": [{
+                    "id": "home",
+                    "root": "/tmp",
+                    "kinds": ["file"]
+                }]
+            });
+            if let Some(max_entries) = max_entries {
+                value["maxEntries"] = max_entries;
+            }
+            let parsed: IndexConfiguration =
+                serde_json::from_value(value).expect("unlimited config");
+            assert_eq!(parsed.max_entries, None);
+            assert!(parsed.sources[0].include_hidden);
+        }
     }
 
     #[test]
