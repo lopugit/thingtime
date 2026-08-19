@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { Download, File as FileIcon } from 'lucide-react';
 
-import { attachmentContentUrl, formatAttachmentBytes, normalizePublicAttachment } from './attachmentUiCore';
+import { attachmentContentUrl, attachmentTypeLabel, formatAttachmentBytes, normalizePublicAttachment } from './attachmentUiCore';
 import { MediaLightbox } from './MediaLightbox';
 import type { PublicAttachment } from './attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
@@ -42,6 +42,74 @@ export const spanAspect = (span: MediaLayoutSpan, columns: number): string => {
 	const cols = spanColumns(span, columns);
 	const rows = spanRows(span);
 	return `${cols} / ${rows}`;
+};
+
+const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachment; compact?: boolean }) => (
+	<Flex
+		as="a"
+		href={attachmentContentUrl(attachment.id, true)}
+		download={attachment.name}
+		alignItems="center"
+		columnGap={2.5}
+		minHeight="48px"
+		paddingX={3}
+		paddingY={2}
+		border={BORDER}
+		borderRadius="var(--tt-radius-md, 12px)"
+		background="var(--tt-surface, #fafafb)"
+		_hover={{ background: 'var(--tt-surface-alt, #f5f5f7)', textDecoration: 'none' }}
+		minWidth={0}
+	>
+		<Flex
+			alignItems="center"
+			justifyContent="center"
+			boxSize="32px"
+			borderRadius="8px"
+			background="var(--tt-card, #ffffff)"
+			color={MUTED}
+			flexShrink={0}
+		>
+			<FileIcon size={15} aria-hidden />
+		</Flex>
+		<Box flex="1" minWidth={0}>
+			<Text
+				fontSize={compact ? 'xs' : 'sm'}
+				fontWeight={650}
+				color="var(--tt-ink, #16161a)"
+				noOfLines={1}
+				title={attachment.title || attachment.name}
+			>
+				{attachment.title || attachment.name}
+			</Text>
+			<Text fontSize="10px" color={MUTED} noOfLines={1}>
+				{formatAttachmentBytes(attachment.size)} · {attachmentTypeLabel(attachment)}
+			</Text>
+		</Box>
+		<Download size={15} color="var(--tt-link, #2f8fd6)" aria-label={`Download ${attachment.name}`} />
+	</Flex>
+);
+
+const AttachmentVideo = ({ attachment, compact }: { attachment: PublicAttachment; compact?: boolean }) => {
+	// The inline allowlist admits every container mainstream browsers can play,
+	// but codec support inside a container still varies (for example HEVC
+	// QuickTime on Firefox); an unplayable video degrades to its download row.
+	const [failed, setFailed] = React.useState(false);
+	if (failed) return <AttachmentFileRow attachment={attachment} compact={compact} />;
+	return (
+		<Box
+			as="video"
+			src={attachmentContentUrl(attachment.id)}
+			aria-label={attachment.title || attachment.name}
+			controls
+			playsInline
+			preload="metadata"
+			width="100%"
+			maxHeight={compact ? '320px' : '520px'}
+			borderRadius="var(--tt-radius-md, 12px)"
+			background="var(--tt-ink, #16161a)"
+			onError={() => setFailed(true)}
+		/>
+	);
 };
 
 export const PostAttachments = ({
@@ -181,61 +249,13 @@ export const PostAttachments = ({
 			)}
 
 			{videos.map((attachment) => (
-				<Box
-					key={attachment.id}
-					as="video"
-					src={attachmentContentUrl(attachment.id)}
-					aria-label={attachment.title || attachment.name}
-					controls
-					playsInline
-					preload="metadata"
-					width="100%"
-					maxHeight={compact ? '320px' : '520px'}
-					borderRadius="var(--tt-radius-md, 12px)"
-					background="var(--tt-ink, #16161a)"
-				/>
+				<AttachmentVideo key={attachment.id} attachment={attachment} compact={compact} />
 			))}
 
 			{files.length > 0 && (
 				<Flex flexDirection="column" rowGap={1.5}>
 					{files.map((attachment) => (
-						<Flex
-							key={attachment.id}
-							as="a"
-							href={attachmentContentUrl(attachment.id, true)}
-							download={attachment.name}
-							alignItems="center"
-							columnGap={2.5}
-							minHeight="48px"
-							paddingX={3}
-							paddingY={2}
-							border={BORDER}
-							borderRadius="var(--tt-radius-md, 12px)"
-							background="var(--tt-surface, #fafafb)"
-							_hover={{ background: 'var(--tt-surface-alt, #f5f5f7)', textDecoration: 'none' }}
-							minWidth={0}
-						>
-							<Flex
-								alignItems="center"
-								justifyContent="center"
-								boxSize="32px"
-								borderRadius="8px"
-								background="var(--tt-card, #ffffff)"
-								color={MUTED}
-								flexShrink={0}
-							>
-								<FileIcon size={15} aria-hidden />
-							</Flex>
-							<Box flex="1" minWidth={0}>
-								<Text fontSize={compact ? 'xs' : 'sm'} fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={attachment.title || attachment.name}>
-									{attachment.title || attachment.name}
-								</Text>
-								<Text fontSize="10px" color={MUTED} noOfLines={1}>
-									{formatAttachmentBytes(attachment.size)} · {attachment.contentType || 'File'}
-								</Text>
-							</Box>
-							<Download size={15} color="var(--tt-link, #2f8fd6)" aria-label={`Download ${attachment.name}`} />
-						</Flex>
+						<AttachmentFileRow key={attachment.id} attachment={attachment} compact={compact} />
 					))}
 				</Flex>
 			)}

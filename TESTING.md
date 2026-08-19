@@ -6,6 +6,48 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Public upload approval (new-signup permissions)
+
+- [ ] Register a brand-new account. `POST /api/v1/auth/register` returns
+      `publicUploadsEnabled: false` AND `privateUploadsEnabled: false`;
+      `POST /api/v1/attachments/uploads` answers `403` with
+      `code: "public_uploads_not_approved"` for public purposes (`post`,
+      `comment`, `custom-emoji`, or no purpose) and
+      `code: "private_uploads_not_approved"` for private ones (`message`,
+      `profile-avatar`, `profile-banner`).
+- [ ] Open the verification link. `emailVerified` flips to `true` while both
+      `*UploadsEnabled` flags stay `false` — verifying an email must never be
+      what grants uploads.
+- [ ] Scopes stay independent: approve only `private`
+      (`POST /api/v1/admin/users/public-uploads` with `scope: "private"`) and
+      confirm `profile-avatar`/`message` starts pass the gate while `post`
+      still 403s; approve only `public` on another account and confirm the
+      reverse; `scope: "all"` enables both, and a request without `scope`
+      keeps the legacy public-only behavior.
+- [ ] Confirm the `admin.new_user` message reaches
+      `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default `admin@thingtime.com`) with
+      the username, display name, email, user id, and signup time. In dev read
+      it from the `email_messages_v2` outbox.
+- [ ] Stop the mail provider (or set an unroutable recipient) and verify again:
+      verification still succeeds and still redirects to `/login?verify=success`
+      — a mail outage must never fail a committed verification, nor grant the
+      permission.
+- [ ] In **/admin → Users**, the account shows a `pending` Uploads badge and
+      the warning banner counts it. Use the **Approve ▾** menu: "Enable public
+      uploads" / "Enable private uploads" flip only that scope (badge shows
+      `public` or `private`), "Enable all" turns the badge green `all` — each
+      optimistically with a Lopu toast — and the matching upload starts stop
+      403ing.
+- [ ] Withhold from the same menu: that scope 403s again ("Withhold all"
+      returns the badge to `pending`). An account that predates the change (no
+      `meta.publicUploads`/`meta.privateUploads`) shows `all`, and an admin row
+      shows `all` with no menu.
+- [ ] Non-admins calling `POST /api/v1/admin/users/public-uploads` get `403`;
+      a missing `userId`, non-boolean `enabled`, or unknown `scope` gets `400`;
+      an unknown user gets `404`.
+- [ ] Run `npm run test:attachments` (it carries the public-upload permission
+      unit tests alongside the upload-gate regression test).
+
 ## Canonical AI instruction links (`AI_ALL.md`)
 
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
@@ -19,8 +61,10 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
       build, the nested config is absent, ordinary product commits build,
-      `github-actions` and duplicate SHAs skip, a valid Nitro artifact is
-      staged at root, and invalid source output preserves the prior artifact.
+      `github-actions` and generic Preview duplicate SHAs skip, the `develop`
+      Custom Environment still rebuilds an already-previewed SHA, a valid Nitro
+      artifact is staged at root, and invalid source output preserves the prior
+      artifact.
 - [ ] Run `npm run build:vercel` from the repository root. Confirm both the
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
@@ -96,6 +140,10 @@ is fixed, and cite the checklist you ran in the PR description.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] For an exact SHA that already has a READY generic Preview, run the
+      controller again and confirm its `develop` Custom Environment deployment
+      builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
+      marker comment must reach the ready state for that exact SHA.
 - [ ] Confirm the wildcard Vercel domain is verified and detached, its
       Cloudflare `*.previews.dev` CNAME targets `cname.vercel-dns.com` with
       DNS-only proxying, and `_acme-challenge.previews.dev` has NS delegations
@@ -173,12 +221,14 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
-- [ ] Seed the `thingtime` LocalForage value with a legacy unrevivable function
-      plus root `set` / `get` runtime methods, then load `/feed` ONCE: the
+- [ ] Seed the `thingtime` LocalForage value with valid-looking hostile and
+      malformed legacy function tags plus root `set` / `get` runtime
+      methods, then load `/feed` ONCE: no payload executes, the code-defined
+      editor factory is restored, the
       collapsed “What's on your mind?” control opens, Editor.js accepts focus
       and typing, Latest / Filters and the global search remain interactive,
       and the repaired stored snapshot already contains neither runtime method
-      nor the legacy fallback before a second navigation.
+      nor any function source before a second navigation.
 - [ ] Open the feed composer → Thingtime tab: the editor shows exactly ONE
       root property, `New Thing`, with no default children (no `name`).
 - [ ] The draft path is session-scoped (`tmp.<sessionId>.New Thing`): add a
@@ -265,6 +315,18 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Feed, profile, nested repost, and permalink cards render vetted raster
       images and videos inline. SVG, HTML, script, and unknown types render only
       as named download rows; their bytes never execute inline.
+- [ ] Upload a QuickTime screen recording (a `.mov`, or a QuickTime container
+      misnamed `.mp4` — check for `ftypqt` magic bytes) plus an MKV or M4V.
+      Each finalizes as its sniffed `video/*` type and plays inline in feed and
+      permalink cards; the decision follows magic bytes, never the filename
+      extension.
+- [ ] Upload a non-web-playable container (for example an AVI) and confirm its
+      download row labels the real sniffed container (for example "AVI video"
+      from `detectedContentType`) instead of `application/octet-stream`, while
+      the bytes still download as opaque octet-stream.
+- [ ] In a browser missing the codec inside an allowed container (for example
+      HEVC QuickTime in Firefox), the failed `<video>` degrades to the named
+      download row instead of an inert black player.
 - [ ] Let a content URL expire at the storage provider and open the attachment
       again: the stable authenticated `/api/v1/attachments/content?id=…` route
       issues fresh access. A private post's attachment fails closed for another
@@ -1090,6 +1152,39 @@ is fixed, and cite the checklist you ran in the PR description.
       blocking) swaps "Loading the SDK…" for the failure notice with the
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
+
+## Register request body cap (`remix/app/routes/api/v1/auth/register/_register.tsx`)
+
+- [ ] Register rejects an oversize body with 413 (`readJsonBody` 16 KiB cap)
+      before validation, bcrypt, or account writes; the existing limiter still
+      consumes the request first, and a normal signup from a fresh IP returns
+      200 with a session cookie.
+
+## Persisted-state codec (`remix/app/Providers/thingtimeSerialization.ts`)
+
+- [ ] `npm run test:persist` passes (tagged Dates, untagged ISO-lookalike user
+      strings including ambiguous legacy values, malformed tag
+      preservation, circular/shared data, invalid Dates, no serialized function
+      source, hostile legacy functions inert, and code-defined default refill).
+- [ ] Live: type a post whose text is a full ISO timestamp (e.g.
+      `2026-01-01T00:00:00.000Z`), reload twice — the text must stay a string
+      (older builds turned it into a Date and rewrote it permanently).
+- [ ] Live: app hydrates under the CSP with no `unsafe-eval`; theme pre-paint
+      and `[LC]`/env title prefix still work from `/tt-boot.js`.
+- [ ] `npm run verify:vercel-output` rejects app `script-src` policies that add
+      `unsafe-inline`/`unsafe-eval`, an inline executable shell script, or a
+      missing `/tt-boot.js` or `/tt-preview-freshness.js`. On a
+      built/Vercel preview, append an inline script
+      element that sets a harmless test variable — CSP blocks it and the
+      variable remains unset.
+- [ ] Commander search/navigation, registered magic-word actions, and data-only
+      assignments (`path = 42`, JSON objects/arrays, quoted/plain strings)
+      work under the strict policy. Program text is stored as text and never
+      executes; never restore global `unsafe-eval` for programmable commands.
+- [ ] A `/docs/design-bundles/<slug>/index.html` prototype still renders: its
+      repo-controlled generated runtime gets the path-scoped `unsafe-eval` +
+      unpkg compatibility policy, while `/`, `/authorize`, and ordinary app
+      routes keep the strict policy without `unsafe-eval`.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
@@ -1917,17 +2012,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Things New/View/Arrange controls all respond; production-domain tabs do
       not run this preview freshness check.
 - [ ] On iOS Safari, navigate away from a Vercel preview and return with Back.
-      The inline preview recovery bootstrap loads before the main application
-      entry and a `pageshow.persisted` restore immediately replaces the page
-      with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
+      The external same-origin preview recovery bootstrap loads before the main
+      application entry; a `pageshow.persisted` restore immediately replaces
+      the page with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
       `/things` returns `Cache-Control: private, no-store, max-age=0,
       must-revalidate`, while `/assets/*` remains outside the HTML no-store
       route.
 - [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
-      and the old `Function could not be revived` fallback values, reload Feed
-      and open “What's on your mind?”. Hydration reports no function syntax
-      exception; the composer focuses and edits, Photos opens, close restores
-      the collapsed composer, and Latest / Filters / navigation still respond.
+      hostile, and old failed-revival function tags, reload Feed and open
+      “What's on your mind?”. Hydration executes none of them, removes every
+      tag, restores the code-defined composer functions, and atomically stores
+      the clean snapshot; the composer focuses and edits, Photos opens, close
+      restores the collapsed composer, and Latest / Filters / navigation still
+      respond.
 - [ ] In Mobile Safari with a retained signed-in session and Commander closed,
       physically tap the collapsed “What's on your mind?” control immediately
       after a fresh Feed navigation. The composer opens on that first tap;

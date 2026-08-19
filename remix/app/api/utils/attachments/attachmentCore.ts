@@ -34,6 +34,10 @@ export type AttachmentPublicMetadata = {
 	// lightbox — optional, absent on legacy attachments, never empty strings
 	title?: string;
 	description?: string;
+	// Magic-byte-sniffed MIME type, present only when the served contentType
+	// collapsed to application/octet-stream so downloads can still name the real
+	// container. Server-written at finalization; never client input.
+	detectedContentType?: string;
 };
 
 export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id'>;
@@ -80,7 +84,16 @@ export type AttachmentStorageCandidate = {
 export type AttachmentMetadataResult = { ok: true; crystal: AttachmentCrystal } | { ok: false; error: string };
 
 const SAFE_IMAGE_CONTENT_TYPES = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
-const SAFE_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/ogg', 'video/quicktime', 'video/webm']);
+const SAFE_VIDEO_CONTENT_TYPES = new Set([
+	'video/3gpp',
+	'video/3gpp2',
+	'video/mp4',
+	'video/ogg',
+	'video/quicktime',
+	'video/webm',
+	'video/x-m4v',
+	'video/x-matroska'
+]);
 const SAFE_AUDIO_CONTENT_TYPES = new Set([
 	'audio/aac',
 	'audio/flac',
@@ -117,6 +130,9 @@ const isWellFormedUnicode = (value: string): boolean => {
 	}
 	return true;
 };
+
+export const isCanonicalAttachmentContentType = (value: string): boolean =>
+	value.length > 0 && value.length <= MAX_ATTACHMENT_CONTENT_TYPE_CHARS && CONTENT_TYPE_RE.test(value);
 
 export const attachmentMediaKindForContentType = (contentType: string): AttachmentMediaKind => {
 	if (SAFE_IMAGE_CONTENT_TYPES.has(contentType)) return 'image';
@@ -236,7 +252,9 @@ export const isAttachmentFinalizationLeaseId = (value: unknown): value is string
 	/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
 
 const REQUIRED_ATTACHMENT_CRYSTAL_KEYS = ['contentType', 'mediaKind', 'name', 'size'] as const;
-const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['title', 'description']);
+// Owner-authored presentation text plus the server-written sniffed container
+// type; each is validated below before a crystal counts as canonical.
+const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['title', 'description', 'detectedContentType']);
 
 const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null => {
 	const sanitized = sanitizeAttachmentPublicMetadata(value);
@@ -244,10 +262,23 @@ const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null =>
 	const raw = value as Record<string, unknown>;
 	const keys = Object.keys(raw);
 	// still a closed shape: every required key present, extras only from the
-	// optional owner-text set (legacy four-key crystals stay canonical)
+	// optional set (legacy four-key crystals stay canonical)
 	if (REQUIRED_ATTACHMENT_CRYSTAL_KEYS.some((key) => !(key in raw))) return null;
 	if (keys.some((key) => !(REQUIRED_ATTACHMENT_CRYSTAL_KEYS as readonly string[]).includes(key) && !OPTIONAL_ATTACHMENT_CRYSTAL_KEYS.has(key))) {
 		return null;
+	}
+	const hasDetected = 'detectedContentType' in raw;
+	if (hasDetected) {
+		// The sniffed type is display metadata for opaque downloads only; it may
+		// never restate or contradict a contentType the server serves inline.
+		if (
+			raw.contentType !== 'application/octet-stream' ||
+			typeof raw.detectedContentType !== 'string' ||
+			raw.detectedContentType === 'application/octet-stream' ||
+			!isCanonicalAttachmentContentType(raw.detectedContentType)
+		) {
+			return null;
+		}
 	}
 	return raw.name === sanitized.crystal.name &&
 		raw.size === sanitized.crystal.size &&
@@ -255,7 +286,7 @@ const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null =>
 		raw.mediaKind === sanitized.crystal.mediaKind &&
 		raw.title === sanitized.crystal.title &&
 		raw.description === sanitized.crystal.description
-		? sanitized.crystal
+		? { ...sanitized.crystal, ...(hasDetected ? { detectedContentType: raw.detectedContentType as string } : {}) }
 		: null;
 };
 
