@@ -101,7 +101,7 @@ Rate limits: `auth.passkeyOptions` 60/min, `auth.passkeyLogin` 30/min,
 
 ## Verification
 
-- **`remix/scripts/verify-passkeys.mjs` — 42/42.** A software WebAuthn
+- **`remix/scripts/verify-passkeys.mjs` — 44/44.** A software WebAuthn
   authenticator in pure Node (P-256 keypair, minimal CBOR encoder, `none`
   attestation, DER ES256 assertions) drives the real API end to end:
   register → attestation verify → duplicate 409 → challenge replay refusals →

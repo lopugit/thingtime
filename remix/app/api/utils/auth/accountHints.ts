@@ -5,6 +5,7 @@ import {
 	type AccountHintPointer
 } from './accountHintsCookie';
 import { resolveSessionUser } from './getCurrentUser';
+import { resolvePublicOrigin } from './publicOrigin';
 import type { PublicUser } from './users';
 
 // Resolve the tt_hints pointers into live account suggestions. Everything is
@@ -53,6 +54,15 @@ export const resolveAccountHints = async (request: Request): Promise<ResolvedAcc
 	const localRoster = await resolveRoster(request);
 	const localUserIds = new Set(localRoster.accounts.map((account) => account.userId));
 
+	// Per-environment authority: this deployment may PRUNE only pointers its
+	// own origin wrote. A pointer from another *.thingtime.com deployment that
+	// doesn't resolve here is indistinguishable between "session ended" and
+	// "that environment runs a different database" (branch-scoped DBs), so it
+	// is kept — not displayed (only verified-live accounts ever render), just
+	// left for its own deployment to vouch for or retire. The cookie's
+	// newest-first cap keeps genuinely dead foreign pointers from accumulating.
+	const currentOrigin = resolvePublicOrigin(request).origin;
+
 	const livePointers: AccountHintPointer[] = [];
 	const hintsByUser = new Map<string, AccountHint>();
 	let resolvedBudget = MAX_RESOLVED_ENTRIES;
@@ -91,7 +101,7 @@ export const resolveAccountHints = async (request: Request): Promise<ResolvedAcc
 				});
 			}
 		}
-		if (anyLive) livePointers.push(pointer);
+		if (anyLive || pointer.origin !== currentOrigin) livePointers.push(pointer);
 	}
 
 	const setCookies: string[] = [];

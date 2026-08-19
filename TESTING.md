@@ -14,7 +14,7 @@ is fixed, and cite the checklist you ran in the PR description.
       created date, and your nickname. Cancelling the sheet shows NO error
       toast (cancel is silent).
 - [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
-      42/42 — full software-authenticator ceremony: registration, duplicate
+      44/44 — full software-authenticator ceremony: registration, duplicate
       409, challenge replay refusals, usernameless login, lastUsed + linked
       apps, revocation blocking login, revoke-before-delete, hint liveness.
 - [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform

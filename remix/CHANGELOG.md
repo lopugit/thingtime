@@ -54,7 +54,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   signed-out visitors get a "Continue as…" popup listing accounts with live
   sessions on other deployments — picking one still requires that account's
   password or passkey. E2E-verified by `remix/scripts/verify-passkeys.mjs`, a
-  software WebAuthn authenticator (P-256 + CBOR) driving the real API (42
+  software WebAuthn authenticator (P-256 + CBOR) driving the real API (44
   checks). — Claude (AI), 2026-08-19
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean

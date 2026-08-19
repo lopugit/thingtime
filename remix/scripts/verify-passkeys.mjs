@@ -297,6 +297,32 @@ const main = async () => {
 	check('hint carries origin + lastSeenAt', typeof farEntry?.origins?.[0]?.origin === 'string' && typeof farEntry?.origins?.[0]?.lastSeenAt === 'string');
 	check('hint is a slim projection (no email)', farEntry && !('email' in farEntry.user));
 
+	// Per-environment authority: a pointer written by ANOTHER deployment that
+	// doesn't resolve here (different database) must be KEPT, while this
+	// origin's own dead pointers are pruned — visiting one environment must
+	// never destroy another environment's hints.
+	const mixedJar = newJar();
+	const nowSec = Math.floor(Date.now() / 1000);
+	const mixedPointers = [
+		{ r: 'ghost-foreign-roster', o: 'https://dev.thingtime.com', t: nowSec },
+		{ r: 'ghost-local-roster', o: ORIGIN, t: nowSec }
+	];
+	mixedJar.cookies.set('tt_hints', `j:${Buffer.from(JSON.stringify(mixedPointers)).toString('base64url')}`);
+	const mixed = await api(mixedJar, 'GET', '/api/v1/auth/account-hints');
+	check('unverifiable pointers render no hints', mixed.json?.ok === true && mixed.json.hints?.length === 0);
+	const rewritten = mixedJar.cookies.get('tt_hints') || '';
+	let keptPointers = null;
+	try {
+		keptPointers = JSON.parse(Buffer.from(decodeURIComponent(rewritten).slice(2), 'base64url').toString('utf8'));
+	} catch {
+		keptPointers = null;
+	}
+	check(
+		'own-origin dead pointer pruned, foreign pointer kept',
+		Array.isArray(keptPointers) && keptPointers.length === 1 && keptPointers[0]?.o === 'https://dev.thingtime.com',
+		JSON.stringify(keptPointers)
+	);
+
 	// ── revocation ──
 	console.log('\nrevocation + deletion');
 	const revokeWrongPw = await api(owner, 'POST', '/api/v1/auth/passkeys/revoke', { id: passkeyId, password: 'nope' });
