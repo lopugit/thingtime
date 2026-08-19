@@ -51,6 +51,9 @@ export const MAX_EXPIRED_ATTACHMENTS_PER_REAP = 1000;
 export const ATTACHMENT_REAP_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_REAP_CONCURRENCY = 5;
 export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
+export const MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN = 200;
+export const ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS = 25 * 1000;
+export const ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY = 5;
 export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji'] as const;
 export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
 export const MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES = 512 * 1024;
@@ -536,6 +539,142 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			};
 		} catch (error) {
 			return knownFailure(error) || unavailable('global expired draft scan', error);
+		}
+	};
+
+	// Re-run magic-byte detection for ready rows finalized before detection
+	// existed (opaque contentType, no sniffed label) and publish exactly what
+	// completion would have: browser-playable containers flip to their inline
+	// contentType/mediaKind, other canonical sniffed types become
+	// detectedContentType display metadata. Undetectable bytes stay untouched —
+	// deliberately, so a later pass under a wider detector can still claim them.
+	const backfillDetectedTypes = async (
+		input: unknown
+	): Promise<
+		AttachmentResult<{
+			dryRun: boolean;
+			scanned: number;
+			upgradedInline: number;
+			labeledOpaque: number;
+			undetected: number;
+			missingObject: number;
+			conflicts: number;
+			failed: number;
+			hasMore: boolean;
+			stoppedForTimeBudget: boolean;
+			nextCursor?: string;
+		}>
+	> => {
+		try {
+			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid backfill request');
+			const raw = input as Record<string, unknown>;
+			if (Object.keys(raw).some((key) => !['dryRun', 'limit', 'cursor'].includes(key))) {
+				return fail(400, 'Invalid backfill request');
+			}
+			if (raw.dryRun !== undefined && typeof raw.dryRun !== 'boolean') return fail(400, 'dryRun must be a boolean');
+			const dryRun = raw.dryRun === true;
+			if (
+				raw.limit !== undefined &&
+				(!Number.isInteger(raw.limit) || Number(raw.limit) < 1 || Number(raw.limit) > MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN)
+			) {
+				return fail(400, `limit must be an integer between 1 and ${MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN}`);
+			}
+			const limit = raw.limit === undefined ? MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN : Number(raw.limit);
+			const cursor = raw.cursor === undefined ? undefined : normalizeId(raw.cursor);
+			if (raw.cursor !== undefined && !cursor) return fail(400, 'Invalid backfill cursor');
+			if (dependencies.customMongoActive()) {
+				return fail(400, 'Attachment maintenance is unavailable with a custom MongoDB endpoint');
+			}
+
+			const docs = await dependencies.store.listReadyUndetected(limit + 1, cursor);
+			const queue = docs.slice(0, limit);
+			const hasMoreFromLimit = docs.length > queue.length;
+			const empty = {
+				ok: true as const,
+				dryRun,
+				scanned: 0,
+				upgradedInline: 0,
+				labeledOpaque: 0,
+				undetected: 0,
+				missingObject: 0,
+				conflicts: 0,
+				failed: 0,
+				hasMore: false,
+				stoppedForTimeBudget: false
+			};
+			if (!queue.length) return empty;
+
+			const s3 = dependencies.getS3();
+			const startedAt = dependencies.clock();
+			let nextIndex = 0;
+			let scanned = 0;
+			let upgradedInline = 0;
+			let labeledOpaque = 0;
+			let undetected = 0;
+			let missingObject = 0;
+			let conflicts = 0;
+			let failed = 0;
+			let stoppedForTimeBudget = false;
+			const worker = async () => {
+				while (nextIndex < queue.length) {
+					if (dependencies.clock() - startedAt >= ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS) {
+						stoppedForTimeBudget = true;
+						return;
+					}
+					let doc = queue[nextIndex++];
+					scanned += 1;
+					try {
+						let versionId = doc.objectVersionId;
+						if (!isAttachmentObjectVersionId(versionId)) {
+							// Adopt the exact current object version the way download and
+							// completion recovery do; a dry run only reads it.
+							const head = await verifiedHeadForDoc(s3, doc);
+							versionId = head.versionId;
+							if (!dryRun) doc = await dependencies.store.setObjectVersionId(doc.ownerId, doc.shareId, versionId);
+						}
+						const detected = detectedAttachmentType(await s3.detectContentType({ objectKey: doc.objectKey, versionId }), doc.crystal.name);
+						if (detected.contentType === 'application/octet-stream' && !detected.detectedContentType) {
+							undetected += 1;
+							continue;
+						}
+						const crystal: AttachmentCrystal = {
+							name: doc.crystal.name,
+							size: doc.crystal.size,
+							contentType: detected.contentType,
+							mediaKind: detected.mediaKind,
+							...(detected.detectedContentType ? { detectedContentType: detected.detectedContentType } : {})
+						};
+						if (!dryRun) await dependencies.store.upgradeReadyCrystal(doc.shareId, crystal, versionId);
+						if (crystal.contentType === 'application/octet-stream') labeledOpaque += 1;
+						else upgradedInline += 1;
+					} catch (error) {
+						if (s3.isNotFound(error)) missingObject += 1;
+						else if (error instanceof AttachmentStoreConflictError) conflicts += 1;
+						else {
+							failed += 1;
+							unavailable('detection backfill', error);
+						}
+					}
+				}
+			};
+			await Promise.all(Array.from({ length: Math.min(ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY, queue.length) }, () => worker()));
+			const hasMore = hasMoreFromLimit || nextIndex < queue.length;
+			const lastClaimedId = nextIndex > 0 ? queue[Math.min(nextIndex, queue.length) - 1].shareId : undefined;
+			return {
+				...empty,
+				scanned,
+				upgradedInline,
+				labeledOpaque,
+				undetected,
+				missingObject,
+				conflicts,
+				failed,
+				hasMore,
+				stoppedForTimeBudget,
+				...(hasMore && lastClaimedId ? { nextCursor: lastClaimedId } : {})
+			};
+		} catch (error) {
+			return knownFailure(error) || unavailable('detection backfill scan', error);
 		}
 	};
 
@@ -1207,7 +1346,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		inspectForEmoji,
 		beforeCascade,
 		beforeSessionReplacement,
-		reapExpired
+		reapExpired,
+		backfillDetectedTypes
 	};
 };
 
@@ -1226,6 +1366,7 @@ export const inspectReadyAttachmentForEmoji = service.inspectForEmoji;
 export const prepareAttachmentCascadeForThing = service.beforeCascade;
 export const prepareUnboundAttachmentCleanupForSessionReplacement = service.beforeSessionReplacement;
 export const reapExpiredAttachments = service.reapExpired;
+export const backfillAttachmentDetectedTypes = service.backfillDetectedTypes;
 
 export const createReadyAttachmentPostInsertHook =
 	(attachmentIds: readonly string[], bind = bindReadyAttachmentsToTarget) =>
