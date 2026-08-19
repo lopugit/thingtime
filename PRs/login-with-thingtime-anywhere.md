@@ -1,7 +1,8 @@
 # Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
 
-Branch: `claude/login-with-thingtime-anywhere` → stacked on
-`claude/auto-login-passkey-support-593cd3` (PR #323). Merge #323 first.
+Shipped INSIDE PR #323 (`claude/auto-login-passkey-support-593cd3`) — the
+stacked PR #327 was collapsed into it at the owner's request; this note
+documents the federation layers of that single PR.
 
 Follow-up to #323's cross-deployment auto-login, extending it beyond the
 `*.thingtime.com` cookie family. Owner's design constraint, honored end to
