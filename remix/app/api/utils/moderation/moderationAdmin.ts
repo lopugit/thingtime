@@ -2,13 +2,22 @@
 // retry sweep. All reads/writes go through the home things collection —
 // moderation is control-plane identity data and never follows a data-plane
 // endpoint override.
-import { getHomeThingsCollection } from '../mongodb/collections';
+import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
 import { createAnalyzeReadyAttachment, moderationFlagShareId, MODERATION_FLAG_THINGTIME } from './analyzeAttachment';
+import { TEXT_FLAG_EXCERPT_CHARS } from './analyzeText';
 import { sanitizeModerationCategories, type ModerationStatus } from './moderationCore';
+import { getModerationSettings, setModerationSettings } from './moderationSettings';
+import type { ModerationSettings } from './moderationSettingsCore';
+import { resolveModerationProvider } from './providers';
+import { resolveTextModeration } from './textModeration';
 
 export type ModerationFlagRow = {
 	id: string;
 	attachmentId: string;
+	// 'attachment' rows point at an upload; 'text' rows point at a post/comment
+	// thing whose crystal.text was flagged (excerpt carries the evidence)
+	targetKind: 'attachment' | 'text';
+	excerpt: string | null;
 	status: string;
 	categories: string[];
 	reason: string | null;
@@ -36,6 +45,8 @@ const MAX_FLAG_ROWS = 200;
 const toFlagRow = (doc: any): ModerationFlagRow => ({
 	id: String(doc.shareId),
 	attachmentId: String(doc.targetId || ''),
+	targetKind: doc.crystal?.targetKind === 'text' ? 'text' : 'attachment',
+	excerpt: typeof doc.crystal?.excerpt === 'string' ? doc.crystal.excerpt : null,
 	status: typeof doc.crystal?.status === 'string' ? doc.crystal.status : 'unknown',
 	categories: sanitizeModerationCategories(doc.crystal?.categories),
 	reason: typeof doc.crystal?.reason === 'string' ? doc.crystal.reason : null,
@@ -70,6 +81,32 @@ export const listModerationOverview = async (): Promise<ModerationOverview> => {
 		flags: (flagDocs as any[]).map(toFlagRow),
 		counts: { flags: flagCount, unanalyzedReady }
 	};
+};
+
+// The Admin AI-moderation settings plus what each surface EFFECTIVELY runs
+// after env/key fallback — so the picker never leaves an admin guessing what
+// 'default' currently means in this environment.
+export type ModerationSettingsView = {
+	settings: ModerationSettings;
+	effective: { media: string; text: string };
+};
+
+export const getModerationSettingsView = async (env: NodeJS.ProcessEnv = process.env): Promise<ModerationSettingsView> => {
+	const settings = await getModerationSettings();
+	const mediaChoice = await resolveModerationProvider(env, settings.mediaProvider);
+	const textChoice = resolveTextModeration(env, settings.textProvider);
+	return {
+		settings,
+		effective: {
+			media: mediaChoice.kind === 'off' ? 'off' : mediaChoice.provider.name,
+			text: textChoice.kind === 'off' ? 'off' : `${textChoice.provider} (${textChoice.model})`
+		}
+	};
+};
+
+export const updateModerationSettings = async (value: unknown, updatedBy: string): Promise<ModerationSettingsView> => {
+	await setModerationSettings(value, updatedBy);
+	return getModerationSettingsView();
 };
 
 export type ModerationReviewAction = 'clear' | 'nsfw' | 'block';
@@ -146,6 +183,85 @@ export const reviewAttachmentModeration = async (
 		);
 	}
 	return { ok: true, attachmentId, moderationStatus: status };
+};
+
+// Admin override for a TEXT flag: stamps the post/comment thing on the
+// DATA-plane things collection (where posts live) and records the decision on
+// the home flag doc. 'blocked' hides the doc from every read via canView;
+// 'clear'/'nsfw' restore or advisory-mark it. Admin stamps are final for the
+// pipeline (the analyzer never overwrites provider 'admin').
+export const reviewTextModeration = async (
+	thingId: string,
+	action: ModerationReviewAction,
+	reviewerId: string
+): Promise<ModerationReviewResult> => {
+	const status = REVIEW_STATUS[action];
+	if (!status) return { ok: false, status: 400, error: 'action must be clear, nsfw, or block' };
+	const things = await getThingsCollection();
+	const home = await getHomeThingsCollection();
+	const now = new Date();
+	const flagShareId = moderationFlagShareId(thingId);
+	const doc = (await things.findOne({ shareId: thingId } as any)) as any;
+	if (!doc) {
+		// The target was deleted (or reaped) after flagging: resolve the orphaned
+		// flag instead of 404-pinning the queue forever.
+		await home.updateOne(
+			{ shareId: flagShareId, thingtime: MODERATION_FLAG_THINGTIME } as any,
+			{ $set: { 'crystal.status': 'clear', 'crystal.reason': 'target no longer exists', 'crystal.reviewedBy': reviewerId, 'crystal.reviewedAt': now.toISOString(), updatedAt: now } }
+		);
+		return { ok: true, attachmentId: thingId, moderationStatus: 'clear' };
+	}
+	const moderation = {
+		status,
+		categories: sanitizeModerationCategories(doc.moderation?.categories),
+		provider: 'admin',
+		analyzedAt: now,
+		reason: `admin review by ${reviewerId}`
+	};
+	await things.updateOne({ shareId: thingId } as any, { $set: { moderation, updatedAt: now } });
+	if (status === 'clear') {
+		// resolving an existing flag is enough; no new audit row for a clear
+		await home.updateOne(
+			{ shareId: flagShareId, thingtime: MODERATION_FLAG_THINGTIME } as any,
+			{ $set: { 'crystal.status': status, 'crystal.reviewedBy': reviewerId, 'crystal.reviewedAt': now.toISOString(), updatedAt: now } }
+		);
+	} else {
+		// nsfw/block always lands a full auditable queue row, even when the
+		// pipeline never flagged the thing (admin-initiated takedown)
+		const kinds: string[] = Array.isArray(doc.thingtime) ? doc.thingtime : [doc.thingtime].filter(Boolean);
+		await home.updateOne(
+			{ shareId: flagShareId } as any,
+			{
+				$set: {
+					thingtime: [MODERATION_FLAG_THINGTIME],
+					targetId: thingId,
+					'crystal.targetKind': 'text',
+					'crystal.status': status,
+					'crystal.categories': moderation.categories,
+					'crystal.reason': moderation.reason,
+					'crystal.provider': 'admin',
+					'crystal.model': null,
+					'crystal.attachmentOwnerId': String(doc.ownerId || ''),
+					'crystal.attachmentName': '',
+					'crystal.attachmentPurpose': kinds.includes('comment') ? 'comment' : kinds.includes('share') ? 'share' : 'post',
+					'crystal.excerpt': String(doc.crystal?.text || '').slice(0, TEXT_FLAG_EXCERPT_CHARS),
+					'crystal.reviewedBy': reviewerId,
+					'crystal.reviewedAt': now.toISOString(),
+					updatedAt: now
+				},
+				$setOnInsert: {
+					shareId: flagShareId,
+					ownerId: 'system',
+					storageClass: 'control',
+					acl: [],
+					tags: [],
+					createdAt: now
+				}
+			},
+			{ upsert: true }
+		);
+	}
+	return { ok: true, attachmentId: thingId, moderationStatus: status };
 };
 
 export type ModerationSweepResult = {

@@ -16,7 +16,7 @@ import {
 	type AttachmentModeration,
 	type ModerationStatus
 } from './moderationCore';
-import { resolveModerationProvider, type ModerationProviderChoice } from './providers';
+import { resolveConfiguredModerationProvider, type ModerationProviderChoice } from './providers';
 
 // Claude vision's accepted raster set; avif stays unanalyzed (skipped).
 export const ANALYZABLE_IMAGE_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
@@ -43,7 +43,7 @@ const defaultFetchBytes = async (url: string): Promise<Uint8Array> => {
 const defaultDependencies = (): AnalyzeAttachmentDependencies => ({
 	getThings: getHomeThingsCollection,
 	getS3: getPrivateS3,
-	resolveProvider: () => resolveModerationProvider(),
+	resolveProvider: () => resolveConfiguredModerationProvider(),
 	fetchBytes: defaultFetchBytes,
 	now: () => new Date()
 });
