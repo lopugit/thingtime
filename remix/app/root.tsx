@@ -18,6 +18,7 @@ import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
 import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
+import { QuickSwitcher } from './components/QuickSwitcher/QuickSwitcher';
 import { rememberAuthReturnTo } from './utils/authReturn';
 
 const setThingtime = (glob: any) => {
@@ -132,6 +133,8 @@ export default function App() {
           </Main>
         )}
         {isAuthorizePopup ? null : <DrawerSystem />}
+        {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
+        {mounted && !isAuthorizePopup ? <QuickSwitcher /> : null}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}

@@ -101,6 +101,12 @@ export function useApi() {
           // authorized them (shared-browser privacy) — unlike viewer-neutral
           // tt-* caches (theme vars, emoji recents), which persist by design
           clearLocalCachePrefix('tt-activity-');
+          // quick-switcher recents can name the viewer's private things —
+          // same shared-browser privacy bar as the activity counts
+          clearLocalCachePrefix('tt-quickswitch-');
+          // same shared-browser rule for "On this day" memories — cached tiles
+          // can carry private/circle post snippets for the signed-out viewer
+          clearLocalCachePrefix('tt-onthisday-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;

@@ -2169,3 +2169,47 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       chords (⌘/Ctrl/Alt + letter) always pass through to the browser.
 - [ ] Mobile is untouched: with no keyboard there is no focus ring, no
       cheatsheet, and no visual change to the feed.
+
+## Feed "On this day" memories (`remix/app/components/Feed/MemoriesCard.tsx`, `/feed`)
+
+- [ ] Logged in with posts from this calendar day in previous years: a
+      dismissible "On this day" card sits between the composer and the post
+      column, showing up to 6 compact tiles (snippet + "N years ago today 🕰️")
+      that link to `/post/<id>`. Posts made TODAY (year offset 0) never appear
+      — this year is excluded from the query by construction. With no
+      anniversary posts (or logged out) the card renders NOTHING — zero layout
+      shift, no empty shell, no spinner.
+- [ ] ✕ dismisses the card for the rest of the LOCAL day (per viewer:
+      `tt-onthisday-<viewerId>` localCache) — reloading keeps it hidden; it
+      returns after the local date rolls over. Same-day revisits paint from the
+      cached entry instantly with no refetch (optimistic rendering); a stale
+      cached day refetches in the background. Logout sweeps the
+      `tt-onthisday-` prefix so another account on the same browser can never
+      see cached private-post snippets.
+- [ ] Query windows are the VIEWER's local calendar day per historical year
+      (local-midnight instants, DST-correct), not UTC days: a Sydney (UTC+10)
+      post from 09:00 local on this date last year appears, and a post from
+      08:00 local TOMORROW's date last year does not. "N years ago today" uses
+      the local year (a Jan 1 00:30 local post is Dec 31 UTC — label must not
+      be off by one).
+- [ ] A tab left open (or backgrounded) across local midnight rolls over
+      without a reload: at 00:00 yesterday's tiles/labels disappear, a
+      yesterday dismissal resets, and the new day's memories fetch on the
+      midnight timer or the next focus/visibility change.
+
+## Quick switcher (`remix/app/components/QuickSwitcher/`, global ⌘K)
+
+- [ ] `⌘K` / `Ctrl+K` from any page (including with focus in an input) opens
+      the centered palette; `Escape`, backdrop click, or `⌘K` again closes it.
+      Fuzzy-typing a page name ("expl", "msgs") surfaces the Pages section;
+      ArrowUp/Down move the highlight across sections and Enter navigates
+      client-side (no full reload). Typing a username fragment shows People
+      rows (avatar + name + @username → their profile); when logged in, a
+      matching own thing appears under "Your things" (title + kind →
+      `/thing/<id>`). Picks land in a per-viewer "Recent" section (localCache
+      `tt-quickswitch-<viewerId|anon>`, cap 8, swept on logout) shown when the
+      query is empty. The chord never fires while Commander is active or
+      another modal/menu is open; with the palette open, feed j/k/l/c
+      shortcuts stay parked (its `role="dialog"` trips the overlay check) and
+      Commander's own ⌘P behavior is untouched. The Nav bar's small ⌘ button
+      (mobile affordance) toggles the same palette.

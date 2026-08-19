@@ -43,7 +43,8 @@ export const FeedShortcutsContext = React.createContext<FeedShortcutsRegistry | 
 
 // The house typing-context check (CommanderV2 keys off document.activeElement
 // the same way): focus in any editable surface makes the shortcuts inert.
-const isTypingContext = (element: Element | null): boolean => {
+// Exported: the ⌘K QuickSwitcher shares these exact detections.
+export const isTypingContext = (element: Element | null): boolean => {
   if (!element) return false;
   const tag = element.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
@@ -62,7 +63,7 @@ const isElementVisible = (element: Element): boolean => {
 
 // Any visible modal/popover/menu parks the shortcuts (Chakra renders them all
 // with dialog/menu roles; closed non-lazy ones stay in the DOM but hidden).
-const hasOpenOverlay = (): boolean => {
+export const hasOpenOverlay = (): boolean => {
   const nodes = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [role="menu"]');
   for (const node of Array.from(nodes)) {
     if (isElementVisible(node)) return true;
@@ -73,7 +74,7 @@ const hasOpenOverlay = (): boolean => {
 // Commander paints data-commander-active on its host — the same marker its
 // own styling keys off — so an open Commander parks the shortcuts even when
 // its input isn't the active element.
-const isCommanderActive = (): boolean => !!document.querySelector('#commander[data-commander-active="true"]');
+export const isCommanderActive = (): boolean => !!document.querySelector('#commander[data-commander-active="true"]');
 
 const escapeCssId = (id: string): string =>
   typeof window !== 'undefined' && window.CSS?.escape ? window.CSS.escape(id) : id;
