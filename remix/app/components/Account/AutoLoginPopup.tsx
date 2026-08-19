@@ -76,7 +76,16 @@ export const AutoLoginPopup = () => {
 				lopu({ title: `Welcome back, ${resp.user?.username || hint.user.username}! ✨`, status: 'success', duration: 5000 });
 			}
 		} catch (err: any) {
-			if (!isPasskeyCancel(err)) {
+			// explicit click → even a cancel/failed cross-device handoff gets
+			// feedback (the browser reports both with the same error)
+			if (isPasskeyCancel(err)) {
+				lopu({
+					title: 'Passkey sign-in didn’t complete 🤏',
+					description: 'Try again, or continue with your password.',
+					status: 'info',
+					duration: 5000
+				});
+			} else {
 				lopu({
 					title: 'Passkey login failed',
 					description: err?.error || 'Try the password instead.',

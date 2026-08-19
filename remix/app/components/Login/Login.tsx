@@ -120,7 +120,18 @@ export const Login = (props) => {
 			const resp = await loginWithPasskey();
 			if (resp?.ok) handleLoggedIn(resp.user);
 		} catch (err) {
-			if (!isPasskeyCancel(err)) {
+			// The user explicitly clicked the button, so even a "cancelled"
+			// outcome gets gentle feedback: the browser reports a failed
+			// cross-device (QR/Bluetooth) handoff with the SAME error as a user
+			// cancel, and dead air after scanning a QR reads as broken.
+			if (isPasskeyCancel(err)) {
+				lopu({
+					title: 'Passkey sign-in didn’t complete 🤏',
+					description: 'No worries — try again, or use your password. Phone-scan sign-ins need Bluetooth nearby.',
+					status: 'info',
+					duration: 5000,
+				});
+			} else {
 				lopu({
 					title: 'Passkey login failed',
 					description: err?.error || 'Try your password instead.',
