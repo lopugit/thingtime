@@ -22,6 +22,7 @@ import {
   ThingsSort,
   ThingsThing,
   ThingsView,
+  isDuplicable,
   isFolder,
   primaryKindOf
 } from './thingsCore';
@@ -90,6 +91,24 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount }: ThingsI
         kbd: '⌘C',
         ...(folder ? { hint: 'Folders copy everything inside' } : {})
       },
+      // one-click copy-into-this-folder (no clipboard round-trip). Hidden for
+      // uncopyable kinds the server would refuse anyway. No kbd: ⌘D is the
+      // browser's bookmark chord, so Duplicate stays context-menu only.
+      ...(isDuplicable(thing)
+        ? [
+            {
+              id: 'duplicate',
+              command: 'duplicate',
+              label: countLabel('Duplicate', actCount),
+              // 🐑 is the codebase's Duplicate emoji (theme/icons.tsx maps it
+              // to lucide copy-plus); emoji icon style falls back to 🤷‍♂️ for
+              // anything outside the emoji set, so no glyphs like ⧉ here
+              icon: '🐑',
+              lucide: 'copy-plus',
+              ...(folder ? { hint: 'Duplicates the folder and everything inside' } : {})
+            } as ThingContextAction
+          ]
+        : []),
       { id: 'cut', command: 'cut', label: countLabel('Cut', actCount), icon: '✂️', lucide: 'scissors', kbd: '⌘X' },
       ...(folder
         ? [
