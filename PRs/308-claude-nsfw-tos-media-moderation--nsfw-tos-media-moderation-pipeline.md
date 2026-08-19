@@ -38,3 +38,7 @@
 - Env: `THINGTIME_MODERATION_PROVIDER` (`claude`/`test`/`off`), `ANTHROPIC_API_KEY`, `TT_MODERATION_MODEL` (README §Private S3 media).
 - TESTING.md: moderation lines under attachments + admin sections.
 - FUNDAMENTALS §3: `moderationFlag` kind + protected `moderation` stamp documented.
+
+## Cost analysis (2026-08-19)
+
+- [`docs/ai-api-cost-analysis.md`](../docs/ai-api-cost-analysis.md) — verified market research on AI API pricing for this pipeline: per-image cost on the `claude-opus-5` default (~$0.011/image), model-tier alternatives, dedicated moderation APIs, self-hosted options, volume projections, and the ranked cost levers (free first-pass gate, `TT_MODERATION_MODEL` downgrade, Batch API, pre-send downscaling, pending-retry bound).
