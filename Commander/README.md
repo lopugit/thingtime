@@ -13,6 +13,8 @@ portable from day one.
   refresh, and built-in Index Now, Index Apps, Index Commands, Index Files, and Index Directories commands;
 - inherited `.gitignore`/Git excludes plus user-defined wildcard and regular-expression ignore rules, editable with
   index roots and live status in Advanced Settings;
+- reusable machine-resource controls for indexer threads, parallel work, open-directory handles, CPU share, and RAM,
+  with transactional memory-limit rollback and measured per-run usage;
 - per-command global shortcuts with click-to-record bindings in Extensions Settings, native conflict validation,
   and rollback to the previously working shortcut set;
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
@@ -103,6 +105,8 @@ The bundled client ID is public by design. Tokens, passwords, and other credenti
 Whole-home filesystem indexing on macOS requires Full Disk Access for Commander. Advanced → Search Index links
 directly to the system pane; without that permission, use explicitly allowed folders as roots. Commander stops a
 blocked scan after 90 seconds, keeps the prior committed snapshot searchable, and reports actionable guidance.
+Deliberately constraining the indexer below 25% CPU extends that isolated writer deadline proportionally, up to 15
+minutes, so an efficiency profile is not mistaken for a hung filesystem call.
 
 ## Raycast companion command
 

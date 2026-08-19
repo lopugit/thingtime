@@ -47,6 +47,17 @@
 - [ ] Verify favourites-in-compact-mode is disabled unless Compact is selected.
 - [ ] Open Advanced → Search Index. Verify application, command, file, and folder counts update while a scan runs;
       Index All and each scoped button remain responsive and Settings can scroll to the final ignore row without clipping.
+- [ ] Change Scanner threads, Parallel tasks, Open folders, Max CPU, and Max memory; close/reopen Settings and verify
+      every value persists. Run a scan and verify the last-run line reports effective workers, average CPU, peak RAM,
+      and throttle time. Set the three concurrency ceilings to different values and verify effective workers use the
+      smallest value (also bounded by logical CPUs).
+- [ ] Against a disposable standalone database, run the same synthetic tree at 100% and 5% CPU and sample process CPU;
+      verify the low profile is throttled and remains searchable. Set RAM below current RSS and verify a `resource_limit`
+      error leaves the prior snapshot searchable; verify traversal directory handles never exceed effective workers.
+- [ ] Against a disposable large index, compare one, two, three, and four worker profiles and keep the measured winner as
+      the default. Re-run the winning profile unchanged; verify schema 3 avoids FTS churn, keeps the result count stable,
+      and finishes materially faster than a fresh build. Open a schema-2 fixture and verify it upgrades in place without
+      rebuilding or losing searchable records.
 - [ ] On macOS, verify Open Full Disk Access opens Privacy & Security → Full Disk Access without changing the toggle.
       With access withheld and a deliberately blocking root, verify the scan stops after 90 seconds, the writer recovers,
       actionable guidance appears, and the last committed index remains searchable.

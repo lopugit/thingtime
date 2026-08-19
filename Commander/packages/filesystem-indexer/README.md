@@ -12,7 +12,16 @@ const indexer = new FileSystemIndexerClient({
   databasePath: '/path/to/files.sqlite3',
 });
 
-await indexer.index(configuration);
+await indexer.index({
+  ...configuration,
+  resourceLimits: {
+    maxThreads: 2,
+    maxParallelism: 2,
+    maxOpenDirectories: 16,
+    maxCpuPercent: 60,
+    maxMemoryMiB: 512,
+  },
+});
 const { records } = await indexer.query({ query: 'invoice', kinds: ['file'], limit: 30 });
 await indexer.close();
 ```
@@ -20,3 +29,9 @@ await indexer.close();
 Use separate reader and writer clients against the same database if a host
 wants searches to continue against the last committed snapshot while a large
 background scan is running. SQLite WAL mode makes this safe.
+
+Resource limits are optional and use the Rust engine's balanced defaults when
+omitted. A completed `IndexReport.resources` records the effective worker count,
+logical CPU count, average whole-machine CPU share, peak resident memory,
+throttle time, queue capacity, and SQLite cache budget. A host can also supply a
+per-call timeout as the second argument to `index(configuration, timeoutMs)`.

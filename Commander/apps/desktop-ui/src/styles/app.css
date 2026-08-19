@@ -1723,6 +1723,64 @@
   font-size: 0.68rem;
   line-height: 1.35;
 }
+.index-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.index-resource-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--hover);
+}
+.index-resource-field > span:first-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.index-resource-field strong {
+  font-size: 0.74rem;
+}
+.index-resource-field small {
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.3;
+}
+.index-resource-input {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.index-resource-input input {
+  width: 100%;
+  min-width: 0;
+  height: 31px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.73rem;
+}
+.index-resource-input input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.index-resource-summary {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 0.69rem;
+  line-height: 1.45;
+}
 .index-status-message {
   margin-top: 12px;
   padding: 8px 10px;
@@ -1733,7 +1791,8 @@
 }
 @media (max-width: 760px) {
   .index-status-grid,
-  .index-options {
+  .index-options,
+  .index-resource-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .index-privacy-note {

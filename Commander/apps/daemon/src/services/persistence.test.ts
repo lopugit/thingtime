@@ -82,6 +82,13 @@ describe('PersistentStore Thingtime defaults', () => {
         roots: ['~'],
         respectGitIgnore: true,
         customIgnores: expect.arrayContaining([{ kind: 'glob', pattern: '**/node_modules/**' }]),
+        resourceLimits: {
+          maxThreads: 2,
+          maxParallelism: 2,
+          maxOpenDirectories: 16,
+          maxCpuPercent: 60,
+          maxMemoryMiB: 512,
+        },
       });
     } finally {
       await rm(temporary, { recursive: true, force: true });

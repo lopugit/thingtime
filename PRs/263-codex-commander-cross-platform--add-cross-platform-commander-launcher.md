@@ -219,14 +219,30 @@ environment.
   seconds, its isolated writer is restarted, and the prior committed snapshot
   stays searchable. The standalone engine remains configurable up to ten million
   entries for other Thingtime/Electron hosts.
+- Advanced Settings now exposes five persisted machine-resource ceilings:
+  scanner threads, parallel directory tasks, open directory handles, total-machine
+  CPU share, and resident RAM. The reusable Rust protocol applies the strictest
+  concurrency ceiling, sizes its bounded channel and SQLite cache from the RAM
+  budget, reports effective/measured usage, and rolls a scan back if RSS crosses
+  the configured limit. Low-CPU profiles receive a proportional isolated-writer
+  timeout rather than being mistaken for a hung scan.
+- The measured balanced default is two traversal workers. CPU duty cycling uses
+  process CPU time divided by all logical machine capacity and performs a final
+  accounting gate, while lower-frequency RSS sampling keeps the governor off the
+  traversal/SQLite hot path. SQLite temporary pages remain memory-backed inside
+  the explicit cache/RSS budgets.
+- Filesystem schema 3 migrates the FTS update trigger in place and fires it only
+  when a filename actually changes. Scheduled generation reconciliation can
+  still delete vanished paths without deleting and recreating every unchanged
+  trigram row.
 
 ## Verification
 
-- Commander TypeScript: 96 tests passed across protocol (4), filesystem client
-  (2), compatibility (18), UI (49), and daemon (23) packages; typecheck,
+- Commander TypeScript: 99 tests passed across protocol (5), filesystem client
+  (3), compatibility (18), UI (49), and daemon (24) packages; typecheck,
   ESLint, Prettier, and package builds passed.
-- Rust: 41 tests passed across command search (21 unit + 5 JSONL) and filesystem
-  indexing (14 unit + 1 JSONL); formatting and strict Clippy with warnings
+- Rust: 48 tests passed across command search (21 unit + 5 JSONL) and filesystem
+  indexing (21 unit + 1 JSONL); formatting and strict Clippy with warnings
   denied passed.
 - Swift: ten WebKit/panel, settings-deep-link, file-drag, and command-hotkey
   regressions passed; the release build passed with warnings treated as errors.
@@ -236,13 +252,30 @@ environment.
 - The installed signature, stable designated requirement, Node JIT
   entitlements, process ancestry, daemon health, and bundled executable paths
   were verified.
-- The standalone installed indexer scanned 500,000 real home metadata entries in
-  29.0 seconds, committed 387,797 files and 112,203 directories alongside 340
+- The optimized standalone indexer scanned 500,000 real home metadata entries in
+  15.6–17.0 seconds with the measured two-worker default (versus 21.9 seconds at
+  one worker, 16.5 at three, 16.8 at four, and the earlier 29.0-second baseline).
+  An unchanged schema-3 reconciliation completed in 12.4 seconds instead of
+  rewriting the full trigram index. A separate 100,000-entry stress run held its
+  configured whole-machine CPU average at exactly 5%, recorded 4.5 seconds of
+  throttling, and stayed below its 512 MiB RAM ceiling. The installed database
+  upgraded in place to schema 3, retained all 500,340 records, and committed
+  387,797 files and 112,203 directories alongside 340
   applications, checkpointed its WAL to zero, and retained `0600` permissions on
   the database and live sidecars. Installed-WebKit QA then returned 30 native-icon
   file results for `package.json`; Advanced showed all live counts, the six-hour
   cadence, Full Disk Access guidance, six default ignores, and the cap warning
   without clipping while scrolling top to bottom.
+- A separate 129-sample OS audit of the live Rust PID observed exactly two
+  traversal workers, no more than two numeric directory handles, and four total
+  process threads (main SQLite writer, walker coordinator, and the two workers),
+  matching the documented distinction between traversal-worker and mandatory
+  process threads.
+- Installed Advanced QA rendered and persisted the measured defaults (2 scanner
+  threads, 2 parallel tasks, 16 open folders, 60% CPU, 512 MiB RAM), showed the
+  real last-run worker/CPU/RSS/throttle report, visibly entered and exited the
+  Apps `Indexing…` state, and remained aligned while scrolling through the final
+  ignore/cap warning.
 - Installed-WebKit QA opened Search Emoji & Symbols, typed the formerly
   crashing first character `h`, continued to `heart`, and kept the picker
   visible and focused with 46 results before returning to the launcher.

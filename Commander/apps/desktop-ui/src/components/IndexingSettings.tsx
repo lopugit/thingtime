@@ -7,6 +7,15 @@ import type {
   IndexingStatus,
 } from '@commander/protocol';
 import {
+  INDEXING_MAX_CPU_PERCENT,
+  INDEXING_MAX_MEMORY_MIB,
+  INDEXING_MAX_OPEN_DIRECTORIES_LIMIT,
+  INDEXING_MAX_PARALLELISM_LIMIT,
+  INDEXING_MAX_THREADS_LIMIT,
+  INDEXING_MIN_CPU_PERCENT,
+  INDEXING_MIN_MEMORY_MIB,
+} from '@commander/protocol';
+import {
   AppWindow,
   Database,
   File,
@@ -246,6 +255,81 @@ export function IndexingSettings({
       <div className="index-settings-section">
         <div className="index-section-heading">
           <div>
+            <strong>Machine resources</strong>
+            <span>
+              Limits apply inside the standalone Rust indexer. The strictest thread, parallel-task, and
+              open-folder ceiling wins.
+            </span>
+          </div>
+        </div>
+        <div className="index-resource-grid">
+          <ResourceLimitInput
+            label="Scanner threads"
+            description="Maximum Rust traversal workers."
+            value={draft.resourceLimits.maxThreads}
+            minimum={1}
+            maximum={INDEXING_MAX_THREADS_LIMIT}
+            onCommit={(maxThreads) =>
+              commit({ ...draft, resourceLimits: { ...draft.resourceLimits, maxThreads } })
+            }
+          />
+          <ResourceLimitInput
+            label="Parallel tasks"
+            description="Maximum directory work in flight."
+            value={draft.resourceLimits.maxParallelism}
+            minimum={1}
+            maximum={INDEXING_MAX_PARALLELISM_LIMIT}
+            onCommit={(maxParallelism) =>
+              commit({ ...draft, resourceLimits: { ...draft.resourceLimits, maxParallelism } })
+            }
+          />
+          <ResourceLimitInput
+            label="Open folders"
+            description="Maximum directory handles at once."
+            value={draft.resourceLimits.maxOpenDirectories}
+            minimum={1}
+            maximum={INDEXING_MAX_OPEN_DIRECTORIES_LIMIT}
+            onCommit={(maxOpenDirectories) =>
+              commit({ ...draft, resourceLimits: { ...draft.resourceLimits, maxOpenDirectories } })
+            }
+          />
+          <ResourceLimitInput
+            label="Max CPU"
+            description="Share of total machine CPU capacity."
+            value={draft.resourceLimits.maxCpuPercent}
+            minimum={INDEXING_MIN_CPU_PERCENT}
+            maximum={INDEXING_MAX_CPU_PERCENT}
+            suffix="%"
+            onCommit={(maxCpuPercent) =>
+              commit({ ...draft, resourceLimits: { ...draft.resourceLimits, maxCpuPercent } })
+            }
+          />
+          <ResourceLimitInput
+            label="Max memory"
+            description="Hard resident-memory ceiling."
+            value={draft.resourceLimits.maxMemoryMiB}
+            minimum={INDEXING_MIN_MEMORY_MIB}
+            maximum={INDEXING_MAX_MEMORY_MIB}
+            suffix="MB"
+            onCommit={(maxMemoryMiB) =>
+              commit({ ...draft, resourceLimits: { ...draft.resourceLimits, maxMemoryMiB } })
+            }
+          />
+        </div>
+        {status?.lastRunResources ? (
+          <div className="index-resource-summary" aria-label="Last index resource usage">
+            Last run used {status.lastRunResources.effective.workerThreads} worker
+            {status.lastRunResources.effective.workerThreads === 1 ? '' : 's'}, averaged{' '}
+            {status.lastRunResources.averageCpuPercent}% CPU, peaked at{' '}
+            {formatBytes(status.lastRunResources.peakMemoryBytes)}, and was throttled for{' '}
+            {formatDuration(status.lastRunResources.throttledMs)}.
+          </div>
+        ) : null}
+      </div>
+
+      <div className="index-settings-section">
+        <div className="index-section-heading">
+          <div>
             <strong>Custom ignore list</strong>
             <span>Wildcards match paths or names; regular expressions match normalized / paths.</span>
           </div>
@@ -292,6 +376,66 @@ export function IndexingSettings({
       ))}
     </section>
   );
+}
+
+function ResourceLimitInput({
+  label,
+  description,
+  value,
+  minimum,
+  maximum,
+  suffix,
+  onCommit,
+}: {
+  label: string;
+  description: string;
+  value: number;
+  minimum: number;
+  maximum: number;
+  suffix?: string;
+  onCommit(value: number): void;
+}) {
+  const [draftValue, setDraftValue] = useState(String(value));
+  useEffect(() => setDraftValue(String(value)), [value]);
+  const commitValue = () => {
+    const parsed = draftValue.trim() ? Number(draftValue) : Number.NaN;
+    const next = Number.isFinite(parsed) ? Math.min(maximum, Math.max(minimum, Math.round(parsed))) : value;
+    setDraftValue(String(next));
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <label className="index-resource-field">
+      <span>
+        <strong>{label}</strong>
+        <small>{description}</small>
+      </span>
+      <span className="index-resource-input">
+        <input
+          aria-label={label}
+          type="number"
+          min={minimum}
+          max={maximum}
+          step={1}
+          value={draftValue}
+          spellCheck={false}
+          onChange={(event) => setDraftValue(event.currentTarget.value)}
+          onBlur={commitValue}
+          onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
+        />
+        {suffix ? <small>{suffix}</small> : null}
+      </span>
+    </label>
+  );
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024 * 1024) return `${Math.max(0, Math.round(value / 1024))} KB`;
+  return `${Math.max(0, Math.round(value / 1024 / 1024))} MB`;
+}
+
+function formatDuration(value: number): string {
+  if (value < 1_000) return `${Math.max(0, Math.round(value))} ms`;
+  return `${(value / 1_000).toFixed(1)} s`;
 }
 
 function formatInterval(minutes: number): string {

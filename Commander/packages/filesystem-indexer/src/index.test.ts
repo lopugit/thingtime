@@ -27,14 +27,49 @@ describe('FileSystemIndexerClient', () => {
       binaryPath: process.execPath,
       databasePath: '/tmp/test-index-timeout.sqlite3',
       prefixArguments: [fixture],
-      indexTimeoutMs: 20,
+      indexTimeoutMs: 1_000,
     });
     try {
       await expect(
-        client.index({
-          sources: [{ id: 'hang', root: '/tmp', kinds: ['file'] }],
-        }),
+        client.index(
+          {
+            sources: [{ id: 'hang', root: '/tmp', kinds: ['file'] }],
+          },
+          20,
+        ),
       ).rejects.toThrow('timed out after 20ms');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('passes standalone machine resource limits through the JSON-lines protocol', async () => {
+    const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/fake-indexer.mjs');
+    const client = new FileSystemIndexerClient({
+      binaryPath: process.execPath,
+      databasePath: '/tmp/test-index-resources.sqlite3',
+      prefixArguments: [fixture],
+    });
+    try {
+      const response = (await client.index({
+        sources: [{ id: 'documents', root: '/tmp', kinds: ['file', 'directory'] }],
+        resourceLimits: {
+          maxThreads: 6,
+          maxParallelism: 3,
+          maxOpenDirectories: 9,
+          maxCpuPercent: 45,
+          maxMemoryMiB: 384,
+        },
+      })) as unknown as { configuration: Record<string, unknown> };
+      expect(response.configuration).toMatchObject({
+        resourceLimits: {
+          maxThreads: 6,
+          maxParallelism: 3,
+          maxOpenDirectories: 9,
+          maxCpuPercent: 45,
+          maxMemoryMiB: 384,
+        },
+      });
     } finally {
       await client.close();
     }
