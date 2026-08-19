@@ -299,6 +299,16 @@ is fixed, and cite the checklist you ran in the PR description.
       `claude` (escalated) — check the provider column in `/admin` →
       Moderation. With `ANTHROPIC_API_KEY` removed, an omni-flagged image still
       lands `nsfw` (blur + flag) instead of staying pending.
+- [ ] `/admin` → Moderation → AI moderation settings: switching Media uploads
+      to "OpenAI omni only (free)" updates the "running:" label and subsequent
+      uploads stamp provider `openai`; switching either surface to Off stops
+      new stamps. Choices survive a reload (settings collection, not local
+      state).
+- [ ] With an OpenAI key configured, a post/comment containing threatening
+      harassment vanishes from feeds/threads for everyone shortly after
+      creation and a `text` flag row (with excerpt, no View button) appears in
+      `/admin` → Moderation; Clear restores the post, Block re-hides it.
+      Editing a clean post to add flagged text re-screens it.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich

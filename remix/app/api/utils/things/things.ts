@@ -23,6 +23,8 @@ import {
 	type AttachmentPublicMetadata,
 	type AttachmentPurpose
 } from '../attachments/attachmentCore';
+import { queueTextModeration, TEXT_MODERATED_THINGTIMES } from '../moderation/analyzeText';
+import { attachmentIsBlocked } from '../moderation/moderationCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
@@ -1105,6 +1107,11 @@ export const createThing = async (
   // notification side effects — emit* never throws, so a notification hiccup
   // can't fail the write that triggered it
   await emitCreationNotifications(doc, target, asOwner);
+	// fire-and-forget text moderation for post-family things with prose — the
+	// free omni screen stamps the protected moderation root asynchronously
+	if (thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) && String((doc as any).crystal?.text || '').trim()) {
+		queueTextModeration(doc.shareId);
+	}
   return { ok: true, doc };
 };
 
@@ -1311,19 +1318,19 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   const things = await getThingsCollection();
   const [related, legacyRelational, shareCounts] = await Promise.all([
     things
-      .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] } } as any)
+      .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] }, 'moderation.status': { $ne: 'blocked' } } as any)
       .sort({ createdAt: 1, shareId: 1 })
       .toArray() as Promise<any[]>,
     // interim relational era: kind:'reaction'/'comment' docs linked by parentId
     // (written by the pre-unification relational model; converted by the things
     // migration, folded here until then)
     things
-      .find({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids } } as any)
+      .find({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids }, 'moderation.status': { $ne: 'blocked' } } as any)
       .sort({ createdAt: 1 })
       .toArray() as Promise<any[]>,
     things
       .aggregate([
-        { $match: { $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } },
+        { $match: { 'moderation.status': { $ne: 'blocked' }, $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } },
         { $group: { _id: { $ifNull: ['$targetId', '$shareOfId'] }, count: { $sum: 1 } } }
       ])
       .toArray() as Promise<any[]>
@@ -1390,19 +1397,25 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
     const withDocs = depth < SHIPPED_REPLY_LEVELS;
     const [levelReactions, replyGroups] = await Promise.all([
       things
-        .find({ targetId: { $in: levelIds }, thingtime: 'reaction' } as any)
+        .find({ targetId: { $in: levelIds }, thingtime: 'reaction', 'moderation.status': { $ne: 'blocked' } } as any)
         .sort({ createdAt: 1, shareId: 1 })
         .toArray() as Promise<any[]>,
+      // blocked replies neither ship as docs nor inflate per-level counts —
+      // this mirrors the first-pass related queries above (a blocked doc must
+      // vanish from EVERY thread payload, not just level 1)
       things
         .aggregate(
           withDocs
             ? [
-                { $match: { targetId: { $in: levelIds }, thingtime: 'comment' } },
+                { $match: { targetId: { $in: levelIds }, thingtime: 'comment', 'moderation.status': { $ne: 'blocked' } } },
                 { $sort: { createdAt: -1, shareId: 1 } },
                 { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
                 { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
               ]
-            : [{ $match: { targetId: { $in: levelIds }, thingtime: 'comment' } }, { $group: { _id: '$targetId', count: { $sum: 1 } } }]
+            : [
+                { $match: { targetId: { $in: levelIds }, thingtime: 'comment', 'moderation.status': { $ne: 'blocked' } } },
+                { $group: { _id: '$targetId', count: { $sum: 1 } } }
+              ]
         )
         .toArray() as Promise<any[]>
     ]);
@@ -1505,7 +1518,9 @@ const resolveThreadCounts = async (ids: string[]): Promise<Map<string, number>> 
           connectFromField: 'shareId',
           connectToField: 'targetId',
           as: 'thread',
-          restrictSearchWithMatch: { thingtime: 'comment' }
+          // blocked comments (and via graph pruning their whole subtrees)
+          // don't count — totals must match the visible lists
+          restrictSearchWithMatch: { thingtime: 'comment', 'moderation.status': { $ne: 'blocked' } }
         }
       },
       { $project: { shareId: 1, total: { $size: '$thread' } } }
@@ -1730,6 +1745,10 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
 	if (thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME)) return false;
+	// Moderation-blocked things vanish from every ordinary read for everyone —
+	// owner included, same as blocked attachments. Admins review through the
+	// moderationFlag queue (which carries a bounded excerpt), never this path.
+	if (attachmentIsBlocked(doc as any)) return false;
   if (viewer?.id && doc.ownerId === viewer.id) return true;
   return aclAllows(aclOf(doc), viewer, doc.ownerId);
 };
@@ -1744,6 +1763,9 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
+	// the blocked gate applies to the doc ITSELF, not just its inherit
+	// terminal — a blocked comment under a clean post must vanish too
+	if (attachmentIsBlocked(doc as any)) return false;
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
   return !!terminal && canView(terminal, viewer);
 };
@@ -1867,6 +1889,9 @@ const appMembershipOk = (app: AppNamespaceScope, doc: ThingDoc): boolean => {
 // thing is as visible as that thing; a chain that escapes the namespace or
 // breaks fails closed).
 const appNamespaceVerdict = async (app: AppNamespaceScope, doc: ThingDoc): Promise<boolean> => {
+	// moderation-blocked docs are invisible under app lenses too — this path
+	// never reaches canView, so it needs its own gate
+	if (attachmentIsBlocked(doc as any)) return false;
   if (!appMembershipOk(app, doc)) return false;
   let judged: ThingDoc = doc;
   if (aclOf(doc).includes(ACL_INHERIT)) {
@@ -3681,6 +3706,16 @@ export const updateThing = async (
 		delete updated.storageClass;
 		delete updated.storageAccountingVersion;
 		if (!storageScope) delete updated.sizeBytes;
+	}
+
+	// Edited prose gets re-screened: the old verdict describes text that no
+	// longer exists (emptied text clears a stale pipeline stamp). The analyzer
+	// refuses to overwrite admin review stamps and no-ops on custom data planes.
+	if (
+		thingtimeOf(updated).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
+		String((updated as any).crystal?.text || '') !== String((doc as any).crystal?.text || '')
+	) {
+		queueTextModeration(doc.shareId);
 	}
 
   const thing = (await toPublicThings([updated], viewer))[0];

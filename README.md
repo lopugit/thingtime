@@ -663,6 +663,20 @@ environments that carry the keys for musing but must not moderate. An
 unrecognized provider value warns and falls back to the key-based default
 rather than silently disabling moderation.
 
+Admins control which AI runs each moderation surface from `/admin` →
+Moderation → "AI moderation settings": media uploads (default / tiered
+openai+claude / free openai-only / claude / off) and post/comment text
+(default / free openai / off). Admin choices are stored in the settings
+collection and override the env default; "default" delegates back to the
+env/key logic above. Post and comment text is screened by the free
+omni-moderation endpoint whenever an OpenAI key exists: block-worthy
+categories (sexual/minors, threatening harassment/hate, violent-illicit,
+self-harm instructions) quarantine the post/comment — it vanishes from every
+feed, thread, and search for everyone — while other flagged categories queue
+an advisory `moderationFlag` (with a bounded text excerpt as evidence) for
+the admin review queue without hiding the content. Edited text is re-screened;
+admin review verdicts are final until an admin changes them.
+
 Posts, comments and replies, Messenger messages and thread replies, custom
 reaction emoji, and profile avatar/banner images use direct, checksummed
 multipart uploads to a private S3 bucket. The browser receives short-lived part

@@ -15,11 +15,16 @@
 //              normally (dev environments without an API key)
 // Unset default by available keys: both → 'openai+claude'; ANTHROPIC only →
 // 'claude'; OPENAI only → 'openai'; neither → 'off'.
+// The Admin dashboard's AI-moderation settings (moderationSettingsCore.ts)
+// override the env choice: resolveConfiguredModerationProvider reads the
+// admin mediaProvider first and only falls through to the env/key logic when
+// it is 'default' (or the settings read fails).
 // Fail-open note: 'off'/missing-key environments do NOT block uploads — the
 // beta admin-grant gate (PR #302) is the hard spam control; analysis is the
 // content-quality layer on top. Set the provider in prod so it actually runs.
 
 import type { ModerationVerdict } from './moderationCore';
+import { DEFAULT_MODERATION_SETTINGS, type ModerationMediaProviderId } from './moderationSettingsCore';
 
 export type ModerationImageInput = {
 	bytes: Uint8Array;
@@ -54,7 +59,25 @@ export type ModerationProviderChoice = { kind: 'off' } | { kind: 'provider'; pro
 // Resolved lazily per call so tests and previews can flip env vars without a
 // process restart; the Claude provider is imported lazily so environments
 // that never analyze don't pay for the SDK import.
-export const resolveModerationProvider = async (env: NodeJS.ProcessEnv = process.env): Promise<ModerationProviderChoice> => {
+export const resolveModerationProvider = async (
+	env: NodeJS.ProcessEnv = process.env,
+	adminProvider: ModerationMediaProviderId = 'default'
+): Promise<ModerationProviderChoice> => {
+	// The admin setting outranks the env: a named admin choice maps straight to
+	// its provider; 'default' delegates to the env/key resolution below.
+	if (adminProvider === 'off') return { kind: 'off' };
+	if (adminProvider === 'openai+claude') {
+		const { createTieredModerationProvider } = await import('./openaiProvider');
+		return { kind: 'provider', provider: createTieredModerationProvider(env) };
+	}
+	if (adminProvider === 'claude') {
+		const { createClaudeModerationProvider } = await import('./claudeProvider');
+		return { kind: 'provider', provider: createClaudeModerationProvider(env) };
+	}
+	if (adminProvider === 'openai') {
+		const { createOpenAiModerationProvider } = await import('./openaiProvider');
+		return { kind: 'provider', provider: createOpenAiModerationProvider(env) };
+	}
 	const configured = env.THINGTIME_MODERATION_PROVIDER?.trim().toLowerCase();
 	if (configured === 'off') return { kind: 'off' };
 	if (configured === 'test') return { kind: 'provider', provider: testModerationProvider };
@@ -91,4 +114,19 @@ export const resolveModerationProvider = async (env: NodeJS.ProcessEnv = process
 		return { kind: 'provider', provider: createOpenAiModerationProvider(env) };
 	}
 	return { kind: 'off' };
+};
+
+// The orchestrator's default resolver: admin settings first, env second. The
+// settings read is isolated so a Mongo hiccup degrades to the env default
+// instead of failing analysis outright (unit tests hit the pure
+// resolveModerationProvider directly and never touch the DB).
+export const resolveConfiguredModerationProvider = async (env: NodeJS.ProcessEnv = process.env): Promise<ModerationProviderChoice> => {
+	let adminProvider = DEFAULT_MODERATION_SETTINGS.mediaProvider;
+	try {
+		const { getModerationSettings } = await import('./moderationSettings');
+		adminProvider = (await getModerationSettings()).mediaProvider;
+	} catch (error) {
+		console.warn('[moderation] settings read failed; using env default provider:', (error as Error)?.message || error);
+	}
+	return resolveModerationProvider(env, adminProvider);
 };

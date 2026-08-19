@@ -1,18 +1,28 @@
 import React from 'react';
-import { Badge, Box, Button, Flex, Spinner, Table, Tbody, Td, Text, Th, Thead, Tr } from '@chakra-ui/react';
+import { Badge, Box, Button, Flex, Select, Spinner, Table, Tbody, Td, Text, Th, Thead, Tr } from '@chakra-ui/react';
 
+import {
+	MODERATION_MEDIA_PROVIDER_OPTIONS,
+	MODERATION_TEXT_PROVIDER_OPTIONS,
+	type ModerationMediaProviderId,
+	type ModerationSettings,
+	type ModerationTextProviderId
+} from '~/api/utils/moderation/moderationSettingsCore';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 
-// /admin → Moderation: the NSFW/TOS review queue. Rows are moderationFlag
-// things written by the analysis pipeline (api/utils/moderation); actions
-// override the verdict on the attachment's protected moderation stamp.
-// Admins can open the raw media (the content route serves blocked bytes to
-// admins only) to judge the evidence.
+// /admin → Moderation: the AI-moderation settings + the NSFW/TOS review
+// queue. Rows are moderationFlag things written by the analysis pipelines
+// (api/utils/moderation) for media uploads AND post/comment text; actions
+// override the verdict on the target's protected moderation stamp. Admins can
+// open raw media (the content route serves blocked bytes to admins only) or
+// read the stored text excerpt to judge the evidence.
 
 type ModerationFlagRow = {
 	id: string;
 	attachmentId: string;
+	targetKind: 'attachment' | 'text';
+	excerpt: string | null;
 	status: string;
 	categories: string[];
 	reason: string | null;
@@ -29,6 +39,8 @@ type ModerationFlagRow = {
 type ModerationOverview = {
 	flags: ModerationFlagRow[];
 	counts: { flags: number; unanalyzedReady: number };
+	settings?: ModerationSettings;
+	effective?: { media: string; text: string };
 };
 
 const statusColor = (status: string) => (status === 'blocked' ? 'red' : status === 'nsfw' ? 'orange' : status === 'clear' ? 'green' : 'gray');
@@ -43,12 +55,17 @@ export const ModerationTab = () => {
 	const [error, setError] = React.useState<string | null>(null);
 	const [busy, setBusy] = React.useState<string | null>(null);
 
+	const [settingsDraft, setSettingsDraft] = React.useState<ModerationSettings | null>(null);
+	const [effective, setEffective] = React.useState<{ media: string; text: string } | null>(null);
+
 	const refresh = React.useCallback(async () => {
 		setLoading(true);
 		try {
 			const resp = await apiRef.current.v1.admin.moderation();
 			if (resp?.ok) {
 				setOverview({ flags: resp.flags || [], counts: resp.counts || { flags: 0, unanalyzedReady: 0 } });
+				if (resp.settings) setSettingsDraft(resp.settings);
+				if (resp.effective) setEffective(resp.effective);
 				setError(null);
 			} else {
 				setError(resp?.error || 'Could not load moderation queue');
@@ -59,6 +76,27 @@ export const ModerationTab = () => {
 			setLoading(false);
 		}
 	}, []);
+
+	const saveSettings = async (settings: ModerationSettings) => {
+		setSettingsDraft(settings); // optimistic — revert on failure
+		setBusy('settings');
+		try {
+			const resp = await apiRef.current.v1.admin.moderationSettings({ settings });
+			if (resp?.ok) {
+				if (resp.settings) setSettingsDraft(resp.settings);
+				if (resp.effective) setEffective(resp.effective);
+				lopu({ title: 'Moderation settings saved', status: 'success' });
+			} else {
+				lopu({ title: resp?.error || 'Could not save moderation settings', status: 'error' });
+				await refresh();
+			}
+		} catch {
+			lopu({ title: 'Could not save moderation settings', status: 'error' });
+			await refresh();
+		} finally {
+			setBusy(null);
+		}
+	};
 
 	React.useEffect(() => {
 		void refresh();
@@ -88,7 +126,7 @@ export const ModerationTab = () => {
 	const review = async (row: ModerationFlagRow, verdict: 'clear' | 'nsfw' | 'block') => {
 		setBusy(`${row.id}:${verdict}`);
 		try {
-			const resp = await apiRef.current.v1.admin.moderationReview({ attachmentId: row.attachmentId, verdict });
+			const resp = await apiRef.current.v1.admin.moderationReview({ attachmentId: row.attachmentId, verdict, targetKind: row.targetKind });
 			if (resp?.ok) {
 				lopu({ title: `“${row.attachmentName || row.attachmentId}” marked ${resp.moderationStatus}`, status: 'success' });
 				await refresh();
@@ -102,8 +140,69 @@ export const ModerationTab = () => {
 		}
 	};
 
+	const mediaNote = MODERATION_MEDIA_PROVIDER_OPTIONS.find((option) => option.id === settingsDraft?.mediaProvider)?.note;
+	const textNote = MODERATION_TEXT_PROVIDER_OPTIONS.find((option) => option.id === settingsDraft?.textProvider)?.note;
+
 	return (
 		<Box>
+			<Box border="1px solid var(--tt-border, #2a2a30)" borderRadius="var(--tt-radius-md, 12px)" p={3} mb={4}>
+				<Text fontWeight={600} fontSize="sm" mb={1}>
+					AI moderation settings
+				</Text>
+				<Text fontSize="xs" opacity={0.65} mb={3}>
+					Which AI analyzes each surface. Choices here override the server env default; “Default” follows the environment’s API keys.
+				</Text>
+				<Flex columnGap={6} rowGap={3} flexWrap="wrap">
+					<Box minW="260px" flex="1">
+						<Text fontSize="xs" fontWeight={600} mb={1}>
+							Media uploads (images){effective ? ` — running: ${effective.media}` : ''}
+						</Text>
+						<Select
+							size="sm"
+							value={settingsDraft?.mediaProvider || 'default'}
+							isDisabled={!settingsDraft || busy === 'settings'}
+							onChange={(event) =>
+								settingsDraft && void saveSettings({ ...settingsDraft, mediaProvider: event.target.value as ModerationMediaProviderId })
+							}
+						>
+							{MODERATION_MEDIA_PROVIDER_OPTIONS.map((option) => (
+								<option key={option.id} value={option.id}>
+									{option.label}
+								</option>
+							))}
+						</Select>
+						{mediaNote ? (
+							<Text fontSize="xs" opacity={0.6} mt={1}>
+								{mediaNote}
+							</Text>
+						) : null}
+					</Box>
+					<Box minW="260px" flex="1">
+						<Text fontSize="xs" fontWeight={600} mb={1}>
+							Post & comment text{effective ? ` — running: ${effective.text}` : ''}
+						</Text>
+						<Select
+							size="sm"
+							value={settingsDraft?.textProvider || 'default'}
+							isDisabled={!settingsDraft || busy === 'settings'}
+							onChange={(event) =>
+								settingsDraft && void saveSettings({ ...settingsDraft, textProvider: event.target.value as ModerationTextProviderId })
+							}
+						>
+							{MODERATION_TEXT_PROVIDER_OPTIONS.map((option) => (
+								<option key={option.id} value={option.id}>
+									{option.label}
+								</option>
+							))}
+						</Select>
+						{textNote ? (
+							<Text fontSize="xs" opacity={0.6} mt={1}>
+								{textNote}
+							</Text>
+						) : null}
+					</Box>
+				</Flex>
+			</Box>
 			<Flex alignItems="center" columnGap={3} rowGap={2} flexWrap="wrap" mb={3}>
 				<Text fontSize="sm" opacity={0.75}>
 					{overview ? `${overview.counts.flags} flag(s) · ${overview.counts.unanalyzedReady} ready attachment(s) awaiting analysis` : '…'}
@@ -145,11 +244,12 @@ export const ModerationTab = () => {
 							{overview.flags.map((row) => (
 								<Tr key={row.id}>
 									<Td>
-										<Text fontWeight={600} fontSize="sm" noOfLines={1} maxW="220px" title={row.attachmentName}>
-											{row.attachmentName || row.attachmentId}
+										<Text fontWeight={600} fontSize="sm" noOfLines={1} maxW="220px" title={row.targetKind === 'text' ? row.excerpt || row.attachmentId : row.attachmentName}>
+											{row.targetKind === 'text' ? `“${(row.excerpt || '').slice(0, 60) || row.attachmentId}”` : row.attachmentName || row.attachmentId}
 										</Text>
 										<Text fontSize="xs" opacity={0.6}>
-											{row.attachmentPurpose || 'unknown'} · owner {row.attachmentOwnerId.slice(0, 8)}…
+											{row.targetKind === 'text' ? `${row.attachmentPurpose || 'post'} text` : row.attachmentPurpose || 'unknown'} · owner{' '}
+											{row.attachmentOwnerId.slice(0, 8)}…
 										</Text>
 									</Td>
 									<Td>
@@ -172,18 +272,20 @@ export const ModerationTab = () => {
 										{row.reviewedBy ? `✅ ${new Date(row.reviewedAt || '').toLocaleDateString()}` : '—'}
 									</Td>
 									<Td whiteSpace="nowrap">
-										<Button
-											as="a"
-											href={`/api/v1/attachments/content?id=${encodeURIComponent(row.attachmentId)}`}
-											target="_blank"
-											rel="noreferrer"
-											size="xs"
-											variant="ghost"
-											mr={1}
-											title="Open the raw media (admin-only for blocked attachments)"
-										>
-											View
-										</Button>
+										{row.targetKind === 'attachment' ? (
+											<Button
+												as="a"
+												href={`/api/v1/attachments/content?id=${encodeURIComponent(row.attachmentId)}`}
+												target="_blank"
+												rel="noreferrer"
+												size="xs"
+												variant="ghost"
+												mr={1}
+												title="Open the raw media (admin-only for blocked attachments)"
+											>
+												View
+											</Button>
+										) : null}
 										<Button size="xs" variant="outline" mr={1} isLoading={busy === `${row.id}:clear`} onClick={() => review(row, 'clear')}>
 											Clear
 										</Button>

@@ -39,6 +39,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Admin AI-moderation settings + free omni text moderation (2026-08-19,
+  Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
+  card choosing the provider per surface — media uploads (default / tiered /
+  free openai-only / claude / off) and post/comment text (default / free
+  openai / off) — stored under `Thingtime.ModerationSettings` and overriding
+  the env default. New text pipeline: post/comment/share `crystal.text` is
+  screened by the free omni endpoint on create and on edit; block-worthy
+  categories quarantine the thing (hidden from feeds/threads/search via
+  `canView` + thread loading), other flags queue an advisory `moderationFlag`
+  with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
+  and its stamps are final for the pipeline.
+
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean
   merges collide semantically (duplicate helpers declared by two PRs), repairs

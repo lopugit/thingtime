@@ -935,14 +935,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/admin/moderation',
     summary: 'Review NSFW/TOS moderation flags, override verdicts, and sweep unanalyzed media (admin only).',
     detail:
-      'GET returns the moderationFlag review queue (newest unreviewed first) plus counts of flags and ready attachments still awaiting analysis. POST with { action: "review", attachmentId, verdict: "clear" | "nsfw" | "block" } overrides the protected moderation stamp — blocked media stops being served immediately (admins can still open it for evidence), cleared media serves again. POST with { action: "sweep" } analyzes a bounded batch of ready attachments the async pipeline missed; run repeatedly to drain.',
+      'GET returns the moderationFlag review queue (newest unreviewed first; media AND post/comment-text flags, text rows carry a bounded excerpt), counts of flags and ready attachments still awaiting analysis, plus the Admin AI-moderation settings ({ settings, effective }). POST with { action: "review", attachmentId, verdict: "clear" | "nsfw" | "block", targetKind?: "attachment" | "text" } overrides the protected moderation stamp — blocked media/text stops being served immediately (admins can still open media for evidence), cleared content serves again. POST with { action: "sweep" } analyzes a bounded batch of ready attachments the async pipeline missed; run repeatedly to drain. POST with { action: "settings", settings: { mediaProvider, textProvider } } saves the per-surface AI provider choices (mediaProvider: default | openai+claude | openai | claude | off; textProvider: default | openai | off) — an admin choice overrides the THINGTIME_MODERATION_PROVIDER env default.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: [
       'GET to load flags + counts for the /admin Moderation tab.',
       'POST { action: "review", attachmentId, verdict } to override a verdict; the flag records reviewedBy/reviewedAt.',
       'POST { action: "sweep" } after deploys or provider outages to analyze pending/unstamped ready attachments.',
-      'Non-admins receive 403; unknown attachmentId 404; invalid verdict/action 400.'
+      'POST { action: "settings", settings } to pick which AI runs media and text moderation; GET echoes the saved choices plus what each surface effectively runs.',
+      'Non-admins receive 403; unknown attachmentId 404; invalid verdict/action/settings 400.'
     ],
     requestExamples: [
       {
@@ -961,6 +962,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Analyze a bounded batch of unanalyzed ready attachments.',
         method: 'POST',
         body: { action: 'sweep' }
+      },
+      {
+        name: 'Use free omni moderation everywhere',
+        description: 'Point both surfaces at OpenAI omni-moderation.',
+        method: 'POST',
+        body: { action: 'settings', settings: { mediaProvider: 'openai', textProvider: 'openai' } }
       }
     ],
     responseExamples: [
