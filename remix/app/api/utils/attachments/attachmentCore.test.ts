@@ -8,6 +8,8 @@ import {
 	attachmentObjectSizeBytesForAccounting,
 	isAttachmentFinalizationLeaseId,
 	isAttachmentObjectVersionId,
+	orderAttachmentDocsByStoredSort,
+	planAttachmentReorder,
 	sanitizeAttachmentPublicMetadata,
 	toAttachmentPublicMetadata
 } from './attachmentCore.ts';
@@ -183,4 +185,52 @@ test('only an exact server envelope contributes object bytes', () => {
 		null,
 		'a sniffed display type may never accompany an inline-served contentType'
 	);
+});
+
+test('stored sort order wins over createdAt order; legacy unstamped docs keep their place after stamped ones', () => {
+	const docs = [
+		{ shareId: 'a', attachmentSortIndex: 2 },
+		{ shareId: 'b', attachmentSortIndex: 0 },
+		{ shareId: 'c', attachmentSortIndex: 1 }
+	];
+	assert.deepEqual(
+		orderAttachmentDocsByStoredSort(docs).map((doc) => doc.shareId),
+		['b', 'c', 'a']
+	);
+	// legacy docs (no stamp) sort after stamped ones, preserving incoming
+	// (createdAt) order between themselves; corrupt stamps count as unstamped
+	const mixed = [
+		{ shareId: 'old-1' },
+		{ shareId: 'new-1', attachmentSortIndex: 1 },
+		{ shareId: 'old-2', attachmentSortIndex: -3 },
+		{ shareId: 'new-2', attachmentSortIndex: 0 }
+	];
+	assert.deepEqual(
+		orderAttachmentDocsByStoredSort(mixed).map((doc) => doc.shareId),
+		['new-2', 'new-1', 'old-1', 'old-2']
+	);
+	// input order is never mutated in place
+	assert.deepEqual(
+		docs.map((doc) => doc.shareId),
+		['a', 'b', 'c']
+	);
+});
+
+test('an attachment reorder must be a pure permutation of the bound set', () => {
+	assert.deepEqual(planAttachmentReorder(['b', 'a'], ['a', 'b'], 25), { ok: true, orderedIds: ['b', 'a'] });
+	assert.deepEqual(planAttachmentReorder([], [], 25), { ok: true, orderedIds: [] });
+	// set changes are not reorders
+	assert.equal(planAttachmentReorder(['a'], ['a', 'b'], 25).ok, false);
+	assert.equal(planAttachmentReorder(['a', 'b', 'c'], ['a', 'b'], 25).ok, false);
+	assert.equal(planAttachmentReorder(['a', 'c'], ['a', 'b'], 25).ok, false);
+	const missing = planAttachmentReorder(['a'], ['a', 'b'], 25);
+	assert.equal(missing.ok === false && missing.status, 409);
+	// malformed ids and duplicates fail as bad requests
+	const duplicate = planAttachmentReorder(['a', 'a'], ['a'], 25);
+	assert.equal(duplicate.ok === false && duplicate.status, 400);
+	assert.equal(planAttachmentReorder([''], [''], 25).ok, false);
+	assert.equal(planAttachmentReorder([' a'], ['a'], 25).ok, false);
+	assert.equal(planAttachmentReorder([42], ['42'], 25).ok, false);
+	const overCap = planAttachmentReorder(['a', 'b', 'c'], ['a', 'b', 'c'], 2);
+	assert.equal(overCap.ok === false && overCap.status, 400);
 });

@@ -230,6 +230,47 @@ export const toAttachmentPublicMetadata = (id: unknown, crystal: unknown): Attac
 	return typeof id === 'string' && id && canonical ? { id, ...canonical } : null;
 };
 
+// The owner-chosen display position, stamped on each bound attachment thing at
+// bind/reorder time. Order is per-target state on the child docs (relational,
+// like every appended thing) — the parent post never stores an id list.
+export const attachmentStoredSortValue = (value: unknown): number =>
+	typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : Number.MAX_SAFE_INTEGER;
+
+// Display order for one target's bound attachments. Callers pass docs already
+// sorted by (createdAt, shareId); this stable sort applies the stamped index
+// and leaves legacy unstamped docs in that createdAt order after stamped ones.
+export const orderAttachmentDocsByStoredSort = <T extends { attachmentSortIndex?: unknown }>(docs: readonly T[]): T[] =>
+	[...docs].sort((left, right) => attachmentStoredSortValue(left.attachmentSortIndex) - attachmentStoredSortValue(right.attachmentSortIndex));
+
+export type AttachmentReorderPlan = { ok: true; orderedIds: string[] } | { ok: false; status: 400 | 409; error: string };
+
+// A reorder must be a pure permutation of the target's currently-bound
+// attachment ids — same set, new order. Additions and removals stay
+// create/delete operations, never a side effect of sorting.
+export const planAttachmentReorder = (
+	requestedIds: readonly unknown[],
+	boundIds: readonly string[],
+	maxAttachments: number
+): AttachmentReorderPlan => {
+	const orderedIds: string[] = [];
+	for (const value of requestedIds) {
+		const id = typeof value === 'string' ? value.trim() : '';
+		if (!id || id !== value) return { ok: false, status: 400, error: 'Invalid attachment id' };
+		orderedIds.push(id);
+	}
+	if (orderedIds.length > maxAttachments) {
+		return { ok: false, status: 400, error: `A post can contain at most ${maxAttachments} attachments` };
+	}
+	if (new Set(orderedIds).size !== orderedIds.length) {
+		return { ok: false, status: 400, error: 'attachmentIds cannot repeat an attachment' };
+	}
+	const bound = new Set(boundIds);
+	if (orderedIds.length !== bound.size || orderedIds.some((id) => !bound.has(id))) {
+		return { ok: false, status: 409, error: 'The attachments on this post changed — refresh and reorder again' };
+	}
+	return { ok: true, orderedIds };
+};
+
 // undefined means "not an attachment" and therefore contributes no object
 // bytes. null means an attachment claim with an invalid server envelope; that
 // is never safe for current-stamp arithmetic or reconciliation. A number is the
