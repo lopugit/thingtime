@@ -38,7 +38,7 @@ type ModerationFlagRow = {
 
 type ModerationOverview = {
 	flags: ModerationFlagRow[];
-	counts: { flags: number; unanalyzedReady: number };
+	counts: { flags: number; unanalyzedReady: number; unmoderatedText: number };
 	settings?: ModerationSettings;
 	effective?: { media: string; text: string };
 };
@@ -63,7 +63,7 @@ export const ModerationTab = () => {
 		try {
 			const resp = await apiRef.current.v1.admin.moderation();
 			if (resp?.ok) {
-				setOverview({ flags: resp.flags || [], counts: resp.counts || { flags: 0, unanalyzedReady: 0 } });
+				setOverview({ flags: resp.flags || [], counts: resp.counts || { flags: 0, unanalyzedReady: 0, unmoderatedText: 0 } });
 				if (resp.settings) setSettingsDraft(resp.settings);
 				if (resp.effective) setEffective(resp.effective);
 				setError(null);
@@ -108,8 +108,10 @@ export const ModerationTab = () => {
 			const resp = await apiRef.current.v1.admin.moderationSweep();
 			if (resp?.ok) {
 				const sweep = resp.sweep || {};
+				const textSweep = resp.textSweep || {};
+				const textLine = textSweep.skippedOff ? 'text: off' : `text: ${textSweep.analyzed ?? 0} analyzed, ${textSweep.flagged ?? 0} flagged`;
 				lopu({
-					title: `Sweep: ${sweep.analyzed ?? 0} analyzed, ${sweep.flagged ?? 0} flagged, ${sweep.skipped ?? 0} skipped, ${sweep.failed ?? 0} failed`,
+					title: `Sweep — media: ${sweep.analyzed ?? 0} analyzed, ${sweep.flagged ?? 0} flagged, ${sweep.failed ?? 0} failed · ${textLine}`,
 					status: 'success'
 				});
 				await refresh();
@@ -205,7 +207,9 @@ export const ModerationTab = () => {
 			</Box>
 			<Flex alignItems="center" columnGap={3} rowGap={2} flexWrap="wrap" mb={3}>
 				<Text fontSize="sm" opacity={0.75}>
-					{overview ? `${overview.counts.flags} flag(s) · ${overview.counts.unanalyzedReady} ready attachment(s) awaiting analysis` : '…'}
+					{overview
+						? `${overview.counts.flags} flag(s) · ${overview.counts.unanalyzedReady} attachment(s) + ${overview.counts.unmoderatedText} text post(s) awaiting analysis`
+						: '…'}
 				</Text>
 				<Button size="xs" variant="outline" marginLeft="auto" isLoading={busy === 'sweep'} onClick={runSweep} title="Analyze a batch of attachments the async pipeline missed">
 					Run analysis sweep

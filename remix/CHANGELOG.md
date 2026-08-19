@@ -49,7 +49,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   categories quarantine the thing (hidden from feeds/threads/search via
   `canView` + thread loading), other flags queue an advisory `moderationFlag`
   with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
-  and its stamps are final for the pipeline.
+  and its stamps are final for the pipeline. A new hourly cron
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
+  29) retries text moderation lost to mid-flight process deaths or provider
+  outages and drains off-era backlog for free, plus the standard attachment
+  sweep; the admin sweep button runs both batches and the tab shows the text
+  backlog count.
 
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean

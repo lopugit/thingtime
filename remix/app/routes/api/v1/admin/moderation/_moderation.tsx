@@ -8,6 +8,7 @@ import {
 	reviewAttachmentModeration,
 	reviewTextModeration,
 	sweepUnanalyzedAttachments,
+	sweepUnmoderatedTextThings,
 	updateModerationSettings
 } from '~/api/utils/moderation/moderationAdmin';
 
@@ -20,8 +21,9 @@ import {
 //     — override the pipeline's verdict; blocked media/text stops being
 //       served immediately, cleared media/text serves again. 'text' rows
 //       review the post/comment thing the flag points at.
-//   { action: 'sweep' } — analyze up to a bounded batch of ready attachments
-//     the async kickoff missed (pending/unstamped); run repeatedly to drain.
+//   { action: 'sweep' } — analyze a bounded batch of ready attachments AND a
+//     bounded batch of unmoderated post/comment text the async kickoffs
+//     missed; run repeatedly to drain (the hourly cron does this too).
 //   { action: 'settings', settings: { mediaProvider, textProvider } }
 //     — save the Admin AI-moderation provider choices (validated strictly).
 export const loader = async ({ request }: { request: Request }) =>
@@ -41,7 +43,9 @@ export const action = async ({ request }: { request: Request }) =>
 		const actionKind = typeof body?.action === 'string' ? body.action : '';
 
 		if (actionKind === 'sweep') {
-			return json({ ok: true, sweep: await sweepUnanalyzedAttachments() });
+			const sweep = await sweepUnanalyzedAttachments();
+			const textSweep = await sweepUnmoderatedTextThings();
+			return json({ ok: true, sweep, textSweep });
 		}
 
 		if (actionKind === 'settings') {

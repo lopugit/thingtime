@@ -677,6 +677,16 @@ an advisory `moderationFlag` (with a bounded text excerpt as evidence) for
 the admin review queue without hiding the content. Edited text is re-screened;
 admin review verdicts are final until an admin changes them.
 
+A scheduled safety net (`GET /api/v1/moderation/sweep`, Vercel Cron at minute
+29 each hour, `CRON_SECRET` bearer — same contract as the attachments cleanup
+cron) retries moderation the fire-and-forget kickoffs lost: post-family things
+with real text and no moderation stamp (process death between the post write
+and the verdict stamp, provider outages) plus the standard ready-attachment
+sweep. Because the omni screen is free, the same job also gradually drains any
+backlog from periods when text moderation was off; it no-ops while the text
+surface is off. The `/admin` → Moderation "Run analysis sweep" button drains
+the same batches on demand and shows the text backlog count.
+
 Posts, comments and replies, Messenger messages and thread replies, custom
 reaction emoji, and profile avatar/banner images use direct, checksummed
 multipart uploads to a private S3 bucket. The browser receives short-lived part

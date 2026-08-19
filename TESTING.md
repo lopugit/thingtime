@@ -309,6 +309,11 @@ is fixed, and cite the checklist you ran in the PR description.
       creation and a `text` flag row (with excerpt, no View button) appears in
       `/admin` → Moderation; Clear restores the post, Block re-hides it.
       Editing a clean post to add flagged text re-screens it.
+- [ ] Text sweep safety net: with text moderation on, manually strip the
+      `moderation` field from a flagged post (simulating a mid-flight death),
+      then hit `/api/v1/moderation/sweep` with the CRON_SECRET bearer (or the
+      admin Run analysis sweep button) — the post gets stamped/flagged and the
+      "text post(s) awaiting analysis" count in `/admin` → Moderation drops.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
