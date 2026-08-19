@@ -296,6 +296,18 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Feed, profile, nested repost, and permalink cards render vetted raster
       images and videos inline. SVG, HTML, script, and unknown types render only
       as named download rows; their bytes never execute inline.
+- [ ] Upload a QuickTime screen recording (a `.mov`, or a QuickTime container
+      misnamed `.mp4` — check for `ftypqt` magic bytes) plus an MKV or M4V.
+      Each finalizes as its sniffed `video/*` type and plays inline in feed and
+      permalink cards; the decision follows magic bytes, never the filename
+      extension.
+- [ ] Upload a non-web-playable container (for example an AVI) and confirm its
+      download row labels the real sniffed container (for example "AVI video"
+      from `detectedContentType`) instead of `application/octet-stream`, while
+      the bytes still download as opaque octet-stream.
+- [ ] In a browser missing the codec inside an allowed container (for example
+      HEVC QuickTime in Firefox), the failed `<video>` degrades to the named
+      download row instead of an inert black player.
 - [ ] Let a content URL expire at the storage provider and open the attachment
       again: the stable authenticated `/api/v1/attachments/content?id=…` route
       issues fresh access. A private post's attachment fails closed for another

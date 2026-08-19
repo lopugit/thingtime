@@ -23,21 +23,69 @@ test('attachment projection exposes only canonical public metadata', () => {
 		mediaKind: 'image'
 	});
 	assert.deepEqual(Object.keys(projected).sort(), ['contentType', 'id', 'mediaKind', 'name', 'size']);
+	assert.deepEqual(
+		attachmentPublicProjection('attachment-2', {
+			name: 'clip.avi',
+			size: 9,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			detectedContentType: 'video/x-msvideo'
+		}),
+		{
+			id: 'attachment-2',
+			name: 'clip.avi',
+			size: 9,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			detectedContentType: 'video/x-msvideo'
+		}
+	);
 });
 
-test('only the narrow magic-detected raster/video allowlist renders inline', () => {
+test('every browser-playable container renders inline; other sniffed types stay labelled downloads', () => {
 	assert.deepEqual(detectedAttachmentType('image/png', 'fake.svg'), { contentType: 'image/png', mediaKind: 'image' });
-	assert.deepEqual(detectedAttachmentType('video/mp4', 'video.bin'), { contentType: 'video/mp4', mediaKind: 'video' });
+	for (const mime of [
+		'video/3gpp',
+		'video/3gpp2',
+		'video/mp4',
+		'video/ogg',
+		'video/quicktime',
+		'video/webm',
+		'video/x-m4v',
+		'video/x-matroska'
+	]) {
+		assert.deepEqual(detectedAttachmentType(mime, 'video.bin'), { contentType: mime, mediaKind: 'video' }, mime);
+	}
 	assert.deepEqual(detectedAttachmentType('image/svg+xml', 'active.svg'), {
 		contentType: 'application/octet-stream',
-		mediaKind: 'file'
+		mediaKind: 'file',
+		detectedContentType: 'image/svg+xml'
 	});
 	assert.deepEqual(detectedAttachmentType('text/html', 'active.html'), {
 		contentType: 'application/octet-stream',
-		mediaKind: 'file'
+		mediaKind: 'file',
+		detectedContentType: 'text/html'
 	});
+	assert.deepEqual(detectedAttachmentType('video/x-msvideo', 'clip.avi'), {
+		contentType: 'application/octet-stream',
+		mediaKind: 'file',
+		detectedContentType: 'video/x-msvideo'
+	});
+	assert.deepEqual(detectedAttachmentType(undefined, 'unknown.mov'), { contentType: 'application/octet-stream', mediaKind: 'file' });
+	assert.deepEqual(detectedAttachmentType('not a mime type', 'weird.bin'), { contentType: 'application/octet-stream', mediaKind: 'file' });
 	assert.equal(attachmentMayRenderInline({ name: 'x', size: 1, contentType: 'image/png', mediaKind: 'image' }), true);
+	assert.equal(attachmentMayRenderInline({ name: 'x', size: 1, contentType: 'video/quicktime', mediaKind: 'video' }), true);
 	assert.equal(attachmentMayRenderInline({ name: 'x', size: 1, contentType: 'image/svg+xml', mediaKind: 'image' }), false);
+	assert.equal(
+		attachmentMayRenderInline({
+			name: 'x',
+			size: 1,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			detectedContentType: 'video/x-msvideo'
+		}),
+		false
+	);
 });
 
 test('content disposition neutralizes active filename syntax while retaining UTF-8 name', () => {

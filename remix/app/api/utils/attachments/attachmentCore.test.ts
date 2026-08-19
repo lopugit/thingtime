@@ -49,6 +49,9 @@ test('attachment metadata is canonical, bounded, and derives a safe media kind',
 	assert.equal(attachmentMediaKindForContentType('image/svg+xml'), 'file');
 	assert.equal(attachmentMediaKindForContentType('text/html'), 'file');
 	assert.equal(attachmentMediaKindForContentType('video/mp4'), 'video');
+	assert.equal(attachmentMediaKindForContentType('video/quicktime'), 'video');
+	assert.equal(attachmentMediaKindForContentType('video/x-matroska'), 'video');
+	assert.equal(attachmentMediaKindForContentType('video/x-msvideo'), 'file');
 	assert.equal(attachmentMediaKindForContentType('audio/mpeg'), 'audio');
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad\0name', size: 1, contentType: 'text/plain' }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad\ud800name', size: 1, contentType: 'text/plain' }).ok, false);
@@ -61,6 +64,18 @@ test('attachment metadata is canonical, bounded, and derives a safe media kind',
 		contentType: 'image/png',
 		mediaKind: 'image'
 	});
+	const opaqueCrystal = {
+		name: 'clip.avi',
+		size: 42,
+		contentType: 'application/octet-stream',
+		mediaKind: 'file',
+		detectedContentType: 'video/x-msvideo'
+	};
+	assert.deepEqual(toAttachmentPublicMetadata('attachment-id', opaqueCrystal), { id: 'attachment-id', ...opaqueCrystal });
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...opaqueCrystal, contentType: 'video/mp4', mediaKind: 'video' }), null);
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...opaqueCrystal, detectedContentType: 'application/octet-stream' }), null);
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...opaqueCrystal, detectedContentType: 'VIDEO/X-MSVIDEO' }), null);
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...opaqueCrystal, detectedContentType: 42 }), null);
 });
 
 test('every lifecycle state remains a valid billable attachment envelope', () => {
@@ -143,5 +158,29 @@ test('only an exact server envelope contributes object bytes', () => {
 		attachmentObjectSizeBytesForAccounting(attachment({ crystal: { name: 'photo.png', size: 42, contentType: 'image/png', mediaKind: 'file' } })),
 		null,
 		'a caller cannot forge an inline-safe media kind or a noncanonical crystal'
+	);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(
+			attachment({
+				crystal: {
+					name: 'clip.avi',
+					size: 42,
+					contentType: 'application/octet-stream',
+					mediaKind: 'file',
+					detectedContentType: 'video/x-msvideo'
+				}
+			})
+		),
+		42,
+		'a sniffed display type on an opaque download remains a canonical billable crystal'
+	);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(
+			attachment({
+				crystal: { name: 'clip.mp4', size: 42, contentType: 'video/mp4', mediaKind: 'video', detectedContentType: 'video/x-msvideo' }
+			})
+		),
+		null,
+		'a sniffed display type may never accompany an inline-served contentType'
 	);
 });

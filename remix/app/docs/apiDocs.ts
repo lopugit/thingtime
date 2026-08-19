@@ -2556,7 +2556,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		summary: 'Verifies every S3 part and publishes canonical attachment metadata idempotently.',
 		detail:
 			'The server lists parts itself, requires consecutive numbers, exact expected sizes, ETags, and SHA-256 checksums, then completes and HEAD-verifies the object. ' +
-			'It reads only a small prefix to detect a narrow inline-safe raster/video type. Active and generic formats stay application/octet-stream downloads. Repeating a successful request is safe.',
+			'It reads only a small prefix to detect an inline-safe raster/video type (AVIF/GIF/JPEG/PNG/WebP images; MP4, WebM, QuickTime, M4V, Ogg, 3GPP, 3GPP2, and Matroska video). ' +
+			'Active and generic formats stay application/octet-stream downloads, with the sniffed container preserved as detectedContentType display metadata when one was recognized. Repeating a successful request is safe.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
@@ -2565,7 +2566,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'Wait for every direct S3 PUT to succeed.',
 			'POST the uploadId; do not send browser-trusted ETags or sizes.',
-			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata.',
+			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata (plus detectedContentType when the object stays a generic download).',
 			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields.'
 		],
 		requestExamples: [
@@ -2674,7 +2675,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
-			'Only magic-byte-verified AVIF/GIF/JPEG/PNG/WebP and MP4/WebM may render inline. Add download=1 to force attachment/octet-stream for every type.',
+			'Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
 		auth: {
 			mode: 'optional',
 			description:
