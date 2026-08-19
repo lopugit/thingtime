@@ -5175,8 +5175,8 @@
     "semantic_hash": "2819e803e8f12d24e9d95898573d80a4"
   },
   "Commander/apps/daemon/src/services/persistence.test.ts": {
-    "mtime": 1787121023.3795953,
-    "ast_hash": "30f678eb97125dcc3378ea1e4a845de9",
+    "mtime": 1787126109.926488,
+    "ast_hash": "327e928be5ff1e08ff91536ff51211c8",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/persistence.ts": {
@@ -5290,8 +5290,8 @@
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Settings.test.tsx": {
-    "mtime": 1787122307.9874065,
-    "ast_hash": "b670c4b4945364e3ed5763bb8318bbc8",
+    "mtime": 1787126697.9999619,
+    "ast_hash": "62fa130deff53331ed4f7cd075d99022",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Settings.tsx": {
@@ -5720,8 +5720,8 @@
     "semantic_hash": "0ce06d40e2d7a57e255d7ef9279abd74"
   },
   "Commander/packages/protocol/src/index.ts": {
-    "mtime": 1787123362.2601295,
-    "ast_hash": "dc3915e6080752ba64a15c197f251b9b",
+    "mtime": 1787126109.9261103,
+    "ast_hash": "ebe3a72bd6f4c60dc0571926d847b0bf",
     "semantic_hash": ""
   },
   "Commander/packages/protocol/tsconfig.json": {
@@ -5845,13 +5845,13 @@
     "semantic_hash": "844210d487b558804d922d7ac0c53dfa"
   },
   "Commander/ARCHITECTURE.md": {
-    "mtime": 1787124011.7071478,
-    "ast_hash": "7f5446e54ea2eafa0151a21d40260438",
+    "mtime": 1787126774.9489608,
+    "ast_hash": "4c9f65b9409234c07ff5c0a22093f927",
     "semantic_hash": ""
   },
   "Commander/README.md": {
-    "mtime": 1787124006.0539348,
-    "ast_hash": "c033e4f7ba63bcb88268e002651b9955",
+    "mtime": 1787125366.0684683,
+    "ast_hash": "4ade6ee73907b340c8a0ebcd51d7ed5a",
     "semantic_hash": ""
   },
   "Commander/THIRD_PARTY_NOTICES.md": {
@@ -5890,8 +5890,8 @@
     "semantic_hash": "93ddb38e56f070bff77ef65919622aad"
   },
   "Commander/docs/TESTING.md": {
-    "mtime": 1787124015.4110389,
-    "ast_hash": "3149d4af700f9ba7357912336cdd230e",
+    "mtime": 1787126307.1764164,
+    "ast_hash": "58f3b9fa1dce72ffbcd3233ce78e122c",
     "semantic_hash": ""
   },
   "Commander/extensions/README.md": {
@@ -5940,8 +5940,8 @@
     "semantic_hash": "2147477c215b8b3975078ace39bca6e2"
   },
   "PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md": {
-    "mtime": 1787124327.8067079,
-    "ast_hash": "77ba8b815b9a463e6d48fe4ed24c64b0",
+    "mtime": 1787126920.9924202,
+    "ast_hash": "ae0c08029aac00d4a389caa14838359d",
     "semantic_hash": ""
   },
   "Commander/design/commander-app-icon.png": {
@@ -6590,23 +6590,23 @@
     "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
   },
   "Commander/apps/daemon/src/services/indexing.test.ts": {
-    "mtime": 1787120924.186974,
-    "ast_hash": "5589b371f3a44475e780ba12dfbf7088",
+    "mtime": 1787125337.263938,
+    "ast_hash": "09e25cf3a6b066ed8a66e16bc1751f6c",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/indexing.ts": {
-    "mtime": 1787123957.2438705,
-    "ast_hash": "ec7b60a4940c75cf44a4206bf14980a7",
+    "mtime": 1787126386.2084427,
+    "ast_hash": "068dea4999b97c32cc31d5ebee1b852f",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/IndexingSettings.tsx": {
-    "mtime": 1787124029.6682231,
-    "ast_hash": "ebd59f530bd086219087db51d22de555",
+    "mtime": 1787126706.0814347,
+    "ast_hash": "161b4cc57792eb0e84863259009eae18",
     "semantic_hash": ""
   },
   "Commander/crates/commander-indexer/src/lib.rs": {
-    "mtime": 1787123669.5924096,
-    "ast_hash": "343d7eb437ad2b611fbf7626c405f355",
+    "mtime": 1787126743.1700404,
+    "ast_hash": "939782932ee2276b279be0a5e2a583dc",
     "semantic_hash": ""
   },
   "Commander/crates/commander-indexer/src/main.rs": {
@@ -6615,8 +6615,8 @@
     "semantic_hash": ""
   },
   "Commander/crates/commander-indexer/tests/jsonl.rs": {
-    "mtime": 1787122571.6470134,
-    "ast_hash": "04014ccf8fe50c14a7d0a3efd8e05f5b",
+    "mtime": 1787126230.4592097,
+    "ast_hash": "41becbd4e57fb5b18bab87c5b3733f9c",
     "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/package.json": {
@@ -6625,18 +6625,18 @@
     "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/src/index.test.ts": {
-    "mtime": 1787123957.244726,
-    "ast_hash": "d74707c9be4c10a936fd87509d7ae751",
+    "mtime": 1787125269.8582962,
+    "ast_hash": "5c1f2e7e18ea22367abd9dc3d1c5b907",
     "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/src/index.ts": {
-    "mtime": 1787120800.3601706,
-    "ast_hash": "59dcfdaf6978f3e29169f81803af3c50",
+    "mtime": 1787125084.8386838,
+    "ast_hash": "5701b19c903118090e01a489cec5058a",
     "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/src/test-fixtures/fake-indexer.mjs": {
-    "mtime": 1787123957.2443256,
-    "ast_hash": "2acf81ddee3eb62b407200a162de236b",
+    "mtime": 1787125269.857677,
+    "ast_hash": "bb178881f870b212cb0a82f75653b322",
     "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/tsconfig.json": {
@@ -6645,18 +6645,23 @@
     "semantic_hash": ""
   },
   "Commander/packages/protocol/src/index.test.ts": {
-    "mtime": 1787123362.2604706,
-    "ast_hash": "9e6c56e779314f86dbefde65aaf2e3c4",
+    "mtime": 1787125094.8979268,
+    "ast_hash": "bb834017ef827110bd14a760ed2b4f5d",
     "semantic_hash": ""
   },
   "Commander/crates/commander-indexer/README.md": {
-    "mtime": 1787122707.1862688,
-    "ast_hash": "17036d0d9b709870629080f316c39763",
+    "mtime": 1787126920.9920428,
+    "ast_hash": "d6d71b8008c50abc7524fd92b58652c5",
     "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/README.md": {
-    "mtime": 1787120199.093656,
-    "ast_hash": "72ca96c8f804c01015c5bfe264ca7159",
+    "mtime": 1787126109.927083,
+    "ast_hash": "40b7eadd930122ff7ab6355077223b73",
+    "semantic_hash": ""
+  },
+  "Commander/crates/commander-indexer/src/resources.rs": {
+    "mtime": 1787126770.3621342,
+    "ast_hash": "f2c186de44e1c08ce0dc3bcea51ecddc",
     "semantic_hash": ""
   }
 }
