@@ -26,3 +26,21 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Commander filesystem indexer dependencies
+
+The bundled `commander-indexer` binary statically includes SQLite through
+`libsqlite3-sys`/`rusqlite` and uses the Rust `ignore`, `globset`, and `regex`
+crates. Exact resolved versions are recorded in
+`crates/commander-indexer/Cargo.lock`.
+
+- SQLite is in the public domain: https://sqlite.org/copyright.html
+- rusqlite is licensed under MIT: https://github.com/rusqlite/rusqlite
+- ignore and globset are dual-licensed under Unlicense or MIT:
+  https://github.com/BurntSushi/ripgrep
+- regex is dual-licensed under MIT or Apache-2.0:
+  https://github.com/rust-lang/regex
+
+The complete license texts for resolved Rust crates are available from their
+upstream source distributions and must remain included by any downstream app
+that redistributes the standalone indexer.

@@ -6,6 +6,7 @@ import { AccountSettings } from './AccountSettings.js';
 import { CloudSyncSettings } from './CloudSyncSettings.js';
 import { ExtensionsSettings } from './ExtensionsSettings.js';
 import { GeneralSettings } from './GeneralSettings.js';
+import { IndexingSettings } from './IndexingSettings.js';
 import { beginWindowDrag } from '../lib/nativeBridge.js';
 
 const tabs: Array<{ id: SettingsTab; title: string; Icon: typeof Settings2 }> = [
@@ -90,6 +91,7 @@ export function Settings({ state }: { state: CommanderState }) {
           <AdvancedSettings
             settings={bootstrap.settings}
             onChange={(next) => void state.saveSettings(next)}
+            onError={state.reportError}
           />
         ) : null}
         {tab === 'about' ? <AboutSettings platform={bootstrap.platform} /> : null}
@@ -106,9 +108,11 @@ export function Settings({ state }: { state: CommanderState }) {
 function AdvancedSettings({
   settings,
   onChange,
+  onError,
 }: {
   settings: CommanderSettings;
   onChange(next: CommanderSettings): void;
+  onError(value: string | null): void;
 }) {
   const [baseUrl, setBaseUrl] = useState(settings.thingtimeBaseUrl);
   const [clientId, setClientId] = useState(settings.thingtimeClientId);
@@ -166,6 +170,7 @@ function AdvancedSettings({
           </span>
         </div>
       </div>
+      <IndexingSettings settings={settings} onChange={onChange} onError={onError} />
     </div>
   );
 }

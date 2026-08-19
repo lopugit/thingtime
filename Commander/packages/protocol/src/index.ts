@@ -5,15 +5,45 @@ export const RECENT_SEARCH_STORAGE_LIMIT = 50;
 export const RECENT_SEARCH_COMMAND_LIMIT = 8;
 export const RECENT_SEARCH_MAX_LENGTH = 256;
 export const COMMAND_SHORTCUT_LIMIT = 256;
+export const INDEXING_ROOT_LIMIT = 32;
+export const INDEXING_IGNORE_RULE_LIMIT = 256;
+export const INDEXING_MAX_ENTRIES_LIMIT = 10_000_000;
+
+const LEGACY_DEFAULT_INDEXING_GLOBS = [
+  'Library/**',
+  '**/.git/**',
+  '**/node_modules/**',
+  '**/.Trash/**',
+  '**/.cache/**',
+] as const;
+const DEFAULT_NOINDEX_GLOB = '**/*.noindex/**';
+const LEGACY_DEFAULT_INDEXING_MAX_ENTRIES = 2_000_000;
 
 export type Platform = 'macos' | 'windows' | 'linux';
 export type Appearance = 'light' | 'dark' | 'system';
 export type WindowMode = 'default' | 'compact';
 export type TextSize = 'default' | 'large';
-export type SearchItemKind = 'builtin' | 'system' | 'application' | 'extension' | 'command' | 'quicklink';
+export type SearchItemKind =
+  'builtin' | 'system' | 'application' | 'file' | 'directory' | 'extension' | 'command' | 'quicklink';
 export type SettingsTab = 'general' | 'extensions' | 'sync' | 'account' | 'advanced' | 'about';
 export type CommanderViewId = 'emoji-symbols';
 export type CommandShortcutMap = Record<string, string>;
+export type IndexKind = 'application' | 'file' | 'directory';
+export type IndexScope = 'all' | 'applications' | 'commands' | 'files' | 'directories';
+export type IndexIgnoreRuleKind = 'glob' | 'regex';
+
+export const DEFAULT_INDEXING_SETTINGS: IndexingSettings = {
+  enabled: true,
+  roots: ['~'],
+  respectGitIgnore: true,
+  includeHidden: false,
+  customIgnores: [
+    ...LEGACY_DEFAULT_INDEXING_GLOBS.map((pattern) => ({ kind: 'glob' as const, pattern })),
+    { kind: 'glob', pattern: DEFAULT_NOINDEX_GLOB },
+  ],
+  refreshIntervalMinutes: 6 * 60,
+  maxEntries: 500_000,
+};
 
 export const SETTINGS_TABS = [
   'general',
@@ -47,6 +77,8 @@ const SEARCH_ITEM_KINDS = new Set<SearchItemKind>([
   'builtin',
   'system',
   'application',
+  'file',
+  'directory',
   'extension',
   'command',
   'quicklink',
@@ -167,6 +199,75 @@ export function normalizeCommandShortcuts(value: unknown): CommandShortcutMap {
   return shortcuts;
 }
 
+export function normalizeIndexingSettings(value: unknown): IndexingSettings {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const candidate = source as Partial<IndexingSettings>;
+  const roots = Array.isArray(candidate.roots)
+    ? candidate.roots
+        .filter((root): root is string => typeof root === 'string')
+        .map((root) => root.trim().slice(0, 4_096))
+        .filter(Boolean)
+        .filter((root, index, values) => values.indexOf(root) === index)
+        .slice(0, INDEXING_ROOT_LIMIT)
+    : [];
+  const customIgnores = Array.isArray(candidate.customIgnores)
+    ? candidate.customIgnores
+        .filter((rule): rule is IndexIgnoreRule =>
+          Boolean(
+            rule &&
+            typeof rule === 'object' &&
+            (rule.kind === 'glob' || rule.kind === 'regex') &&
+            typeof rule.pattern === 'string' &&
+            rule.pattern.trim(),
+          ),
+        )
+        .map((rule) => ({ kind: rule.kind, pattern: rule.pattern.trim().slice(0, 2_048) }))
+        .slice(0, INDEXING_IGNORE_RULE_LIMIT)
+    : [];
+  const hasLegacyDefaults = LEGACY_DEFAULT_INDEXING_GLOBS.every((pattern) =>
+    customIgnores.some((rule) => rule.kind === 'glob' && rule.pattern === pattern),
+  );
+  if (
+    hasLegacyDefaults &&
+    customIgnores.length < INDEXING_IGNORE_RULE_LIMIT &&
+    !customIgnores.some((rule) => rule.kind === 'glob' && rule.pattern === DEFAULT_NOINDEX_GLOB)
+  ) {
+    customIgnores.push({ kind: 'glob', pattern: DEFAULT_NOINDEX_GLOB });
+  }
+  const refreshIntervalMinutes =
+    candidate.refreshIntervalMinutes === 30 && hasLegacyDefaults
+      ? DEFAULT_INDEXING_SETTINGS.refreshIntervalMinutes
+      : Number.isSafeInteger(candidate.refreshIntervalMinutes)
+        ? Math.min(24 * 60, Math.max(5, candidate.refreshIntervalMinutes!))
+        : DEFAULT_INDEXING_SETTINGS.refreshIntervalMinutes;
+  const maxEntries =
+    candidate.maxEntries === LEGACY_DEFAULT_INDEXING_MAX_ENTRIES && hasLegacyDefaults
+      ? DEFAULT_INDEXING_SETTINGS.maxEntries
+      : Number.isSafeInteger(candidate.maxEntries)
+        ? Math.min(INDEXING_MAX_ENTRIES_LIMIT, Math.max(1_000, candidate.maxEntries!))
+        : DEFAULT_INDEXING_SETTINGS.maxEntries;
+  return {
+    enabled: typeof candidate.enabled === 'boolean' ? candidate.enabled : DEFAULT_INDEXING_SETTINGS.enabled,
+    roots: roots.length ? roots : [...DEFAULT_INDEXING_SETTINGS.roots],
+    respectGitIgnore:
+      typeof candidate.respectGitIgnore === 'boolean'
+        ? candidate.respectGitIgnore
+        : DEFAULT_INDEXING_SETTINGS.respectGitIgnore,
+    includeHidden:
+      typeof candidate.includeHidden === 'boolean'
+        ? candidate.includeHidden
+        : DEFAULT_INDEXING_SETTINGS.includeHidden,
+    customIgnores:
+      Array.isArray(candidate.customIgnores) && candidate.customIgnores.length === 0
+        ? []
+        : customIgnores.length
+          ? customIgnores
+          : DEFAULT_INDEXING_SETTINGS.customIgnores.map((rule) => ({ ...rule })),
+    refreshIntervalMinutes,
+    maxEntries,
+  };
+}
+
 export interface CommanderSettings {
   version: 1;
   openAtLogin: boolean;
@@ -177,12 +278,52 @@ export interface CommanderSettings {
   textSize: TextSize;
   hotkey: string;
   commandShortcuts: CommandShortcutMap;
+  indexing: IndexingSettings;
   activeAccountId: string | null;
   thingtimeBaseUrl: string;
   thingtimeClientId: string;
   syncRevision: number;
   syncUpdatedAt: string | null;
   syncDirty: boolean;
+}
+
+export interface IndexIgnoreRule {
+  kind: IndexIgnoreRuleKind;
+  pattern: string;
+}
+
+export interface IndexingSettings {
+  enabled: boolean;
+  roots: string[];
+  respectGitIgnore: boolean;
+  includeHidden: boolean;
+  customIgnores: IndexIgnoreRule[];
+  refreshIntervalMinutes: number;
+  maxEntries: number;
+}
+
+export interface IndexKindStatus {
+  kind: IndexKind;
+  count: number;
+  lastIndexedAtMs?: number;
+  lastDurationMs?: number;
+  lastError?: string;
+}
+
+export interface IndexingStatus {
+  available: boolean;
+  running: IndexScope[];
+  totalRecords: number;
+  kinds: IndexKindStatus[];
+  commands: {
+    count: number;
+    lastIndexedAtMs?: number;
+  };
+  automaticRefresh: {
+    applicationsMinutes: number;
+    filesystemMinutes: number;
+  };
+  message?: string;
 }
 
 export interface CommanderAccount {
@@ -317,6 +458,7 @@ export interface ExecuteResponse {
   ok: true;
   nativeRequest?: Omit<NativeRequest, 'id'>;
   view?: CommanderView;
+  notice?: string;
 }
 
 export interface NativePasteResult {
@@ -339,6 +481,7 @@ export interface BootstrapResponse {
     secureCredentialStore: boolean;
     openAtLogin: boolean;
     sideloadPicker: boolean;
+    filesystemIndex: boolean;
   };
 }
 
@@ -415,6 +558,11 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   textSize: 'default',
   hotkey: 'Command+Space',
   commandShortcuts: {},
+  indexing: {
+    ...DEFAULT_INDEXING_SETTINGS,
+    roots: [...DEFAULT_INDEXING_SETTINGS.roots],
+    customIgnores: DEFAULT_INDEXING_SETTINGS.customIgnores.map((rule) => ({ ...rule })),
+  },
   activeAccountId: null,
   thingtimeBaseUrl: 'https://thingtime.com',
   thingtimeClientId: COMMANDER_THINGTIME_CLIENT_ID,

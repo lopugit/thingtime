@@ -95,3 +95,18 @@ describe('SearchService Rust failure fallback', () => {
     service.close();
   });
 });
+
+describe('SearchService transient filesystem candidates', () => {
+  it('ranks additional indexed results without mutating the command catalog', async () => {
+    const service = new SearchService();
+    service.setItems(searchableItems);
+    const file = item('indexed:file', 'Quarterly Report');
+    file.kind = 'file';
+    file.path = '/Users/test/Documents/Quarterly Report.pdf';
+
+    await expect(service.search('quarterly', 30, [file])).resolves.toMatchObject([
+      { id: 'indexed:file', kind: 'file' },
+    ]);
+    expect(service.items()).toEqual(searchableItems);
+  });
+});

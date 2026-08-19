@@ -7,7 +7,12 @@ portable from day one.
 ## What works in this milestone
 
 - global Commander shortcut on macOS (defaults to Command-Space; customizable in Settings);
-- application and command search with deterministic Rust fuzzy-search process plus TypeScript fallback;
+- application, command, file, and folder search with deterministic Rust command ranking plus a standalone,
+  persistent Rust filesystem metadata index;
+- automatic application-directory watching with five-minute reconciliation, configurable six-hour file/folder
+  refresh, and built-in Index Now, Index Apps, Index Commands, Index Files, and Index Directories commands;
+- inherited `.gitignore`/Git excludes plus user-defined wildcard and regular-expression ignore rules, editable with
+  index roots and live status in Advanced Settings;
 - per-command global shortcuts with click-to-record bindings in Extensions Settings, native conflict validation,
   and rollback to the previously working shortcut set;
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
@@ -28,7 +33,7 @@ portable from day one.
 - Thingtime desktop OAuth/PKCE, multi-account UI, Keychain token storage, account switching, and private app-data
   settings sync;
 - Swift/AppKit/WKWebView macOS host; C#/.NET 8/WPF/WebView2 Windows host boundary; Linux host contract;
-- a persistent Rust core with stable cross-platform JSON-lines search protocol.
+- persistent Rust command-search and filesystem-index processes with stable cross-platform JSON-lines protocols.
 
 ## Compatibility promise
 
@@ -58,14 +63,14 @@ in [`ARCHITECTURE.md`](ARCHITECTURE.md). The high-level stack is:
 
 - React + TypeScript shared UI;
 - one long-lived Node 22 daemon;
-- a persistent Rust search/indexing process;
+- persistent Rust command-search and standalone SQLite/FTS5 filesystem-index processes;
 - Swift/AppKit + WKWebView on macOS;
 - C#/.NET 8 + WPF + WebView2 on Windows;
 - the same native bridge contract for Linux.
 
 ## Build and run on macOS
 
-Requirements: macOS 14+, Xcode command-line tools, Node 22+, pnpm, and optionally Rust 1.85+.
+Requirements: macOS 14+, Xcode command-line tools, Node 22+, pnpm, and Rust 1.75+.
 
 ```bash
 cd Commander
@@ -73,8 +78,8 @@ corepack pnpm install --frozen-lockfile
 ./script/build_and_run.sh --verify
 ```
 
-The script builds the TypeScript workspaces, builds the Rust core when Cargo is available, builds the Swift host,
-stages and signs `dist/Commander.app`, embeds a checksum-pinned Node 22 runtime, installs it to
+The script builds the TypeScript workspaces and both Rust crates, builds the Swift host, stages and signs
+`dist/Commander.app`, embeds a checksum-pinned Node 22 runtime, installs it to
 `~/Applications/Commander.app`, launches that exact copy, and verifies the signed host owns the reported daemon
 process and health endpoint. The daemon also watches its native parent so a forced host exit cannot leave port 47820
 occupied by an orphaned service.
@@ -94,6 +99,10 @@ Keychain on macOS, Credential Manager on Windows, and Secret Service on Linux. S
 the app-data key `commander.settings.v1`.
 
 The bundled client ID is public by design. Tokens, passwords, and other credentials never belong in this repository.
+
+Whole-home filesystem indexing on macOS requires Full Disk Access for Commander. Advanced → Search Index links
+directly to the system pane; without that permission, use explicitly allowed folders as roots. Commander stops a
+blocked scan after 90 seconds, keeps the prior committed snapshot searchable, and reports actionable guidance.
 
 ## Raycast companion command
 
@@ -121,6 +130,8 @@ corepack pnpm test
 corepack pnpm build
 cargo fmt --check --manifest-path crates/commander-core/Cargo.toml
 cargo test --manifest-path crates/commander-core/Cargo.toml
+cargo fmt --check --manifest-path crates/commander-indexer/Cargo.toml
+cargo test --manifest-path crates/commander-indexer/Cargo.toml
 swift build --package-path hosts/macos
 ./script/build_and_run.sh --verify
 ```

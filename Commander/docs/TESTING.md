@@ -4,6 +4,10 @@
 
 - [ ] Type a misspelling in the root launcher and confirm macOS does not show a correction/replacement popover.
 - [ ] Search for an application or path-backed file/folder and confirm its real Finder icon replaces the generic Commander glyph.
+- [ ] Create a disposable file and folder beneath an indexed root, run Index Files Now and Index Directories Now,
+      then verify both appear in root search with native icons, Open, Show in Finder, Copy Path, and Finder-compatible drag-out.
+- [ ] Search `index now`; verify the built-in Index Now command appears with separate Apps, Commands, Files, and
+      Directories commands. Run Index Apps after installing a disposable app and verify it appears without restarting Commander.
 - [ ] With more results than fit in the launcher, use a mouse wheel or trackpad over the rows and confirm the list scrolls while the header and footer remain fixed.
 
 - [ ] Global shortcut opens the launcher over the active application without moving focus elsewhere first.
@@ -41,6 +45,20 @@
 - [ ] Toggle menu-bar visibility and verify exactly one Commander item exists when enabled.
 - [ ] Verify light, dark, and system appearance plus default/large text size without clipping.
 - [ ] Verify favourites-in-compact-mode is disabled unless Compact is selected.
+- [ ] Open Advanced → Search Index. Verify application, command, file, and folder counts update while a scan runs;
+      Index All and each scoped button remain responsive and Settings can scroll to the final ignore row without clipping.
+- [ ] On macOS, verify Open Full Disk Access opens Privacy & Security → Full Disk Access without changing the toggle.
+      With access withheld and a deliberately blocking root, verify the scan stops after 90 seconds, the writer recovers,
+      actionable guidance appears, and the last committed index remains searchable.
+- [ ] Add a disposable index root. With `.gitignore` in a parent directory, verify ignored descendants stay absent;
+      add wildcard `**/build/**` and regex `(^|/)scratch-[0-9]+(/|$)` rules and verify matching paths disappear after reindex.
+      Verify a `large.noindex` directory is skipped by the defaults and descendant globs prune their directory tree.
+- [ ] Enter an invalid regular expression and run a scan. Verify Commander reports the error and continues serving
+      results from the last committed index; remove the rule and reindex successfully.
+- [ ] Set a disposable standalone index source above its entry cap. Verify the capped results remain searchable and
+      Settings reports the warning instead of rolling the source back to an empty index.
+- [ ] Leave Commander running, add an `.app` bundle to `~/Applications`, and verify the app-directory watcher makes
+      it searchable promptly. Also verify the documented five-minute app and six-hour default file/folder reconciliation intervals.
 
 ## Extensions
 

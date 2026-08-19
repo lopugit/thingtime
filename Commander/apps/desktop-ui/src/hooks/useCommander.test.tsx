@@ -35,6 +35,7 @@ const bootstrap = {
     secureCredentialStore: true,
     openAtLogin: true,
     sideloadPicker: true,
+    filesystemIndex: true,
   },
 };
 

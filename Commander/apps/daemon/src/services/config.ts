@@ -29,6 +29,7 @@ export interface RuntimeOptions {
   host: string;
   uiPath: string;
   rustBinary?: string;
+  indexerBinary?: string;
   parentPid?: number;
   platform?: Platform;
 }
@@ -50,6 +51,13 @@ export function parseRuntimeOptions(argv: string[]): RuntimeOptions {
     uiPath: path.resolve(uiPath),
     ...(value('--rust-core') || process.env.COMMANDER_RUST_CORE
       ? { rustBinary: path.resolve(value('--rust-core') ?? process.env.COMMANDER_RUST_CORE!) }
+      : {}),
+    ...(value('--filesystem-indexer') || process.env.COMMANDER_FILESYSTEM_INDEXER
+      ? {
+          indexerBinary: path.resolve(
+            value('--filesystem-indexer') ?? process.env.COMMANDER_FILESYSTEM_INDEXER!,
+          ),
+        }
       : {}),
     ...(parentPid === undefined ? {} : { parentPid }),
   };

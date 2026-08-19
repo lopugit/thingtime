@@ -4,6 +4,8 @@ import type {
   CommanderExtension,
   CommanderSettings,
   ExecuteResponse,
+  IndexScope,
+  IndexingStatus,
   LocalRaycastExtensionsResponse,
   RaycastPreferenceSyncSummary,
   RecentSearch,
@@ -49,6 +51,12 @@ export const api = {
     request<ExecuteResponse>('/api/execute', {
       method: 'POST',
       body: JSON.stringify({ itemId, actionId }),
+    }),
+  indexingStatus: () => request<IndexingStatus>('/api/index/status'),
+  indexNow: (scope: IndexScope) =>
+    request<{ ok: true; scope: IndexScope; status: IndexingStatus }>('/api/index', {
+      method: 'POST',
+      body: JSON.stringify({ scope }),
     }),
   listExtensions: () => request<{ extensions: CommanderExtension[] }>('/api/extensions'),
   listRaycastExtensions: () => request<LocalRaycastExtensionsResponse>('/api/extensions/raycast'),

@@ -28,6 +28,8 @@ pub enum SearchItemKind {
     Builtin,
     System,
     Application,
+    File,
+    Directory,
     Extension,
     Command,
     Quicklink,
@@ -39,9 +41,11 @@ impl SearchItemKind {
             Self::Builtin => 0,
             Self::System => 1,
             Self::Application => 2,
-            Self::Extension => 3,
-            Self::Command => 4,
-            Self::Quicklink => 5,
+            Self::File => 3,
+            Self::Directory => 4,
+            Self::Extension => 5,
+            Self::Command => 6,
+            Self::Quicklink => 7,
         }
     }
 }
@@ -1033,6 +1037,8 @@ mod tests {
             (SearchItemKind::Builtin, "builtin"),
             (SearchItemKind::System, "system"),
             (SearchItemKind::Application, "application"),
+            (SearchItemKind::File, "file"),
+            (SearchItemKind::Directory, "directory"),
             (SearchItemKind::Extension, "extension"),
             (SearchItemKind::Command, "command"),
             (SearchItemKind::Quicklink, "quicklink"),

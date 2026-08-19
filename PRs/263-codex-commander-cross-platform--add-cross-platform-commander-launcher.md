@@ -16,6 +16,9 @@ PR: https://github.com/lopugit/thingtime/pull/263
   multi-account switching, and private app-data settings sync.
 - Added Raycast Store discovery, bounded folder and ZIP sideload handling, and a
   privacy-preserving Your Raycast importer for local extensions and settings.
+- Added a standalone Rust/SQLite filesystem metadata index, a reusable typed
+  Node client, Commander file/folder search, inherited Git ignores, custom
+  wildcard/regex exclusions, live status, and scoped Index Now commands.
 
 The process split follows Raycast's published architecture: native lifecycle
 and operating-system integration stay in Swift/AppKit, portable business logic
@@ -195,15 +198,37 @@ environment.
   the macOS-only catalog. Stable third-party app deep links can use the same
   provider shape, while arbitrary app-menu indexing remains an explicit future
   Accessibility provider rather than an unsafe static macro.
+- Commander now packages a second persistent Rust service for local file,
+  folder, and application metadata. It stores paths/names/kinds plus optional
+  size and mtime—not contents—in an owner-only SQLite/FTS5 index. The scanner
+  inherits parent `.gitignore`, `.git/info/exclude`, and global Git excludes;
+  compiles custom wildcard and regex rules before traversal; treats application
+  and macOS document/media bundles as opaque; and avoids hydrating dataless File
+  Provider folders. A name-only trigram FTS schema keeps large indexes compact,
+  migrates the earlier path-token schema transactionally, and falls back to path
+  substring matching only when a name query has no hit.
+- Application roots now refresh from native directory watchers with a five-minute
+  reconciliation, replacing the former startup-only snapshot that missed newly
+  installed apps. Files/folders reconcile every six hours by default. The
+  built-in Commander extension exposes Index All plus separate Apps, Commands,
+  Files, and Directories commands; Advanced Settings exposes the same controls,
+  roots, ignore rules, and status cards.
+- Commander defaults to a 500,000-entry safety cap and commits a searchable
+  partial snapshot with an actionable warning. Whole-home macOS indexing links
+  directly to Full Disk Access; a privacy-blocked scan is terminated after 90
+  seconds, its isolated writer is restarted, and the prior committed snapshot
+  stays searchable. The standalone engine remains configurable up to ten million
+  entries for other Thingtime/Electron hosts.
 
 ## Verification
 
-- Commander TypeScript: 83 tests passed across UI (46), daemon (19), and
-  compatibility (18) packages; typecheck, ESLint, Prettier, and package builds
-  passed.
-- Rust: 21 unit and 5 JSONL integration tests passed; formatting and strict
-  Clippy with warnings denied passed.
-- Swift: nine WebKit/panel, settings-deep-link, file-drag, and command-hotkey
+- Commander TypeScript: 96 tests passed across protocol (4), filesystem client
+  (2), compatibility (18), UI (49), and daemon (23) packages; typecheck,
+  ESLint, Prettier, and package builds passed.
+- Rust: 41 tests passed across command search (21 unit + 5 JSONL) and filesystem
+  indexing (14 unit + 1 JSONL); formatting and strict Clippy with warnings
+  denied passed.
+- Swift: ten WebKit/panel, settings-deep-link, file-drag, and command-hotkey
   regressions passed; the release build passed with warnings treated as errors.
 - `Commander/script/build_and_run.sh --verify` built, Apple Development signed,
   installed, and launched the exact follow-up app at
@@ -211,6 +236,13 @@ environment.
 - The installed signature, stable designated requirement, Node JIT
   entitlements, process ancestry, daemon health, and bundled executable paths
   were verified.
+- The standalone installed indexer scanned 500,000 real home metadata entries in
+  29.0 seconds, committed 387,797 files and 112,203 directories alongside 340
+  applications, checkpointed its WAL to zero, and retained `0600` permissions on
+  the database and live sidecars. Installed-WebKit QA then returned 30 native-icon
+  file results for `package.json`; Advanced showed all live counts, the six-hour
+  cadence, Full Disk Access guidance, six default ignores, and the cap warning
+  without clipping while scrolling top to bottom.
 - Installed-WebKit QA opened Search Emoji & Symbols, typed the formerly
   crashing first character `h`, continued to `heart`, and kept the picker
   visible and focused with 46 results before returning to the launcher.

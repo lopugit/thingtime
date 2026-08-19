@@ -32,22 +32,23 @@ export class SearchService {
     return this.#items;
   }
 
-  async search(query: string, limit = 30): Promise<SearchHit[]> {
+  async search(query: string, limit = 30, additionalItems: SearchItem[] = []): Promise<SearchHit[]> {
+    const items = mergeItems(this.#items, additionalItems);
     const child = this.#rust;
-    if (!child) return fallbackSearch(query, this.#items, limit);
+    if (!child) return fallbackSearch(query, items, limit);
     try {
       return await new Promise<SearchHit[]>((resolve, reject) => {
         const timer = setTimeout(() => {
           this.#failRust(new Error(`Rust search core timed out after ${SEARCH_TIMEOUT_MS}ms`), child);
         }, SEARCH_TIMEOUT_MS);
         this.#pending.push({ resolve, reject, timer });
-        const request: SearchRequest = { query, items: this.#items, limit };
+        const request: SearchRequest = { query, items, limit };
         child.stdin.write(`${JSON.stringify(request)}\n`, (error) => {
           if (error) this.#failRust(error, child);
         });
       });
     } catch {
-      return fallbackSearch(query, this.#items, limit);
+      return fallbackSearch(query, items, limit);
     }
   }
 
@@ -108,6 +109,14 @@ export class SearchService {
       pending.reject(error);
     }
   }
+}
+
+function mergeItems(catalog: SearchItem[], additional: SearchItem[]): SearchItem[] {
+  if (!additional.length) return catalog;
+  const seen = new Set<string>();
+  return [...catalog, ...additional].filter((item) =>
+    seen.has(item.id) ? false : (seen.add(item.id), true),
+  );
 }
 
 function score(query: string, item: SearchItem): number {
