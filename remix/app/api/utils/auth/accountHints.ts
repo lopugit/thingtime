@@ -37,7 +37,15 @@ export type AccountHint = {
 	alreadyHere: boolean;
 };
 
-export type ResolvedAccountHints = { hints: AccountHint[]; setCookies: string[] };
+export type ResolvedAccountHints = {
+	hints: AccountHint[];
+	setCookies: string[];
+	// Foreign *.thingtime.com origins whose pointers this deployment could not
+	// resolve (different database) — the client federates: it asks each origin's
+	// own /account-hints/resolve to vouch for its sessions. The user's browser
+	// assembles the full picture; no deployment ever holds another's sessions.
+	unresolvedOrigins: string[];
+};
 
 const toHintUser = (user: PublicUser): AccountHintUser => ({
 	id: user.id,
@@ -48,7 +56,7 @@ const toHintUser = (user: PublicUser): AccountHintUser => ({
 
 export const resolveAccountHints = async (request: Request): Promise<ResolvedAccountHints> => {
 	const pointers = await parseAccountHintsCookie(request);
-	if (!pointers.length) return { hints: [], setCookies: [] };
+	if (!pointers.length) return { hints: [], setCookies: [], unresolvedOrigins: [] };
 
 	// Local roster (empty when signed out — the popup's usual state).
 	const localRoster = await resolveRoster(request);
@@ -65,12 +73,19 @@ export const resolveAccountHints = async (request: Request): Promise<ResolvedAcc
 
 	const livePointers: AccountHintPointer[] = [];
 	const hintsByUser = new Map<string, AccountHint>();
+	const unresolvedOrigins: string[] = [];
+	const markUnresolved = (pointer: AccountHintPointer) => {
+		if (pointer.origin !== currentOrigin && !unresolvedOrigins.includes(pointer.origin)) {
+			unresolvedOrigins.push(pointer.origin);
+		}
+	};
 	let resolvedBudget = MAX_RESOLVED_ENTRIES;
 
 	for (const pointer of pointers) {
 		if (resolvedBudget <= 0) {
 			// over-budget pointers are kept (not pruned) — just not resolved now
 			livePointers.push(pointer);
+			markUnresolved(pointer);
 			continue;
 		}
 		const entries = (await getLiveRosterEntries(pointer.rosterId)).slice(0, resolvedBudget);
@@ -102,6 +117,7 @@ export const resolveAccountHints = async (request: Request): Promise<ResolvedAcc
 			}
 		}
 		if (anyLive || pointer.origin !== currentOrigin) livePointers.push(pointer);
+		if (!anyLive) markUnresolved(pointer);
 	}
 
 	const setCookies: string[] = [];
@@ -113,5 +129,40 @@ export const resolveAccountHints = async (request: Request): Promise<ResolvedAcc
 		(b.origins[0]?.lastSeenAt || '').localeCompare(a.origins[0]?.lastSeenAt || '')
 	);
 
-	return { hints, setCookies };
+	return { hints, setCookies, unresolvedOrigins };
+};
+
+// The federated half: resolve ONLY the pointers this deployment's own origin
+// wrote, for a cross-origin caller (another *.thingtime.com deployment's page
+// fetching with credentials — same-site, so the tt_hints cookie arrives).
+// Read-only by design: no pruning, no Set-Cookie — a deployment never edits
+// the shared cookie from a cross-origin response; retirement of its dead
+// pointers happens on its own first-party visits.
+export const resolveOwnOriginHints = async (request: Request): Promise<AccountHint[]> => {
+	const pointers = await parseAccountHintsCookie(request);
+	if (!pointers.length) return [];
+	const currentOrigin = resolvePublicOrigin(request).origin;
+
+	const hintsByUser = new Map<string, AccountHint>();
+	let resolvedBudget = MAX_RESOLVED_ENTRIES;
+
+	for (const pointer of pointers) {
+		if (pointer.origin !== currentOrigin || resolvedBudget <= 0) continue;
+		const entries = (await getLiveRosterEntries(pointer.rosterId)).slice(0, resolvedBudget);
+		resolvedBudget -= entries.length;
+		const resolved = await Promise.all(
+			entries.map(async (entry) => ({ entry, user: await resolveSessionUser(entry.jti, entry.userId) }))
+		);
+		for (const { entry, user } of resolved) {
+			if (!user || user.temporary) continue;
+			const lastSeenAt = new Date(
+				Math.max(new Date(entry.addedAt).getTime() || 0, pointer.seenAt * 1000)
+			).toISOString();
+			const existing = hintsByUser.get(user.id);
+			if (existing) existing.origins.push({ origin: pointer.origin, lastSeenAt });
+			else hintsByUser.set(user.id, { user: toHintUser(user), origins: [{ origin: pointer.origin, lastSeenAt }], alreadyHere: false });
+		}
+	}
+
+	return [...hintsByUser.values()];
 };

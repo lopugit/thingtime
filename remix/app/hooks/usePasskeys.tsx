@@ -134,11 +134,48 @@ export const usePasskeyAutofill = (enabled: boolean, onSuccess: (resp: any) => v
 };
 
 const HINTS_CACHE_KEY = 'tt-account-hints';
+const MAX_FEDERATED_ORIGINS = 4;
+
+// The federated fan-out: for pointers the local deployment couldn't vouch for
+// (a different-database environment), ask each origin's own
+// /account-hints/resolve — same-site credentialed fetch, so the shared
+// tt_hints cookie arrives and each environment answers only for its own
+// sessions. The user's browser assembles the full picture.
+const fetchFederatedHints = async (origins: string[]): Promise<AccountHint[]> => {
+	const targets = origins.slice(0, MAX_FEDERATED_ORIGINS);
+	const settled = await Promise.all(
+		targets.map(async (origin) => {
+			try {
+				const response = await fetch(`${origin}/api/v1/auth/account-hints/resolve`, {
+					credentials: 'include',
+					headers: { Accept: 'application/json' }
+				});
+				const body = await response.json();
+				return body?.ok && Array.isArray(body.hints) ? (body.hints as AccountHint[]) : [];
+			} catch {
+				return []; // that environment is down or cross-site — skip it
+			}
+		})
+	);
+	return settled.flat();
+};
+
+const mergeHints = (local: AccountHint[], federated: AccountHint[]): AccountHint[] => {
+	const byUser = new Map<string, AccountHint>();
+	for (const hint of local) byUser.set(hint.user.id, hint);
+	for (const hint of federated) {
+		const existing = byUser.get(hint.user.id);
+		if (existing) existing.origins = [...existing.origins, ...hint.origins];
+		else byUser.set(hint.user.id, hint);
+	}
+	return [...byUser.values()];
+};
 
 // Cross-deployment auto-login suggestions, optimistic-rendering compliant:
 // first paint comes from the synchronous localCache tier, the live answer
 // reconciles in the background (and hint death — logging out elsewhere —
-// propagates on the next mount).
+// propagates on the next mount). Foreign-database environments are resolved
+// by federated per-origin fetches and merged in as they answer.
 export const useAccountHints = () => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
@@ -152,15 +189,20 @@ export const useAccountHints = () => {
 		let alive = true;
 		apiRef.current.v1.auth
 			.accountHints()
-			.then((resp: any) => {
-				if (!alive) return;
-				if (resp?.ok && Array.isArray(resp.hints)) {
-					setHints(resp.hints);
-					writeLocalCache(HINTS_CACHE_KEY, resp.hints);
+			.then(async (resp: any) => {
+				if (!alive || !resp?.ok || !Array.isArray(resp.hints)) return;
+				setHints(resp.hints);
+				writeLocalCache(HINTS_CACHE_KEY, resp.hints);
+				if (Array.isArray(resp.unresolved) && resp.unresolved.length) {
+					const federated = await fetchFederatedHints(resp.unresolved);
+					if (!alive || !federated.length) return;
+					const merged = mergeHints(resp.hints, federated);
+					setHints(merged);
+					writeLocalCache(HINTS_CACHE_KEY, merged);
 				}
-				setLoaded(true);
 			})
-			.catch(() => {
+			.catch(() => {})
+			.finally(() => {
 				if (alive) setLoaded(true);
 			});
 		return () => {

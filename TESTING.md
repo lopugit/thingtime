@@ -37,6 +37,35 @@ is fixed, and cite the checklist you ran in the PR description.
       cached identity). `GET /api/v1/auth/account-hints` responses carry no
       email — only id/username/displayName/avatarUrl.
 
+## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
+
+- [ ] `node scripts/verify-federated-login.mjs` passes (31 checks) against two
+      stacks on DIFFERENT databases (recipe in the script header — stack B
+      must be a production build; a second dev stack silently shares `.env`'s
+      database). Proves: per-environment hint authority + federated resolve
+      (CORS allow family / deny others, read-only), handoff aud binding,
+      cross-environment fail-closed, single-use + replay-revokes-session, and
+      the full FedCM accounts→assertion→session loop.
+- [ ] On a `*.thingtime.com` page, DevTools → Network shows at most
+      `MAX_FEDERATED_ORIGINS` (4) `/account-hints/resolve` fan-out fetches,
+      only for origins the local endpoint reported `unresolved`, and the
+      popup/login strip merges accounts without duplicate users.
+- [ ] On a NON-thingtime origin (immutable `*.vercel.app` preview) while
+      signed out: the corner card offers "Sign in with Thingtime 🌈" (never
+      the hints list); the button opens the `/authorize?self=1` popup, the
+      popup shows "Continue to <host>?" with the ACTIVE account, Continue
+      signs the page in (welcome toast) and the popup closes; Cancel closes
+      with nothing shared. In Chrome with FedCM available, the native
+      "Continue as" sheet appears instead and completes the same loop.
+- [ ] The `/authorize?self=1` popup signed OUT shows the embedded login (with
+      the cross-deployment hints strip) before the confirm card.
+- [ ] Replaying a captured sso-session code fails AND kills the session it
+      minted (theft response); a code redeemed on the wrong origin 403s; an
+      expired (>2 min) code 401s.
+- [ ] FedCM endpoints refuse non-browser fetches (no
+      `Sec-Fetch-Dest: webidentity` → 400) and `/fedcm/accounts` 401s when
+      signed out.
+
 ## Public upload approval (new-signup permissions)
 
 - [ ] Register a brand-new account. `POST /api/v1/auth/register` returns

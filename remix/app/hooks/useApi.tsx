@@ -137,6 +137,20 @@ export function useApi() {
       // Accounts this browser is signed into on OTHER Thingtime deployments
       // (cross-deployment auto-login suggestions). Read-only.
       accountHints: useCallback(async () => getJson('/api/v1/auth/account-hints'), []),
+      // Cross-origin session handoff (Login with Thingtime anywhere): mint a
+      // code for a target origin / redeem one minted for THIS origin.
+      ssoHandoff: useCallback(
+        async (args: { origin: string }) => asyncFetcher.submit({ origin: args?.origin }, { action: '/api/v1/auth/sso-handoff' }),
+        [asyncFetcher]
+      ),
+      ssoSession: useCallback(
+        async (args: { code: string }) => {
+          const ret = asyncFetcher.submit({ code: args?.code }, { action: '/api/v1/auth/sso-session' });
+          ret.then(refreshRootData).catch(() => {});
+          return ret;
+        },
+        [asyncFetcher]
+      ),
       passkeys: {
         list: useCallback(async () => getJson('/api/v1/auth/passkeys'), []),
         registerOptions: useCallback(

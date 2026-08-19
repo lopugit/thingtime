@@ -873,6 +873,196 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-account-hints-resolve',
+    group: 'auth',
+    title: 'Resolve own-origin hints (federated)',
+    endpoint: '/api/v1/auth/account-hints/resolve',
+    summary: 'This deployment vouches for the hint pointers ITS origin wrote — the federated half of auto-login.',
+    detail:
+      'Cross-origin, credentialed, CORS-restricted to the Thingtime family (and localhost dev). Another ' +
+      'deployment\'s page calls this when its own /account-hints reported pointers it could not resolve ' +
+      '(different database): the shared tt_hints cookie arrives on the same-site fetch, and THIS deployment ' +
+      'resolves only the pointers its own origin wrote, through the same live roster/session chokepoints. ' +
+      'Each environment answers only for its own sessions — the user\'s browser assembles the full picture; ' +
+      'no deployment ever holds another\'s session state. Read-only: never prunes, never sets cookies.',
+    auth: { mode: 'none', description: 'Cookie-driven; answers only for pointers this origin minted.' },
+    methods: ['GET'],
+    steps: [
+      'GET /api/v1/auth/account-hints on your own origin first.',
+      'For each origin in its `unresolved`, fetch that origin\'s /account-hints/resolve with credentials.',
+      'Merge the returned hints (dedupe by user id) into the "continue as" list.'
+    ],
+    requestExamples: [{ name: 'Federated resolve', description: 'Asked by another deployment\'s page.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'This origin vouches for one live account.',
+        body: { ok: true, hints: [{ user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', avatarUrl: null }, origins: [{ origin: 'https://dev.thingtime.com', lastSeenAt: '2026-08-19T03:12:00.000Z' }], alreadyHere: false }] }
+      },
+      { status: 200, description: 'Nothing to vouch for.', body: { ok: true, hints: [] } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-sso-handoff',
+    group: 'auth',
+    title: 'Mint a cross-origin sign-in code',
+    endpoint: '/api/v1/auth/sso-handoff',
+    summary: 'A signed-in Thingtime surface mints a short-lived, origin-bound, single-use code for another deployment.',
+    detail:
+      'POST { origin } — for Thingtime deployments OUTSIDE the *.thingtime.com cookie family (immutable ' +
+      '*.vercel.app previews, custom domains). The code is a 2-minute purpose-fenced JWT bound to the target ' +
+      'origin (aud), backed by a pre-minted browser session that self-expires if never claimed. The target ' +
+      'page redeems it at ITS OWN /api/v1/auth/sso-session. Origins stay default-open (owner decision) — ' +
+      'security is the per-code binding, TTL, and single use. Used by the /authorize?self=1 popup and the ' +
+      'FedCM assertion endpoint.',
+    auth: { mode: 'session', description: 'Requires a signed-in session (app tokens are rejected).' },
+    methods: ['POST'],
+    steps: [
+      'POST { origin: "https://<target-origin>" } from a signed-in first-party surface.',
+      'Deliver the code to the target page (postMessage from the popup, or the FedCM token).',
+      'The target page POSTs it to its own /api/v1/auth/sso-session within 2 minutes.'
+    ],
+    requestExamples: [
+      { name: 'Mint for a preview', description: 'Sign into an immutable preview deployment.', method: 'POST', body: { origin: 'https://thingtime-abc123-lopugits-projects.vercel.app' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Code minted.', body: { ok: true, code: 'eyJhbGciOi…', aud: 'https://thingtime-abc123-lopugits-projects.vercel.app', expiresAt: '2026-08-19T05:02:00.000Z' } },
+      { status: 401, description: 'Not signed in.', body: { ok: false, error: 'Unauthorized' } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-sso-session',
+    group: 'auth',
+    title: 'Redeem a sign-in code',
+    endpoint: '/api/v1/auth/sso-session',
+    summary: 'Exchange a handoff code for a first-class session on THIS deployment.',
+    detail:
+      'POST { code } — verifies the signature (deployments share JWT key material), requires the code\'s aud ' +
+      'to equal this deployment\'s public origin, claims it atomically exactly once (a second redemption ' +
+      'revokes the session — theft signal), then runs the exact password-login tail: httpOnly auth cookie, ' +
+      'switcher roster merge, cross-deployment hint pointer. Redemption only succeeds where this deployment ' +
+      'shares the minting environment\'s database (an immutable preview and its alias twin do) — anything ' +
+      'else fails closed with a generic error.',
+    auth: { mode: 'none', description: 'The code is the credential.' },
+    methods: ['POST'],
+    steps: [
+      'Receive a code from the /authorize?self=1 popup (postMessage) or a FedCM assertion.',
+      'POST { code } to THIS deployment within 2 minutes.',
+      'On 200 the session cookies are set — treat it like a successful /api/v1/login.'
+    ],
+    requestExamples: [{ name: 'Redeem', description: 'Become a session here.', method: 'POST', body: { code: 'eyJhbGciOi…' } }],
+    responseExamples: [
+      { status: 200, description: 'Signed in.', body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik' } } },
+      { status: 403, description: 'Code bound to a different origin.', body: { ok: false, error: 'This sign-in link belongs to a different site' } },
+      { status: 401, description: 'Expired, replayed, or different environment.', body: { ok: false, error: 'This sign-in link is no longer valid — try again' } }
+    ]
+  }),
+  endpoint({
+    id: 'fedcm-config',
+    group: 'auth',
+    title: 'FedCM provider config',
+    endpoint: '/api/v1/fedcm/config',
+    summary: 'The FedCM identity-provider manifest — where the browser finds the accounts and assertion endpoints.',
+    detail:
+      'Discovered via /.well-known/web-identity at the domain root. Any page can pass this URL as configURL ' +
+      'to navigator.credentials.get({ identity }) and the BROWSER — never the page — fetches the accounts ' +
+      'list with the user\'s first-party Thingtime cookies and renders its native "Continue as …" sheet. ' +
+      'Pure metadata; endpoints are absolute URLs on this deployment.',
+    auth: { mode: 'none', description: 'Public metadata.' },
+    methods: ['GET'],
+    steps: [
+      'Reference it as configURL in navigator.credentials.get({ identity: { providers: [...] } }).',
+      'Use clientId "thingtime-self" for Thingtime deployments (session handoff) or a ttapp_… clientId (app token).',
+      'Redeem the returned token: sso-session for handoff codes, Bearer for app tokens.'
+    ],
+    requestExamples: [{ name: 'Fetch config', description: 'Browser loads the manifest.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Provider manifest.',
+        body: {
+          accounts_endpoint: 'https://thingtime.com/api/v1/fedcm/accounts',
+          client_metadata_endpoint: 'https://thingtime.com/api/v1/fedcm/client-metadata',
+          id_assertion_endpoint: 'https://thingtime.com/api/v1/fedcm/assertion',
+          login_url: 'https://thingtime.com/login',
+          branding: { name: 'Thingtime', background_color: '#16161a', color: '#ffffff' }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'fedcm-accounts',
+    group: 'auth',
+    title: 'FedCM accounts',
+    endpoint: '/api/v1/fedcm/accounts',
+    summary: 'The signed-in accounts behind the browser\'s native "Continue as …" sheet.',
+    detail:
+      'Browser-mediated only: requires Sec-Fetch-Dest: webidentity (page JS can never set Sec-Fetch-*), so ' +
+      'no embedding page can read it — the browser fetches with first-party cookies and draws the sheet ' +
+      'itself. The list is this browser\'s own switcher roster (resolveRoster, ownership-gated), never a ' +
+      'central registry: only sessions this roster owns can later be redeemed by an assertion. Returns 401 ' +
+      'with an empty list when signed out.',
+    auth: { mode: 'none', description: 'First-party cookies via the browser\'s FedCM fetch.' },
+    methods: ['GET'],
+    steps: [
+      'Never call this from page JS — the browser does, during navigator.credentials.get({ identity }).',
+      'Sign into thingtime.com first; the sheet lists the roster accounts.',
+      'Direct (non-FedCM) requests are refused with 400.'
+    ],
+    requestExamples: [{ name: 'Browser fetch', description: 'Sent by the FedCM machinery.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Roster accounts.',
+        body: { accounts: [{ id: '64f000000000000000000002', name: 'Nik', email: 'nik@example.com', picture: 'https://…/avatar.png' }] }
+      },
+      { status: 400, description: 'Not a FedCM fetch.', body: { ok: false, error: 'FedCM requests only' } }
+    ]
+  }),
+  endpoint({
+    id: 'fedcm-client-metadata',
+    group: 'auth',
+    title: 'FedCM client metadata',
+    endpoint: '/api/v1/fedcm/client-metadata',
+    summary: 'Policy links the browser shows alongside the FedCM consent sheet.',
+    detail: 'Standard FedCM metadata endpoint; Thingtime\'s own pages and registered apps share the platform policies.',
+    auth: { mode: 'none', description: 'Public metadata.' },
+    methods: ['GET'],
+    steps: ['Never call directly — the browser fetches it during the FedCM ceremony.'],
+    requestExamples: [{ name: 'Browser fetch', description: 'Sent by the FedCM machinery.', method: 'GET', query: { client_id: 'thingtime-self' } }],
+    responseExamples: [
+      { status: 200, description: 'Policy links.', body: { privacy_policy_url: 'https://thingtime.com/', terms_of_service_url: 'https://thingtime.com/' } }
+    ]
+  }),
+  endpoint({
+    id: 'fedcm-assertion',
+    group: 'auth',
+    title: 'FedCM assertion',
+    endpoint: '/api/v1/fedcm/assertion',
+    summary: 'The browser exchanges the user\'s sheet pick for a token: a session-handoff code or an app token.',
+    detail:
+      'Browser-mediated only (Sec-Fetch-Dest: webidentity), form-encoded { client_id, account_id, nonce? } ' +
+      'with the RP\'s Origin header. The picked account must belong to this browser\'s roster (re-checked ' +
+      'server-side). client_id "thingtime-self" mints a 2-minute aud-bound single-use handoff code the RP ' +
+      'redeems at its own /api/v1/auth/sso-session for a full session; a registered ttapp_… client gets the ' +
+      'same app-scoped Bearer token the consent popup issues, baseline profile scope only (wider grants ' +
+      'still require the consent popup). Errors use the FedCM { error: { code } } shape.',
+    auth: { mode: 'none', description: 'First-party cookies via the browser\'s FedCM fetch; roster ownership enforced.' },
+    methods: ['POST'],
+    steps: [
+      'Never call directly — the browser posts here after the user picks an account on the sheet.',
+      'Thingtime-self RPs redeem the returned token at their own /api/v1/auth/sso-session.',
+      'App RPs use the returned token as a Bearer credential, exactly like a consent-popup grant.'
+    ],
+    requestExamples: [
+      { name: 'Browser assertion', description: 'Form-encoded by the FedCM machinery.', method: 'POST', body: { client_id: 'thingtime-self', account_id: '64f000000000000000000002' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Token minted.', body: { token: 'eyJhbGciOi…' } },
+      { status: 401, description: 'Account not in this browser\'s roster.', body: { error: { code: 'unauthorized' } } }
+    ]
+  }),
+  endpoint({
     id: 'auth-passkeys-list',
     group: 'auth',
     title: 'List passkeys',

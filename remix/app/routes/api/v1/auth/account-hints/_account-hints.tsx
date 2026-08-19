@@ -16,9 +16,12 @@ export const loader = async ({ request }: { request: Request }) => {
 		return json({ ok: false, error: 'Too many requests — take a breather 🌸' }, rateLimitedResponseInit(limit));
 	}
 
-	const { hints, setCookies } = await resolveAccountHints(request);
+	const { hints, setCookies, unresolvedOrigins } = await resolveAccountHints(request);
 
 	const headers = new Headers();
 	for (const cookie of setCookies) headers.append('Set-Cookie', cookie);
-	return json({ ok: true, hints }, { headers });
+	// `unresolved`: foreign origins whose pointers this deployment can't vouch
+	// for (different database) — the client federates to each origin's own
+	// /account-hints/resolve and merges.
+	return json({ ok: true, hints, unresolved: unresolvedOrigins }, { headers });
 };
