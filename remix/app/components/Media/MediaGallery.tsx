@@ -31,6 +31,11 @@ export type MediaGalleryTileProps = {
 	children?: React.ReactNode;
 	invalid?: boolean;
 	aspectRatio?: React.ComponentProps<typeof Box>['aspectRatio'];
+	// reorder support: data attributes land here; the dragged tile dims and the
+	// hovered drop position outlines so the pending order reads clearly
+	dragging?: boolean;
+	dropTarget?: boolean;
+	containerProps?: React.ComponentProps<typeof Flex>;
 };
 
 export const MediaGalleryTile = (props: MediaGalleryTileProps) => (
@@ -43,6 +48,10 @@ export const MediaGalleryTile = (props: MediaGalleryTileProps) => (
 		borderRadius="var(--tt-radius-md, 12px)"
 		overflow="hidden"
 		background="var(--tt-card, #ffffff)"
+		opacity={props.dragging ? 0.55 : undefined}
+		outline={props.dropTarget ? '2px solid var(--tt-accent, #7c5cff)' : undefined}
+		outlineOffset={props.dropTarget ? '1px' : undefined}
+		{...props.containerProps}
 	>
 		<Box position="relative" width="100%" aspectRatio={props.aspectRatio ?? 1} overflow="hidden" background="var(--tt-surface-alt, #f5f5f7)">
 			{props.preview}

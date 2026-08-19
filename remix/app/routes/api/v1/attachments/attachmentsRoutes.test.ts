@@ -51,6 +51,79 @@ test('same-origin mutations honor the proxy-owned public origin and still fail c
 	);
 });
 
+// Signup-permissions hotfix: a brand-new account (both upload scopes withheld,
+// even once its email is verified) must not be able to START an upload, and
+// the requested purpose decides WHICH scope gates it (public =
+// post/comment/custom-emoji, private = message/profile media; "all" is both
+// flags). Approved scopes are unaffected — and routes that DON'T opt in stay
+// open so an in-flight upload can still be completed or cancelled after a
+// revoke.
+test('upload starts require the upload-permission scope matching the purpose', async () => {
+	let serviceCalls = 0;
+	const gated = (viewer: any) =>
+		createAttachmentMutationAction(
+			{
+				rateKey: 'attachments.start',
+				service: async () => {
+					serviceCalls += 1;
+					return { ok: true };
+				},
+				requireUploadPermission: true
+			},
+			{ getUser: async () => viewer, enforceLimit: allowed as any }
+		);
+
+	const pending = {
+		id: 'user-new',
+		accountKind: 'user',
+		emailVerified: true,
+		publicUploadsEnabled: false,
+		privateUploadsEnabled: false
+	} as any;
+	// no purpose defaults to 'post' — a public surface
+	const denied = await gated(pending)({ request: post({}) });
+	assert.equal(denied.status, 403);
+	assert.equal(serviceCalls, 0);
+	const deniedBody = await denied.json();
+	assert.equal(deniedBody.code, 'public_uploads_not_approved');
+	assert.equal(denied.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+	for (const purpose of ['post', 'comment', 'custom-emoji']) {
+		const res = await gated(pending)({ request: post({ purpose }) });
+		assert.equal(res.status, 403, `public purpose ${purpose} not gated`);
+		assert.equal((await res.json()).code, 'public_uploads_not_approved');
+	}
+	for (const purpose of ['message', 'profile-avatar', 'profile-banner']) {
+		const res = await gated(pending)({ request: post({ purpose }) });
+		assert.equal(res.status, 403, `private purpose ${purpose} not gated`);
+		assert.equal((await res.json()).code, 'private_uploads_not_approved');
+	}
+	assert.equal(serviceCalls, 0);
+
+	// each scope grants ONLY its own purposes — "all" is simply both flags
+	const publicOnly = { id: 'user-pub', accountKind: 'user', publicUploadsEnabled: true, privateUploadsEnabled: false } as any;
+	assert.equal((await gated(publicOnly)({ request: post({ purpose: 'post' }) })).status, 200);
+	assert.equal((await gated(publicOnly)({ request: post({ purpose: 'message' }) })).status, 403);
+	const privateOnly = { id: 'user-priv', accountKind: 'user', publicUploadsEnabled: false, privateUploadsEnabled: true } as any;
+	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'profile-avatar' }) })).status, 200);
+	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'comment' }) })).status, 403);
+	const approvedAll = { id: 'user-ok', accountKind: 'user', publicUploadsEnabled: true, privateUploadsEnabled: true } as any;
+	assert.equal((await gated(approvedAll)({ request: post({}) })).status, 200);
+	assert.equal((await gated(approvedAll)({ request: post({ purpose: 'message' }) })).status, 200);
+	assert.equal(serviceCalls, 4);
+
+	// an unknown purpose reaches the service's own validation (no scope gates it)
+	assert.equal((await gated(pending)({ request: post({ purpose: 'nonsense' }) })).status, 200);
+	assert.equal(serviceCalls, 5);
+
+	// Lifecycle routes (parts/complete/abort/delete) never opt in, so a
+	// permission flipped off mid-upload can't strand a reserved MPU.
+	const ungated = createAttachmentMutationAction(
+		{ rateKey: 'attachments.complete', service: async () => ({ ok: true }) },
+		{ getUser: async () => pending, enforceLimit: allowed as any }
+	);
+	assert.equal((await ungated({ request: post({}) })).status, 200);
+});
+
 test('attachment mutations enforce same-origin JSON, full users, caps, and private responses', async () => {
 	let serviceCalls = 0;
 	const handler = createAttachmentMutationAction(

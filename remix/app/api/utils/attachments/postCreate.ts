@@ -1,24 +1,34 @@
 export type PostAttachmentRequest =
 	| { ok: true; present: false }
-	| { ok: true; present: true; attachmentIds: readonly unknown[] }
+	| { ok: true; present: true; kind: 'create' | 'reorder'; attachmentIds: readonly unknown[] }
 	| { ok: false; status: 400; error: string };
 
 const hasOwn = (value: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 
 // `attachmentIds` is a server feature flag on the generic things body, not a
 // generic Thing field. This helper deliberately covers only generic/legacy
-// post creation; the dedicated comment and Messenger routes apply their own
-// purpose-bound attachment contracts. Shares, upserts and updates stay closed.
+// post creation plus the PATCH reorder of an existing post's bound set; the
+// dedicated comment and Messenger routes apply their own purpose-bound
+// attachment contracts. Shares, upserts and deletes stay closed.
 export const postAttachmentRequest = (method: string, body: unknown, isUnified: boolean): PostAttachmentRequest => {
 	if (!body || typeof body !== 'object' || Array.isArray(body)) return { ok: true, present: false };
 	const input = body as Record<string, unknown>;
 	if (!hasOwn(input, 'attachmentIds')) return { ok: true, present: false };
 
-	if (method.toUpperCase() !== 'POST') {
-		return { ok: false, status: 400, error: 'Attachments may only be added when creating a post' };
+	const verb = method.toUpperCase();
+	if (verb !== 'POST' && verb !== 'PATCH') {
+		return { ok: false, status: 400, error: 'Attachments may be added on post creation or reordered on a post update' };
 	}
 	if (!Array.isArray(input.attachmentIds)) {
 		return { ok: false, status: 400, error: 'attachmentIds must be a list' };
+	}
+	if (verb === 'PATCH') {
+		// reorder-only: the ids must be a permutation of the post's bound set,
+		// verified against live state by the attachment store
+		if (typeof input.id !== 'string' || !input.id.trim()) {
+			return { ok: false, status: 400, error: 'Reordering attachments requires the thing id' };
+		}
+		return { ok: true, present: true, kind: 'reorder', attachmentIds: input.attachmentIds };
 	}
 	if (isUnified) {
 		const thingtime = input.thingtime;
@@ -28,7 +38,7 @@ export const postAttachmentRequest = (method: string, body: unknown, isUnified: 
 			return { ok: false, status: 400, error: 'Attachments are available only on top-level posts' };
 		}
 	}
-	return { ok: true, present: true, attachmentIds: input.attachmentIds };
+	return { ok: true, present: true, kind: 'create', attachmentIds: input.attachmentIds };
 };
 
 export const bodyHasAttachmentIds = (body: unknown): boolean =>
