@@ -677,6 +677,13 @@ an advisory `moderationFlag` (with a bounded text excerpt as evidence) for
 the admin review queue without hiding the content. Edited text is re-screened;
 admin review verdicts are final until an admin changes them.
 
+Post creation uses a hybrid gate: the free omni screen races a bounded time
+budget (`TT_TEXT_SCREEN_BUDGET_MS`, default 600ms; `0` disables the sync gate)
+BEFORE the insert. A verdict in time means the post is born stamped — blocked
+content never renders anywhere, not even between insert and an async verdict —
+while a slow or offline omni fails open: the post publishes instantly and the
+async queue + hourly sweep moderate it after the fact. Edits stay async.
+
 A scheduled safety net (`GET /api/v1/moderation/sweep`, Vercel Cron at minute
 29 each hour, `CRON_SECRET` bearer — same contract as the attachments cleanup
 cron) retries moderation the fire-and-forget kickoffs lost: post-family things

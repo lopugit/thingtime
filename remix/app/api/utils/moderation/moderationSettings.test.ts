@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createAnalyzeTextThing, TEXT_MODERATED_THINGTIMES } from './analyzeText';
+import {
+	createAnalyzeTextThing,
+	DEFAULT_TEXT_SCREEN_BUDGET_MS,
+	moderationTextHash,
+	postInsertModerationPlan,
+	resolveTextScreenBudgetMs,
+	screenTextForCreate,
+	TEXT_MODERATED_THINGTIMES
+} from './analyzeText';
 import { moderationFlagShareId } from './analyzeAttachment';
 import { createModerationSettingsStore } from './moderationSettings';
 import {
@@ -362,4 +370,163 @@ test('moderation sweep cron route requires the exact bearer secret and fails clo
 	const unconfigured = createModerationSweepLoader({ getSecret: () => undefined });
 	const response = await unconfigured({ request: new Request('https://thingtime.example/api/v1/moderation/sweep') });
 	assert.equal(response.status, 503);
+});
+
+test('sync screen budget env parsing: default, override, disable, clamp', () => {
+	assert.equal(resolveTextScreenBudgetMs({} as any), DEFAULT_TEXT_SCREEN_BUDGET_MS);
+	assert.equal(resolveTextScreenBudgetMs({ TT_TEXT_SCREEN_BUDGET_MS: '250' } as any), 250);
+	assert.equal(resolveTextScreenBudgetMs({ TT_TEXT_SCREEN_BUDGET_MS: '0' } as any), 0);
+	for (const bad of ['999999', '-5', 'nope', '']) {
+		assert.equal(resolveTextScreenBudgetMs({ TT_TEXT_SCREEN_BUDGET_MS: bad } as any), DEFAULT_TEXT_SCREEN_BUDGET_MS);
+	}
+});
+
+test('create-time sync screen: fast verdicts gate the doc, slow/broken omni fails open to async', async () => {
+	const screenChoice = (result: OmniModerationResult | 'hang' | 'throw') => async () =>
+		({
+			kind: 'screen' as const,
+			provider: 'openai',
+			model: 'omni-moderation-latest',
+			screen: async () => {
+				if (result === 'hang') return new Promise<never>(() => {});
+				if (result === 'throw') throw new Error('openai down');
+				return result;
+			}
+		}) as any;
+
+	// fast blocked verdict → the doc is born blocked
+	const blocked = await screenTextForCreate('vile text', {
+		resolveText: screenChoice({ flagged: true, categories: { 'sexual/minors': true } }),
+		budgetMs: 1000,
+		now: () => NOW
+	});
+	assert.equal(blocked?.status, 'blocked');
+	assert.equal(blocked?.provider, 'openai');
+
+	// fast clean verdict → born clear (no async call needed)
+	const clear = await screenTextForCreate('hello', {
+		resolveText: screenChoice({ flagged: false }),
+		budgetMs: 1000,
+		now: () => NOW
+	});
+	assert.equal(clear?.status, 'clear');
+
+	// slow omni → null within the budget (post proceeds; async path owns it)
+	const started = Date.now();
+	assert.equal(await screenTextForCreate('hello', { resolveText: screenChoice('hang'), budgetMs: 25, now: () => NOW }), null);
+	assert.ok(Date.now() - started < 1000, 'timeout resolves promptly');
+
+	// omni error → null (fail open)
+	assert.equal(await screenTextForCreate('hello', { resolveText: screenChoice('throw'), budgetMs: 1000, now: () => NOW }), null);
+
+	// off surface and empty text → null
+	assert.equal(await screenTextForCreate('hello', { resolveText: (async () => ({ kind: 'off' })) as any, budgetMs: 1000 }), null);
+	assert.equal(await screenTextForCreate('   ', { resolveText: screenChoice({ flagged: false }), budgetMs: 1000 }), null);
+
+	// budget 0 disables the gate without even resolving settings
+	let resolved = 0;
+	assert.equal(
+		await screenTextForCreate('hello', {
+			resolveText: (async () => {
+				resolved += 1;
+				return { kind: 'off' };
+			}) as any,
+			budgetMs: 0
+		}),
+		null
+	);
+	assert.equal(resolved, 0);
+});
+
+test('sync screen stamps carry textHash; flagged ones carry flagPending; advisory nsfw passes through', async () => {
+	const choiceOf = (result: OmniModerationResult) => async () =>
+		({ kind: 'screen' as const, provider: 'openai', model: 'omni-moderation-latest', screen: async () => result }) as any;
+	const blocked = await screenTextForCreate('vile', { resolveText: choiceOf({ flagged: true, categories: { 'sexual/minors': true } }), budgetMs: 1000, now: () => NOW });
+	assert.equal(blocked?.flagPending, true);
+	assert.equal(blocked?.textHash, moderationTextHash('vile'));
+	const advisory = await screenTextForCreate('edgy', { resolveText: choiceOf({ flagged: true, categories: { harassment: true } }), budgetMs: 1000, now: () => NOW });
+	assert.equal(advisory?.status, 'nsfw');
+	assert.equal(advisory?.flagPending, true);
+	const clear = await screenTextForCreate('hello', { resolveText: choiceOf({ flagged: false }), budgetMs: 1000, now: () => NOW });
+	assert.equal(clear?.status, 'clear');
+	assert.equal(clear?.flagPending, undefined);
+	assert.equal(clear?.textHash, moderationTextHash('hello'));
+});
+
+test('sync screen: hung settings read cannot hold a post past the budget; late rejections are handled', async () => {
+	const started = Date.now();
+	assert.equal(await screenTextForCreate('hello', { resolveText: () => new Promise<never>(() => {}), budgetMs: 25, now: () => NOW }), null);
+	assert.ok(Date.now() - started < 1000, 'hung settings read must lose the race');
+
+	// a screen that rejects AFTER the timeout won must not surface anywhere
+	const lateReject = await screenTextForCreate('hello', {
+		resolveText: (async () => ({
+			kind: 'screen',
+			provider: 'openai',
+			model: 'omni-moderation-latest',
+			screen: () => new Promise((_resolve, reject) => setTimeout(() => reject(new Error('late failure')), 40))
+		})) as any,
+		budgetMs: 10,
+		now: () => NOW
+	});
+	assert.equal(lateReject, null);
+	await new Promise((resolve) => setTimeout(resolve, 80));
+
+	// clamp boundary: 10000 is accepted, 10001 falls back to the default
+	assert.equal(resolveTextScreenBudgetMs({ TT_TEXT_SCREEN_BUDGET_MS: '10000' } as any), 10000);
+	assert.equal(resolveTextScreenBudgetMs({ TT_TEXT_SCREEN_BUDGET_MS: '10001' } as any), DEFAULT_TEXT_SCREEN_BUDGET_MS);
+});
+
+test('post-insert moderation plan: notify/inlineFlag/queueAsync branching', () => {
+	const base = { thingtime: ['post'], crystal: { text: 'hello' } };
+	assert.deepEqual(postInsertModerationPlan({ ...base, moderation: { status: 'blocked' } }), { notify: false, inlineFlag: true, queueAsync: false });
+	assert.deepEqual(postInsertModerationPlan({ ...base, moderation: { status: 'nsfw' } }), { notify: true, inlineFlag: true, queueAsync: false });
+	assert.deepEqual(postInsertModerationPlan({ ...base, moderation: { status: 'clear' } }), { notify: true, inlineFlag: false, queueAsync: false });
+	assert.deepEqual(postInsertModerationPlan(base), { notify: true, inlineFlag: false, queueAsync: true });
+	// non-text kinds never queue or flag, whatever their fields say
+	assert.deepEqual(postInsertModerationPlan({ thingtime: ['user'], crystal: { text: 'x' } }), { notify: true, inlineFlag: false, queueAsync: false });
+	assert.deepEqual(postInsertModerationPlan({ thingtime: ['post'], crystal: { text: '   ' } }), { notify: true, inlineFlag: false, queueAsync: false });
+});
+
+test('a non-admin block on identical text is sticky against provider flip-flops; edits re-verdict freely', async () => {
+	const hash = moderationTextHash('hello world');
+	const flipFlop: FakeState = {
+		docs: new Map([['post-1', postDoc({ moderation: { status: 'blocked', provider: 'openai', textHash: hash } })]]),
+		updates: []
+	};
+	const home: FakeState = { docs: new Map(), updates: [] };
+	// same text, provider now says clean → block retained + flag refreshed
+	const result = await textAnalyzer(flipFlop, home, { flagged: false })('post-1');
+	assert.deepEqual(result, { ok: true, status: 'blocked' });
+	assert.equal(flipFlop.docs.get('post-1').moderation.status, 'blocked');
+	assert.ok(home.docs.get(moderationFlagShareId('post-1')), 'flag lands for admin review');
+
+	// different text (hash mismatch = a real edit) → fresh clear verdict wins
+	const edited: FakeState = {
+		docs: new Map([['post-1', postDoc({ moderation: { status: 'blocked', provider: 'openai', textHash: 'stale-hash' } })]]),
+		updates: []
+	};
+	const editedHome: FakeState = { docs: new Map(), updates: [] };
+	assert.deepEqual(await textAnalyzer(edited, editedHome, { flagged: false })('post-1'), { ok: true, status: 'clear' });
+	assert.equal(edited.docs.get('post-1').moderation.status, 'clear');
+});
+
+test('analyzer stamps are fenced to the text they screened and carry its hash; flag success clears flagPending', async () => {
+	const state: FakeState = {
+		docs: new Map([['post-1', postDoc({ moderation: { status: 'blocked', provider: 'openai', flagPending: true, textHash: moderationTextHash('hello world') } })]]),
+		updates: []
+	};
+	const home: FakeState = { docs: new Map(), updates: [] };
+	await textAnalyzer(state, home, { flagged: true, categories: { 'sexual/minors': true } })('post-1');
+	const stampWrite = state.updates.find((entry) => entry.update?.$set?.moderation)!;
+	assert.equal(stampWrite.filter['crystal.text'], 'hello world', 'stamp is fenced to the screened text');
+	const doc = state.docs.get('post-1');
+	assert.equal(doc.moderation.textHash, moderationTextHash('hello world'));
+	assert.equal(doc.moderation.flagPending, undefined, 'flagPending cleared once the flag landed');
+	assert.ok(home.docs.get(moderationFlagShareId('post-1')));
+});
+
+test('sweep filter drains unstamped docs AND born-flagged docs whose flag write was lost', async () => {
+	const { UNMODERATED_TEXT_FILTER } = await import('./moderationAdmin');
+	assert.deepEqual((UNMODERATED_TEXT_FILTER as any).$or, [{ moderation: { $exists: false } }, { 'moderation.flagPending': true }]);
 });

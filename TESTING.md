@@ -309,6 +309,12 @@ is fixed, and cite the checklist you ran in the PR description.
       creation and a `text` flag row (with excerpt, no View button) appears in
       `/admin` → Moderation; Clear restores the post, Block re-hides it.
       Editing a clean post to add flagged text re-screens it.
+- [ ] Hybrid create gate: with text moderation on, posting text that omni
+      flags as block-worthy never appears in any feed/thread — even a refresh
+      fired immediately after posting (the doc is born blocked; a `text` flag
+      row appears for admins). With `TT_TEXT_SCREEN_BUDGET_MS=0` (or omni
+      unreachable) the same post appears instantly and then vanishes once the
+      async verdict lands.
 - [ ] Text sweep safety net: with text moderation on, manually strip the
       `moderation` field from a flagged post (simulating a mid-flight death),
       then hit `/api/v1/moderation/sweep` with the CRON_SECRET bearer (or the
