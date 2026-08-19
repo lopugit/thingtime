@@ -17,8 +17,41 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Security
+
+- **Upload approval now has public / private / all scopes**: the
+  signup-permissions gate is split into two independent tri-state flags —
+  `meta.publicUploads` (post/comment/custom-emoji attachments) and the new
+  `meta.privateUploads` (message attachments + own profile media) — both
+  stamped `false` at registration and both privileged meta keys. The upload
+  start gate is purpose-aware (`403 public_uploads_not_approved` /
+  `private_uploads_not_approved`), `POST /api/v1/admin/users/public-uploads`
+  accepts `scope: 'public' | 'private' | 'all'` (default `public`, wire-
+  compatible), and the /admin Users tab's control becomes an Approve menu with
+  per-scope and enable/withhold-all actions plus per-scope pending flags.
+  Grandfathering and the admin bypass are unchanged. — Claude (AI), 2026-08-18
+
+- **New signups no longer receive public upload permissions**: accounts created
+  from this change forward start with `meta.publicUploads: false`, and verifying
+  the email address no longer grants uploads. `POST /api/v1/attachments/uploads`
+  fails closed with `403 public_uploads_not_approved` until an administrator
+  enables the account, so no upload is reserved and no MPU is opened. Once a new
+  account verifies its email, an `admin.new_user` notification carrying the
+  account details goes to `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default
+  `admin@thingtime.com`), and the **/admin → Users** tab gained an Uploads
+  column, a pending-approval banner, and a per-user Enable/Withhold toggle
+  backed by `POST /api/v1/admin/users/public-uploads`. The flag is tri-state:
+  accounts predating the change have no flag and keep uploading, so no data
+  migration is required, and administrators bypass the gate entirely.
+  — Claude (AI), 2026-08-18
+
 ### Fixed
 
+- **Manual develop-preview recovery reaches its controller**: the thin `main`
+  listener now converts `workflow_dispatch`'s string PR number to the numeric
+  input required by the protected reusable workflow. Manual recovery no longer
+  fails before GitHub can create a controller job, and the caller contract now
+  locks that typed boundary. — Codex (AI), 2026-08-17
 - **Vercel status in custom environments**: deployment status now checks
   Vercel's system environment and custom target independently, so the
   Preview-backed `develop` target keeps `/api/v1/vercel/status`, `/status`, and

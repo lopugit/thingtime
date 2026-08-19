@@ -6,6 +6,48 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Public upload approval (new-signup permissions)
+
+- [ ] Register a brand-new account. `POST /api/v1/auth/register` returns
+      `publicUploadsEnabled: false` AND `privateUploadsEnabled: false`;
+      `POST /api/v1/attachments/uploads` answers `403` with
+      `code: "public_uploads_not_approved"` for public purposes (`post`,
+      `comment`, `custom-emoji`, or no purpose) and
+      `code: "private_uploads_not_approved"` for private ones (`message`,
+      `profile-avatar`, `profile-banner`).
+- [ ] Open the verification link. `emailVerified` flips to `true` while both
+      `*UploadsEnabled` flags stay `false` — verifying an email must never be
+      what grants uploads.
+- [ ] Scopes stay independent: approve only `private`
+      (`POST /api/v1/admin/users/public-uploads` with `scope: "private"`) and
+      confirm `profile-avatar`/`message` starts pass the gate while `post`
+      still 403s; approve only `public` on another account and confirm the
+      reverse; `scope: "all"` enables both, and a request without `scope`
+      keeps the legacy public-only behavior.
+- [ ] Confirm the `admin.new_user` message reaches
+      `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default `admin@thingtime.com`) with
+      the username, display name, email, user id, and signup time. In dev read
+      it from the `email_messages_v2` outbox.
+- [ ] Stop the mail provider (or set an unroutable recipient) and verify again:
+      verification still succeeds and still redirects to `/login?verify=success`
+      — a mail outage must never fail a committed verification, nor grant the
+      permission.
+- [ ] In **/admin → Users**, the account shows a `pending` Uploads badge and
+      the warning banner counts it. Use the **Approve ▾** menu: "Enable public
+      uploads" / "Enable private uploads" flip only that scope (badge shows
+      `public` or `private`), "Enable all" turns the badge green `all` — each
+      optimistically with a Lopu toast — and the matching upload starts stop
+      403ing.
+- [ ] Withhold from the same menu: that scope 403s again ("Withhold all"
+      returns the badge to `pending`). An account that predates the change (no
+      `meta.publicUploads`/`meta.privateUploads`) shows `all`, and an admin row
+      shows `all` with no menu.
+- [ ] Non-admins calling `POST /api/v1/admin/users/public-uploads` get `403`;
+      a missing `userId`, non-boolean `enabled`, or unknown `scope` gets `400`;
+      an unknown user gets `404`.
+- [ ] Run `npm run test:attachments` (it carries the public-upload permission
+      unit tests alongside the upload-gate regression test).
+
 ## Canonical AI instruction links (`AI_ALL.md`)
 
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
@@ -38,14 +80,20 @@ is fixed, and cite the checklist you ran in the PR description.
 ## Develop-target Vercel PR previews
 
 - [ ] Confirm `.github/workflows/develop-pr-preview.yml` and its controller
-      script are present on the default `main` branch before expecting
-      `pull_request_target` to run; a workflow present only on the feature PR is
-      deliberately inactive.
+      listener are present on the default `main` branch, while the reusable
+      implementation and controller script are present on the protected
+      `github-actions` branch, before expecting `pull_request_target` to run; a
+      listener present only on the feature PR is deliberately inactive.
 - [ ] On a product branch, run
       `node remix/scripts/workflow-caller-contract.mjs` and
       `node --test remix/scripts/vercel-config.test.mjs`: the thin listener
-      checks out the trusted controller from `main`, `.github/scripts/` is
-      empty, and every Vercel cron `(path, schedule)` pair appears exactly once.
+      calls the trusted implementation on `github-actions`, `.github/scripts/`
+      is empty, and every Vercel cron `(path, schedule)` pair appears exactly
+      once.
+- [ ] Manually run `Develop S3 PR preview` from `main` with a valid develop PR
+      number: the caller converts the dispatch string to the reusable
+      workflow's numeric `pr_number`, creates the controller job instead of a
+      zero-job failure, and performs the requested publish or cleanup.
 - [ ] Inspect an eligible PR's two runs: the `pull_request_target` dispatcher
       has no GitHub Environment/Vercel secret, checks out no code, and emits one
       bounded `repository_dispatch`; only the downstream default-branch run

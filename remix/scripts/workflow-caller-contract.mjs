@@ -29,6 +29,16 @@ for (const filename of callers) {
   assert.equal((source.match(/^\s+uses:/gm) ?? []).length, 1, `${filename} must contain exactly one reusable-workflow call`);
 }
 
+const developPreviewCaller = readFileSync(
+  resolve(workflowsRoot, 'develop-pr-preview.yml'),
+  'utf8'
+);
+assert.match(
+  developPreviewCaller,
+  /^      pr_number: \$\{\{ fromJSON\(inputs\.pr_number \|\| '0'\) \}\}$/m,
+  'develop-pr-preview.yml must convert the manual dispatch string to the reusable workflow number type'
+);
+
 const promotionCaller = readFileSync(
   resolve(workflowsRoot, 'promote-features-to-main.yml'),
   'utf8'
