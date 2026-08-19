@@ -35,6 +35,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Passkeys (WebAuthn) + cross-deployment auto-login.** Full passkey support:
+  password-confirmed registration (`POST /api/v1/auth/passkeys/register-options`
+  → `/register`), usernameless discoverable login (`/login-options` → `/login`,
+  bypasses email-OTP by design, sessions carry `meta.method: "passkey"`), and a
+  Settings → Security manager (nicknames, descriptions, provider names derived
+  from authenticator AAGUIDs, created/last-used dates, linked apps, revoke +
+  delete, both password-confirmed). rpID is `thingtime.com` for every
+  `*.thingtime.com` deployment so one passkey works on production, dev, and
+  previews; conditional-UI autofill (`autocomplete="username webauthn"` +
+  `mediation: conditional`) surfaces the native iCloud Keychain / 1Password
+  popups on the login form. Credentials are protected `passkey` things (secure
+  blob + uniqueKeys, HOME collection — a `tt_mongo` override can never capture
+  or plant credentials); usage records are `passkey-app-link` child things.
+  Auto-login: every sign-in writes a `{rosterId, origin}` pointer into the
+  `Domain=.thingtime.com` `tt_hints` cookie; `GET /api/v1/auth/account-hints`
+  resolves pointers live (same roster/session chokepoints as the switcher) so
+  signed-out visitors get a "Continue as…" popup listing accounts with live
+  sessions on other deployments — picking one still requires that account's
+  password or passkey. E2E-verified by `remix/scripts/verify-passkeys.mjs`, a
+  software WebAuthn authenticator (P-256 + CBOR) driving the real API (42
+  checks). — Claude (AI), 2026-08-19
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean
   merges collide semantically (duplicate helpers declared by two PRs), repairs

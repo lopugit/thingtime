@@ -6,6 +6,37 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Passkeys + cross-deployment auto-login
+
+- [ ] Settings → Security → "Add a passkey ✨": wrong password → error toast,
+      no platform sheet; correct password → the browser/1Password/iCloud sheet
+      opens and the saved passkey appears in the list with provider name,
+      created date, and your nickname. Cancelling the sheet shows NO error
+      toast (cancel is silent).
+- [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
+      42/42 — full software-authenticator ceremony: registration, duplicate
+      409, challenge replay refusals, usernameless login, lastUsed + linked
+      apps, revocation blocking login, revoke-before-delete, hint liveness.
+- [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
+      sheet → welcome toast → roster merged, other accounts untouched); the
+      username field offers the browser's own passkey autofill popup
+      (conditional UI) on browsers that support it.
+- [ ] Revoked passkey: revoke (password-confirmed) → the passkey stops logging
+      in IMMEDIATELY (401), stays listed with a Revoked badge, Delete appears
+      only after revocation and asks for the password again.
+- [ ] Passkey login bypasses email-OTP 2FA (a 2FA-enabled account logs
+      straight in with a passkey — the passkey is the second factor).
+- [ ] Auto-login popup: with a live session on another `*.thingtime.com`
+      deployment, a signed-out visit shows the "Continue as… ✨" corner card;
+      picking an account routes to `/login?u=<username>` with the username
+      prefilled and password focused; "Not now" snoozes it for a day; it never
+      renders on `/login`, `/register`, `/authorize`, `/reset-password`, or
+      while signed in.
+- [ ] Hint liveness: log out on the OTHER deployment → the suggestion
+      disappears here on the next fetch (hints resolve live sessions, never a
+      cached identity). `GET /api/v1/auth/account-hints` responses carry no
+      email — only id/username/displayName/avatarUrl.
+
 ## Public upload approval (new-signup permissions)
 
 - [ ] Register a brand-new account. `POST /api/v1/auth/register` returns
