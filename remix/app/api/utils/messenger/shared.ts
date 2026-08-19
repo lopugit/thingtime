@@ -5,7 +5,9 @@
 // write — the generic /api/v1/things paths refuse the kinds outright (no
 // crystal sanitizers), so nothing here is reachable or forgeable around us.
 import { randomUUID } from 'node:crypto';
+import type { Binary } from 'mongodb';
 import { getThingsCollection } from '../mongodb/collections';
+import { toBin } from '../auth/users';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 export type Fail = { ok: false; status: number; error: string };
@@ -18,24 +20,55 @@ export type RequestOrigin = 'follower' | 'unknown';
 
 export const ROLE_RANK: Record<ChatRole, number> = { member: 0, admin: 1, owner: 2 };
 
-// Pair keys backing the partial unique indexes (collections.ts): one
-// membership per (container, user), one DM per pair, one follow per pair.
+// Pair keys for relationship dedupe + lookups: one membership per
+// (container, user), one DM per pair, one follow per pair.
 export const chatMemberKey = (chatId: string, userId: string) => `${chatId}:${userId}`;
 export const communityMemberKey = (communityId: string, userId: string) => `${communityId}:${userId}`;
 export const followKey = (followerId: string, followeeId: string) => `${followerId}:${followeeId}`;
 export const dmKeyOf = (a: string, b: string) => [a, b].sort().join(':');
 export const emojiScopeKey = (scope: string, name: string) => `${scope}:${name}`;
 
+// Structural dedupe rides the server-only root uniqueKeys namespace (the
+// sparse unique multikey index in collections.ts that already holds
+// username/email/schema/waitlist slots) — NOT kind-blind crystal-path unique
+// indexes: crystal paths are user-writable in free-form data things (the
+// squat class RESERVED_CRYSTAL_ROOT_KEYS guards during the transition), root
+// fields are not reachable by any user input. One map keyed by kind, stamped
+// inside newThingDoc so no writer can forget; the friend writer (users/
+// social.ts) and the backfill migration stamp through the same helper.
+// Entries are `<crystalField>:<key>` — prefixes disjoint from the existing
+// username:/email:/schema:/waitlist-email: namespaces. BinData for the same
+// reason as user keys: plain strings would tokenize into the $** text index.
+// The chat entry covers DMs only — group/channel chats carry dmKey null and
+// skip the stamp (relationshipUniqueKeys returns undefined for them).
+export const RELATIONSHIP_UNIQUE_CRYSTAL_KEYS: Readonly<Record<string, string>> = {
+	follow: 'followKey',
+	'chat-member': 'memberKey',
+	'community-member': 'memberKey',
+	chat: 'dmKey',
+	'community-invite': 'inviteCode',
+	'custom-emoji': 'emojiKey',
+	friend: 'friendKey'
+};
+
+export const relationshipUniqueKeys = (kind: string, crystal: Record<string, unknown> | null | undefined): Binary[] | undefined => {
+	const field = RELATIONSHIP_UNIQUE_CRYSTAL_KEYS[kind];
+	const value = field ? crystal?.[field] : undefined;
+	return typeof value === 'string' && value ? [toBin(`${field}:${value}`)] : undefined;
+};
+
 export const newThingDoc = (
   kind: string,
   fields: { ownerId: string; targetId?: string | null; crystal: Record<string, unknown>; shareId?: string }
 ) => {
   const now = new Date();
+  const uniqueKeys = relationshipUniqueKeys(kind, fields.crystal);
   return {
     shareId: fields.shareId || randomUUID(),
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
     thingtime: [kind],
     crystal: fields.crystal,
+    ...(uniqueKeys ? { uniqueKeys } : {}),
     extended: null,
     ownerId: fields.ownerId,
     acl: ['tt:user'],

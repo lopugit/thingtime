@@ -30,6 +30,7 @@ import {
 	userUsernameKey
 } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
+import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys } from '../messenger/shared';
 import { themeAcl } from '../themes/themes';
 import { builtinSchemaSeedNeedsRefresh, exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore';
 import { MigrationOperatorError, migrationFailureResult, type MigrationFailure } from './migrationFailure';
@@ -2559,6 +2560,93 @@ const staleGenerationBlocker = async (physical: string): Promise<string | null> 
   return null;
 };
 
+// ---------------------------------------------------------------------------
+// Relationship uniqueKeys backfill. Relationship dedupe moved off the
+// kind-blind crystal-path unique indexes (squattable through free-form data
+// crystals — KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS in collections.ts) onto the
+// server-only root uniqueKeys namespace. New docs stamp at insert
+// (messenger/shared.ts newThingDoc + the friend writer); this stamps legacy
+// docs so their create-race dedupe is structural again, and counts (never
+// touches) data things carrying a reserved key from before the sanitizer
+// reservation — the squat census.
+
+const relationshipBackfillTargets = (): Array<{ kind: string; field: string }> =>
+	Object.entries(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS).map(([kind, field]) => ({ kind, field }));
+
+const relationshipBackfillFilter = (kind: string, field: string) =>
+	({ thingtime: kind, [`crystal.${field}`]: { $type: 'string' }, uniqueKeys: { $exists: false } }) as any;
+
+const backfillRelationshipUniqueKeys: Migration = {
+	id: 'backfill-relationship-unique-keys',
+	collection: 'things',
+	fromVersion: THINGS_VERSION,
+	toVersion: THINGS_VERSION,
+	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend)',
+	description:
+		'Stamps the server-only root uniqueKeys dedupe entry (`<field>:<key>` BinData) onto legacy relationship ' +
+		'things whose uniqueness previously rode kind-blind crystal-path unique indexes (retired to lookup ' +
+		'indexes by the boot-time ensure). Idempotent: stamps are deterministic and only docs without ' +
+		'uniqueKeys are touched. Also counts — never modifies — free-form data things carrying a reserved key ' +
+		'at the crystal root: pre-reservation squats or legacy user data to review.',
+	pending: async () => {
+		const things = await getCollection('things');
+		let total = 0;
+		for (const { kind, field } of relationshipBackfillTargets()) {
+			total += await things.countDocuments(relationshipBackfillFilter(kind, field));
+		}
+		return total;
+	},
+	run: async ({ dryRun, assertLease }) => {
+		const things = await getCollection('things');
+		const notes: string[] = [];
+		let matched = 0;
+		let migrated = 0;
+		let skipped = 0;
+		for (const { kind, field } of relationshipBackfillTargets()) {
+			const filter = relationshipBackfillFilter(kind, field);
+			const kindMatched = await things.countDocuments(filter);
+			matched += kindMatched;
+			if (dryRun || !kindMatched) continue;
+			let kindMigrated = 0;
+			while (true) {
+				await assertLease?.();
+				const batch = await things.find(filter).project({ shareId: 1, crystal: 1 }).limit(THINGS_BATCH).toArray();
+				if (!batch.length) break;
+				for (const doc of batch) {
+					const uniqueKeys = relationshipUniqueKeys(kind, doc.crystal);
+					if (!uniqueKeys) {
+						skipped += 1;
+						continue;
+					}
+					try {
+						await things.updateOne({ shareId: doc.shareId, uniqueKeys: { $exists: false } } as any, { $set: { uniqueKeys } } as any);
+						kindMigrated += 1;
+					} catch (err: any) {
+						if (err?.code !== 11000) throw err;
+						// The slot is already held by another doc — a twin from the
+						// pre-unique-index era. Leave it unstamped for operator review;
+						// guessing a winner here could delete a real relationship.
+						skipped += 1;
+						notes.push(`duplicate ${kind} ${field} slot left unstamped: ${doc.shareId}`);
+					}
+				}
+				if (batch.length < THINGS_BATCH) break;
+			}
+			migrated += kindMigrated;
+			if (kindMigrated) notes.push(`${kindMigrated} ${kind} doc(s) stamped`);
+		}
+		const reservedFields = Array.from(new Set(Object.values(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)));
+		for (const field of reservedFields) {
+			await assertLease?.();
+			const count = await things.countDocuments({ thingtime: 'data', [`crystal.${field}`]: { $exists: true } } as any);
+			if (count) {
+				notes.push(`${count} data thing(s) carry crystal.${field} at the root (pre-reservation legacy/squats — review, not modified)`);
+			}
+		}
+		return { dryRun, matched, migrated, created: 0, skipped, notes };
+	}
+};
+
 export const migrations: Migration[] = [
 	// Physical residue must land in the current generation before any logical
 	// shape or byte-ledger migration can declare its source universe complete.
@@ -2579,6 +2667,7 @@ export const migrations: Migration[] = [
   backfillAppNamespaceFields,
   backfillAppStorageAllowances,
 	backfillUserStorageAccounting,
+	backfillRelationshipUniqueKeys,
   dropStaleCollectionGenerations
 ];
 
