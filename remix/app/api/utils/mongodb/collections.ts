@@ -393,6 +393,104 @@ const taggedCollection = (collection: any, logical: string) => ({
 // exactly the collection reads and writes touch.
 const thingsCollection = (db: any) => db.collection(physicalCollectionName('things'));
 
+const LEGACY_DEVICE_UNIQUE_INDEXES = [
+	'things_device_key_unique',
+	'things_device_state_key_unique',
+	'things_device_connector_key_unique',
+	'things_device_command_key_unique',
+	'things_device_event_key_unique',
+	'things_device_ai_live_state_key_unique',
+	'things_device_ai_live_sequence_unique',
+	'things_device_approval_key_unique',
+	'things_device_screen_key_unique'
+] as const;
+
+const LEGACY_DEVICE_TTL_INDEXES = [
+	'things_device_transient_event_ttl',
+	'things_device_terminal_command_ttl',
+	'things_device_approval_ttl'
+] as const;
+
+// Pre-release mesh builds used one unique/TTL index per protected device kind
+// and could take `things_v2` to MongoDB's hard 64-index ceiling. Converge those
+// rows and indexes before the normal parallel ensure: first backfill the shared
+// fields, drop only the non-unique legacy TTL indexes to make room, create the
+// replacement constraints, then remove the redundant unique indexes. This
+// preserves uniqueness throughout upgrades and leaves future index headroom.
+const migrateDeviceIndexLayout = async (db: any) => {
+	const raw = thingsCollection(db);
+	const col = taggedCollection(raw, 'things');
+	const keyFields = [
+		'$crystal.deviceKey',
+		'$crystal.deviceStateKey',
+		'$crystal.deviceConnectorKey',
+		'$crystal.deviceCommandKey',
+		'$crystal.deviceEventKey',
+		'$crystal.deviceAiLiveStateKey',
+		'$crystal.liveEventSequenceKey',
+		'$crystal.deviceApprovalKey',
+		'$crystal.deviceScreenKey'
+	];
+	await raw.updateMany(
+		{
+			'crystal.deviceUniqueKeys': { $exists: false },
+			$or: keyFields.map((field) => ({ [field.slice(1)]: { $type: 'string' } }))
+		},
+		[
+			{
+				$set: {
+					'crystal.deviceUniqueKeys': {
+						$setUnion: [
+							{
+								$filter: {
+									input: keyFields,
+									as: 'key',
+									cond: { $eq: [{ $type: '$$key' }, 'string'] }
+								}
+							},
+							[]
+						]
+					}
+				}
+			}
+		]
+	);
+	await raw.updateMany(
+		{
+			thingtime: { $in: ['device-command', 'device-command-event'] },
+			'crystal.expiresAt': { $type: 'date' },
+			'crystal.deviceTtlAt': { $exists: false }
+		},
+		[{ $set: { 'crystal.deviceTtlAt': '$crystal.expiresAt' } }]
+	);
+	await raw.updateMany(
+		{
+			thingtime: 'device-approval',
+			'crystal.approvalTtlAt': { $type: 'date' },
+			'crystal.deviceTtlAt': { $exists: false }
+		},
+		[{ $set: { 'crystal.deviceTtlAt': '$crystal.approvalTtlAt' } }]
+	);
+	for (const name of LEGACY_DEVICE_TTL_INDEXES) await dropIndexRetrying(col, name);
+	await col.createIndex(
+		{ 'crystal.deviceUniqueKeys': 1 },
+		{
+			name: 'things_device_unique_keys',
+			unique: true,
+			partialFilterExpression: { 'crystal.deviceUniqueKeys': { $type: 'array' } }
+		}
+	);
+	await col.createIndex(
+		{ 'crystal.deviceTtlAt': 1 },
+		{
+			name: 'things_device_ttl',
+			expireAfterSeconds: 0,
+			partialFilterExpression: { 'crystal.deviceTtlAt': { $type: 'date' } }
+		}
+	);
+	for (const name of LEGACY_DEVICE_UNIQUE_INDEXES) await dropIndexRetrying(col, name);
+};
+
 // Data-plane (`things`) index definitions, shared by the home ensure below and
 // the lazy per-endpoint ensure for CUSTOM data-plane DBs — a fresh override DB
 // bootstraps with the same structural guarantees (unique shareId/uniqueKeys,
@@ -443,18 +541,12 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Private-S3 attachment lifecycle scans. Deliberately NOT a TTL index:
     // expiry cleanup must delete/abort S3 first and refund the user ledger in
     // one Mongo transaction; TTL deletion would orphan bytes and accounting.
-    col.createIndex(
-      { ownerId: 1, attachmentState: 1, attachmentExpiresAt: 1, shareId: 1 },
-      { partialFilterExpression: { thingtime: 'attachment' } }
-    ),
+		col.createIndex({ ownerId: 1, attachmentState: 1, attachmentExpiresAt: 1, shareId: 1 }, { partialFilterExpression: { thingtime: 'attachment' } }),
     // Hourly global draft reaper: expiry is the leading key so a bounded scan
     // across owners never walks the whole attachment partition. Attached
     // rows clear attachmentExpiresAt when bound and therefore do not enter the
     // useful key range. This must remain a normal index, never Mongo TTL.
-    col.createIndex(
-      { attachmentExpiresAt: 1, shareId: 1 },
-      { partialFilterExpression: { thingtime: 'attachment' } }
-    ),
+		col.createIndex({ attachmentExpiresAt: 1, shareId: 1 }, { partialFilterExpression: { thingtime: 'attachment' } }),
     col.createIndex(
       { targetId: 1, ownerId: 1, attachmentState: 1, createdAt: 1, shareId: 1 },
       { partialFilterExpression: { thingtime: 'attachment', targetId: { $type: 'string' } } }
@@ -629,10 +721,7 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Account-ownership links (accounts/accountLinks.ts): "who is linked
     // to this target" — the admin owners view and app co-manager checks.
     // Links a USER holds ride the (thingtime, ownerId) prefix instead.
-    col.createIndex(
-      { 'crystal.targetId': 1, 'crystal.linkKind': 1 },
-      { partialFilterExpression: { 'crystal.targetId': { $exists: true } } }
-    ),
+		col.createIndex({ 'crystal.targetId': 1, 'crystal.linkKind': 1 }, { partialFilterExpression: { 'crystal.targetId': { $exists: true } } }),
     // Messenger (api/utils/messenger). Structural invariants ride single
     // crystal key fields with partial unique indexes (the reaction-index
     // pattern — acl/thingtime are multikey, so compounds over them are out):
@@ -674,12 +763,68 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     ),
     col.createIndex(
       { 'crystal.externalConversationKey': 1 },
-      { name: 'things_external_conversation_key_unique', unique: true, partialFilterExpression: { 'crystal.externalConversationKey': { $type: 'string' } } }
+			{
+				name: 'things_external_conversation_key_unique',
+				unique: true,
+				partialFilterExpression: { 'crystal.externalConversationKey': { $type: 'string' } }
+			}
     ),
     col.createIndex(
       { 'crystal.externalMessageKey': 1 },
       { name: 'things_external_message_key_unique', unique: true, partialFilterExpression: { 'crystal.externalMessageKey': { $type: 'string' } } }
     ),
+		// Thingtime mesh entities carry one or more domain-separated server
+		// hashes in a single multikey field. One unique index therefore enforces
+		// every device/state/connector/command/event/approval/screen idempotency
+		// invariant without exhausting MongoDB's per-collection index budget.
+		col.createIndex(
+			{ 'crystal.deviceUniqueKeys': 1 },
+			{
+				name: 'things_device_unique_keys',
+				unique: true,
+				partialFilterExpression: { 'crystal.deviceUniqueKeys': { $type: 'array' } }
+			}
+		),
+		col.createIndex(
+			{ ownerId: 1, targetId: 1, 'crystal.approvalPendingSlot': 1 },
+			{
+				name: 'things_device_approval_pending_slot_unique',
+				unique: true,
+				partialFilterExpression: { 'crystal.approvalPendingSlot': { $type: 'number' } }
+			}
+		),
+		col.createIndex(
+			{ ownerId: 1, targetId: 1, 'crystal.status': 1, createdAt: 1, shareId: 1 },
+			{ name: 'things_device_command_queue', partialFilterExpression: { 'crystal.deviceCommandKey': { $type: 'string' } } }
+		),
+		col.createIndex(
+			{ ownerId: 1, targetId: 1, createdAt: 1, shareId: 1 },
+			{ name: 'things_device_event_cursor', partialFilterExpression: { 'crystal.deviceEventKey': { $type: 'string' } } }
+		),
+		col.createIndex(
+			{ ownerId: 1, targetId: 1, 'crystal.deviceControlEventScopeKey': 1, createdAt: -1, shareId: -1 },
+			{ name: 'things_device_control_event_retention', partialFilterExpression: { 'crystal.deviceControlEventScopeKey': { $type: 'string' } } }
+		),
+		col.createIndex(
+			{ ownerId: 1, targetId: 1, 'crystal.liveControlEventScopeKey': 1, createdAt: -1, shareId: -1 },
+			{ name: 'things_device_live_event_retention', partialFilterExpression: { 'crystal.liveControlEventScopeKey': { $type: 'string' } } }
+		),
+		col.createIndex(
+			{ 'crystal.externalLiveMessageRootKey': 1, 'crystal.externalSource.segmentIndex': 1 },
+			{ name: 'things_external_live_message_segments', partialFilterExpression: { 'crystal.externalLiveMessageRootKey': { $type: 'string' } } }
+		),
+		col.createIndex(
+			{ 'crystal.deviceTtlAt': 1 },
+			{
+				name: 'things_device_ttl',
+				expireAfterSeconds: 0,
+				partialFilterExpression: { 'crystal.deviceTtlAt': { $type: 'date' } }
+			}
+		),
+		col.createIndex(
+			{ ownerId: 1, targetId: 1, 'crystal.status': 1, createdAt: -1, shareId: 1 },
+			{ name: 'things_device_approval_list', partialFilterExpression: { 'crystal.deviceApprovalKey': { $type: 'string' } } }
+		),
     // Thread replies list under their root message (main chat pages ride the
     // shared { targetId, thingtime, createdAt, shareId } index above).
     col.createIndex(
@@ -716,7 +861,7 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
 const customIndexesEnsured = new Map<string, Promise<void>>();
 const ensureCustomDataIndexes = (uri: string, db: any) => {
   if (customIndexesEnsured.has(uri)) return;
-  const run = Promise.all(createThingsDataIndexes(db)).then(
+	const run = migrateDeviceIndexLayout(db).then(() => Promise.all(createThingsDataIndexes(db))).then(
     () => undefined,
     (err) => {
       customIndexesEnsured.delete(uri);
@@ -733,6 +878,7 @@ export const ensureIndexes = async () => {
       // carries a custom endpoint override (e.g. via enforceRateLimit), and
       // the control-plane index set must never land on an override DB.
       const db = await getHomeThingtimeDb();
+			await migrateDeviceIndexLayout(db);
       // indexes land on the current-generation physical collections; createIndex
       // failures are tagged with `<logical>.<index name>` (via taggedCollection)
       // because Promise.all surfaces only the first rejection and driver
@@ -759,6 +905,21 @@ export const ensureIndexes = async () => {
         // this the sweep scans the whole sessions collection. Partial so the
         // (much larger) browser/service session population stays out.
         col('sessions').createIndex({ 'meta.clientId': 1 }, { partialFilterExpression: { purpose: 'app' } }),
+				// Device pairing/node credentials are opaque random tokens; only
+				// domain-separated SHA-256 hashes are persisted and indexed. The
+				// owner/device index powers safe presence aggregation and revocation.
+				col('sessions').createIndex(
+					{ 'meta.pairingSecretHash': 1 },
+					{ name: 'sessions_device_pairing_hash_unique', unique: true, partialFilterExpression: { purpose: 'device-pairing' } }
+				),
+				col('sessions').createIndex(
+					{ 'meta.deviceCredentialHash': 1 },
+					{ name: 'sessions_device_credential_hash_unique', unique: true, partialFilterExpression: { purpose: 'device' } }
+				),
+				col('sessions').createIndex(
+					{ purpose: 1, userId: 1, 'meta.deviceId': 1 },
+					{ name: 'sessions_device_owner', partialFilterExpression: { purpose: 'device' } }
+				),
         // account-switcher rosters: one doc per browser, entries reference
         // sessions by jti; TTL reaps rosters abandoned past their rolling expiry
         col('rosters').createIndex({ rosterId: 1 }, { unique: true }),

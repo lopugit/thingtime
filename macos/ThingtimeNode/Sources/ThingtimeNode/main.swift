@@ -1,0 +1,460 @@
+import AppKit
+import Foundation
+import Security
+import ThingtimeNodeCore
+
+private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
+    private let controller: ThingtimeNodeController
+
+    init(controller: ThingtimeNodeController) {
+        self.controller = controller
+    }
+
+    func request(_ data: Data, withReply reply: @escaping (Data) -> Void) {
+        let request: NodeRequest
+        do {
+            request = try NodeWireCodec.decodeRequest(data)
+        } catch let error as ThingtimeNodeError {
+            reply(Self.encoded(.failure(id: "", code: error.code, message: error.localizedDescription)))
+            return
+        } catch {
+            reply(Self.encoded(.failure(id: "", code: "invalid_request", message: "The XPC request is invalid.")))
+            return
+        }
+
+        Task {
+            let access = ThingtimeNodeXPCRequestPolicy.access(for: request.method)
+            guard access != .forbidden else {
+                reply(Self.encoded(.failure(
+                    id: request.id,
+                    code: "xpc_method_forbidden",
+                    message: "This operation is not available through the local setup bridge."
+                )))
+                return
+            }
+            if access == .pairingMutation {
+                let approved = await LocalPairingPresenceGate.shared.confirm(method: request.method)
+                guard approved else {
+                    reply(Self.encoded(.failure(
+                        id: request.id,
+                        code: "user_presence_required",
+                        message: "The pairing operation was not confirmed on this Mac."
+                    )))
+                    return
+                }
+            }
+            let response = await controller.handle(request)
+            reply(Self.encoded(response))
+        }
+    }
+
+    private static func encoded(_ response: NodeResponse) -> Data {
+        (try? NodeWireCodec.encodeResponse(response))
+            ?? Data(#"{"error":{"code":"encoding_error","message":"The node response could not be encoded."},"id":"","ok":false}"#.utf8)
+    }
+}
+
+@MainActor
+private final class LocalPairingPresenceGate {
+    static let shared = LocalPairingPresenceGate()
+
+    private var presenting = false
+
+    func confirm(method: String) -> Bool {
+        guard !presenting else { return false }
+        presenting = true
+        defer { presenting = false }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = method == "pairing.unpair"
+            ? "Allow Thingtime to unpair this Mac?"
+            : "Allow Thingtime to pair this Mac?"
+        alert.informativeText = "Only continue if you just requested this action in the Thingtime desktop app."
+        alert.addButton(withTitle: "Allow")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+}
+
+private struct PeerSignatureValidator {
+    private let teamIdentifier: String?
+    private let allowedIdentifiers: [String]
+
+    init() {
+        teamIdentifier = Self.currentTeamIdentifier()
+        let configured = ProcessInfo.processInfo.environment["THINGTIME_NODE_ALLOWED_CLIENT_IDENTIFIERS"]
+            .map { $0.split(separator: ",").map { String($0) } }
+        allowedIdentifiers = (configured ?? [
+            "com.thingtime.desktop",
+            "com.thingtime.desktop.node",
+            "com.thingtime.desktop.node.bridge"
+        ])
+            .filter {
+                !$0.isEmpty
+                    && $0.utf8.count <= 255
+                    && $0.range(of: #"^[A-Za-z0-9.-]+$"#, options: .regularExpression) != nil
+            }
+    }
+
+    func accepts(_ connection: NSXPCConnection) -> Bool {
+        guard connection.effectiveUserIdentifier == getuid() else { return false }
+        guard let teamIdentifier else {
+            // A Mach service that is not stably signed must not accept control
+            // requests from arbitrary same-user processes.
+            return false
+        }
+        guard teamIdentifier.range(of: #"^[A-Z0-9]{10}$"#, options: .regularExpression) != nil else {
+            return false
+        }
+        guard !allowedIdentifiers.isEmpty else { return false }
+
+        var guest: SecCode?
+        let attributes = [kSecGuestAttributePid as String: NSNumber(value: connection.processIdentifier)] as CFDictionary
+        guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &guest) == errSecSuccess,
+              let guest else { return false }
+
+        var requirement: SecRequirement?
+        let identifiers = allowedIdentifiers.map { "identifier \"\($0)\"" }.joined(separator: " or ")
+        let source = "anchor apple generic and certificate leaf[subject.OU] = \"\(teamIdentifier)\" and (\(identifiers))" as CFString
+        guard SecRequirementCreateWithString(source, [], &requirement) == errSecSuccess,
+              let requirement else { return false }
+        return SecCodeCheckValidity(guest, [], requirement) == errSecSuccess
+    }
+
+    private static func currentTeamIdentifier() -> String? {
+        var code: SecCode?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess,
+              let staticCode else { return nil }
+        var information: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information) == errSecSuccess,
+              let dictionary = information as? [String: Any] else { return nil }
+        return dictionary[kSecCodeInfoTeamIdentifier as String] as? String
+    }
+}
+
+private final class XPCListenerDelegate: NSObject, NSXPCListenerDelegate {
+    private let service: XPCService
+    private let validator = PeerSignatureValidator()
+
+    init(service: XPCService) {
+        self.service = service
+    }
+
+    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
+        guard validator.accepts(connection) else {
+            ThingtimeNodeLog.lifecycle.error("Rejected an XPC connection that did not meet the peer requirement")
+            return false
+        }
+        connection.exportedInterface = NSXPCInterface(with: ThingtimeNodeXPCProtocol.self)
+        connection.exportedObject = service
+        connection.resume()
+        return true
+    }
+}
+
+@MainActor
+private final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    // Construct telemetry with the delegate, before NSApplication begins its
+    // launch notifications. An agent restarted inside an inactive/locked Aqua
+    // session then observes sessionDidResignActive before did-finish instead of
+    // briefly treating that session as unlocked.
+    private let telemetry = DeviceTelemetryCollector()
+    private var controller: ThingtimeNodeController?
+    private var connectorRuntime: ConnectorRuntime?
+    private var desktopChatRuntime: DesktopChatRuntime?
+    private var scheduler: ControlPlaneScheduler?
+    private var liveSync: LiveAISyncCoordinator?
+    private var liveSyncEventTask: Task<Void, Never>?
+    private var desktopChatEventTask: Task<Void, Never>?
+    private var liveSyncFlushTask: Task<Void, Never>?
+    private var listener: NSXPCListener?
+    private var listenerDelegate: XPCListenerDelegate?
+    private var summaryItem: NSMenuItem?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+        telemetry.establishSessionActivityAfterApplicationLaunch()
+        configureMenu()
+        do {
+            let telemetry = self.telemetry
+            let journal = try CommandJournal(fileURL: CommandJournal.defaultFileURL())
+            let credentialStore = KeychainDeviceCredentialStore()
+            let pairing = PairingManager(store: credentialStore)
+            let connectorConfiguration = try connectorConfiguration()
+            let connector = ConnectorRuntime(configuration: connectorConfiguration)
+            let desktopChat = DesktopChatRuntime(
+                connector: DesktopChatAccessibilityConnector(
+                    backend: SystemDesktopChatAccessibilityBackend()
+                )
+            )
+            let actionExecutor = SafeActionExecutor(telemetry: telemetry)
+            let apiClient = try ThingtimeAPIClient(
+                baseURL: try apiBaseURL(),
+                credentialStore: credentialStore
+            )
+            let liveSync = try LiveAISyncCoordinator { body in
+                try await apiClient.syncLiveAI(body)
+            }
+            let controller = ThingtimeNodeController(
+                journal: journal,
+                pairing: pairing,
+                connector: connector,
+                telemetry: telemetry,
+                actionExecutor: actionExecutor,
+                controlPlaneClient: apiClient,
+                desktopChat: desktopChat,
+                pairingScopeChanged: { deviceID in
+                    try await liveSync.bindPairing(deviceID: deviceID)
+                    if deviceID == nil { await desktopChat.clearActiveSessions() }
+                }
+            )
+            self.controller = controller
+            connectorRuntime = connector
+            desktopChatRuntime = desktopChat
+            self.liveSync = liveSync
+            let scheduler = ControlPlaneScheduler(
+                client: apiClient,
+                hooks: ControlPlaneSchedulerHooks(
+                    makeHeartbeat: {
+                        let status = try await pairing.status()
+                        guard let deviceID = status.deviceID else {
+                            try await liveSync.bindPairing(deviceID: nil)
+                            throw ThingtimeAPIClientError.notPaired
+                        }
+                        try await liveSync.bindPairing(deviceID: deviceID)
+                        return await DeviceHeartbeat(
+                            deviceID: deviceID,
+                            telemetry: telemetry.snapshot(),
+                            connector: connector.health(),
+                            connectorProjects: connector.cachedProjectReferences(),
+                            additionalConnectors: desktopChat.connectorStates()
+                        )
+                    },
+                    dispatchCommand: { command in
+                        let response = await controller.handleLeasedCommand(command)
+                        do {
+                            _ = try await liveSync.captureSuccessfulLeasedResponse(
+                                command: command,
+                                response: response
+                            )
+                        } catch {
+                            ThingtimeNodeLog.connector.error(
+                                "Live AI command capture failed: \(error.localizedDescription, privacy: .public)"
+                            )
+                        }
+                        return response
+                    },
+                    reportError: { error in
+                        if (error as? ThingtimeAPIClientError) != .notPaired {
+                            ThingtimeNodeLog.lifecycle.error("Control-plane cycle failed: \(error.localizedDescription, privacy: .public)")
+                        }
+                    }
+                )
+            )
+            self.scheduler = scheduler
+            if ProcessInfo.processInfo.environment["THINGTIME_NODE_MACH_SERVICE"] == "1" {
+                let service = XPCService(controller: controller)
+                let delegate = XPCListenerDelegate(service: service)
+                let listener = NSXPCListener(machServiceName: ThingtimeNodeXPC.machServiceName)
+                listener.delegate = delegate
+                listener.resume()
+                self.listener = listener
+                self.listenerDelegate = delegate
+            }
+            liveSyncEventTask = Task {
+                do {
+                    let initialStatus = try await pairing.status()
+                    try await liveSync.bindPairing(deviceID: initialStatus.deviceID)
+                } catch {
+                    ThingtimeNodeLog.connector.error(
+                        "Live AI journal pairing failed closed: \(error.localizedDescription, privacy: .public)"
+                    )
+                    return
+                }
+                let events = await connector.events()
+                if connectorConfiguration != nil {
+                    do {
+                        try await connector.start()
+                        try await connector.refreshProjectReferences()
+                    } catch {
+                        ThingtimeNodeLog.connector.error("Connector startup failed: \(error.localizedDescription, privacy: .public)")
+                    }
+                }
+                await scheduler.start()
+                for await event in events {
+                    if Task.isCancelled { return }
+                    do {
+                        let status = try await pairing.status()
+                        try await liveSync.bindPairing(deviceID: status.deviceID)
+                        guard status.paired else { continue }
+                        _ = try await liveSync.captureConnectorEvent(event)
+                    } catch {
+                        ThingtimeNodeLog.connector.error(
+                            "Live AI event capture failed: \(error.localizedDescription, privacy: .public)"
+                        )
+                    }
+                }
+            }
+            desktopChatEventTask = Task {
+                let events = await desktopChat.events()
+                await desktopChat.startMonitoring()
+                for await event in events {
+                    if Task.isCancelled { return }
+                    do {
+                        let status = try await pairing.status()
+                        try await liveSync.bindPairing(deviceID: status.deviceID)
+                        guard status.paired else {
+                            await desktopChat.clearActiveSessions()
+                            continue
+                        }
+                        _ = try await liveSync.captureConnectorEvent(event)
+                    } catch {
+                        ThingtimeNodeLog.connector.error(
+                            "Desktop chat live event capture failed: \(error.localizedDescription, privacy: .public)"
+                        )
+                    }
+                }
+            }
+            liveSyncFlushTask = Task {
+                while !Task.isCancelled {
+                    let retryDelay: Duration
+                    do {
+                        let status = try await pairing.status()
+                        try await liveSync.bindPairing(deviceID: status.deviceID)
+                        guard status.paired else { throw ThingtimeAPIClientError.notPaired }
+                        _ = try await liveSync.flush(maximumRequests: 8)
+                        retryDelay = .seconds(2)
+                    } catch ThingtimeAPIClientError.notPaired {
+                        retryDelay = .seconds(5)
+                    } catch {
+                        ThingtimeNodeLog.connector.error(
+                            "Live AI sync failed; the durable outbox will retry: \(error.localizedDescription, privacy: .public)"
+                        )
+                        retryDelay = .seconds(10)
+                    }
+                    do {
+                        try await Task.sleep(for: retryDelay)
+                    } catch {
+                        return
+                    }
+                }
+            }
+            refreshStatus(nil)
+            ThingtimeNodeLog.lifecycle.info("Thingtime Node started")
+        } catch {
+            summaryItem?.title = "Node unavailable"
+            statusItem.button?.title = "Thingtime Node !"
+            ThingtimeNodeLog.lifecycle.error("Thingtime Node setup failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        listener?.invalidate()
+        liveSyncEventTask?.cancel()
+        desktopChatEventTask?.cancel()
+        liveSyncFlushTask?.cancel()
+        let scheduler = scheduler
+        let connector = connectorRuntime
+        let desktopChat = desktopChatRuntime
+        Task {
+            await scheduler?.stop()
+            await connector?.stop()
+            await desktopChat?.stopMonitoring(clearSessions: true)
+        }
+        ThingtimeNodeLog.lifecycle.info("Thingtime Node stopped")
+    }
+
+    private func configureMenu() {
+        statusItem.button?.title = "Thingtime Node"
+        statusItem.button?.setAccessibilityLabel("Thingtime Node")
+        let menu = NSMenu()
+        let summary = NSMenuItem(title: "Starting…", action: nil, keyEquivalent: "")
+        summary.isEnabled = false
+        menu.addItem(summary)
+        summaryItem = summary
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Refresh Status", action: #selector(refreshStatus(_:)), keyEquivalent: "r"))
+        menu.addItem(NSMenuItem(title: "Open Thingtime", action: #selector(openThingtime(_:)), keyEquivalent: "o"))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Quit Thingtime Node", action: #selector(quit(_:)), keyEquivalent: "q"))
+        menu.items.forEach { $0.target = self }
+        statusItem.menu = menu
+    }
+
+    @objc private func refreshStatus(_ sender: Any?) {
+        guard let controller else { return }
+        Task {
+            let response = await controller.handle(NodeRequest(method: "node.status"))
+            if response.ok, let status = try? response.result?.decode(NodeStatus.self) {
+                summaryItem?.title = status.pairing.paired ? "Paired · Node healthy" : "Ready to pair"
+                statusItem.button?.title = "Thingtime Node"
+            } else {
+                summaryItem?.title = "Node degraded"
+                statusItem.button?.title = "Thingtime Node !"
+            }
+        }
+    }
+
+    @objc private func openThingtime(_ sender: Any?) {
+        guard let url = URL(string: "https://thingtime.com/things") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func quit(_ sender: Any?) {
+        NSApp.terminate(nil)
+    }
+
+    private func connectorConfiguration() throws -> ConnectorRuntimeConfiguration? {
+        let environment = ProcessInfo.processInfo.environment
+        guard let path = environment["THINGTIME_NODE_CONNECTOR_EXECUTABLE"], !path.isEmpty else { return nil }
+        let decoder = JSONDecoder()
+        let arguments: [String]
+        if let json = environment["THINGTIME_NODE_CONNECTOR_ARGUMENTS_JSON"]?.data(using: .utf8) {
+            arguments = try decoder.decode([String].self, from: json)
+        } else {
+            arguments = []
+        }
+        let childEnvironment: [String: String]
+        if let json = environment["THINGTIME_NODE_CONNECTOR_ENV_JSON"]?.data(using: .utf8) {
+            childEnvironment = try decoder.decode([String: String].self, from: json)
+        } else {
+            childEnvironment = [:]
+        }
+        return try ConnectorRuntimeConfiguration(
+            executableURL: URL(fileURLWithPath: path),
+            arguments: arguments,
+            environment: childEnvironment
+        )
+    }
+
+    private func apiBaseURL() throws -> URL {
+        let rawValue = ProcessInfo.processInfo.environment["THINGTIME_NODE_API_BASE_URL"]
+            ?? "https://thingtime.com/"
+        guard var components = URLComponents(string: rawValue),
+              components.query == nil,
+              components.fragment == nil else {
+            throw ThingtimeAPIClientError.invalidBaseURL
+        }
+        if components.path.isEmpty { components.path = "/" }
+        guard components.path.hasSuffix("/"), let url = components.url else {
+            throw ThingtimeAPIClientError.invalidBaseURL
+        }
+        return url
+    }
+}
+
+@main
+private enum ThingtimeNodeApplication {
+    @MainActor
+    static func main() {
+        let application = NSApplication.shared
+        let delegate = AppDelegate()
+        application.delegate = delegate
+        application.run()
+    }
+}

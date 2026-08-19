@@ -2005,21 +2005,285 @@ const aiConnectionSchema: ThingtimeSchema = {
   title: 'AI desktop connection',
   summary: 'One consented ChatGPT or Claude desktop source linked to Thingtime Messenger.',
   detail:
-    'Created only through /api/v1/ai/connections. It stores bounded sync status and counts, ' +
+		'Created only through /api/v1/ai/connections or an authenticated device live sync. It stores bounded sync status and counts, ' +
     'never provider credentials, cookies, raw local paths or conversation bodies. Projects map ' +
-    'to communities, conversations to chats, and imported messages to relational chat-message ' +
-    'Things with hashed source keys for idempotent resync.',
-  createdVia: 'POST /api/v1/ai/connections',
+		'to communities, conversations or native sessions to chats, and visible completed messages to relational chat-message ' +
+		'Things with hashed source keys for idempotent resync. Live connections expose safe command capabilities and remain writable only through the paired device bridge.',
+	createdVia: 'POST /api/v1/ai/connections or /api/v1/devices/node/live-sync',
   fields: [
+		{
+			name: 'sourceType',
+			type: 'enum',
+			required: true,
+			values: ['imported', 'live'],
+			description: 'Discriminates snapshot imports from a live paired connector.'
+		},
     { name: 'provider', type: 'enum', required: true, values: ['chatgpt', 'claude'], description: 'Source provider.' },
     { name: 'sourceId', type: 'string', required: true, description: 'Non-secret desktop source identifier.' },
+		{ name: 'deviceId', type: 'id', required: false, description: 'Paired device for node-originated sources.' },
+		{ name: 'connectorId', type: 'string', required: false, max: 80, description: 'Live connector identifier.' },
     { name: 'label', type: 'string', required: true, description: 'User-facing app/profile label.' },
     { name: 'connectors', type: 'string[]', required: true, description: 'Bounded connector ids seen for this source.' },
+		{ name: 'capabilities', type: 'string[]', required: false, max: 64, description: 'Safe live connector command capabilities.' },
     { name: 'status', type: 'enum', required: true, values: ['syncing', 'connected', 'error'], description: 'Latest sync state.' },
-    { name: 'readOnly', type: 'boolean', required: true, description: 'Provider history is imported read-only.' },
+		{ name: 'readOnly', type: 'boolean', required: true, description: 'True for imports; false for live connector-backed sessions.' },
     { name: 'lastSyncAt', type: 'string', required: false, description: 'Last completed sync timestamp.' }
   ],
-  example: { provider: 'claude', sourceId: 'claude-thingtime', label: 'Claude Thingtime', connectors: ['claude-code-local'], status: 'connected', readOnly: true }
+	example: {
+		sourceType: 'imported',
+		provider: 'claude',
+		sourceId: 'claude-thingtime',
+		label: 'Claude Thingtime',
+		connectors: ['claude-code-local'],
+		status: 'connected',
+		readOnly: true
+	}
+};
+
+const deviceSchema: ThingtimeSchema = {
+	id: 'device',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Mesh device',
+	summary: 'One paired computer participating in the user’s Thingtime mesh.',
+	detail:
+		'Created only by the one-time device pairing flow. The crystal contains bounded, safe display metadata and capability ids; the node credential hash lives only in its scoped session and is never projected. Device rows are protected private user content and count toward account storage.',
+	createdVia: 'POST /api/v1/devices/pairing/claim',
+	fields: [
+		{ name: 'deviceKey', type: 'string', required: true, description: 'Server-hashed unique owner/device key.' },
+		{ name: 'name', type: 'string', required: true, max: 120, description: 'User-facing computer name.' },
+		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux'], description: 'Operating-system family.' },
+		{ name: 'model', type: 'string', required: false, max: 160, description: 'Bounded hardware model label.' },
+		{ name: 'osVersion', type: 'string', required: false, max: 80, description: 'Bounded OS version label.' },
+		{ name: 'appVersion', type: 'string', required: false, max: 80, description: 'Thingtime node version.' },
+		{ name: 'capabilities', type: 'string[]', required: true, max: 64, description: 'Allowlisted capability identifiers reported at pairing.' },
+		{ name: 'pairedAt', type: 'date', required: true, description: 'Server pairing timestamp.' }
+	],
+	example: { name: 'Lopu’s MacBook Pro', platform: 'macos', capabilities: ['session.read', 'session.send'] }
+};
+
+const deviceStateSchema: ThingtimeSchema = {
+	id: 'device-state',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Device state mirror',
+	summary: 'The latest bounded state snapshot for one paired device.',
+	detail:
+		'targetId is the device. Exactly one row per device is replace-on-write under a monotonic revision and content hash. Heartbeats stay in scoped session metadata rather than appending Things. Raw paths, process arguments, window titles, frames and media are never accepted. This persistent mirror counts toward account storage.',
+	createdVia: 'POST /api/v1/devices/node/state',
+	fields: [
+		{ name: 'deviceStateKey', type: 'string', required: true, description: 'Server-hashed unique device-state key.' },
+		{ name: 'revision', type: 'number', required: true, min: 1, description: 'Node-monotonic snapshot revision.' },
+		{ name: 'stateHash', type: 'string', required: true, description: 'Canonical content hash used for exact retry reconciliation.' },
+		{ name: 'snapshotHash', type: 'string', required: true, description: 'Canonical hash of the complete state plus connector snapshot.' },
+		{ name: 'state', type: 'record', required: true, description: 'Bounded locked, volume, brightness, battery and safe open-app summary.' },
+		{ name: 'observedAt', type: 'date', required: true, description: 'Server receipt timestamp.' }
+	],
+	example: { revision: 42, state: { locked: false, volume: 0.5, brightness: 0.8, openApps: [] } }
+};
+
+const deviceConnectorSchema: ThingtimeSchema = {
+	id: 'device-connector',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Device connector mirror',
+	summary: 'One bounded program connector available on a paired device.',
+	detail:
+		'targetId is the device. One row per connector is updated by monotonic snapshot revision and content hash. Credentials, cookies, raw local paths and process arguments are never stored. This persistent mirror counts toward account storage.',
+	createdVia: 'POST /api/v1/devices/node/state',
+	fields: [
+		{ name: 'deviceConnectorKey', type: 'string', required: true, description: 'Server-hashed unique device/connector key.' },
+		{ name: 'revision', type: 'number', required: true, min: 1, description: 'Node-monotonic connector revision.' },
+		{ name: 'connectorHash', type: 'string', required: true, description: 'Canonical content hash.' },
+		{ name: 'connector', type: 'record', required: true, description: 'Safe id, kind, label, status and capability projection.' }
+	],
+	example: {
+		revision: 42,
+		connector: { id: 'chatgpt-desktop', kind: 'chatgpt', label: 'ChatGPT', status: 'connected', capabilities: ['session.read'] }
+	}
+};
+
+const deviceCommandSchema: ThingtimeSchema = {
+	id: 'device-command',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Device command',
+	summary: 'Bounded allowlisted work queued for one paired device.',
+	detail:
+		'Control-plane delivery state: exact requestId retries return the existing command and conflicting payloads return 409. Required-approval commands remain unleaseable until a linked one-decision approval atomically queues them. Commands use hashed short leases and never expose arbitrary shell, script, executable, path, SDP or frame input. User chat content persists once in quota-billed chat-message Things.',
+	createdVia: 'POST /api/v1/devices/commands',
+	fields: [
+		{ name: 'deviceCommandKey', type: 'string', required: true, description: 'Server-hashed unique owner/device/request key.' },
+		{ name: 'requestId', type: 'string', required: true, max: 160, description: 'Client idempotency identifier.' },
+		{ name: 'kind', type: 'string', required: true, description: 'Allowlisted typed command kind.' },
+		{ name: 'input', type: 'record', required: true, description: 'Closed, kind-specific bounded input.' },
+		{ name: 'requiresApproval', type: 'boolean', required: true, description: 'Whether dispatch requires an account-user decision.' },
+		{
+			name: 'approvalState',
+			type: 'enum',
+			required: true,
+			values: ['not-required', 'pending', 'approved', 'denied'],
+			description: 'Server-enforced dispatch approval gate.'
+		},
+		{
+			name: 'status',
+			type: 'enum',
+			required: true,
+			values: ['queued', 'claimed', 'running', 'needs-approval', 'succeeded', 'failed', 'cancelled', 'needs-review'],
+			description: 'Monotonic command lifecycle.'
+		},
+		{
+			name: 'controlBytes',
+			type: 'number',
+			required: true,
+			min: 0,
+			description: 'Logical command-envelope bytes used by the strict pending control-plane budget.'
+		},
+		{
+			name: 'inputTextHash',
+			type: 'string',
+			required: false,
+			description: 'Hash retained after a delivered session prompt is redacted from the control row.'
+		},
+		{
+			name: 'inputRedactedAt',
+			type: 'date',
+			required: false,
+			description: 'When duplicate prompt text was removed after durable Messenger materialization or terminal completion.'
+		},
+		{ name: 'expiresAt', type: 'date', required: false, description: 'TTL deadline applied only after the command becomes terminal.' }
+	],
+	example: {
+		requestId: 'web-123',
+		kind: 'session.send',
+		input: { connectorId: 'chatgpt', sessionId: 'chat-1', text: 'Hello', delivery: 'queue' },
+		status: 'queued'
+	}
+};
+
+const deviceCommandEventSchema: ThingtimeSchema = {
+	id: 'device-command-event',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Device event',
+	summary: 'One bounded device, command, approval or screen lifecycle event.',
+	detail:
+		'Relational child event consumed through the cursor-based NDJSON feed. Live AI rows may retain bounded visible deltas and safe activity briefly as control-plane events; reasoning, paths, tool input/output, frames and arbitrary output bodies are rejected. Completed chat content updates the corresponding quota-billed message row.',
+	createdVia: 'Device state machines',
+	fields: [
+		{ name: 'deviceEventKey', type: 'string', required: true, description: 'Server-hashed event idempotency key.' },
+		{ name: 'deviceControlEventScopeKey', type: 'string', required: true, description: 'Server-hashed owner/device retention namespace.' },
+		{
+			name: 'liveControlEventScopeKey',
+			type: 'string',
+			required: false,
+			description: 'Server-hashed connector/session retention namespace for live AI rows.'
+		},
+		{
+			name: 'retainedBytes',
+			type: 'number',
+			required: true,
+			min: 0,
+			description: 'Logical row bytes enforced by strict control-plane retention budgets.'
+		},
+		{
+			name: 'liveEventSequenceKey',
+			type: 'string',
+			required: false,
+			description: 'Server-hashed connector/session/sequence uniqueness key for live AI events.'
+		},
+		{
+			name: 'liveEventHash',
+			type: 'string',
+			required: false,
+			description: 'Canonical live event hash used to distinguish exact replay from conflicting reuse.'
+		},
+		{ name: 'liveActivityHash', type: 'string', required: false, description: 'Canonical safe historical activity hash used for revision checks.' },
+		{ name: 'eventType', type: 'string', required: true, description: 'Bounded event type.' },
+		{ name: 'resourceId', type: 'id', required: false, description: 'Related resource id.' },
+		{ name: 'revision', type: 'number', required: false, description: 'Related monotonic revision.' },
+		{ name: 'payload', type: 'record', required: true, description: 'Small safe event projection.' },
+		{
+			name: 'expiresAt',
+			type: 'date',
+			required: false,
+			description: 'TTL deadline for transient live deltas and activity; durable completed text lives in chat-message rows.'
+		}
+	],
+	example: { eventType: 'command.running', resourceId: 'command-id', payload: { status: 'running' } }
+};
+
+const deviceAiLiveStateSchema: ThingtimeSchema = {
+	id: 'device-ai-live-state',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Device AI live cursor',
+	summary: 'One monotonic live-event cursor per device connector session.',
+	detail:
+		'Control-plane replay state only. The server hashes the owner/device/connector/session namespace, rejects gaps and stale sequence reuse, and never stores credentials, local paths, reasoning, or tool input/output.',
+	createdVia: 'POST /api/v1/devices/node/live-sync',
+	fields: [
+		{ name: 'deviceAiLiveStateKey', type: 'string', required: true, description: 'Server-hashed unique live session namespace.' },
+		{ name: 'connectorId', type: 'string', required: true, max: 80, description: 'Opaque connector identifier.' },
+		{ name: 'sessionId', type: 'string', required: true, max: 512, description: 'Opaque native session identifier.' },
+		{ name: 'lastSequence', type: 'number', required: true, min: 1, description: 'Last contiguous accepted event sequence.' },
+		{ name: 'lastObservedAt', type: 'date', required: true, description: 'Node observation time for the accepted cursor.' }
+	],
+	example: { connectorId: 'chatgpt-desktop', sessionId: 'session-1', lastSequence: 42, lastObservedAt: '2026-08-18T01:00:00.000Z' }
+};
+
+const deviceApprovalSchema: ThingtimeSchema = {
+	id: 'device-approval',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Device approval',
+	summary: 'A one-decision approval requested by a local connector.',
+	detail:
+		'Operational approval state tied to one command/device. Exact repeats are idempotent, conflicting decisions return 409, and expired approvals cannot be revived.',
+	createdVia: 'POST /api/v1/devices/node/commands (approval-request)',
+	fields: [
+		{ name: 'deviceApprovalKey', type: 'string', required: true, description: 'Server-hashed unique command/request key.' },
+		{ name: 'commandId', type: 'id', required: true, description: 'Parent device command.' },
+		{ name: 'requestId', type: 'string', required: true, max: 160, description: 'Node idempotency id.' },
+		{ name: 'kind', type: 'string', required: true, max: 80, description: 'Approval category.' },
+		{ name: 'prompt', type: 'string', required: true, max: 1000, description: 'Human-readable bounded question.' },
+		{ name: 'status', type: 'enum', required: true, values: ['pending', 'approved', 'denied', 'expired'], description: 'One-decision state.' }
+	],
+	example: { commandId: 'command-id', requestId: 'approval-1', kind: 'computer-use', prompt: 'Allow app control?', status: 'pending' }
+};
+
+const deviceScreenSessionSchema: ThingtimeSchema = {
+	id: 'device-screen-session',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Device screen session',
+	summary: 'Safe lifecycle metadata for a remote screen session.',
+	detail:
+		'Persistent, quota-billed lifecycle metadata only. Frames, images, audio, SDP, ICE candidates and TURN credentials are never accepted or stored; media uses a separately authorized real-time channel with local approval.',
+	createdVia: 'POST /api/v1/devices/screen',
+	fields: [
+		{ name: 'deviceScreenKey', type: 'string', required: true, description: 'Server-hashed idempotency key.' },
+		{ name: 'requestId', type: 'string', required: true, max: 160, description: 'Client request id.' },
+		{
+			name: 'status',
+			type: 'enum',
+			required: true,
+			values: ['requested', 'awaiting-local-approval', 'connecting', 'active', 'ended', 'failed'],
+			description: 'Screen lifecycle state.'
+		},
+		{ name: 'viewOnly', type: 'boolean', required: true, description: 'Whether input control is disabled.' },
+		{ name: 'startedAt', type: 'date', required: false, description: 'Server timestamp when active.' },
+		{ name: 'endedAt', type: 'date', required: false, description: 'Server terminal timestamp.' }
+	],
+	example: { requestId: 'screen-1', status: 'awaiting-local-approval', viewOnly: true }
 };
 
 const customEmojiSchema: ThingtimeSchema = {
@@ -2087,6 +2351,23 @@ const followSchema: ThingtimeSchema = {
 // minted only by the server on someone ELSE's action. Their dedicated
 // endpoints (/api/v1/users/follow, /api/v1/users/friend, notifications utils)
 // do direct inserts.
+export const DEVICE_THINGTIME = [
+	'device',
+	'device-state',
+	'device-connector',
+	'device-command',
+	'device-command-event',
+	'device-ai-live-state',
+	'device-approval',
+	'device-screen-session'
+] as const;
+
+// Pairing challenges live in the versioned sessions collection. These three
+// Thing kinds are bounded operational machinery and remain writable while an
+// account is full; the durable device/state/connector/screen mirror and all
+// imported chat rows stay ordinary quota-billed content.
+export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
+
 export const PROTECTED_THINGTIME = [
 	ATTACHMENT_THINGTIME,
   'user',
@@ -2103,7 +2384,8 @@ export const PROTECTED_THINGTIME = [
   ...CI_CONTROL_THINGTIME,
   'follow',
   'friend',
-  'notification'
+	'notification',
+	...DEVICE_THINGTIME
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -2257,6 +2539,14 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   chatMemberSchema,
   chatMessageSchema,
   aiConnectionSchema,
+	deviceSchema,
+	deviceStateSchema,
+	deviceConnectorSchema,
+	deviceCommandSchema,
+	deviceCommandEventSchema,
+	deviceAiLiveStateSchema,
+	deviceApprovalSchema,
+	deviceScreenSessionSchema,
   customEmojiSchema,
   followSchema,
   // system kinds (collections collapsing into things — dual-era)

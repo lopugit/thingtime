@@ -7,15 +7,21 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
 const { app, BrowserWindow, dialog, ipcMain, shell, Menu } = require('electron');
+const {
+	ThingtimeNodeBridgeError,
+	ThingtimeNodeIntegration,
+	ensureLocalProjectRegistry,
+	normalizePermissions,
+	registerLocalProject,
+	validateDeviceRequest
+} = require('./lib/thingtime-node-bridge.cjs');
 
 const repoRoot = path.resolve(__dirname, '..');
 const localWebOutput = path.join(__dirname, 'dist', 'web', '.output');
 const productionUrl = 'https://thingtime.com/';
 const clearElectronUrlParam = 'thingtimeDesktopClearUrl';
 const electronReleaseLabel = process.env.THINGTIME_DESKTOP_RELEASE_LABEL || 'Electron App Release';
-const updateFeedUrl =
-  process.env.THINGTIME_DESKTOP_UPDATE_FEED_URL ||
-  'https://api.github.com/repos/lopugit/thingtime/releases?per_page=20';
+const updateFeedUrl = process.env.THINGTIME_DESKTOP_UPDATE_FEED_URL || 'https://api.github.com/repos/lopugit/thingtime/releases?per_page=20';
 const macTitlebar = {
   height: 52,
   leftInset: 88,
@@ -30,6 +36,7 @@ let mainWindow = null;
 let sessionHash = null;
 let aiConnectorsPromise = null;
 const aiSyncSessions = new Map();
+const thingtimeNode = new ThingtimeNodeIntegration({ app, electronDir: __dirname });
 
 function getSessionHash() {
   if (!sessionHash) {
@@ -43,10 +50,7 @@ function getSessionHash() {
 function readEnvValue(rawValue) {
   let value = rawValue.trim();
 
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
+	if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
     value = value.slice(1, -1);
   }
 
@@ -200,9 +204,7 @@ async function startNitroServer() {
   const serverEntry = path.join(outputDir, 'server', 'index.mjs');
 
   if (!fs.existsSync(serverEntry)) {
-    throw new Error(
-      `Missing bundled web server at ${serverEntry}. Run "pnpm --dir electron build:web" before starting Electron.`
-    );
+		throw new Error(`Missing bundled web server at ${serverEntry}. Run "pnpm --dir electron build:web" before starting Electron.`);
   }
 
   loadLocalEnv();
@@ -429,9 +431,7 @@ function selectElectronAsset(assets) {
 }
 
 function selectElectronRelease(rawReleases) {
-  const releases = (Array.isArray(rawReleases) ? rawReleases : rawReleases ? [rawReleases] : []).filter(
-    (release) => release && !release.draft
-  );
+	const releases = (Array.isArray(rawReleases) ? rawReleases : rawReleases ? [rawReleases] : []).filter((release) => release && !release.draft);
 
   if (releases.length === 0) {
     return { asset: null, release: null };
@@ -666,10 +666,220 @@ function requireTrustedAiBridgeEvent(event) {
   }
 }
 
+function requireMacNode(event) {
+	requireTrustedAiBridgeEvent(event);
+	if (process.platform !== 'darwin') {
+		throw new ThingtimeNodeBridgeError('unsupported_platform', 'Thingtime Node is currently available on macOS only.');
+	}
+}
+
+async function confirmNodeChange({ title, message, detail, confirmLabel }) {
+	const result = await dialog.showMessageBox(mainWindow || undefined, {
+		type: 'question',
+		title,
+		message,
+		detail,
+		buttons: [confirmLabel, 'Cancel'],
+		defaultId: 1,
+		cancelId: 1,
+		noLink: true
+	});
+	return result.response === 0;
+}
+
+async function nodeGetStatus(event) {
+	requireMacNode(event);
+	return thingtimeNode.status();
+}
+
+function nodeProjectRegistryPath() {
+	return path.join(app.getPath('userData'), 'thingtime-node', 'projects.json');
+}
+
+async function nodeRegisterService(event) {
+	requireMacNode(event);
+	const confirmed = await confirmNodeChange({
+		title: 'Start Thingtime Node at login?',
+		message: 'Allow Thingtime to run its local node while you are signed in?',
+		detail:
+			'The node keeps device state and approved desktop-chat connectors available even when the Thingtime window is closed. You can turn it off again from Thingtime.',
+		confirmLabel: 'Enable Node'
+	});
+	if (!confirmed) return thingtimeNode.status();
+	const projectRegistryPath = nodeProjectRegistryPath();
+	await ensureLocalProjectRegistry(projectRegistryPath);
+	return thingtimeNode.registerService({ projectRegistryPath });
+}
+
+async function nodeAddProject(event) {
+	requireMacNode(event);
+	const registration = await thingtimeNode.registrationStatus();
+	if (!registration.registered) {
+		throw new ThingtimeNodeBridgeError('node_not_registered', 'Start Thingtime Node before adding a local Codex project.');
+	}
+	const selection = await dialog.showOpenDialog(mainWindow || undefined, {
+		title: 'Add a local Codex project to Thingtime Node',
+		buttonLabel: 'Add Project',
+		properties: ['openDirectory', 'createDirectory']
+	});
+	if (selection.canceled || selection.filePaths.length !== 1) return { cancelled: true };
+	const projectRegistryPath = nodeProjectRegistryPath();
+	const project = await registerLocalProject(projectRegistryPath, selection.filePaths[0]);
+	const status = await thingtimeNode.registerService({ projectRegistryPath });
+	return { cancelled: false, project, status };
+}
+
+async function nodeUnregisterService(event) {
+	requireMacNode(event);
+	const confirmed = await confirmNodeChange({
+		title: 'Stop Thingtime Node?',
+		message: 'Turn off the Thingtime login node on this Mac?',
+		detail: 'Remote device state and desktop-chat connectors will be unavailable after the node stops.',
+		confirmLabel: 'Turn Off Node'
+	});
+	return confirmed ? thingtimeNode.unregisterService() : thingtimeNode.status();
+}
+
+async function nodeBeginPairing(event) {
+	requireMacNode(event);
+	const challenge = await thingtimeNode.request('pairing.begin');
+	return {
+		code: challenge?.pairingID || null,
+		expiresAt: challenge?.expiresAt || null,
+		nonce: challenge?.nonce || null,
+		publicKey: challenge?.publicKey || null,
+		status: 'pairing'
+	};
+}
+
+async function nodeCompletePairing(event, request) {
+	requireMacNode(event);
+	const pairingSecret = typeof request?.pairingSecret === 'string' ? request.pairingSecret : '';
+	const commandId = typeof request?.commandId === 'string' ? request.commandId : '';
+	if (!pairingSecret || !commandId) {
+		throw new ThingtimeNodeBridgeError('invalid_request', 'Pairing requires a secret and commandId.');
+	}
+	const confirmed = await confirmNodeChange({
+		title: 'Pair this Mac with Thingtime?',
+		message: 'Connect this Mac to your Thingtime account?',
+		detail: 'Thingtime Node will store a device credential in your macOS Keychain and begin syncing approved device state.',
+		confirmLabel: 'Pair Mac'
+	});
+	if (!confirmed) return thingtimeNode.status();
+	await thingtimeNode.request('pairing.claim', { pairingSecret }, commandId);
+	return thingtimeNode.status();
+}
+
+async function nodeResumePairing(event, request) {
+	requireMacNode(event);
+	const commandId = typeof request?.commandId === 'string' ? request.commandId : '';
+	if (!commandId) throw new ThingtimeNodeBridgeError('invalid_request', 'Resuming pairing requires a commandId.');
+	const confirmed = await confirmNodeChange({
+		title: 'Resume pairing this Mac?',
+		message: 'Finish connecting this Mac to your Thingtime account?',
+		detail: 'Thingtime Node will retry only the exact pending signed pairing claim stored in your macOS Keychain.',
+		confirmLabel: 'Resume Pairing'
+	});
+	if (!confirmed) return thingtimeNode.status();
+	await thingtimeNode.request('pairing.resume', {}, commandId);
+	return thingtimeNode.status();
+}
+
+async function nodeUnpair(event, request) {
+	requireMacNode(event);
+	const commandId = typeof request?.commandId === 'string' ? request.commandId : '';
+	if (!commandId) throw new ThingtimeNodeBridgeError('invalid_request', 'Unpairing requires a commandId.');
+	const confirmed = await confirmNodeChange({
+		title: 'Unpair this Mac?',
+		message: 'Remove this Mac from Thingtime Node?',
+		detail: 'The local device credential will be removed from the macOS Keychain. The login node remains installed until you turn it off separately.',
+		confirmLabel: 'Unpair Mac'
+	});
+	if (!confirmed) return thingtimeNode.status();
+	await thingtimeNode.request('pairing.unpair', {}, commandId);
+	return thingtimeNode.status();
+}
+
+async function nodeGetPermissions(event) {
+	requireMacNode(event);
+	return normalizePermissions(await thingtimeNode.request('permissions.preflight'));
+}
+
+const NODE_PERMISSION_SETTINGS = Object.freeze({
+	accessibility: {
+		label: 'Accessibility',
+		url: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
+	},
+	'screen-recording': {
+		label: 'Screen Recording',
+		url: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
+	}
+});
+
+async function nodeOpenPermissionSettings(event, request) {
+	requireMacNode(event);
+	const kind = typeof request?.kind === 'string' && Object.hasOwn(NODE_PERMISSION_SETTINGS, request.kind) ? request.kind : null;
+	const permission = kind ? NODE_PERMISSION_SETTINGS[kind] : null;
+	if (!permission) {
+		throw new ThingtimeNodeBridgeError('invalid_request', 'Choose a supported Thingtime Node permission.');
+	}
+	const paths = thingtimeNode.paths();
+	await thingtimeNode.verify(paths);
+	const confirmed = await confirmNodeChange({
+		title: `Open ${permission.label} settings?`,
+		message: `Allow Thingtime Node in macOS ${permission.label}?`,
+		detail:
+			'In Privacy & Security, add or enable the signed “Thingtime Node” helper. Finder will also reveal the exact helper bundled with this Thingtime app.',
+		confirmLabel: 'Open Settings'
+	});
+	if (!confirmed) return { kind, opened: false };
+	shell.showItemInFolder(paths.helperApp);
+	await shell.openExternal(permission.url);
+	return { kind, opened: true };
+}
+
+async function nodeConnectorCommand(event, request) {
+	requireMacNode(event);
+	return thingtimeNode.connector(request);
+}
+
+function describeDeviceAction(request) {
+	switch (request.request.kind) {
+		case 'system.volume.set': {
+			const volume = request.request.parameters.volume;
+			const label = typeof volume === 'number' && Number.isFinite(volume) ? `${Math.round(volume * 100)}%` : 'the requested level';
+			return { message: `Set this Mac's output volume to ${label}?`, confirmLabel: 'Set Volume' };
+		}
+		case 'application.activate':
+			return { message: 'Bring the requested application to the front?', confirmLabel: 'Activate App' };
+		case 'application.launch':
+			return { message: 'Launch the requested application on this Mac?', confirmLabel: 'Launch App' };
+		default:
+			return { message: 'Run this approved device action?', confirmLabel: 'Run Action' };
+	}
+}
+
+async function nodeDeviceCommand(event, value) {
+	requireMacNode(event);
+	const request = validateDeviceRequest(value);
+	if (request.action !== 'execute' || request.request.kind === 'telemetry.refresh') {
+		return thingtimeNode.device(request);
+	}
+	const description = describeDeviceAction(request);
+	const confirmed = await confirmNodeChange({
+		title: 'Approve Thingtime device action',
+		message: description.message,
+		detail: 'Thingtime Node will also refuse this action if the Mac user session is locked.',
+		confirmLabel: description.confirmLabel
+	});
+	if (!confirmed) {
+		throw new ThingtimeNodeBridgeError('approval_required', 'The device action was not approved.');
+	}
+	return thingtimeNode.device(request, { userApproved: true });
+}
+
 function aiConnectorPath() {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'ai', 'ai-connectors.mjs')
-    : path.join(__dirname, 'dist', 'ai', 'ai-connectors.mjs');
+	return app.isPackaged ? path.join(process.resourcesPath, 'ai', 'ai-connectors.mjs') : path.join(__dirname, 'dist', 'ai', 'ai-connectors.mjs');
 }
 
 function loadAiConnectors() {
@@ -894,6 +1104,18 @@ ipcMain.handle('thingtime-desktop:ai-discover', (event) => discoverAiSources(eve
 ipcMain.handle('thingtime-desktop:ai-begin-sync', (event, request) => beginAiSync(event, request));
 ipcMain.handle('thingtime-desktop:ai-read-batch', (event, request) => readAiSyncBatch(event, request));
 ipcMain.handle('thingtime-desktop:ai-cancel-sync', (event, request) => cancelAiSync(event, request));
+ipcMain.handle('thingtime-desktop:node-status', (event) => nodeGetStatus(event));
+ipcMain.handle('thingtime-desktop:node-register-service', (event) => nodeRegisterService(event));
+ipcMain.handle('thingtime-desktop:node-unregister-service', (event) => nodeUnregisterService(event));
+ipcMain.handle('thingtime-desktop:node-begin-pairing', (event) => nodeBeginPairing(event));
+ipcMain.handle('thingtime-desktop:node-complete-pairing', (event, request) => nodeCompletePairing(event, request));
+ipcMain.handle('thingtime-desktop:node-resume-pairing', (event, request) => nodeResumePairing(event, request));
+ipcMain.handle('thingtime-desktop:node-unpair', (event, request) => nodeUnpair(event, request));
+ipcMain.handle('thingtime-desktop:node-permissions', (event) => nodeGetPermissions(event));
+ipcMain.handle('thingtime-desktop:node-open-permission-settings', (event, request) => nodeOpenPermissionSettings(event, request));
+ipcMain.handle('thingtime-desktop:node-add-project', (event) => nodeAddProject(event));
+ipcMain.handle('thingtime-desktop:node-connector', (event, request) => nodeConnectorCommand(event, request));
+ipcMain.handle('thingtime-desktop:node-device', (event, request) => nodeDeviceCommand(event, request));
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 
@@ -912,7 +1134,8 @@ if (!singleInstanceLock) {
     mainWindow.focus();
   });
 
-  app.whenReady()
+	app
+		.whenReady()
     .then(startNitroServer)
     .then((origin) => {
       createWindow(origin);

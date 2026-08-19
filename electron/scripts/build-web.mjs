@@ -9,7 +9,8 @@ const remixDir = path.join(repoRoot, 'remix');
 const stagedWebDir = path.join(electronDir, 'dist', 'web');
 const stagedAiDir = path.join(electronDir, 'dist', 'ai');
 const mcpDir = path.join(repoRoot, 'MCP');
-const aiBundle = path.join(mcpDir, 'dist-desktop', 'ai-connectors.mjs');
+const aiBundle = path.join(mcpDir, 'dist-desktop', 'desktop.mjs');
+const nodeRuntimeBundle = path.join(mcpDir, 'dist-desktop', 'nodeRuntime.mjs');
 const remixOutputDir = path.join(remixDir, '.output');
 const desktopReleaseMetadata = {
   baseVersion: process.env.THINGTIME_ELECTRON_BASE_VERSION || null,
@@ -19,9 +20,7 @@ const desktopReleaseMetadata = {
 };
 
 const corepackCommand = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
-const pnpmExecPath = process.env.npm_execpath && process.env.npm_execpath.includes('pnpm')
-  ? process.env.npm_execpath
-  : null;
+const pnpmExecPath = process.env.npm_execpath && process.env.npm_execpath.includes('pnpm') ? process.env.npm_execpath : null;
 const pnpmRunner = pnpmExecPath
   ? /\.(?:cjs|mjs|js)$/i.test(pnpmExecPath)
     ? { command: process.execPath, args: [pnpmExecPath] }
@@ -80,6 +79,7 @@ await cp(remixOutputDir, path.join(stagedWebDir, '.output'), {
 });
 await mkdir(stagedAiDir, { recursive: true });
 await cp(aiBundle, path.join(stagedAiDir, 'ai-connectors.mjs'));
+await cp(nodeRuntimeBundle, path.join(stagedAiDir, 'thingtime-node-runtime.mjs'));
 
 await writeFile(
   path.join(stagedWebDir, 'metadata.json'),

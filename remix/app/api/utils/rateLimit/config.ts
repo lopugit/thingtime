@@ -147,6 +147,20 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // window accommodates a first full-history import while still fencing a
   // runaway renderer or replay loop.
   'ai.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
+	// Paired device mesh. Pairing creates credentials and therefore fails
+	// closed at the routes; state/command/event budgets are deliberately roomy
+	// enough for a live desktop while still bounding stuck pollers and replays.
+	'devices.read': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.pairing': { limit: 20, windowMs: 3_600_000, enabled: true },
+	'devices.pairing.claim': { limit: 30, windowMs: 15 * 60_000, enabled: true },
+	'devices.state': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.commands': { limit: 120, windowMs: 60_000, enabled: true },
+	'devices.node.commands': { limit: 600, windowMs: 60_000, enabled: true },
+	'devices.liveSync': { limit: 120, windowMs: 60_000, enabled: true },
+	'devices.approvals': { limit: 120, windowMs: 60_000, enabled: true },
+	'devices.events': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.screen': { limit: 60, windowMs: 60_000, enabled: true },
+	'devices.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
   // message reactions mirror things.react but chats toggle faster in practice
   'chats.react': { limit: 120, windowMs: 60_000, enabled: true },
   // read receipts fire on every focused chat scroll — cheap single-doc updates,
@@ -172,9 +186,7 @@ let cache: { at: number; config: RateLimitConfig } | null = null;
 
 const clampRule = (rule: any, fallback: RateLimitRule): RateLimitRule => ({
   limit: Number.isFinite(rule?.limit) ? Math.max(1, Math.min(100_000, Math.floor(rule.limit))) : fallback.limit,
-  windowMs: Number.isFinite(rule?.windowMs)
-    ? Math.max(1000, Math.min(MAX_WINDOW_MS, Math.floor(rule.windowMs)))
-    : fallback.windowMs,
+	windowMs: Number.isFinite(rule?.windowMs) ? Math.max(1000, Math.min(MAX_WINDOW_MS, Math.floor(rule.windowMs))) : fallback.windowMs,
   enabled: rule?.enabled === undefined ? fallback.enabled : rule.enabled !== false
 });
 
@@ -211,11 +223,9 @@ export const setRateLimitConfig = async (patch: RateLimitConfig, updatedBy: stri
     const p = patch?.[name] && typeof patch[name] === 'object' ? patch[name] : {};
     endpoints[name] = clampRule({ ...current[name], ...p }, def);
   }
-  await (await getSettingsCollection()).updateOne(
-    { key: SETTINGS_KEY },
-    { $set: { key: SETTINGS_KEY, endpoints, updatedAt: new Date(), updatedBy } },
-    { upsert: true }
-  );
+	await (
+		await getSettingsCollection()
+	).updateOne({ key: SETTINGS_KEY }, { $set: { key: SETTINGS_KEY, endpoints, updatedAt: new Date(), updatedBy } }, { upsert: true });
   cache = { at: Date.now(), config: endpoints };
   return endpoints;
 };

@@ -7,6 +7,8 @@ on:
     branches: [main]
     paths:
       - electron/**
+      - MCP/**
+      - macos/**
       - .github/workflows/electron-release.yml
   workflow_dispatch:
 

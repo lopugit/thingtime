@@ -1748,6 +1748,53 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       count zero, and create/comment/reaction/share activity emits no home bell
       notification or email. Resetting to home restores normal telemetry/emits.
 
+## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
+
+- [ ] Run the Swift tests and release-build both `ThingtimeNode` products; run
+      MCP typecheck, tests, and `build:desktop`; then run the Electron tests.
+      Cancellation/timeout cases must terminate the connector child and mark
+      ambiguous in-flight work for review, while queue scheduling still lets
+      steer and interrupt overtake a blocked queued send. Keep a real connector
+      pipe active beyond two minutes: incremental `AsyncBytes` reads must
+      deliver output before EOF, and a stale reader generation must never clear
+      or terminate its replacement process.
+- [ ] Build with the repository's exact Corepack pnpm version. Confirm the
+      package-manager preflight and electron-builder's nested dependency
+      collector both resolve that same version even when a different global
+      pnpm is first on the inherited `PATH`; the temporary shim is removed on
+      success and failure.
+- [ ] Build the local app with a stable Apple Development identity, then run
+      strict deep `codesign` and the repository verifier against the unpacked
+      bundle. Install only that verified bundle with `install:local`, rerun
+      both checks against `~/Applications/Thingtime.app`, and compare the outer
+      app/node/bridge team identifiers, designated requirements, and executable
+      hashes between build and install.
+- [ ] Explicitly register the installed node login service, verify its
+      plist passes `plutil -lint`, uses valid `<key>` fields, its executable and
+      runtime resolve inside the verified installed app, and its registry
+      resolves to the exact private user-data file. Bootstrap must not issue an
+      unconditional immediate kickstart. Replace an exact old managed node,
+      then confirm launchd owns one new PID with `runs = 1` and no exit.
+- [ ] Open the exact installed Electron app, record its loopback-only internal
+      URL, and Quit with Cmd+Q. Electron must stop while the launchd node and
+      connector remain alive from the installed bundle for more than two
+      minutes. Signed-parent status must remain responsive; relaunch Electron
+      and unregister through the same confirmed UI without touching a foreign
+      agent/process.
+- [ ] Permission preflight must not prompt. Without grants, Accessibility and
+      Screen Recording operations fail closed with actionable instructions.
+      After the user grants the exact installed signed bundle, relaunch that
+      bundle and prove one harmless protected Accessibility focus/read and one
+      real bounded frame capture. Never automate a TCC toggle/reset, and do not
+      invoke the system-lock action without explicit confirmation.
+- [ ] Treat the local Apple Development result only as stable local/TCC proof.
+      Gatekeeper rejection is expected for that non-distribution identity.
+      Before any direct-distribution release, patch the protected
+      `github-actions` workflow, import a Developer ID Application identity in
+      its ephemeral keychain, provide notarization credentials, remove every
+      unsigned fallback, and require strict signature, Gatekeeper, and stapler
+      validation before assets publish.
+
 ## Messenger (chats, communities, custom emojis) (`remix/app/components/Messenger/`, `/api/v1/chats*`, `api/utils/messenger/`)
 
 Automated first: `node scripts/verify-messenger.mjs` from `remix/` against the
@@ -1779,6 +1826,31 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       that desktop discovery requires the app. At desktop and 390px mobile
       widths, open every modal state, scroll top-to-bottom, and confirm buttons,
       provider links, progress, and close controls neither clip nor overlap.
+- [ ] With a paired online Mac, **✦ AI** lists only its active bounded
+      connectors. Refresh a Codex connector, open one mirrored live chat,
+      create a chat under an opaque project id/label, and send while idle and
+      while a turn is active: Queue, Steer, and Stop map to distinct native
+      operations, stable request ids reconcile an ambiguous retry once, and
+      reopening/reloading the chat resumes from its event cursor without
+      repeating completed text.
+- [ ] In a live Codex chat, observe several exact streaming deltas (including
+      whitespace boundaries), a completed assistant item, and a command/file
+      approval. The activity panel updates without a spinner replacing cached
+      history. Reload with an approval pending: only its opaque/redacted safe
+      projection replays, and approve/deny still acts on that one request.
+      Completed visible user/assistant text survives event expiry as relational
+      quota-accounted Messenger messages, while reasoning, command lines/output,
+      tool payloads, cookies, credentials, and local paths never appear in UI,
+      API payloads, logs, or rows.
+- [ ] For a semantic Accessibility connector, permission preflight never
+      prompts on launch. Only the already-visible selected chat can be read;
+      create, send, or queue appears only when that exact connector advertises
+      the capability, and every semantic mutation first requires Thingtime
+      approval. Locked, denied, missing-permission, ambiguous-selector, or
+      selector-drift states fail closed. Steer, Interrupt, arbitrary app
+      selection, coordinates, AppleScript, and shell execution remain
+      unavailable unless a future connector explicitly implements and safely
+      advertises a narrower operation.
 - [ ] Sync one local source and one official JSON/ZIP export. Projects appear
       as Spaces, grouped conversations as channels, ungrouped conversations as
       chats, and user/assistant messages retain order and provider badges.
@@ -1859,6 +1931,43 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
+- [ ] A paired Mac appears at `/things` root and search from the dedicated
+      devices projection, with cached-first name/presence and current system,
+      volume, brightness, lock, open-app, permission, and connector state.
+      Open `?device=<id>` at desktop and exactly 390 CSS px, exercise every
+      drawer section and scroll top-to-bottom: no clipping/overflow, stale and
+      offline state is explicit, and desired controls confirm or revert against
+      a newer observed revision.
+- [ ] Device rows never enter generic selection, copy/move/share/delete,
+      context-menu, or preview flows. Capability, permission, lock, connector,
+      version, local-only, offline-queue, and approval policy each disable or
+      gate the relevant control before a command is sent. Approve and deny one
+      command, replay its request id, and confirm the node leases only approved
+      work and never blindly re-executes an expired/ambiguous lease.
+- [ ] Pairing uses prepare + complete with a server nonce and exact signed
+      claim. Simulate a server-committed complete response being lost, restart
+      the node, and confirm the persisted pending credential/proof replays into
+      one paired device. A changed proof, nonce, credential, or descriptor 409s;
+      the legacy unsigned claim is rejected. Treat this as key continuity and
+      replay fencing, not platform attestation.
+- [ ] Publish a newer complete connector snapshot that removes one connector,
+      then replay both the old snapshot and a same-revision changed snapshot:
+      the removal stays tombstoned, the changed replay 409s, and live sync is
+      rejected for a stale, removed, or revision-mismatched connector. Flood
+      bounded command/events in a disposable account and confirm count/byte
+      pruning plus TTL indexes prevent quota-neutral control rows becoming an
+      unmetered archive; submitted chat text remains once in the billed message.
+- [ ] In a disposable account, record storage before pairing and publishing a
+      persistent device/state/connector mirror. The canonical stored bytes
+      increase the same account ledger as posts and Messenger content; an
+      identical revision replay adds zero bytes, while attachments remain
+      separately metered and expiring command/event transport does not become
+      quota-free durable content.
+- [ ] Screen sharing says `not installed` and exposes no fake video stream when
+      peer transport is absent. The signed native capture primitive itself
+      preflights without prompting, refuses a locked/unapproved session, caps
+      display size/FPS/queue/frame bytes, disables audio and input injection,
+      and stops on permission loss or display disappearance.
 - [ ] A fresh browser landing directly on `/things` blocks first paint only
       long enough to create one temporary session user, then serves the real
       Things UI (never the logged-out sign-in hero). Reload and navigation

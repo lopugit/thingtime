@@ -22,15 +22,7 @@ import {
 } from './MessengerModals';
 import { RequestsView } from './RequestsView';
 import { SlackSidebar } from './SlackSidebar';
-import {
-  MESSENGER_REFRESH_EVENT,
-  modeKey,
-  readChatList,
-  readCommunities,
-  writeChatList,
-  writeCommunities,
-  writeUnread
-} from './messengerCache';
+import { MESSENGER_REFRESH_EVENT, modeKey, readChatList, readCommunities, writeChatList, writeCommunities, writeUnread } from './messengerCache';
 import type { ChatSummary, Community, MessengerMode } from './messengerTypes';
 import { useMessengerApi } from './useMessengerApi';
 
@@ -50,9 +42,7 @@ export const MessengerPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [mode, setMode] = React.useState<MessengerMode>(
-    () => (readLocalCache<MessengerMode>(modeKey(userId)) === 'slack' ? 'slack' : 'messenger')
-  );
+	const [mode, setMode] = React.useState<MessengerMode>(() => (readLocalCache<MessengerMode>(modeKey(userId)) === 'slack' ? 'slack' : 'messenger'));
   const [chats, setChats] = React.useState<ChatSummary[]>(() => readChatList(userId));
   const [communities, setCommunities] = React.useState<Community[]>(() => readCommunities(userId));
   const [requestsCount, setRequestsCount] = React.useState(0);
@@ -152,13 +142,7 @@ export const MessengerPage = () => {
   };
 
   const modeToggle = (
-    <Flex
-      background="var(--tt-surface-alt, #f2f2f5)"
-      borderRadius="var(--tt-radius-pill, 999px)"
-      padding="3px"
-      gap={0}
-      flexShrink={0}
-    >
+		<Flex background="var(--tt-surface-alt, #f2f2f5)" borderRadius="var(--tt-radius-pill, 999px)" padding="3px" gap={0} flexShrink={0}>
       {(
         [
           ['slack', '🏛️ Spaces'],
@@ -183,7 +167,8 @@ export const MessengerPage = () => {
     </Flex>
   );
 
-  const sidebar = mode === 'slack' ? (
+	const sidebar =
+		mode === 'slack' ? (
     <SlackSidebar
       communities={communities}
       activeCommunityId={activeCommunity?.id || null}
@@ -325,13 +310,7 @@ export const MessengerPage = () => {
             borderRight={{ md: '1px solid var(--tt-border-light, #f3f3f5)' }}
             minHeight={0}
           >
-            <Flex
-              align="center"
-              justify="center"
-              padding={2}
-              borderBottom="1px solid var(--tt-border-light, #f3f3f5)"
-              position="relative"
-            >
+						<Flex align="center" justify="center" padding={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)" position="relative">
               {modeToggle}
               <Button
                 size="xs"
@@ -407,7 +386,8 @@ export const MessengerPage = () => {
         isOpen={aiConnectionsOpen}
         onClose={() => setAiConnectionsOpen(false)}
         api={api}
-        onSynced={() => void refresh()}
+				chats={chats}
+		onSynced={refresh}
       />
       {selectedChat ? (
         <ChatDetailsDrawer

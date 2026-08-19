@@ -42,6 +42,7 @@ remix/server/assets/*
 electron/dist/
 electron/release/
 electron/node_modules/
+macos/ThingtimeNode/.build/
 
 tmp/*
 

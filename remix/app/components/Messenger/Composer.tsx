@@ -5,6 +5,7 @@ import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/
 import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerEmojiPicker } from './MessengerEmojiPicker';
+import { AgentComposerControls, type AgentComposerControlState, type AgentSendMode } from './AgentComposerControls';
 import { CUSTOM_TOKEN_PREFIX, customTokenId, isCustomToken, type ChatMessage, type CustomEmoji } from './messengerTypes';
 import { getUserDisplayName } from '~/utils/userIdentity';
 
@@ -15,10 +16,18 @@ export type ComposerProps = {
   onCancelReply: () => void;
   editing: ChatMessage | null;
   onCancelEdit: () => void;
-	onSend: (submission: { text: string; requestId: string; attachmentIds: string[]; attachments: PublicAttachment[] }) => Promise<boolean>;
+	onSend: (submission: {
+		text: string;
+		requestId: string;
+		attachmentIds: string[];
+		attachments: PublicAttachment[];
+		agentMode?: AgentSendMode;
+	}) => Promise<boolean>;
   onUploadEmoji?: () => void;
   disabled?: boolean;
   disabledLabel?: string;
+	agentControls?: AgentComposerControlState;
+	attachmentsSupported?: boolean;
 };
 
 const EMPTY_ATTACHMENTS: AttachmentComposerSnapshot = {
@@ -65,7 +74,8 @@ export const Composer = (props: ComposerProps) => {
 				text: text.trim(),
 				requestId: crypto.randomUUID(),
 				attachmentIds: [...attachmentSnapshot.attachmentIds],
-				attachments: [...attachmentSnapshot.attachments]
+				attachments: [...attachmentSnapshot.attachments],
+				...(props.agentControls?.running ? { agentMode: props.agentControls.mode } : {})
 			} satisfies MessageSubmission);
 		if (
 			(!submission.text && !submission.attachments.length) ||
@@ -124,9 +134,7 @@ export const Composer = (props: ComposerProps) => {
 		<ContextStrip label="Editing message" onCancel={props.onCancelEdit} disabled={composerLocked} />
   ) : props.replyTo ? (
     <ContextStrip
-      label={`Replying to ${props.replyTo.author ? getUserDisplayName(props.replyTo.author) : 'someone'}: ${
-        props.replyTo.text.slice(0, 60) || '…'
-      }`}
+			label={`Replying to ${props.replyTo.author ? getUserDisplayName(props.replyTo.author) : 'someone'}: ${props.replyTo.text.slice(0, 60) || '…'}`}
       onCancel={props.onCancelReply}
 			disabled={composerLocked}
     />
@@ -143,6 +151,7 @@ export const Composer = (props: ComposerProps) => {
   return (
     <Box padding={3} paddingTop={contextStrip ? 1 : 3}>
       {contextStrip}
+			{props.agentControls ? <AgentComposerControls state={props.agentControls} /> : null}
       <Flex
         align="flex-end"
         gap={2}
@@ -190,7 +199,7 @@ export const Composer = (props: ComposerProps) => {
             </PopoverContent>
           </Portal>
         </Popover>
-				{!props.editing ? (
+				{!props.editing && props.attachmentsSupported !== false ? (
 					<Button
 						size="sm"
 						variant={attachmentOpen || attachmentSnapshot.hasSelection ? 'solid' : 'ghost'}

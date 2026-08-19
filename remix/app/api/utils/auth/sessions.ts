@@ -11,7 +11,7 @@ export type SessionDoc = {
   expiresAt: Date | null;
   revokedAt: Date | null;
   type: 'tt.session';
-  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat';
+	purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'device-pairing' | 'device';
   meta?: Record<string, any>;
 };
 
@@ -19,30 +19,25 @@ export type CreateSessionOptions = {
   expiresAt?: Date | null;
   purpose?: SessionDoc['purpose'];
   meta?: Record<string, any>;
+	session?: any;
 };
 
 // Create a server-side session. The `jti` goes into the JWT so the token can be
 // revoked by flipping/deleting this record (FUNDAMENTALS.md §5).
-export const createSession = async (
-  userId: string,
-  options: CreateSessionOptions = {}
-): Promise<SessionDoc> => {
+export const createSession = async (userId: string, options: CreateSessionOptions = {}): Promise<SessionDoc> => {
   const now = new Date();
   const session: SessionDoc = {
     jti: crypto.randomUUID(),
     userId,
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.sessions,
     createdAt: now,
-    expiresAt:
-      options.expiresAt === undefined
-        ? new Date(now.getTime() + THIRTY_DAYS_MS)
-        : options.expiresAt,
+		expiresAt: options.expiresAt === undefined ? new Date(now.getTime() + THIRTY_DAYS_MS) : options.expiresAt,
     revokedAt: null,
     type: 'tt.session',
     purpose: options.purpose ?? 'browser',
     meta: options.meta ?? {}
   };
-  await (await getSessionsCollection()).insertOne(session);
+	await (await getSessionsCollection()).insertOne(session, options.session ? { session: options.session } : undefined);
   return session;
 };
 

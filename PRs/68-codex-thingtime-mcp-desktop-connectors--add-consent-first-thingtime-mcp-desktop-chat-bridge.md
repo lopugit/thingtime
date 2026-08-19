@@ -2,7 +2,7 @@
 
 - Branch: `codex/thingtime-mcp-desktop-connectors`
 - Pull request: <https://github.com/lopugit/thingtime/pull/68>
-- Date: 2026-07-13; platform integration updated 2026-08-17
+- Date: 2026-07-13; platform integration updated 2026-08-19
 
 ## Goal
 
@@ -67,63 +67,189 @@ relational shape for later ThingtimeDB storage and platform chat views.
   bounded imported-message chunks. A quota error cannot leave an unmetered or
   inaccessible half-write.
 
+### 2026-08-19 persistent mesh node + live sessions
+
+- Protected device, state, connector, command-event, approval, and screen
+  session records now back a dedicated `/api/v1/devices` family. Pairing is a
+  two-step, nonce-bound Ed25519 exchange: the node persists its pending bearer
+  credential and signing key before prepare, the server binds that key to the
+  one-use challenge, and complete signs an exact length-prefixed claim. Lost
+  responses replay the same proof and credential after a crash. This provides
+  integrity, key continuity, and replay fencing—not hardware/app attestation.
+  Node bearer credentials are stored hashed server-side, state revisions are
+  monotonic, and owner/device identity always comes from authentication rather
+  than request fields.
+- Connector heartbeats are complete snapshots: a newer revision atomically
+  updates present rows and tombstones removals, while stale snapshots are a
+  whole-request no-op. Live sync requires the connector revision to equal the
+  current device snapshot and to have been observed within two minutes.
+- Commands use a closed typed allowlist, owner/device/request-id idempotency,
+  random hashed leases, ten-second renewal heartbeats, and durable terminal
+  reporting. A failed renewal can never be reported as success; ambiguous work
+  becomes `needs-review`, while a rejected billable state upload does not
+  strand command claim/report. Volume,
+  brightness, app focus/launch/quit, lock, and screen start/stop always require
+  server approval; an approval-required command cannot be leased until its
+  approval changes it transactionally to queued. Expired ambiguous work becomes
+  `needs-review` instead of executing twice.
+- The signed macOS menu/login node now has a concrete HTTPS adapter, Keychain
+  pairing, bounded telemetry, a journaled connector subprocess, same-user/team
+  XPC, and Electron's fixed one-shot bridge. Closing the Electron window does
+  not stop the node; the embedded login service is managed separately from app
+  Quit and accepts no renderer-selected executable, method, environment, or
+  LaunchAgent fields.
+- Launch/runtime hardening writes a syntactically valid LaunchAgent plist with
+  ordinary `<key>` fields, avoids an unconditional immediate `kickstart` after
+  bootstrap, drains the long-lived connector pipe incrementally through
+  `AsyncBytes`, and uses a connector-generation guard so a stale canceled read
+  cannot tear down its replacement process.
+- The Codex connector talks to the documented local app-server protocol for
+  session list/read/create, queue/steer/interrupt, visible streaming updates,
+  and opaque approvals. A bounded local-history fallback exposes only visible
+  user/assistant messages. Project paths remain in a private local registry;
+  Thingtime receives only opaque project ids and short labels.
+- Semantic Accessibility adapters cover the allowlisted ChatGPT/Codex and
+  Claude desktop bundles with exact fail-closed selectors. Only already-visible
+  user/assistant content is read; new-chat/send requires an unlocked Mac and
+  explicit command approval. Window titles, URLs, coordinates, private app
+  stores, reasoning, tools, attachments, shell, and AppleScript are excluded.
+- `/things` merges a dedicated cache-first device projection into root/search
+  without exposing protected device rows to generic select/copy/move/share or
+  delete. The responsive device drawer renders observed versus desired state,
+  permissions, apps, connectors, command history, and approvals with capability
+  policy enforced before dispatch.
+- Messenger now discriminates immutable imported history from live sources.
+  Live chat controls reconcile idempotent queue/steer/stop commands and opaque
+  approvals, resume bounded cursor events, coalesce visible deltas, and replace
+  them with completed relational messages. Approval reload replays only the
+  privacy-safe opaque/redacted projection. Session summaries, transcript pages,
+  and completed user/assistant text are materialized transactionally and charged
+  to the same account-byte ledger as posts. Quota-neutral command/event delivery
+  state is byte/count bounded and TTL-expiring; submitted prompt text is redacted
+  from command rows once its billed Messenger message is durable.
+- A view-only ScreenCaptureKit primitive provides explicit approval, lock and
+  TCC preflight gates, deterministic display selection, bounded JPEG frames,
+  and newest-frame backpressure with audio/input disabled. No peer media
+  transport is claimed: screen UI remains `not installed` until one exists.
+- The Electron packaging path embeds and verifies the signed native node,
+  bridge, login-agent template, and MCP runtime. Local builds require a stable
+  Apple Development identity. Direct distribution remains fail-closed until the
+  protected `github-actions` workflow receives Developer ID Application and
+  notarization credentials; the exact control-plane patch is recorded under
+  `electron/PRODUCTION_RELEASE.md`.
+
 ## Security and product boundaries
 
 MCP gives a host a standard way to invoke this server; it does not give the
 server universal access to all open desktop chats, application cookies, local
-storage, passwords, or settings. The implementation therefore uses two honest
-capture paths: explicit current-chat handoff from the host, or an approved file
-inside a configured root. Imports and deletes require a literal
+storage, passwords, or settings. The standalone staging package therefore uses
+two honest capture paths: explicit current-chat handoff from the host, or an
+approved file inside a configured root. Imports and deletes require a literal
 `confirmedByUser: true` argument.
 
 The standalone MCP staging tools still do not write the database directly.
-ThingtimeDB persistence is enabled only through the authenticated Electron
-renderer and `/api/v1/ai/connections`, so the current Thingtime session,
+ThingtimeDB persistence is enabled only through authenticated Thingtime API
+families, so the current Thingtime session or paired-device credential,
 membership projections, rate limits, schema registry, storage admission, and
-normal API error boundary remain authoritative. Local discovery filters hidden
-reasoning, tool calls, internal context, cookies, credentials, and raw paths;
-imported provider rows are read-only.
+normal API error boundary remain authoritative. Local capture is deliberately
+split between explicit staging/import, the documented native Codex app-server
+protocol, and exact semantic Accessibility selectors for the already-visible
+chat. Discovery filters hidden reasoning, tool calls, internal context,
+cookies, credentials, and raw paths; imported provider rows remain read-only.
 
 ## Validation
 
-- `npm run typecheck`
-- `npm test` — 11/11 passing
-- `npm run build`
-- `npm run build:desktop`
-- `npm run build-electron` plus `npm run install-electron`; the source and
-  installed `~/Applications/Thingtime.app` bundles pass strict deep signature
-  verification and the installed executable check
-- Installed-app UI: ChatGPT, Claude, and Claude Thingtime all reported
-  `FOUND`; a real bounded ChatGPT import into the disposable replica set wrote
-  10,892 Messenger/AI rows totaling 7,620,754 bytes, exactly matching the
-  account's v2 `storageUsedBytes` ledger (the disposable database was removed)
-- `npm run build:vercel` including the static shell/filesystem-route verifier
-- `npm --prefix remix run test:messenger` — 7/7 passing
-- `npm --prefix remix run test:storage` — 7/7 passing
-- `npm --prefix remix run test:migrations` — 19/19 passing
-- `npm --prefix remix run test:schemas` — 54/54 passing after pinning the new
-  `ai-connection` builtin and its seven intentional projected fields
-- CI-equivalent `build:client`, `typecheck:ratchet`, and complete `test:unit`
-  gate pass locally; the ratchet remains non-blocking at the repository's
-  existing 147 errors versus the 143 baseline
-- Disposable MongoDB 8 single-node replica-set integration: posts and all
-  Messenger/imported-AI rows counted, identical import byte-idempotent,
-  1-byte quota rolled back both community rows, and v1 history reconciled by
-  `backfill-user-storage-accounting`
-- `npm audit --omit=dev` — 0 vulnerabilities
-- MCP client/server initialization and tool discovery over linked transports
-- allowlisted-path and real attachment-copy test
-- ChatGPT, Claude, portable-manifest, redaction, and relational-record tests
-- `npm pack --dry-run` with the expected `dist/index.js` executable entry
-- Graphify semantic/code refresh plus clustering, report, and HTML regeneration
-- Graphify post-commit/post-checkout hooks and `graphify` merge driver verified
+### Automated and build gates (2026-08-19)
+
+- Swift: `swift test --package-path macos/ThingtimeNode` passed 87/87 tests;
+  the final real long-lived connector-pipe regression slice passed 10/10. Both
+  `ThingtimeNode` and `ThingtimeNodeBridge` passed the release build.
+- MCP: typecheck, ordinary build, and `build:desktop` passed; the final suite
+  passed 36/36 tests twice sequentially, including Codex app-server, bounded
+  local-history fallback, project registry, cancellation, live wire, and
+  internal-context redaction coverage.
+- Electron: the bridge, registration, verifier, installer, packaging-contract,
+  and pinned-package-manager suite passed 37/37 tests. Changed main/preload and
+  script files also passed their syntax checks.
+- Remix focused coverage passed 175/175 tests: devices 42, Messenger 28,
+  storage 9, quota 11, collections 16, schemas 62, Things 6, and rate limiting
+  1. The fresh complete `test:unit` gate passed 28 TAP groups / 525 Node tests
+  plus its AI model-routing self-test gate.
+- The canonical repository-root `npm run build:vercel` passed, including the
+  Vite client, Nitro Vercel output, static shell, and filesystem-route verifier.
+- Targeted lint over 78 changed feature files reported zero errors and five
+  pre-existing `ThingsPage` warnings. The typecheck ratchet reported 146 total
+  errors against the repository baseline of 143, with no error in a changed
+  feature file.
+- Disposable MongoDB replica-set proofs passed for quota admission,
+  idempotency, rollback, and the prior 64-index migration: posts, Messenger
+  content, and persistent device mirrors are account-byte metered; attachments
+  remain separately metered; identical replay adds no bytes; failed admission
+  leaves no partial related rows. Ephemeral command/event delivery remains
+  byte/count bounded and TTL-expiring rather than an unmetered archive.
+
+### Canonical local package and install (2026-08-19)
+
+- `corepack pnpm@10.12.1 --dir electron build` completed with the local
+  Apple Development signing mode. The unpacked app is
+  `/Users/lopu/.codex/worktrees/ai-desktop-messenger/thingtime/electron/release/mac-arm64/Thingtime.app`.
+- The source bundle passed `codesign --verify --deep --strict` and
+  `electron/scripts/verify-signed-app.mjs --mode local`. Its outer identifier is
+  `com.thingtime.desktop`, and the outer app and embedded node both resolve to
+  team `6DQQ9V7C84`.
+- `install:local` atomically installed a byte-identical verified bundle at
+  `/Users/lopu/Applications/Thingtime.app`; the installed copy passed the same
+  strict and repository verifier checks. Built and installed designated
+  requirements matched for the outer app, node, and bridge. Final executable
+  SHA-256 values matched between build and install:
+  `42a190cca1cf42fb75c09de18d1a6713abd2faa5a979e53047856d55a03d18bd`
+  (outer), `9b26de645b372f79da253ef5727b8b9f161a8b1bd5d96bae5afcfb8857ef6446`
+  (node), and
+  `da873c18bfabae138f122d552d8ca019ecba9ddc66140436a3d9055864d6f98d`
+  (bridge).
+- The installer replaced old node PID 8923 with launchd-owned PID 22740. Its
+  connector PID 22764 remained running for more than two minutes, beyond the
+  previous 60-second pipe failure. `launchctl` reported `runs = 1` and no exit.
+- The exact installed Electron app opened its packaged UI at
+  `127.0.0.1:64878`, then received Cmd+Q. Electron stopped while node PID 22740
+  and connector PID 22764 remained running from the installed bundle. A
+  signed-parent status request returned `running`, `unpaired`, and journal
+  count 0; Accessibility and Screen Recording were both denied without a
+  prompt.
+
+### Acceptance boundaries still open
+
+- The installed Electron session and worktree browser session were logged out,
+  and the persistent node remained deliberately unpaired. Authenticated
+  current-branch pairing, device-drawer controls, live remote
+  chat queue/steer/interrupt/approval flows, and their full desktop/390 px
+  visual acceptance therefore remain manual QA; automated coverage is not
+  represented as that real account-level proof.
+- Accessibility and Screen Recording paths were validated for non-prompting,
+  fail-closed preflight and bounded behavior, but no TCC toggle was automated.
+  A real protected Accessibility focus/read and ScreenCaptureKit capture still
+  require the user to grant the exact installed signed app and then run the
+  checklist. The system-lock mutation was not invoked during validation.
+- Screen work is foundation only. No peer media transport is installed, so the
+  product correctly renders screen sharing as `not installed` and exposes no
+  synthetic or remotely playable stream.
+- This is a local Apple Development build, not a production-distribution
+  artifact; Gatekeeper rejection is expected. No Developer ID Application
+  identity is installed locally, and notarization/stapling were not attempted.
+  The protected `github-actions` release workflow is still stale and production
+  remains blocked until it receives the documented Developer ID/notarization
+  patch and credentials; see `electron/PRODUCTION_RELEASE.md`.
 
 ## Follow-up slices
 
-1. Add explicit disconnect/delete-local-copy controls and source retention
+1. Complete authenticated installed-app pairing and desktop/mobile acceptance,
+   then perform real TCC-protected operations only after the user grants the
+   exact installed signed app.
+2. Add explicit disconnect/delete-local-copy controls and source retention
    policy once product semantics are chosen.
-2. Add object-backed import of provider-export attachments after each export
+3. Add object-backed import of provider-export attachments after each export
    format exposes stable, verifiable file references.
-3. Add explicit provider send/reply permissions only where an app exposes a
-   documented authorized API; imported provider history remains read-only by
-   default.
+4. Install and validate a real peer media transport before enabling any screen
+   stream UI; keep capture foundation unavailable until then.
+5. Apply the protected-workflow Developer ID/notarization patch and validate a
+   stapled Gatekeeper-accepted artifact before production publication.

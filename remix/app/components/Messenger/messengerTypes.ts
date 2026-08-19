@@ -9,7 +9,8 @@ export type ChatRole = 'owner' | 'admin' | 'member';
 export type MemberState = 'active' | 'pending' | 'left' | 'declined';
 export type MessengerMode = 'slack' | 'messenger';
 
-export type ExternalAiSource = {
+export type ImportedAiSource = {
+	access?: 'imported';
   provider: 'chatgpt' | 'claude';
   sourceId: string;
   label: string;
@@ -20,6 +21,42 @@ export type ExternalAiSource = {
   segmentIndex?: number;
   segmentCount?: number;
 };
+
+export type AgentCapability =
+	| 'read-history'
+	| 'create-session'
+	| 'send-message'
+	| 'steer-turn'
+	| 'interrupt-turn'
+	| 'review-approval'
+	| 'accessibility'
+	| 'explicit-approval'
+	| 'attachments';
+
+export type LiveAiSource = {
+	access: 'live';
+	provider: 'chatgpt' | 'claude';
+	sourceId: string;
+	label: string;
+	connector: string;
+	readOnly: false;
+	deviceId: string;
+	connectorId: string;
+	sessionId: string;
+	projectId?: string | null;
+	projectLabel?: string | null;
+	historyCursor?: string | null;
+	historyHasMore?: boolean;
+	historySyncedAt?: string;
+	capabilities: AgentCapability[];
+	role?: 'user' | 'assistant' | 'system' | 'unknown';
+	authorName?: string | null;
+};
+
+export type ExternalAiSource = ImportedAiSource | LiveAiSource;
+
+export const isLiveAiSource = (source: ExternalAiSource | null | undefined): source is LiveAiSource =>
+	source?.access === 'live' && source.readOnly === false;
 
 export type MessengerProfile = {
   id: string;

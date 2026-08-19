@@ -19,6 +19,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Desktop mesh node and connector stay alive independently of Electron**:
+  LaunchAgent generation now emits valid property-list `<key>` fields and
+  registration no longer performs an unconditional immediate kickstart. The
+  connector reads its long-lived pipe incrementally through `AsyncBytes`, with
+  a generation guard preventing stale canceled readers from tearing down a
+  replacement process; pending approvals also survive reload through only
+  their privacy-safe opaque/redacted projection. The final installed-app proof
+  replaced the old managed node once, kept the launchd node and connector alive
+  for more than two minutes and after Electron Cmd+Q, and reported one launchd
+  run with no exit. — Codex (AI), 2026-08-19
 - **PR #99 final security reconciliation**: the current Thingtime serializer
   now treats persisted state strictly as data—functions are omitted on write,
   every legacy function tag is removed without compilation, code-defined
@@ -29,18 +39,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   assignments parse data literals without `eval`. Registration preserves the
   existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
   streaming body cap. — Codex (AI), 2026-08-18
-- **Posts and Messenger now share the exact account-storage quota**: every
-  user-owned Messenger row—including chats, messages, communities,
-  memberships, follows, and imported AI history—now carries the canonical
-  content-byte stamp and changes the subscription ledger in the same Mongo
-  transaction as its write. Attachments remain separately metered by their
-  protected object-backed Things. Storage accounting v2 forces the idempotent
-  whole-account backfill to recount legacy posts and Messenger content;
-  identical AI re-imports add zero bytes, and quota failures roll back related
-  container/membership, send, delete, invite, and section mutations rather
-  than leaving partial or unmetered rows. See the
+- **Posts, Messenger, and persistent device mirrors share the exact account
+  quota**: every user-owned Messenger row—including chats, messages,
+  communities, memberships, follows, and imported AI history—now carries the
+  canonical content-byte stamp and changes the subscription ledger in the same
+  Mongo transaction as its write. Persistent protected device mirror rows use
+  the same accounted-Thing admission path. Attachments remain separately
+  metered by their protected object-backed Things, while transient command and
+  event delivery is count/byte bounded and TTL-expiring. Storage accounting v2
+  forces the idempotent whole-account backfill to recount legacy posts and
+  Messenger content; identical AI re-imports add zero bytes, and quota failures
+  roll back related container/membership, send, delete, invite, and section
+  mutations rather than leaving partial or unmetered rows. See the
   [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
-  — Codex (AI), 2026-08-17
+  — Codex (AI), 2026-08-19
 - **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
   now lets the controller build an already-previewed commit in the isolated
   `develop` Custom Environment instead of canceling it as a duplicate, while
@@ -66,6 +78,28 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Thingtime desktop mesh nodes and live AI sessions**: a signed, persistent
+  macOS node now pairs to a user account, mirrors bounded device/app/permission
+  state into protected `/things` device views, leases an exact allowlist of
+  idempotent commands, and keeps remote mutations behind lock, capability, and
+  approval gates. Messenger distinguishes imported history from live sessions:
+  the native Codex app-server connector lists/reads/creates chats, queues or
+  steers messages, interrupts turns, forwards safe visible deltas, and brokers
+  approvals; semantic Accessibility connectors for ChatGPT and Claude expose
+  only already-visible user/assistant chat content and require one-time approval
+  for mutation. Completed visible messages become quota-accounted relational
+  Messenger rows while transient stream/control events expire separately.
+  Electron embeds the same-team signed node and bounded runtime; local paths,
+  credentials, cookies, hidden reasoning, and tool arguments/results never
+  enter Thingtime. A gated view-only ScreenCaptureKit primitive is included,
+  but the UI remains explicitly unavailable until a real peer media transport
+  is installed. The current delivery checkpoint proves the byte-identical local
+  Apple Development package/install and that its launchd node plus connector
+  survive Electron Cmd+Q; authenticated pairing and TCC-protected real-operation
+  acceptance remain open. The stale protected workflow still requires its
+  Developer ID/notarization patch before production. See the
+  [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
+  — Codex (AI), 2026-08-19
 - **ChatGPT and Claude desktop history in Messenger**: the Electron app now
   discovers local ChatGPT Work/Codex sessions plus the main and Thingtime
   Claude desktop profiles, accepts official ChatGPT/Claude JSON or ZIP exports,
@@ -194,7 +228,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and cookie-varying. Regression coverage seeds representative CI, webhook, and
   email HMAC values and proves none cross the server/client boundary. — Codex
   (AI), 2026-08-17
-
 
 - **Thin Web CI promotion no longer blocks on topology contracts**: the stale
   product-branch copy of the develop-preview controller was removed, the two

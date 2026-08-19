@@ -81,9 +81,86 @@ export type ThingtimeAiSyncBatch = {
 	progress: { completed: number; total: number };
 };
 
+export type ThingtimeNodeServiceStatus = 'absent' | 'needs-approval' | 'starting' | 'running' | 'degraded' | 'stopped' | 'version-mismatch';
+export type ThingtimeNodePairingStatus = 'unpaired' | 'pairing' | 'paired' | 'revoked';
+export type ThingtimeNodeTransportStatus = 'unknown' | 'offline' | 'connecting' | 'online' | 'backoff';
+export type ThingtimeNodePermissionStatus = 'not-determined' | 'denied' | 'restricted' | 'authorized';
+
+export type ThingtimeNodeStatus = {
+	deviceId?: string | null;
+	serviceStatus: ThingtimeNodeServiceStatus;
+	pairingStatus: ThingtimeNodePairingStatus;
+	recoverablePairing?: boolean;
+	transportStatus: ThingtimeNodeTransportStatus;
+	version?: string | null;
+	lastSeenAt?: string | null;
+	lastError?: { code: string; message?: string | null; at?: string | null } | null;
+	capabilities?: string[];
+	connector?: { state: string; detail?: string | null; processIdentifier?: number | null };
+	journalEntryCount?: number;
+	loginItem?: { label: string; registered: boolean; state: string };
+	permissions?: ThingtimeNodePermission[];
+	rawStatus?: Record<string, unknown>;
+};
+
+export type ThingtimeNodePermission = {
+	kind: string;
+	status: ThingtimeNodePermissionStatus;
+	updatedAt?: string | null;
+};
+
+export type ThingtimeNodePermissions = {
+	permissions: ThingtimeNodePermission[];
+};
+
+export type ThingtimeNodeProjectReference = {
+	projectId: string;
+	projectLabel: string;
+};
+
+export type ThingtimeNodePairingChallenge = {
+	code?: string | null;
+	expiresAt?: string | null;
+	nonce?: string | null;
+	publicKey?: string | null;
+	status?: ThingtimeNodePairingStatus;
+};
+
+export type ThingtimeNodeConnectorRequest =
+	| { action: 'start' | 'stop'; commandId: string }
+	| {
+			action: 'send';
+			commandId: string;
+			operation:
+				| 'connector/list'
+				| 'connector/start'
+				| 'connector/stop'
+				| 'session/list'
+				| 'session/read'
+				| 'session/create'
+				| 'session/send'
+				| 'session/interrupt'
+				| 'approval/respond';
+			payload?: Record<string, unknown>;
+	  };
+
+export type ThingtimeNodeDeviceRequest =
+	| { action: 'snapshot' | 'permissions' }
+	| {
+			action: 'evaluate' | 'execute';
+			commandId?: string;
+			request: {
+				kind: 'telemetry.refresh' | 'system.volume.set' | 'application.activate' | 'application.launch';
+				parameters?: Record<string, unknown>;
+			};
+	  };
+
 export type ThingtimeDesktopBridge = {
 	discoverAiSources?: () => Promise<{ sources: ThingtimeAiDesktopSource[] }>;
-	beginAiSync?: (request: { sourceId: string; mode: 'local' | 'export' }) => Promise<{ syncId: string; totals: ThingtimeAiSyncBatch['totals'] } | { cancelled: true }>;
+	beginAiSync?: (request: {
+		sourceId: string;
+		mode: 'local' | 'export';
+	}) => Promise<{ syncId: string; totals: ThingtimeAiSyncBatch['totals'] } | { cancelled: true }>;
 	readAiSyncBatch?: (request: { syncId: string }) => Promise<ThingtimeAiSyncBatch>;
 	cancelAiSync?: (request: { syncId: string }) => Promise<{ ok: true }>;
 	checkForUpdates?: () => Promise<ThingtimeDesktopUpdateInfo>;
@@ -91,6 +168,27 @@ export type ThingtimeDesktopBridge = {
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;
 	loadUrl?: (url: string) => Promise<ThingtimeDesktopInfo>;
 	navigateToUrl?: (url: string) => Promise<ThingtimeDesktopInfo>;
+	// Narrow local-node setup and macOS privacy surface. Ordinary device
+	// commands deliberately do not travel through a loaded renderer page; they
+	// are authenticated server commands claimed by the local node.
+	nodeGetStatus?: () => Promise<ThingtimeNodeStatus>;
+	nodeRegisterService?: () => Promise<ThingtimeNodeStatus>;
+	nodeUnregisterService?: () => Promise<ThingtimeNodeStatus>;
+	nodeBeginPairing?: () => Promise<ThingtimeNodePairingChallenge>;
+	nodeCompletePairing?: (request: { pairingSecret: string; commandId: string }) => Promise<ThingtimeNodeStatus>;
+	nodeResumePairing?: (request: { commandId: string }) => Promise<ThingtimeNodeStatus>;
+	nodeUnpair?: (request: { commandId: string }) => Promise<ThingtimeNodeStatus>;
+	nodeGetPermissions?: () => Promise<ThingtimeNodePermissions>;
+	nodeOpenPermissionSettings?: (request: { kind: 'accessibility' | 'screen-recording' }) => Promise<{
+		kind: 'accessibility' | 'screen-recording';
+		opened: boolean;
+	}>;
+	nodeAddProject?: () => Promise<
+		| { cancelled: true }
+		| { cancelled: false; project: ThingtimeNodeProjectReference; status: ThingtimeNodeStatus }
+	>;
+	nodeConnector?: (request: ThingtimeNodeConnectorRequest) => Promise<unknown>;
+	nodeDevice?: (request: ThingtimeNodeDeviceRequest) => Promise<unknown>;
 	platform?: string;
 	versions?: {
 		chrome?: string;
@@ -108,8 +206,7 @@ export const electronUrlSettingKey = (sessionHash: string) => `${sessionHash}URL
 export const electronAutoUpdateSettingKey = (sessionHash: string) => `${sessionHash}AutoUpdateEnabled`;
 
 export const electronUrlSettingPath = (sessionHash: string) => `settings.electron.${electronUrlSettingKey(sessionHash)}`;
-export const electronAutoUpdateSettingPath = (sessionHash: string) =>
-	`settings.electron.${electronAutoUpdateSettingKey(sessionHash)}`;
+export const electronAutoUpdateSettingPath = (sessionHash: string) => `settings.electron.${electronAutoUpdateSettingKey(sessionHash)}`;
 
 export const getElectronBridge = () => {
 	if (typeof window === 'undefined') {

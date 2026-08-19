@@ -1,6 +1,7 @@
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import {
 	COLLECTION_SCHEMA_VERSIONS,
+	DEVICE_CONTROL_THINGTIME,
 	MIGRATION_DIAGNOSTIC_THINGTIME,
 	USER_STORAGE_ACCOUNTING_VERSION
 } from '../../../schemas/registry.ts';
@@ -108,6 +109,7 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
 	// minted by dedicated home-plane state machines, never generic user CRUD.
 	'friend',
 	'notification',
+	...DEVICE_CONTROL_THINGTIME,
   'service-quota',
   'subscription',
   'subscription-tier',

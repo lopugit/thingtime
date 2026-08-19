@@ -4,11 +4,11 @@
 // key, making interrupted/repeated batches safe to resume without duplicates.
 import { createHash } from 'node:crypto';
 
-import { getThingsCollection } from '../mongodb/collections';
+import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
 import { MAX_MESSAGE_CHARS } from '~/schemas/registry';
 import { publicExternalAiSource, type AiMessageRole, type AiSourceProvider } from './externalAi';
 import { chatMemberKey, communityMemberKey, fail, newThingDoc, type Fail } from './shared';
-import { updateMessengerThing, withMessengerStorageTransaction } from './storage';
+import { deleteMessengerThings, updateMessengerThing, withMessengerStorageTransaction } from './storage';
 
 const MAX_GROUPS_PER_BATCH = 80;
 const MAX_CONVERSATIONS_PER_BATCH = 120;
@@ -16,6 +16,7 @@ const MAX_MESSAGES_PER_BATCH = 240;
 const MAX_EXTERNAL_ID_CHARS = 512;
 const MAX_IMPORTED_TEXT_CHARS = 256_000;
 const MAX_CONNECTIONS_PER_USER = 8;
+const MAX_IMPORTED_SEGMENTS = Math.ceil(MAX_IMPORTED_TEXT_CHARS / MAX_MESSAGE_CHARS) + 1;
 
 type AiSourceInput = {
   provider: AiSourceProvider;
@@ -23,6 +24,11 @@ type AiSourceInput = {
   label: string;
   connector: string;
   mode: 'local' | 'export';
+	// Server-derived identity namespace. Browser/export syncs retain sourceId;
+	// device credentials add their authenticated device id so two computers
+	// cannot overwrite one another's mirror merely by choosing the same source.
+	keyScope: string;
+	deviceId: string | null;
 };
 
 type AiGroupInput = { id: string; name: string; kind: 'workspace' | 'project' | 'group' };
@@ -44,13 +50,17 @@ type AiMessageInput = {
 
 export type PublicAiConnection = {
   id: string;
+	sourceType: 'imported' | 'live';
   provider: AiSourceProvider;
   sourceId: string;
+	deviceId: string | null;
+	connectorId: string | null;
   label: string;
   connectors: string[];
-  mode: 'local' | 'export' | 'mixed';
+	capabilities: string[];
+	mode: 'local' | 'export' | 'mixed' | 'live';
   status: 'syncing' | 'connected' | 'error';
-  readOnly: true;
+	readOnly: boolean;
   groups: number;
   conversations: number;
   messages: number;
@@ -66,8 +76,7 @@ type SyncResult =
       accepted: { groups: number; conversations: number; messages: number; messageSegments: number };
     };
 
-const bounded = (value: unknown, max: number): string =>
-  typeof value === 'string' ? value.trim().slice(0, max) : '';
+const bounded = (value: unknown, max: number): string => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 
 const externalKey = (ownerId: string, sourceId: string, kind: string, id: string): string =>
   createHash('sha256').update(`${ownerId}\0${sourceId}\0${kind}\0${id}`).digest('hex');
@@ -90,7 +99,9 @@ const normalizeSource = (value: unknown): AiSourceInput | null => {
   const label = bounded(raw.label, 80);
   const connector = bounded(raw.connector, 80);
   const mode = raw.mode === 'local' || raw.mode === 'export' ? raw.mode : null;
-  return provider && sourceId && label && connector && mode ? { provider, sourceId, label, connector, mode } : null;
+	return provider && sourceId && label && connector && mode
+		? { provider, sourceId, label, connector, mode, keyScope: sourceId, deviceId: null }
+		: null;
 };
 
 const normalizeGroup = (value: unknown): AiGroupInput | null => {
@@ -162,17 +173,35 @@ export const splitImportedMessage = (value: string, max = MAX_MESSAGE_CHARS): st
   return chunks;
 };
 
+export const staleImportedSegmentIndexes = (activeSegments: number, maximumSegments = MAX_IMPORTED_SEGMENTS): number[] => {
+	const start = Math.max(0, Math.floor(activeSegments));
+	const end = Math.max(start, Math.floor(maximumSegments));
+	return Array.from({ length: end - start }, (_unused, index) => start + index);
+};
+
 const sourceProjection = (source: AiSourceInput, extra: Record<string, unknown> = {}) => ({
+	access: 'imported',
   provider: source.provider,
   sourceId: source.sourceId,
   label: source.label,
   connector: source.connector,
+	...(source.deviceId ? { deviceId: source.deviceId } : {}),
   readOnly: true,
   ...extra
 });
 
-const ensureMembership = async (kind: 'community' | 'chat', targetId: string, ownerId: string, session: any) => {
-  const things = await getThingsCollection();
+const sourceThings = (source: AiSourceInput) => (source.deviceId ? getHomeThingsCollection() : getThingsCollection());
+
+const sourceStorageOptions = (source: AiSourceInput, options: Record<string, unknown> = {}) => ({
+	...options,
+	...(source.deviceId ? { messengerPlane: 'home' as const } : {})
+});
+
+const withSourceStorageTransaction = <T>(source: AiSourceInput, work: (session: any) => Promise<T>) =>
+	withMessengerStorageTransaction(work, source.deviceId ? 'home' : 'active');
+
+const ensureMembership = async (kind: 'community' | 'chat', targetId: string, ownerId: string, session: any, source: AiSourceInput) => {
+	const things = await sourceThings(source);
   const memberKind = `${kind}-member`;
   const memberKey = kind === 'community' ? communityMemberKey(targetId, ownerId) : chatMemberKey(targetId, ownerId);
   const base = newThingDoc(memberKind, {
@@ -220,13 +249,13 @@ const ensureMembership = async (kind: 'community' | 'chat', targetId: string, ow
         updatedAt: new Date()
       }
     } as any,
-		{ upsert: true, session }
+		sourceStorageOptions(source, { upsert: true, session })
   );
 };
 
 const ensureGroup = async (ownerId: string, source: AiSourceInput, group: AiGroupInput): Promise<any> => {
-  const things = await getThingsCollection();
-  const key = externalKey(ownerId, source.sourceId, 'group', group.id);
+	const things = await sourceThings(source);
+	const key = externalKey(ownerId, source.keyScope, 'group', group.id);
   const base = newThingDoc('community', {
     shareId: stableShareId('ai-space', key),
     ownerId,
@@ -239,7 +268,7 @@ const ensureGroup = async (ownerId: string, source: AiSourceInput, group: AiGrou
     }
   });
   const { crystal: _groupCrystal, updatedAt: _groupUpdatedAt, ...groupRoot } = base;
-  return withMessengerStorageTransaction(async (session) => {
+	return withSourceStorageTransaction(source, async (session) => {
 		await updateMessengerThing(
 			things,
 			{ 'crystal.externalCommunityKey': key } as any,
@@ -254,27 +283,23 @@ const ensureGroup = async (ownerId: string, source: AiSourceInput, group: AiGrou
 					updatedAt: new Date()
 				}
 			} as any,
-			{ upsert: true, session }
+			sourceStorageOptions(source, { upsert: true, session })
 		);
 		const doc = await things.findOne({ 'crystal.externalCommunityKey': key } as any, { session });
 		if (!doc) throw new Error('ai_group_upsert_failed');
-		await ensureMembership('community', String((doc as any).shareId), ownerId, session);
+		await ensureMembership('community', String((doc as any).shareId), ownerId, session, source);
 		return doc;
 	});
 };
 
-const ensureConversation = async (
-  ownerId: string,
-  source: AiSourceInput,
-  conversation: AiConversationInput
-): Promise<any | Fail> => {
-  const things = await getThingsCollection();
-  const key = externalKey(ownerId, source.sourceId, 'conversation', conversation.id);
+const ensureConversation = async (ownerId: string, source: AiSourceInput, conversation: AiConversationInput): Promise<any | Fail> => {
+	const things = await sourceThings(source);
+	const key = externalKey(ownerId, source.keyScope, 'conversation', conversation.id);
   const createdAt = safeDate(conversation.createdAt);
-  return withMessengerStorageTransaction(async (session) => {
+	return withSourceStorageTransaction(source, async (session) => {
 		let communityId: string | null = null;
 		if (conversation.groupId) {
-			const communityKey = externalKey(ownerId, source.sourceId, 'group', conversation.groupId);
+			const communityKey = externalKey(ownerId, source.keyScope, 'group', conversation.groupId);
 			const community = await things.findOne({ 'crystal.externalCommunityKey': communityKey } as any, { session });
 			if (!community) return fail(409, 'An imported conversation arrived before its project; retry the sync batch');
 			communityId = String((community as any).shareId);
@@ -297,12 +322,7 @@ const ensureConversation = async (
 		});
 		base.createdAt = createdAt;
 		base.updatedAt = safeDate(conversation.updatedAt, createdAt);
-		const {
-			crystal: _conversationCrystal,
-			targetId: _conversationTargetId,
-			updatedAt: _conversationUpdatedAt,
-			...conversationRoot
-		} = base;
+		const { crystal: _conversationCrystal, targetId: _conversationTargetId, updatedAt: _conversationUpdatedAt, ...conversationRoot } = base;
 		await updateMessengerThing(
 			things,
 			{ 'crystal.externalConversationKey': key } as any,
@@ -322,11 +342,11 @@ const ensureConversation = async (
 					updatedAt: safeDate(conversation.updatedAt)
 				}
 			} as any,
-			{ upsert: true, session }
+			sourceStorageOptions(source, { upsert: true, session })
 		);
 		const doc = await things.findOne({ 'crystal.externalConversationKey': key } as any, { session });
 		if (!doc) throw new Error('ai_conversation_upsert_failed');
-		await ensureMembership('chat', String((doc as any).shareId), ownerId, session);
+		await ensureMembership('chat', String((doc as any).shareId), ownerId, session, source);
 		return doc;
 	});
 };
@@ -337,9 +357,9 @@ const upsertMessages = async (
   messages: AiMessageInput[]
 ): Promise<{ accepted: number; segments: number }> => {
   if (!messages.length) return { accepted: 0, segments: 0 };
-  const things = await getThingsCollection();
+	const things = await sourceThings(source);
   const conversationIds = Array.from(new Set(messages.map((message) => message.conversationId)));
-  const conversationKeys = conversationIds.map((id) => externalKey(ownerId, source.sourceId, 'conversation', id));
+	const conversationKeys = conversationIds.map((id) => externalKey(ownerId, source.keyScope, 'conversation', id));
   const chats = await things
     .find({ 'crystal.externalConversationKey': { $in: conversationKeys } } as any, {
       projection: { shareId: 1, 'crystal.externalConversationKey': 1 }
@@ -348,18 +368,17 @@ const upsertMessages = async (
   const chatByKey = new Map<string, string>(
     chats.map((chat: any) => [String(chat.crystal?.externalConversationKey), String(chat.shareId)] as [string, string])
   );
-  const missing = conversationIds.find(
-    (id) => !chatByKey.has(externalKey(ownerId, source.sourceId, 'conversation', id))
-  );
+	const missing = conversationIds.find((id) => !chatByKey.has(externalKey(ownerId, source.keyScope, 'conversation', id)));
   if (missing) throw Object.assign(new Error('ai_conversation_missing'), { status: 409 });
 
   const operations: any[] = [];
+	const staleSegmentKeys: string[] = [];
   for (const message of messages) {
-    const chatId = chatByKey.get(externalKey(ownerId, source.sourceId, 'conversation', message.conversationId))!;
+		const chatId = chatByKey.get(externalKey(ownerId, source.keyScope, 'conversation', message.conversationId))!;
     const parts = splitImportedMessage(message.text);
     parts.forEach((part, segmentIndex) => {
       const segmentId = `${message.id}:${segmentIndex}`;
-      const key = externalKey(ownerId, source.sourceId, 'message', `${message.conversationId}:${segmentId}`);
+			const key = externalKey(ownerId, source.keyScope, 'message', `${message.conversationId}:${segmentId}`);
       const createdAt = safeDate(message.createdAt);
       const externalSource = sourceProjection(source, {
         role: message.role,
@@ -399,20 +418,32 @@ const upsertMessages = async (
         }
       });
     });
+		for (const segmentIndex of staleImportedSegmentIndexes(parts.length)) {
+			const segmentId = `${message.id}:${segmentIndex}`;
+			staleSegmentKeys.push(externalKey(ownerId, source.keyScope, 'message', `${message.conversationId}:${segmentId}`));
+		}
   }
   const operationChunks: any[][] = [];
   for (let offset = 0; offset < operations.length; offset += 50) operationChunks.push(operations.slice(offset, offset + 50));
   for (const chunk of operationChunks) {
-		await withMessengerStorageTransaction(async (session) => {
+		await withSourceStorageTransaction(source, async (session) => {
 			for (const operation of chunk) {
 				await updateMessengerThing(
 					things,
 					operation.updateOne.filter,
 					operation.updateOne.update,
-					{ upsert: true, session }
+					sourceStorageOptions(source, { upsert: true, session })
 				);
 			}
 		});
+	}
+	// A provider message can be edited shorter while retaining its external id.
+	// Remove now-impossible trailing segments through the same exact-accounting
+	// transaction helper; otherwise retries remain duplicate-free but leak stale
+	// text and quota bytes forever.
+	for (let offset = 0; offset < staleSegmentKeys.length; offset += 500) {
+		const keys = staleSegmentKeys.slice(offset, offset + 500);
+		await deleteMessengerThings(things, { 'crystal.externalMessageKey': { $in: keys } } as any, sourceStorageOptions(source));
 	}
 
   const chatIds = Array.from(new Set(chats.map((chat: any) => String(chat.shareId))));
@@ -426,7 +457,7 @@ const upsertMessages = async (
     if (!newestByChat.has(chatId)) newestByChat.set(chatId, message);
   }
   if (newestByChat.size) {
-		await withMessengerStorageTransaction(async (session) => {
+		await withSourceStorageTransaction(source, async (session) => {
 			for (const [chatId, message] of newestByChat.entries()) {
 				await updateMessengerThing(
 					things,
@@ -446,7 +477,7 @@ const upsertMessages = async (
 							}
 						}
 					},
-					{ session }
+					sourceStorageOptions(source, { session })
 				);
 			}
 		});
@@ -456,18 +487,25 @@ const upsertMessages = async (
 };
 
 const connectionProjection = (doc: any): PublicAiConnection => {
-  const mode = doc.crystal?.mode === 'local' || doc.crystal?.mode === 'export' ? doc.crystal.mode : 'mixed';
+	const sourceType = doc.crystal?.sourceType === 'live' ? 'live' : 'imported';
+	const mode = doc.crystal?.mode === 'local' || doc.crystal?.mode === 'export' || doc.crystal?.mode === 'live' ? doc.crystal.mode : 'mixed';
   return {
     id: String(doc.shareId),
+		sourceType,
     provider: doc.crystal?.provider === 'claude' ? 'claude' : 'chatgpt',
     sourceId: String(doc.crystal?.sourceId || ''),
+		deviceId: typeof doc.crystal?.deviceId === 'string' ? doc.crystal.deviceId : null,
+		connectorId: typeof doc.crystal?.connectorId === 'string' ? doc.crystal.connectorId : null,
     label: String(doc.crystal?.label || 'AI app'),
     connectors: Array.isArray(doc.crystal?.connectors)
       ? doc.crystal.connectors.filter((entry: unknown): entry is string => typeof entry === 'string').slice(0, 8)
       : [],
+		capabilities: Array.isArray(doc.crystal?.capabilities)
+			? doc.crystal.capabilities.filter((entry: unknown): entry is string => typeof entry === 'string').slice(0, 64)
+			: [],
     mode,
     status: doc.crystal?.status === 'syncing' || doc.crystal?.status === 'error' ? doc.crystal.status : 'connected',
-    readOnly: true,
+		readOnly: sourceType !== 'live',
     groups: Number(doc.crystal?.groups) || 0,
     conversations: Number(doc.crystal?.conversations) || 0,
     messages: Number(doc.crystal?.messages) || 0,
@@ -486,11 +524,19 @@ export const listAiConnections = async (ownerId: string): Promise<{ ok: true; co
   return { ok: true, connections: docs.map(connectionProjection) };
 };
 
-export const syncAiConnections = async (ownerId: string, input: unknown): Promise<SyncResult> => {
+export type AiSyncContext = { deviceId?: string };
+
+export const syncAiConnections = async (ownerId: string, input: unknown, context: AiSyncContext = {}): Promise<SyncResult> => {
   if (!input || typeof input !== 'object') return fail(400, 'A sync batch is required');
   const raw = input as Record<string, unknown>;
-  const source = normalizeSource(raw.source);
-  if (!source) return fail(400, 'The AI source descriptor is invalid');
+	const normalizedSource = normalizeSource(raw.source);
+	if (!normalizedSource) return fail(400, 'The AI source descriptor is invalid');
+	const deviceId = typeof context.deviceId === 'string' && context.deviceId.trim() ? context.deviceId.trim().slice(0, 160) : null;
+	const source: AiSourceInput = {
+		...normalizedSource,
+		deviceId,
+		keyScope: deviceId ? `${normalizedSource.sourceId}\0device:${deviceId}\0connector:${normalizedSource.connector}` : normalizedSource.sourceId
+	};
   const groupsRaw = Array.isArray(raw.groups) ? raw.groups : [];
   const conversationsRaw = Array.isArray(raw.conversations) ? raw.conversations : [];
   const messagesRaw = Array.isArray(raw.messages) ? raw.messages : [];
@@ -513,8 +559,8 @@ export const syncAiConnections = async (ownerId: string, input: unknown): Promis
     messages: Math.max(0, Math.floor(Number(totalsRaw.messages) || 0))
   };
 
-  const things = await getThingsCollection();
-  const connectionKey = externalKey(ownerId, source.sourceId, 'connection', source.sourceId);
+	const things = await sourceThings(source);
+	const connectionKey = externalKey(ownerId, source.keyScope, 'connection', source.sourceId);
   const existingCount = await things.countDocuments({ thingtime: 'ai-connection', ownerId } as any);
   const existing = await things.findOne({ 'crystal.aiConnectionKey': connectionKey } as any);
   if (!existing && existingCount >= MAX_CONNECTIONS_PER_USER) return fail(400, 'This account already has enough AI app connections');
@@ -553,8 +599,10 @@ export const syncAiConnections = async (ownerId: string, input: unknown): Promis
       $setOnInsert: root,
       $set: {
         'crystal.aiConnectionKey': connectionKey,
+				'crystal.sourceType': 'imported',
         'crystal.provider': source.provider,
         'crystal.sourceId': source.sourceId,
+				'crystal.deviceId': source.deviceId,
         'crystal.label': source.label,
         'crystal.connectors': connectors,
         'crystal.mode': mode,
@@ -571,7 +619,7 @@ export const syncAiConnections = async (ownerId: string, input: unknown): Promis
         updatedAt: now
       }
     },
-    { upsert: true }
+		sourceStorageOptions(source, { upsert: true })
   );
   const connection = await things.findOne({ 'crystal.aiConnectionKey': connectionKey } as any);
   if (!connection) throw new Error('ai_connection_upsert_failed');
