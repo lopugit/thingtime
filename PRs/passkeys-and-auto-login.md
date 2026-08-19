@@ -143,7 +143,12 @@ Rate limits: `auth.passkeyOptions` 60/min, `auth.passkeyLogin` 30/min,
 - iOS wrapper: WKWebView passkey ceremonies need the associated-domains
   (`webcredentials:thingtime.com`) entitlement to use the shared rpID —
   untouched here, worth a follow-up when the native shell wants passkeys.
-- **Merge coordination with PR #320** (crystal root-key squat guard, not in
-  this branch's base): `crystal.linkKey` now backs a partial unique index, so
-  when both land, `linkKey` should join `RESERVED_CRYSTAL_ROOT_KEYS` so a
-  user-authored `data` crystal can't squat a passkey-app-link slot.
+- **Merge coordination with the crystal-uniqueness stack (#320 → #325/#326,
+  not in this branch's base):** that stack migrates relationship uniqueness
+  off `crystal.*Key` partial indexes onto root `uniqueKeys`
+  (`<field>:<key>` BinData) and then un-reserves the crystal root keys. This
+  PR's `crystal.linkKey` partial unique index follows the current (pre-stack)
+  pattern; when the stack lands, migrate `passkey-app-link` dedup onto root
+  `uniqueKeys` (`linkKey:<passkeyId>:<appKey>`) like the other relationship
+  keys and drop the `things_passkey_link_key_unique` index. The passkey
+  credential id already rides root `uniqueKeys`, so it needs nothing.
