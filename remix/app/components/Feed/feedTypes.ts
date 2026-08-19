@@ -100,6 +100,9 @@ export type PublicPost = {
   viewStats?: { impressions: number; avgDwellMs: number };
   // poll posts only: live per-option vote counts + the viewer's own vote
   pollVotes?: PublicPollVotes;
+  // logged-in viewers only: has the viewer saved this post to their library?
+  // (absent for anonymous projections — the bookmark button hides with it)
+  viewerSaved?: boolean;
   createdAt: string;
 };
 

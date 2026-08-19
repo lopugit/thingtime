@@ -31,6 +31,7 @@ import Rainbow from './routes/rainbow.$';
 import Raw from './routes/raw';
 import Register from './routes/register';
 import ResetPassword from './routes/reset-password';
+import SavedRoute from './routes/saved';
 import SchemasRoute from './routes/schemas';
 import DocsSchemas from './routes/docs/schemas';
 import SearchRoute from './routes/search';
@@ -172,6 +173,9 @@ export const router = createBrowserRouter([
       // (the emailed token/link is the credential, not the session)
       { path: 'reset-password', element: <ResetPassword /> },
       { path: 'verify-email', element: <VerifyEmail /> },
+      // the viewer's Saved library — no loader guard: it renders its own
+      // signed-out quiet state, like /apps
+      { path: 'saved', element: <SavedRoute /> },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', element: <SchemasRoute /> },

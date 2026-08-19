@@ -277,6 +277,9 @@ export type PublicPost = {
   // poll posts only (crystal.thing carries question/options): live per-option
   // vote counts + the viewer's own vote, batch-aggregated from vote things
   pollVotes?: PublicPollVotes;
+  // logged-in viewers only: has the viewer saved this post to their library?
+  // (batched savedTargetIds lookup — anonymous projections omit the field)
+  viewerSaved?: boolean;
   extended: unknown | null;
   createdAt: string;
 };
@@ -662,7 +665,7 @@ export const postMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }]
 
 // Any post-shaped thing, including rich comments — for share-original lookups,
 // where the target may legitimately be a ["post","comment"] thing.
-const postThingMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }] });
+export const postThingMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }] });
 
 // Query fragment for a `thingtime in [...]` filter that stays era-correct: v1
 // posts have no thingtime array, so a 'post' filter must also match kind:'post'.
@@ -1673,10 +1676,13 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   // One batched pass each: interactions, whole-thread comment totals,
   // protected attachment metadata, and public view stats. Run them together
   // so neither attachments nor views add serial read latency.
-	const [related, threadCounts, viewStats] = await Promise.all([
+	const [related, threadCounts, viewStats, savedIds] = await Promise.all([
     resolveRelated(allDocs),
     resolveThreadCounts(allDocs.map((doc) => doc.shareId)),
-    resolveViewStats(allDocs.map((doc) => doc.shareId))
+    resolveViewStats(allDocs.map((doc) => doc.shareId)),
+    // the viewer's library saves across the page (one query, never N+1);
+    // anonymous viewers skip the read entirely and get no viewerSaved field
+    viewer?.id ? savedTargetIds(viewer, allDocs.map((doc) => doc.shareId)) : Promise.resolve(new Set<string>())
   ]);
 	const attachmentTargetIds = [
 		...allDocs.map((doc) => doc.shareId),
@@ -1783,6 +1789,9 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
         };
       })(),
       ...(pollVotes ? { pollVotes } : {}),
+      // viewer-personalised like viewerReactions — logged-out viewers get no
+      // field at all (nothing to bookmark without a library)
+      ...(viewerId ? { viewerSaved: savedIds.has(doc.shareId) } : {}),
       extended: doc.extended ?? null,
       createdAt: new Date(doc.createdAt).toISOString()
     };

@@ -27,7 +27,7 @@ import {
 } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { Link } from 'react-router';
-import { ArrowLeft, Eye, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
+import { ArrowLeft, Bookmark, Eye, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
@@ -45,6 +45,7 @@ import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity'
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
+import { splashEmoji } from './emojiSplash';
 import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
 import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
 import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, warmAvatars } from './threadCache';
@@ -711,6 +712,8 @@ const CommentRow = (props: {
   const lopu = useLopu();
   const { recent, pushRecent } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
+  // emoji-splash origin: the comment's react button (chips/picker anchor here)
+  const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
   const replyFocus = React.useContext(ReplyFocusContext);
   const threadFocus = React.useContext(ThreadFocusContext);
   // at the cap, reveals hand over to the drill-down panel instead of nesting
@@ -781,6 +784,9 @@ const CommentRow = (props: {
     inFlightReactionTokensRef.current.add(token);
 
     const adding = !viewerSet.has(token);
+    // pure delight: ADDING a reaction erupts it from the button (motion-gated
+    // inside splashEmoji; removals stay quiet)
+    if (adding) splashEmoji(token, reactAnchorRef.current);
     // note every local mutation so background fetches snapshotted BEFORE it
     // merge through instead of clobbering (reactionOverlay contract)
     onChanged(comment.id, (current) => {
@@ -985,7 +991,7 @@ const CommentRow = (props: {
   // the comment (default ReactionControl mode — no tapOpens); hover or
   // touch-and-hold still opens the quick-react popup.
   const reactControl = (
-    <Box position="relative" display="flex" flexShrink={0}>
+    <Box ref={reactAnchorRef} position="relative" display="flex" flexShrink={0}>
       <ReactionControl
         enabled={!!user && !pending}
         onQuickTap={() => handleReact('❤️')}
@@ -1242,6 +1248,8 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
   const { recent, pushRecent } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
+  // emoji-splash origin: the merged react button (picker + chips anchor here)
+  const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isOwner = !!user && !!post.author && user.id === post.author.id;
   const circle = CIRCLE_META[post.visibility] || CIRCLE_META.public;
@@ -1362,6 +1370,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     inFlightReactionTokensRef.current.add(token);
 
     const adding = !viewerSet.has(token);
+    // pure delight: ADDING a reaction erupts it from the button (motion-gated
+    // inside splashEmoji; removals stay quiet)
+    if (adding) splashEmoji(token, reactAnchorRef.current);
 
     // Optimistic + reconcile + revert all touch ONLY this token, applied to the
     // freshest post — so a concurrent reaction on another token isn't clobbered
@@ -1416,7 +1427,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // immediately, the server's authoritative tally reconciles when the
   // response lands, and a failure reverts to the pre-tap tally + toasts.
   const inFlightVoteRef = React.useRef(false);
-  const handleVote = async (optionIndex: number) => {
+  const handleVote = async (optionIndex: number, splash?: () => void) => {
     if (!user) {
       lopu({ title: 'Log in to vote 🗳️', status: 'info', duration: 6000 });
       return;
@@ -1428,6 +1439,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
     const prevTally = post.pollVotes;
     const adding = prevTally?.viewerVote === null;
+    // emoji-splash (thunk from PollRenderer) fires with the optimistic apply —
+    // past the guards above, and only when the vote LANDS on this option (new
+    // or moved); tapping your own option removes the vote — no burst
+    if (prevTally && prevTally.viewerVote !== optionIndex) splash?.();
     onChanged?.((prev) => applyPollVoteToggle(prev, optionIndex));
     // a fresh vote is engagement of react strength for the feed algorithms
     if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
@@ -1616,6 +1631,35 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       if (err?.name === 'AbortError') return; // dismissed the share sheet
       // clipboard unavailable (http origin) — hand the link over anyway
       lopu({ title: `Copy this link: ${url}`, status: 'info', duration: 10000 });
+    }
+  };
+
+  // Bookmark toggle — save/unsave this post to the viewer's private library
+  // (/saved). Optimistic: the icon fills immediately, the server's saved
+  // boolean reconciles when the response lands, and a failure reverts + toasts.
+  // Same-button taps hold off while a toggle is in flight (the endpoint
+  // toggles rather than setting, so response order could invert the state).
+  const inFlightSaveRef = React.useRef(false);
+  const handleToggleSave = async () => {
+    if (!user) return; // the button is hidden logged-out; belt-and-braces
+    if (inFlightSaveRef.current) return;
+    inFlightSaveRef.current = true;
+
+    const prevSaved = post.viewerSaved === true;
+    onChanged?.((prev) => ({ ...prev, viewerSaved: !prevSaved }));
+    try {
+      const resp = await api.v1.things.save({ id: post.id });
+      onChanged?.((prev) => ({ ...prev, viewerSaved: resp.saved === true }));
+      lopu({
+        title: resp.saved ? 'Saved to your library 🔖' : 'Removed from Saved 🌫️',
+        status: 'success',
+        duration: 4000
+      });
+    } catch (err: any) {
+      onChanged?.((prev) => ({ ...prev, viewerSaved: prevSaved }));
+      lopu({ title: err?.error || 'Could not update your Saved library 😞', status: 'error' });
+    } finally {
+      inFlightSaveRef.current = false;
     }
   };
 
@@ -1820,7 +1864,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           />
 
           {user ? (
-            <Box position="relative" display="flex">
+            <Box ref={reactAnchorRef} position="relative" display="flex">
               {/* tap, touch-and-hold, or hover: quick reactions + a ＋ that
               opens the full picker */}
               <ReactionControl
@@ -1939,6 +1983,20 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
           {/* outward share: native sheet / copy link */}
           <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
+
+          {/* bookmark: save to the viewer's private library (/saved) —
+          filled/accent when saved, hidden logged-out (nothing to save into) */}
+          {user && (
+            <ActionIcon
+              icon={<Bookmark size={18} strokeWidth={2.2} fill={post.viewerSaved ? 'currentColor' : 'none'} />}
+              label={post.viewerSaved ? 'Remove from Saved' : 'Save to library'}
+              active={post.viewerSaved === true}
+              color={post.viewerSaved ? ACCENT : MUTED}
+              _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: post.viewerSaved ? ACCENT : INK }}
+              aria-pressed={post.viewerSaved === true}
+              onClick={handleToggleSave}
+            />
+          )}
 
           {/* public view stats (X-style, right edge): count = unique viewers;
           the tooltip carries impressions + average time on screen */}

@@ -6123,7 +6123,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Saves are relational child things (thingtime ["save"], targetId = the saved thing, acl ' +
       '["tt:user"]) — always private to the saver, never inheriting the target audience, so a ' +
       'library is personal by construction. Toggling an existing save removes it. List saved ' +
-      'schemas via /api/v1/schemas/browse?library=1, or raw saves via GET /api/v1/things?thingtime=save.',
+      'posts via GET /api/v1/things/saved, saved schemas via /api/v1/schemas/browse?library=1, ' +
+      'or raw saves via GET /api/v1/things?thingtime=save.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -6150,6 +6151,54 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, saved: true }
       }
     ]
+  }),
+  endpoint({
+    id: 'things-saved',
+    group: 'things',
+    title: 'Saved library',
+    endpoint: '/api/v1/things/saved',
+    summary: 'Lists the posts the current user saved to their library, newest-saved-first.',
+    detail:
+      'Reads the caller’s save things (written by POST /api/v1/things/save) newest first and batch-loads ' +
+      'their post-shaped targets in two indexed queries — never N+1. Targets that no longer resolve ' +
+      '(deleted, audience narrowed since the save, or not post-shaped, e.g. a saved schema) are silently ' +
+      'skipped rather than erroring — the library fails closed. Posts come back as the same PublicPost ' +
+      'projections the feed returns (reactions, comments, polls, view stats, viewerSaved: true), ordered by ' +
+      'when they were SAVED, not when they were posted. Pagination uses the feed’s stable ' +
+      '(createdAt, shareId) cursor over the save things; the cursor advances over the raw save page so ' +
+      'skipped rows are dropped, not resurfaced.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token — a library is personal by construction, so there is no anonymous view.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET the endpoint — no parameters are required for the first page (default limit 30, max 50).',
+      'Render posts with the same components as the feed; every entry carries viewerSaved: true.',
+      'Pass nextCursor back as cursor for the next page; null means the library is fully paged.',
+      'Handle 401 unauthenticated.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read the library',
+        description: 'Fetch the first page of saved posts.',
+        method: 'GET'
+      },
+      {
+        name: 'Next page',
+        description: 'Continue from a previous response’s nextCursor.',
+        method: 'GET',
+        query: { cursor: '1755500000000_post_123', limit: 30 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Saved posts returned, newest-saved-first.',
+        body: { ok: true, posts: [], nextCursor: null }
+      }
+    ],
+    notes: ['Responses carry Cache-Control: private, no-store — the library is viewer-specific and never edge-cached.']
   }),
   endpoint({
     id: 'things-vote',

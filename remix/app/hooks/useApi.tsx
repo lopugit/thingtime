@@ -107,6 +107,9 @@ export function useApi() {
           // same shared-browser rule for "On this day" memories — cached tiles
           // can carry private/circle post snippets for the signed-out viewer
           clearLocalCachePrefix('tt-onthisday-');
+          // the Saved library cache can carry private/circle posts the
+          // signed-out viewer bookmarked — same shared-browser privacy bar
+          clearLocalCachePrefix('tt-saved-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -507,6 +510,8 @@ export function useApi() {
       ),
       // toggle a private "add to my library" save on any visible thing
       save: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }), [asyncFetcher]),
+      // the viewer's Saved library — posts they bookmarked, newest-saved-first
+      saved: useCallback(async (args?: { cursor?: string; limit?: number }) => getJson(`/api/v1/things/saved${toQuery(args)}`), []),
       // cast/move/remove the caller's vote on a visible poll thing
       vote: useCallback(
         async (args: { id: string; optionIndex: number }) =>
