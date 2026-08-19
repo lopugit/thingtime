@@ -58,7 +58,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
   insert so flagged posts are born stamped (blocked content never renders,
   even briefly), while timeouts/outages fail open to the async pipeline —
-  moderation can never break or visibly slow posting.
+  moderation can never break or visibly slow posting; a per-instance circuit
+  breaker (3 failures → open, 60s cooldown) makes confirmed outages cost zero
+  added latency. Screening now covers ALL omni-judgeable post content in one
+  combined free request: prose + listing text + tags + legacy external image
+  URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
 
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean

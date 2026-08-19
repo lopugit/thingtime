@@ -27,6 +27,31 @@ export const TEXT_BLOCK_CATEGORIES = new Set([
 // Bound what one moderation request carries; omni's own cap is far higher but
 // post/comment text beyond this is truncated for classification purposes only.
 export const MAX_MODERATION_TEXT_CHARS = 20_000;
+// Bound the external image URLs screened per post (crystal.images legacy
+// photo flow) — omni fetches each URL itself, all still $0.
+export const MODERATED_IMAGE_URL_CAP = 8;
+export const MODERATED_IMAGE_URL_CHARS = 2048;
+
+// EVERYTHING publicly rendered from a post-family doc that omni can judge:
+// prose, marketplace listing text, tags, and the legacy external image URLs.
+export type ModeratedContent = { text: string; imageUrls: string[] };
+
+export const moderatedContentOf = (doc: { crystal?: any; tags?: unknown } | null | undefined): ModeratedContent => {
+	const crystal = doc?.crystal ?? {};
+	const listing = crystal.listing ?? {};
+	const textParts = [crystal.text, listing.title, listing.location, listing.category, listing.condition]
+		.map((value: unknown) => (typeof value === 'string' ? value.trim() : ''))
+		.filter(Boolean);
+	const tags = Array.isArray(doc?.tags) ? (doc!.tags as unknown[]).filter((tag): tag is string => typeof tag === 'string' && !!tag.trim()) : [];
+	if (tags.length) textParts.push(`tags: ${tags.join(', ')}`);
+	const imageUrls = (Array.isArray(crystal.images) ? (crystal.images as unknown[]) : [])
+		.filter((url): url is string => typeof url === 'string' && /^https?:\/\//i.test(url.trim()))
+		.map((url) => url.trim().slice(0, MODERATED_IMAGE_URL_CHARS))
+		.slice(0, MODERATED_IMAGE_URL_CAP);
+	return { text: textParts.join('\n'), imageUrls };
+};
+
+export const hasModeratedContent = (content: ModeratedContent): boolean => !!content.text.trim() || content.imageUrls.length > 0;
 
 export const mapOmniTextVerdict = (result: OmniModerationResult): ModerationVerdict => {
 	const scores = result.category_scores ?? {};
@@ -49,20 +74,27 @@ export const mapOmniTextVerdict = (result: OmniModerationResult): ModerationVerd
 	};
 };
 
-export type OmniTextScreen = (text: string) => Promise<OmniModerationResult>;
+export type OmniTextScreen = (content: ModeratedContent) => Promise<OmniModerationResult>;
 
+// One combined omni request judges the prose AND every external image URL
+// together (mixed-modality input array; still free). URL images can only ever
+// produce nsfw-advisory or block via TEXT categories — omni's image-blind
+// sexual/minors limitation applies here exactly as in the media pipeline.
 export const createOmniTextScreen = (env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): OmniTextScreen =>
-	async (text) => {
+	async (content) => {
+		const text = content.text.trim();
+		const input = [
+			...(text ? [{ type: 'text', text: text.slice(0, MAX_MODERATION_TEXT_CHARS) }] : []),
+			...content.imageUrls.slice(0, MODERATED_IMAGE_URL_CAP).map((url) => ({ type: 'image_url', image_url: { url } }))
+		];
+		if (!input.length) throw new Error('moderation: nothing to screen');
 		const response = await fetchImpl(OPENAI_MODERATION_URL, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
 				Authorization: `Bearer ${env.OPENAI_API_KEY ?? ''}`
 			},
-			body: JSON.stringify({
-				model: OPENAI_MODERATION_MODEL,
-				input: [{ type: 'text', text: text.slice(0, MAX_MODERATION_TEXT_CHARS) }]
-			})
+			body: JSON.stringify({ model: OPENAI_MODERATION_MODEL, input })
 		});
 		if (!response.ok) throw new Error(`moderation: omni-moderation text request failed (${response.status})`);
 		const payload = (await response.json()) as { results?: OmniModerationResult[] };

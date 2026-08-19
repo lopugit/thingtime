@@ -315,6 +315,11 @@ is fixed, and cite the checklist you ran in the PR description.
       row appears for admins). With `TT_TEXT_SCREEN_BUDGET_MS=0` (or omni
       unreachable) the same post appears instantly and then vanishes once the
       async verdict lands.
+- [ ] URL-photos moderation: a post created through the multi-URL photo flow
+      pointing at an explicit external image gets flagged (nsfw advisory row
+      with the URL in the excerpt) without any text in the post; editing the
+      listing title or tags of a clean marketplace post to violating text
+      re-screens it.
 - [ ] Text sweep safety net: with text moderation on, manually strip the
       `moderation` field from a flagged post (simulating a mid-flight death),
       then hit `/api/v1/moderation/sweep` with the CRON_SECRET bearer (or the

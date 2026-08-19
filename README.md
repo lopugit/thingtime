@@ -682,7 +682,21 @@ budget (`TT_TEXT_SCREEN_BUDGET_MS`, default 600ms; `0` disables the sync gate)
 BEFORE the insert. A verdict in time means the post is born stamped — blocked
 content never renders anywhere, not even between insert and an async verdict —
 while a slow or offline omni fails open: the post publishes instantly and the
-async queue + hourly sweep moderate it after the fact. Edits stay async.
+async queue + hourly sweep moderate it after the fact. The budget is measured
+entirely server→OpenAI (client speed is irrelevant), and a per-instance
+circuit breaker opens after 3 consecutive sync failures so a confirmed outage
+adds ZERO latency to posting (re-probes after a 60s cooldown). Edits stay
+async.
+
+Text screening covers every omni-judgeable public surface of a post-family
+thing in one free combined request: prose (`crystal.text`), marketplace
+listing text (title/location/category/condition), tags, and the legacy
+external image URLs (`crystal.images`, capped at 8/post — omni fetches the
+URLs itself, so the multi-URL photos flow is moderated too; URL images follow
+the same image-blind `sexual/minors` limitation as omni-only media, so they
+flag/advisory rather than auto-block). Known coverage gaps, deliberate for
+now: video and non-image file CONTENTS (needs frame-extraction/AV infra) and
+profile bio/display-name (different write path).
 
 A scheduled safety net (`GET /api/v1/moderation/sweep`, Vercel Cron at minute
 29 each hour, `CRON_SECRET` bearer — same contract as the attachments cleanup

@@ -24,12 +24,14 @@ import {
 	type AttachmentPurpose
 } from '../attachments/attachmentCore';
 import {
+	moderatedContentFingerprint,
 	postInsertModerationPlan,
 	queueTextModeration,
 	screenTextForCreate,
 	TEXT_MODERATED_THINGTIMES,
 	upsertTextModerationFlag
 } from '../moderation/analyzeText';
+import { hasModeratedContent, moderatedContentOf } from '../moderation/textModeration';
 import { attachmentIsBlocked } from '../moderation/moderationCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
@@ -1068,9 +1070,12 @@ export const createThing = async (
 	// anywhere, not even in a feed refresh between insert and async verdict);
 	// timeout/outage/off resolves null and the async queue + hourly sweep own
 	// it. screenTextForCreate never throws and never exceeds its budget.
-	if (thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) && String((doc as any).crystal?.text || '').trim()) {
-		const syncModeration = await screenTextForCreate(String((doc as any).crystal.text));
-		if (syncModeration) (doc as any).moderation = syncModeration;
+	if (thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind))) {
+		const moderatedContent = moderatedContentOf(doc as any);
+		if (hasModeratedContent(moderatedContent)) {
+			const syncModeration = await screenTextForCreate(moderatedContent);
+			if (syncModeration) (doc as any).moderation = syncModeration;
+		}
 	}
 
   try {
@@ -1138,7 +1143,14 @@ export const createThing = async (
 	if (moderationPlan.inlineFlag) {
 		try {
 			const home = await getHomeThingsCollection();
-			await upsertTextModerationFlag(home, doc as any, (doc as any).moderation, String((doc as any).crystal?.text || ''), new Date());
+			const flaggedContent = moderatedContentOf(doc as any);
+			await upsertTextModerationFlag(
+				home,
+				doc as any,
+				(doc as any).moderation,
+				flaggedContent.text.trim() || `[image urls] ${flaggedContent.imageUrls.slice(0, 3).join(' ')}`,
+				new Date()
+			);
 			await things.updateOne({ shareId: doc.shareId, 'moderation.flagPending': true } as any, { $unset: { 'moderation.flagPending': '' } } as any);
 		} catch (error) {
 			// flagPending stays on the stamp — the hourly sweep retries the flag
@@ -3750,12 +3762,13 @@ export const updateThing = async (
 		if (!storageScope) delete updated.sizeBytes;
 	}
 
-	// Edited prose gets re-screened: the old verdict describes text that no
-	// longer exists (emptied text clears a stale pipeline stamp). The analyzer
-	// refuses to overwrite admin review stamps and no-ops on custom data planes.
+	// Edited moderated content (prose, listing text, tags, image URLs) gets
+	// re-screened: the old verdict describes content that no longer exists
+	// (emptied content clears a stale pipeline stamp). The analyzer refuses to
+	// overwrite admin review stamps and no-ops on custom data planes.
 	if (
 		thingtimeOf(updated).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
-		String((updated as any).crystal?.text || '') !== String((doc as any).crystal?.text || '')
+		moderatedContentFingerprint(moderatedContentOf(updated as any)) !== moderatedContentFingerprint(moderatedContentOf(doc as any))
 	) {
 		queueTextModeration(doc.shareId);
 	}

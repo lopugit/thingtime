@@ -51,8 +51,12 @@ export type ModerationOverview = {
 // docs can never wedge the oldest-first batch.
 export const UNMODERATED_TEXT_FILTER = {
 	thingtime: { $in: [...TEXT_MODERATED_THINGTIMES] },
-	'crystal.text': { $regex: /\S/ },
-	$or: [{ moderation: { $exists: false } }, { 'moderation.flagPending': true }]
+	$and: [
+		// real prose OR at least one external image URL — whitespace-only,
+		// contentless docs are excluded so zombies can't wedge the batch
+		{ $or: [{ 'crystal.text': { $regex: /\S/ } }, { 'crystal.images.0': { $exists: true } }] },
+		{ $or: [{ moderation: { $exists: false } }, { 'moderation.flagPending': true }] }
+	]
 } as const;
 
 const MAX_FLAG_ROWS = 200;

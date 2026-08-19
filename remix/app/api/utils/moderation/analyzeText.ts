@@ -24,7 +24,14 @@ import { MODERATION_FLAG_THINGTIME, moderationFlagShareId } from './analyzeAttac
 import { moderationFromVerdict, type AttachmentModeration, type ModerationStatus } from './moderationCore';
 import { getModerationSettings } from './moderationSettings';
 import { DEFAULT_MODERATION_SETTINGS } from './moderationSettingsCore';
-import { mapOmniTextVerdict, resolveTextModeration, type TextModerationChoice } from './textModeration';
+import {
+	hasModeratedContent,
+	mapOmniTextVerdict,
+	moderatedContentOf,
+	resolveTextModeration,
+	type ModeratedContent,
+	type TextModerationChoice
+} from './textModeration';
 
 export const TEXT_FLAG_EXCERPT_CHARS = 500;
 
@@ -33,6 +40,12 @@ export const TEXT_FLAG_EXCERPT_CHARS = 500;
 // identical text" (block stays sticky) from "the author actually edited"
 // (fresh verdict allowed).
 export const moderationTextHash = (text: string): string => createHash('sha256').update(text).digest('hex').slice(0, 16);
+
+// Fingerprint of EVERYTHING a combined screen judges (prose + listing text +
+// tags + external image URLs) — the unit of "did the moderated content
+// actually change" for edit re-screens and sticky blocks.
+export const moderatedContentFingerprint = (content: ModeratedContent): string =>
+	moderationTextHash(`${content.text}\u0000${content.imageUrls.join('\u0000')}`);
 
 // Post-family kinds whose crystal.text is user-authored prose worth screening.
 export const TEXT_MODERATED_THINGTIMES = new Set(['post', 'comment', 'share']);
@@ -65,6 +78,16 @@ const defaultDependencies = (): AnalyzeTextDependencies => ({
 
 export type AnalyzeTextResult = { ok: true; status: ModerationStatus | 'unmoderated' } | { ok: false; error: string; retryable: boolean };
 
+// Per-instance circuit breaker for the sync gate: after a few consecutive
+// sync-screen failures the breaker OPENS and posts skip the budget toll
+// entirely (zero added latency during a confirmed omni outage), then a
+// cool-down expiry lets the next post probe again. Warm serverless instances
+// learn within a few posts; a cold instance pays at most one probe.
+export type SyncScreenBreaker = { failures: number; openUntil: number };
+export const SYNC_SCREEN_BREAKER_THRESHOLD = 3;
+export const SYNC_SCREEN_BREAKER_COOLDOWN_MS = 60_000;
+const defaultSyncScreenBreaker: SyncScreenBreaker = { failures: 0, openUntil: 0 };
+
 // ---- Hybrid create-time screen ---------------------------------------------
 // createThing gives the free omni screen a bounded time budget BEFORE the
 // insert: when the verdict lands in time the doc is born stamped — blocked
@@ -88,28 +111,41 @@ export type ScreenTextDependencies = {
 	resolveText: () => Promise<TextModerationChoice>;
 	budgetMs: number;
 	now: () => Date;
+	breaker: SyncScreenBreaker;
+	nowMs: () => number;
 };
 
 // Never throws and never exceeds its budget by design — every failure mode
 // (custom plane, off, empty text, timeout, provider error) returns null and
 // the caller falls back to the async pipeline.
 export const screenTextForCreate = async (
-	text: string,
+	content: ModeratedContent,
 	overrides: Partial<ScreenTextDependencies> = {}
 ): Promise<AttachmentModeration | null> => {
+	const breaker = overrides.breaker ?? defaultSyncScreenBreaker;
+	const nowMs = overrides.nowMs ?? Date.now;
+	const recordFailure = () => {
+		breaker.failures += 1;
+		if (breaker.failures >= SYNC_SCREEN_BREAKER_THRESHOLD) {
+			breaker.openUntil = nowMs() + SYNC_SCREEN_BREAKER_COOLDOWN_MS;
+			breaker.failures = 0;
+			console.warn('[moderation] sync screen breaker OPEN — posts skip the sync toll until', new Date(breaker.openUntil).toISOString());
+		}
+	};
 	try {
 		if (isCustomMongoEndpointActive()) return null;
+		// breaker open = confirmed outage: skip the toll entirely, async owns it
+		if (nowMs() < breaker.openUntil) return null;
 		const budgetMs = overrides.budgetMs ?? resolveTextScreenBudgetMs();
 		if (budgetMs <= 0) return null;
-		const trimmed = String(text || '').trim();
-		if (!trimmed) return null;
+		if (!hasModeratedContent(content)) return null;
 		// EVERYTHING variable-latency — the settings read AND the omni call —
 		// races the budget, so no degraded dependency can hold a post hostage.
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const attempt = (async () => {
 			const choice = await (overrides.resolveText ?? resolveConfiguredTextModeration)();
 			if (choice.kind === 'off') return null;
-			return { choice, verdict: mapOmniTextVerdict(await choice.screen(trimmed)) };
+			return { choice, verdict: mapOmniTextVerdict(await choice.screen(content)) };
 		})();
 		// a rejection landing AFTER the timeout already won the race must never
 		// surface as an unhandled rejection
@@ -121,19 +157,27 @@ export const screenTextForCreate = async (
 				(timer as { unref?: () => void }).unref?.();
 			})
 		]).finally(() => clearTimeout(timer));
-		if (!screened) return null;
+		if (!screened) {
+			// distinguish "surface off" (neutral) from a real timeout (failure):
+			// the attempt resolving null means off; the timer winning means slow
+			const settled = await Promise.race([attempt.then(() => 'resolved' as const, () => 'rejected' as const), Promise.resolve('pending' as const)]);
+			if (settled === 'pending') recordFailure();
+			return null;
+		}
+		breaker.failures = 0;
 		const stamp = moderationFromVerdict(screened.verdict, {
 			provider: screened.choice.provider,
 			model: screened.choice.model,
 			now: (overrides.now ?? (() => new Date()))()
 		});
-		stamp.textHash = moderationTextHash(trimmed);
+		stamp.textHash = moderatedContentFingerprint(content);
 		// the admin flag hasn't been written yet — createThing writes it inline
 		// right after the insert, and the hourly sweep drains any doc where that
 		// write was lost (the marker is cleared once a flag lands)
 		if (stamp.status === 'nsfw' || stamp.status === 'blocked') stamp.flagPending = true;
 		return stamp;
 	} catch (error) {
+		recordFailure();
 		console.warn('[moderation] sync text screen failed; falling back to async:', (error as Error)?.message || error);
 		return null;
 	}
@@ -156,8 +200,9 @@ export const createAnalyzeTextThing =
 		if (!kinds.some((kind) => TEXT_MODERATED_THINGTIMES.has(kind))) {
 			return { ok: false, error: 'Not a text-moderated thing', retryable: false };
 		}
-		const text = String(doc.crystal?.text || '').trim();
-		if (!text) {
+		const content = moderatedContentOf(doc);
+		const text = content.text.trim();
+		if (!hasModeratedContent(content)) {
 			// Emptied text: the old verdict describes prose that no longer exists.
 			// Clear a stale pipeline stamp (admin stamps stay final) and resolve
 			// any unreviewed flag; write nothing when there was never a stamp.
@@ -180,10 +225,11 @@ export const createAnalyzeTextThing =
 
 		try {
 			const rawText = doc.crystal?.text;
-			const verdict = mapOmniTextVerdict(await choice.screen(text));
+			const rawImages = doc.crystal?.images;
+			const verdict = mapOmniTextVerdict(await choice.screen(content));
 			const now = deps.now();
 			let moderation = moderationFromVerdict(verdict, { provider: choice.provider, model: choice.model, now });
-			const textHash = moderationTextHash(text);
+			const textHash = moderatedContentFingerprint(content);
 			const prior = doc.moderation as AttachmentModeration | undefined;
 			if (prior?.status === 'blocked' && prior.provider !== 'admin' && prior.textHash === textHash && moderation.status !== 'blocked') {
 				// Provider flip-flop on IDENTICAL text never relaxes a block — only
@@ -200,7 +246,12 @@ export const createAnalyzeTextThing =
 			// it, and the crystal.text fence keeps a slow verdict for OLD text from
 			// stamping over an edit that a fresher run already re-screened.
 			const stamped = await things.updateOne(
-				{ shareId, 'crystal.text': rawText, $or: [{ moderation: { $exists: false } }, { 'moderation.provider': { $ne: 'admin' } }] } as any,
+				{
+					shareId,
+					'crystal.text': rawText,
+					...(Array.isArray(rawImages) ? { 'crystal.images': rawImages } : {}),
+					$or: [{ moderation: { $exists: false } }, { 'moderation.provider': { $ne: 'admin' } }]
+				} as any,
 				{ $set: { moderation, updatedAt: now } }
 			);
 			const home = await deps.getHomeThings();
@@ -210,7 +261,7 @@ export const createAnalyzeTextThing =
 				// pipeline from touching the doc: an edit AFTER an admin 'clear' must
 				// resurface in the queue (resetting the reviewed markers), or a user
 				// could launder content by editing violations in post-review.
-				await upsertTextModerationFlag(home, doc, moderation, text, now);
+				await upsertTextModerationFlag(home, doc, moderation, text || `[image urls] ${content.imageUrls.slice(0, 3).join(' ')}`, now);
 				// the flag landed: clear any flagPending marker a born-flagged sync
 				// stamp left behind (admin stamps never carry it)
 				await things.updateOne(
@@ -308,18 +359,19 @@ export type PostInsertModerationPlan = { notify: boolean; inlineFlag: boolean; q
 export const postInsertModerationPlan = (doc: {
 	thingtime?: unknown;
 	crystal?: { text?: unknown } | null;
+	tags?: unknown;
 	moderation?: { status?: string } | null;
 }): PostInsertModerationPlan => {
 	const status = doc.moderation?.status;
 	const kinds: string[] = Array.isArray(doc.thingtime) ? (doc.thingtime as string[]) : [doc.thingtime as string].filter(Boolean);
 	const textKind = kinds.some((kind) => TEXT_MODERATED_THINGTIMES.has(String(kind)));
-	const hasText = !!String(doc.crystal?.text || '').trim();
+	const screenable = hasModeratedContent(moderatedContentOf(doc as any));
 	return {
 		// born-blocked docs are invisible everywhere — never notify about them
 		notify: status !== 'blocked',
 		// born-flagged docs get their admin flag written inline, same request
 		inlineFlag: textKind && (status === 'nsfw' || status === 'blocked'),
 		// no sync verdict → the ordinary async screen owns the doc
-		queueAsync: !status && textKind && hasText
+		queueAsync: !status && textKind && screenable
 	};
 };
