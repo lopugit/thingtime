@@ -6923,7 +6923,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
-      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, groups ' +
+      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
       '(reserved), plus the email-only weekly-summary digest. Defaults ON, except email for the two ' +
       'high-volume post types (post-from-followed / post-from-friend), which are opt-in. GET always ' +
       'returns the full matrix. POST merges only the keys you send — the new channel shape ' +

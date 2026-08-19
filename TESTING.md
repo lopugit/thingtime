@@ -597,6 +597,32 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       thing-context-menu) still lay out statically inside their canvases
       (`inline` mode).
 
+## /things Duplicate (`remix/app/components/Things/ThingsPage.tsx`, `thingsMenuModel.ts`)
+
+- [ ] Right-click a named thing (data/folder/schema) → Duplicate 🐑: a copy
+      named "Copy of X" appears beside the original — in the ORIGINAL's own
+      folder, not the browsed folder — immediately (real server id painted
+      from the bulk response, reconciled by the refetch); the original keeps
+      its name, content, and folder. The menu row shows the 🐑 emoji (emoji
+      icon style) / copy-plus (lucide), never the 🤷‍♂️ fallback.
+- [ ] Duplicate from SEARCH results (type a query, right-click a result from a
+      different folder): the copy lands in that result's own folder, the
+      active search re-runs, and "Copy of X" appears in the results.
+- [ ] Duplicate from an ANCESTOR column in columns view: the copy appears in
+      the column you acted in (the original's folder), not the deepest one.
+- [ ] The per-item ⋯ kebab menu offers 🐑 Duplicate for duplicable things
+      (this is the only path on iOS/touch, where right-click never opens).
+- [ ] Multi-select N things → Duplicate N things duplicates all of them
+      (one bulk copy per source folder; "Duplicated N ✨" Lopu toast;
+      per-item failures report as "Duplicated n, m skipped" with the first
+      error).
+- [ ] Duplicating a folder copies its whole subtree (bounded server-side);
+      uncopyable child kinds inside are skipped with honest counts.
+- [ ] Uncopyable kinds (comment/reaction/save/share/vote — the server
+      UNCOPYABLE set) never show a Duplicate item in the context menu.
+- [ ] No ⌘D keyboard shortcut (that's the browser bookmark chord) — Duplicate
+      is context-menu only.
+
 ## Post engagement row & comment threads (`remix/app/components/Feed/PostCard.tsx`)
 
 - [ ] The action row is icon + count ONLY (no text labels): 💬 comments with
@@ -1095,6 +1121,40 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       HTML entities (`&#39;`), mid-word hashes (`foo#bar`), or pure numbers
       (`#42`) — those render as plain text — and Unicode tags (`#日本語`)
       linkify correctly (unit-tested in `hashtags.test.ts`; spot-check one).
+
+## @Mentions (`remix/app/utils/mentions.ts`, `MentionAutocomplete.tsx`, `api/utils/notifications/mentions.ts`)
+
+- [ ] Posting `hey @<user> 👋` (or commenting it) mints a `mention` bell
+      notification for that user — "mentioned you" + preview text, click
+      lands on the post — and sends the mention email when their email
+      channel is on. Self-mentions and unknown `@nobody` names emit nothing;
+      at most 10 unique mentions per text are honoured.
+- [ ] A mentioned user gets exactly ONE notification per event: mentioning
+      the post author inside a comment on their post yields only the
+      `comment` notification, and a mentioned friend/follower is skipped by
+      the post fan-out (no `mention` + `post-from-friend` double-ring).
+- [ ] Mentions are visibility-gated (`emitTextMentions` in
+      `api/utils/things/things.ts`): mentioning a user in a PRIVATE post
+      emits nothing for them (no bell, no email, no preview leak — verify
+      their `/api/v1/notifications` stays empty while the post 404s for
+      them); a friends-only post's mention rings only accepted friends of
+      the author; a `tt:user/<name>` acl grant makes that user's mention
+      ring; comments gate on the parent thread's effective (inherited) acl.
+- [ ] Editing a post/comment text to add a NEW `@name` notifies that user
+      (same visibility gate); names already present in the pre-edit text and
+      the direct target owner never re-ring, and an edit that only removes
+      or keeps mentions emits nothing.
+- [ ] Typing `@` + ≥1 char in the composer body (post AND comment composers)
+      pops the people dropdown under the caret (debounced users/search);
+      ArrowUp/Down move, Enter/Tab/click insert `@username ` at the caret
+      with no cursor jump, Escape closes. Emails (`bob@example.com`) never
+      trigger it.
+- [ ] PostCard linkifies `@username` tokens in post/comment text to
+      `/profile/<username>`, composing with `#hashtag` links in one pass —
+      no nested/double links, `#tag@name` seams stay plain, and the literal
+      `@Casing` text is preserved (grammar unit-tested in
+      `mentions.test.ts`). Mentions in Settings → Notifications has its own
+      push/email switch row.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 

@@ -1437,6 +1437,7 @@ export const NOTIFICATION_TYPES = [
   'reply',
   'reaction',
   'share',
+  'mention',
   'groups'
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -1494,7 +1495,8 @@ const notificationThingSchema: ThingtimeSchema = {
   summary: 'A server-minted in-app notification for one recipient (ownerId).',
   detail:
     'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
-    'comments, replies, reacts, shares, or (fan-out, capped) posts while you follow them. ' +
+    'comments, replies, reacts, shares, @mentions you in a post or comment, or (fan-out, ' +
+    'capped) posts while you follow them. ' +
     'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
 		"flips when read. Listed via GET /api/v1/notifications (filtered by the recipient's " +
     'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +

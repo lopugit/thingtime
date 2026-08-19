@@ -25,6 +25,7 @@ import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { RAINBOW } from '~/theme/rainbow';
 import { extractInlineHashtags } from './hashtags';
+import { MentionAutocomplete } from './MentionAutocomplete';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
 import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from './feedTypes';
 
@@ -182,6 +183,9 @@ export const PostComposer = (props: PostComposerProps) => {
   // host a full editor inline, and mobile needs the room)
   const [thingModalOpen, setThingModalOpen] = React.useState(false);
   const editorApiRef = React.useRef<{ popOutDuplicate: () => void } | null>(null);
+	// the Box around the body editor — MentionAutocomplete watches typing inside
+	// it and inserts `@username ` at the caret (posts and comments both)
+	const editorBoxRef = React.useRef<HTMLDivElement | null>(null);
 	const attachmentComposerRef = React.useRef<AttachmentComposerHandle | null>(null);
 	// A stable client id turns a lost POST response into a safely reconcilable
 	// read. It is rotated only after the draft is definitively committed/reset.
@@ -605,7 +609,7 @@ export const PostComposer = (props: PostComposerProps) => {
 
       <Flex columnGap={3}>
         <UserAvatarCircle size="36px" fontSize="sm" />
-        <Box flex="1" minWidth={0}>
+        <Box flex="1" minWidth={0} ref={editorBoxRef}>
           <LongTextEditor
             // Editor.js reads its placeholder once at init, so entering/leaving
             // poll mode remounts the editor (the value prop reseeds the text) —
@@ -616,6 +620,7 @@ export const PostComposer = (props: PostComposerProps) => {
             placeholder={TEXTAREA_PLACEHOLDERS[type]}
             minHeight="72px"
           />
+          <MentionAutocomplete containerRef={editorBoxRef} />
         </Box>
       </Flex>
 

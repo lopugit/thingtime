@@ -49,7 +49,8 @@ import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReacti
 import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
 import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, warmAvatars } from './threadCache';
 import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
-import { extractInlineHashtags, searchTagHref, splitHashtagSegments } from './hashtags';
+import { profileMentionHref, splitMentionSegments, type MentionSegment } from '~/utils/mentions';
+import { extractInlineHashtags, searchTagHref, splitHashtagSegments, type HashtagSegment } from './hashtags';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, timeAgo } from './feedTypes';
 import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost } from './feedTypes';
 import type { PollRenderPollContext } from '~/components/Kinds';
@@ -392,17 +393,38 @@ const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | '
 };
 
 // Post text with inline #hashtags rendered as links to /search pre-filtered
-// to that tag. Text is otherwise plain (no markdown/mention layer), so the
-// linkifier IS the rendering layer: non-tag segments pass through verbatim
-// and concatenate back to the exact original string. URL fragments, HTML
-// entities and mid-word hashes never match (word-start rule — hashtags.ts).
+// to that tag, and @mentions rendered as links to /profile/<username>. Text is
+// otherwise plain (no markdown layer), so the linkifier IS the rendering
+// layer. Sequential passes — hashtags first, then mentions inside the
+// remaining plain-text segments: the grammars are disjoint (`@`/`#` are not
+// name characters in either, and both require a word start), so the passes can
+// never double-linkify or nest anchors, and every emitted segment is exactly
+// one of text/tag/mention. Non-link segments pass through verbatim and
+// concatenate back to the exact original string. URL fragments, HTML entities,
+// emails and mid-word #/@ never match (word-start rules — hashtags.ts /
+// ~/utils/mentions.ts); a post-hashtag segment passes precededByWordChar so a
+// "#tag@name" seam stays plain. Mentions linkify on grammar alone — no
+// client-side existence check (the render must stay cheap; the profile page
+// handles names nobody holds).
 const HashtagText = ({ text }: { text: string }) => {
-	const segments = React.useMemo(() => splitHashtagSegments(text), [text]);
+	const segments = React.useMemo(
+		() =>
+			splitHashtagSegments(text).flatMap((segment, index): Array<HashtagSegment | MentionSegment> =>
+				segment.kind === 'tag' ? [segment] : splitMentionSegments(segment.text, index > 0)
+			),
+		[text]
+	);
 	return (
 		<>
 			{segments.map((segment, index) =>
 				segment.kind === 'tag' ? (
 					<Link key={`${segment.tag}-${index}`} to={searchTagHref(segment.tag)}>
+						<Text as="span" color={ACCENT} fontWeight={600} _hover={{ textDecoration: 'underline' }}>
+							{segment.text}
+						</Text>
+					</Link>
+				) : segment.kind === 'mention' ? (
+					<Link key={`${segment.username}-${index}`} to={profileMentionHref(segment.username)}>
 						<Text as="span" color={ACCENT} fontWeight={600} _hover={{ textDecoration: 'underline' }}>
 							{segment.text}
 						</Text>

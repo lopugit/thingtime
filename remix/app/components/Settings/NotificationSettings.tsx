@@ -38,6 +38,7 @@ const PREF_ROWS: PrefRow[] = [
   { type: 'reply', label: 'Replies ↩️', hint: 'Replies to your comments' },
   { type: 'reaction', label: 'Reactions 🤣', hint: 'Reactions on your posts and comments' },
   { type: 'share', label: 'Shares 🔁', hint: 'Your posts get reposted' },
+  { type: 'mention', label: 'Mentions 📣', hint: 'Someone @mentions you in a post or comment' },
   { type: 'groups', label: 'Groups 👥', hint: 'Group activity — ready for when groups arrive ✨' },
   {
     type: 'weekly-summary',

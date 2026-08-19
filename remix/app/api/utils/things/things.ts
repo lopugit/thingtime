@@ -73,7 +73,8 @@ import type { AppNamespaceScope } from '../apps/namespace';
 import { scopeCovers } from '../apps/scopes';
 import { resolveAppScopedAcl } from '../apps/namespace';
 import { resolveViewStats } from './views';
-import { emitNotification, emitNotificationsBulk } from '../notifications/notifications';
+import { emitNotification, emitNotificationsBulk, type NotificationActor } from '../notifications/notifications';
+import { emitMentionNotifications } from '../notifications/mentions';
 import { followerIdsOf, friendIdsOf } from '../users/social';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 
@@ -1135,6 +1136,55 @@ export const createThing = async (
 // notify their newest FANOUT_CAP connections rather than block the write.
 const FANOUT_CAP = 200;
 
+// @mentions may only ring for people who can actually VIEW the text that
+// mentions them — a mention notification carries a preview (bell AND
+// default-on email), so an ungated emit would leak up to 140 chars of a
+// private or friends-only post to an arbitrary user, contradicting the acl
+// gate the fan-out below applies. The governing acl is the doc's own for
+// posts and the inherit-chain terminal's for comments (a comment is exactly
+// as visible as its thread); a broken/cyclic chain fails closed (nobody is
+// notified). The gate is the exact per-recipient evaluation reads use
+// (canView), so specific-user grants (tt:user/<name>) still notify and
+// exclusions still deny. One friendIdsOf query on the TERMINAL owner answers
+// the friends circle for every candidate — friendship is mutual, so a
+// recipient is inside the owner's friends circle iff the owner's own friend
+// set contains them.
+//
+// Shared by the create funnel (emitCreationNotifications) and updateThing's
+// edit pass; `previousText` (edit pass) limits emits to newly ADDED
+// usernames. Returns the recipient ids actually notified.
+const emitTextMentions = async (
+  doc: ThingDoc,
+  target: ThingDoc | null,
+  actorRef: NotificationActor,
+  previousText?: unknown
+): Promise<Set<string>> => {
+  const isCommentDoc = thingtimeOf(doc).includes('comment');
+  // the walk's first hop is almost always the already-fetched target
+  const findWithTarget = (shareId: string): Promise<ThingDoc | null> =>
+    target && target.shareId === shareId ? Promise.resolve(target) : findThing(shareId);
+  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findWithTarget);
+  if (!terminal) return new Set<string>();
+  const terminalAcl = aclOf(terminal);
+  const ownerFriends = terminalAcl.some((entry) => entry === ACL_FRIENDS || entry === `-${ACL_FRIENDS}`)
+    ? await friendIdsOf(terminal.ownerId)
+    : null;
+  return emitMentionNotifications({
+    text: crystalOf(doc).text,
+    previousText,
+    actor: actorRef,
+    targetId: doc.shareId,
+    postId: isCommentDoc && target ? target.shareId : doc.shareId,
+    excludeIds: target ? [target.ownerId] : [],
+    canRecipientView: (recipient) =>
+      canView(terminal, {
+        id: recipient.id,
+        username: recipient.username,
+        friendIds: ownerFriends?.has(recipient.id) ? new Set([terminal.ownerId]) : undefined
+      })
+  });
+};
+
 // Notifications for a freshly created thing. createThing is the single funnel
 // for posts, comments (plain + rich), shares AND reaction things, so this one
 // hook covers every creation path — dedicated routes and generic POST alike.
@@ -1146,6 +1196,18 @@ export const emitCreationNotifications = async (doc: ThingDoc, target: ThingDoc 
   if (!actor?.id) return;
   const kinds = thingtimeOf(doc);
   const actorRef = { id: actor.id, username: actor.username || null };
+
+  // @mentions in the body text notify each mentioned user (posts, comments and
+  // share captions — never reactions, whose "text" is an emoji token). The
+  // notification is the artifact: no mention doc is stored, the literal
+  // @username text re-parses on render (same model as inline #hashtags). The
+  // direct target owner is excluded (they already get the comment/reply/share
+  // notification for this same doc) and mentioned users are excluded from the
+  // post fan-out below, so each person gets exactly one bell entry per event —
+  // the most specific one. Emits are visibility-gated (emitTextMentions): a
+  // mention only rings for someone who can view the doc that mentions them.
+  const mentioned =
+    kinds.includes('post') || kinds.includes('comment') ? await emitTextMentions(doc, target, actorRef) : new Set<string>();
 
   if (target && kinds.includes('reaction')) {
     await emitNotification({
@@ -1193,13 +1255,14 @@ export const emitCreationNotifications = async (doc: ThingDoc, target: ThingDoc 
   const recipients: Array<{ recipientId: string; type: NotificationType }> = [];
   for (const id of friends) {
     if (recipients.length >= FANOUT_CAP) break;
+    if (mentioned.has(id)) continue;
     recipients.push({ recipientId: id, type: 'post-from-friend' });
   }
   if (isPublic && recipients.length < FANOUT_CAP) {
     const followers = await followerIdsOf(actor.id, FANOUT_CAP);
     for (const id of followers) {
       if (recipients.length >= FANOUT_CAP) break;
-      if (friends.has(id)) continue;
+      if (friends.has(id) || mentioned.has(id)) continue;
       recipients.push({ recipientId: id, type: 'post-from-followed' });
     }
   }
@@ -3729,6 +3792,24 @@ export const updateThing = async (
 		if (!storageScope) delete updated.sizeBytes;
 	}
 
+  // A text-changing edit notifies newly ADDED @mentions (posts + comments):
+  // the composer autocomplete and PostCard linkification treat edited text
+  // exactly like created text, so the notification contract must too. Same
+  // grammar, exclusions, and visibility gate as the create pass
+  // (emitTextMentions), with the pre-edit text as the baseline — names
+  // already present never re-ring. Custom data planes never ring the home
+  // bell (same rule as emitCreationNotifications); emit* never throws, so a
+  // notification hiccup can't fail the update that carried it.
+  if (!isCustomMongoEndpointActive() && (thingtime.includes('post') || thingtime.includes('comment'))) {
+    const previousText = crystalOf(doc).text;
+    const nextText = crystalOf(updated).text;
+    if (typeof nextText === 'string' && nextText !== previousText) {
+      const parentId = targetIdOf(updated);
+      const parent = parentId ? await findThing(parentId) : null;
+      await emitTextMentions(updated, parent, { id: viewer.id, username: viewer.username || null }, previousText);
+    }
+  }
+
   const thing = (await toPublicThings([updated], viewer))[0];
   if (app) {
     await appShapeProjections(app, [updated], [thing]);
@@ -3902,11 +3983,14 @@ export const bulkThings = async (
 
   // copy one doc through the real create path (validation, acl defaults,
   // provenance re-checks, storage accounting all apply). `nameHint` adds the
-  // Drive-style "Copy of" prefix (top-level copies only — inner names keep).
+  // Drive-style "Copy of" prefix to any NAMED top-level copy (crystal.name is
+  // metadata — data, folder, schema, …) so a copy is never indistinguishable
+  // from its original. Inner (subtree) names keep; unnamed kinds like posts
+  // keep their content untouched (title/text is content, not a filename).
   const copyOne = async (doc: ThingDoc, destination: string | null, nameHint: boolean) => {
     const thingtime = thingtimeOf(doc);
     const crystal: Record<string, any> = { ...crystalOf(doc) };
-    if (nameHint && (thingtime.includes('data') || thingtime.includes('folder')) && typeof crystal.name === 'string' && crystal.name.trim()) {
+    if (nameHint && typeof crystal.name === 'string' && crystal.name.trim()) {
       crystal.name = `Copy of ${crystal.name}`.slice(0, 120);
     }
     return createThing(
@@ -3988,7 +4072,7 @@ export const bulkThings = async (
       continue;
     }
     if (!isFolderDoc) {
-      const created = await copyOne(doc, folderId, thingtime.includes('data'));
+      const created = await copyOne(doc, folderId, true);
       results.push(created.ok ? { id, ok: true, newId: created.doc.shareId } : { id, ok: false, error: created.error });
       continue;
     }
