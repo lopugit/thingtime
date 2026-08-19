@@ -96,3 +96,14 @@ An 11-agent review pass confirmed 8 findings on the hybrid gate, all fixed pre-p
 - **Breaker**: per-instance sync-gate circuit breaker — 3 consecutive sync-screen failures (timeouts count, 'off' doesn't) open it for 60s, during which posts skip the sync toll entirely (settings not even resolved: zero added latency in a confirmed outage), then the next post probes. Budget answer for the record: the race measures server→OpenAI only; client latency cannot circumvent the gate.
 - Remaining coverage gaps (deliberate): video/file CONTENTS (frame-extraction/AV infra — future), profile bio/display-name (different write path — follow-up candidate).
 - Tests: content extraction (listing/tags/URL filtering + caps), image-URL-only screening + URL excerpts, breaker open/skip/re-probe lifecycle, updated fingerprint-based sticky/fence assertions, sweep filter shape. test:moderation 48/48.
+
+## Fail-closed pending flow (2026-08-19, owner decision)
+
+Replaces the fail-open posture: while text moderation is ON, no post-family content ever goes public unscreened.
+
+- `screenTextForCreate` now returns a tri-state: **verdict** (born stamped), **unavailable** (omni outage / breaker open / budget-0 async-release mode → born `pending`), **skip** (surface off / custom plane / no content → publish normally unstamped).
+- **Born-pending = owner-private**: `canView`/`canViewInherited`/`appNamespaceVerdict` show pending post-family docs only to their owner (kind-scoped so in-flight attachment analysis keeps today's visibility); thread/reaction/count batch queries use `$nin: ['blocked','pending']`.
+- **Release**: the async queue (fires at create) or the hourly cron overwrites the pending stamp with the real verdict; a clear/nsfw release triggers `notifyModerationRelease` → things.ts's registered notifier emits the deferred creation notifications at the moment the post becomes visible (release-time notifications — the earlier blocked-release caveat no longer applies to the pending flow). Blocked releases stay silent and hidden.
+- **No stranding**: the sweep filter drains `moderation.status: 'pending'`; when the surface is OFF the sweep instead RELEASES stranded pending docs (bounded batches, deferred notifications fire) so a settings flip can't orphan content; admin pending stamps are never touched.
+- The breaker keeps posting fast during outages — posts simply arrive born-pending instead of paying the budget toll.
+- Tests: tri-state outcomes (incl. budget-0 semantics, breaker-open settings-still-resolve/no-omni-call), pending plan branching, release notification on clear vs silent on blocked, off-sweep release lifecycle, sweep filter shape. test:moderation 50/50.

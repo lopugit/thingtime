@@ -6,9 +6,11 @@ import {
 	DEFAULT_TEXT_SCREEN_BUDGET_MS,
 	moderatedContentFingerprint,
 	moderationTextHash,
+	pendingModerationStamp,
 	postInsertModerationPlan,
 	resolveTextScreenBudgetMs,
 	screenTextForCreate,
+	setModerationReleaseNotifier,
 	SYNC_SCREEN_BREAKER_COOLDOWN_MS,
 	SYNC_SCREEN_BREAKER_THRESHOLD,
 	TEXT_MODERATED_THINGTIMES,
@@ -305,15 +307,19 @@ test('text-moderated kinds cover the post family only', () => {
 	assert.deepEqual([...TEXT_MODERATED_THINGTIMES].sort(), ['comment', 'post', 'share']);
 });
 
-test('text sweep: off no-ops without touching the collection; batches analyze and count', async () => {
+test('text sweep: off releases pending only; batches analyze and count', async () => {
 	const { sweepUnmoderatedTextThings } = await import('./moderationAdmin');
+	// off: the only collection work is the stranded-pending release query
 	const offResult = await sweepUnmoderatedTextThings({
 		resolveText: (async () => ({ kind: 'off' })) as any,
-		getThings: (async () => {
-			throw new Error('collection must not be touched when text moderation is off');
-		}) as any
+		getThings: (async () => ({
+			find: (filter: any) => {
+				assert.equal(filter['moderation.status'], 'pending', 'off mode only queries stranded pending docs');
+				return { project: () => ({ sort: () => ({ limit: () => ({ toArray: async () => [] }) }) }) };
+			}
+		})) as any
 	});
-	assert.deepEqual(offResult, { scanned: 0, analyzed: 0, flagged: 0, failed: 0, skippedOff: true });
+	assert.deepEqual(offResult, { scanned: 0, analyzed: 0, flagged: 0, failed: 0, skippedOff: true, released: 0 });
 
 	const analyzed: string[] = [];
 	const outcomes: Record<string, any> = {
@@ -409,8 +415,7 @@ test('create-time sync screen: fast verdicts gate the doc, slow/broken omni fail
 		now: () => NOW,
 		breaker: freshBreaker()
 	});
-	assert.equal(blocked?.status, 'blocked');
-	assert.equal(blocked?.provider, 'openai');
+	assert.ok(blocked.kind === 'verdict' && blocked.stamp.status === 'blocked' && blocked.stamp.provider === 'openai');
 
 	// fast clean verdict → born clear (no async call needed)
 	const clear = await screenTextForCreate(content('hello'), {
@@ -419,54 +424,61 @@ test('create-time sync screen: fast verdicts gate the doc, slow/broken omni fail
 		now: () => NOW,
 		breaker: freshBreaker()
 	});
-	assert.equal(clear?.status, 'clear');
+	assert.ok(clear.kind === 'verdict' && clear.stamp.status === 'clear');
 
-	// slow omni → null within the budget (post proceeds; async path owns it)
+	// slow omni → unavailable within the budget (fail-closed: born pending)
 	const started = Date.now();
-	assert.equal(await screenTextForCreate(content('hello'), { resolveText: screenChoice('hang'), budgetMs: 25, now: () => NOW, breaker: freshBreaker() }), null);
+	assert.equal((await screenTextForCreate(content('hello'), { resolveText: screenChoice('hang'), budgetMs: 25, now: () => NOW, breaker: freshBreaker() })).kind, 'unavailable');
 	assert.ok(Date.now() - started < 1000, 'timeout resolves promptly');
 
-	// omni error → null (fail open)
-	assert.equal(await screenTextForCreate(content('hello'), { resolveText: screenChoice('throw'), budgetMs: 1000, now: () => NOW, breaker: freshBreaker() }), null);
+	// omni error → unavailable (fail-closed)
+	assert.equal((await screenTextForCreate(content('hello'), { resolveText: screenChoice('throw'), budgetMs: 1000, now: () => NOW, breaker: freshBreaker() })).kind, 'unavailable');
 
-	// off surface and contentless input → null
-	assert.equal(await screenTextForCreate(content('hello'), { resolveText: (async () => ({ kind: 'off' })) as any, budgetMs: 1000, breaker: freshBreaker() }), null);
-	assert.equal(await screenTextForCreate(content('   '), { resolveText: screenChoice({ flagged: false }), budgetMs: 1000, breaker: freshBreaker() }), null);
+	// off surface and contentless input → skip (publish normally)
+	assert.equal((await screenTextForCreate(content('hello'), { resolveText: (async () => ({ kind: 'off' })) as any, budgetMs: 1000, breaker: freshBreaker() })).kind, 'skip');
+	assert.equal((await screenTextForCreate(content('   '), { resolveText: screenChoice({ flagged: false }), budgetMs: 1000, breaker: freshBreaker() })).kind, 'skip');
 
-	// budget 0 disables the gate without even resolving settings
-	let resolved = 0;
-	assert.equal(
-		await screenTextForCreate(content('hello'), {
-			resolveText: (async () => {
-				resolved += 1;
-				return { kind: 'off' };
-			}) as any,
-			budgetMs: 0,
-			breaker: freshBreaker()
-		}),
-		null
-	);
-	assert.equal(resolved, 0);
+	// budget 0 = async-release mode: settings still resolve (off must publish
+	// normally) but an active surface fails closed without calling omni
+	let screens = 0;
+	const asyncRelease = await screenTextForCreate(content('hello'), {
+		resolveText: (async () => ({
+			kind: 'screen',
+			provider: 'openai',
+			model: 'omni-moderation-latest',
+			screen: async () => {
+				screens += 1;
+				return { flagged: false };
+			}
+		})) as any,
+		budgetMs: 0,
+		breaker: freshBreaker()
+	});
+	assert.equal(asyncRelease.kind, 'unavailable');
+	assert.equal(screens, 0, 'budget 0 never calls omni');
+	assert.equal((await screenTextForCreate(content('hello'), { resolveText: (async () => ({ kind: 'off' })) as any, budgetMs: 0, breaker: freshBreaker() })).kind, 'skip');
 });
 
 test('sync screen stamps carry textHash; flagged ones carry flagPending; advisory nsfw passes through', async () => {
 	const choiceOf = (result: OmniModerationResult) => async () =>
 		({ kind: 'screen' as const, provider: 'openai', model: 'omni-moderation-latest', screen: async () => result }) as any;
 	const blocked = await screenTextForCreate(content('vile'), { resolveText: choiceOf({ flagged: true, categories: { 'sexual/minors': true } }), budgetMs: 1000, now: () => NOW, breaker: freshBreaker() });
-	assert.equal(blocked?.flagPending, true);
-	assert.equal(blocked?.textHash, moderatedContentFingerprint(content('vile')));
+	assert.ok(blocked.kind === 'verdict' && blocked.stamp.flagPending === true);
+	assert.ok(blocked.kind === 'verdict' && blocked.stamp.textHash === moderatedContentFingerprint(content('vile')));
 	const advisory = await screenTextForCreate(content('edgy'), { resolveText: choiceOf({ flagged: true, categories: { harassment: true } }), budgetMs: 1000, now: () => NOW, breaker: freshBreaker() });
-	assert.equal(advisory?.status, 'nsfw');
-	assert.equal(advisory?.flagPending, true);
+	assert.ok(advisory.kind === 'verdict' && advisory.stamp.status === 'nsfw' && advisory.stamp.flagPending === true);
 	const clear = await screenTextForCreate(content('hello'), { resolveText: choiceOf({ flagged: false }), budgetMs: 1000, now: () => NOW, breaker: freshBreaker() });
-	assert.equal(clear?.status, 'clear');
-	assert.equal(clear?.flagPending, undefined);
-	assert.equal(clear?.textHash, moderatedContentFingerprint(content('hello')));
+	assert.ok(clear.kind === 'verdict' && clear.stamp.status === 'clear' && clear.stamp.flagPending === undefined);
+	assert.ok(clear.kind === 'verdict' && clear.stamp.textHash === moderatedContentFingerprint(content('hello')));
+	// the born-private stamp: pending, non-admin, fingerprinted
+	const pending = pendingModerationStamp(content('hello'));
+	assert.deepEqual({ status: pending.status, provider: pending.provider }, { status: 'pending', provider: 'openai' });
+	assert.equal(pending.textHash, moderatedContentFingerprint(content('hello')));
 });
 
 test('sync screen: hung settings read cannot hold a post past the budget; late rejections are handled', async () => {
 	const started = Date.now();
-	assert.equal(await screenTextForCreate(content('hello'), { resolveText: () => new Promise<never>(() => {}), budgetMs: 25, now: () => NOW, breaker: freshBreaker() }), null);
+	assert.equal((await screenTextForCreate(content('hello'), { resolveText: () => new Promise<never>(() => {}), budgetMs: 25, now: () => NOW, breaker: freshBreaker() })).kind, 'unavailable');
 	assert.ok(Date.now() - started < 1000, 'hung settings read must lose the race');
 
 	// a screen that rejects AFTER the timeout won must not surface anywhere
@@ -481,7 +493,7 @@ test('sync screen: hung settings read cannot hold a post past the budget; late r
 		now: () => NOW,
 		breaker: freshBreaker()
 	});
-	assert.equal(lateReject, null);
+	assert.equal(lateReject.kind, 'unavailable');
 	await new Promise((resolve) => setTimeout(resolve, 80));
 
 	// clamp boundary: 10000 is accepted, 10001 falls back to the default
@@ -494,6 +506,8 @@ test('post-insert moderation plan: notify/inlineFlag/queueAsync branching', () =
 	assert.deepEqual(postInsertModerationPlan({ ...base, moderation: { status: 'blocked' } }), { notify: false, inlineFlag: true, queueAsync: false });
 	assert.deepEqual(postInsertModerationPlan({ ...base, moderation: { status: 'nsfw' } }), { notify: true, inlineFlag: true, queueAsync: false });
 	assert.deepEqual(postInsertModerationPlan({ ...base, moderation: { status: 'clear' } }), { notify: true, inlineFlag: false, queueAsync: false });
+	// born-pending: private, silent, queued for release
+	assert.deepEqual(postInsertModerationPlan({ ...base, moderation: { status: 'pending' } }), { notify: false, inlineFlag: false, queueAsync: true });
 	assert.deepEqual(postInsertModerationPlan(base), { notify: true, inlineFlag: false, queueAsync: true });
 	// non-text kinds never queue or flag, whatever their fields say
 	assert.deepEqual(postInsertModerationPlan({ thingtime: ['user'], crystal: { text: 'x' } }), { notify: true, inlineFlag: false, queueAsync: false });
@@ -542,7 +556,7 @@ test('sweep filter drains unstamped/flag-lost docs with prose OR external image 
 	const { UNMODERATED_TEXT_FILTER } = await import('./moderationAdmin');
 	const [contentClause, stampClause] = (UNMODERATED_TEXT_FILTER as any).$and;
 	assert.deepEqual(contentClause.$or[1], { 'crystal.images.0': { $exists: true } });
-	assert.deepEqual(stampClause.$or, [{ moderation: { $exists: false } }, { 'moderation.flagPending': true }]);
+	assert.deepEqual(stampClause.$or, [{ moderation: { $exists: false } }, { 'moderation.flagPending': true }, { 'moderation.status': 'pending' }]);
 });
 
 test('moderated content covers prose, listing text, tags, and capped http(s) image URLs', () => {
@@ -580,21 +594,29 @@ test('sync-screen circuit breaker opens after consecutive failures and re-probes
 	const breaker = freshBreaker();
 	const failing = { resolveText: (async () => { throw new Error('down'); }) as any, budgetMs: 50, now: () => NOW, breaker, nowMs: () => 1_000_000 };
 	for (let attempt = 0; attempt < SYNC_SCREEN_BREAKER_THRESHOLD; attempt += 1) {
-		assert.equal(await screenTextForCreate(content('hello'), failing), null);
+		assert.equal((await screenTextForCreate(content('hello'), failing)).kind, 'unavailable');
 	}
 	assert.equal(breaker.openUntil, 1_000_000 + SYNC_SCREEN_BREAKER_COOLDOWN_MS, 'breaker opened');
-	// open breaker: settings are not even resolved (zero toll)
-	let resolved = 0;
-	await screenTextForCreate(content('hello'), {
-		resolveText: (async () => {
-			resolved += 1;
-			return { kind: 'off' };
-		}) as any,
+	// open breaker: settings still resolve (off must skip) but omni is never
+	// called — an active surface goes born-pending with zero omni toll
+	let screens = 0;
+	const duringOutage = await screenTextForCreate(content('hello'), {
+		resolveText: (async () => ({
+			kind: 'screen',
+			provider: 'openai',
+			model: 'omni-moderation-latest',
+			screen: async () => {
+				screens += 1;
+				return { flagged: false };
+			}
+		})) as any,
 		budgetMs: 50,
 		breaker,
 		nowMs: () => 1_000_000 + 5
 	});
-	assert.equal(resolved, 0);
+	assert.equal(duringOutage.kind, 'unavailable');
+	assert.equal(screens, 0, 'open breaker never calls omni');
+	assert.equal((await screenTextForCreate(content('hello'), { resolveText: (async () => ({ kind: 'off' })) as any, budgetMs: 50, breaker, nowMs: () => 1_000_000 + 5 })).kind, 'skip');
 	// cooldown expired: the next post probes again and a success resets state
 	const probe = await screenTextForCreate(content('hello'), {
 		resolveText: (async () => ({ kind: 'screen', provider: 'openai', model: 'omni-moderation-latest', screen: async () => ({ flagged: false }) })) as any,
@@ -603,6 +625,57 @@ test('sync-screen circuit breaker opens after consecutive failures and re-probes
 		breaker,
 		nowMs: () => 1_000_000 + SYNC_SCREEN_BREAKER_COOLDOWN_MS + 1
 	});
-	assert.equal(probe?.status, 'clear');
+	assert.ok(probe.kind === 'verdict' && probe.stamp.status === 'clear');
 	assert.equal(breaker.failures, 0);
+});
+
+test('releasing a born-pending doc emits its deferred creation notification', async () => {
+	const released: string[] = [];
+	setModerationReleaseNotifier((shareId) => released.push(shareId));
+	try {
+		const state: FakeState = {
+			docs: new Map([['post-1', postDoc({ moderation: pendingModerationStamp(content('hello world')) })]]),
+			updates: []
+		};
+		const home: FakeState = { docs: new Map(), updates: [] };
+		assert.deepEqual(await textAnalyzer(state, home, { flagged: false })('post-1'), { ok: true, status: 'clear' });
+		assert.deepEqual(released, ['post-1'], 'clear release notifies');
+		// blocked release stays silent (still invisible)
+		const blockedState: FakeState = {
+			docs: new Map([['post-1', postDoc({ moderation: pendingModerationStamp(content('hello world')) })]]),
+			updates: []
+		};
+		await textAnalyzer(blockedState, home, { flagged: true, categories: { 'sexual/minors': true } })('post-1');
+		assert.deepEqual(released, ['post-1'], 'blocked release does not notify');
+	} finally {
+		setModerationReleaseNotifier(() => {});
+	}
+});
+
+test('sweep with the surface off releases stranded born-pending docs', async () => {
+	const { sweepUnmoderatedTextThings } = await import('./moderationAdmin');
+	const released: string[] = [];
+	setModerationReleaseNotifier((shareId) => released.push(shareId));
+	try {
+		const pendingDocs = [
+			{ shareId: 'post-1', moderation: { status: 'pending', provider: 'openai' } },
+			{ shareId: 'post-2', moderation: { status: 'pending', provider: 'openai' } }
+		];
+		const updates: any[] = [];
+		const result = await sweepUnmoderatedTextThings({
+			resolveText: (async () => ({ kind: 'off' })) as any,
+			getThings: (async () => ({
+				find: () => ({ project: () => ({ sort: () => ({ limit: () => ({ toArray: async () => pendingDocs }) }) }) }),
+				updateOne: async (filter: any, update: any) => {
+					updates.push({ filter, update });
+					return { modifiedCount: 1, matchedCount: 1 };
+				}
+			})) as any
+		});
+		assert.deepEqual(result, { scanned: 2, analyzed: 0, flagged: 0, failed: 0, skippedOff: true, released: 2 });
+		assert.deepEqual(released, ['post-1', 'post-2']);
+		assert.ok(updates.every((entry) => entry.update.$unset?.moderation === '' && entry.filter['moderation.provider'].$ne === 'admin'));
+	} finally {
+		setModerationReleaseNotifier(() => {});
+	}
 });
