@@ -35,6 +35,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
+  Three layers, all powered by the browser's own sessions — never a central
+  session store. (1) *Federated hint resolution*: `/api/v1/auth/account-hints`
+  now reports foreign-database origins as `unresolved`, and the client fans
+  out to each origin's new `/account-hints/resolve` (CORS restricted to the
+  Thingtime family, credentialed, read-only) so every environment vouches
+  only for its own sessions. (2) *Cross-origin session handoff*: a signed-in
+  surface mints a 2-minute, aud-bound, single-use code
+  (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
+  cookie family (immutable `*.vercel.app` previews) redeems at its own
+  `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
+  the session (theft signal), different-environment redemption fails closed;
+  the `/authorize?self=1` popup ("Continue to <host>?") and a
+  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) *FedCM
+  identity provider*: `/.well-known/web-identity` + config/accounts/
+  client-metadata/assertion endpoints let Chromium render its native
+  "Continue as…" sheet on any domain from the switcher roster
+  (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,
+  assertion mints handoff codes for Thingtime-self or baseline app tokens for
+  registered clients). E2E: `remix/scripts/verify-federated-login.mjs` — 31
+  checks against two stacks on separate mongods, including the full
+  FedCM→assertion→session loop. — Claude (AI), 2026-08-19
+
 - **Passkeys (WebAuthn) + cross-deployment auto-login.** Full passkey support:
   password-confirmed registration (`POST /api/v1/auth/passkeys/register-options`
   → `/register`), usernameless discoverable login (`/login-options` → `/login`,
