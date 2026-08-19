@@ -239,6 +239,9 @@ export const MediaLayoutCanvas = ({
 		const cellSize = Math.max(40, tile.getBoundingClientRect().width / spanColumns(startSpan, gridColumns));
 		dragRef.current = { id: attachment.id, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, cellSize, startSpan };
 		event.currentTarget.setPointerCapture(event.pointerId);
+		// preventDefault above suppresses the native focus, so take it by hand —
+		// otherwise arrow-key resizing is dead until the handle is tabbed to
+		event.currentTarget.focus({ preventScroll: true });
 		setDragPreview({ id: attachment.id, span: startSpan });
 	};
 
