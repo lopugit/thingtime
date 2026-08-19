@@ -677,16 +677,21 @@ an advisory `moderationFlag` (with a bounded text excerpt as evidence) for
 the admin review queue without hiding the content. Edited text is re-screened;
 admin review verdicts are final until an admin changes them.
 
-Post creation uses a hybrid gate: the free omni screen races a bounded time
-budget (`TT_TEXT_SCREEN_BUDGET_MS`, default 600ms; `0` disables the sync gate)
-BEFORE the insert. A verdict in time means the post is born stamped — blocked
-content never renders anywhere, not even between insert and an async verdict —
-while a slow or offline omni fails open: the post publishes instantly and the
-async queue + hourly sweep moderate it after the fact. The budget is measured
-entirely server→OpenAI (client speed is irrelevant), and a per-instance
-circuit breaker opens after 3 consecutive sync failures so a confirmed outage
-adds ZERO latency to posting (re-probes after a 60s cooldown). Edits stay
-async.
+Post creation is FAIL-CLOSED while text moderation is on: the free omni
+screen races a bounded time budget (`TT_TEXT_SCREEN_BUDGET_MS`, default
+600ms) BEFORE the insert, and a verdict in time means the post is born
+stamped — blocked content never renders anywhere. When no verdict can be
+obtained (omni outage, circuit breaker open, or `TT_TEXT_SCREEN_BUDGET_MS=0`
+async-release mode) the post is born **pending: visible only to its owner**
+until the async queue or the hourly cron screens and releases it — its
+creation notifications fire at release, when followers can actually see it.
+No post-family content ever goes public unscreened while the surface is on;
+turning the surface off publishes normally (and the sweep releases any
+stranded pending docs so an off flip can't orphan them). The budget is
+measured entirely server→OpenAI (client speed is irrelevant), and the
+per-instance breaker (3 failures → open 60s) skips the omni call during
+confirmed outages so posting stays fast — posts just arrive born-pending.
+Edits stay async.
 
 Text screening covers every omni-judgeable public surface of a post-family
 thing in one free combined request: prose (`crystal.text`), marketplace

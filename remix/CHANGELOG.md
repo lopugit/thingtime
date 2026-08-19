@@ -58,9 +58,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
   insert so flagged posts are born stamped (blocked content never renders,
   even briefly), while timeouts/outages fail open to the async pipeline —
-  moderation can never break or visibly slow posting; a per-instance circuit
-  breaker (3 failures → open, 60s cooldown) makes confirmed outages cost zero
-  added latency. Screening now covers ALL omni-judgeable post content in one
+  moderation can never break posting; a per-instance circuit breaker
+  (3 failures → open, 60s cooldown) skips the omni call during confirmed
+  outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
+  obtainable while the surface is on, posts are born PENDING — owner-private
+  until the async queue / hourly cron screens and releases them (creation
+  notifications fire at release); `TT_TEXT_SCREEN_BUDGET_MS=0` becomes
+  async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
   combined free request: prose + listing text + tags + legacy external image
   URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
 

@@ -315,6 +315,12 @@ is fixed, and cite the checklist you ran in the PR description.
       row appears for admins). With `TT_TEXT_SCREEN_BUDGET_MS=0` (or omni
       unreachable) the same post appears instantly and then vanishes once the
       async verdict lands.
+- [ ] Fail-closed pending flow: with text moderation on and omni unreachable
+      (or `TT_TEXT_SCREEN_BUDGET_MS=0`), a new post appears for its author but
+      NOT for other accounts; once omni is reachable again (queue retry or
+      cron sweep) the post appears for everyone and follower notifications
+      arrive at release time. Turning text moderation Off releases any
+      stranded pending posts on the next sweep.
 - [ ] URL-photos moderation: a post created through the multi-URL photo flow
       pointing at an explicit external image gets flagged (nsfw advisory row
       with the URL in the excerpt) without any text in the post; editing the

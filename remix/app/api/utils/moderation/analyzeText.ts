@@ -78,6 +78,34 @@ const defaultDependencies = (): AnalyzeTextDependencies => ({
 
 export type AnalyzeTextResult = { ok: true; status: ModerationStatus | 'unmoderated' } | { ok: false; error: string; retryable: boolean };
 
+// Fail-closed posture (owner decision 2026-08-19): while text moderation is
+// ON, no post-family content ever goes public unscreened. The sync screen
+// gates creation; when a verdict can't be obtained (omni outage, breaker
+// open, sync gate disabled) the doc is BORN PENDING — visible only to its
+// owner — and the async queue + hourly cron screen and RELEASE it (creation
+// notifications fire at release, when followers can actually see it).
+// 'skip' (surface off / custom plane / no content) publishes normally.
+export type SyncScreenOutcome = { kind: 'verdict'; stamp: AttachmentModeration } | { kind: 'unavailable' } | { kind: 'skip' };
+
+// The born-private marker. provider 'openai' + status 'pending' → the
+// analyzer's non-admin guard overwrites it with the real verdict on release.
+export const pendingModerationStamp = (content: ModeratedContent): AttachmentModeration => ({
+	status: 'pending',
+	provider: 'openai',
+	model: 'omni-moderation-latest',
+	textHash: moderatedContentFingerprint(content)
+});
+
+// things.ts registers the actual notifier (it owns emitCreationNotifications);
+// moderation modules only signal "this doc just became publicly visible".
+let moderationReleaseNotifier: ((shareId: string) => void) | null = null;
+export const setModerationReleaseNotifier = (notifier: (shareId: string) => void): void => {
+	moderationReleaseNotifier = notifier;
+};
+export const notifyModerationRelease = (shareId: string): void => {
+	moderationReleaseNotifier?.(shareId);
+};
+
 // Per-instance circuit breaker for the sync gate: after a few consecutive
 // sync-screen failures the breaker OPENS and posts skip the budget toll
 // entirely (zero added latency during a confirmed omni outage), then a
@@ -121,7 +149,7 @@ export type ScreenTextDependencies = {
 export const screenTextForCreate = async (
 	content: ModeratedContent,
 	overrides: Partial<ScreenTextDependencies> = {}
-): Promise<AttachmentModeration | null> => {
+): Promise<SyncScreenOutcome> => {
 	const breaker = overrides.breaker ?? defaultSyncScreenBreaker;
 	const nowMs = overrides.nowMs ?? Date.now;
 	const recordFailure = () => {
@@ -129,40 +157,46 @@ export const screenTextForCreate = async (
 		if (breaker.failures >= SYNC_SCREEN_BREAKER_THRESHOLD) {
 			breaker.openUntil = nowMs() + SYNC_SCREEN_BREAKER_COOLDOWN_MS;
 			breaker.failures = 0;
-			console.warn('[moderation] sync screen breaker OPEN — posts skip the sync toll until', new Date(breaker.openUntil).toISOString());
+			console.warn('[moderation] sync screen breaker OPEN — posts are born pending until', new Date(breaker.openUntil).toISOString());
 		}
 	};
 	try {
-		if (isCustomMongoEndpointActive()) return null;
-		// breaker open = confirmed outage: skip the toll entirely, async owns it
-		if (nowMs() < breaker.openUntil) return null;
+		if (isCustomMongoEndpointActive()) return { kind: 'skip' };
+		if (!hasModeratedContent(content)) return { kind: 'skip' };
 		const budgetMs = overrides.budgetMs ?? resolveTextScreenBudgetMs();
-		if (budgetMs <= 0) return null;
-		if (!hasModeratedContent(content)) return null;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const timeout = new Promise<null>((resolve) => {
+			timer = setTimeout(() => resolve(null), Math.max(budgetMs, 1));
+			(timer as { unref?: () => void }).unref?.();
+		});
+		// Breaker open (confirmed outage) or budget 0 (async-release mode):
+		// never call omni, but STILL resolve the surface so 'off' publishes
+		// normally while an active surface fails closed to born-pending.
+		if (nowMs() < breaker.openUntil || budgetMs <= 0) {
+			const choiceAttempt = (overrides.resolveText ?? resolveConfiguredTextModeration)();
+			choiceAttempt.catch(() => {});
+			const choice = await Promise.race([choiceAttempt, timeout]).finally(() => clearTimeout(timer));
+			return choice && choice.kind === 'off' ? { kind: 'skip' } : { kind: 'unavailable' };
+		}
 		// EVERYTHING variable-latency — the settings read AND the omni call —
 		// races the budget, so no degraded dependency can hold a post hostage.
-		let timer: ReturnType<typeof setTimeout> | undefined;
 		const attempt = (async () => {
 			const choice = await (overrides.resolveText ?? resolveConfiguredTextModeration)();
-			if (choice.kind === 'off') return null;
+			if (choice.kind === 'off') return 'off' as const;
 			return { choice, verdict: mapOmniTextVerdict(await choice.screen(content)) };
 		})();
 		// a rejection landing AFTER the timeout already won the race must never
 		// surface as an unhandled rejection
 		attempt.catch(() => {});
-		const screened = await Promise.race([
-			attempt,
-			new Promise<null>((resolve) => {
-				timer = setTimeout(() => resolve(null), budgetMs);
-				(timer as { unref?: () => void }).unref?.();
-			})
-		]).finally(() => clearTimeout(timer));
+		const screened = await Promise.race([attempt, timeout]).finally(() => clearTimeout(timer));
+		if (screened === 'off') return { kind: 'skip' };
 		if (!screened) {
-			// distinguish "surface off" (neutral) from a real timeout (failure):
-			// the attempt resolving null means off; the timer winning means slow
-			const settled = await Promise.race([attempt.then(() => 'resolved' as const, () => 'rejected' as const), Promise.resolve('pending' as const)]);
-			if (settled === 'pending') recordFailure();
-			return null;
+			// distinguish "surface off" (neutral skip) from a real timeout
+			// (failure → born pending): the attempt may have resolved just after
+			const settled = await Promise.race([attempt.then((value) => value, () => 'rejected' as const), Promise.resolve('pending' as const)]);
+			if (settled === 'off') return { kind: 'skip' };
+			if (settled === 'pending' || settled === 'rejected') recordFailure();
+			return { kind: 'unavailable' };
 		}
 		breaker.failures = 0;
 		const stamp = moderationFromVerdict(screened.verdict, {
@@ -175,11 +209,11 @@ export const screenTextForCreate = async (
 		// right after the insert, and the hourly sweep drains any doc where that
 		// write was lost (the marker is cleared once a flag lands)
 		if (stamp.status === 'nsfw' || stamp.status === 'blocked') stamp.flagPending = true;
-		return stamp;
+		return { kind: 'verdict', stamp };
 	} catch (error) {
 		recordFailure();
-		console.warn('[moderation] sync text screen failed; falling back to async:', (error as Error)?.message || error);
-		return null;
+		console.warn('[moderation] sync text screen failed; the doc is born pending:', (error as Error)?.message || error);
+		return { kind: 'unavailable' };
 	}
 };
 
@@ -254,6 +288,12 @@ export const createAnalyzeTextThing =
 				} as any,
 				{ $set: { moderation, updatedAt: now } }
 			);
+			// A born-pending doc that just became publicly visible emits its
+			// creation notifications NOW — followers hear about it when they can
+			// actually see it (blocked releases stay silent and hidden).
+			if (stamped.modifiedCount > 0 && prior?.status === 'pending' && (moderation.status === 'clear' || moderation.status === 'nsfw')) {
+				notifyModerationRelease(String(doc.shareId));
+			}
 			const home = await deps.getHomeThings();
 			const flagShareId = moderationFlagShareId(String(doc.shareId));
 			if (moderation.status === 'nsfw' || moderation.status === 'blocked') {
@@ -367,11 +407,13 @@ export const postInsertModerationPlan = (doc: {
 	const textKind = kinds.some((kind) => TEXT_MODERATED_THINGTIMES.has(String(kind)));
 	const screenable = hasModeratedContent(moderatedContentOf(doc as any));
 	return {
-		// born-blocked docs are invisible everywhere — never notify about them
-		notify: status !== 'blocked',
+		// born-blocked docs are invisible everywhere; born-PENDING docs are
+		// owner-private until released — either way, notify at release, not now
+		notify: status !== 'blocked' && status !== 'pending',
 		// born-flagged docs get their admin flag written inline, same request
 		inlineFlag: textKind && (status === 'nsfw' || status === 'blocked'),
-		// no sync verdict → the ordinary async screen owns the doc
-		queueAsync: !status && textKind && screenable
+		// pending docs queue immediately (a slow-blip verdict releases them in
+		// seconds); unstamped screenable docs queue the ordinary async screen
+		queueAsync: textKind && (status === 'pending' || (!status && screenable))
 	};
 };

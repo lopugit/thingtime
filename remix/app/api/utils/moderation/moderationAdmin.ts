@@ -4,7 +4,13 @@
 // endpoint override.
 import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
 import { createAnalyzeReadyAttachment, moderationFlagShareId, MODERATION_FLAG_THINGTIME } from './analyzeAttachment';
-import { analyzeTextThing, resolveConfiguredTextModeration, TEXT_FLAG_EXCERPT_CHARS, TEXT_MODERATED_THINGTIMES } from './analyzeText';
+import {
+	analyzeTextThing,
+	notifyModerationRelease,
+	resolveConfiguredTextModeration,
+	TEXT_FLAG_EXCERPT_CHARS,
+	TEXT_MODERATED_THINGTIMES
+} from './analyzeText';
 import { sanitizeModerationCategories, type ModerationStatus } from './moderationCore';
 import { getModerationSettings, setModerationSettings } from './moderationSettings';
 import type { ModerationSettings } from './moderationSettingsCore';
@@ -55,7 +61,7 @@ export const UNMODERATED_TEXT_FILTER = {
 		// real prose OR at least one external image URL — whitespace-only,
 		// contentless docs are excluded so zombies can't wedge the batch
 		{ $or: [{ 'crystal.text': { $regex: /\S/ } }, { 'crystal.images.0': { $exists: true } }] },
-		{ $or: [{ moderation: { $exists: false } }, { 'moderation.flagPending': true }] }
+		{ $or: [{ moderation: { $exists: false } }, { 'moderation.flagPending': true }, { 'moderation.status': 'pending' }] }
 	]
 } as const;
 
@@ -302,8 +308,11 @@ export type TextSweepResult = {
 	flagged: number;
 	failed: number;
 	// true when the text surface resolved to 'off' — absence of a stamp is
-	// ambiguous by design in off mode, so the sweep refuses to churn
+	// ambiguous by design in off mode, so the sweep refuses to churn (but it
+	// still RELEASES born-pending docs so an off flip can't strand them)
 	skippedOff: boolean;
+	// born-pending docs released because the surface is off
+	released?: number;
 };
 
 export type TextSweepDependencies = {
@@ -327,7 +336,24 @@ export const sweepUnmoderatedTextThings = async (
 		...overrides
 	};
 	if ((await deps.resolveText()).kind === 'off') {
-		return { scanned: 0, analyzed: 0, flagged: 0, failed: 0, skippedOff: true };
+		// Off must never strand born-private docs: release a bounded batch of
+		// non-admin pending stamps (they become ordinary unstamped public posts)
+		// and emit their deferred creation notifications.
+		const things = await deps.getThings();
+		const stranded = (await things
+			.find({ thingtime: { $in: [...TEXT_MODERATED_THINGTIMES] }, 'moderation.status': 'pending', 'moderation.provider': { $ne: 'admin' } } as any)
+			.project({ shareId: 1 })
+			.sort({ createdAt: 1 })
+			.limit(TEXT_SWEEP_BATCH)
+			.toArray()) as any[];
+		for (const doc of stranded) {
+			await things.updateOne(
+				{ shareId: doc.shareId, 'moderation.status': 'pending', 'moderation.provider': { $ne: 'admin' } } as any,
+				{ $unset: { moderation: '' }, $set: { updatedAt: new Date() } }
+			);
+			notifyModerationRelease(String(doc.shareId));
+		}
+		return { scanned: stranded.length, analyzed: 0, flagged: 0, failed: 0, skippedOff: true, released: stranded.length };
 	}
 	const things = await deps.getThings();
 	const candidates = (await things
