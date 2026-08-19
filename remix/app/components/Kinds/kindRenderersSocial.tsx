@@ -3,6 +3,7 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
+import { leadingEmoji, splashEmoji } from '~/components/Feed/emojiSplash';
 import {
 	Avatar,
 	BodyText,
@@ -198,9 +199,14 @@ const PollRenderer = ({ value, context }: { value: PollValue; context: KindRende
 	const showResults = viewerVote !== null || (live ? !live.canVote : !demo);
 	const tappable = live ? live.canVote || !!live.onVote : demo && demoPick === null;
 
-	const handleTap = (idx: number) => {
+	const handleTap = (idx: number, anchor?: HTMLElement | null) => {
 		if (live) {
-			live.onVote?.(idx);
+			// the splash thunk resolves the option's emoji here (the renderer owns
+			// the adapted labels) but FIRES in the host's vote handler, behind its
+			// login/in-flight guards — only a tap that lands a vote on this option
+			// (new or moved) bursts; dropped taps and unvotes stay quiet
+			// (motion-gated inside splashEmoji)
+			live.onVote?.(idx, () => splashEmoji(leadingEmoji(value.options[idx]?.label) ?? '🗳️', anchor));
 			return;
 		}
 		if (demo && demoPick === null) setDemoPick(idx);
@@ -230,7 +236,7 @@ const PollRenderer = ({ value, context }: { value: PollValue; context: KindRende
 							paddingX={1}
 							paddingY={0.5}
 							marginX={-1}
-							onClick={() => handleTap(idx)}
+							onClick={(event: React.MouseEvent<HTMLElement>) => handleTap(idx, event.currentTarget)}
 						>
 							<Flex justifyContent="space-between" columnGap={2} marginBottom={1}>
 								<Text color={mine ? 'var(--tt-accent, hotpink)' : 'var(--tt-ink, #16161a)'} fontSize="sm" fontWeight={mine ? 800 : 600}>

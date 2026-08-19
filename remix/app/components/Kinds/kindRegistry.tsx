@@ -32,7 +32,10 @@ export type PollRenderPollContext = {
 	// false for logged-out viewers — results only, taps route to onVote which
 	// may explain why (login toast)
 	canVote: boolean;
-	onVote?: (optionIndex: number) => void;
+	// splash is the renderer's emoji-burst thunk for the tapped option; the
+	// host invokes it only when the tap actually lands a vote (past its
+	// login/in-flight guards), so dropped taps never burst
+	onVote?: (optionIndex: number, splash?: () => void) => void;
 };
 
 export type KindRenderContext = {
