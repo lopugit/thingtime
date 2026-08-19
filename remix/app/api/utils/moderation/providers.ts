@@ -3,10 +3,18 @@
 // bytes, stamping results, and every attachment-shape decision.
 //
 // Selection (THINGTIME_MODERATION_PROVIDER):
-//   'claude' — Claude API vision (default when ANTHROPIC_API_KEY is set)
+//   'openai+claude' (alias 'tiered')
+//            — FREE omni-moderation first pass; flagged/borderline images
+//              escalate to Claude for the policy-nuanced verdict. Recommended
+//              whenever both keys exist (docs/ai-api-cost-analysis.md lever 1).
+//   'claude' — Claude API vision on every image
+//   'openai' — omni-moderation only ($0; flagged images stamp nsfw, never
+//              blocked — its image categories can't establish TOS violations)
 //   'test'   — deterministic filename-marker provider for tests/dev
 //   'off'    — analysis disabled; images stamp 'skipped' and are served
 //              normally (dev environments without an API key)
+// Unset default by available keys: both → 'openai+claude'; ANTHROPIC only →
+// 'claude'; OPENAI only → 'openai'; neither → 'off'.
 // Fail-open note: 'off'/missing-key environments do NOT block uploads — the
 // beta admin-grant gate (PR #302) is the hard spam control; analysis is the
 // content-quality layer on top. Set the provider in prod so it actually runs.
@@ -50,9 +58,37 @@ export const resolveModerationProvider = async (env: NodeJS.ProcessEnv = process
 	const configured = env.THINGTIME_MODERATION_PROVIDER?.trim().toLowerCase();
 	if (configured === 'off') return { kind: 'off' };
 	if (configured === 'test') return { kind: 'provider', provider: testModerationProvider };
-	if (configured === 'claude' || (!configured && env.ANTHROPIC_API_KEY)) {
+	if (configured === 'openai+claude' || configured === 'tiered') {
+		const { createTieredModerationProvider } = await import('./openaiProvider');
+		return { kind: 'provider', provider: createTieredModerationProvider(env) };
+	}
+	if (configured === 'claude') {
 		const { createClaudeModerationProvider } = await import('./claudeProvider');
 		return { kind: 'provider', provider: createClaudeModerationProvider(env) };
+	}
+	if (configured === 'openai') {
+		const { createOpenAiModerationProvider } = await import('./openaiProvider');
+		return { kind: 'provider', provider: createOpenAiModerationProvider(env) };
+	}
+	if (configured) {
+		// A typo'd value must not silently disable moderation while keys sit in
+		// the env: warn audibly and honor the operator's clear intent to have
+		// moderation ON by falling through to the key-based default below.
+		console.warn(
+			`[moderation] unrecognized THINGTIME_MODERATION_PROVIDER "${configured}" — using the key-based default. Valid: openai+claude | tiered | claude | openai | test | off.`
+		);
+	}
+	if (env.OPENAI_API_KEY && env.ANTHROPIC_API_KEY) {
+		const { createTieredModerationProvider } = await import('./openaiProvider');
+		return { kind: 'provider', provider: createTieredModerationProvider(env) };
+	}
+	if (env.ANTHROPIC_API_KEY) {
+		const { createClaudeModerationProvider } = await import('./claudeProvider');
+		return { kind: 'provider', provider: createClaudeModerationProvider(env) };
+	}
+	if (env.OPENAI_API_KEY) {
+		const { createOpenAiModerationProvider } = await import('./openaiProvider');
+		return { kind: 'provider', provider: createOpenAiModerationProvider(env) };
 	}
 	return { kind: 'off' };
 };
