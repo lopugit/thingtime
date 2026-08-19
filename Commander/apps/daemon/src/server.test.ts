@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -153,6 +153,7 @@ describe('Commander daemon HTTP trust boundaries', () => {
       expect(await indexingStatus.json()).toMatchObject({
         available: false,
         running: [],
+        databaseSizeBytes: 0,
         commands: { count: expect.any(Number), lastIndexedAtMs: expect.any(Number) },
         automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 360 },
       });
@@ -174,13 +175,27 @@ describe('Commander daemon HTTP trust boundaries', () => {
           'content-type': 'application/json',
           'x-commander-session': server.token,
         },
-        body: JSON.stringify({ itemId: 'builtin:extensions', actionId: 'open-settings' }),
+        body: JSON.stringify({
+          itemId: 'builtin:extensions',
+          actionId: 'open-settings',
+          query: 'extension prefs',
+        }),
       });
       expect(extensionSettings.status).toBe(200);
       expect(await extensionSettings.json()).toEqual({
         ok: true,
         nativeRequest: { method: 'settings.open', params: { tab: 'extensions' } },
       });
+      expect(
+        JSON.parse(await readFile(path.join(temporary, 'data', 'state.json'), 'utf8')).searchPreferences,
+      ).toEqual([
+        expect.objectContaining({
+          query: 'extension prefs',
+          itemId: 'builtin:extensions',
+          actionId: 'open-settings',
+          count: 1,
+        }),
+      ]);
 
       const accountSettings = await fetch(`${server.url}/api/execute`, {
         method: 'POST',
@@ -207,7 +222,7 @@ describe('Commander daemon HTTP trust boundaries', () => {
       expect(indexingSettings.status).toBe(200);
       expect(await indexingSettings.json()).toEqual({
         ok: true,
-        nativeRequest: { method: 'settings.open', params: { tab: 'advanced' } },
+        nativeRequest: { method: 'settings.open', params: { tab: 'search' } },
       });
 
       const indexSearch = await fetch(`${server.url}/api/search?q=index%20now`, {

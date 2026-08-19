@@ -17,9 +17,13 @@ private SQLite database. It never reads or stores file contents.
   rules. A descendant glob such as `**/node_modules/**` also prunes the
   matching directory instead of walking every ignored child.
 - Persist results and per-kind status in SQLite with a name-focused FTS5
-  trigram index and an on-demand path fallback.
+  trigram index, shared typo/transposition ranking, and time-bounded coarse-name
+  and path fallbacks that cannot monopolize a long-lived client.
 - Treat macOS application and document/media package directories as one
   searchable item instead of crawling their private bundle contents.
+- Index metadata-only references for extensionless executables, hard links,
+  aliases, symbolic links (including broken links), sockets, FIFOs, and device
+  nodes without opening their contents or following them by default.
 - Serve a typed request/response protocol over JSON Lines for long-lived app
   hosts.
 - Run as a standalone CLI for scripts and other Thingtime applications.
@@ -27,9 +31,10 @@ private SQLite database. It never reads or stores file contents.
   work, open directory handles, total-machine CPU share, and process resident
   memory. Every report includes the effective limits and measured usage.
 
-When a source reaches `maxEntries`, the scan commits the bounded partial index
-and records a visible warning instead of discarding every result from a large
-first-time scan.
+`maxEntries` is optional: omitted or `null` means unlimited. When a caller sets
+a cap and a source reaches it, the scan commits the bounded partial index and
+records a visible warning instead of discarding every result from a large
+first-time scan. `includeHidden` defaults to `true` when omitted.
 
 ## Standalone examples
 
@@ -49,7 +54,7 @@ An index configuration looks like this:
       "root": "/Users/example/Documents",
       "kinds": ["file", "directory"],
       "respectGitIgnore": true,
-      "includeHidden": false,
+      "includeHidden": true,
       "followSymlinks": false
     }
   ],
@@ -57,7 +62,7 @@ An index configuration looks like this:
     { "kind": "glob", "pattern": "**/node_modules/**" },
     { "kind": "regex", "pattern": "(^|/)scratch-[0-9]+(/|$)" }
   ],
-  "maxEntries": 2000000,
+  "maxEntries": null,
   "resourceLimits": {
     "maxThreads": 2,
     "maxParallelism": 2,
@@ -93,4 +98,6 @@ rewriting unchanged trigram rows.
 
 `serve --database <path>` reads one request per line and writes one response
 per line. Each request carries an `id`, and each response echoes it, so clients
-can safely multiplex queries and long-running scans.
+can safely multiplex queries and long-running scans. Status uses indexed row
+counts rather than expensive distinct-path scans; the Node client terminates a
+timed-out child and starts a clean replacement on its next request.

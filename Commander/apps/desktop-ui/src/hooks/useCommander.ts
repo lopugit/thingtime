@@ -26,7 +26,7 @@ export interface CommanderState {
   setActionsOpen(value: boolean): void;
   setActiveView(value: CommanderViewId | null): void;
   rememberRecentSearch(value: string, command?: RecentSearchCommand): Promise<void>;
-  executeCommand(itemId: string, actionId: string): Promise<void>;
+  executeCommand(itemId: string, actionId: string, searchQuery?: string): Promise<void>;
   reportError(value: string | null): void;
   saveSettings(settings: CommanderSettings): Promise<void>;
   refresh(): Promise<void>;
@@ -137,9 +137,9 @@ export function useCommander(): CommanderState {
   );
 
   const executeCommand = useCallback(
-    async (itemId: string, actionId: string) => {
+    async (itemId: string, actionId: string, searchQuery = queryRef.current) => {
       let nativeRequestMethod: string | undefined;
-      const response = await api.execute(itemId, actionId);
+      const response = await api.execute(itemId, actionId, searchQuery);
       if (response.notice) setNotice(response.notice);
       if (response.view) setActiveView(response.view.id);
       if (response.nativeRequest) {

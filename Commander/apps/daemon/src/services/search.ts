@@ -7,6 +7,7 @@ import type {
   SearchRequest,
   SearchResponse,
 } from '@commander/protocol';
+import { fuzzyTextScore } from '@commander/protocol';
 
 interface Pending {
   resolve(hits: SearchHit[]): void;
@@ -32,8 +33,16 @@ export class SearchService {
     return this.#items;
   }
 
-  async search(query: string, limit = 30, additionalItems: SearchItem[] = []): Promise<SearchHit[]> {
-    const items = mergeItems(this.#items, additionalItems);
+  async search(
+    query: string,
+    limit = 30,
+    additionalItems: SearchItem[] = [],
+    preferenceScores: Readonly<Record<string, number>> = {},
+  ): Promise<SearchHit[]> {
+    const items = mergeItems(this.#items, additionalItems).map((item) => {
+      const preferenceScore = Math.min(100_000, Math.max(0, preferenceScores[item.id] ?? 0));
+      return preferenceScore ? { ...item, preferenceScore } : item;
+    });
     const child = this.#rust;
     if (!child) return fallbackSearch(query, items, limit);
     try {
@@ -120,25 +129,25 @@ function mergeItems(catalog: SearchItem[], additional: SearchItem[]): SearchItem
 }
 
 function score(query: string, item: SearchItem): number {
-  if (!query) return item.favourite ? 20_000 : 1_000;
+  const preference = Math.min(100_000, Math.max(0, item.preferenceScore ?? 0));
+  if (!query) return (item.favourite ? 20_000 : 1_000) + preference;
   const needle = query.toLowerCase().trim();
   const title = item.title.toLowerCase();
   const subtitle = item.subtitle?.toLowerCase() ?? '';
   const keyword = item.keywords.join(' ').toLowerCase();
-  if (title === needle) return 100_000;
-  if (title.startsWith(needle)) return 80_000 - title.length;
-  if (title.includes(needle)) return 60_000 - title.indexOf(needle);
-  if (subtitle.includes(needle)) return 35_000 - subtitle.indexOf(needle);
-  if (keyword.includes(needle)) return 25_000 - keyword.indexOf(needle);
-  let cursor = 0;
-  let gaps = 0;
-  for (const character of needle) {
-    const found = title.indexOf(character, cursor);
-    if (found < 0) return -1;
-    gaps += found - cursor;
-    cursor = found + 1;
-  }
-  return 10_000 - gaps;
+  const titleScore = fuzzyTextScore(needle, title);
+  const subtitleScore = fuzzyTextScore(needle, subtitle);
+  const keywordScore = fuzzyTextScore(needle, keyword);
+  const textScore = Math.max(
+    titleScore,
+    weightedScore(subtitleScore, 0.5),
+    weightedScore(keywordScore, 0.25),
+  );
+  return textScore < 0 ? -1 : textScore + preference;
+}
+
+function weightedScore(value: number, weight: number): number {
+  return value < 0 ? -1 : Math.round(value * weight);
 }
 
 export function fallbackSearch(query: string, items: SearchItem[], limit: number): SearchHit[] {

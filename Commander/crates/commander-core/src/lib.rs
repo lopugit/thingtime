@@ -20,6 +20,7 @@ const TITLE_WEIGHT: u64 = 100;
 const SUBTITLE_WEIGHT: u64 = 50;
 const KEYWORD_WEIGHT: u64 = 25;
 const FAVOURITE_BONUS: u64 = 25;
+const MAX_PREFERENCE_SCORE: u64 = 100_000;
 
 /// The kinds currently shared with Commander's TypeScript protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,6 +80,8 @@ pub struct SearchItem {
     pub path: Option<String>,
     #[serde(default)]
     pub favourite: bool,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub preference_score: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extension_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -261,6 +264,10 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
+fn is_zero(value: &u64) -> bool {
+    *value == 0
+}
+
 #[derive(Debug)]
 struct RankedMatch<'a> {
     item: &'a SearchItem,
@@ -284,7 +291,7 @@ fn rank_item<'a>(item: &'a SearchItem, query: &[char], ordinal: usize) -> Option
     if query.is_empty() {
         return Some(RankedMatch {
             item,
-            score: favourite_bonus(item),
+            score: favourite_bonus(item).saturating_add(preference_bonus(item)),
             matched_ranges: Vec::new(),
             folded_title: fold_sort_key(&item.title),
             ordinal,
@@ -318,7 +325,9 @@ fn rank_item<'a>(item: &'a SearchItem, query: &[char], ordinal: usize) -> Option
         }
     }
 
-    let score = best_score?.saturating_add(favourite_bonus(item));
+    let score = best_score?
+        .saturating_add(favourite_bonus(item))
+        .saturating_add(preference_bonus(item));
     let matched_ranges = title_match
         .map(|text_match| text_match.ranges)
         .unwrap_or_default();
@@ -349,6 +358,10 @@ fn favourite_bonus(item: &SearchItem) -> u64 {
     } else {
         0
     }
+}
+
+fn preference_bonus(item: &SearchItem) -> u64 {
+    item.preference_score.min(MAX_PREFERENCE_SCORE)
 }
 
 fn weighted_score(score: u64, weight: u64) -> u64 {
@@ -434,8 +447,12 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
     }
 
     let candidate = fold_candidate(candidate);
-    if candidate.is_empty() || query.len() > candidate.len() {
+    if candidate.is_empty() {
         return None;
+    }
+
+    if query.len() > candidate.len() {
+        return typo_match(query, &candidate);
     }
 
     let mut rows = vec![vec![None; candidate.len()]; query.len()];
@@ -527,7 +544,9 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
         }
     }
 
-    let (candidate_index, final_cell) = best_end?;
+    let Some((candidate_index, final_cell)) = best_end else {
+        return typo_match(query, &candidate);
+    };
     let mut matched_indices = reconstruct_indices(&rows, candidate_index);
     let mut path_score = final_cell.score;
 
@@ -574,6 +593,151 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
         score,
         ranges: ranges_for_indices(&candidate, &matched_indices),
     })
+}
+
+/// Returns the same deterministic fuzzy score used by Commander without
+/// requiring callers to construct a complete [`SearchItem`]. The standalone
+/// filesystem indexer uses this to keep file/folder typo handling aligned with
+/// application, command, and extension search.
+pub fn fuzzy_text_score(query: &str, candidate: &str) -> Option<u64> {
+    match_text(&fold_query(query), candidate).map(|text_match| text_match.score)
+}
+
+#[derive(Clone, Copy)]
+struct EditCell {
+    cost: usize,
+    start: usize,
+}
+
+fn typo_match(query: &[char], candidate: &[FoldedGlyph]) -> Option<TextMatch> {
+    let compact_query: Vec<char> = query
+        .iter()
+        .copied()
+        .filter(|character| character.is_alphanumeric())
+        .collect();
+    let compact_query = if compact_query.is_empty() {
+        query.to_vec()
+    } else {
+        compact_query
+    };
+    if compact_query.len() < 3 {
+        return None;
+    }
+    let compact_candidate: Vec<(char, usize)> = candidate
+        .iter()
+        .enumerate()
+        .filter(|(_, glyph)| glyph.value.is_alphanumeric())
+        .map(|(index, glyph)| (glyph.value, index))
+        .collect();
+    if compact_candidate.is_empty() {
+        return None;
+    }
+
+    let mut previous_previous: Option<Vec<EditCell>> = None;
+    let mut previous: Vec<EditCell> = (0..=compact_candidate.len())
+        .map(|column| EditCell {
+            cost: 0,
+            start: column,
+        })
+        .collect();
+
+    for row in 1..=compact_query.len() {
+        let mut current = vec![
+            EditCell {
+                cost: row,
+                start: 0
+            };
+            compact_candidate.len() + 1
+        ];
+        for column in 1..=compact_candidate.len() {
+            let substitution_cost =
+                usize::from(compact_query[row - 1] != compact_candidate[column - 1].0);
+            let mut best = best_edit_cell(
+                EditCell {
+                    cost: previous[column].cost + 1,
+                    start: previous[column].start,
+                },
+                EditCell {
+                    cost: current[column - 1].cost + 1,
+                    start: current[column - 1].start,
+                },
+                column,
+            );
+            best = best_edit_cell(
+                best,
+                EditCell {
+                    cost: previous[column - 1].cost + substitution_cost,
+                    start: previous[column - 1].start,
+                },
+                column,
+            );
+            if let Some(previous_previous) = &previous_previous {
+                if row > 1
+                    && column > 1
+                    && compact_query[row - 1] == compact_candidate[column - 2].0
+                    && compact_query[row - 2] == compact_candidate[column - 1].0
+                {
+                    best = best_edit_cell(
+                        best,
+                        EditCell {
+                            cost: previous_previous[column - 2].cost + 1,
+                            start: previous_previous[column - 2].start,
+                        },
+                        column,
+                    );
+                }
+            }
+            current[column] = best;
+        }
+        previous_previous = Some(previous);
+        previous = current;
+    }
+
+    let (end, best) = previous.iter().copied().enumerate().skip(1).min_by(
+        |(left_end, left), (right_end, right)| {
+            left.cost
+                .cmp(&right.cost)
+                .then_with(|| {
+                    edit_span_distance(*left_end, left.start, compact_query.len()).cmp(
+                        &edit_span_distance(*right_end, right.start, compact_query.len()),
+                    )
+                })
+                .then_with(|| left.start.cmp(&right.start))
+        },
+    )?;
+    if best.cost > maximum_typo_distance(compact_query.len()) || best.start >= end {
+        return None;
+    }
+    let start_glyph = compact_candidate[best.start].1;
+    let end_glyph = compact_candidate[end - 1].1;
+    let score = 8_000_u64
+        .saturating_sub((best.cost as u64).saturating_mul(1_500))
+        .saturating_sub((best.start as u64).saturating_mul(3));
+    Some(TextMatch {
+        score: score.max(1),
+        ranges: ranges_for_indices(candidate, &(start_glyph..=end_glyph).collect::<Vec<_>>()),
+    })
+}
+
+fn best_edit_cell(left: EditCell, right: EditCell, _end: usize) -> EditCell {
+    if right.cost < left.cost || (right.cost == left.cost && right.start > left.start) {
+        right
+    } else {
+        left
+    }
+}
+
+fn edit_span_distance(end: usize, start: usize, wanted: usize) -> usize {
+    end.saturating_sub(start).abs_diff(wanted)
+}
+
+fn maximum_typo_distance(length: usize) -> usize {
+    match length {
+        0..=2 => 0,
+        3..=5 => 1,
+        6..=9 => 2,
+        _ => 3,
+    }
 }
 
 fn initial_score(glyph: &FoldedGlyph, candidate_index: usize) -> i64 {
@@ -741,6 +905,7 @@ mod tests {
             icon: None,
             path: None,
             favourite: false,
+            preference_score: 0,
             extension_id: None,
             command_name: None,
             actions: Vec::new(),
@@ -824,6 +989,35 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].item.id, "commander");
         assert!(hits[0].matched_ranges.len() > 1);
+    }
+
+    #[test]
+    fn tolerates_substitutions_and_adjacent_transpositions() {
+        let substitution = search(&request(
+            "settngs",
+            vec![item("settings", "Settings"), item("terminal", "Terminal")],
+        ));
+        assert_eq!(substitution[0].item.id, "settings");
+
+        let transposition = search(&request("raycsat", vec![item("raycast", "Raycast Start")]));
+        assert_eq!(transposition[0].item.id, "raycast");
+        assert!(!transposition[0].matched_ranges.is_empty());
+    }
+
+    #[test]
+    fn learned_preference_reorders_equivalent_results_for_queries_and_empty_search() {
+        let baseline = item("baseline", "Open Notes");
+        let mut preferred = item("preferred", "Open Notes");
+        preferred.preference_score = 9_000;
+
+        let matching = search(&request(
+            "open notes",
+            vec![baseline.clone(), preferred.clone()],
+        ));
+        assert_eq!(matching[0].item.id, "preferred");
+
+        let empty = search(&request("", vec![baseline, preferred]));
+        assert_eq!(empty[0].item.id, "preferred");
     }
 
     #[test]

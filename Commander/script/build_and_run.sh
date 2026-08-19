@@ -217,7 +217,9 @@ case "$MODE" in
     process_command="$(/bin/ps -p "$local_app_pid" -o command=)"
     [[ "$process_command" == "$HOME/Applications/$APP_NAME.app/Contents/MacOS/$APP_NAME"* ]]
     health=""
-    for _ in {1..50}; do
+    # The first launch can migrate and open a large filesystem index before the
+    # daemon starts listening. Give that bounded initialization time to finish.
+    for _ in {1..300}; do
       if health="$(/usr/bin/curl --fail --silent --show-error --max-time 1 http://127.0.0.1:47820/healthz 2>/dev/null)"; then break; fi
       sleep 0.1
     done

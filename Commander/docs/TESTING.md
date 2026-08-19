@@ -8,6 +8,13 @@
       then verify both appear in root search with native icons, Open, Show in Finder, Copy Path, and Finder-compatible drag-out.
 - [ ] Search `index now`; verify the built-in Index Now command appears with separate Apps, Commands, Files, and
       Directories commands. Run Index Apps after installing a disposable app and verify it appears without restarting Commander.
+- [ ] Search typo variants such as `settngs`, `extensoin`, and `raycsat`; verify apps, built-ins, extension commands,
+      files, and folders use the same typo-tolerant ordering. Choose a lower equivalent result several times, repeat
+      the same query, and verify the selected item is promoted without affecting an unrelated query. Quit/relaunch
+      and verify the learned ordering persists locally.
+- [ ] Create an extensionless executable named `raycast-start`, a hidden file, a broken symlink, and a nested `.app`
+      bundle beneath a disposable root. Index All and verify each reference is searchable without crawling the app
+      bundle or following the link.
 - [ ] With more results than fit in the launcher, use a mouse wheel or trackpad over the rows and confirm the list scrolls while the header and footer remain fixed.
 
 - [ ] Global shortcut opens the launcher over the active application without moving focus elsewhere first.
@@ -45,8 +52,14 @@
 - [ ] Toggle menu-bar visibility and verify exactly one Commander item exists when enabled.
 - [ ] Verify light, dark, and system appearance plus default/large text size without clipping.
 - [ ] Verify favourites-in-compact-mode is disabled unless Compact is selected.
-- [ ] Open Advanced → Search Index. Verify application, command, file, and folder counts update while a scan runs;
+- [ ] Open Search → Search Index. Verify application, command, file, and folder counts update while a scan runs;
       Index All and each scoped button remain responsive and Settings can scroll to the final ignore row without clipping.
+- [ ] Verify Include hidden files starts enabled, Maximum entries starts blank/Unlimited, and the database footprint
+      displays in B, KB, MB, or GB. Set a custom entry cap, close/reopen Settings, verify it persists, then clear the
+      field and verify the saved value returns to unlimited.
+- [ ] With an index above one million records, leave Search Settings open for at least four status polls. Counts and
+      database size must stay populated, each poll must complete within five seconds, and no timeout may replace the
+      last-known values with zeroes. Search a long nonexistent term afterward and verify status polling recovers.
 - [ ] Change Scanner threads, Parallel tasks, Open folders, Max CPU, and Max memory; close/reopen Settings and verify
       every value persists. Run a scan and verify the last-run line reports effective workers, average CPU, peak RAM,
       and throttle time. Set the three concurrency ceilings to different values and verify effective workers use the

@@ -78,7 +78,7 @@ export function Launcher({ state }: { state: CommanderState }) {
       try {
         if (!selected) return;
         await state.rememberRecentSearch(state.query, commandHistoryEntry(selected, actionId));
-        await state.executeCommand(selected.id, actionId);
+        await state.executeCommand(selected.id, actionId, state.query);
       } catch (error) {
         state.reportError(error instanceof Error ? error.message : 'Command failed');
       }
@@ -90,7 +90,7 @@ export function Launcher({ state }: { state: CommanderState }) {
     async (row: Extract<HistoryRow, { type: 'command' }>) => {
       try {
         await state.rememberRecentSearch(row.search.query, row.command);
-        await state.executeCommand(row.command.itemId, row.command.actionId);
+        await state.executeCommand(row.command.itemId, row.command.actionId, row.search.query);
       } catch (error) {
         state.reportError(error instanceof Error ? error.message : 'Command failed');
       }

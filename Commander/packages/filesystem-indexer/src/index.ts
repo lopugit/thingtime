@@ -30,7 +30,7 @@ export interface IndexResourceLimits {
 export interface IndexConfiguration {
   sources: IndexSource[];
   customIgnores?: IgnoreRule[];
-  maxEntries?: number;
+  maxEntries?: number | null;
   resourceLimits?: IndexResourceLimits;
 }
 
@@ -65,6 +65,7 @@ export interface KindStatus {
 export interface IndexStatus {
   schemaVersion: number;
   totalRecords: number;
+  databaseSizeBytes: number;
   kinds: KindStatus[];
 }
 
@@ -205,6 +206,7 @@ export class FileSystemIndexerClient {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
+    this.#stderrBytes = 0;
     this.#process = child;
     createInterface({ input: child.stdout }).on('line', (line) => this.#receive(line));
     child.stderr.on('data', (chunk: Buffer) => {
@@ -221,21 +223,14 @@ export class FileSystemIndexerClient {
   }
 
   #request<T>(operation: RequestOperation, timeoutMs?: number): Promise<T> {
-    const child = this.#process;
-    if (!child) return Promise.reject(new Error('Filesystem indexer is unavailable'));
+    if (!this.#process) this.#start();
+    const child = this.#process!;
     const id = `indexer-${process.pid}-${++this.#sequence}`;
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(
-        () => {
-          this.#pending.delete(id);
-          reject(
-            new Error(
-              `Filesystem indexer request timed out after ${timeoutMs ?? this.#options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS}ms`,
-            ),
-          );
-        },
-        timeoutMs ?? this.#options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
-      );
+      const duration = timeoutMs ?? this.#options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+      const timer = setTimeout(() => {
+        this.#failProcess(child, new Error(`Filesystem indexer request timed out after ${duration}ms`));
+      }, duration);
       this.#pending.set(id, {
         resolve: (value) => resolve(value as T),
         reject,

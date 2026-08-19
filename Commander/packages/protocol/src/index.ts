@@ -4,10 +4,13 @@ export const RECENT_SEARCH_PREVIEW_LIMIT = 8;
 export const RECENT_SEARCH_STORAGE_LIMIT = 50;
 export const RECENT_SEARCH_COMMAND_LIMIT = 8;
 export const RECENT_SEARCH_MAX_LENGTH = 256;
+export const SEARCH_PREFERENCE_STORAGE_LIMIT = 10_000;
+export const SEARCH_PREFERENCE_MAX_COUNT = 1_000_000;
 export const COMMAND_SHORTCUT_LIMIT = 256;
 export const INDEXING_ROOT_LIMIT = 32;
 export const INDEXING_IGNORE_RULE_LIMIT = 256;
-export const INDEXING_MAX_ENTRIES_LIMIT = 10_000_000;
+export const INDEXING_MAX_ENTRIES_LIMIT = Number.MAX_SAFE_INTEGER;
+export const INDEXING_SETTINGS_VERSION = 3 as const;
 export const INDEXING_MAX_THREADS_LIMIT = 64;
 export const INDEXING_MAX_PARALLELISM_LIMIT = 64;
 export const INDEXING_MAX_OPEN_DIRECTORIES_LIMIT = 256;
@@ -40,7 +43,7 @@ export type WindowMode = 'default' | 'compact';
 export type TextSize = 'default' | 'large';
 export type SearchItemKind =
   'builtin' | 'system' | 'application' | 'file' | 'directory' | 'extension' | 'command' | 'quicklink';
-export type SettingsTab = 'general' | 'extensions' | 'sync' | 'account' | 'advanced' | 'about';
+export type SettingsTab = 'general' | 'extensions' | 'search' | 'sync' | 'account' | 'advanced' | 'about';
 export type CommanderViewId = 'emoji-symbols';
 export type CommandShortcutMap = Record<string, string>;
 export type IndexKind = 'application' | 'file' | 'directory';
@@ -48,22 +51,24 @@ export type IndexScope = 'all' | 'applications' | 'commands' | 'files' | 'direct
 export type IndexIgnoreRuleKind = 'glob' | 'regex';
 
 export const DEFAULT_INDEXING_SETTINGS: IndexingSettings = {
+  version: INDEXING_SETTINGS_VERSION,
   enabled: true,
   roots: ['~'],
   respectGitIgnore: true,
-  includeHidden: false,
+  includeHidden: true,
   customIgnores: [
     ...LEGACY_DEFAULT_INDEXING_GLOBS.map((pattern) => ({ kind: 'glob' as const, pattern })),
     { kind: 'glob', pattern: DEFAULT_NOINDEX_GLOB },
   ],
   refreshIntervalMinutes: 6 * 60,
-  maxEntries: 500_000,
+  maxEntries: null,
   resourceLimits: { ...DEFAULT_INDEXING_RESOURCE_LIMITS },
 };
 
 export const SETTINGS_TABS = [
   'general',
   'extensions',
+  'search',
   'sync',
   'account',
   'advanced',
@@ -87,6 +92,18 @@ export interface RecentSearchCommand {
 export interface RecentSearch {
   query: string;
   commands: RecentSearchCommand[];
+}
+
+export interface SearchPreference {
+  query: string;
+  itemId: string;
+  actionId: string;
+  count: number;
+  lastSelectedAtMs: number;
+}
+
+export function normalizeSearchPreferenceQuery(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, RECENT_SEARCH_MAX_LENGTH);
 }
 
 const SEARCH_ITEM_KINDS = new Set<SearchItemKind>([
@@ -200,6 +217,141 @@ export function addRecentSearch(
   ]);
 }
 
+export function normalizeSearchPreferences(value: unknown): SearchPreference[] {
+  if (!Array.isArray(value)) return [];
+  const preferences = new Map<string, SearchPreference>();
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+    const item = candidate as Partial<SearchPreference>;
+    const query = typeof item.query === 'string' ? normalizeSearchPreferenceQuery(item.query) : '';
+    const itemId = normalizedText(item.itemId, 512);
+    const actionId = normalizedText(item.actionId, 128);
+    if (!itemId || !actionId) continue;
+    const count = boundedInteger(item.count, 1, SEARCH_PREFERENCE_MAX_COUNT, 1);
+    const lastSelectedAtMs = Number.isSafeInteger(item.lastSelectedAtMs)
+      ? Math.max(0, item.lastSelectedAtMs as number)
+      : 0;
+    const key = `${query}\u0000${itemId}\u0000${actionId}`;
+    const existing = preferences.get(key);
+    preferences.set(key, {
+      query,
+      itemId,
+      actionId,
+      count: Math.min(SEARCH_PREFERENCE_MAX_COUNT, count + (existing?.count ?? 0)),
+      lastSelectedAtMs: Math.max(lastSelectedAtMs, existing?.lastSelectedAtMs ?? 0),
+    });
+  }
+  return [...preferences.values()]
+    .sort(
+      (left, right) =>
+        right.lastSelectedAtMs - left.lastSelectedAtMs ||
+        right.count - left.count ||
+        left.query.localeCompare(right.query) ||
+        left.itemId.localeCompare(right.itemId) ||
+        left.actionId.localeCompare(right.actionId),
+    )
+    .slice(0, SEARCH_PREFERENCE_STORAGE_LIMIT);
+}
+
+export function recordSearchPreference(
+  preferences: readonly SearchPreference[],
+  queryValue: string,
+  itemIdValue: string,
+  actionIdValue: string,
+  selectedAtMs = Date.now(),
+): SearchPreference[] {
+  const query = normalizeSearchPreferenceQuery(queryValue);
+  const itemId = normalizedText(itemIdValue, 512);
+  const actionId = normalizedText(actionIdValue, 128);
+  if (!itemId || !actionId) return normalizeSearchPreferences(preferences);
+  const normalized = normalizeSearchPreferences(preferences);
+  const existing = normalized.find(
+    (item) => item.query === query && item.itemId === itemId && item.actionId === actionId,
+  );
+  return normalizeSearchPreferences([
+    {
+      query,
+      itemId,
+      actionId,
+      count: Math.min(SEARCH_PREFERENCE_MAX_COUNT, (existing?.count ?? 0) + 1),
+      lastSelectedAtMs: Number.isSafeInteger(selectedAtMs) ? Math.max(0, selectedAtMs) : Date.now(),
+    },
+    ...normalized.filter(
+      (item) => !(item.query === query && item.itemId === itemId && item.actionId === actionId),
+    ),
+  ]);
+}
+
+/** Lightweight TypeScript counterpart to the Rust search core for renderer and
+ * process-failure fallbacks. It supports substring/subsequence matching plus
+ * bounded Damerau-style typo tolerance. */
+export function fuzzyTextScore(queryValue: string, candidateValue: string): number {
+  const query = [...queryValue.toLowerCase().trim()].slice(0, 128).join('');
+  const value = [...candidateValue.toLowerCase()].slice(0, 512).join('');
+  if (!query) return 0;
+  if (!value) return -1;
+  if (value === query) return 100_000;
+  if (value.startsWith(query)) return 80_000 - value.length;
+  const containedAt = value.indexOf(query);
+  if (containedAt >= 0) return 60_000 - containedAt;
+  let cursor = 0;
+  let gaps = 0;
+  let subsequence = true;
+  for (const character of query) {
+    const found = value.indexOf(character, cursor);
+    if (found < 0) {
+      subsequence = false;
+      break;
+    }
+    gaps += found - cursor;
+    cursor = found + 1;
+  }
+  if (subsequence) return 10_000 - gaps;
+  const compactQuery = compactSearchText(query);
+  const compactValue = compactSearchText(value);
+  if (compactQuery.length < 3 || !compactValue) return -1;
+  const distance = substringDamerauDistance(compactQuery, compactValue);
+  return distance <= maximumTypoDistance(compactQuery.length) ? 8_000 - distance * 1_500 : -1;
+}
+
+function compactSearchText(value: string): string {
+  const alphanumeric = [...value].filter((character) => /[\p{L}\p{N}]/u.test(character)).join('');
+  return alphanumeric || value.replace(/\s+/g, '');
+}
+
+function maximumTypoDistance(length: number): number {
+  if (length < 3) return 0;
+  if (length < 6) return 1;
+  if (length < 10) return 2;
+  return 3;
+}
+
+function substringDamerauDistance(query: string, candidate: string): number {
+  const needle = [...query];
+  const haystack = [...candidate];
+  let previousPrevious: number[] | undefined;
+  let previous = Array.from({ length: haystack.length + 1 }, () => 0);
+  for (let row = 1; row <= needle.length; row += 1) {
+    const current = [row, ...Array.from({ length: haystack.length }, () => 0)];
+    for (let column = 1; column <= haystack.length; column += 1) {
+      const substitution = previous[column - 1]! + (needle[row - 1] === haystack[column - 1] ? 0 : 1);
+      current[column] = Math.min(previous[column]! + 1, current[column - 1]! + 1, substitution);
+      if (
+        previousPrevious &&
+        row > 1 &&
+        column > 1 &&
+        needle[row - 1] === haystack[column - 2] &&
+        needle[row - 2] === haystack[column - 1]
+      ) {
+        current[column] = Math.min(current[column]!, previousPrevious[column - 2]! + 1);
+      }
+    }
+    previousPrevious = previous;
+    previous = current;
+  }
+  return Math.min(...previous);
+}
+
 export function extensionCommandItemId(extensionId: string, commandName: string): string {
   return `extension:${extensionId}:${commandName}`;
 }
@@ -260,23 +412,29 @@ export function normalizeIndexingSettings(value: unknown): IndexingSettings {
       : Number.isSafeInteger(candidate.refreshIntervalMinutes)
         ? Math.min(24 * 60, Math.max(5, candidate.refreshIntervalMinutes!))
         : DEFAULT_INDEXING_SETTINGS.refreshIntervalMinutes;
+  const currentVersion = candidate.version === INDEXING_SETTINGS_VERSION;
   const maxEntries =
-    candidate.maxEntries === LEGACY_DEFAULT_INDEXING_MAX_ENTRIES && hasLegacyDefaults
-      ? DEFAULT_INDEXING_SETTINGS.maxEntries
-      : Number.isSafeInteger(candidate.maxEntries)
-        ? Math.min(INDEXING_MAX_ENTRIES_LIMIT, Math.max(1_000, candidate.maxEntries!))
-        : DEFAULT_INDEXING_SETTINGS.maxEntries;
+    candidate.maxEntries === null
+      ? null
+      : !currentVersion &&
+          (candidate.maxEntries === LEGACY_DEFAULT_INDEXING_MAX_ENTRIES || candidate.maxEntries === 500_000)
+        ? null
+        : Number.isSafeInteger(candidate.maxEntries)
+          ? Math.min(INDEXING_MAX_ENTRIES_LIMIT, Math.max(1, candidate.maxEntries!))
+          : DEFAULT_INDEXING_SETTINGS.maxEntries;
   return {
+    version: INDEXING_SETTINGS_VERSION,
     enabled: typeof candidate.enabled === 'boolean' ? candidate.enabled : DEFAULT_INDEXING_SETTINGS.enabled,
     roots: roots.length ? roots : [...DEFAULT_INDEXING_SETTINGS.roots],
     respectGitIgnore:
       typeof candidate.respectGitIgnore === 'boolean'
         ? candidate.respectGitIgnore
         : DEFAULT_INDEXING_SETTINGS.respectGitIgnore,
-    includeHidden:
-      typeof candidate.includeHidden === 'boolean'
+    includeHidden: currentVersion
+      ? typeof candidate.includeHidden === 'boolean'
         ? candidate.includeHidden
-        : DEFAULT_INDEXING_SETTINGS.includeHidden,
+        : DEFAULT_INDEXING_SETTINGS.includeHidden
+      : DEFAULT_INDEXING_SETTINGS.includeHidden,
     customIgnores:
       Array.isArray(candidate.customIgnores) && candidate.customIgnores.length === 0
         ? []
@@ -351,13 +509,14 @@ export interface IndexIgnoreRule {
 }
 
 export interface IndexingSettings {
+  version: typeof INDEXING_SETTINGS_VERSION;
   enabled: boolean;
   roots: string[];
   respectGitIgnore: boolean;
   includeHidden: boolean;
   customIgnores: IndexIgnoreRule[];
   refreshIntervalMinutes: number;
-  maxEntries: number;
+  maxEntries: number | null;
   resourceLimits: IndexingResourceLimits;
 }
 
@@ -400,6 +559,7 @@ export interface IndexingStatus {
   available: boolean;
   running: IndexScope[];
   totalRecords: number;
+  databaseSizeBytes: number;
   kinds: IndexKindStatus[];
   commands: {
     count: number;
@@ -500,6 +660,7 @@ export interface SearchItem {
   icon?: string;
   path?: string;
   favourite: boolean;
+  preferenceScore?: number;
   extensionId?: string;
   commandName?: string;
   actions: CommanderAction[];

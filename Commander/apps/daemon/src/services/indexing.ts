@@ -62,6 +62,7 @@ export class IndexingService {
   #lastFallbackApplicationsAtMs: number | undefined;
   #commandCount = 0;
   #lastRunResources: IndexResourceUsage | undefined;
+  #lastStatus: IndexStatus | undefined;
 
   constructor(options: IndexingServiceOptions) {
     this.#platform = options.platform;
@@ -121,7 +122,7 @@ export class IndexingService {
     try {
       const response = await this.#reader.query({
         query,
-        kinds: ['file', 'directory'],
+        kinds: ['application', 'file', 'directory'],
         limit: Math.min(FILESYSTEM_RESULT_LIMIT, Math.max(1, limit)),
       });
       return response.records.map(indexRecordToSearchItem);
@@ -172,11 +173,12 @@ export class IndexingService {
   }
 
   async status(): Promise<IndexingStatus> {
-    const status = await this.#safeRustStatus();
+    const status = (await this.#safeRustStatus()) ?? this.#lastStatus;
     return {
       available: this.#available,
       running: [...this.#running],
       totalRecords: status?.totalRecords ?? 0,
+      databaseSizeBytes: status?.databaseSizeBytes ?? 0,
       kinds:
         status?.kinds.map((kind) => ({
           kind: kind.kind,
@@ -228,7 +230,7 @@ export class IndexingService {
       await this.#indexApplications();
       return;
     }
-    if (!this.#settings.enabled) throw new Error('Filesystem indexing is disabled in Advanced Settings');
+    if (!this.#settings.enabled) throw new Error('Filesystem indexing is disabled in Search Settings');
     await this.#indexFilesystem([scope === 'files' ? 'file' : 'directory']);
   }
 
@@ -248,12 +250,12 @@ export class IndexingService {
         root,
         kinds: ['application'],
         respectGitIgnore: false,
-        includeHidden: false,
+        includeHidden: this.#settings.includeHidden,
         followSymlinks: false,
         maxDepth: 1,
       })),
       customIgnores: [],
-      maxEntries: Math.min(this.#settings.maxEntries, 100_000),
+      maxEntries: this.#settings.maxEntries,
       resourceLimits: this.#settings.resourceLimits,
     });
     this.#available = true;
@@ -265,11 +267,12 @@ export class IndexingService {
     if (!this.#writer) throw new Error('The bundled Rust filesystem indexer is unavailable');
     const roots = await existingDirectories(this.#settings.roots.map(expandRoot));
     if (!roots.length) throw new Error('None of the configured filesystem index roots are available');
+    const indexedKinds = [...new Set([...kinds, 'application' as const])];
     const configuration: IndexConfiguration = {
       sources: roots.map((root, index) => ({
         id: `filesystem:${index}:${root}`,
         root,
-        kinds,
+        kinds: indexedKinds,
         respectGitIgnore: this.#settings.respectGitIgnore,
         includeHidden: this.#settings.includeHidden,
         followSymlinks: false,
@@ -281,6 +284,7 @@ export class IndexingService {
     await this.#writeIndex(configuration);
     this.#available = true;
     this.#message = undefined;
+    this.#callbacks.applications(await this.#queryApplications());
   }
 
   async #writeIndex(configuration: IndexConfiguration): Promise<IndexReport> {
@@ -289,9 +293,10 @@ export class IndexingService {
     try {
       const report = await writer.index(
         configuration,
-        indexTimeoutMs(configuration.resourceLimits?.maxCpuPercent),
+        indexTimeoutMs(configuration.resourceLimits?.maxCpuPercent, configuration.maxEntries == null),
       );
       this.#lastRunResources = report.resources;
+      this.#lastStatus = structuredClone(report.status);
       return report;
     } catch (error) {
       if (!errorMessage(error).includes('timed out')) throw error;
@@ -352,6 +357,8 @@ export class IndexingService {
     try {
       const status = await this.#reader.status();
       this.#available = true;
+      this.#message = undefined;
+      this.#lastStatus = structuredClone(status);
       return status;
     } catch (error) {
       this.#disableRust(error);
@@ -391,10 +398,13 @@ export class IndexingService {
   }
 }
 
-export function indexTimeoutMs(maxCpuPercent = 100): number {
+export function indexTimeoutMs(maxCpuPercent = 100, unlimited = false): number {
   const boundedCpu = Math.min(100, Math.max(5, maxCpuPercent));
-  if (boundedCpu >= 25) return COMMANDER_INDEX_TIMEOUT_MS;
-  return Math.min(COMMANDER_MAX_INDEX_TIMEOUT_MS, Math.ceil((COMMANDER_INDEX_TIMEOUT_MS * 25) / boundedCpu));
+  const resourceAdjusted =
+    boundedCpu >= 25
+      ? COMMANDER_INDEX_TIMEOUT_MS
+      : Math.min(COMMANDER_MAX_INDEX_TIMEOUT_MS, Math.ceil((COMMANDER_INDEX_TIMEOUT_MS * 25) / boundedCpu));
+  return unlimited ? COMMANDER_MAX_INDEX_TIMEOUT_MS : resourceAdjusted;
 }
 
 export function indexRecordToSearchItem(record: IndexRecord): SearchItem {

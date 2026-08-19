@@ -48,6 +48,24 @@ describe('fallbackSearch', () => {
       10,
     );
     expect(hits.map((hit) => hit.id)).toEqual(['a', 'b', 'c']);
+    expect(fallbackSearch('settings', [item('unrelated', 'Terminal')], 10)).toEqual([]);
+  });
+
+  it('tolerates substitutions and adjacent transpositions across titles and keywords', () => {
+    expect(fallbackSearch('settngs', [item('settings', 'Settings')], 10)[0]?.id).toBe('settings');
+    expect(fallbackSearch('raycsat', [item('raycast', 'Raycast Start')], 10)[0]?.id).toBe('raycast');
+    expect(
+      fallbackSearch('extensoin', [item('extensions', 'Manage', ['extension settings'])], 10)[0]?.id,
+    ).toBe('extensions');
+  });
+
+  it('uses a learned preference to reorder otherwise identical text matches', () => {
+    const first = item('first', 'Open Notes');
+    const preferred = { ...item('preferred', 'Open Notes'), preferenceScore: 9_000 };
+    expect(fallbackSearch('open notes', [first, preferred], 10).map((hit) => hit.id)).toEqual([
+      'preferred',
+      'first',
+    ]);
   });
 });
 
@@ -108,5 +126,18 @@ describe('SearchService transient filesystem candidates', () => {
       { id: 'indexed:file', kind: 'file' },
     ]);
     expect(service.items()).toEqual(searchableItems);
+  });
+
+  it('applies the same learned score to catalog and transient filesystem items', async () => {
+    const service = new SearchService();
+    service.setItems([item('catalog', 'Raycast Start')]);
+    const file = item('indexed:file', 'Raycast Start');
+    file.kind = 'file';
+    file.path = '/Users/test/raycast-start';
+
+    await expect(service.search('raycast', 30, [file], { 'indexed:file': 20_000 })).resolves.toMatchObject([
+      { id: 'indexed:file' },
+      { id: 'catalog' },
+    ]);
   });
 });

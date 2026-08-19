@@ -7,12 +7,14 @@ portable from day one.
 ## What works in this milestone
 
 - global Commander shortcut on macOS (defaults to Command-Space; customizable in Settings);
-- application, command, file, and folder search with deterministic Rust command ranking plus a standalone,
-  persistent Rust filesystem metadata index;
+- typo-tolerant fuzzy application, command, extension, file, folder, and Store search with deterministic Rust
+  ranking plus bounded device-local preference learning from the result a user actually chooses;
 - automatic application-directory watching with five-minute reconciliation, configurable six-hour file/folder
   refresh, and built-in Index Now, Index Apps, Index Commands, Index Files, and Index Directories commands;
 - inherited `.gitignore`/Git excludes plus user-defined wildcard and regular-expression ignore rules, editable with
-  index roots and live status in Advanced Settings;
+  index roots, an optional entry cap, and live database size/status in dedicated Search Settings;
+- unlimited filesystem entries and hidden files by default, including metadata-only references for executables,
+  symlinks, special Unix file types, packages, and app bundles found outside standard application folders;
 - reusable machine-resource controls for indexer threads, parallel work, open-directory handles, CPU share, and RAM,
   with transactional memory-limit rollback and measured per-run usage;
 - per-command global shortcuts with click-to-record bindings in Extensions Settings, native conflict validation,
@@ -102,11 +104,11 @@ the app-data key `commander.settings.v1`.
 
 The bundled client ID is public by design. Tokens, passwords, and other credentials never belong in this repository.
 
-Whole-home filesystem indexing on macOS requires Full Disk Access for Commander. Advanced → Search Index links
-directly to the system pane; without that permission, use explicitly allowed folders as roots. Commander stops a
-blocked scan after 90 seconds, keeps the prior committed snapshot searchable, and reports actionable guidance.
-Deliberately constraining the indexer below 25% CPU extends that isolated writer deadline proportionally, up to 15
-minutes, so an efficiency profile is not mistaken for a hung filesystem call.
+Whole-home filesystem indexing on macOS requires Full Disk Access for Commander. Search → Search Index links
+directly to the system pane; without that permission, use explicitly allowed folders as roots. Unlimited scans get
+a bounded 15-minute writer window; a custom-capped scan normally stops a blocked writer after 90 seconds, keeps the
+prior committed snapshot searchable, and reports actionable guidance. Deliberately constraining a capped indexer
+below 25% CPU extends that shorter deadline proportionally, up to 15 minutes.
 
 ## Raycast companion command
 

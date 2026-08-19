@@ -1376,11 +1376,17 @@
 }
 
 .advanced-settings,
+.search-settings,
 .cloud-sync-settings {
-  max-width: 720px;
+  max-width: 920px;
   margin: 0 auto;
 }
+.advanced-settings,
+.cloud-sync-settings {
+  max-width: 720px;
+}
 .advanced-heading,
+.search-settings-heading,
 .cloud-hero {
   display: flex;
   align-items: center;
@@ -1392,18 +1398,56 @@
   height: 32px;
   color: var(--accent);
 }
+.search-settings-heading > svg {
+  width: 32px;
+  height: 32px;
+  color: var(--accent);
+}
 .advanced-heading h2,
 .advanced-heading p,
+.search-settings-heading h2,
+.search-settings-heading p,
 .cloud-hero h2,
 .cloud-hero p {
   margin: 0;
 }
 .advanced-heading p,
+.search-settings-heading p,
 .cloud-hero p {
   margin-top: 4px;
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.45;
+}
+.search-ranking-card {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-raised));
+}
+.search-ranking-card > svg {
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+}
+.search-ranking-card > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.search-ranking-card strong {
+  font-size: 0.8rem;
+}
+.search-ranking-card span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+.search-settings .indexing-card {
+  margin-top: 16px;
 }
 .advanced-card {
   overflow: hidden;
@@ -1578,10 +1622,20 @@
   opacity: 0.48;
 }
 .index-refresh-copy {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
   margin-top: 10px;
   color: var(--muted);
   font-size: 0.7rem;
   line-height: 1.45;
+}
+.index-refresh-copy strong {
+  flex: none;
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
 }
 .index-privacy-note {
   display: grid;
@@ -1729,6 +1783,12 @@
   gap: 8px;
   margin-top: 10px;
 }
+.index-resource-grid.single {
+  grid-template-columns: minmax(260px, 420px);
+}
+.index-resource-input.wide input {
+  min-width: 180px;
+}
 .index-resource-field {
   min-width: 0;
   display: flex;
@@ -1794,6 +1854,9 @@
   .index-options,
   .index-resource-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .index-resource-grid.single {
+    grid-template-columns: minmax(0, 1fr);
   }
   .index-privacy-note {
     grid-template-columns: 20px minmax(0, 1fr);

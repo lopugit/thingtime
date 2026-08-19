@@ -12,7 +12,11 @@ describe('FileSystemIndexerClient', () => {
       prefixArguments: [fixture],
     });
     try {
-      await expect(client.status()).resolves.toMatchObject({ schemaVersion: 1, totalRecords: 3 });
+      await expect(client.status()).resolves.toMatchObject({
+        schemaVersion: 1,
+        totalRecords: 3,
+        databaseSizeBytes: 4_096,
+      });
       await expect(client.query({ query: 'note', kinds: ['file'], limit: 10 })).resolves.toMatchObject({
         records: [{ name: 'note.txt', kind: 'file' }],
       });
@@ -21,7 +25,7 @@ describe('FileSystemIndexerClient', () => {
     }
   });
 
-  it('times out a blocked index request so its process can be closed', async () => {
+  it('terminates a timed-out process and restarts cleanly for the next request', async () => {
     const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/fake-indexer.mjs');
     const client = new FileSystemIndexerClient({
       binaryPath: process.execPath,
@@ -38,6 +42,7 @@ describe('FileSystemIndexerClient', () => {
           20,
         ),
       ).rejects.toThrow('timed out after 20ms');
+      await expect(client.status()).resolves.toMatchObject({ totalRecords: 3 });
     } finally {
       await client.close();
     }
@@ -53,6 +58,7 @@ describe('FileSystemIndexerClient', () => {
     try {
       const response = (await client.index({
         sources: [{ id: 'documents', root: '/tmp', kinds: ['file', 'directory'] }],
+        maxEntries: null,
         resourceLimits: {
           maxThreads: 6,
           maxParallelism: 3,
@@ -62,6 +68,7 @@ describe('FileSystemIndexerClient', () => {
         },
       })) as unknown as { configuration: Record<string, unknown> };
       expect(response.configuration).toMatchObject({
+        maxEntries: null,
         resourceLimits: {
           maxThreads: 6,
           maxParallelism: 3,

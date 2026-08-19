@@ -103,6 +103,7 @@ describe('useCommander launcher sessions', () => {
 
     await act(() => result.current.executeCommand('app:/Applications/Notes.app', 'open'));
 
+    expect(api.execute).toHaveBeenCalledWith('app:/Applications/Notes.app', 'open', '');
     expect(nativeRequest).toHaveBeenCalledWith('application.open', {
       path: '/Applications/Notes.app',
     });
@@ -120,7 +121,7 @@ describe('useCommander launcher sessions', () => {
 
     act(() => window.dispatchEvent(new CustomEvent('commander:command-hotkey', { detail: itemId })));
 
-    await waitFor(() => expect(api.execute).toHaveBeenCalledWith(itemId, 'run'));
+    await waitFor(() => expect(api.execute).toHaveBeenCalledWith(itemId, 'run', ''));
     await waitFor(() => expect(result.current.activeView).toBe('emoji-symbols'));
     expect(hideLauncher).not.toHaveBeenCalled();
   });

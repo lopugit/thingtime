@@ -78,9 +78,12 @@ describe('PersistentStore Thingtime defaults', () => {
       const store = new PersistentStore();
       await store.load();
       expect(store.snapshot().settings.indexing).toMatchObject({
+        version: 3,
         enabled: true,
         roots: ['~'],
         respectGitIgnore: true,
+        includeHidden: true,
+        maxEntries: null,
         customIgnores: expect.arrayContaining([{ kind: 'glob', pattern: '**/node_modules/**' }]),
         resourceLimits: {
           maxThreads: 2,
@@ -90,6 +93,8 @@ describe('PersistentStore Thingtime defaults', () => {
           maxMemoryMiB: 512,
         },
       });
+      expect(store.consumeIndexingMigration()).toBe(true);
+      expect(store.consumeIndexingMigration()).toBe(false);
     } finally {
       await rm(temporary, { recursive: true, force: true });
     }
@@ -214,6 +219,31 @@ describe('PersistentStore Thingtime defaults', () => {
         query: `search ${RECENT_SEARCH_STORAGE_LIMIT + 4}`,
         commands: [],
       });
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('persists adaptive search choices and boosts the matching query more than global usage', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
+    vi.stubEnv('COMMANDER_DATA_DIR', path.join(temporary, 'data'));
+
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      await store.recordSearchSelection(' RayCast Start ', 'index:file:raycast-start', 'open', 1_000);
+      await store.recordSearchSelection('raycast start', 'index:file:raycast-start', 'open', 2_000);
+      await store.recordSearchSelection('other', 'index:file:other', 'open', 3_000);
+
+      const exact = store.preferenceScores('RAYCAST START', 3_000);
+      const unrelated = store.preferenceScores('something else', 3_000);
+      expect(exact['index:file:raycast-start']).toBeGreaterThan(unrelated['index:file:raycast-start']!);
+      expect(exact['index:file:raycast-start']).toBeGreaterThan(exact['index:file:other']!);
+      expect(store.snapshot()).not.toHaveProperty('searchPreferences');
+
+      const reloaded = new PersistentStore();
+      await reloaded.load();
+      expect(reloaded.preferenceScores('raycast start', 3_000)).toEqual(exact);
     } finally {
       await rm(temporary, { recursive: true, force: true });
     }

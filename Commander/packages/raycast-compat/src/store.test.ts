@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { materializePublicRaycastExtensionSource } from './store.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { browseRaycastStore, materializePublicRaycastExtensionSource } from './store.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -13,9 +13,40 @@ async function cacheDirectory(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
   );
+});
+
+describe('browseRaycastStore', () => {
+  it('fuzzy-ranks feed extensions when the search contains a transposition', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 'https://www.raycast.com/raycast/github',
+                  url: 'https://www.raycast.com/raycast/github',
+                  title: 'GitHub',
+                  summary: 'Search repositories and issues',
+                  author: { name: 'Raycast' },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+
+    await expect(browseRaycastStore('githbu')).resolves.toEqual([
+      expect.objectContaining({ name: 'github', title: 'GitHub' }),
+      expect.objectContaining({ name: 'raycast-store-search' }),
+    ]);
+  });
 });
 
 function sourceFetch(

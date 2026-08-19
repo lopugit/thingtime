@@ -6,6 +6,7 @@ import type {
   CommanderSettings,
   RecentSearch,
   RecentSearchCommand,
+  SearchPreference,
 } from '@commander/protocol';
 import {
   addRecentSearch as prependRecentSearch,
@@ -13,6 +14,9 @@ import {
   normalizeCommandShortcuts,
   normalizeIndexingSettings,
   normalizeRecentSearches,
+  normalizeSearchPreferenceQuery,
+  normalizeSearchPreferences,
+  recordSearchPreference,
 } from '@commander/protocol';
 import type { RaycastExtensionPreferenceState } from './raycastLocal.js';
 import { commanderDataDirectory } from './config.js';
@@ -24,7 +28,10 @@ interface PersistentState {
   extensions: CommanderExtension[];
   extensionPreferences: RaycastExtensionPreferenceState[];
   recentSearches: RecentSearch[];
+  searchPreferences: SearchPreference[];
 }
+
+type PersistentSnapshot = Omit<PersistentState, 'searchPreferences'>;
 
 const statePath = () => path.join(commanderDataDirectory(), 'state.json');
 
@@ -47,12 +54,14 @@ function initialState(): PersistentState {
     extensions: [],
     extensionPreferences: [],
     recentSearches: [],
+    searchPreferences: [],
   };
 }
 
 export class PersistentStore {
   #state: PersistentState = initialState();
   #writeQueue = Promise.resolve();
+  #indexingMigrationPending = false;
 
   async load(): Promise<void> {
     try {
@@ -63,10 +72,15 @@ export class PersistentStore {
         JSON.stringify(parsed.settings?.commandShortcuts ?? {}) !== JSON.stringify(settings.commandShortcuts);
       const indexingNeedsMigration =
         JSON.stringify(parsed.settings?.indexing) !== JSON.stringify(settings.indexing);
+      this.#indexingMigrationPending = indexingNeedsMigration;
       const recentSearches = normalizeRecentSearches(parsed.recentSearches);
       const historyNeedsMigration =
         Array.isArray(parsed.recentSearches) &&
         JSON.stringify(parsed.recentSearches) !== JSON.stringify(recentSearches);
+      const searchPreferences = normalizeSearchPreferences(parsed.searchPreferences);
+      const preferencesNeedMigration =
+        Array.isArray(parsed.searchPreferences) &&
+        JSON.stringify(parsed.searchPreferences) !== JSON.stringify(searchPreferences);
       this.#state = {
         version: 1,
         settings,
@@ -74,16 +88,30 @@ export class PersistentStore {
         extensions: Array.isArray(parsed.extensions) ? parsed.extensions : [],
         extensionPreferences: normalizeExtensionPreferences(parsed.extensionPreferences),
         recentSearches,
+        searchPreferences,
       };
-      if (clientIdNeedsMigration || shortcutsNeedMigration || indexingNeedsMigration || historyNeedsMigration)
+      if (
+        clientIdNeedsMigration ||
+        shortcutsNeedMigration ||
+        indexingNeedsMigration ||
+        historyNeedsMigration ||
+        preferencesNeedMigration
+      )
         await this.#persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   }
 
-  snapshot(): PersistentState {
-    return structuredClone(this.#state);
+  snapshot(): PersistentSnapshot {
+    const { searchPreferences: _searchPreferences, ...snapshot } = this.#state;
+    return structuredClone(snapshot);
+  }
+
+  consumeIndexingMigration(): boolean {
+    const pending = this.#indexingMigrationPending;
+    this.#indexingMigrationPending = false;
+    return pending;
   }
 
   async setSettings(
@@ -155,6 +183,55 @@ export class PersistentStore {
       await this.#persist();
     }
     return structuredClone(this.#state.recentSearches);
+  }
+
+  async recordSearchSelection(
+    query: string,
+    itemId: string,
+    actionId: string,
+    selectedAtMs = Date.now(),
+  ): Promise<void> {
+    this.#state.searchPreferences = recordSearchPreference(
+      this.#state.searchPreferences,
+      query,
+      itemId,
+      actionId,
+      selectedAtMs,
+    );
+    await this.#persist();
+  }
+
+  preferenceScores(queryValue: string, nowMs = Date.now()): Record<string, number> {
+    const query = normalizeSearchPreferenceQuery(queryValue);
+    const totals = new Map<
+      string,
+      { exactCount: number; globalCount: number; latestExactMs: number; latestGlobalMs: number }
+    >();
+    for (const preference of this.#state.searchPreferences) {
+      const current = totals.get(preference.itemId) ?? {
+        exactCount: 0,
+        globalCount: 0,
+        latestExactMs: 0,
+        latestGlobalMs: 0,
+      };
+      current.globalCount += preference.count;
+      current.latestGlobalMs = Math.max(current.latestGlobalMs, preference.lastSelectedAtMs);
+      if (preference.query === query) {
+        current.exactCount += preference.count;
+        current.latestExactMs = Math.max(current.latestExactMs, preference.lastSelectedAtMs);
+      }
+      totals.set(preference.itemId, current);
+    }
+    return Object.fromEntries(
+      [...totals.entries()].map(([itemId, usage]) => {
+        const exact = Math.min(60_000, Math.round(Math.log2(usage.exactCount + 1) * 6_000));
+        const global = Math.min(8_000, Math.round(Math.log2(usage.globalCount + 1) * 800));
+        const latest = usage.latestExactMs || usage.latestGlobalMs;
+        const ageDays = latest ? Math.max(0, nowMs - latest) / 86_400_000 : Number.POSITIVE_INFINITY;
+        const recency = Number.isFinite(ageDays) ? Math.round(2_000 / (1 + ageDays / 7)) : 0;
+        return [itemId, exact + global + recency];
+      }),
+    );
   }
 
   async #persist(): Promise<void> {
