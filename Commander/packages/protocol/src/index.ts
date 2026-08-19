@@ -351,6 +351,7 @@ export interface NativeRequest<T = unknown> {
     | 'application.quit'
     | 'window.beginDrag'
     | 'filesystem.beginDrag'
+    | 'filesystem.icon'
     | 'settings.open'
     | 'application.open'
     | 'application.pasteTarget'

@@ -147,6 +147,41 @@ describe('Launcher keyboard navigation', () => {
     expect(input.selectionEnd).toBe(5);
   });
 
+  it('disables browser spelling and autocorrect UI in the root search field', () => {
+    render(<Launcher state={state()} />);
+    const input = screen.getByRole('textbox', { name: 'Search apps and commands' });
+
+    expect(input).toHaveAttribute('autocomplete', 'off');
+    expect(input).toHaveAttribute('autocapitalize', 'none');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+    expect(input).toHaveAttribute('spellcheck', 'false');
+  });
+
+  it('requests and renders the native Finder icon for path-backed results', async () => {
+    const application = {
+      ...hits[1]!,
+      id: 'app:preview',
+      title: 'Preview',
+      subtitle: '/Applications/Preview.app',
+      path: '/Applications/Preview.app',
+    };
+    vi.mocked(nativeRequest).mockResolvedValueOnce({
+      dataUrl: 'data:image/png;base64,aWNvbg==',
+    });
+    render(<Launcher state={state({ hits: [application], selectedIndex: 0 })} />);
+
+    await waitFor(() =>
+      expect(nativeRequest).toHaveBeenCalledWith('filesystem.icon', {
+        path: '/Applications/Preview.app',
+      }),
+    );
+    await waitFor(() => {
+      const icon = document.querySelector('.result-native-icon');
+      expect(icon).toHaveAttribute('src', 'data:image/png;base64,aWNvbg==');
+      expect(icon?.closest('.result-icon')).toHaveClass('native-file-icon');
+    });
+  });
+
   it('runs the selected primary action with Return', async () => {
     const commander = state({ selectedIndex: 1 });
     render(<Launcher state={commander} />);

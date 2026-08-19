@@ -174,6 +174,9 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
       case "filesystem.reveal":
         guard let raw = request.params?["path"]?.string else { throw BridgeError.missing("path") }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: raw)]); result = nil
+      case "filesystem.icon":
+        guard let path = request.params?["path"]?.string else { throw BridgeError.missing("path") }
+        result = ["dataUrl": try CommanderWebView.fileIconDataURL(for: path)]
       case "clipboard.write":
         guard let text = request.params?["text"]?.string else { throw BridgeError.missing("text") }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); result = nil

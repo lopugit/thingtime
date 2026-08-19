@@ -74,6 +74,8 @@
   font-size: 0.92rem;
 }
 .result-region {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   padding: 15px 16px 10px;
   overflow: hidden;
@@ -170,6 +172,18 @@
 }
 .result-icon.kind-history {
   color: var(--muted);
+}
+.result-icon.path-backed-icon,
+.result-row.selected .result-icon.path-backed-icon {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.result-native-icon {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  pointer-events: none;
 }
 .result-copy {
   display: flex;
