@@ -338,7 +338,7 @@ export function Launcher({ state }: { state: CommanderState }) {
           {state.error ? (
             <span className="footer-error">{state.error}</span>
           ) : (
-            <span>Commander is ready</span>
+            <span>{state.notice ?? 'Commander is ready'}</span>
           )}
           <span className="footer-spacer" />
           <span>Navigate</span>

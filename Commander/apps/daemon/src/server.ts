@@ -8,8 +8,10 @@ import type {
   CommanderAccount,
   CommanderExtension,
   CommanderSettings,
+  IndexScope,
   NativeRequest,
   RecentSearchCommand,
+  SearchItem,
   StoreExtension,
 } from '@commander/protocol';
 import { PROTOCOL_VERSION } from '@commander/protocol';
@@ -21,7 +23,6 @@ import {
   RaycastExtensionRuntime,
 } from '@commander/raycast-compat';
 import { commanderCacheDirectory, currentPlatform, type RuntimeOptions } from './services/config.js';
-import { discoverApplications } from './services/applications.js';
 import {
   availableExtensions,
   builtins,
@@ -30,9 +31,15 @@ import {
   commanderExtension,
   emojiSymbolsExtension,
   extensionItems,
+  indexApplicationsCommandName,
+  indexCommandsCommandName,
+  indexDirectoriesCommandName,
+  indexFilesCommandName,
+  indexNowCommandName,
   openCommanderCommandName,
   searchEmojiSymbolsCommandName,
 } from './services/catalog.js';
+import { IndexingService } from './services/indexing.js';
 import { PersistentStore } from './services/persistence.js';
 import { macosSystemExtension, macosSystemShortcutURL } from './services/macosSystem.js';
 import { preferenceValuesForCommand, RaycastLocalService } from './services/raycastLocal.js';
@@ -62,13 +69,13 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   const store = new PersistentStore();
   await store.load();
   const platform = options.platform ?? currentPlatform();
-  const applications = await discoverApplications();
   const search = new SearchService(options.rustBinary);
   const extensions = new RaycastExtensionRuntime();
   const thingtime = new ThingtimeService();
   const localRaycast = new RaycastLocalService();
   const credentials = new Map<string, string>();
   let pendingCredential: { accountId: string; token: string; createdAt: number } | null = null;
+  let applications: SearchItem[] = [];
 
   const refreshCatalog = () => {
     const state = store.snapshot();
@@ -78,6 +85,22 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       ...applications,
     ]);
   };
+  const indexing = new IndexingService({
+    binaryPath: options.indexerBinary,
+    platform,
+    settings: store.snapshot().settings,
+    callbacks: {
+      applications(items) {
+        applications = items;
+        refreshCatalog();
+      },
+      commands() {
+        refreshCatalog();
+        return search.items().filter((item) => item.kind !== 'application').length;
+      },
+    },
+  });
+  applications = await indexing.initialize();
   refreshCatalog();
 
   const server = http.createServer(async (request, response) => {
@@ -128,13 +151,15 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
           secureCredentialStore: true,
           openAtLogin: platform === 'macos',
           sideloadPicker: true,
+          filesystemIndex: Boolean(options.indexerBinary),
         },
       };
       return json(response, 200, body);
     }
     if (request.method === 'GET' && url.pathname === '/api/search') {
       const query = url.searchParams.get('q') ?? '';
-      let hits = await search.search(query);
+      const indexedItems = await indexing.queryItems(query);
+      let hits = await search.search(query, 30, indexedItems);
       if (
         !query.trim() &&
         state.settings.windowMode === 'compact' &&
@@ -144,16 +169,26 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       }
       return json(response, 200, { hits });
     }
+    if (request.method === 'GET' && url.pathname === '/api/index/status')
+      return json(response, 200, await indexing.status());
+    if (request.method === 'POST' && url.pathname === '/api/index') {
+      const { scope } = await readBody<{ scope?: IndexScope }>(request);
+      if (!scope || !isIndexScope(scope))
+        return json(response, 400, { error: 'A valid index scope is required' });
+      void indexing.start(scope).catch(() => undefined);
+      return json(response, 202, { ok: true, scope, status: await indexing.status() });
+    }
     if (request.method === 'POST' && url.pathname === '/api/history') {
       const { query, command } = await readBody<{ query?: string; command?: RecentSearchCommand }>(request);
       if (typeof query !== 'string' || !query.trim())
         return json(response, 400, { error: 'query is required' });
       return json(response, 200, { recentSearches: await store.addRecentSearch(query, command) });
     }
-    if (request.method === 'PUT' && url.pathname === '/api/settings')
-      return json(response, 200, {
-        settings: await store.setSettings(await readBody<CommanderSettings>(request)),
-      });
+    if (request.method === 'PUT' && url.pathname === '/api/settings') {
+      const settings = await store.setSettings(await readBody<CommanderSettings>(request));
+      indexing.updateSettings(settings);
+      return json(response, 200, { settings });
+    }
     if (request.method === 'GET' && url.pathname === '/api/extensions')
       return json(response, 200, { extensions: extensionsForState });
     if (request.method === 'GET' && url.pathname === '/api/extensions/raycast') {
@@ -254,7 +289,8 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     }
     if (request.method === 'POST' && url.pathname === '/api/execute') {
       const { itemId, actionId } = await readBody<{ itemId: string; actionId: string }>(request);
-      const item = search.items().find((candidate) => candidate.id === itemId);
+      const item =
+        search.items().find((candidate) => candidate.id === itemId) ?? (await indexing.resolveItem(itemId));
       if (!item) return json(response, 404, { error: 'Search item not found' });
       if (actionId === 'open-settings')
         return json(response, 200, {
@@ -267,7 +303,9 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
                   ? 'extensions'
                   : item.id === 'builtin:accounts'
                     ? 'account'
-                    : 'general',
+                    : item.id === 'builtin:indexing'
+                      ? 'advanced'
+                      : 'general',
             },
           } satisfies Omit<NativeRequest, 'id'>,
         });
@@ -291,7 +329,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
           ok: true,
           nativeRequest: { method: 'clipboard.write', params: { text: item.path } },
         });
-      if (item.kind === 'application' && item.path)
+      if ((item.kind === 'application' || item.kind === 'file' || item.kind === 'directory') && item.path)
         return json(response, 200, {
           ok: true,
           nativeRequest: { method: 'application.open', params: { path: item.path } },
@@ -315,6 +353,17 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
           return json(response, 200, {
             ok: true,
             nativeRequest: { method: 'launcher.show' } satisfies Omit<NativeRequest, 'id'>,
+          });
+        }
+        const indexScope = commanderIndexScope(item.commandName);
+        if (extension.id === commanderExtension.id && indexScope) {
+          void indexing.start(indexScope).catch(() => undefined);
+          return json(response, 202, {
+            ok: true,
+            notice:
+              indexScope === 'all'
+                ? 'Indexing applications, commands, files, and directories…'
+                : `Indexing ${indexScope}…`,
           });
         }
         if (extension.id === emojiSymbolsExtension.id && item.commandName === searchEmojiSymbolsCommandName) {
@@ -451,6 +500,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     url: baseUrl,
     close: async () => {
       search.close();
+      await indexing.close();
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
@@ -465,6 +515,19 @@ function preparationSummary(prepared: Awaited<ReturnType<typeof prepareRaycastEx
     diagnostics: prepared.report.diagnostics,
     build: prepared.build,
   };
+}
+
+function isIndexScope(value: string): value is IndexScope {
+  return ['all', 'applications', 'commands', 'files', 'directories'].includes(value);
+}
+
+function commanderIndexScope(commandName: string): IndexScope | undefined {
+  if (commandName === indexNowCommandName) return 'all';
+  if (commandName === indexApplicationsCommandName) return 'applications';
+  if (commandName === indexCommandsCommandName) return 'commands';
+  if (commandName === indexFilesCommandName) return 'files';
+  if (commandName === indexDirectoriesCommandName) return 'directories';
+  return undefined;
 }
 
 async function readBody<T>(request: IncomingMessage): Promise<T> {

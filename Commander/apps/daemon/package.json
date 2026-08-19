@@ -15,6 +15,7 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@commander/filesystem-indexer": "workspace:*",
     "@commander/protocol": "workspace:*",
     "@commander/raycast-compat": "workspace:*"
   },

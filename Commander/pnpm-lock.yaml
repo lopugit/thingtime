@@ -23,6 +23,9 @@ importers:
 
   apps/daemon:
     dependencies:
+      '@commander/filesystem-indexer':
+        specifier: workspace:*
+        version: link:../../packages/filesystem-indexer
       '@commander/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -76,6 +79,8 @@ importers:
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
+
+  packages/filesystem-indexer: {}
 
   packages/protocol: {}
 

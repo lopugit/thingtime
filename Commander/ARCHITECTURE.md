@@ -8,7 +8,10 @@ The architecture intentionally follows the Raycast 2.0 direction without couplin
 ```mermaid
 flowchart LR
   UI["React + TypeScript UI"] <--> D["Long-lived Node daemon"]
-  D <--> R["Rust search core"]
+  D <--> R["Rust command search core"]
+  D <--> F["Rust filesystem indexer"]
+  F <--> S[("Private SQLite + FTS5 index")]
+  F --> FS["Filesystem metadata"]
   UI <--> P["Typed native bridge"]
   P --> M["Swift/AppKit macOS shell"]
   P --> W["C#/WebView2 Windows shell"]
@@ -18,10 +21,11 @@ flowchart LR
 ```
 
 - **React/TypeScript** owns the launcher, actions palette, settings, extensions, and accounts UI.
-- **Node.js** is the long-lived local control plane. It owns indexing, extension lifecycle, the loopback API,
-  settings persistence, platform discovery adapters, and Thingtime sync requests.
-- **Rust** owns deterministic, low-latency fuzzy search over the shared JSON-lines protocol. It builds for
-  macOS, Windows, and Linux from one crate.
+- **Node.js** is the long-lived local control plane. It owns index scheduling, extension lifecycle, the loopback
+  API, settings persistence, platform discovery adapters, and Thingtime sync requests.
+- **Rust** owns deterministic command ranking plus a separate persistent filesystem metadata index. The reusable
+  `commander-indexer` binary/library scans roots deterministically, inherits Git ignore rules, applies custom wildcard or
+  regex exclusions, and queries a private SQLite/FTS5 database. Both crates build for macOS, Windows, and Linux.
 - **Swift/AppKit/WebKit** is the shipping macOS shell. It owns global shortcuts, native windows, the menu bar,
   launch-at-login, Keychain, file panels, application launching, activation, and lifecycle.
 - **C#/.NET 8 + WPF/WebView2** is the Windows shell boundary. Its project and bridge contract live in `hosts/windows` so
@@ -52,11 +56,14 @@ system hotkeys or constructs file-URL dragging sessions.
 
 ## Process lifecycle
 
-1. The native host starts the bundled Node daemon on Commander's fixed loopback callback port and passes the bundled UI and Rust binary paths.
+1. The native host starts the bundled Node daemon on Commander's fixed loopback callback port and passes the
+   bundled UI, Rust command-search, and Rust filesystem-indexer binary paths.
 2. The daemon prints one JSON `ready` line containing the fixed callback port plus separate UI/native tokens.
 3. The host creates the launcher and settings WebViews from that URL.
 4. The daemon stays alive for the host lifetime; the host terminates the child process on exit.
-5. Search requests stream through the persistent Rust child process, avoiding per-keystroke process startup.
+5. Command candidates stream through the persistent Rust search child, avoiding per-keystroke process startup.
+6. The daemon keeps separate filesystem-index reader and writer children against one WAL-mode SQLite database, so
+   root search keeps using the last committed snapshot while a background scan is in progress.
 
 The shared frontend builds separate entry points for Launcher and Settings. Settings is always a separate native
 window. DOM overlays are acceptable only while they stay inside the launcher; platform popovers, action panels,
@@ -72,7 +79,8 @@ place. This keeps repeated global-shortcut presentation fast while preserving a 
 | React to native shell | WKWebView message handler / WebView2 postMessage | Correlation ID, 10-second timeout, bounded JSON values, one response per request                  |
 | React to Node         | Authenticated loopback HTTP                      | Loopback only, per-launch 256-bit token, 1 MiB mutation cap, no-store responses                   |
 | Native shell to Node  | Framed stdio handshake and process supervision   | Protocol version gate, ready deadline, one bounded restart, crash surfaced to UI                  |
-| Node to Rust          | Persistent JSON-lines stdio                      | Ordered requests/responses, structured error envelope, 64 MiB request cap, timeout/fallback       |
+| Node to search Rust   | Persistent JSON-lines stdio                      | Ordered requests/responses, structured error envelope, 64 MiB request cap, timeout/fallback       |
+| Node to indexer Rust  | Correlated JSON-lines stdio                      | Request IDs, transactional scans, reader/writer isolation, bounded input and result counts        |
 | Node to extension     | Worker messages                                  | Completion/error envelope, execution timeout, 128 MiB old-generation heap cap, forced termination |
 
 The loopback UI-to-Node connection is an intentional Commander divergence from Raycast's primarily stdio topology:
@@ -98,6 +106,33 @@ gate before Commander may claim a view extension works.
 - Extension workers are lazy, unloaded after a grace period at root, and individually capped at 128 MiB old-gen.
 - Icon/image caches are byte-bounded and modules outside the launcher path load lazily.
 - Telemetry records process RSS/physical footprint, V8 heap, cold/warm presentation time, and daemon/Rust restarts.
+
+## Filesystem indexing
+
+The filesystem index is local device metadata, not Thingtime cloud data. It stores only path, display name, kind,
+modification time, and size in `filesystem-index.sqlite3` with owner-only file permissions; it never reads file
+contents. Commander indexes applications as a dedicated scope, then files and directories from user-configured
+roots. Application directories are watched for changes and reconciled every five minutes. Files and directories
+reconcile in the background every six hours by default, after index-setting changes, or immediately through the
+built-in Index Now commands. Commander defaults to a 500,000-entry safety cap; the standalone engine remains
+configurable up to ten million entries.
+
+Each scan uses `ignore::WalkBuilder` with parent discovery enabled, so `.gitignore`, `.git/info/exclude`, and Git's
+global excludes apply even when a configured root starts inside a repository. Additional glob and finite-automata
+regex rules are compiled before scanning; an invalid rule rejects the new scan and preserves the previous committed
+index. Descendant globs prune their matching directory, and the defaults skip macOS `.noindex` trees. Application
+bundles plus macOS document/media package directories are indexed as one item and never recursively traversed.
+On-demand File Provider placeholder directories are recorded without hydration. On macOS, indexing all of `~`
+requires Full Disk Access; Commander links to that system pane, terminates a scan that remains blocked for 90
+seconds, restarts its isolated writer, and leaves the previous committed snapshot available.
+
+`crates/commander-indexer` and `packages/filesystem-indexer` are host-independent. Another Thingtime desktop app can
+use the CLI directly or import the typed Node client. Overlapping scans are serialized, entry counts are capped, and
+SQLite WAL lets queries remain responsive during a write transaction. Successful scans checkpoint and truncate the
+WAL, every SQLite database/sidecar remains owner-only, and FTS tokenizes names rather than every full path to keep
+large home indexes compact. A source that reaches its cap commits a bounded partial index and surfaces a warning
+instead of leaving first-run search empty. Filesystem event-level incremental updates are a future optimization; scheduled
+reconciliation is the current cross-platform freshness guarantee.
 
 Linux shares the protocol and product implementation but remains runtime-unverified until WebKitGTK, global-hotkey,
 tray, accessibility, IME, drag/drop, and credential-store behavior have dedicated testing.
@@ -126,8 +161,8 @@ keyboard macros in the static system catalog.
 
 ## Distribution
 
-The macOS build stages a signed `.app` containing compiled React assets, daemon/worker bundles, the Rust search
-binary, app icon, and a checksum-pinned Node 22 runtime, so the installed app does not depend on Homebrew Node.
+The macOS build stages a signed `.app` containing compiled React assets, daemon/worker bundles, both Rust binaries,
+the app icon, and a checksum-pinned Node 22 runtime, so the installed app does not depend on Homebrew Node or Cargo.
 
 Architecture source: Raycast's official May 2026 technical deep dive describes this four-part hybrid topology,
 typed IPC, WebView rendering workarounds, and measured memory trade-offs:

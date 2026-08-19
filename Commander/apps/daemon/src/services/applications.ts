@@ -11,6 +11,15 @@ const macApplicationDirectories = [
   path.join(os.homedir(), 'Applications'),
 ];
 
+export function applicationDirectories(platform: 'macos' | 'windows' | 'linux'): string[] {
+  if (platform === 'macos') return [...macApplicationDirectories];
+  if (platform === 'windows')
+    return [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.LOCALAPPDATA]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => path.resolve(value));
+  return ['/usr/share/applications', path.join(os.homedir(), '.local', 'share', 'applications')];
+}
+
 export async function discoverApplications(): Promise<SearchItem[]> {
   if (process.platform !== 'darwin') return [];
   const applications = await Promise.all(

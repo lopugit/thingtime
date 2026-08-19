@@ -1,15 +1,36 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DEFAULT_SETTINGS, type BootstrapResponse } from '@commander/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
+import { api } from '../lib/api.js';
 import { Settings } from './Settings.js';
 
 vi.mock('../lib/api.js', () => ({
   api: {
     listRaycastExtensions: vi.fn(async () => ({ available: true, extensions: [] })),
     browseStore: vi.fn(async () => ({ extensions: [] })),
+    indexingStatus: vi.fn(async () => ({
+      available: true,
+      running: [],
+      totalRecords: 0,
+      kinds: [],
+      commands: { count: 0 },
+      automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 30 },
+    })),
+    indexNow: vi.fn(async (scope: string) => ({
+      ok: true,
+      scope,
+      status: {
+        available: true,
+        running: [scope],
+        totalRecords: 0,
+        kinds: [],
+        commands: { count: 0 },
+        automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 30 },
+      },
+    })),
   },
 }));
 vi.mock('../lib/nativeBridge.js', () => ({ beginWindowDrag: vi.fn(), nativeRequest: vi.fn() }));
@@ -27,6 +48,7 @@ const bootstrap: BootstrapResponse = {
     secureCredentialStore: true,
     openAtLogin: true,
     sideloadPicker: true,
+    filesystemIndex: true,
   },
 };
 
@@ -39,6 +61,7 @@ function state(): CommanderState {
     selectedIndex: 0,
     actionsOpen: false,
     error: null,
+    notice: null,
     activeView: null,
     setQuery: vi.fn(),
     setSelectedIndex: vi.fn(),
@@ -68,5 +91,30 @@ describe('Commander settings deep links', () => {
     fireEvent(window, new CustomEvent('commander:settings-tab', { detail: 'account' }));
     expect(screen.getByRole('button', { name: 'Account' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('Thingtime Account')).toBeVisible();
+  });
+
+  it('shows indexing roots and ignore rules and can request a scoped refresh', async () => {
+    window.history.replaceState({}, '', '/settings.html?tab=advanced');
+    const commander = state();
+    render(<Settings state={commander} />);
+
+    expect(screen.getByRole('heading', { name: 'Search Index' })).toBeVisible();
+    expect(screen.getByDisplayValue('~')).toBeVisible();
+    expect(screen.getByDisplayValue('**/node_modules/**')).toBeVisible();
+    expect(screen.getByDisplayValue('**/*.noindex/**')).toBeVisible();
+    expect(screen.getByText(/files and folders reconcile every 6 hours/i)).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Files' }));
+    await waitFor(() => expect(api.indexNow).toHaveBeenCalledWith('files'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Ignore' }));
+    expect(screen.getByDisplayValue('**/build/**')).toBeVisible();
+    expect(commander.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        indexing: expect.objectContaining({
+          customIgnores: expect.arrayContaining([{ kind: 'glob', pattern: '**/build/**' }]),
+        }),
+      }),
+    );
   });
 });

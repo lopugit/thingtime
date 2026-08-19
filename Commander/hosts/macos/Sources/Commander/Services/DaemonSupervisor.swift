@@ -88,6 +88,7 @@ final class DaemonSupervisor: @unchecked Sendable {
 
     let bundledNode = resources.appendingPathComponent("node/bin/node")
     let rustCore = resources.appendingPathComponent("commander-core")
+    let filesystemIndexer = resources.appendingPathComponent("commander-indexer")
     let process = Process()
     var arguments = [
       daemonURL.path,
@@ -97,6 +98,9 @@ final class DaemonSupervisor: @unchecked Sendable {
     ]
     if FileManager.default.isExecutableFile(atPath: rustCore.path) {
       arguments += ["--rust-core", rustCore.path]
+    }
+    if FileManager.default.isExecutableFile(atPath: filesystemIndexer.path) {
+      arguments += ["--filesystem-indexer", filesystemIndexer.path]
     }
     if FileManager.default.isExecutableFile(atPath: bundledNode.path) {
       process.executableURL = bundledNode

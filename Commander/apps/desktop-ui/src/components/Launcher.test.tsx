@@ -27,6 +27,7 @@ const bootstrap: BootstrapResponse = {
     secureCredentialStore: true,
     openAtLogin: true,
     sideloadPicker: true,
+    filesystemIndex: true,
   },
 };
 
@@ -66,6 +67,7 @@ function state(overrides: Partial<CommanderState> = {}): CommanderState {
     selectedIndex: 0,
     actionsOpen: false,
     error: null,
+    notice: null,
     activeView: null,
     setQuery: vi.fn(),
     setSelectedIndex: vi.fn(),

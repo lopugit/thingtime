@@ -62,6 +62,32 @@ describe('PersistentStore Thingtime defaults', () => {
     }
   });
 
+  it('migrates legacy state to local filesystem indexing defaults', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
+    const dataDirectory = path.join(temporary, 'data');
+    await mkdir(dataDirectory);
+    vi.stubEnv('COMMANDER_DATA_DIR', dataDirectory);
+    const legacySettings = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
+    delete legacySettings.indexing;
+    await writeFile(
+      path.join(dataDirectory, 'state.json'),
+      `${JSON.stringify({ version: 1, settings: legacySettings, accounts: [], extensions: [] })}\n`,
+    );
+
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      expect(store.snapshot().settings.indexing).toMatchObject({
+        enabled: true,
+        roots: ['~'],
+        respectGitIgnore: true,
+        customIgnores: expect.arrayContaining([{ kind: 'glob', pattern: '**/node_modules/**' }]),
+      });
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('normalizes persisted command shortcuts without accepting the reserved launcher identifier', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
     const dataDirectory = path.join(temporary, 'data');

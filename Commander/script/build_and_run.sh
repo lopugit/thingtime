@@ -24,13 +24,14 @@ build_all() {
   corepack pnpm --dir "$ROOT_DIR" test
   corepack pnpm --dir "$ROOT_DIR" build
 
-  local rust_binary=""
-  if command -v cargo >/dev/null 2>&1; then
-    cargo build --release --manifest-path "$ROOT_DIR/crates/commander-core/Cargo.toml"
-    rust_binary="$ROOT_DIR/crates/commander-core/target/release/commander-search"
-  else
-    echo "warning: Cargo is unavailable; staging TypeScript search fallback" >&2
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "Commander requires Cargo to build its bundled search and filesystem indexer binaries" >&2
+    exit 1
   fi
+  cargo build --release --manifest-path "$ROOT_DIR/crates/commander-core/Cargo.toml"
+  local rust_binary="$ROOT_DIR/crates/commander-core/target/release/commander-search"
+  cargo build --release --manifest-path "$ROOT_DIR/crates/commander-indexer/Cargo.toml"
+  local rust_indexer_binary="$ROOT_DIR/crates/commander-indexer/target/release/commander-indexer"
 
   swift build --package-path "$SWIFT_PACKAGE" -c release
   local swift_binary
@@ -52,6 +53,9 @@ build_all() {
   stage_icon "$staged_bundle/Contents/Resources/$APP_NAME.icns"
   if [[ -n "$rust_binary" && -x "$rust_binary" ]]; then
     /usr/bin/ditto "$rust_binary" "$staged_bundle/Contents/Resources/commander-core"
+  fi
+  if [[ -n "$rust_indexer_binary" && -x "$rust_indexer_binary" ]]; then
+    /usr/bin/ditto "$rust_indexer_binary" "$staged_bundle/Contents/Resources/commander-indexer"
   fi
 
   /usr/bin/plutil -create xml1 "$staged_bundle/Contents/Info.plist"
@@ -81,6 +85,9 @@ build_all() {
   /usr/bin/codesign --verify --strict "$staged_bundle/Contents/Resources/node/bin/node"
   if [[ -x "$staged_bundle/Contents/Resources/commander-core" ]]; then
     /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/Resources/commander-core"
+  fi
+  if [[ -x "$staged_bundle/Contents/Resources/commander-indexer" ]]; then
+    /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/Resources/commander-indexer"
   fi
   /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/MacOS/$APP_NAME"
   /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle"
@@ -159,6 +166,7 @@ stop_installed_runtime() {
   local host_pattern="^$installed/Contents/MacOS/$APP_NAME$"
   local daemon_pattern="^$installed/Contents/Resources/node/bin/node $installed/Contents/Resources/commander-daemon.mjs( |$)"
   local core_pattern="^$installed/Contents/Resources/commander-core$"
+  local indexer_pattern="^$installed/Contents/Resources/commander-indexer( |$)"
 
   if /usr/bin/pgrep -f "$host_pattern" >/dev/null 2>&1; then
     /usr/bin/osascript -e 'tell application id "'"$BUNDLE_ID"'" to quit' >/dev/null 2>&1 || true
@@ -170,6 +178,7 @@ stop_installed_runtime() {
   /usr/bin/pkill -TERM -f "$host_pattern" >/dev/null 2>&1 || true
   /usr/bin/pkill -TERM -f "$daemon_pattern" >/dev/null 2>&1 || true
   /usr/bin/pkill -TERM -f "$core_pattern" >/dev/null 2>&1 || true
+  /usr/bin/pkill -TERM -f "$indexer_pattern" >/dev/null 2>&1 || true
   for _ in {1..40}; do
     if ! /usr/sbin/lsof -nP -iTCP:47820 -sTCP:LISTEN >/dev/null 2>&1; then return; fi
     sleep 0.05
@@ -178,6 +187,7 @@ stop_installed_runtime() {
   /usr/bin/pkill -KILL -f "$host_pattern" >/dev/null 2>&1 || true
   /usr/bin/pkill -KILL -f "$daemon_pattern" >/dev/null 2>&1 || true
   /usr/bin/pkill -KILL -f "$core_pattern" >/dev/null 2>&1 || true
+  /usr/bin/pkill -KILL -f "$indexer_pattern" >/dev/null 2>&1 || true
   sleep 0.1
   if /usr/sbin/lsof -nP -iTCP:47820 -sTCP:LISTEN; then
     echo "Commander cannot start because another process owns 127.0.0.1:47820" >&2
@@ -220,6 +230,12 @@ case "$MODE" in
     daemon_command="$(/bin/ps -p "$daemon_pid" -o command=)"
     [[ "$daemon_command" == "$HOME/Applications/$APP_NAME.app/Contents/Resources/node/bin/node $HOME/Applications/$APP_NAME.app/Contents/Resources/commander-daemon.mjs "* ]]
     [[ "$daemon_command" == *" --parent-pid $local_app_pid"* ]]
+    indexer_pids="$(/usr/bin/pgrep -f "^$HOME/Applications/$APP_NAME.app/Contents/Resources/commander-indexer serve --database " || true)"
+    [[ "$(/bin/echo "$indexer_pids" | /usr/bin/awk 'NF { count += 1 } END { print count + 0 }')" -ge 2 ]]
+    while IFS= read -r indexer_pid; do
+      [[ -z "$indexer_pid" ]] && continue
+      [[ "$(/bin/ps -p "$indexer_pid" -o ppid= | /usr/bin/xargs)" == "$daemon_pid" ]]
+    done <<<"$indexer_pids"
     ;;
   --debug|debug)
     lldb -- "$APP_BUNDLE/Contents/MacOS/$APP_NAME"

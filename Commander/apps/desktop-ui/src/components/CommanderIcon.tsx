@@ -8,6 +8,7 @@ import {
   FolderOpen,
   History,
   Link,
+  Search,
   Settings,
   Smile,
   Sparkles,
@@ -38,16 +39,20 @@ export function CommanderIcon({
                 ? History
                 : key === 'application'
                   ? AppWindow
-                  : key === 'quicklink'
-                    ? Link
-                    : key === 'command'
-                      ? TerminalSquare
-                      : key === 'external'
-                        ? ExternalLink
-                        : key === 'file'
-                          ? FileCode2
-                          : key === 'sparkles'
-                            ? Sparkles
-                            : Command;
+                  : key === 'directory'
+                    ? FolderOpen
+                    : key === 'quicklink'
+                      ? Link
+                      : key === 'command'
+                        ? TerminalSquare
+                        : key === 'external'
+                          ? ExternalLink
+                          : key === 'file'
+                            ? FileCode2
+                            : key === 'search'
+                              ? Search
+                              : key === 'sparkles'
+                                ? Sparkles
+                                : Command;
   return <Icon aria-hidden="true" strokeWidth={1.8} />;
 }

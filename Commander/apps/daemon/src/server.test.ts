@@ -78,26 +78,35 @@ describe('Commander daemon HTTP trust boundaries', () => {
             name: 'commander',
             source: 'builtin',
             compatibility: 'native',
-            commands: [
-              {
+            commands: expect.arrayContaining([
+              expect.objectContaining({
                 name: 'close-commander',
                 title: 'Close Commander',
                 description: 'Quit the Commander app and stop its background service.',
                 keywords: expect.arrayContaining(['exit', 'quit', 'terminate']),
-              },
-              {
+              }),
+              expect.objectContaining({
                 name: 'close-commander-window',
                 title: 'Close Commander Window',
                 description: 'Hide the floating Commander window without quitting the app.',
                 keywords: expect.arrayContaining(['close window', 'dismiss', 'hide']),
-              },
-              {
+              }),
+              expect.objectContaining({
                 name: 'open-commander',
                 title: 'Open Commander',
                 description: 'Open and focus the floating Commander window.',
                 keywords: expect.arrayContaining(['open', 'launch', 'show']),
-              },
-            ],
+              }),
+              expect.objectContaining({
+                name: 'index-now',
+                title: 'Index Now',
+                keywords: expect.arrayContaining(['reindex', 'index everything']),
+              }),
+              expect.objectContaining({ name: 'index-applications', title: 'Index Apps Now' }),
+              expect.objectContaining({ name: 'index-commands', title: 'Index Commands Now' }),
+              expect.objectContaining({ name: 'index-files', title: 'Index Files Now' }),
+              expect.objectContaining({ name: 'index-directories', title: 'Index Directories Now' }),
+            ]),
           },
           {
             id: 'builtin:emoji-symbols',
@@ -134,7 +143,18 @@ describe('Commander daemon HTTP trust boundaries', () => {
             ]),
           },
         ],
-        capabilities: { secureCredentialStore: true },
+        capabilities: { secureCredentialStore: true, filesystemIndex: false },
+      });
+
+      const indexingStatus = await fetch(`${server.url}/api/index/status`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(indexingStatus.status).toBe(200);
+      expect(await indexingStatus.json()).toMatchObject({
+        available: false,
+        running: [],
+        commands: { count: expect.any(Number), lastIndexedAtMs: expect.any(Number) },
+        automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 360 },
       });
 
       const settingsSearch = await fetch(`${server.url}/api/search?q=settings`, {
@@ -175,6 +195,60 @@ describe('Commander daemon HTTP trust boundaries', () => {
         ok: true,
         nativeRequest: { method: 'settings.open', params: { tab: 'account' } },
       });
+
+      const indexingSettings = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({ itemId: 'builtin:indexing', actionId: 'open-settings' }),
+      });
+      expect(indexingSettings.status).toBe(200);
+      expect(await indexingSettings.json()).toEqual({
+        ok: true,
+        nativeRequest: { method: 'settings.open', params: { tab: 'advanced' } },
+      });
+
+      const indexSearch = await fetch(`${server.url}/api/search?q=index%20now`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(indexSearch.status).toBe(200);
+      expect((await indexSearch.json()) as { hits: unknown[] }).toMatchObject({
+        hits: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'extension:builtin:commander:index-now',
+            title: 'Index Now',
+          }),
+        ]),
+      });
+
+      const indexCommands = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({
+          itemId: 'extension:builtin:commander:index-commands',
+          actionId: 'run',
+        }),
+      });
+      expect(indexCommands.status).toBe(202);
+      expect(await indexCommands.json()).toEqual({
+        ok: true,
+        notice: 'Indexing commands…',
+      });
+
+      const invalidIndexScope = await fetch(`${server.url}/api/index`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({ scope: 'secrets' }),
+      });
+      expect(invalidIndexScope.status).toBe(400);
 
       const exitSearch = await fetch(`${server.url}/api/search?q=exit`, {
         headers: { 'x-commander-session': server.token },

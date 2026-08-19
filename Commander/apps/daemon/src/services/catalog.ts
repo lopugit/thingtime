@@ -9,6 +9,11 @@ import { macosSystemExtension, macosSystemExtensionId } from './macosSystem.js';
 export const closeCommanderCommandName = 'close-commander';
 export const closeCommanderWindowCommandName = 'close-commander-window';
 export const openCommanderCommandName = 'open-commander';
+export const indexNowCommandName = 'index-now';
+export const indexApplicationsCommandName = 'index-applications';
+export const indexCommandsCommandName = 'index-commands';
+export const indexFilesCommandName = 'index-files';
+export const indexDirectoriesCommandName = 'index-directories';
 export const searchEmojiSymbolsCommandName = 'search-emoji-symbols';
 
 export const commanderExtension: CommanderExtension = {
@@ -16,7 +21,7 @@ export const commanderExtension: CommanderExtension = {
   name: 'commander',
   title: 'Commander',
   description: 'Commands for controlling Commander itself.',
-  version: '0.2.0',
+  version: '0.3.0',
   author: 'Thingtime',
   source: 'builtin',
   enabled: true,
@@ -44,6 +49,46 @@ export const commanderExtension: CommanderExtension = {
       description: 'Open and focus the floating Commander window.',
       mode: 'no-view',
       keywords: ['open', 'launch', 'show', 'focus', 'commander window', 'search'],
+      disabled: false,
+    },
+    {
+      name: indexNowCommandName,
+      title: 'Index Now',
+      description: 'Refresh applications, commands, files, and directories in Commander.',
+      mode: 'no-view',
+      keywords: ['reindex', 'refresh index', 'scan now', 'index everything', 'update search'],
+      disabled: false,
+    },
+    {
+      name: indexApplicationsCommandName,
+      title: 'Index Apps Now',
+      description: 'Refresh the installed application index immediately.',
+      mode: 'no-view',
+      keywords: ['reindex apps', 'applications', 'refresh apps', 'scan applications', 'new app'],
+      disabled: false,
+    },
+    {
+      name: indexCommandsCommandName,
+      title: 'Index Commands Now',
+      description: 'Rebuild Commander’s built-in and extension command catalog.',
+      mode: 'no-view',
+      keywords: ['reindex commands', 'extensions', 'refresh commands', 'command catalog'],
+      disabled: false,
+    },
+    {
+      name: indexFilesCommandName,
+      title: 'Index Files Now',
+      description: 'Refresh file metadata in the local Rust search index.',
+      mode: 'no-view',
+      keywords: ['reindex files', 'filesystem', 'refresh files', 'scan files', 'file search'],
+      disabled: false,
+    },
+    {
+      name: indexDirectoriesCommandName,
+      title: 'Index Directories Now',
+      description: 'Refresh folder metadata in the local Rust search index.',
+      mode: 'no-view',
+      keywords: ['reindex folders', 'directories', 'refresh folders', 'scan folders', 'folder search'],
       disabled: false,
     },
   ],
@@ -140,6 +185,16 @@ export const builtins: SearchItem[] = [
     icon: 'sideload',
     favourite: false,
     actions: [{ id: 'sideload', title: 'Choose Extension Folder', shortcut: '↵' }],
+  },
+  {
+    id: 'builtin:indexing',
+    title: 'Indexing Settings',
+    subtitle: 'Configure file roots, ignore rules, and refresh the search index',
+    kind: 'builtin',
+    keywords: ['index', 'indexing', 'files', 'folders', 'ignore', 'gitignore', 'regex', 'wildcard'],
+    icon: 'search',
+    favourite: false,
+    actions: [{ id: 'open-settings', title: 'Open Indexing Settings', shortcut: '↵' }],
   },
   {
     id: 'builtin:accounts',

@@ -19,6 +19,7 @@ export interface CommanderState {
   selectedIndex: number;
   actionsOpen: boolean;
   error: string | null;
+  notice: string | null;
   activeView: CommanderViewId | null;
   setQuery(value: string): void;
   setSelectedIndex(value: number): void;
@@ -39,6 +40,7 @@ export function useCommander(): CommanderState {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<CommanderViewId | null>(null);
   const requestSequence = useRef(0);
   const recentSearchSequence = useRef(0);
@@ -66,6 +68,12 @@ export function useCommander(): CommanderState {
   }, []);
 
   useEffect(() => void refresh(), [refresh]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const rememberRecentSearch = useCallback(async (value: string, command?: RecentSearchCommand) => {
     const next = addRecentSearch(recentSearchesRef.current, value, command);
@@ -132,6 +140,7 @@ export function useCommander(): CommanderState {
     async (itemId: string, actionId: string) => {
       let nativeRequestMethod: string | undefined;
       const response = await api.execute(itemId, actionId);
+      if (response.notice) setNotice(response.notice);
       if (response.view) setActiveView(response.view.id);
       if (response.nativeRequest) {
         const request = response.nativeRequest;
@@ -178,6 +187,7 @@ export function useCommander(): CommanderState {
       selectedIndex,
       actionsOpen,
       error,
+      notice,
       activeView,
       setQuery,
       setSelectedIndex,
@@ -197,6 +207,7 @@ export function useCommander(): CommanderState {
       selectedIndex,
       actionsOpen,
       error,
+      notice,
       activeView,
       setQuery,
       rememberRecentSearch,

@@ -11,6 +11,7 @@ import {
   addRecentSearch as prependRecentSearch,
   DEFAULT_SETTINGS,
   normalizeCommandShortcuts,
+  normalizeIndexingSettings,
   normalizeRecentSearches,
 } from '@commander/protocol';
 import type { RaycastExtensionPreferenceState } from './raycastLocal.js';
@@ -33,6 +34,7 @@ function normalizedSettings(settings: Partial<CommanderSettings> | undefined): C
   return {
     ...merged,
     commandShortcuts: normalizeCommandShortcuts(settings?.commandShortcuts),
+    indexing: normalizeIndexingSettings(settings?.indexing),
     thingtimeClientId: clientId || DEFAULT_SETTINGS.thingtimeClientId,
   };
 }
@@ -40,7 +42,7 @@ function normalizedSettings(settings: Partial<CommanderSettings> | undefined): C
 function initialState(): PersistentState {
   return {
     version: 1,
-    settings: { ...DEFAULT_SETTINGS },
+    settings: structuredClone(DEFAULT_SETTINGS),
     accounts: [],
     extensions: [],
     extensionPreferences: [],
@@ -59,6 +61,8 @@ export class PersistentStore {
       const clientIdNeedsMigration = parsed.settings?.thingtimeClientId !== settings.thingtimeClientId;
       const shortcutsNeedMigration =
         JSON.stringify(parsed.settings?.commandShortcuts ?? {}) !== JSON.stringify(settings.commandShortcuts);
+      const indexingNeedsMigration =
+        JSON.stringify(parsed.settings?.indexing) !== JSON.stringify(settings.indexing);
       const recentSearches = normalizeRecentSearches(parsed.recentSearches);
       const historyNeedsMigration =
         Array.isArray(parsed.recentSearches) &&
@@ -71,7 +75,8 @@ export class PersistentStore {
         extensionPreferences: normalizeExtensionPreferences(parsed.extensionPreferences),
         recentSearches,
       };
-      if (clientIdNeedsMigration || shortcutsNeedMigration || historyNeedsMigration) await this.#persist();
+      if (clientIdNeedsMigration || shortcutsNeedMigration || indexingNeedsMigration || historyNeedsMigration)
+        await this.#persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
