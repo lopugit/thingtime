@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
@@ -168,6 +170,8 @@ export type AttachmentStore = {
 	listUnboundOwned(ownerId: string, limit: number): Promise<AttachmentDoc[]>;
 	listExpiredOwned(ownerId: string, limit: number): Promise<AttachmentDoc[]>;
 	listExpired(limit: number, expiredAtOrBefore: Date): Promise<AttachmentDoc[]>;
+	listReadyUndetected(limit: number, afterId?: string): Promise<AttachmentDoc[]>;
+	upgradeReadyCrystal(id: string, crystal: AttachmentCrystal, expectedObjectVersionId: string): Promise<AttachmentDoc>;
 };
 
 export const expiredAttachmentDraftFilter = (
@@ -658,6 +662,66 @@ export const attachmentStore: AttachmentStore = {
 			.sort({ attachmentExpiresAt: 1, shareId: 1 })
 			.limit(Math.max(1, Math.min(1001, Math.floor(limit))))
 			.toArray()) as any as AttachmentDoc[];
+	},
+
+	// Ready rows finalized before server-side magic-byte detection existed:
+	// opaque contentType with no sniffed label. shareId-ordered so a caller can
+	// resume with the last id it saw even when a pass writes nothing (dry run,
+	// undetectable bytes).
+	async listReadyUndetected(limit, afterId) {
+		return (await (
+			await getHomeThingsCollection()
+		)
+			.find({
+				thingtime: ATTACHMENT_THINGTIME,
+				attachmentState: 'ready',
+				'crystal.contentType': 'application/octet-stream',
+				'crystal.detectedContentType': { $exists: false },
+				...(afterId ? { shareId: { $gt: afterId } } : {})
+			} as any)
+			.sort({ shareId: 1 })
+			.limit(Math.max(1, Math.min(1001, Math.floor(limit))))
+			.toArray()) as any as AttachmentDoc[];
+	},
+
+	// Publish a re-detected crystal on an already-ready row. Only detection
+	// metadata may change: name and size are immutable here so the object-byte
+	// side of storage accounting cannot move, while the row's JSON payload delta
+	// is still settled through the same transactional ledger markReady uses. The
+	// write is fenced to the exact object version the caller detected against —
+	// a concurrent delete, re-finalize, or version swap loses cleanly.
+	async upgradeReadyCrystal(id, crystal, expectedObjectVersionId) {
+		if (!isAttachmentObjectVersionId(expectedObjectVersionId)) throw new AttachmentStoreConflictError('Invalid object version');
+		return withHomeMongoTransaction(async (session) => {
+			const things = await getHomeThingsCollection();
+			const before = (await things.findOne(attachmentMatch(id) as any, { session })) as any as AttachmentDoc | null;
+			if (!before) throw new AttachmentStoreConflictError('Attachment not found');
+			if (before.attachmentState !== 'ready') throw new AttachmentStoreConflictError('Attachment is not ready');
+			if (before.objectVersionId !== expectedObjectVersionId) throw new AttachmentStoreConflictError('Attachment object version changed');
+			if (before.crystal.name !== crystal.name || before.crystal.size !== crystal.size) {
+				throw new AttachmentStoreConflictError('Attachment name and size cannot change during a crystal upgrade');
+			}
+			if (isDeepStrictEqual(before.crystal, crystal)) return before;
+
+			const next = { ...before, crystal, updatedAt: new Date() };
+			const nextSize = thingStorageSizeBytes(next);
+			const deltaBytes = nextSize - canonicalStoredBytes(before);
+			await applyUserStorageDelta(before.ownerId, deltaBytes, session);
+			const write = await things.updateOne(
+				{
+					_id: before._id,
+					ownerId: before.ownerId,
+					attachmentState: 'ready',
+					objectVersionId: expectedObjectVersionId,
+					updatedAt: before.updatedAt,
+					sizeBytes: before.sizeBytes
+				} as any,
+				{ $set: { crystal, sizeBytes: nextSize, updatedAt: next.updatedAt } },
+				{ session }
+			);
+			if (!write.matchedCount) throw new AttachmentStoreConflictError();
+			return { ...next, sizeBytes: nextSize };
+		});
 	}
 };
 

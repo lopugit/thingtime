@@ -384,6 +384,13 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] In a browser missing the codec inside an allowed container (for example
       HEVC QuickTime in Firefox), the failed `<video>` degrades to the named
       download row instead of an inert black player.
+- [ ] For a ready upload finalized before magic-byte detection (crystal
+      `application/octet-stream`, no `detectedContentType`, renders as a file
+      card), run the admin `POST /api/v1/attachments/backfill-detected-types`
+      sweep — `dryRun: true` first, then for real, following `nextCursor` while
+      `hasMore` — and confirm the already-posted attachment flips to inline
+      video (or gains its sniffed download label) without re-uploading, with
+      name and size unchanged. A repeat run reports zero changes.
 - [ ] Let a content URL expire at the storage provider and open the attachment
       again: the stable authenticated `/api/v1/attachments/content?id=…` route
       issues fresh access. A private post's attachment fails closed for another
