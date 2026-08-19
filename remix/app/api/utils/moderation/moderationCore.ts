@@ -31,6 +31,13 @@ export type AttachmentModeration = {
 	analyzedAt?: Date;
 	// admin-only; never leaves admin surfaces
 	reason?: string;
+	// text pipeline only: hash of the exact text this verdict describes —
+	// fences stale stamps and lets a block stay sticky across provider
+	// flip-flops until the text actually changes
+	textHash?: string;
+	// text pipeline only: the admin moderationFlag for this verdict has not
+	// landed yet; the hourly sweep drains docs still carrying this marker
+	flagPending?: boolean;
 };
 
 export const MODERATION_CATEGORY_MAX = 12;

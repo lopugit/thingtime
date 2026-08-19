@@ -23,7 +23,13 @@ import {
 	type AttachmentPublicMetadata,
 	type AttachmentPurpose
 } from '../attachments/attachmentCore';
-import { queueTextModeration, TEXT_MODERATED_THINGTIMES } from '../moderation/analyzeText';
+import {
+	postInsertModerationPlan,
+	queueTextModeration,
+	screenTextForCreate,
+	TEXT_MODERATED_THINGTIMES,
+	upsertTextModerationFlag
+} from '../moderation/analyzeText';
 import { attachmentIsBlocked } from '../moderation/moderationCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
@@ -985,7 +991,9 @@ export const createThing = async (
   if (isFail(folderAssignment)) return folderAssignment;
 
   if (validated.thingtime.includes('comment') && target) {
-    const commentCount = await countCommentsOf(target);
+		// includeBlocked: the cap is a physical doc bound — blocked spam must not
+		// free up quota for more child docs under the same post
+		const commentCount = await countCommentsOf(target, { includeBlocked: true });
     if (commentCount >= MAX_COMMENTS_PER_POST) return fail(400, 'This post has reached its comment limit');
   }
 
@@ -1055,6 +1063,16 @@ export const createThing = async (
 		const charge = await chargeAppStorage(app, sizeBytes);
 		if (charge.ok === false) return fail(charge.status, charge.error);
 	}
+	// Hybrid create-time text screen: bounded free omni race. A verdict in
+	// time means the doc is BORN stamped (a blocked post never renders
+	// anywhere, not even in a feed refresh between insert and async verdict);
+	// timeout/outage/off resolves null and the async queue + hourly sweep own
+	// it. screenTextForCreate never throws and never exceeds its budget.
+	if (thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) && String((doc as any).crystal?.text || '').trim()) {
+		const syncModeration = await screenTextForCreate(String((doc as any).crystal.text));
+		if (syncModeration) (doc as any).moderation = syncModeration;
+	}
+
   try {
 		if (billable || registeredApp || target || hooks.afterInsert) {
 			await withMongoTransaction(async (session) => {
@@ -1104,12 +1122,30 @@ export const createThing = async (
     throw err;
   }
 
-  // notification side effects — emit* never throws, so a notification hiccup
-  // can't fail the write that triggered it
+	// Post-insert moderation plan (pure helper, unit-tested):
+	//   notify     — born-blocked docs are invisible everywhere, so followers
+	//                are never notified about content they can't open
+	//   inlineFlag — a born-flagged doc's admin moderationFlag lands in the
+	//                SAME request as its stamp; only if that write fails does
+	//                the flagPending marker + hourly sweep own it
+	//   queueAsync — no sync verdict: the ordinary async screen runs as before
+	const moderationPlan = postInsertModerationPlan(doc as any);
+	if (moderationPlan.notify) {
+		// notification side effects — emit* never throws, so a notification
+		// hiccup can't fail the write that triggered it
   await emitCreationNotifications(doc, target, asOwner);
-	// fire-and-forget text moderation for post-family things with prose — the
-	// free omni screen stamps the protected moderation root asynchronously
-	if (thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) && String((doc as any).crystal?.text || '').trim()) {
+	}
+	if (moderationPlan.inlineFlag) {
+		try {
+			const home = await getHomeThingsCollection();
+			await upsertTextModerationFlag(home, doc as any, (doc as any).moderation, String((doc as any).crystal?.text || ''), new Date());
+			await things.updateOne({ shareId: doc.shareId, 'moderation.flagPending': true } as any, { $unset: { 'moderation.flagPending': '' } } as any);
+		} catch (error) {
+			// flagPending stays on the stamp — the hourly sweep retries the flag
+			console.warn('[moderation] inline flag write failed; sweep will retry:', (error as Error)?.message || error);
+			queueTextModeration(doc.shareId);
+		}
+	} else if (moderationPlan.queueAsync) {
 		queueTextModeration(doc.shareId);
 	}
   return { ok: true, doc };
@@ -1997,11 +2033,15 @@ export const appShapeProjections = async (
   });
 };
 
-const countCommentsOf = async (target: ThingDoc): Promise<number> => {
+const countCommentsOf = async (target: ThingDoc, options: { includeBlocked?: boolean } = {}): Promise<number> => {
   const things = await getThingsCollection();
+	// visible counts must match what the read paths render (blocked comments
+	// are excluded everywhere); the comment CAP passes includeBlocked because
+	// it doubles as a physical per-post doc bound
+	const blockedClause = options.includeBlocked ? {} : { 'moderation.status': { $ne: 'blocked' } };
   const [standalone, legacyRelational] = await Promise.all([
-    things.countDocuments({ targetId: target.shareId, thingtime: 'comment' } as any),
-    things.countDocuments({ kind: 'comment', parentId: target.shareId } as any)
+    things.countDocuments({ targetId: target.shareId, thingtime: 'comment', ...blockedClause } as any),
+    things.countDocuments({ kind: 'comment', parentId: target.shareId, ...blockedClause } as any)
   ]);
   return standalone + legacyRelational + (target.comments || []).length;
 };
@@ -2910,7 +2950,9 @@ export const addComment = async (
     // self-author shaped by the acting grant; count fenced to the namespace
     await appShapeProjections(app, [doc], [comment]);
     const things = await getThingsCollection();
-    const commentCount = await things.countDocuments(withMatch({ targetId: target.shareId, thingtime: 'comment' }, ...appMatchClauses(app)) as any);
+    const commentCount = await things.countDocuments(
+			withMatch({ targetId: target.shareId, thingtime: 'comment', 'moderation.status': { $ne: 'blocked' } }, ...appMatchClauses(app)) as any
+		);
     return { ok: true, comment, commentCount };
   }
 

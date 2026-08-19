@@ -45,13 +45,14 @@ export type ModerationOverview = {
 };
 
 // Matches exactly what the text sweep drains: post-family docs whose
-// crystal.text has any non-whitespace character and that carry no moderation
-// stamp at all (whitespace-only text is excluded so zombie docs can never
-// wedge the oldest-first batch).
+// crystal.text has any non-whitespace character and that either carry no
+// moderation stamp at all OR carry a born-flagged stamp whose admin flag
+// write was lost (flagPending). Whitespace-only text is excluded so zombie
+// docs can never wedge the oldest-first batch.
 export const UNMODERATED_TEXT_FILTER = {
 	thingtime: { $in: [...TEXT_MODERATED_THINGTIMES] },
 	'crystal.text': { $regex: /\S/ },
-	moderation: { $exists: false }
+	$or: [{ moderation: { $exists: false } }, { 'moderation.flagPending': true }]
 } as const;
 
 const MAX_FLAG_ROWS = 200;

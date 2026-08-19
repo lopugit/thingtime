@@ -34,7 +34,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   29) retries text moderation lost to mid-flight process deaths or provider
   outages and drains off-era backlog for free, plus the standard attachment
   sweep; the admin sweep button runs both batches and the tab shows the text
-  backlog count.
+  backlog count. Post creation adds a hybrid sync gate: the free omni screen
+  races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
+  insert so flagged posts are born stamped (blocked content never renders,
+  even briefly), while timeouts/outages fail open to the async pipeline —
+  moderation can never break or visibly slow posting.
 
 - **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
   moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
