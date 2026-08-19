@@ -17,6 +17,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CSP blocked attachment uploads on header-serving deployments**: the
+  application Content-Security-Policy's `connect-src` never allowed the
+  private S3 bucket origin, so on any surface that serves the CSP header
+  (`pr-*.previews.dev.thingtime.com`, `dev.thingtime.com`, staging — and
+  production once the policy ships) the composer's direct-to-S3 part PUT was
+  killed by the browser and every upload failed with "The file could not
+  reach storage. Check your connection and retry." (`*.vercel.app` previews
+  carry no CSP header, which is why uploads kept working there.) `csp.mjs`
+  now derives the exact bucket origin from
+  `THINGTIME_PRIVATE_S3_BUCKET`/`_REGION` at build time, with a regional
+  `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
+  Verified via S3 preflight (bucket CORS already allowed the preview origins
+  — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+
 ### Performance
 
 - **PR #299 performance audit — findings, notes and fixes**: full ten-dimension
