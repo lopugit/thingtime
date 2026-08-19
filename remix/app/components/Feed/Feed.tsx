@@ -10,6 +10,7 @@ import { AdvancedFilters, advancedSearchBody, searchResponsePosts, useAdvancedFi
 import { AlgorithmMenu } from './AlgorithmMenu';
 import { FeedFilters } from './FeedFilters';
 import { FeedShortcutsHelp } from './FeedShortcutsHelp';
+import { MemoriesCard } from './MemoriesCard';
 import { PostComposer } from './PostComposer';
 import { PostList } from './PostList';
 import { useFeedEngagement } from './useFeedEngagement';
@@ -309,6 +310,10 @@ export const FeedPage = () => {
             <PostComposer onPosted={handlePosted} />
           </Box>
         )}
+
+        {/* "On this day" memories — own-post anniversaries; renders nothing
+            when there are none, so the list below never shifts */}
+        {user && <MemoriesCard />}
 
         <Box ref={listRef}>
           <FeedShortcutsContext.Provider value={shortcuts.registry}>
