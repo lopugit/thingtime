@@ -291,3 +291,75 @@ test('screen failures leave no verdict stamp', async () => {
 test('text-moderated kinds cover the post family only', () => {
 	assert.deepEqual([...TEXT_MODERATED_THINGTIMES].sort(), ['comment', 'post', 'share']);
 });
+
+test('text sweep: off no-ops without touching the collection; batches analyze and count', async () => {
+	const { sweepUnmoderatedTextThings } = await import('./moderationAdmin');
+	const offResult = await sweepUnmoderatedTextThings({
+		resolveText: (async () => ({ kind: 'off' })) as any,
+		getThings: (async () => {
+			throw new Error('collection must not be touched when text moderation is off');
+		}) as any
+	});
+	assert.deepEqual(offResult, { scanned: 0, analyzed: 0, flagged: 0, failed: 0, skippedOff: true });
+
+	const analyzed: string[] = [];
+	const outcomes: Record<string, any> = {
+		'post-1': { ok: true, status: 'clear' },
+		'post-2': { ok: true, status: 'blocked' },
+		'post-3': { ok: false, error: 'openai down', retryable: true },
+		'post-4': { ok: true, status: 'unmoderated' }
+	};
+	const result = await sweepUnmoderatedTextThings({
+		resolveText: (async () => ({ kind: 'screen', screen: async () => ({ flagged: false }), provider: 'openai', model: 'omni-moderation-latest' })) as any,
+		getThings: (async () => ({
+			find: () => ({
+				project: () => ({
+					sort: () => ({
+						limit: () => ({ toArray: async () => Object.keys(outcomes).map((shareId) => ({ shareId })) })
+					})
+				})
+			})
+		})) as any,
+		analyze: (async (shareId: string) => {
+			analyzed.push(shareId);
+			return outcomes[shareId];
+		}) as any
+	});
+	assert.deepEqual(analyzed, ['post-1', 'post-2', 'post-3', 'post-4']);
+	assert.deepEqual(result, { scanned: 4, analyzed: 2, flagged: 1, failed: 1, skippedOff: false });
+});
+
+test('moderation sweep cron route requires the exact bearer secret and fails closed unconfigured', async () => {
+	const { createModerationSweepLoader } = await import('../../../routes/api/v1/moderation/sweep/_sweep');
+	let sweeps = 0;
+	const loader = createModerationSweepLoader({
+		getSecret: () => 'cron-test-secret',
+		sweepText: (async () => {
+			sweeps += 1;
+			return { scanned: 1, analyzed: 1, flagged: 0, failed: 0, skippedOff: false };
+		}) as any,
+		sweepAttachments: (async () => ({ scanned: 0, analyzed: 0, flagged: 0, skipped: 0, failed: 0 })) as any
+	});
+	for (const authorization of [undefined, 'cron-test-secret', 'bearer cron-test-secret', 'Bearer wrong']) {
+		const response = await loader({
+			request: new Request('https://thingtime.example/api/v1/moderation/sweep', {
+				headers: authorization ? { Authorization: authorization } : {}
+			})
+		});
+		assert.equal(response.status, 401);
+	}
+	assert.equal(sweeps, 0);
+
+	const authorized = await loader({
+		request: new Request('https://thingtime.example/api/v1/moderation/sweep', { headers: { Authorization: 'Bearer cron-test-secret' } })
+	});
+	assert.equal(authorized.status, 200);
+	const body = await authorized.json();
+	assert.equal(body.ok, true);
+	assert.equal(body.text.analyzed, 1);
+	assert.equal(sweeps, 1);
+
+	const unconfigured = createModerationSweepLoader({ getSecret: () => undefined });
+	const response = await unconfigured({ request: new Request('https://thingtime.example/api/v1/moderation/sweep') });
+	assert.equal(response.status, 503);
+});

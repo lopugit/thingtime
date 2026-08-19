@@ -4,7 +4,7 @@
 // endpoint override.
 import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
 import { createAnalyzeReadyAttachment, moderationFlagShareId, MODERATION_FLAG_THINGTIME } from './analyzeAttachment';
-import { TEXT_FLAG_EXCERPT_CHARS } from './analyzeText';
+import { analyzeTextThing, resolveConfiguredTextModeration, TEXT_FLAG_EXCERPT_CHARS, TEXT_MODERATED_THINGTIMES } from './analyzeText';
 import { sanitizeModerationCategories, type ModerationStatus } from './moderationCore';
 import { getModerationSettings, setModerationSettings } from './moderationSettings';
 import type { ModerationSettings } from './moderationSettingsCore';
@@ -37,8 +37,22 @@ export type ModerationOverview = {
 	counts: {
 		flags: number;
 		unanalyzedReady: number;
+		// post-family things with real text and no moderation stamp — the text
+		// sweep's backlog (mid-flight deaths + anything posted while text
+		// moderation was off)
+		unmoderatedText: number;
 	};
 };
+
+// Matches exactly what the text sweep drains: post-family docs whose
+// crystal.text has any non-whitespace character and that carry no moderation
+// stamp at all (whitespace-only text is excluded so zombie docs can never
+// wedge the oldest-first batch).
+export const UNMODERATED_TEXT_FILTER = {
+	thingtime: { $in: [...TEXT_MODERATED_THINGTIMES] },
+	'crystal.text': { $regex: /\S/ },
+	moderation: { $exists: false }
+} as const;
 
 const MAX_FLAG_ROWS = 200;
 
@@ -64,7 +78,8 @@ const toFlagRow = (doc: any): ModerationFlagRow => ({
 // Unreviewed first (newest within each group) so the queue surfaces work.
 export const listModerationOverview = async (): Promise<ModerationOverview> => {
 	const things = await getHomeThingsCollection();
-	const [flagDocs, flagCount, unanalyzedReady] = await Promise.all([
+	const dataThings = await getThingsCollection();
+	const [flagDocs, flagCount, unanalyzedReady, unmoderatedText] = await Promise.all([
 		things
 			.find({ thingtime: MODERATION_FLAG_THINGTIME } as any)
 			.sort({ 'crystal.reviewedAt': 1, createdAt: -1 })
@@ -75,11 +90,12 @@ export const listModerationOverview = async (): Promise<ModerationOverview> => {
 			thingtime: 'attachment',
 			attachmentState: 'ready',
 			$or: [{ moderation: { $exists: false } }, { 'moderation.status': 'pending' }]
-		} as any)
+		} as any),
+		dataThings.countDocuments(UNMODERATED_TEXT_FILTER as any)
 	]);
 	return {
 		flags: (flagDocs as any[]).map(toFlagRow),
-		counts: { flags: flagCount, unanalyzedReady }
+		counts: { flags: flagCount, unanalyzedReady, unmoderatedText }
 	};
 };
 
@@ -273,6 +289,63 @@ export type ModerationSweepResult = {
 };
 
 const SWEEP_BATCH = 10;
+const TEXT_SWEEP_BATCH = 25;
+
+export type TextSweepResult = {
+	scanned: number;
+	analyzed: number;
+	flagged: number;
+	failed: number;
+	// true when the text surface resolved to 'off' — absence of a stamp is
+	// ambiguous by design in off mode, so the sweep refuses to churn
+	skippedOff: boolean;
+};
+
+export type TextSweepDependencies = {
+	getThings: typeof getThingsCollection;
+	resolveText: typeof resolveConfiguredTextModeration;
+	analyze: typeof analyzeTextThing;
+};
+
+// Retry/backfill path for post/comment text the fire-and-forget kickoff lost
+// (process death between the post write and the verdict stamp, provider
+// outages) — and, because omni is free, the drain path for anything posted
+// while text moderation was off. Bounded oldest-first batch per call; failures
+// stay unstamped and are retried on the next run.
+export const sweepUnmoderatedTextThings = async (
+	overrides: Partial<TextSweepDependencies> = {}
+): Promise<TextSweepResult> => {
+	const deps: TextSweepDependencies = {
+		getThings: getThingsCollection,
+		resolveText: resolveConfiguredTextModeration,
+		analyze: analyzeTextThing,
+		...overrides
+	};
+	if ((await deps.resolveText()).kind === 'off') {
+		return { scanned: 0, analyzed: 0, flagged: 0, failed: 0, skippedOff: true };
+	}
+	const things = await deps.getThings();
+	const candidates = (await things
+		.find(UNMODERATED_TEXT_FILTER as any)
+		.project({ shareId: 1 })
+		.sort({ createdAt: 1 })
+		.limit(TEXT_SWEEP_BATCH)
+		.toArray()) as any[];
+	const result: TextSweepResult = { scanned: candidates.length, analyzed: 0, flagged: 0, failed: 0, skippedOff: false };
+	for (const candidate of candidates) {
+		const outcome = await deps.analyze(String(candidate.shareId));
+		if (outcome.ok === false) {
+			result.failed += 1;
+			continue;
+		}
+		// 'unmoderated' = the doc changed under us (text emptied, provider
+		// flipped off mid-run) — it simply drops out of the next run's filter
+		if (outcome.status === 'unmoderated') continue;
+		result.analyzed += 1;
+		if (outcome.status === 'nsfw' || outcome.status === 'blocked') result.flagged += 1;
+	}
+	return result;
+};
 
 // Retry path for attachments the fire-and-forget kickoff missed (deploy
 // restarts, provider outages). Bounded per call; run repeatedly to drain.

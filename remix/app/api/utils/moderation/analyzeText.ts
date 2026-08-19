@@ -36,7 +36,9 @@ export type AnalyzeTextDependencies = {
 	now: () => Date;
 };
 
-const defaultResolveText = async (): Promise<TextModerationChoice> => {
+// Admin-settings-aware text resolution — the sweep pre-checks this so an
+// 'off' surface never churns through the unstamped corpus doing nothing.
+export const resolveConfiguredTextModeration = async (): Promise<TextModerationChoice> => {
 	let adminProvider = DEFAULT_MODERATION_SETTINGS.textProvider;
 	try {
 		adminProvider = (await getModerationSettings()).textProvider;
@@ -49,7 +51,7 @@ const defaultResolveText = async (): Promise<TextModerationChoice> => {
 const defaultDependencies = (): AnalyzeTextDependencies => ({
 	getThings: getThingsCollection,
 	getHomeThings: getHomeThingsCollection,
-	resolveText: defaultResolveText,
+	resolveText: resolveConfiguredTextModeration,
 	now: () => new Date()
 });
 
