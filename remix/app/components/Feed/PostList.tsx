@@ -19,6 +19,9 @@ export type PostListProps = {
   onPostChanged: (id: string, next: PostChange) => void;
   onEngagement?: (event: EngagementEvent) => void;
   emptyLabel?: string;
+  // keyboard-focused post (useFeedShortcuts j/k) — its wrapper draws a subtle
+  // accent ring; pages without shortcuts just omit this
+  focusedPostId?: string | null;
 };
 
 const SkeletonCard = () => (
@@ -40,7 +43,7 @@ const SkeletonCard = () => (
 );
 
 export const PostList = (props: PostListProps) => {
-  const { posts, loading, hasMore, onLoadMore, onPostChanged, onEngagement, emptyLabel } = props;
+  const { posts, loading, hasMore, onLoadMore, onPostChanged, onEngagement, emptyLabel, focusedPostId } = props;
 
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   // public view-count telemetry — wired here so every PostList surface (feed,
@@ -76,7 +79,17 @@ export const PostList = (props: PostListProps) => {
   return (
     <Flex flexDirection="column" rowGap={4} width="100%">
       {posts.map((post) => (
-        <Box key={post.id} data-thing-id={post.id} ref={(element: HTMLDivElement | null) => observeView(element, post.id)}>
+        <Box
+          key={post.id}
+          data-thing-id={post.id}
+          ref={(element: HTMLDivElement | null) => observeView(element, post.id)}
+          // keyboard focus ring (j/k) — theme-aware accent outline hugging the
+          // card's radius; scrollIntoView keeps a little breathing room
+          borderRadius="var(--tt-radius-lg, 16px)"
+          outline={post.id === focusedPostId ? '2px solid var(--tt-accent, hotpink)' : undefined}
+          outlineOffset="3px"
+          scrollMarginY="calc(var(--tt-nav-clearance, 54px) + 16px)"
+        >
           <PostCard
             post={post}
             onChanged={(next) => onPostChanged(post.id, next)}

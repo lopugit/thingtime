@@ -33,6 +33,8 @@ import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
+import { FeedShortcutsContext } from '~/hooks/useFeedShortcuts';
+import type { FeedPostShortcutActions } from '~/hooks/useFeedShortcuts';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
@@ -1442,6 +1444,19 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       onEngagement?.({ thingId: post.id, signal: 'expand' });
     }
   };
+
+  // Feed keyboard shortcuts (useFeedShortcuts): inside a shortcuts-enabled
+  // page (feed/explore mount the provider) the card lends its OWN handlers —
+  // handleReact for `l`, toggleComments for `c` — through a ref, so the hook
+  // always calls the freshest closures without re-registering per render.
+  // Outside a provider this is a no-op and the card renders exactly as before.
+  const shortcutsRegistry = React.useContext(FeedShortcutsContext);
+  const shortcutActionsRef = React.useRef<FeedPostShortcutActions | null>(null);
+  shortcutActionsRef.current = { react: handleReact, toggleComments };
+  React.useEffect(() => {
+    if (!shortcutsRegistry) return;
+    return shortcutsRegistry.register(post.id, shortcutActionsRef);
+  }, [shortcutsRegistry, post.id]);
 
   // Drill into a deep comment: it slides in as the panel's new top level.
   const focusThread = React.useCallback((comment: PostComment) => {

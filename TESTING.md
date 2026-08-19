@@ -2140,3 +2140,32 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       skeletons appear only on a true cold start (cleared storage).
 - [ ] The drawer's Feed section shows "Explore 🔥" and navigates to
       `/explore`; `/feed` itself still loads and paginates normally.
+
+## Public posts Atom feed (`remix/app/api/utils/things/rss.ts`, `GET /api/v1/things/rss`)
+
+- [ ] `GET /api/v1/things/rss` (logged in OR out) returns well-formed Atom XML
+      (`Content-Type: application/atom+xml; charset=utf-8`, edge cache headers)
+      of the latest ~50 PUBLIC posts only — no friends/family/private post ever
+      appears, cookies are ignored, and no viewer field leaks into entries.
+      Posts containing quotes, angle brackets (`"><script>` probes), emoji, or
+      control characters escape cleanly (feed still parses with xmllint), and
+      the shell `<head>` keeps the `<link rel="alternate"
+      type="application/atom+xml" href="/api/v1/things/rss">` discovery tag on
+      every page (it lives outside the swapped tt-social-meta block).
+
+## Feed keyboard shortcuts (`remix/app/hooks/useFeedShortcuts.ts`, `/feed` + `/explore`)
+
+- [ ] On `/feed` (desktop): `j`/`k` move an accent focus ring down/up the post
+      column (clamping at both ends, `scrollIntoView` keeping the card in
+      view), `l` toggles a ❤️ on the focused post optimistically (press again
+      to un-react; counts reconcile with the server), `c` does exactly what
+      the Show/Hide comments button does, `n` expands/focuses the composer's
+      editor, `?` opens the cheatsheet modal (Escape/backdrop closes it), and
+      Escape clears the focus ring. Same on `/explore` minus `n`.
+- [ ] Shortcuts are INERT while typing: with focus in the composer, a comment
+      box, the search field, any input/select/contenteditable, while any
+      modal/popover/menu is open, or while Commander is active, pressing
+      j/k/l/c/n/? types normally and never navigates or reacts. Modifier
+      chords (⌘/Ctrl/Alt + letter) always pass through to the browser.
+- [ ] Mobile is untouched: with no keyboard there is no focus ring, no
+      cheatsheet, and no visual change to the feed.

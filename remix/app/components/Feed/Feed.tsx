@@ -3,11 +3,13 @@ import { Box, Flex } from '@chakra-ui/react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { FeedShortcutsContext, useFeedShortcuts } from '~/hooks/useFeedShortcuts';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 import { AdvancedFilters, advancedSearchBody, searchResponsePosts, useAdvancedFilters } from './AdvancedFilters';
 import { AlgorithmMenu } from './AlgorithmMenu';
 import { FeedFilters } from './FeedFilters';
+import { FeedShortcutsHelp } from './FeedShortcutsHelp';
 import { PostComposer } from './PostComposer';
 import { PostList } from './PostList';
 import { useFeedEngagement } from './useFeedEngagement';
@@ -193,6 +195,32 @@ export const FeedPage = () => {
     });
   }, [posts, observeCard]);
 
+  // keyboard shortcuts (j/k/l/c/n/?) — `n` walks into the composer: expand the
+  // collapsed pill if needed, then focus the Editor.js editable once it mounts
+  // (the editor loads async, so poll briefly instead of racing it)
+  const composerBoxRef = React.useRef<HTMLDivElement | null>(null);
+  const focusComposer = React.useCallback(() => {
+    const root = composerBoxRef.current;
+    if (!root) return;
+    const tryFocus = (attempt: number) => {
+      const editable = root.querySelector<HTMLElement>('.long-text-editor [contenteditable="true"]');
+      if (editable) {
+        editable.scrollIntoView({ block: 'center' });
+        editable.focus({ preventScroll: true });
+        return;
+      }
+      // no editor holder yet → the composer is collapsed; tap its pill once
+      if (attempt === 0 && !root.querySelector('.long-text-editor')) {
+        root.querySelector<HTMLButtonElement>('button')?.click();
+      }
+      if (attempt < 40) window.setTimeout(() => tryFocus(attempt + 1), 50);
+    };
+    tryFocus(0);
+  }, []);
+
+  const postIds = React.useMemo(() => posts.map((post) => post.id), [posts]);
+  const shortcuts = useFeedShortcuts({ postIds, onFocusComposer: user ? focusComposer : undefined });
+
   return (
     <Flex
       justifyContent="center"
@@ -276,25 +304,34 @@ export const FeedPage = () => {
           />
         )}
 
-        {user && <PostComposer onPosted={handlePosted} />}
+        {user && (
+          <Box ref={composerBoxRef}>
+            <PostComposer onPosted={handlePosted} />
+          </Box>
+        )}
 
         <Box ref={listRef}>
-          <PostList
-            posts={posts}
-            loading={loading}
-            hasMore={!!nextCursor}
-            onLoadMore={handleLoadMore}
-            onPostChanged={handlePostChanged}
-            onEngagement={recordEvent}
-            emptyLabel={
-              appliedAdvanced
-                ? 'Nothing matched — loosen a filter, or try plain words up top ✨'
-                : ranked
-                  ? 'Your algorithm has nothing to rank yet — try Latest ⏱️'
-                  : 'Nothing here yet — be the first to post ✨'
-            }
-          />
+          <FeedShortcutsContext.Provider value={shortcuts.registry}>
+            <PostList
+              posts={posts}
+              loading={loading}
+              hasMore={!!nextCursor}
+              onLoadMore={handleLoadMore}
+              onPostChanged={handlePostChanged}
+              onEngagement={recordEvent}
+              focusedPostId={shortcuts.focusedPostId}
+              emptyLabel={
+                appliedAdvanced
+                  ? 'Nothing matched — loosen a filter, or try plain words up top ✨'
+                  : ranked
+                    ? 'Your algorithm has nothing to rank yet — try Latest ⏱️'
+                    : 'Nothing here yet — be the first to post ✨'
+              }
+            />
+          </FeedShortcutsContext.Provider>
         </Box>
+
+        <FeedShortcutsHelp isOpen={shortcuts.helpOpen} onClose={shortcuts.closeHelp} />
       </Flex>
     </Flex>
   );

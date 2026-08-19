@@ -3,9 +3,11 @@ import { Box, Flex } from '@chakra-ui/react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { FeedShortcutsContext, useFeedShortcuts } from '~/hooks/useFeedShortcuts';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
+import { FeedShortcutsHelp } from '~/components/Feed/FeedShortcutsHelp';
 import { PostList } from '~/components/Feed/PostList';
 import { mergeReactionOverlays } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -125,6 +127,11 @@ export const ExplorePage = () => {
     );
   }, []);
 
+  // keyboard shortcuts (j/k/l/c/?) — same wiring as the feed, minus the
+  // composer (`n` stays unhandled here: explore has nowhere to compose)
+  const postIds = React.useMemo(() => posts.map((post) => post.id), [posts]);
+  const shortcuts = useFeedShortcuts({ postIds });
+
   return (
     <Flex
       justifyContent="center"
@@ -173,14 +180,19 @@ export const ExplorePage = () => {
           </Box>
         </Flex>
 
-        <PostList
-          posts={posts}
-          loading={loading}
-          hasMore={false}
-          onLoadMore={() => {}}
-          onPostChanged={handlePostChanged}
-          emptyLabel="Nothing is trending yet — go start something 🔥"
-        />
+        <FeedShortcutsContext.Provider value={shortcuts.registry}>
+          <PostList
+            posts={posts}
+            loading={loading}
+            hasMore={false}
+            onLoadMore={() => {}}
+            onPostChanged={handlePostChanged}
+            focusedPostId={shortcuts.focusedPostId}
+            emptyLabel="Nothing is trending yet — go start something 🔥"
+          />
+        </FeedShortcutsContext.Provider>
+
+        <FeedShortcutsHelp isOpen={shortcuts.helpOpen} onClose={shortcuts.closeHelp} />
       </Flex>
     </Flex>
   );
