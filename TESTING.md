@@ -56,7 +56,12 @@ is fixed, and cite the checklist you ran in the PR description.
       popup shows "Continue to <host>?" with the ACTIVE account, Continue
       signs the page in (welcome toast) and the popup closes; Cancel closes
       with nothing shared. In Chrome with FedCM available, the native
-      "Continue as" sheet appears instead and completes the same loop.
+      "Continue as" sheet ALSO auto-appears on page load (no click; the
+      browser's own dismissal cooldown governs re-prompts) and completes the
+      same loop. Until the hub code is live on production thingtime.com, set
+      `localStorage['tt-sso-hub'] = '"https://pr-<N>.previews.dev.thingtime.com"'`
+      (JSON string, matching localCache format) on the foreign origin to
+      point both flows at a preview hub sharing the deployment's database.
 - [ ] The `/authorize?self=1` popup signed OUT shows the embedded login (with
       the cross-deployment hints strip) before the confirm card.
 - [ ] Replaying a captured sso-session code fails AND kills the session it

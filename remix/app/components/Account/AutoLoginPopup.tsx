@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { AccountHintRow } from './AccountHints';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { readLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { isPasskeyCancel, passkeysSupported, useAccountHints, usePasskeyAuth } from '~/hooks/usePasskeys';
@@ -12,7 +13,23 @@ import type { AccountHint } from '~/hooks/usePasskeys';
 // The canonical first-party surface for cross-origin sign-in (the
 // /authorize?self=1 popup + FedCM IdP live there). Deployments inside the
 // *.thingtime.com cookie family never need it — hints work directly.
+// Overridable via localStorage `tt-sso-hub` (e.g. a preview alias like
+// https://pr-323.previews.dev.thingtime.com) so foreign-origin flows are
+// testable before the hub code reaches production thingtime.com.
 const SSO_HUB = 'https://thingtime.com';
+const SSO_HUB_CACHE_KEY = 'tt-sso-hub';
+
+const resolveSsoHub = (): string => {
+	const override = readLocalCache<string>(SSO_HUB_CACHE_KEY);
+	if (typeof override === 'string' && override) {
+		try {
+			return new URL(override).origin;
+		} catch {
+			// malformed override — fall through to the default hub
+		}
+	}
+	return SSO_HUB;
+};
 
 const isThingtimeFamilyHost = (hostname: string) =>
 	hostname === 'thingtime.com' ||
@@ -70,6 +87,34 @@ export const AutoLoginPopup = () => {
 	const foreignOrigin =
 		typeof window !== 'undefined' && !isThingtimeFamilyHost(window.location.hostname);
 
+	// FedCM is DESIGNED for auto-prompt on load: on foreign origins the
+	// browser itself renders "Continue as …" with the user's thingtime.com
+	// accounts — the auto-login popup, in browser chrome, on any domain. The
+	// browser applies its own dismissal cooldowns, so this never nags; when it
+	// can't run (unsupported, no hub, no accounts, cooling down) the card with
+	// the manual button below is the fallback.
+	const autoFedcmTried = React.useRef(false);
+	const redeemRef = React.useRef<(code: string) => Promise<void>>();
+	React.useEffect(() => {
+		if (!foreignOrigin || user || !eligible || dismissed || autoFedcmTried.current) return;
+		if (typeof (window as any).IdentityCredential === 'undefined') return;
+		autoFedcmTried.current = true;
+		(async () => {
+			try {
+				const credential: any = await (navigator.credentials as any).get({
+					identity: {
+						providers: [
+							{ configURL: `${resolveSsoHub()}/api/v1/fedcm/config`, clientId: 'thingtime-self', nonce: crypto.randomUUID() }
+						]
+					}
+				});
+				if (credential?.token) await redeemRef.current?.(credential.token);
+			} catch {
+				// dismissed / cooldown / no accounts — the manual card remains
+			}
+		})();
+	}, [foreignOrigin, user, eligible, dismissed]);
+
 	const redeemSsoCode = React.useCallback(
 		async (code: string) => {
 			try {
@@ -90,10 +135,12 @@ export const AutoLoginPopup = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[lopu]
 	);
+	redeemRef.current = redeemSsoCode;
 
 	const signInViaHub = async () => {
 		if (ssoBusy) return;
 		setSsoBusy(true);
+		const hub = resolveSsoHub();
 		try {
 			// FedCM first: the browser's own "Continue as…" sheet, no popup.
 			const identityCredential = (window as any).IdentityCredential;
@@ -103,7 +150,7 @@ export const AutoLoginPopup = () => {
 						identity: {
 							providers: [
 								{
-									configURL: `${SSO_HUB}/api/v1/fedcm/config`,
+									configURL: `${hub}/api/v1/fedcm/config`,
 									clientId: 'thingtime-self',
 									nonce: crypto.randomUUID()
 								}
@@ -120,10 +167,10 @@ export const AutoLoginPopup = () => {
 				}
 			}
 
-			// Popup fallback: first-party thingtime.com confirm card → postMessage
-			// code → redeem here. Popup blockers allow it (we're in a click).
+			// Popup fallback: first-party hub confirm card → postMessage code →
+			// redeem here. Popup blockers allow it (we're in a click).
 			const popup = window.open(
-				`${SSO_HUB}/authorize?self=1&origin=${encodeURIComponent(window.location.origin)}`,
+				`${hub}/authorize?self=1&origin=${encodeURIComponent(window.location.origin)}`,
 				'thingtime-sso',
 				'width=480,height=640,popup=1'
 			);
@@ -133,7 +180,7 @@ export const AutoLoginPopup = () => {
 			}
 			await new Promise<void>((resolve) => {
 				const onMessage = (event: MessageEvent) => {
-					if (event.origin !== SSO_HUB) return;
+					if (event.origin !== hub) return;
 					const data = event.data;
 					if (!data || data.type !== 'thingtime:sso') return;
 					window.removeEventListener('message', onMessage);
