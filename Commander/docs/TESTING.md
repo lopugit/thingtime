@@ -2,6 +2,10 @@
 
 ## Launcher
 
+- [ ] Type a misspelling in the root launcher and confirm macOS does not show a correction/replacement popover.
+- [ ] Search for an application or path-backed file/folder and confirm its real Finder icon replaces the generic Commander glyph.
+- [ ] With more results than fit in the launcher, use a mouse wheel or trackpad over the rows and confirm the list scrolls while the header and footer remain fixed.
+
 - [ ] Global shortcut opens the launcher over the active application without moving focus elsewhere first.
 - [ ] The first visible frame contains rendered UI; there is no white, transparent, or stale flash.
 - [ ] Type `settings`; Settings / Commander Settings is first and Return opens the separate settings window.

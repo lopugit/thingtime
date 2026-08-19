@@ -18,6 +18,7 @@ public interface INativeBridge
     Task QuitApplicationAsync();
     Task BeginWindowDragAsync();
     Task BeginFileDragAsync(string path);
+    Task<string?> GetFileIconDataUrlAsync(string path);
     Task OpenSettingsAsync(string? tab = null);
     Task OpenApplicationAsync(string pathOrUrl);
     Task<string?> GetPasteTargetAsync();

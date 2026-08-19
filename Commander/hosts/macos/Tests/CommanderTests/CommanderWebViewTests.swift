@@ -114,6 +114,27 @@ final class CommanderWebViewTests: XCTestCase {
     )
   }
 
+  func testNativeFileIconProducesABoundedPNGForFilesFoldersAndApplications() throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("commander-icons-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+    let file = directory.appendingPathComponent("document.txt")
+    XCTAssertTrue(FileManager.default.createFile(atPath: file.path, contents: Data("icon".utf8)))
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let application = URL(fileURLWithPath: "/System/Applications/Finder.app")
+    for url in [file, directory, application] where FileManager.default.fileExists(atPath: url.path) {
+      let dataURL = try CommanderWebView.fileIconDataURL(for: url.path)
+      XCTAssertTrue(dataURL.hasPrefix("data:image/png;base64,"))
+      let encoded = String(dataURL.dropFirst("data:image/png;base64,".count))
+      let data = try XCTUnwrap(Data(base64Encoded: encoded))
+      XCTAssertLessThanOrEqual(data.count, 128 * 1024)
+      XCTAssertNotNil(NSBitmapImageRep(data: data))
+    }
+
+    XCTAssertThrowsError(try CommanderWebView.fileIconDataURL(for: "relative/file.txt"))
+  }
+
   func testPreparedFileDragKeepsLauncherVisibleUntilTheSessionEnds() throws {
     let ready = DaemonReady(
       type: "ready",

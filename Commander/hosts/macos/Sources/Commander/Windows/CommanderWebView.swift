@@ -113,6 +113,45 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource 
     return url
   }
 
+  static func fileIconDataURL(for path: String, pixelSize: Int = 64) throws -> String {
+    let url = try validatedFileURL(for: path)
+    guard pixelSize > 0, pixelSize <= 256,
+          let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: pixelSize,
+            pixelsHigh: pixelSize,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+          ) else { throw CommanderFileIconError.couldNotEncode }
+
+    let icon = NSWorkspace.shared.icon(forFile: url.path)
+    let size = CGFloat(pixelSize)
+    NSGraphicsContext.saveGraphicsState()
+    defer { NSGraphicsContext.restoreGraphicsState() }
+    guard let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
+      throw CommanderFileIconError.couldNotEncode
+    }
+    NSGraphicsContext.current = context
+    context.imageInterpolation = .high
+    icon.draw(
+      in: NSRect(x: 0, y: 0, width: size, height: size),
+      from: .zero,
+      operation: .copy,
+      fraction: 1
+    )
+    context.flushGraphics()
+    guard let data = bitmap.representation(using: .png, properties: [:]) else {
+      throw CommanderFileIconError.couldNotEncode
+    }
+    guard data.count <= 128 * 1024 else { throw CommanderFileIconError.couldNotEncode }
+    return "data:image/png;base64,\(data.base64EncodedString())"
+  }
+
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     Self.makeCanvasTransparent(webView)
     guard !hasCommittedContent else { return }
@@ -184,6 +223,12 @@ enum CommanderFileDragError: LocalizedError {
     case .missingFile: "That file no longer exists. Refresh Commander and try again."
     }
   }
+}
+
+enum CommanderFileIconError: LocalizedError {
+  case couldNotEncode
+
+  var errorDescription: String? { "Commander could not render that file’s icon." }
 }
 
 private extension URL {

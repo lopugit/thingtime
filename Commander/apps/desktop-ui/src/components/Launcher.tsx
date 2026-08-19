@@ -7,6 +7,7 @@ import type { CommanderState } from '../hooks/useCommander.js';
 import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 import { ActionsPanel } from './ActionsPanel.js';
 import { CommanderIcon } from './CommanderIcon.js';
+import { ResultIcon } from './ResultIcon.js';
 
 type HistoryRow =
   | { type: 'query'; search: RecentSearch }
@@ -152,8 +153,11 @@ export function Launcher({ state }: { state: CommanderState }) {
           <input
             ref={inputRef}
             aria-label="Search apps and commands"
+            autoCapitalize="none"
             autoComplete="off"
+            autoCorrect="off"
             placeholder="Search for apps and commands…"
+            spellCheck={false}
             value={state.query}
             onChange={(event) => state.setQuery(event.target.value)}
             onKeyDown={(event) => {
@@ -301,9 +305,7 @@ export function Launcher({ state }: { state: CommanderState }) {
                   }}
                   onDoubleClick={() => void runAction(hit.actions[0]?.id ?? 'open')}
                 >
-                  <span className={`result-icon kind-${hit.kind}`}>
-                    <CommanderIcon name={hit.icon} kind={hit.kind} />
-                  </span>
+                  <ResultIcon icon={hit.icon} kind={hit.kind} path={hit.path} />
                   <span className="result-copy">
                     <span className="result-title">{hit.title}</span>
                     {hit.subtitle ? <span className="result-subtitle">{hit.subtitle}</span> : null}
