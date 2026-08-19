@@ -107,8 +107,11 @@ export const Login = (props) => {
 	// Conditional UI: while the form is idle, one background ceremony arms the
 	// browser's own passkey autofill (Safari/iCloud Keychain, Chrome, 1Password
 	// surface their popup on the username field). Resolves only if the user
-	// picks a passkey there.
-	usePasskeyAutofill(!otpChallenge, (resp) => handleLoggedIn(resp?.user));
+	// picks a passkey there. Standalone /login only — the embedded "Add
+	// account" form renders while ALREADY signed in, where an armed background
+	// request just invites surprise passkey popups (the modal 🔑 button still
+	// works there).
+	usePasskeyAutofill(!otpChallenge && !embedded, (resp) => handleLoggedIn(resp?.user));
 
 	const handlePasskeyLogin = async () => {
 		if (passkeyLoading) return;

@@ -3,7 +3,8 @@ import {
 	browserSupportsWebAuthn,
 	browserSupportsWebAuthnAutofill,
 	startAuthentication,
-	startRegistration
+	startRegistration,
+	WebAuthnAbortService
 } from '@simplewebauthn/browser';
 
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -122,6 +123,12 @@ export const usePasskeyAutofill = (enabled: boolean, onSuccess: (resp: any) => v
 			});
 		return () => {
 			alive = false;
+			// Abort the pending conditional request the moment the login surface
+			// goes away (login finished, 2FA step, unmount). A stale WebAuthn
+			// request left running after navigation is what lets the browser's
+			// cross-device QR sheet (or a password manager popup) surface
+			// uninvited later, long after the user logged in.
+			WebAuthnAbortService.cancelCeremony();
 		};
 	}, [enabled, loginWithPasskey]);
 };
