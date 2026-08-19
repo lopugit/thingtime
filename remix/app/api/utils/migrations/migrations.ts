@@ -2563,7 +2563,7 @@ const staleGenerationBlocker = async (physical: string): Promise<string | null> 
 // ---------------------------------------------------------------------------
 // Relationship uniqueKeys backfill. Relationship dedupe moved off the
 // kind-blind crystal-path unique indexes (squattable through free-form data
-// crystals — KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS in collections.ts) onto the
+// crystals — see KIND-BLIND HISTORY in collections.ts) onto the
 // server-only root uniqueKeys namespace. New docs stamp at insert
 // (messenger/shared.ts newThingDoc + the friend writer); this stamps legacy
 // docs so their create-race dedupe is structural again, and counts (never
