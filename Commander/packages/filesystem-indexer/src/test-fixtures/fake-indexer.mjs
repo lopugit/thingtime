@@ -19,6 +19,8 @@ input.on('line', (line) => {
               },
             ],
           }
-        : null;
+        : request.operation === 'index'
+          ? { configuration: request.configuration }
+          : null;
   process.stdout.write(`${JSON.stringify({ id: request.id, ok: true, result })}\n`);
 });

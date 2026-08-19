@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { DEFAULT_SETTINGS, type BootstrapResponse } from '@commander/protocol';
+import {
+  DEFAULT_INDEXING_RESOURCE_LIMITS,
+  DEFAULT_SETTINGS,
+  type BootstrapResponse,
+} from '@commander/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { api } from '../lib/api.js';
@@ -18,6 +22,23 @@ vi.mock('../lib/api.js', () => ({
       kinds: [],
       commands: { count: 0 },
       automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 30 },
+      resourceLimits: DEFAULT_INDEXING_RESOURCE_LIMITS,
+      lastRunResources: {
+        effective: {
+          logicalCpuCount: 8,
+          workerThreads: 4,
+          maxOpenDirectories: 16,
+          maxCpuPercent: 60,
+          maxMemoryMiB: 512,
+          channelCapacity: 2_048,
+          sqliteCacheKib: 65_536,
+        },
+        cpuTimeMs: 1_000,
+        averageCpuPercent: 23,
+        peakMemoryBytes: 96 * 1024 * 1024,
+        throttledMs: 250,
+        memoryChecks: 4,
+      },
     })),
     indexNow: vi.fn(async (scope: string) => ({
       ok: true,
@@ -29,6 +50,7 @@ vi.mock('../lib/api.js', () => ({
         kinds: [],
         commands: { count: 0 },
         automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 30 },
+        resourceLimits: DEFAULT_INDEXING_RESOURCE_LIMITS,
       },
     })),
   },
@@ -103,6 +125,13 @@ describe('Commander settings deep links', () => {
     expect(screen.getByDisplayValue('**/node_modules/**')).toBeVisible();
     expect(screen.getByDisplayValue('**/*.noindex/**')).toBeVisible();
     expect(screen.getByText(/files and folders reconcile every 6 hours/i)).toBeVisible();
+    expect(screen.getByRole('spinbutton', { name: 'Scanner threads' })).toHaveValue(2);
+    expect(screen.getByRole('spinbutton', { name: 'Max CPU' })).toHaveValue(60);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Last index resource usage')).toHaveTextContent(
+        /last run used 4 workers, averaged 23% cpu/i,
+      ),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Files' }));
     await waitFor(() => expect(api.indexNow).toHaveBeenCalledWith('files'));
@@ -113,6 +142,17 @@ describe('Commander settings deep links', () => {
       expect.objectContaining({
         indexing: expect.objectContaining({
           customIgnores: expect.arrayContaining([{ kind: 'glob', pattern: '**/build/**' }]),
+        }),
+      }),
+    );
+
+    const threads = screen.getByRole('spinbutton', { name: 'Scanner threads' });
+    fireEvent.change(threads, { target: { value: '3' } });
+    fireEvent.blur(threads);
+    expect(commander.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        indexing: expect.objectContaining({
+          resourceLimits: expect.objectContaining({ maxThreads: 3 }),
         }),
       }),
     );

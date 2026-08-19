@@ -8,6 +8,7 @@ import {
   type IndexKind,
   type IndexRecord,
   type IndexReport,
+  type IndexResourceUsage,
   type IndexStatus,
 } from '@commander/filesystem-indexer';
 import type {
@@ -39,6 +40,7 @@ interface IndexingServiceOptions {
 const FILESYSTEM_RESULT_LIMIT = 160;
 const APPLICATION_RESULT_LIMIT = 1_000;
 const COMMANDER_INDEX_TIMEOUT_MS = 90_000;
+const COMMANDER_MAX_INDEX_TIMEOUT_MS = 15 * 60_000;
 
 export class IndexingService {
   readonly #platform: Platform;
@@ -59,6 +61,7 @@ export class IndexingService {
   #lastCommandsIndexedAtMs: number | undefined;
   #lastFallbackApplicationsAtMs: number | undefined;
   #commandCount = 0;
+  #lastRunResources: IndexResourceUsage | undefined;
 
   constructor(options: IndexingServiceOptions) {
     this.#platform = options.platform;
@@ -192,6 +195,8 @@ export class IndexingService {
         applicationsMinutes: APPLICATION_REFRESH_MINUTES,
         filesystemMinutes: this.#settings.refreshIntervalMinutes,
       },
+      resourceLimits: structuredClone(this.#settings.resourceLimits),
+      ...(this.#lastRunResources ? { lastRunResources: structuredClone(this.#lastRunResources) } : {}),
       ...(this.#message ? { message: this.#message } : {}),
     };
   }
@@ -249,6 +254,7 @@ export class IndexingService {
       })),
       customIgnores: [],
       maxEntries: Math.min(this.#settings.maxEntries, 100_000),
+      resourceLimits: this.#settings.resourceLimits,
     });
     this.#available = true;
     this.#message = undefined;
@@ -270,6 +276,7 @@ export class IndexingService {
       })),
       customIgnores: this.#settings.customIgnores,
       maxEntries: this.#settings.maxEntries,
+      resourceLimits: this.#settings.resourceLimits,
     };
     await this.#writeIndex(configuration);
     this.#available = true;
@@ -280,7 +287,12 @@ export class IndexingService {
     const writer = this.#writer;
     if (!writer) throw new Error('The bundled Rust filesystem indexer is unavailable');
     try {
-      return await writer.index(configuration);
+      const report = await writer.index(
+        configuration,
+        indexTimeoutMs(configuration.resourceLimits?.maxCpuPercent),
+      );
+      this.#lastRunResources = report.resources;
+      return report;
     } catch (error) {
       if (!errorMessage(error).includes('timed out')) throw error;
       if (this.#writer === writer) {
@@ -377,6 +389,12 @@ export class IndexingService {
       }
     }
   }
+}
+
+export function indexTimeoutMs(maxCpuPercent = 100): number {
+  const boundedCpu = Math.min(100, Math.max(5, maxCpuPercent));
+  if (boundedCpu >= 25) return COMMANDER_INDEX_TIMEOUT_MS;
+  return Math.min(COMMANDER_MAX_INDEX_TIMEOUT_MS, Math.ceil((COMMANDER_INDEX_TIMEOUT_MS * 25) / boundedCpu));
 }
 
 export function indexRecordToSearchItem(record: IndexRecord): SearchItem {

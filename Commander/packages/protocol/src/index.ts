@@ -8,6 +8,13 @@ export const COMMAND_SHORTCUT_LIMIT = 256;
 export const INDEXING_ROOT_LIMIT = 32;
 export const INDEXING_IGNORE_RULE_LIMIT = 256;
 export const INDEXING_MAX_ENTRIES_LIMIT = 10_000_000;
+export const INDEXING_MAX_THREADS_LIMIT = 64;
+export const INDEXING_MAX_PARALLELISM_LIMIT = 64;
+export const INDEXING_MAX_OPEN_DIRECTORIES_LIMIT = 256;
+export const INDEXING_MIN_CPU_PERCENT = 5;
+export const INDEXING_MAX_CPU_PERCENT = 100;
+export const INDEXING_MIN_MEMORY_MIB = 32;
+export const INDEXING_MAX_MEMORY_MIB = 131_072;
 
 const LEGACY_DEFAULT_INDEXING_GLOBS = [
   'Library/**',
@@ -18,6 +25,14 @@ const LEGACY_DEFAULT_INDEXING_GLOBS = [
 ] as const;
 const DEFAULT_NOINDEX_GLOB = '**/*.noindex/**';
 const LEGACY_DEFAULT_INDEXING_MAX_ENTRIES = 2_000_000;
+
+export const DEFAULT_INDEXING_RESOURCE_LIMITS: IndexingResourceLimits = {
+  maxThreads: 2,
+  maxParallelism: 2,
+  maxOpenDirectories: 16,
+  maxCpuPercent: 60,
+  maxMemoryMiB: 512,
+};
 
 export type Platform = 'macos' | 'windows' | 'linux';
 export type Appearance = 'light' | 'dark' | 'system';
@@ -43,6 +58,7 @@ export const DEFAULT_INDEXING_SETTINGS: IndexingSettings = {
   ],
   refreshIntervalMinutes: 6 * 60,
   maxEntries: 500_000,
+  resourceLimits: { ...DEFAULT_INDEXING_RESOURCE_LIMITS },
 };
 
 export const SETTINGS_TABS = [
@@ -88,6 +104,10 @@ function normalizedText(value: unknown, maximumLength: number): string | undefin
   if (typeof value !== 'string') return undefined;
   const text = value.trim().slice(0, maximumLength);
   return text || undefined;
+}
+
+function boundedInteger(value: unknown, minimum: number, maximum: number, fallback: number): number {
+  return Number.isSafeInteger(value) ? Math.min(maximum, Math.max(minimum, value as number)) : fallback;
 }
 
 function normalizeRecentSearchCommand(value: unknown): RecentSearchCommand | undefined {
@@ -265,6 +285,44 @@ export function normalizeIndexingSettings(value: unknown): IndexingSettings {
           : DEFAULT_INDEXING_SETTINGS.customIgnores.map((rule) => ({ ...rule })),
     refreshIntervalMinutes,
     maxEntries,
+    resourceLimits: normalizeIndexingResourceLimits(candidate.resourceLimits),
+  };
+}
+
+export function normalizeIndexingResourceLimits(value: unknown): IndexingResourceLimits {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const candidate = source as Partial<IndexingResourceLimits>;
+  return {
+    maxThreads: boundedInteger(
+      candidate.maxThreads,
+      1,
+      INDEXING_MAX_THREADS_LIMIT,
+      DEFAULT_INDEXING_RESOURCE_LIMITS.maxThreads,
+    ),
+    maxParallelism: boundedInteger(
+      candidate.maxParallelism,
+      1,
+      INDEXING_MAX_PARALLELISM_LIMIT,
+      DEFAULT_INDEXING_RESOURCE_LIMITS.maxParallelism,
+    ),
+    maxOpenDirectories: boundedInteger(
+      candidate.maxOpenDirectories,
+      1,
+      INDEXING_MAX_OPEN_DIRECTORIES_LIMIT,
+      DEFAULT_INDEXING_RESOURCE_LIMITS.maxOpenDirectories,
+    ),
+    maxCpuPercent: boundedInteger(
+      candidate.maxCpuPercent,
+      INDEXING_MIN_CPU_PERCENT,
+      INDEXING_MAX_CPU_PERCENT,
+      DEFAULT_INDEXING_RESOURCE_LIMITS.maxCpuPercent,
+    ),
+    maxMemoryMiB: boundedInteger(
+      candidate.maxMemoryMiB,
+      INDEXING_MIN_MEMORY_MIB,
+      INDEXING_MAX_MEMORY_MIB,
+      DEFAULT_INDEXING_RESOURCE_LIMITS.maxMemoryMiB,
+    ),
   };
 }
 
@@ -300,6 +358,34 @@ export interface IndexingSettings {
   customIgnores: IndexIgnoreRule[];
   refreshIntervalMinutes: number;
   maxEntries: number;
+  resourceLimits: IndexingResourceLimits;
+}
+
+export interface IndexingResourceLimits {
+  maxThreads: number;
+  maxParallelism: number;
+  maxOpenDirectories: number;
+  maxCpuPercent: number;
+  maxMemoryMiB: number;
+}
+
+export interface EffectiveIndexingResourceLimits {
+  logicalCpuCount: number;
+  workerThreads: number;
+  maxOpenDirectories: number;
+  maxCpuPercent: number;
+  maxMemoryMiB: number;
+  channelCapacity: number;
+  sqliteCacheKib: number;
+}
+
+export interface IndexingResourceUsage {
+  effective: EffectiveIndexingResourceLimits;
+  cpuTimeMs: number;
+  averageCpuPercent: number;
+  peakMemoryBytes: number;
+  throttledMs: number;
+  memoryChecks: number;
 }
 
 export interface IndexKindStatus {
@@ -323,6 +409,8 @@ export interface IndexingStatus {
     applicationsMinutes: number;
     filesystemMinutes: number;
   };
+  resourceLimits: IndexingResourceLimits;
+  lastRunResources?: IndexingResourceUsage;
   message?: string;
 }
 
@@ -562,6 +650,7 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
     ...DEFAULT_INDEXING_SETTINGS,
     roots: [...DEFAULT_INDEXING_SETTINGS.roots],
     customIgnores: DEFAULT_INDEXING_SETTINGS.customIgnores.map((rule) => ({ ...rule })),
+    resourceLimits: { ...DEFAULT_INDEXING_SETTINGS.resourceLimits },
   },
   activeAccountId: null,
   thingtimeBaseUrl: 'https://thingtime.com',

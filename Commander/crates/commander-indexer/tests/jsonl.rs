@@ -1,4 +1,5 @@
 use serde_json::{json, Value};
+use std::fs::{create_dir, write};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use tempfile::TempDir;
@@ -19,6 +20,9 @@ fn service_processes_correlated_requests_and_survives_invalid_json() {
         .expect("spawn indexer");
     let mut stdin = child.stdin.take().expect("stdin");
     let mut stdout = BufReader::new(child.stdout.take().expect("stdout"));
+    let fixture_root = temp.path().join("fixture");
+    create_dir(&fixture_root).expect("fixture root");
+    write(fixture_root.join("resource.txt"), "resource").expect("fixture file");
 
     writeln!(stdin, "{{not-json").expect("invalid request");
     writeln!(
@@ -40,7 +44,47 @@ fn service_processes_correlated_requests_and_survives_invalid_json() {
     let second: Value = serde_json::from_str(&second).expect("second JSON");
     assert_eq!(second["id"], "status-1");
     assert_eq!(second["ok"], true);
-    assert_eq!(second["result"]["schemaVersion"], 2);
+    assert_eq!(second["result"]["schemaVersion"], 3);
+
+    writeln!(
+        stdin,
+        "{}",
+        json!({
+            "id": "index-1",
+            "operation": "index",
+            "configuration": {
+                "sources": [{
+                    "id": "fixture",
+                    "root": fixture_root,
+                    "kinds": ["file"]
+                }],
+                "maxEntries": 1000,
+                "resourceLimits": {
+                    "maxThreads": 8,
+                    "maxParallelism": 4,
+                    "maxOpenDirectories": 1,
+                    "maxCpuPercent": 100,
+                    "maxMemoryMiB": 128
+                }
+            }
+        })
+    )
+    .expect("index request");
+    stdin.flush().expect("flush index");
+    let mut third = String::new();
+    stdout.read_line(&mut third).expect("index response");
+    let third: Value = serde_json::from_str(&third).expect("index JSON");
+    assert_eq!(third["id"], "index-1");
+    assert_eq!(third["ok"], true);
+    assert_eq!(third["result"]["indexed"], 1);
+    assert_eq!(
+        third["result"]["resources"]["effective"]["workerThreads"],
+        1
+    );
+    assert_eq!(
+        third["result"]["resources"]["effective"]["maxMemoryMiB"],
+        128
+    );
 
     drop(stdin);
     assert!(child.wait().expect("wait").success());

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_INDEXING_SETTINGS, normalizeIndexingSettings } from './index.js';
+import {
+  DEFAULT_INDEXING_RESOURCE_LIMITS,
+  DEFAULT_INDEXING_SETTINGS,
+  normalizeIndexingSettings,
+} from './index.js';
 
 describe('normalizeIndexingSettings', () => {
   it('migrates legacy settings to safe local indexing defaults', () => {
@@ -20,6 +24,13 @@ describe('normalizeIndexingSettings', () => {
         ],
         refreshIntervalMinutes: 1,
         maxEntries: 99_000_000,
+        resourceLimits: {
+          maxThreads: 99,
+          maxParallelism: 0,
+          maxOpenDirectories: 999,
+          maxCpuPercent: 1,
+          maxMemoryMiB: 999_999,
+        },
       }),
     ).toEqual({
       enabled: false,
@@ -32,11 +43,39 @@ describe('normalizeIndexingSettings', () => {
       ],
       refreshIntervalMinutes: 5,
       maxEntries: 10_000_000,
+      resourceLimits: {
+        maxThreads: 64,
+        maxParallelism: 1,
+        maxOpenDirectories: 256,
+        maxCpuPercent: 5,
+        maxMemoryMiB: 131_072,
+      },
     });
   });
 
   it('allows an intentionally empty custom ignore list', () => {
     expect(normalizeIndexingSettings({ customIgnores: [] }).customIgnores).toEqual([]);
+  });
+
+  it('migrates missing machine resource limits without changing valid custom values', () => {
+    expect(normalizeIndexingSettings({}).resourceLimits).toEqual(DEFAULT_INDEXING_RESOURCE_LIMITS);
+    expect(
+      normalizeIndexingSettings({
+        resourceLimits: {
+          maxThreads: 7,
+          maxParallelism: 3,
+          maxOpenDirectories: 11,
+          maxCpuPercent: 42,
+          maxMemoryMiB: 768,
+        },
+      }).resourceLimits,
+    ).toEqual({
+      maxThreads: 7,
+      maxParallelism: 3,
+      maxOpenDirectories: 11,
+      maxCpuPercent: 42,
+      maxMemoryMiB: 768,
+    });
   });
 
   it('adds the noindex default to the previous built-in ignore set', () => {

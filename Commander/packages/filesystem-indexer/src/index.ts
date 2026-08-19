@@ -19,10 +19,19 @@ export interface IgnoreRule {
   pattern: string;
 }
 
+export interface IndexResourceLimits {
+  maxThreads?: number;
+  maxParallelism?: number;
+  maxOpenDirectories?: number;
+  maxCpuPercent?: number;
+  maxMemoryMiB?: number;
+}
+
 export interface IndexConfiguration {
   sources: IndexSource[];
   customIgnores?: IgnoreRule[];
   maxEntries?: number;
+  resourceLimits?: IndexResourceLimits;
 }
 
 export interface IndexRecord {
@@ -78,6 +87,26 @@ export interface IndexReport {
   errors: number;
   sources: SourceReport[];
   status: IndexStatus;
+  resources: IndexResourceUsage;
+}
+
+export interface EffectiveResourceLimits {
+  logicalCpuCount: number;
+  workerThreads: number;
+  maxOpenDirectories: number;
+  maxCpuPercent: number;
+  maxMemoryMiB: number;
+  channelCapacity: number;
+  sqliteCacheKib: number;
+}
+
+export interface IndexResourceUsage {
+  effective: EffectiveResourceLimits;
+  cpuTimeMs: number;
+  averageCpuPercent: number;
+  peakMemoryBytes: number;
+  throttledMs: number;
+  memoryChecks: number;
 }
 
 type RequestOperation =
@@ -132,10 +161,10 @@ export class FileSystemIndexerClient {
     return this.#request<IndexStatus>({ operation: 'status' });
   }
 
-  index(configuration: IndexConfiguration): Promise<IndexReport> {
+  index(configuration: IndexConfiguration, timeoutMs?: number): Promise<IndexReport> {
     return this.#request<IndexReport>(
       { operation: 'index', configuration },
-      this.#options.indexTimeoutMs ?? DEFAULT_INDEX_TIMEOUT_MS,
+      timeoutMs ?? this.#options.indexTimeoutMs ?? DEFAULT_INDEX_TIMEOUT_MS,
     );
   }
 

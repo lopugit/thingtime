@@ -106,6 +106,8 @@ gate before Commander may claim a view extension works.
 - Extension workers are lazy, unloaded after a grace period at root, and individually capped at 128 MiB old-gen.
 - Icon/image caches are byte-bounded and modules outside the launcher path load lazily.
 - Telemetry records process RSS/physical footprint, V8 heap, cold/warm presentation time, and daemon/Rust restarts.
+- Filesystem scans default to two measured-optimal workers, 60% of total logical-CPU capacity, and a 512 MiB resident-memory ceiling;
+  each limit is user-configurable and reported after a run.
 
 ## Filesystem indexing
 
@@ -126,11 +128,23 @@ On-demand File Provider placeholder directories are recorded without hydration. 
 requires Full Disk Access; Commander links to that system pane, terminates a scan that remains blocked for 90
 seconds, restarts its isolated writer, and leaves the previous committed snapshot available.
 
+The standalone protocol accepts `resourceLimits` for traversal threads, parallel directory tasks, open directory
+handles, total-machine CPU percentage, and resident memory. The pinned ignore walker holds at most one directory
+iterator per worker, so the effective worker pool is the minimum of the thread, parallelism, open-directory, and
+logical-CPU limits. A process-wide CPU-time governor pauses that pool when its duty-cycle window exceeds the selected
+machine share. The memory limit also bounds the scan channel and SQLite page cache; an RSS breach aborts the current
+transaction rather than publishing a partial replacement. Completed reports include effective limits, CPU time and
+average share, peak RSS, memory sample count, and throttle duration. Commander preserves the ordinary 90-second blocked
+scan deadline at 25–100% CPU and proportionally extends it, up to 15 minutes, only for deliberately lower CPU limits.
+If process CPU or RSS counters are unavailable, the standalone service fails closed rather than running unbounded.
+
 `crates/commander-indexer` and `packages/filesystem-indexer` are host-independent. Another Thingtime desktop app can
 use the CLI directly or import the typed Node client. Overlapping scans are serialized, entry counts are capped, and
 SQLite WAL lets queries remain responsive during a write transaction. Successful scans checkpoint and truncate the
 WAL, every SQLite database/sidecar remains owner-only, and FTS tokenizes names rather than every full path to keep
-large home indexes compact. A source that reaches its cap commits a bounded partial index and surfaces a warning
+large home indexes compact. Schema 3 also guards the FTS update trigger by filename equality, so the generation-only
+writes in an unchanged reconciliation do not delete and recreate every trigram row. A source that reaches its cap
+commits a bounded partial index and surfaces a warning
 instead of leaving first-run search empty. Filesystem event-level incremental updates are a future optimization; scheduled
 reconciliation is the current cross-platform freshness guarantee.
 

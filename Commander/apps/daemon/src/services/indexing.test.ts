@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeIndexedItemId, indexedItemId, indexRecordToSearchItem } from './indexing.js';
+import { decodeIndexedItemId, indexedItemId, indexRecordToSearchItem, indexTimeoutMs } from './indexing.js';
 
 describe('filesystem index search item bridge', () => {
   it('maps a persistent file record to native open, reveal, copy, icon, and drag metadata', () => {
@@ -35,5 +35,14 @@ describe('filesystem index search item bridge', () => {
     );
     expect(decodeIndexedItemId('index:file:bm90LXJlYWxseS1hYnNvbHV0ZQ')).toBeUndefined();
     expect(decodeIndexedItemId('index:unknown:abcd')).toBeUndefined();
+  });
+});
+
+describe('filesystem index resource scheduling', () => {
+  it('extends the isolated writer timeout for deliberately CPU-constrained scans', () => {
+    expect(indexTimeoutMs(100)).toBe(90_000);
+    expect(indexTimeoutMs(60)).toBe(90_000);
+    expect(indexTimeoutMs(20)).toBe(112_500);
+    expect(indexTimeoutMs(5)).toBe(450_000);
   });
 });

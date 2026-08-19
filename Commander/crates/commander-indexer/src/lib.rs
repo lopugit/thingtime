@@ -22,7 +22,12 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 2;
+mod resources;
+
+use resources::{validate_resource_limits, ResourceGovernor};
+pub use resources::{EffectiveResourceLimits, IndexResourceLimits, IndexResourceUsage};
+
+const SCHEMA_VERSION: i64 = 3;
 const DEFAULT_MAX_ENTRIES: usize = 2_000_000;
 const HARD_MAX_ENTRIES: usize = 10_000_000;
 const MAX_SOURCES: usize = 128;
@@ -32,6 +37,7 @@ const MAX_DIAGNOSTICS: usize = 20;
 const DATABASE_OPEN_RETRY_ATTEMPTS: usize = 100;
 const DATABASE_OPEN_RETRY_DELAY: Duration = Duration::from_millis(25);
 const DATABASE_JOURNAL_SIZE_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_RESOURCE_MEMORY_MIB: usize = 131_072;
 
 #[derive(Debug)]
 pub struct IndexerError {
@@ -136,6 +142,8 @@ pub struct IndexConfiguration {
     pub custom_ignores: Vec<IgnoreRule>,
     #[serde(default = "default_max_entries")]
     pub max_entries: usize,
+    #[serde(default)]
+    pub resource_limits: IndexResourceLimits,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -214,6 +222,7 @@ pub struct IndexReport {
     pub errors: usize,
     pub sources: Vec<SourceReport>,
     pub status: IndexStatus,
+    pub resources: IndexResourceUsage,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -297,13 +306,20 @@ impl IndexDatabase {
         configuration: &IndexConfiguration,
     ) -> Result<IndexReport, IndexerError> {
         validate_configuration(configuration)?;
+        let governor = Arc::new(ResourceGovernor::new(&configuration.resource_limits)?);
+        configure_database_resources(&self.connection, governor.effective())?;
         let matcher = Arc::new(CustomIgnoreMatcher::compile(&configuration.custom_ignores)?);
         let started_at_ms = now_ms();
         let started = Instant::now();
         let mut reports = Vec::with_capacity(configuration.sources.len());
 
         for source in &configuration.sources {
-            match self.index_source(source, Arc::clone(&matcher), configuration.max_entries) {
+            match self.index_source(
+                source,
+                Arc::clone(&matcher),
+                configuration.max_entries,
+                Arc::clone(&governor),
+            ) {
                 Ok(report) => reports.push(report),
                 Err(error) => {
                     self.record_source_error(source, &error.message)?;
@@ -318,6 +334,8 @@ impl IndexDatabase {
         let _ = self
             .connection
             .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+        let status = self.status()?;
+        let resources = governor.finish();
         Ok(IndexReport {
             started_at_ms,
             completed_at_ms: now_ms(),
@@ -326,7 +344,8 @@ impl IndexDatabase {
             skipped,
             errors,
             sources: reports,
-            status: self.status()?,
+            status,
+            resources,
         })
     }
 
@@ -439,6 +458,7 @@ impl IndexDatabase {
         source: &IndexSource,
         matcher: Arc<CustomIgnoreMatcher>,
         max_entries: usize,
+        governor: Arc<ResourceGovernor>,
     ) -> Result<SourceReport, IndexerError> {
         let root = fs::canonicalize(&source.root).map_err(|error| {
             IndexerError::new(
@@ -459,12 +479,15 @@ impl IndexDatabase {
         let transaction = self.connection.transaction()?;
         let report = scan_and_store(
             &transaction,
-            source,
-            &root,
-            &root_text,
-            matcher,
-            max_entries,
-            generation,
+            ScanContext {
+                source,
+                root: &root,
+                root_text: &root_text,
+                matcher,
+                max_entries,
+                generation,
+                governor: Arc::clone(&governor),
+            },
         )?;
         let scan_warning = report.diagnostics.first().map(String::as_str);
 
@@ -500,6 +523,7 @@ impl IndexDatabase {
                 ],
             )?;
         }
+        governor.check_memory_now()?;
         transaction.commit()?;
         Ok(report)
     }
@@ -614,6 +638,20 @@ impl IndexDatabase {
     }
 }
 
+fn configure_database_resources(
+    connection: &Connection,
+    limits: &EffectiveResourceLimits,
+) -> Result<(), IndexerError> {
+    let cache_kib = i64::try_from(limits.sqlite_cache_kib).unwrap_or(i64::MAX);
+    connection.pragma_update(None, "cache_size", -cache_kib)?;
+    connection.pragma_update(None, "mmap_size", 0_i64)?;
+    connection.execute_batch(
+        "PRAGMA cache_spill=ON;
+         PRAGMA temp_store=MEMORY;",
+    )?;
+    Ok(())
+}
+
 fn initialize_schema(connection: &Connection) -> Result<(), IndexerError> {
     let schema_is_complete: bool = retry_database_busy(|| {
         connection.query_row(
@@ -633,7 +671,7 @@ fn initialize_schema(connection: &Connection) -> Result<(), IndexerError> {
            key TEXT PRIMARY KEY,
            value INTEGER NOT NULL
          );
-         INSERT INTO metadata(key, value) VALUES ('schema_version', 2)
+         INSERT INTO metadata(key, value) VALUES ('schema_version', 3)
            ON CONFLICT(key) DO NOTHING;
          INSERT INTO metadata(key, value) VALUES ('generation', 0)
            ON CONFLICT(key) DO NOTHING;
@@ -669,7 +707,8 @@ fn initialize_schema(connection: &Connection) -> Result<(), IndexerError> {
            INSERT INTO records_fts(records_fts, rowid, name)
            VALUES ('delete', old.rowid, old.name);
          END;
-         CREATE TRIGGER IF NOT EXISTS records_after_update AFTER UPDATE ON records BEGIN
+         CREATE TRIGGER IF NOT EXISTS records_after_update AFTER UPDATE ON records
+         WHEN old.name IS NOT new.name BEGIN
            INSERT INTO records_fts(records_fts, rowid, name)
            VALUES ('delete', old.rowid, old.name);
            INSERT INTO records_fts(rowid, name)
@@ -696,7 +735,11 @@ fn initialize_schema(connection: &Connection) -> Result<(), IndexerError> {
     )?;
     if schema_version == 1 {
         migrate_name_only_fts(connection)?;
-        schema_version = SCHEMA_VERSION;
+        schema_version = 3;
+    }
+    if schema_version == 2 {
+        migrate_fts_update_trigger(connection)?;
+        schema_version = 3;
     }
     if schema_version != SCHEMA_VERSION {
         return Err(IndexerError::new(
@@ -728,13 +771,32 @@ fn migrate_name_only_fts(connection: &Connection) -> Result<(), IndexerError> {
                INSERT INTO records_fts(records_fts, rowid, name)
                VALUES ('delete', old.rowid, old.name);
              END;
-             CREATE TRIGGER records_after_update AFTER UPDATE ON records BEGIN
+             CREATE TRIGGER records_after_update AFTER UPDATE ON records
+             WHEN old.name IS NOT new.name BEGIN
                INSERT INTO records_fts(records_fts, rowid, name)
                VALUES ('delete', old.rowid, old.name);
                INSERT INTO records_fts(rowid, name) VALUES (new.rowid, new.name);
              END;
              INSERT INTO records_fts(records_fts) VALUES ('rebuild');
-             UPDATE metadata SET value = 2 WHERE key = 'schema_version';
+             UPDATE metadata SET value = 3 WHERE key = 'schema_version';
+             COMMIT;",
+        )
+    })?;
+    Ok(())
+}
+
+fn migrate_fts_update_trigger(connection: &Connection) -> Result<(), IndexerError> {
+    retry_database_busy(|| {
+        connection.execute_batch(
+            "BEGIN IMMEDIATE;
+             DROP TRIGGER IF EXISTS records_after_update;
+             CREATE TRIGGER records_after_update AFTER UPDATE ON records
+             WHEN old.name IS NOT new.name BEGIN
+               INSERT INTO records_fts(records_fts, rowid, name)
+               VALUES ('delete', old.rowid, old.name);
+               INSERT INTO records_fts(rowid, name) VALUES (new.rowid, new.name);
+             END;
+             UPDATE metadata SET value = 3 WHERE key = 'schema_version';
              COMMIT;",
         )
     })?;
@@ -766,22 +828,35 @@ fn is_database_busy(error: &rusqlite::Error) -> bool {
     )
 }
 
-fn scan_and_store(
-    transaction: &Transaction<'_>,
-    source: &IndexSource,
-    root: &Path,
-    root_text: &str,
+struct ScanContext<'a> {
+    source: &'a IndexSource,
+    root: &'a Path,
+    root_text: &'a str,
     matcher: Arc<CustomIgnoreMatcher>,
     max_entries: usize,
     generation: i64,
+    governor: Arc<ResourceGovernor>,
+}
+
+fn scan_and_store(
+    transaction: &Transaction<'_>,
+    context: ScanContext<'_>,
 ) -> Result<SourceReport, IndexerError> {
+    let ScanContext {
+        source,
+        root,
+        root_text,
+        matcher,
+        max_entries,
+        generation,
+        governor,
+    } = context;
     let mut builder = WalkBuilder::new(root);
     builder
-        // One deterministic traversal worker guarantees that reaching the
-        // entry cap cannot be held open by another worker already blocked in
-        // a slow File Provider directory. SQLite writes remain the dominant
-        // cost, and callers can run independent databases concurrently.
-        .threads(1)
+        // ignore 0.4.25 is pinned and holds at most one ReadDir per traversal
+        // worker. ResourceGovernor takes the strictest thread, parallel-work,
+        // logical-CPU, and open-directory ceiling before we reach this call.
+        .threads(governor.effective().worker_threads)
         .hidden(!source.include_hidden)
         .follow_links(source.follow_symlinks)
         .ignore(source.respect_git_ignore)
@@ -794,7 +869,8 @@ fn scan_and_store(
     }
     let walker = builder.build_parallel();
     let kinds: HashSet<IndexKind> = normalized_kinds(&source.kinds).into_iter().collect();
-    let (sender, receiver) = mpsc::sync_channel::<ScanMessage>(1_024);
+    let (sender, receiver) =
+        mpsc::sync_channel::<ScanMessage>(governor.effective().channel_capacity);
     let cancelled = Arc::new(AtomicBool::new(false));
     let discovered = Arc::new(AtomicUsize::new(0));
     let root_owned = root.to_path_buf();
@@ -813,16 +889,23 @@ fn scan_and_store(
         let walker_sender = sender.clone();
         let walker_cancelled = Arc::clone(&cancelled);
         let walker_discovered = Arc::clone(&discovered);
+        let walker_governor = Arc::clone(&governor);
         scope.spawn(move || {
             walker.run(|| {
                 let sender = walker_sender.clone();
                 let cancelled = Arc::clone(&walker_cancelled);
                 let discovered = Arc::clone(&walker_discovered);
                 let matcher = Arc::clone(&matcher);
+                let governor = Arc::clone(&walker_governor);
                 let kinds = kinds.clone();
                 let root = root_owned.clone();
                 Box::new(move |entry| {
                     if cancelled.load(Ordering::Relaxed) {
+                        return WalkState::Quit;
+                    }
+                    if let Err(error) = governor.checkpoint() {
+                        cancelled.store(true, Ordering::Relaxed);
+                        let _ = sender.send(ScanMessage::Fatal(error));
                         return WalkState::Quit;
                     }
                     let entry = match entry {
@@ -886,9 +969,18 @@ fn scan_and_store(
                generation = excluded.generation",
         )?;
         let mut limit_reported = false;
+        let mut fatal_error = None;
         for message in receiver {
             match message {
                 ScanMessage::Record(record) => {
+                    if fatal_error.is_some() {
+                        continue;
+                    }
+                    if let Err(error) = governor.checkpoint() {
+                        cancelled.store(true, Ordering::Relaxed);
+                        fatal_error = Some(error);
+                        continue;
+                    }
                     if let Err(error) = insert.execute(params![
                         source_id,
                         record.path,
@@ -923,7 +1015,16 @@ fn scan_and_store(
                         ));
                     }
                 }
+                ScanMessage::Fatal(error) => {
+                    cancelled.store(true, Ordering::Relaxed);
+                    if fatal_error.is_none() {
+                        fatal_error = Some(error);
+                    }
+                }
             }
+        }
+        if let Some(error) = fatal_error {
+            return Err(error);
         }
         Ok(())
     })?;
@@ -935,6 +1036,7 @@ enum ScanMessage {
     Skipped,
     WalkError(String),
     LimitExceeded,
+    Fatal(IndexerError),
 }
 
 #[derive(Debug)]
@@ -1169,6 +1271,7 @@ fn validate_configuration(configuration: &IndexConfiguration) -> Result<(), Inde
             format!("maxEntries must be between 1 and {HARD_MAX_ENTRIES}"),
         ));
     }
+    validate_resource_limits(&configuration.resource_limits)?;
     let mut ids = HashSet::new();
     for source in &configuration.sources {
         if source.id.trim().is_empty() || source.id.len() > 256 {
@@ -1387,6 +1490,7 @@ mod tests {
             }],
             custom_ignores: Vec::new(),
             max_entries: 10_000,
+            resource_limits: IndexResourceLimits::default(),
         }
     }
 
@@ -1477,7 +1581,7 @@ mod tests {
         drop(legacy);
 
         let migrated = IndexDatabase::open(&database_path).expect("migrate index");
-        assert_eq!(migrated.status().expect("status").schema_version, 2);
+        assert_eq!(migrated.status().expect("status").schema_version, 3);
         let definition: String = migrated
             .connection
             .query_row(
@@ -1496,6 +1600,50 @@ mod tests {
             .expect("query");
         assert_eq!(results.records.len(), 1);
         assert_eq!(results.records[0].name, "keep.txt");
+    }
+
+    #[test]
+    fn version_two_fts_trigger_is_migrated_without_rebuilding_the_index() {
+        let temp = TempDir::new().expect("tempdir");
+        write(temp.path().join("keep.txt"), "keep").expect("file");
+        let database_path = temp.path().join(".state/index.sqlite3");
+        let mut legacy = IndexDatabase::open(&database_path).expect("open index");
+        legacy
+            .index(&configuration(temp.path(), vec![IndexKind::File]))
+            .expect("index");
+        legacy
+            .connection
+            .execute_batch(
+                "DROP TRIGGER records_after_update;
+                 CREATE TRIGGER records_after_update AFTER UPDATE ON records BEGIN
+                   INSERT INTO records_fts(records_fts, rowid, name)
+                   VALUES ('delete', old.rowid, old.name);
+                   INSERT INTO records_fts(rowid, name) VALUES (new.rowid, new.name);
+                 END;
+                 UPDATE metadata SET value = 2 WHERE key = 'schema_version';",
+            )
+            .expect("version two fixture");
+        drop(legacy);
+
+        let migrated = IndexDatabase::open(&database_path).expect("migrate index");
+        assert_eq!(migrated.status().expect("status").schema_version, 3);
+        let definition: String = migrated
+            .connection
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE name = 'records_after_update'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("trigger definition");
+        assert!(definition.contains("WHEN old.name IS NOT new.name"));
+        let results = migrated
+            .query(&QueryRequest {
+                query: "keep".to_owned(),
+                kinds: vec![IndexKind::File],
+                limit: 20,
+            })
+            .expect("query");
+        assert_eq!(results.records.len(), 1);
     }
 
     #[test]
@@ -1762,6 +1910,81 @@ mod tests {
             .last_error
             .as_deref()
             .is_some_and(|message| message.contains("Index capped at 2 entries")));
+    }
+
+    #[test]
+    fn resource_limits_use_the_strictest_concurrency_ceiling_and_report_usage() {
+        let temp = TempDir::new().expect("tempdir");
+        for index in 0..256 {
+            write(temp.path().join(format!("entry-{index}.txt")), "entry").expect("file");
+        }
+        let mut config = configuration(temp.path(), vec![IndexKind::File]);
+        config.resource_limits = IndexResourceLimits {
+            max_threads: 8,
+            max_parallelism: 3,
+            max_open_directories: 2,
+            max_cpu_percent: 100,
+            max_memory_mib: 128,
+        };
+        let report = database(&temp)
+            .index(&config)
+            .expect("resource-bounded index");
+
+        assert_eq!(report.indexed, 256);
+        assert_eq!(
+            report.resources.effective.worker_threads,
+            report.resources.effective.logical_cpu_count.min(2)
+        );
+        assert_eq!(report.resources.effective.max_open_directories, 2);
+        assert!(report.resources.effective.channel_capacity <= 4_096);
+        assert!(report.resources.average_cpu_percent <= 100);
+        assert!(report.resources.memory_checks > 0);
+    }
+
+    #[test]
+    fn memory_limit_failure_preserves_the_previous_searchable_snapshot() {
+        let temp = TempDir::new().expect("tempdir");
+        write(temp.path().join("before.txt"), "before").expect("initial file");
+        let mut database = database(&temp);
+        database
+            .index(&configuration(temp.path(), vec![IndexKind::File]))
+            .expect("initial index");
+        write(temp.path().join("after.txt"), "after").expect("new file");
+
+        let allocation = vec![1_u8; 64 * 1024 * 1024];
+        std::hint::black_box(&allocation);
+        let mut constrained = configuration(temp.path(), vec![IndexKind::File]);
+        constrained.resource_limits.max_memory_mib = 32;
+        let error = database
+            .index(&constrained)
+            .expect_err("resident memory cap must abort the scan");
+        assert_eq!(error.code, "resource_limit");
+        assert!(error.message.contains("previous index was preserved"));
+
+        let records = database
+            .query(&QueryRequest {
+                query: String::new(),
+                kinds: vec![IndexKind::File],
+                limit: 20,
+            })
+            .expect("query preserved index")
+            .records;
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].name, "before.txt");
+    }
+
+    #[test]
+    fn legacy_json_configuration_receives_balanced_resource_defaults() {
+        let parsed: IndexConfiguration = serde_json::from_value(serde_json::json!({
+            "sources": [{
+                "id": "documents",
+                "root": "/tmp",
+                "kinds": ["file"]
+            }],
+            "maxEntries": 1000
+        }))
+        .expect("legacy configuration");
+        assert_eq!(parsed.resource_limits, IndexResourceLimits::default());
     }
 
     #[test]
