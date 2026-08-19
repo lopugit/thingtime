@@ -1527,7 +1527,7 @@
   "README.md": {
     "mtime": 1787128555.3556755,
     "ast_hash": "bb7cce7ea6d402df8b936038f87fb90a",
-    "semantic_hash": ""
+    "semantic_hash": "bb7cce7ea6d402df8b936038f87fb90a"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1786968783.5594118,
@@ -1752,7 +1752,7 @@
   "remix/CHANGELOG.md": {
     "mtime": 1787128555.3570156,
     "ast_hash": "7ce279bf51923630a56089b6681f4056",
-    "semantic_hash": ""
+    "semantic_hash": "7ce279bf51923630a56089b6681f4056"
   },
   "remix/README.md": {
     "mtime": 1786968733.8268416,
@@ -4157,7 +4157,7 @@
   "TESTING.md": {
     "mtime": 1787128555.3564038,
     "ast_hash": "321b7f554dc80e94c898f3c990e5120d",
-    "semantic_hash": ""
+    "semantic_hash": "321b7f554dc80e94c898f3c990e5120d"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786968733.6525278,
@@ -5037,7 +5037,7 @@
   ".github/workflows/develop-pr-preview.yml": {
     "mtime": 1787128555.3552926,
     "ast_hash": "9bf259fee3fe1a07419b2268b921816a",
-    "semantic_hash": ""
+    "semantic_hash": "9bf259fee3fe1a07419b2268b921816a"
   },
   "PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md": {
     "mtime": 1786968783.5577075,
@@ -6782,6 +6782,6 @@
   ".github/workflows/all-branch.yml": {
     "mtime": 1787128555.3550086,
     "ast_hash": "695372b40d215e5055cfe695042cd2f0",
-    "semantic_hash": ""
+    "semantic_hash": "695372b40d215e5055cfe695042cd2f0"
   }
 }

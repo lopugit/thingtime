@@ -202,20 +202,21 @@ cookies, credentials, and raw paths; imported provider rows remain read-only.
   strict and repository verifier checks. Built and installed designated
   requirements matched for the outer app, node, and bridge. Final executable
   SHA-256 values matched between build and install:
-  `42a190cca1cf42fb75c09de18d1a6713abd2faa5a979e53047856d55a03d18bd`
-  (outer), `9b26de645b372f79da253ef5727b8b9f161a8b1bd5d96bae5afcfb8857ef6446`
+  `a3c4fe7fde3b1197d366ed50a70227ada237f1466def1c5d4081167974fb2352`
+  (outer), `78074f8b6dbcae3a49c7ce3523d20ed5977f2df5cf22e425ccddc95ed0c95fc8`
   (node), and
-  `da873c18bfabae138f122d552d8ca019ecba9ddc66140436a3d9055864d6f98d`
-  (bridge).
-- The installer replaced old node PID 8923 with launchd-owned PID 22740. Its
-  connector PID 22764 remained running for more than two minutes, beyond the
-  previous 60-second pipe failure. `launchctl` reported `runs = 1` and no exit.
-- The exact installed Electron app opened its packaged UI at
-  `127.0.0.1:64878`, then received Cmd+Q. Electron stopped while node PID 22740
-  and connector PID 22764 remained running from the installed bundle. A
-  signed-parent status request returned `running`, `unpaired`, and journal
-  count 0; Accessibility and Screen Recording were both denied without a
-  prompt.
+  `16faa6dbccb7574af0f0c133ade1147692564b5a9dfdd714ed839761e1fcdbfe`
+  (bridge). The packaged ASAR also matched at
+  `cf9b7febb8a74c0c96d835ea4787e60bec02db7e9c01e4511b55baadd9d4fbc4`.
+- The final exact-head installer started launchd-owned node PID 9442 and
+  connector PID 9757. Both remained running unchanged for more than two
+  minutes, beyond the previous 60-second pipe failure, while the Electron main
+  process was absent. `launchctl` reported `runs = 1` and no exit.
+- The preceding feature-identical signed package was also opened at
+  `127.0.0.1:64878` and received Cmd+Q; Electron stopped while its node and
+  connector remained running. A signed-parent status request returned
+  `running`, `unpaired`, and journal count 0; Accessibility and Screen Recording
+  were both denied without a prompt.
 
 ### Acceptance boundaries still open
 
