@@ -143,6 +143,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/things/react': () => import('../../../app/routes/api/v1/things/react/_react'),
   'v1/things/reactions-recent': () => import('../../../app/routes/api/v1/things/reactions-recent/_reactions-recent'),
   'v1/things/quota': () => import('../../../app/routes/api/v1/things/quota/_quota'),
+  'v1/things/rss': () => import('../../../app/routes/api/v1/things/rss/_rss'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
   'v1/things/save': () => import('../../../app/routes/api/v1/things/save/_save'),
   'v1/things/search': () => import('../../../app/routes/api/v1/things/search/_search'),

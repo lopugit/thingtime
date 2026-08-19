@@ -6036,6 +6036,43 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-rss',
+    group: 'things',
+    title: 'Public posts Atom feed',
+    endpoint: '/api/v1/things/rss',
+    summary: 'Returns an Atom (RSS) XML feed of the latest ~50 public posts, newest first.',
+    detail:
+      'Unlike every other endpoint in this API, the response body is NOT JSON: it is an Atom 1.0 XML document (Content-Type: application/atom+xml; charset=utf-8) suitable for any feed reader. Entries are the newest 50 public (tt:all) posts rendered as the anonymous viewer — the same acl walk and PublicPost projections trending uses, with no viewer-specific fields — each carrying the author handle plus truncated text (or poll question) as <title>, the full text as <content type="text">, the /post/<id> permalink as <link rel="alternate">, and RFC 3339 <published>/<updated> timestamps. All user text is XML-escaped and stripped of XML-invalid control characters.',
+    auth: {
+      mode: 'none',
+      description: 'Always anonymous — cookies and bearer tokens are ignored, so the feed only ever contains public posts.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET the endpoint (or subscribe to it from a feed reader) — no parameters are required.',
+      'Parse the body as Atom XML, not JSON; each <entry> links to its /post/<id> permalink.',
+      'The app shell also advertises the feed via <link rel="alternate" type="application/atom+xml"> for reader auto-discovery.'
+    ],
+    requestExamples: [
+      {
+        name: 'Fetch the feed',
+        description: 'Fetch the Atom feed of the latest public posts.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Atom XML feed returned (shown here as a string; the raw body is the XML document itself, not JSON).',
+        headers: { 'Content-Type': 'application/atom+xml; charset=utf-8' },
+        body: '<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom">\n  <title>Thingtime</title>\n  <updated>2026-08-19T00:00:00.000Z</updated>\n  <entry>...</entry>\n</feed>'
+      }
+    ],
+    notes: [
+      'Responses carry Cache-Control: public, s-maxage=300, stale-while-revalidate=900 — the feed is served from the Vercel edge and can lag new posts by a few minutes.'
+    ]
+  }),
+  endpoint({
     id: 'things-react',
     group: 'things',
     title: 'React to post',
