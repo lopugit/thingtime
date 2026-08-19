@@ -636,6 +636,15 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       Click, hover, and touch-and-hold all open the quick-react popup on the
       POST button; picking an emoji applies optimistically (no wait), and ＋
       opens the full custom picker.
+- [ ] EMOJI SPLASH (`emojiSplash.ts`): ADDING a reaction (quick-tap heart,
+      quick-row pick, full-picker pick — post or comment) erupts 5–8 floating
+      copies of the chosen emoji from the react button; a live poll vote
+      bursts the option's leading emoji (🗳️ fallback) from the tapped row.
+      REMOVING a reaction / un-voting never bursts, guests never burst.
+      Spam-tap: at most 3 concurrent bursts (oldest culled) and the DOM
+      returns to its pre-tap node count within ~1.5s (no leaked spans).
+      With reduced motion emulated (or `--tt-motion: 0`), zero DOM is
+      created — same `motionOK()` gate as confetti.
 - [ ] Threads that mount OPEN (the two-level ship, drill-panel roots)
       revalidate in the background even when the cache already covers their
       reply count — reactions/edits made elsewhere reconcile in within a
@@ -1363,6 +1372,35 @@ routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
       full height, sticks under the top nav only while it fits the viewport,
       and taller content (search results, expanded endpoint lists) flows with
       the page scroll — the bottom of the menu stays reachable.
+
+## API docs Try-it runner (`remix/app/routes/docs/ApiTryIt.tsx`, `api.tsx`)
+
+- [ ] Every request example on /docs/api shows a "Try it" panel; nothing ever
+      auto-runs on page load or navigation — a request only fires from an
+      explicit Run click.
+- [ ] Run on a GET example (health or things/trending) shows a green
+      `HTTP 200` badge, a grey `<n> ms` timing badge, and pretty-printed JSON
+      in a dark code block with its copy button; the response headers list is
+      hidden behind the "Show response headers" toggle.
+- [ ] The things/rss example renders the Atom XML response as highlighted
+      raw text (content-type aware), not a JSON parse error.
+- [ ] Editing the query string input and re-running changes the request
+      (e.g. add `limit=1`); the URL is always the documented endpoint path —
+      typing an absolute URL (`https://evil.example/...`) or a
+      protocol-relative `//host` into the query input is rejected with an
+      inline error and no request is sent.
+- [ ] Invalid JSON typed into the body textarea shows an inline "not valid
+      JSON" error without sending; fixing the JSON clears the error.
+- [ ] Mutation examples (POST/PUT/PATCH/DELETE) are two-step: first click
+      arms a red "Really run" confirm with a cancel and a plain-English
+      warning; only the confirm click sends. GET examples run in one click.
+- [ ] The Run button is disabled (spinner) while a request is in flight and
+      never retries; a network failure or 30s timeout renders a friendly
+      inline message, not a toast or a crash.
+- [ ] Requests send the viewer's own session cookie (same-origin
+      credentials): logged out, a session-auth mutation answers 401 — and
+      that 401 renders as a normal red-badged response, the documented
+      teaching moment.
 
 ## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
 
@@ -2200,6 +2238,33 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       skeletons appear only on a true cold start (cleared storage).
 - [ ] The drawer's Feed section shows "Explore 🔥" and navigates to
       `/explore`; `/feed` itself still loads and paginates normally.
+
+## Saved library (`remix/app/components/Saved/SavedPage.tsx`, `remix/app/api/utils/things/saved.ts`, `GET /api/v1/things/saved`)
+
+- [ ] Logged in, every post card (feed, `/explore`, `/post/:id` permalink,
+      profile) shows a 🔖 bookmark button beside Share. Tapping it flips the
+      icon to filled/accent INSTANTLY (optimistic), toasts "Saved to your
+      library 🔖", and the state survives a reload (`viewerSaved` rides the
+      same batched projection as `viewerReactions` — one query per page, no
+      N+1). Tapping again unfills instantly and toasts the removal; a failed
+      toggle reverts the icon and toasts the error. Logged OUT, no bookmark
+      button renders anywhere and `PublicPost` carries no `viewerSaved` field.
+- [ ] `/saved` lists the viewer's saved posts newest-SAVED-first (save time,
+      not post time) as real PostCards — reactions, comments, polls, and the
+      bookmark itself work in place; unsaving a card removes it from the list
+      optimistically (a failed unsave restores it in place). Pagination loads
+      ~30 per page via `nextCursor`. Optimistic first paint from the
+      per-viewer `tt-saved-<viewerId>` localStorage cache (no skeleton flash
+      on revisit; skeleton only on a true cold start), and logout sweeps the
+      `tt-saved-` prefix so another account on the same browser never sees a
+      cached library.
+- [ ] Libraries are independent per user: two accounts saving different posts
+      each see only their own on `/saved`, and `GET /api/v1/things/saved`
+      401s logged out (`/saved` shows the quiet log-in state instead). A
+      saved post that is later DELETED (or its audience narrowed away from
+      the viewer) silently disappears from `/saved` — fail closed, no error
+      rows. The drawer's Feed section shows "Saved 🔖" (auth-only) linking to
+      `/saved`.
 
 ## Public posts Atom feed (`remix/app/api/utils/things/rss.ts`, `GET /api/v1/things/rss`)
 
