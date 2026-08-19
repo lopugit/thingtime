@@ -143,3 +143,7 @@ Rate limits: `auth.passkeyOptions` 60/min, `auth.passkeyLogin` 30/min,
 - iOS wrapper: WKWebView passkey ceremonies need the associated-domains
   (`webcredentials:thingtime.com`) entitlement to use the shared rpID —
   untouched here, worth a follow-up when the native shell wants passkeys.
+- **Merge coordination with PR #320** (crystal root-key squat guard, not in
+  this branch's base): `crystal.linkKey` now backs a partial unique index, so
+  when both land, `linkKey` should join `RESERVED_CRYSTAL_ROOT_KEYS` so a
+  user-authored `data` crystal can't squat a passkey-app-link slot.
