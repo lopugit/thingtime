@@ -58,6 +58,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
   recording every merge and skip. See README “Branch automation: the `all`
   wildcard branch”. — Claude (AI), 2026-08-18
+- **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
+  moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
+  `omni-moderation-latest` endpoint screens every image first; clean images
+  stamp `clear` at $0 and only flagged/borderline images escalate to the paid
+  Claude vision call (fail-safes: omni outage → straight to Claude; Claude
+  outage → omni-flagged images stamp `nsfw`/blur instead of pending). New env:
+  `OPENAI_API_KEY` reused for the screen, optional
+  `TT_MODERATION_ESCALATION_SCORE` (default 0.2);
+  `THINGTIME_MODERATION_PROVIDER` accepts `openai+claude` (alias `tiered`) and
+  standalone `openai`, and the unset default picks the tiered pipeline when
+  both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
+  (PR #308 note has details).
 
 ### Security
 

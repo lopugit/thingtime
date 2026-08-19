@@ -626,18 +626,42 @@ test recipient (or a plus alias of it).
 ### Private S3 media and attachments
 
 Uploaded images are moderated asynchronously after upload: a provider-pluggable
-NSFW/TOS analysis (Claude API vision by default) stamps a protected
-`moderation` field on the attachment thing. NSFW media renders heavily blurred
-behind a "Show Anyway" click; TOS/illegal verdicts quarantine the media (never
-served publicly, admins can open evidence) and log a `moderationFlag` for the
-`/admin` → Moderation review queue, which also offers a retry sweep for
-attachments the async kickoff missed.
+NSFW/TOS analysis stamps a protected `moderation` field on the attachment
+thing. NSFW media renders heavily blurred behind a "Show Anyway" click;
+TOS/illegal verdicts quarantine the media (never served publicly, admins can
+open evidence) and log a `moderationFlag` for the `/admin` → Moderation review
+queue, which also offers a retry sweep for attachments the async kickoff
+missed.
+
+The recommended production provider is the tiered `openai+claude` pipeline:
+OpenAI's **free** `omni-moderation-latest` endpoint screens every image first,
+clean images stamp `clear` at $0, and only flagged/borderline images escalate
+to a paid Claude vision call for the policy-nuanced verdict (see
+`docs/ai-api-cost-analysis.md`). Note the free screen cannot detect CSAM in
+images (OpenAI's `sexual/minors` category is text-only) and cannot apply
+Thingtime's "artistic nudity still blurs" rule — that is exactly why flagged
+and borderline images always escalate, and why omni alone never stamps
+`blocked`. If Claude is unreachable, omni-flagged images fail safe to `nsfw`
+(blurred + flagged for admin review); if OpenAI is unreachable, every image
+goes straight to Claude.
 
 ```sh
-THINGTIME_MODERATION_PROVIDER="claude"  # 'claude' | 'test' | 'off' (default: claude when ANTHROPIC_API_KEY is set, else off)
-ANTHROPIC_API_KEY="<key>"               # Claude API key used by the moderation provider
-TT_MODERATION_MODEL="claude-opus-5"     # optional model override
+THINGTIME_MODERATION_PROVIDER="openai+claude"  # 'openai+claude' (alias 'tiered') | 'claude' | 'openai' | 'test' | 'off'
+                                               # unset default by keys: both → openai+claude; ANTHROPIC only → claude;
+                                               # OPENAI only → openai; neither → off
+ANTHROPIC_API_KEY="<key>"                # Claude API key (escalation / claude provider)
+OPENAI_API_KEY="<key>"                   # OpenAI key for the free omni-moderation screen
+TT_MODERATION_MODEL="claude-opus-5"      # optional Claude model override
+TT_MODERATION_ESCALATION_SCORE="0.2"     # optional; escalate unflagged images whose max
+                                         # image-category score meets this 0..1 threshold
 ```
+
+Note: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
+feature — their presence alone activates image moderation when
+`THINGTIME_MODERATION_PROVIDER` is unset. Set it to `off` explicitly in
+environments that carry the keys for musing but must not moderate. An
+unrecognized provider value warns and falls back to the key-based default
+rather than silently disabling moderation.
 
 Posts, comments and replies, Messenger messages and thread replies, custom
 reaction emoji, and profile avatar/banner images use direct, checksummed

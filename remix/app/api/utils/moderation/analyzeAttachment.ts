@@ -172,8 +172,11 @@ export const createAnalyzeReadyAttachment =
 			const bytes = await deps.fetchBytes(signed.url);
 			const verdict = await choice.provider.analyzeImage({ bytes, contentType, filename: String(doc.crystal?.name || '') });
 			const moderation = moderationFromVerdict(verdict, { provider: choice.provider.name, model: choice.provider.model, now: deps.now() });
-			await stampModeration(things, shareId, moderation, { allowOverwriteOf: [null, 'pending'], now: deps.now() });
-			if (moderation.status === 'nsfw' || moderation.status === 'blocked') {
+			const stamped = await stampModeration(things, shareId, moderation, { allowOverwriteOf: [null, 'pending'], now: deps.now() });
+			// The flag doc follows the stamp's optimistic-concurrency guard: when
+			// this verdict lost the race (an admin review already landed), do not
+			// reset the flag's reviewedBy/reviewedAt with a stale re-analysis.
+			if (stamped && (moderation.status === 'nsfw' || moderation.status === 'blocked')) {
 				await upsertModerationFlag(things, doc, moderation, deps.now());
 			}
 			return { ok: true, status: moderation.status };

@@ -293,6 +293,12 @@ is fixed, and cite the checklist you ran in the PR description.
       An image named `tt-test-illegal.png` disappears from public payloads and
       its `/api/v1/attachments/content` URL 404s for non-admins, while a
       `moderationFlag` row appears in `/admin` → Moderation.
+- [ ] With `THINGTIME_MODERATION_PROVIDER=openai+claude` (+ both API keys), a
+      clearly clean image stamps `clear` with provider `openai` (free omni
+      screen, no Claude spend) while an explicit image stamps via provider
+      `claude` (escalated) — check the provider column in `/admin` →
+      Moderation. With `ANTHROPIC_API_KEY` removed, an omni-flagged image still
+      lands `nsfw` (blur + flag) instead of staying pending.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich

@@ -42,3 +42,13 @@
 ## Cost analysis (2026-08-19)
 
 - [`docs/ai-api-cost-analysis.md`](../docs/ai-api-cost-analysis.md) — verified market research on AI API pricing for this pipeline: per-image cost on the `claude-opus-5` default (~$0.011/image), model-tier alternatives, dedicated moderation APIs, self-hosted options, volume projections, and the ranked cost levers (free first-pass gate, `TT_MODERATION_MODEL` downgrade, Batch API, pre-send downscaling, pending-retry bound).
+
+## Free omni-moderation first-pass gate (2026-08-19)
+
+Implements cost lever 1 from [`docs/ai-api-cost-analysis.md`](../docs/ai-api-cost-analysis.md): OpenAI's free `omni-moderation-latest` endpoint now screens every image before any paid Claude call.
+
+- New `remix/app/api/utils/moderation/openaiProvider.ts`: `createOmniScreen` (POST /v1/moderations, data-URL image, ≤10 MiB — under OpenAI's 20 MB cap), `mapOmniVerdict`, `shouldEscalateOmniResult`, standalone `openai` provider, and the tiered `openai+claude` provider.
+- **Tiered flow**: clean screen → `clear` stamped with provider `openai` at $0; flagged OR any image-applicable category score ≥ `TT_MODERATION_ESCALATION_SCORE` (default 0.2) → Claude makes the final policy-nuanced verdict (provider `claude` + resolved model on the stamp). Fail-safes: omni outage → straight to Claude; Claude outage on a **flagged** image → omni's `nsfw` verdict lands (blur + moderationFlag beats rendering it) while borderline/no-signal rethrows so the doc stays `pending` for the sweep.
+- **Why omni never decides alone**: its `sexual/minors` category is text-only (cannot see CSAM in images) and its fixed taxonomy can't apply our "artistic/medical nudity still blurs" rule — so omni never stamps `blocked`, and anything it isn't confidently clean about goes to Claude.
+- Provider resolution: `THINGTIME_MODERATION_PROVIDER` gains `openai+claude` (alias `tiered`) and `openai`; unset default is now key-driven (both → tiered, ANTHROPIC only → claude, OPENAI only → openai, neither → off). Explicit values are never rerouted.
+- Verification: `test:moderation` 20/20 (10 new: verdict mapping incl. text-only score exclusion, escalation threshold clamping, screen request/auth/data-URL shape + error paths, all four tiered branches, resolution matrix), `test:attachments` 111/111, full nitro build green.

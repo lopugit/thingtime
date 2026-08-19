@@ -230,10 +230,16 @@ becomes one around ~50k+ images/month.
 
 ## 7. Cost levers, cheapest first
 
-1. **Free first-pass gate (optional layer):** OpenAI `omni-moderation-latest`
-   is $0 for images ≤20 MB. Route only its flagged/uncertain results to Claude
-   for the policy-nuanced verdict → cuts paid calls to a small fraction at the
-   cost of a second vendor dependency. Azure F0 (5k/mo free) is an alternative.
+1. **Free first-pass gate — ✅ implemented (2026-08-19):** OpenAI
+   `omni-moderation-latest` is $0 for images ≤20 MB. The tiered
+   `openai+claude` provider (`remix/app/api/utils/moderation/openaiProvider.ts`,
+   the default when both API keys are set) screens every image for free and
+   escalates only flagged/borderline results (score ≥
+   `TT_MODERATION_ESCALATION_SCORE`, default 0.2) to Claude → paid calls drop
+   to the flagged fraction. Caveats handled in code: omni's `sexual/minors`
+   category is text-only (so omni never stamps `blocked` and CSAM detection
+   rides on the Claude escalation), and our "artistic nudity still blurs" rule
+   is exactly why borderline images can't be cleared by omni alone.
 2. **Model tier via existing env var (no code):** `TT_MODERATION_MODEL=claude-haiku-4-5`
    ≈ 5× cheaper than Opus 5; `claude-sonnet-5` ≈ 2.5× cheaper. Classification
    against our explicit written policy is well within Sonnet/Haiku capability;
