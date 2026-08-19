@@ -70,3 +70,23 @@ TESTING.md gained a checklist section per feature. Full-project tsc remains
 at its pre-existing broken baseline (~150 errors, none in files touched
 here); targeted lint + live Vite/Nitro compile + browser verification were
 the gates, per repo docs.
+
+## Sequel run (2026-08-19 daytime, owner-requested continuation)
+
+| # | Feature | Commit |
+|---|---------|--------|
+| 8 | ⌘ Cmd+K quick switcher | 02b6aa69 |
+| 9 | 🕰️ On this day memories card | caa5a569 |
+| 10 | 💬 @mentions (autocomplete + bell/email, acl-gated) | c78e2e27 |
+| 11 | 🐑 One-click Duplicate on /things | 3db64c3c |
+| 12 | 🔖 Surface Saves (/saved library) | 65ea4e93 |
+| 13 | 🎆 Emoji Splash | a04c940d |
+| 14 | ▶️ API docs Try-it runner | 42131a22 |
+
+Sequel review catches (fixed pre-ship): Cmd+K collision with Editor.js's
+inline-link chord + Escape dead-spots + macOS Ctrl+K hijack; on-this-day
+UTC/local anniversary mis-bucketing; @mention notifications leaking private
+post text to non-viewers (now gated by the exact read-path acl evaluation);
+Duplicate landing in the browsed folder instead of each thing's own; poll
+splash bursting on guard-dropped taps. All 14 features carry TESTING.md
+checklist sections.
