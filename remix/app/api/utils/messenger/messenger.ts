@@ -10,7 +10,7 @@
 import { getThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import type { FeedAuthor} from '../things/things';
 import { resolveProfiles, parseChronoCursor, chronoCursorClause } from '../things/things';
-import { toAttachmentPublicMetadata, type AttachmentPublicMetadata } from '../attachments/attachmentCore';
+import { orderAttachmentDocsByStoredSort, toAttachmentPublicMetadata, type AttachmentPublicMetadata } from '../attachments/attachmentCore';
 import {
 	createReadyAttachmentMessageInsertHook,
 	inspectReadyAttachmentsForMessage,
@@ -958,7 +958,7 @@ const projectMessages = async (
 							attachmentState: 'ready',
 							attachmentPurpose: 'message'
 						} as any,
-						{ projection: { shareId: 1, targetId: 1, ownerId: 1, crystal: 1, createdAt: 1 } }
+						{ projection: { shareId: 1, targetId: 1, ownerId: 1, attachmentSortIndex: 1, crystal: 1, createdAt: 1 } }
 					)
 					.sort({ createdAt: 1, shareId: 1 })
 					.toArray()
@@ -972,7 +972,8 @@ const projectMessages = async (
 		}
 	}
 	const attachmentsByMessage = new Map<string, AttachmentPublicMetadata[]>();
-	for (const doc of attachmentDocs as any[]) {
+	// stamped display order wins; legacy unstamped docs keep createdAt order
+	for (const doc of orderAttachmentDocsByStoredSort(attachmentDocs as any[])) {
 		const targetId = typeof doc.targetId === 'string' ? doc.targetId : '';
 		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
 		if (!targetId || !attachment || String(doc.ownerId) !== messageOwnerById.get(targetId)) continue;
