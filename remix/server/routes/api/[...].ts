@@ -25,6 +25,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/tiers': () => import('../../../app/routes/api/v1/admin/tiers/_tiers'),
   'v1/admin/users': () => import('../../../app/routes/api/v1/admin/users/_users'),
   'v1/admin/users/overview': () => import('../../../app/routes/api/v1/admin/users/overview/_overview'),
+  'v1/admin/users/public-uploads': () => import('../../../app/routes/api/v1/admin/users/public-uploads/_public-uploads'),
   'v1/integrations/github/webhook': () => import('../../../app/routes/api/v1/integrations/github/webhook/_webhook'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
   'v1/integrations/vercel/webhook': () => import('../../../app/routes/api/v1/integrations/vercel/webhook/_webhook'),

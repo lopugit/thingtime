@@ -865,6 +865,70 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-users-public-uploads',
+    group: 'admin',
+    title: 'Approve uploads (public / private / all)',
+    endpoint: '/api/v1/admin/users/public-uploads',
+    summary: 'Grant or withhold a user’s file and media upload permissions, per scope or all at once (admin only).',
+    detail:
+      'POST { userId, enabled, scope } to set meta.publicUploads and/or meta.privateUploads. scope is ' +
+      "'public' (post/comment/custom-emoji attachments — the default when omitted), 'private' (message attachments + " +
+      "the user's own profile avatar/banner), or 'all' (both flags in one write). Accounts created after the " +
+      'signup-permissions hotfix start with BOTH scopes withheld — verifying their email address does NOT grant ' +
+      'uploads — so this endpoint is the manual approval step an admin performs after the “new user” notification ' +
+      'email. While a scope is withheld, POST /api/v1/attachments/uploads returns 403 public_uploads_not_approved or ' +
+      'private_uploads_not_approved for purposes in that scope and no upload can start. Accounts that predate the ' +
+      'flags have no meta keys and remain enabled; admins are always allowed regardless of the flags.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      "POST userId + enabled:true + scope ('public' | 'private' | 'all') to approve that variation; enabled:false withholds it again.",
+      'Read the returned user row (publicUploadsEnabled, privateUploadsEnabled, publicUploadsPending, privateUploadsPending) to update the UI.',
+      'The /admin Users tab lists pending accounts — a *Pending flag is true while that scope’s approval is outstanding.',
+      "Non-admins receive 403; missing userId, a non-boolean enabled, or an unknown scope 400; unknown user 404."
+    ],
+    requestExamples: [
+      {
+        name: 'Approve all uploads',
+        description: 'Enable public AND private file and media uploads for a vetted new user.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', enabled: true, scope: 'all' }
+      },
+      {
+        name: 'Approve private only',
+        description: 'Let the user set profile media and attach in DMs while public uploads stay withheld.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', enabled: true, scope: 'private' }
+      },
+      {
+        name: 'Withhold public uploads',
+        description: 'Revoke the public variation again (scope defaults to public when omitted).',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', enabled: false }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated user row.',
+        body: {
+          ok: true,
+          user: {
+            id: '64f000000000000000000002',
+            username: 'nik',
+            emailVerified: true,
+            publicUploadsEnabled: true,
+            privateUploadsEnabled: true,
+            publicUploadsPending: false,
+            privateUploadsPending: false
+          }
+        }
+      },
+      { status: 400, description: 'Missing userId.', body: { ok: false, error: 'userId is required' } },
+      { status: 404, description: 'Unknown user.', body: { ok: false, error: 'User not found' } }
+    ]
+  }),
+  endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
     group: 'settings',
     title: 'AI workflow model waterfall',
@@ -2546,7 +2610,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		summary: 'Verifies every S3 part and publishes canonical attachment metadata idempotently.',
 		detail:
 			'The server lists parts itself, requires consecutive numbers, exact expected sizes, ETags, and SHA-256 checksums, then completes and HEAD-verifies the object. ' +
-			'It reads only a small prefix to detect a narrow inline-safe raster/video type. Active and generic formats stay application/octet-stream downloads. Repeating a successful request is safe.',
+			'It reads only a small prefix to detect an inline-safe raster/video type (AVIF/GIF/JPEG/PNG/WebP images; MP4, WebM, QuickTime, M4V, Ogg, 3GPP, 3GPP2, and Matroska video). ' +
+			'Active and generic formats stay application/octet-stream downloads, with the sniffed container preserved as detectedContentType display metadata when one was recognized. Repeating a successful request is safe.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
@@ -2555,8 +2620,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'Wait for every direct S3 PUT to succeed.',
 			'POST the uploadId; do not send browser-trusted ETags or sizes.',
-			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata.',
-			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields.'
+			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata (plus detectedContentType when the object stays a generic download).',
+			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } re-sorts a post’s bound set later.'
 		],
 		requestExamples: [
 			{
@@ -2664,7 +2729,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
-			'Only magic-byte-verified AVIF/GIF/JPEG/PNG/WebP and MP4/WebM may render inline. Add download=1 to force attachment/octet-stream for every type.',
+			'Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
 		auth: {
 			mode: 'optional',
 			description:
@@ -5303,6 +5368,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
       "GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
+      'PATCH { id, attachmentIds } reorders a post’s (or rich comment’s) private attachments for display: the list must be a pure permutation of the ids already bound to that thing — additions/removals are rejected (409 when the bound set changed). Same-origin JSON from a full user session only, like attachment creation.',
       'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
     ],
@@ -6956,7 +7022,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Vercel deployments',
     endpoint: '/api/v1/vercel/deployments',
     summary: 'Returns deployment overview data for environment pickers and dashboards.',
-    detail: 'This route is visible only when deployment status is enabled. It normalizes branch limits and hides itself with 404 otherwise.',
+    detail: 'This route is visible only when deployment status is enabled. It normalizes branch and per-branch history limits, returns one latest deployment per branch for compatibility plus bounded deploymentGroups history, and hides itself with 404 otherwise.',
     auth: {
       mode: 'none',
       description: 'Public status endpoint when enabled by server-side deployment configuration.'
@@ -6964,7 +7030,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'Call with an optional limit, branchLimit, or branches query parameter.',
-      'Use returned deployments to populate preview/environment selectors.',
+      'Set history, historyLimit, or deploymentsPerBranch to include up to 20 recent deployments in each deploymentGroups entry.',
+      'Use deployments for a latest-per-branch selector or deploymentGroups for a nested branch and deployment-history selector.',
       'Handle 404 as intentionally hidden when deployment status is disabled.',
       'Avoid exposing Vercel API tokens; this route returns sanitized overview data only.'
     ],
@@ -6973,7 +7040,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'List deployments',
         description: 'Read up to five branch deployments.',
         method: 'GET',
-        query: { limit: 5 }
+        query: { history: 10, limit: 5 }
       }
     ],
     responseExamples: [

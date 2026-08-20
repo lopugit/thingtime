@@ -6,6 +6,48 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Public upload approval (new-signup permissions)
+
+- [ ] Register a brand-new account. `POST /api/v1/auth/register` returns
+      `publicUploadsEnabled: false` AND `privateUploadsEnabled: false`;
+      `POST /api/v1/attachments/uploads` answers `403` with
+      `code: "public_uploads_not_approved"` for public purposes (`post`,
+      `comment`, `custom-emoji`, or no purpose) and
+      `code: "private_uploads_not_approved"` for private ones (`message`,
+      `profile-avatar`, `profile-banner`).
+- [ ] Open the verification link. `emailVerified` flips to `true` while both
+      `*UploadsEnabled` flags stay `false` — verifying an email must never be
+      what grants uploads.
+- [ ] Scopes stay independent: approve only `private`
+      (`POST /api/v1/admin/users/public-uploads` with `scope: "private"`) and
+      confirm `profile-avatar`/`message` starts pass the gate while `post`
+      still 403s; approve only `public` on another account and confirm the
+      reverse; `scope: "all"` enables both, and a request without `scope`
+      keeps the legacy public-only behavior.
+- [ ] Confirm the `admin.new_user` message reaches
+      `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default `admin@thingtime.com`) with
+      the username, display name, email, user id, and signup time. In dev read
+      it from the `email_messages_v2` outbox.
+- [ ] Stop the mail provider (or set an unroutable recipient) and verify again:
+      verification still succeeds and still redirects to `/login?verify=success`
+      — a mail outage must never fail a committed verification, nor grant the
+      permission.
+- [ ] In **/admin → Users**, the account shows a `pending` Uploads badge and
+      the warning banner counts it. Use the **Approve ▾** menu: "Enable public
+      uploads" / "Enable private uploads" flip only that scope (badge shows
+      `public` or `private`), "Enable all" turns the badge green `all` — each
+      optimistically with a Lopu toast — and the matching upload starts stop
+      403ing.
+- [ ] Withhold from the same menu: that scope 403s again ("Withhold all"
+      returns the badge to `pending`). An account that predates the change (no
+      `meta.publicUploads`/`meta.privateUploads`) shows `all`, and an admin row
+      shows `all` with no menu.
+- [ ] Non-admins calling `POST /api/v1/admin/users/public-uploads` get `403`;
+      a missing `userId`, non-boolean `enabled`, or unknown `scope` gets `400`;
+      an unknown user gets `404`.
+- [ ] Run `npm run test:attachments` (it carries the public-upload permission
+      unit tests alongside the upload-gate regression test).
+
 ## Canonical AI instruction links (`AI_ALL.md`)
 
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
@@ -40,14 +82,20 @@ is fixed, and cite the checklist you ran in the PR description.
 ## Develop-target Vercel PR previews
 
 - [ ] Confirm `.github/workflows/develop-pr-preview.yml` and its controller
-      script are present on the default `main` branch before expecting
-      `pull_request_target` to run; a workflow present only on the feature PR is
-      deliberately inactive.
+      listener are present on the default `main` branch, while the reusable
+      implementation and controller script are present on the protected
+      `github-actions` branch, before expecting `pull_request_target` to run; a
+      listener present only on the feature PR is deliberately inactive.
 - [ ] On a product branch, run
       `node remix/scripts/workflow-caller-contract.mjs` and
       `node --test remix/scripts/vercel-config.test.mjs`: the thin listener
-      checks out the trusted controller from `main`, `.github/scripts/` is
-      empty, and every Vercel cron `(path, schedule)` pair appears exactly once.
+      calls the trusted implementation on `github-actions`, `.github/scripts/`
+      is empty, and every Vercel cron `(path, schedule)` pair appears exactly
+      once.
+- [ ] Manually run `Develop S3 PR preview` from `main` with a valid develop PR
+      number: the caller converts the dispatch string to the reusable
+      workflow's numeric `pr_number`, creates the controller job instead of a
+      zero-job failure, and performs the requested publish or cleanup.
 - [ ] Inspect an eligible PR's two runs: the `pull_request_target` dispatcher
       has no GitHub Environment/Vercel secret, checks out no code, and emits one
       bounded `repository_dispatch`; only the downstream default-branch run
@@ -140,11 +188,24 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## iOS web destination drawer
 
-- [ ] Confirm `https://thingtime.com/api/v1/vercel/deployments?limit=50` reports
-      `source: "api"`, `hasError: false`, and more than the production `main`
-      deployment before testing the native picker. A tokenless response or
-      `Vercel API returned 403` means the Vercel project token must be repaired
-      and a fresh deployment built before the app can discover previews.
+- [ ] At a phone-width native WebView destination, open the web app navigation
+      drawer from the top-left menu icon. The same fixed icon used by mobile web
+      stays inside the drawer header while the page and top nav move aside; no
+      duplicate icon appears at the drawer's outside edge. Close it, scroll from
+      the page top to bottom, reopen it, and confirm the icon remains tappable.
+- [ ] From any media composer in the native iOS app, choose Add Media → Take
+      Photo or Video. The system requests camera access instead of terminating
+      the app; photo capture returns a selectable file. Repeat with video and
+      confirm microphone permission is requested, then verify Photo Library
+      selection still returns media without a crash.
+- [ ] Confirm
+      `https://thingtime.com/api/v1/vercel/deployments?limit=50&history=10`
+      reports `source: "api"`, `hasError: false`, and `deploymentGroups` with
+      up to ten newest-first deployments per branch before testing the native
+      picker. The compatibility `deployments` array must still expose one
+      latest row per branch. A tokenless response or `Vercel API returned 403`
+      means the Vercel project token must be repaired and a fresh deployment
+      built before the app can discover previews.
 - [ ] Launch the iOS app with at least twelve returned destinations, open the
       left-edge Web destination drawer, and scroll from the first row to the
       final row and back. The header, refresh, and close controls stay pinned;
@@ -153,6 +214,16 @@ is fixed, and cite the checklist you ran in the PR description.
       without dismissing the drawer. Then swipe predominantly left and confirm
       the drawer closes; reopen it, select an off-screen preview, and confirm
       the web view loads that exact URL.
+- [ ] Find a branch whose newest deployment is queued/building and whose prior
+      deployment is ready. Expand the branch row, confirm both deployments are
+      shown newest first and the ready child is labelled `Last successful`,
+      then select that child and verify the WebView loads its immutable URL
+      rather than the queued branch alias. Reopen the drawer and confirm the
+      selected branch expands automatically with the child checkmark visible.
+- [ ] Expand and collapse several branches while scrolling to the bottom and
+      back in portrait and landscape. Nested deployment rows remain inside
+      their branch cards, disclosure controls stay tappable, and vertical
+      scrolling never triggers the horizontal drawer-close gesture.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
@@ -223,6 +294,17 @@ is fixed, and cite the checklist you ran in the PR description.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] With two or more selected files, drag the ⠿ grip (mouse AND touch) to
+      reorder media tiles and file rows; arrow keys on a focused grip move one
+      step, Home/End jump to the edges. Tiles reorder live while dragging, a
+      tile drag never triggers the panel's file-drop styling, and the posted
+      card renders images and files in exactly the chosen order after reload.
+- [ ] Edit a post with 2+ attachments: the composer shows the read-only
+      reorderable gallery (no upload panel), dragging or arrow keys reorder it,
+      Save persists the order (card + `/post/:id` + reload agree), and saving
+      with no changes sends no attachment reorder. A stale edit saved after the
+      post's attachments changed fails with the refresh-and-reorder 409 rather
+      than half-applying.
 - [ ] Cancel an in-flight file, remove a completed draft file, and retry both a
       failed part upload and a failed completion. No file is silently omitted,
       duplicated, charged twice, or left in a permanent uploading state.
@@ -256,6 +338,18 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Feed, profile, nested repost, and permalink cards render vetted raster
       images and videos inline. SVG, HTML, script, and unknown types render only
       as named download rows; their bytes never execute inline.
+- [ ] Upload a QuickTime screen recording (a `.mov`, or a QuickTime container
+      misnamed `.mp4` — check for `ftypqt` magic bytes) plus an MKV or M4V.
+      Each finalizes as its sniffed `video/*` type and plays inline in feed and
+      permalink cards; the decision follows magic bytes, never the filename
+      extension.
+- [ ] Upload a non-web-playable container (for example an AVI) and confirm its
+      download row labels the real sniffed container (for example "AVI video"
+      from `detectedContentType`) instead of `application/octet-stream`, while
+      the bytes still download as opaque octet-stream.
+- [ ] In a browser missing the codec inside an allowed container (for example
+      HEVC QuickTime in Firefox), the failed `<video>` degrades to the named
+      download row instead of an inert black player.
 - [ ] Let a content URL expire at the storage provider and open the attachment
       again: the stable authenticated `/api/v1/attachments/content?id=…` route
       issues fresh access. A private post's attachment fails closed for another
