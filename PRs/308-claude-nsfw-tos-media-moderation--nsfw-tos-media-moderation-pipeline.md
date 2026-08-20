@@ -2,30 +2,38 @@
 
 - **PR**: https://github.com/lopugit/thingtime/pull/308
 
-- **Branch**: `claude/nsfw-tos-media-moderation-58c301` (stacked on `claude/media-upload-permission-gate`, PR #302)
-- **Base**: `claude/media-upload-permission-gate`
-- **Why**: media attachments are public content; beyond the PR #302 admin-grant gate, every uploaded image is analyzed for NSFW and TOS/illegal content, tagged with protected system attributes, blurred or quarantined accordingly, and surfaced to admins for review.
+- **Branch**: `claude/nsfw-tos-media-moderation-58c301`
+- **Base**: `develop`, after the canonical public/private/all upload-scope reconciliation in #330 (the production twin is #310)
+- **Why**: the scoped upload gate answers whether an account may upload a class of content; this pipeline separately analyzes uploaded/public content for NSFW and TOS/illegal material, tags it with protected system attributes, blurs or quarantines it, and surfaces it to admins for review. The obsolete one-boolean #302 architecture is not retained.
 
 ## Shape of the change
 
 | Layer | What |
 |---|---|
 | Moderation utils (`api/utils/moderation/`) | `moderationCore.ts` (verdict → protected stamp mapping, bounded categories/reason, status guards), `providers.ts` (registry: `claude` \| `test` \| `off` via `THINGTIME_MODERATION_PROVIDER`; claude auto-selected when `ANTHROPIC_API_KEY` set), `claudeProvider.ts` (@anthropic-ai/sdk vision call, strict-JSON prompt, refusal → quarantine-for-review), `analyzeAttachment.ts` (orchestrator: load doc → gate on mediaKind/type/size → presigned-GET bytes → provider → stamp + flag; DI for tests; pending-only overwrites so verdicts never regress), `moderationAdmin.ts` (review queue, verdict overrides, bounded sweep). |
-| Protected attributes | `moderation` is a ROOT field on attachment things (`{ status: pending\|skipped\|clear\|nsfw\|blocked, categories, provider, model, analyzedAt, reason }`) — generic Thing input has no path to root fields, so only `api/utils/moderation/` and admin review write it. `moderationFlag` things (`modflag-<attachmentId>`, system-owned, `storageClass: control`, empty acl) are the admin review/audit records. |
-| Wiring (`attachments.ts`) | `completeAttachmentUpload` fire-and-forgets `queueModeration(shareId)` after markReady (optional DI dep, no-op in unit tests). `download` 404s blocked attachments for everyone except admins (viewer now carries `isAdmin`). |
-| Projections | `toAttachmentPublicMetadata(id, crystal, moderation?)`: blocked → `null` (vanishes from feed/messenger payloads), nsfw → `nsfw: true`; both aggregation sites (`things.ts` post/comment resolver, `messenger.ts`) project + pass `moderation`. Client `PublicAttachment.nsfw`, normalize keeps only explicit server `true`, snapshot compares it. |
+| Protected attributes | `moderation` is an explicitly protected ROOT system field on attachment things (`{ status: pending\|skipped\|clear\|nsfw\|blocked, categories, provider, model, analyzedAt, reason }`). `moderationFlag` is also a protected Thing kind; generic Things APIs cannot create either state. Flag upserts require both the deterministic id and protected kind, so a colliding ordinary Thing is never repurposed as a control record. |
+| Wiring (`attachments.ts`) | `completeAttachmentUpload` atomically marks the attachment `pending` before returning ready, then fire-and-forgets `queueModeration(shareId)`. Public callers receive 404 while pending or blocked; owner/admin evidence access remains available. The bounded sweep retries both lost analysis and lost flag writes. |
+| Projections | `toAttachmentPublicMetadata(id, crystal, moderation?)`: pending/blocked → `null` (vanishes from feed/messenger payloads), nsfw → `nsfw: true`; both aggregation sites (`things.ts` post/comment resolver, `messenger.ts`) project + pass `moderation`. Client `PublicAttachment.nsfw`, normalize keeps only explicit server `true`, snapshot compares it. |
 | UI (`PostAttachments.tsx`) | `NsfwShield`: blur(64px) + opacity 0.92 + scale(1.15) crop, 2px red border, rgba(229,72,77,.22) wash, centered mono NSFW badge, pill "Show Anyway" button; per-attachment per-render reveal state; wraps images and videos in feed, permalinks, and messenger. |
 | Admin (`/admin` → Moderation) | `ModerationTab.tsx`: queue table (unreviewed first), status badges, View (admins can open blocked evidence), Clear/NSFW/Block overrides with Lopu toasts, "Run analysis sweep" + backlog counts. Route `GET/POST /api/v1/admin/moderation` (requireAdmin + withAdminPrivateResponse), registered in import map + apiDocs (auto docs smoke tests). |
 
 ## Key decisions
 
-- **Post-hoc analysis, fail-safe stamps**: analysis never blocks or slows the upload response; failures leave `pending` (never a fabricated `clear`), and the admin sweep drains pending/unstamped docs after outages.
+- **Post-hoc analysis, fail-closed pending**: analysis never blocks or slows the upload response, but completion stamps `pending` before the attachment can be projected or served publicly. Failures leave it quarantined (never a fabricated `clear`), and the admin/cron sweep drains pending docs after outages.
 - **Claude refusal = signal**: if Claude's safety classifiers refuse to process an image, the attachment is quarantined (`blocked`, category `analysis-refused`) for human review rather than failing open.
-- **`off` fails open by design** for dev environments without a key — the PR #302 admin-grant gate is the hard spam control; set the provider in prod (documented in README).
+- **`off` is explicit**: disabled environments stamp `skipped`; configured provider failure leaves the media durably `pending` and quarantined. Upload permission scopes remain an independent authorization boundary and are never duplicated inside moderation.
 - **Blocked = vanish + 404**: no public placeholder, no oracle; admins keep evidence access through the same content route.
 - Model default `claude-opus-5`, env-overridable via `TT_MODERATION_MODEL`.
 
-## Verification log (2026-08-18)
+## Integration reconciliation (2026-08-21)
+
+- Replayed the moderation commits onto the canonical #309/#310/#330 public/private/all permission model without any #302 field, API, migration, or UI dependency.
+- Protected both the root `moderation` field and `moderationFlag` kind at the generic Things boundary.
+- Made attachment readiness and the initial `pending` moderation stamp atomic; pending and blocked media now disappear from public projections and return not found from content routes, while owner/admin evidence access remains usable.
+- Made deterministic moderation-flag upserts collision-safe and sweep-recoverable through `flagPending`; an ordinary Thing squatting a flag id remains untouched and cannot be converted into a system control record.
+- Reconciled validation: `test:moderation` 52/52, `test:attachments` 115/115, the complete current `test:unit` chain, and the canonical Vercel/Nitro build all pass. The only stale gate was the cron contract test, now scoped to require the moderation sweep alongside cleanup and weekly notifications.
+
+## Verification log (original 2026-08-18 branch record)
 
 - `corepack pnpm --dir remix run test:moderation` — 10/10 (verdict mapping, category bounding, provider resolution incl. claude branch, orchestrator: nsfw/blocked stamps + flag upserts, skip paths, provider-failure leaves pending, landed-verdict no-op).
 - `corepack pnpm --dir remix run test:attachments` — 104/104 with the new wiring.
@@ -72,7 +80,7 @@ A 19-agent review pass (5 lenses + per-finding verification) confirmed 13 issues
 - Test fidelity: the fake collection now genuinely evaluates the `$or`/`$exists`/`$ne` filters (a broken admin guard fails the suite); new lifecycle tests cover every path above (test:moderation 35/35).
 - ~~Known limitation: text moderation has no retry sweep~~ **Superseded (same day)**: `GET /api/v1/moderation/sweep` (hourly Vercel Cron at :29, CRON_SECRET bearer, mirrors the attachments-cleanup contract) sweeps a bounded oldest-first batch of post-family things with real text and no moderation stamp — recovering mid-flight deaths/provider outages AND draining off-era backlog for free — plus the standard attachment sweep. It no-ops while the text surface is off (absence of a stamp is deliberate there); whitespace-only docs are excluded by the `\S` filter so nothing can wedge the batch. The admin sweep action now runs both batches and the Moderation tab shows the unmoderated-text backlog count. Registered in all three places (route + import map + apiDocs `moderation-sweep`).
 
-## Hybrid create-time text gate (2026-08-19)
+## Historical hybrid create-time text gate (2026-08-19; superseded by the fail-closed pending flow below)
 
 - `screenTextForCreate` (analyzeText.ts): the free omni screen races a bounded budget (`TT_TEXT_SCREEN_BUDGET_MS`, default 600ms, clamp ≤10s, `0` = pure async) inside `createThing` BEFORE the insert. Verdict in time → the doc is **born stamped**: blocked posts never render anywhere (no insert→async-verdict visibility window); clear posts skip the async call entirely (zero duplicate spend). Timeout, provider error, off surface, empty text, or a custom data plane all resolve `null` — the post publishes instantly and the async queue + hourly sweep own it (fail-open: moderation can never break or visibly slow posting; the helper never throws and clears its race timer).
 - Tail logic: sync-flagged docs still fire the async analyzer once (free re-screen) so the admin moderationFlag lands with full queue semantics (reviewed-marker resets etc.); sync-cleared docs make zero extra calls; no-verdict docs queue exactly as before.

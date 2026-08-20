@@ -120,9 +120,9 @@ const defaultSyncScreenBreaker: SyncScreenBreaker = { failures: 0, openUntil: 0 
 // createThing gives the free omni screen a bounded time budget BEFORE the
 // insert: when the verdict lands in time the doc is born stamped — blocked
 // content never renders anywhere, not even briefly. When omni is slow or down
-// the race resolves null, the post proceeds instantly, and the async queue +
-// hourly sweep moderate it after the fact (fail-open by design: moderation
-// must never break or visibly slow posting).
+// the race resolves unavailable, the post proceeds instantly but is born
+// owner-private with a pending stamp; the async queue + hourly sweep release it
+// only after a verdict (moderation never breaks or visibly slows posting).
 
 export const DEFAULT_TEXT_SCREEN_BUDGET_MS = 600;
 
@@ -274,7 +274,11 @@ export const createAnalyzeTextThing =
 					reason: `${moderation.reason ? `${moderation.reason} ` : ''}(block retained: identical text was previously blocked)`.slice(0, 500)
 				};
 			}
-			moderation = { ...moderation, textHash };
+			moderation = {
+				...moderation,
+				textHash,
+				...((moderation.status === 'nsfw' || moderation.status === 'blocked') ? { flagPending: true } : {})
+			};
 			// Guarded stamp: the pipeline may lay a first verdict or replace its own
 			// stale one, but an admin review stamp is final until an admin changes
 			// it, and the crystal.text fence keeps a slow verdict for OLD text from
@@ -358,10 +362,9 @@ export const upsertTextModerationFlag = async (
 	const kinds: string[] = Array.isArray(doc.thingtime) ? (doc.thingtime as string[]) : [doc.thingtime as string].filter(Boolean);
 	const flagShareId = moderationFlagShareId(String(doc.shareId));
 	await home.updateOne(
-		{ shareId: flagShareId } as any,
+		{ shareId: flagShareId, thingtime: MODERATION_FLAG_THINGTIME } as any,
 		{
 			$set: {
-				thingtime: [MODERATION_FLAG_THINGTIME],
 				targetId: String(doc.shareId),
 				crystal: {
 					targetKind: 'text',
@@ -381,6 +384,7 @@ export const upsertTextModerationFlag = async (
 			},
 			$setOnInsert: {
 				shareId: flagShareId,
+				thingtime: [MODERATION_FLAG_THINGTIME],
 				ownerId: 'system',
 				storageClass: 'control',
 				acl: [],

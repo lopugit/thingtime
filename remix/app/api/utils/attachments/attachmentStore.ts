@@ -75,6 +75,7 @@ export type AttachmentDoc = {
 		model?: string;
 		analyzedAt?: Date;
 		reason?: string;
+		flagPending?: boolean;
 	};
 	createdAt: Date;
 	updatedAt: Date;
@@ -423,6 +424,10 @@ export const attachmentStore: AttachmentStore = {
 				crystal,
 				objectVersionId,
 				attachmentState: 'ready' as const,
+				// Quarantine every newly durable object until analysis either clears/
+				// flags it or deliberately marks it skipped. This lands before complete
+				// returns, so a fast bind cannot expose unscreened bytes during outage.
+				moderation: { status: 'pending' as const },
 				attachmentExpiresAt: expiresAt,
 				updatedAt: new Date()
 			};
@@ -447,6 +452,7 @@ export const attachmentStore: AttachmentStore = {
 						crystal,
 						objectVersionId,
 						attachmentState: 'ready',
+						moderation: { status: 'pending' },
 						attachmentExpiresAt: expiresAt,
 						sizeBytes: nextSize,
 						updatedAt: next.updatedAt

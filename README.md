@@ -625,13 +625,16 @@ test recipient (or a plus alias of it).
 
 ### Private S3 media and attachments
 
-Uploaded images are moderated asynchronously after upload: a provider-pluggable
-NSFW/TOS analysis stamps a protected `moderation` field on the attachment
-thing. NSFW media renders heavily blurred behind a "Show Anyway" click;
-TOS/illegal verdicts quarantine the media (never served publicly, admins can
-open evidence) and log a `moderationFlag` for the `/admin` → Moderation review
-queue, which also offers a retry sweep for attachments the async kickoff
-missed.
+Uploaded images are moderated asynchronously after upload: attachment
+completion atomically stamps protected `moderation.status: pending` before the
+upload can be projected or served publicly. Pending media stays available only
+to its owner and admins as evidence; other callers receive not found until a
+provider-pluggable NSFW/TOS analysis releases it. NSFW media then renders
+heavily blurred behind a "Show Anyway" click; TOS/illegal verdicts remain
+quarantined and log a protected `moderationFlag` for the `/admin` → Moderation
+review queue. Provider failures leave the item pending rather than fabricating
+a clear verdict, and the bounded retry sweep recovers both missed analysis and
+missed flag writes.
 
 The recommended production provider is the tiered `openai+claude` pipeline:
 OpenAI's **free** `omni-moderation-latest` endpoint screens every image first,
@@ -707,8 +710,9 @@ A scheduled safety net (`GET /api/v1/moderation/sweep`, Vercel Cron at minute
 29 each hour, `CRON_SECRET` bearer — same contract as the attachments cleanup
 cron) retries moderation the fire-and-forget kickoffs lost: post-family things
 with real text and no moderation stamp (process death between the post write
-and the verdict stamp, provider outages) plus the standard ready-attachment
-sweep. Because the omni screen is free, the same job also gradually drains any
+and the verdict stamp, provider outages), pending attachments, and verdicts
+whose protected moderation flag still needs to be written. Because the omni
+screen is free, the same job also gradually drains any
 backlog from periods when text moderation was off; it no-ops while the text
 surface is off. The `/admin` → Moderation "Run analysis sweep" button drains
 the same batches on demand and shows the text backlog count.

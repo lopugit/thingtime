@@ -842,6 +842,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					return fail(409, 'Attachment object version is unavailable');
 				}
 				await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+				dependencies.queueModeration?.(doc.shareId);
 				return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
 			}
 			if (!finalizationClaim.acquired) {
@@ -1039,9 +1040,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!id) return fail(404, 'Attachment not found');
 			let doc = await dependencies.store.getById(id);
 			if (!doc || doc.attachmentState !== 'ready') return fail(404, 'Attachment not found');
-			// TOS-blocked attachments are quarantined: never served to anyone but
-			// admins reviewing the flag. 404 (not 403) so blocking is not an oracle.
+			// Pending analysis fails closed for everyone except the owner preview and
+			// an administrator reviewing evidence. Blocked attachments stay admin-only.
+			// 404 (not 403) keeps moderation state from becoming an existence oracle.
 			if (doc.moderation?.status === 'blocked' && !viewer?.isAdmin) return fail(404, 'Attachment not found');
+			if (doc.moderation?.status === 'pending' && !viewer?.isAdmin && viewer?.id !== doc.ownerId) {
+				return fail(404, 'Attachment not found');
+			}
 			// Unbound drafts are owner-previewable only while their reservation is
 			// live. Profile replacement stamps immediate expiry in the same Mongo
 			// transaction that removes the user-slot reference, making the old object

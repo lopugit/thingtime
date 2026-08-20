@@ -19,9 +19,10 @@
 // override the env choice: resolveConfiguredModerationProvider reads the
 // admin mediaProvider first and only falls through to the env/key logic when
 // it is 'default' (or the settings read fails).
-// Fail-open note: 'off'/missing-key environments do NOT block uploads — the
-// beta admin-grant gate (PR #302) is the hard spam control; analysis is the
-// content-quality layer on top. Set the provider in prod so it actually runs.
+// An explicit 'off'/missing-key environment marks attachments skipped. When a
+// configured provider fails, the durable pending stamp stays quarantined and
+// the sweep retries it. Upload authorization remains the separate canonical
+// public/private/all scope gate; moderation never reimplements permission.
 
 import type { ModerationVerdict } from './moderationCore';
 import { DEFAULT_MODERATION_SETTINGS, type ModerationMediaProviderId } from './moderationSettingsCore';

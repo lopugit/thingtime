@@ -57,8 +57,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   backlog count. Post creation adds a hybrid sync gate: the free omni screen
   races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
   insert so flagged posts are born stamped (blocked content never renders,
-  even briefly), while timeouts/outages fail open to the async pipeline —
-  moderation can never break posting; a per-instance circuit breaker
+  even briefly), while timeouts/outages produce owner-private pending posts
+  for the async pipeline — moderation can never break posting; a per-instance circuit breaker
   (3 failures → open, 60s cooldown) skips the omni call during confirmed
   outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
   obtainable while the surface is on, posts are born PENDING — owner-private
@@ -101,6 +101,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   (PR #308 note has details).
 
 ### Security
+
+- **Moderation reconciliation and pending-media quarantine**: replayed the
+  NSFW/TOS pipeline onto the singular public/private/all upload-permission
+  model with no legacy one-boolean gate dependency. Attachment completion now
+  atomically records `pending`; pending and blocked media are absent from
+  public projections/content routes while owner/admin evidence access and
+  bounded sweep recovery remain available. Generic Things writes cannot forge
+  root moderation state or moderation-flag control Things, and deterministic
+  flag-id collisions leave ordinary user Things untouched for operator
+  review. — Codex (AI), 2026-08-21
 
 - **Canonical scoped-upload UX reconciliation**: every attachment picker now
   reads the existing public/private approval booleans directly and shows a

@@ -35,8 +35,8 @@ export type AttachmentModeration = {
 	// fences stale stamps and lets a block stay sticky across provider
 	// flip-flops until the text actually changes
 	textHash?: string;
-	// text pipeline only: the admin moderationFlag for this verdict has not
-	// landed yet; the hourly sweep drains docs still carrying this marker
+// The protected admin moderationFlag for this verdict has not landed yet;
+// attachment and text sweeps drain docs still carrying this marker.
 	flagPending?: boolean;
 };
 

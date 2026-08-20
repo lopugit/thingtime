@@ -135,6 +135,15 @@ const setAt = (doc: any, path: string, value: any) => {
 	for (const part of parts.slice(0, -1)) target = target[part] ??= {};
 	target[parts[parts.length - 1]] = value;
 };
+const unsetAt = (doc: any, path: string) => {
+	const parts = path.split('.');
+	let target = doc;
+	for (const part of parts.slice(0, -1)) {
+		if (!target?.[part] || typeof target[part] !== 'object') return;
+		target = target[part];
+	}
+	delete target[parts[parts.length - 1]];
+};
 
 const fakeCollection = (state: FakeState) => ({
 	findOne: async (filter: any) => state.docs.get(filter.shareId) ?? null,
@@ -143,10 +152,15 @@ const fakeCollection = (state: FakeState) => ({
 		const existing = state.docs.get(filter.shareId);
 		if (existing && matches(existing, filter)) {
 			for (const [key, value] of Object.entries(update.$set ?? {})) setAt(existing, key, value);
-			for (const key of Object.keys(update.$unset ?? {})) delete existing[key];
+			for (const key of Object.keys(update.$unset ?? {})) unsetAt(existing, key);
 			return { modifiedCount: 1, matchedCount: 1 };
 		}
 		if (options?.upsert) {
+			if (existing) {
+				const duplicate = new Error('duplicate key') as Error & { code: number };
+				duplicate.code = 11000;
+				throw duplicate;
+			}
 			const inserted: any = { ...(update.$setOnInsert ?? {}) };
 			for (const [key, value] of Object.entries(update.$set ?? {})) setAt(inserted, key, value);
 			state.docs.set(filter.shareId, inserted);
@@ -202,6 +216,19 @@ test('text analyzer stamps verdicts on the thing and flags blocked/nsfw text wit
 	assert.equal(flag.crystal.targetKind, 'text');
 	assert.equal(flag.crystal.excerpt, 'hello world');
 	assert.equal(flag.crystal.attachmentPurpose, 'post');
+});
+
+test('text flag creation never repurposes an ordinary Thing that squats the deterministic id', async () => {
+	const state: FakeState = { docs: new Map([['post-1', postDoc()]]), updates: [] };
+	const flagId = moderationFlagShareId('post-1');
+	const ordinary = { shareId: flagId, thingtime: ['data'], ownerId: 'attacker', crystal: { keep: true } };
+	const home: FakeState = { docs: new Map([[flagId, ordinary]]), updates: [] };
+	const result = await textAnalyzer(state, home, { flagged: true, categories: { 'sexual/minors': true } })('post-1');
+	assert.deepEqual(result, { ok: false, error: 'Text moderation analysis failed', retryable: true });
+	assert.equal(home.docs.get(flagId), ordinary);
+	assert.deepEqual(ordinary.crystal, { keep: true });
+	assert.equal(state.docs.get('post-1').moderation.status, 'blocked');
+	assert.equal(state.docs.get('post-1').moderation.flagPending, true);
 });
 
 test('text analyzer labels comment/share purposes and bounds the excerpt at 500 chars', async () => {
@@ -395,7 +422,7 @@ test('sync screen budget env parsing: default, override, disable, clamp', () => 
 const freshBreaker = (): SyncScreenBreaker => ({ failures: 0, openUntil: 0 });
 const content = (text: string, imageUrls: string[] = []) => ({ text, imageUrls });
 
-test('create-time sync screen: fast verdicts gate the doc, slow/broken omni fails open to async', async () => {
+test('create-time sync screen: fast verdicts gate the doc, slow/broken omni falls back to owner-private pending', async () => {
 	const screenChoice = (result: OmniModerationResult | 'hang' | 'throw') => async () =>
 		({
 			kind: 'screen' as const,

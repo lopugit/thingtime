@@ -43,11 +43,12 @@ test('moderation doc guards read only well-formed stamps', () => {
 	assert.equal(attachmentIsNsfw({ moderation: { status: 'nsfw' } }), true);
 });
 
-test('public metadata carries nsfw and drops blocked attachments entirely', () => {
+test('public metadata carries nsfw and quarantines pending or blocked attachments', () => {
 	const crystal = { name: 'a.png', size: 10, contentType: 'image/png', mediaKind: 'image' };
 	assert.deepEqual(toAttachmentPublicMetadata('id-1', crystal), { id: 'id-1', ...crystal });
 	assert.deepEqual(toAttachmentPublicMetadata('id-1', crystal, { status: 'clear' }), { id: 'id-1', ...crystal });
 	assert.deepEqual(toAttachmentPublicMetadata('id-1', crystal, { status: 'nsfw' }), { id: 'id-1', ...crystal, nsfw: true });
+	assert.equal(toAttachmentPublicMetadata('id-1', crystal, { status: 'pending' }), null);
 	assert.equal(toAttachmentPublicMetadata('id-1', crystal, { status: 'blocked' }), null);
 	// malformed moderation input never crashes or leaks a flag
 	assert.deepEqual(toAttachmentPublicMetadata('id-1', crystal, 'garbage'), { id: 'id-1', ...crystal });
@@ -128,10 +129,14 @@ test('analyzer stamps nsfw verdicts and logs a moderation flag', async () => {
 	const stamp = lastModerationStamp(state);
 	assert.equal(stamp.status, 'nsfw');
 	assert.equal(stamp.provider, 'test');
+	assert.equal(stamp.flagPending, true);
 	const flag = state.updates.find((entry) => entry.filter?.shareId === moderationFlagShareId('attachment-1'));
 	assert.ok(flag, 'flag upsert recorded');
+	assert.equal(flag!.filter.thingtime, MODERATION_FLAG_THINGTIME, 'an ordinary colliding Thing is never repurposed as a flag');
 	assert.equal(flag!.options?.upsert, true);
-	assert.deepEqual(flag!.update.$set.thingtime, [MODERATION_FLAG_THINGTIME]);
+	assert.equal(flag!.update.$set.thingtime, undefined);
+	assert.deepEqual(flag!.update.$setOnInsert.thingtime, [MODERATION_FLAG_THINGTIME]);
+	assert.ok(state.updates.some((entry) => entry.update?.$unset?.['moderation.flagPending'] === ''), 'landed flag clears retry marker');
 });
 
 test('analyzer quarantines TOS verdicts as blocked', async () => {
@@ -177,4 +182,16 @@ test('analyzer leaves the doc pending on provider failure and no-ops landed verd
 	const landed: FakeCollectionState = { doc: readyImageDoc({ moderation: { status: 'clear' } }), updates: [] };
 	assert.deepEqual(await analyzerWith(landed, { nsfw: true, tosViolation: false })('attachment-1'), { ok: true, status: 'clear' });
 	assert.equal(landed.updates.length, 0);
+});
+
+test('analyzer retries a lost moderationFlag without re-running the provider', async () => {
+	const state: FakeCollectionState = {
+		doc: readyImageDoc({ moderation: { status: 'nsfw', provider: 'test', flagPending: true } }),
+		updates: []
+	};
+	const result = await analyzerWith(state, { nsfw: false, tosViolation: false })('attachment-1');
+	assert.deepEqual(result, { ok: true, status: 'nsfw' });
+	const flag = state.updates.find((entry) => entry.options?.upsert === true);
+	assert.equal(flag?.filter?.thingtime, MODERATION_FLAG_THINGTIME);
+	assert.ok(state.updates.some((entry) => entry.update?.$unset?.['moderation.flagPending'] === ''));
 });

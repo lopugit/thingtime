@@ -100,7 +100,7 @@ export const listModerationOverview = async (): Promise<ModerationOverview> => {
 		things.countDocuments({
 			thingtime: 'attachment',
 			attachmentState: 'ready',
-			$or: [{ moderation: { $exists: false } }, { 'moderation.status': 'pending' }]
+			$or: [{ moderation: { $exists: false } }, { 'moderation.status': 'pending' }, { 'moderation.flagPending': true }]
 		} as any),
 		dataThings.countDocuments(UNMODERATED_TEXT_FILTER as any)
 	]);
@@ -388,7 +388,7 @@ export const sweepUnanalyzedAttachments = async (
 		.find({
 			thingtime: 'attachment',
 			attachmentState: 'ready',
-			$or: [{ moderation: { $exists: false } }, { 'moderation.status': 'pending' }]
+			$or: [{ moderation: { $exists: false } }, { 'moderation.status': 'pending' }, { 'moderation.flagPending': true }]
 		} as any)
 		.project({ shareId: 1 })
 		.sort({ createdAt: 1 })
