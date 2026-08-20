@@ -39,6 +39,8 @@ test('rows mode rejects missing, oversize, and out-of-range patterns', () => {
 	assert.equal(validatePost({ mode: 'rows', pattern: [0] }).ok, false);
 	assert.equal(validatePost({ mode: 'rows', pattern: [MAX_MEDIA_LAYOUT_TRACK + 1] }).ok, false);
 	assert.equal(validatePost({ mode: 'rows', pattern: [1.5] }).ok, false);
+	assert.equal(validatePost({ mode: 'rows', pattern: ['2'] }).ok, false);
+	assert.equal(validatePost({ mode: 'rows', pattern: [true] }).ok, false);
 	assert.equal(validatePost({ mode: 'rows', pattern: ['two'] }).ok, false);
 });
 
@@ -48,6 +50,9 @@ test('grid mode defaults to 3 columns and bounds explicit ones', () => {
 	assert.equal(validatePost({ mode: 'grid', columns: 0 }).ok, false);
 	assert.equal(validatePost({ mode: 'grid', columns: MAX_MEDIA_LAYOUT_TRACK + 1 }).ok, false);
 	assert.equal(validatePost({ mode: 'grid', columns: 2.5 }).ok, false);
+	assert.equal(validatePost({ mode: 'grid', columns: '2' }).ok, false);
+	assert.equal(validatePost({ mode: 'grid', columns: true }).ok, false);
+	assert.equal(validatePost({ mode: 'grid', columns: null }).ok, false);
 });
 
 test('grid spans are bounded, enum-valued, and drop redundant normal entries', () => {
@@ -67,7 +72,10 @@ test('grid spans reject oversize maps, bad values, and bad keys', () => {
 	for (let index = 0; index <= MAX_MEDIA_LAYOUT_ENTRIES; index += 1) oversized[`att_${index}`] = 'wide';
 	assert.equal(validatePost({ mode: 'grid', spans: oversized }).ok, false);
 	assert.equal(validatePost({ mode: 'grid', spans: { att_a: 'huge' } }).ok, false);
-	assert.equal(validatePost({ mode: 'grid', spans: { ['x'.repeat(201)]: 'wide' } }).ok, false);
+	assert.equal(validatePost({ mode: 'grid', spans: { ['x'.repeat(129)]: 'wide' } }).ok, false);
+	assert.equal(validatePost({ mode: 'grid', spans: { 'att.with.path': 'wide' } }).ok, false);
+	assert.equal(validatePost({ mode: 'grid', spans: { '$attachment': 'wide' } }).ok, false);
+	assert.equal(validatePost({ mode: 'grid', spans: { ['__proto__']: 'wide' } }).ok, false);
 	assert.equal(validatePost({ mode: 'grid', spans: ['wide'] }).ok, false);
 });
 

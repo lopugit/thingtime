@@ -23,8 +23,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   server-owned magic-byte `detectedContentType`, Auto layout removes the
   optional `mediaLayout` key, and media-card permalinks consistently use
   `/media/:id`. Internal repost/quote controls stay hidden on media Things
-  until attachment-target shares have a non-empty renderer. — Codex (AI),
-  2026-08-21
+  until attachment-target shares have a non-empty renderer. Gallery layout
+  numbers and span keys are now strict rather than coercible/prototype-shaped,
+  annotation accepts only its documented request fields, and media cards label
+  their audience as inherited instead of incorrectly falling back to Public.
+  — Codex (AI), 2026-08-21
 
 - **CSP blocked attachment uploads on header-serving deployments**: the
   application Content-Security-Policy's `connect-src` never allowed the

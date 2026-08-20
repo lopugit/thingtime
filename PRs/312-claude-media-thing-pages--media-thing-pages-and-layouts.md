@@ -18,6 +18,11 @@
 - store Auto layout by omitting the optional `mediaLayout` field;
 - route media-card timestamp/copy/share permalinks to `/media/:id` and suppress
   internal repost/quote until attachment-target shares have a real projection.
+- reject coercible booleans/strings and unsafe map keys in bounded gallery
+  layouts, and keep annotation requests to the exact `id`/`title`/`description`
+  shape used by the other attachment mutations;
+- label a media card's audience as inherited instead of falling back from the
+  raw `tt:inherit` marker to the misleading Public badge.
 
 ## Validation gates
 
