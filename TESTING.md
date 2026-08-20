@@ -188,11 +188,24 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## iOS web destination drawer
 
-- [ ] Confirm `https://thingtime.com/api/v1/vercel/deployments?limit=50` reports
-      `source: "api"`, `hasError: false`, and more than the production `main`
-      deployment before testing the native picker. A tokenless response or
-      `Vercel API returned 403` means the Vercel project token must be repaired
-      and a fresh deployment built before the app can discover previews.
+- [ ] At a phone-width native WebView destination, open the web app navigation
+      drawer from the top-left menu icon. The same fixed icon used by mobile web
+      stays inside the drawer header while the page and top nav move aside; no
+      duplicate icon appears at the drawer's outside edge. Close it, scroll from
+      the page top to bottom, reopen it, and confirm the icon remains tappable.
+- [ ] From any media composer in the native iOS app, choose Add Media → Take
+      Photo or Video. The system requests camera access instead of terminating
+      the app; photo capture returns a selectable file. Repeat with video and
+      confirm microphone permission is requested, then verify Photo Library
+      selection still returns media without a crash.
+- [ ] Confirm
+      `https://thingtime.com/api/v1/vercel/deployments?limit=50&history=10`
+      reports `source: "api"`, `hasError: false`, and `deploymentGroups` with
+      up to ten newest-first deployments per branch before testing the native
+      picker. The compatibility `deployments` array must still expose one
+      latest row per branch. A tokenless response or `Vercel API returned 403`
+      means the Vercel project token must be repaired and a fresh deployment
+      built before the app can discover previews.
 - [ ] Launch the iOS app with at least twelve returned destinations, open the
       left-edge Web destination drawer, and scroll from the first row to the
       final row and back. The header, refresh, and close controls stay pinned;
@@ -201,6 +214,16 @@ is fixed, and cite the checklist you ran in the PR description.
       without dismissing the drawer. Then swipe predominantly left and confirm
       the drawer closes; reopen it, select an off-screen preview, and confirm
       the web view loads that exact URL.
+- [ ] Find a branch whose newest deployment is queued/building and whose prior
+      deployment is ready. Expand the branch row, confirm both deployments are
+      shown newest first and the ready child is labelled `Last successful`,
+      then select that child and verify the WebView loads its immutable URL
+      rather than the queued branch alias. Reopen the drawer and confirm the
+      selected branch expands automatically with the child checkmark visible.
+- [ ] Expand and collapse several branches while scrolling to the bottom and
+      back in portrait and landscape. Nested deployment rows remain inside
+      their branch cards, disclosure controls stay tappable, and vertical
+      scrolling never triggers the horizontal drawer-close gesture.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
