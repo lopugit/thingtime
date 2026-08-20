@@ -45,6 +45,12 @@ export type AttachmentPublicMetadata = {
 
 export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id'>;
 
+export type AttachmentAnnotationPatch = {
+	// undefined = leave untouched, null/'' = clear, string = set (trimmed)
+	title?: string | null;
+	description?: string | null;
+};
+
 // These fields live on the protected Thing root, never in its public crystal.
 // The upload service owns every value; generic Thing input has no path that
 // copies them onto a document.
@@ -213,9 +219,9 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 	}
 
 	const title = sanitizeAttachmentLine(raw.title, MAX_ATTACHMENT_TITLE_CHARS, 'title');
-	if (!title.ok) return title;
+	if (title.ok === false) return title;
 	const description = sanitizeAttachmentBlock(raw.description, MAX_ATTACHMENT_DESCRIPTION_CHARS, 'description');
-	if (!description.ok) return description;
+	if (description.ok === false) return description;
 
 	return {
 		ok: true,
@@ -291,6 +297,33 @@ const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null =>
 		raw.description === sanitized.crystal.description
 		? { ...sanitized.crystal, ...(hasDetected ? { detectedContentType: raw.detectedContentType as string } : {}) }
 		: null;
+};
+
+// Apply owner-authored presentation text to an already-canonical attachment
+// crystal. The magic-byte detector's optional detectedContentType is
+// server-owned metadata: annotation must preserve it exactly, never accept it
+// from the patch and never silently erase it.
+export const applyAttachmentAnnotationPatch = (
+	value: unknown,
+	patch: AttachmentAnnotationPatch
+): AttachmentMetadataResult => {
+	const before = canonicalAttachmentCrystal(value);
+	if (!before) return { ok: false, error: 'Attachment metadata is not canonical' };
+	const sanitized = sanitizeAttachmentPublicMetadata({
+		name: before.name,
+		size: before.size,
+		contentType: before.contentType,
+		title: patch.title === undefined ? before.title : patch.title,
+		description: patch.description === undefined ? before.description : patch.description
+	});
+	if (!sanitized.ok) return sanitized;
+	return {
+		ok: true,
+		crystal: {
+			...sanitized.crystal,
+			...(before.detectedContentType ? { detectedContentType: before.detectedContentType } : {})
+		}
+	};
 };
 
 // `moderation` is the protected root stamp (api/utils/moderation). Pending and

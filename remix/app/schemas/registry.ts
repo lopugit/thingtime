@@ -2446,7 +2446,10 @@ const sanitizePostCrystal = (
 	const layout = sanitizeMediaLayout(input.mediaLayout);
 	if (layout.ok === false) return layout;
 
-	return { ok: true, crystal: { type, text, images, listing, thing, mediaLayout: layout.mediaLayout } };
+	return {
+		ok: true,
+		crystal: { type, text, images, listing, thing, ...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}) }
+	};
 };
 
 const sanitizeCommentCrystal = (input: Record<string, unknown>, ids?: string[]): { ok: true; crystal: Record<string, unknown> } | Fail => {

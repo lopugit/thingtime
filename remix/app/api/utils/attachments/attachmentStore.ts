@@ -6,10 +6,11 @@ import { ACL_INHERIT, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '../../../sch
 import {
 	ATTACHMENT_ENVELOPE_VERSION,
 	ATTACHMENT_THINGTIME,
+	applyAttachmentAnnotationPatch,
 	isAttachmentFinalizationLeaseId,
 	isAttachmentObjectVersionId,
 	planAttachmentReorder,
-	sanitizeAttachmentPublicMetadata,
+	type AttachmentAnnotationPatch,
 	type AttachmentCrystal,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
@@ -765,12 +766,6 @@ const bindReadyAttachmentsForPurpose = async (
 	}
 };
 
-export type AttachmentAnnotationPatch = {
-	// undefined = leave untouched, null/'' = clear, string = set (trimmed)
-	title?: string | null;
-	description?: string | null;
-};
-
 // Owner-authored title/description on a READY attachment. Ready-only on
 // purpose: finalize (markReady) rebuilds the crystal from the verified S3
 // object, so annotating an in-flight upload would be silently clobbered.
@@ -785,22 +780,9 @@ export const annotateOwnedAttachment = async (ownerId: string, id: string, patch
 			throw new AttachmentBindingError(409, 'This file is still uploading — try again once it is ready');
 		}
 
-		const merged: Record<string, unknown> = {
-			name: before.crystal.name,
-			size: before.crystal.size,
-			contentType: before.crystal.contentType,
-			...(patch.title === undefined ? (before.crystal.title ? { title: before.crystal.title } : {}) : patch.title ? { title: patch.title } : {}),
-			...(patch.description === undefined
-				? before.crystal.description
-					? { description: before.crystal.description }
-					: {}
-				: patch.description
-				? { description: patch.description }
-				: {})
-		};
-		const sanitized = sanitizeAttachmentPublicMetadata(merged);
-		if (!sanitized.ok) throw new AttachmentBindingError(400, sanitized.error);
-		const nextCrystal: AttachmentCrystal = { ...sanitized.crystal, mediaKind: before.crystal.mediaKind };
+		const annotated = applyAttachmentAnnotationPatch(before.crystal, patch);
+		if (annotated.ok === false) throw new AttachmentBindingError(400, annotated.error);
+		const nextCrystal: AttachmentCrystal = annotated.crystal;
 		if (
 			nextCrystal.title === before.crystal.title &&
 			nextCrystal.description === before.crystal.description &&
@@ -848,7 +830,7 @@ export const reorderBoundTargetAttachments = async (ownerId: string, targetId: s
 		bound.map((doc) => String(doc.shareId)),
 		MAX_ATTACHMENTS_PER_TARGET
 	);
-	if (!plan.ok) throw new AttachmentBindingError(plan.status, plan.error);
+	if (plan.ok === false) throw new AttachmentBindingError(plan.status, plan.error);
 	if (!plan.orderedIds.length) return;
 	const now = new Date();
 	const write = await things.bulkWrite(

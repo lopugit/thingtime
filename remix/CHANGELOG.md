@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #312 media integration hardening**: attachment annotation now preserves
+  server-owned magic-byte `detectedContentType`, Auto layout removes the
+  optional `mediaLayout` key, and media-card permalinks consistently use
+  `/media/:id`. Internal repost/quote controls stay hidden on media Things
+  until attachment-target shares have a non-empty renderer. — Codex (AI),
+  2026-08-21
+
 - **PR #99 final security reconciliation**: the current Thingtime serializer
   now treats persisted state strictly as data—functions are omitted on write,
   every legacy function tag is removed without compilation, code-defined
