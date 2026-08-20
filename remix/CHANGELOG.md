@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #321 legacy detected-type backfill preserves media annotations**:
+  re-detecting a pre-#319 opaque attachment now changes only its server-owned
+  type fields and retains #312's owner-authored title/description exactly;
+  malformed annotation metadata fails closed instead of being erased. — Codex
+  (AI), 2026-08-21
+
 - **PR #312 media integration hardening**: attachment annotation now preserves
   server-owned magic-byte `detectedContentType`, Auto layout removes the
   optional `mediaLayout` key, and media-card permalinks consistently use

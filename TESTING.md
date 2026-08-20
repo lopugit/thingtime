@@ -390,7 +390,8 @@ is fixed, and cite the checklist you ran in the PR description.
       sweep — `dryRun: true` first, then for real, following `nextCursor` while
       `hasMore` — and confirm the already-posted attachment flips to inline
       video (or gains its sniffed download label) without re-uploading, with
-      name and size unchanged. A repeat run reports zero changes.
+      name, size, and any owner-authored title/description unchanged. A repeat
+      run reports zero changes.
 - [ ] Let a content URL expire at the storage provider and open the attachment
       again: the stable authenticated `/api/v1/attachments/content?id=…` route
       issues fresh access. A private post's attachment fails closed for another
