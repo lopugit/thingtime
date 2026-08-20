@@ -974,7 +974,8 @@ is fixed, and cite the checklist you ran in the PR description.
       `newThingDoc` + the friend writer): after a follow/friend/DM/join/
       invite/emoji create, the doc must carry `uniqueKeys`, a duplicate
       insert of the same key must E11000 on the `uniqueKeys` index, and the
-      six crystal-path indexes must be the non-unique `things_*_lookup`
+      seven crystal-path indexes (including `voteKey`, even while the poll
+      product remains deferred) must be the non-unique `things_*_lookup`
       generation (old `things_*_unique` names dropped by the boot-time
       ensure swap — verify with `getIndexes()`). Legacy docs get stamped by
       the `backfill-relationship-unique-keys` migration, whose notes also

@@ -41,6 +41,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Security
 
+- **Relationship uniqueness is structural across all reserved key families**:
+  follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
+  protected root `uniqueKeys` namespace. Boot-time index convergence replaces
+  every kind-blind crystal-path unique index with a non-unique lookup, and the
+  idempotent backfill stamps legacy relationship docs while only reporting
+  suspicious free-form data. The vote family is migrated as security
+  substrate without shipping the deferred polls product. — Codex (AI), 2026-08-21
+
 - **Upload approval now has public / private / all scopes**: the
   signup-permissions gate is split into two independent tri-state flags —
   `meta.publicUploads` (post/comment/custom-emoji attachments) and the new

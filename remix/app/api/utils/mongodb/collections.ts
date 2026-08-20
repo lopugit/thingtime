@@ -426,7 +426,8 @@ export const KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS: readonly string[] = [
 	'dmKey', // was things_dm_key_unique → lookup + uniqueKeys 'dmKey:<a>:<b>'
 	'inviteCode', // was things_invite_code_unique → lookup + uniqueKeys 'inviteCode:<code>'
 	'emojiKey', // was things_emoji_key_unique → lookup + uniqueKeys 'emojiKey:<scope>:<name>'
-	'followKey' // was things_follow_key_unique → lookup + uniqueKeys 'followKey:<follower>:<followee>'
+	'followKey', // was things_follow_key_unique → lookup + uniqueKeys 'followKey:<follower>:<followee>'
+	'voteKey' // was things_vote_key_unique → lookup + uniqueKeys 'voteKey:<poll>~<user>'
 ];
 
 const createThingsDataIndexes = (db: any): Promise<any>[] => {
@@ -706,6 +707,18 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { 'crystal.followKey': 1 },
       { name: 'things_follow_key_lookup', partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } },
       ['things_follow_key_unique']
+    ),
+    // Poll voting is deliberately outside this release, but its preview
+    // branch already installed the old kind-blind index in the shared develop
+    // database. Retire it here with the rest of the family so phase 2 can
+    // safely reopen voteKey too. Any existing vote docs are backfilled into
+    // uniqueKeys; this lookup preserves the future query shape without
+    // shipping the poll product surface.
+    createIndexReplacing(
+      col,
+      { 'crystal.voteKey': 1 },
+      { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
+      ['things_vote_key_unique']
     ),
     // Thread replies list under their root message (main chat pages ride the
     // shared { targetId, thingtime, createdAt, shareId } index above).

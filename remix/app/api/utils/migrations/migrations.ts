@@ -2581,7 +2581,7 @@ const backfillRelationshipUniqueKeys: Migration = {
 	collection: 'things',
 	fromVersion: THINGS_VERSION,
 	toVersion: THINGS_VERSION,
-	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend)',
+	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend/vote)',
 	description:
 		'Stamps the server-only root uniqueKeys dedupe entry (`<field>:<key>` BinData) onto legacy relationship ' +
 		'things whose uniqueness previously rode kind-blind crystal-path unique indexes (retired to lookup ' +
