@@ -19,6 +19,76 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **CSP blocked attachment uploads on header-serving deployments**: the
+  application Content-Security-Policy's `connect-src` never allowed the
+  private S3 bucket origin, so on any surface that serves the CSP header
+  (`pr-*.previews.dev.thingtime.com`, `dev.thingtime.com`, staging — and
+  production once the policy ships) the composer's direct-to-S3 part PUT was
+  killed by the browser and every upload failed with "The file could not
+  reach storage. Check your connection and retry." (`*.vercel.app` previews
+  carry no CSP header, which is why uploads kept working there.) `csp.mjs`
+  now derives the exact bucket origin from
+  `THINGTIME_PRIVATE_S3_BUCKET`/`_REGION` at build time, with a regional
+  `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
+  Verified via S3 preflight (bucket CORS already allowed the preview origins
+  — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
+
+### Added
+
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
+
+### Security
+
+- **Upload approval now has public / private / all scopes**: the
+  signup-permissions gate is split into two independent tri-state flags —
+  `meta.publicUploads` (post/comment/custom-emoji attachments) and the new
+  `meta.privateUploads` (message attachments + own profile media) — both
+  stamped `false` at registration and both privileged meta keys. The upload
+  start gate is purpose-aware (`403 public_uploads_not_approved` /
+  `private_uploads_not_approved`), `POST /api/v1/admin/users/public-uploads`
+  accepts `scope: 'public' | 'private' | 'all'` (default `public`, wire-
+  compatible), and the /admin Users tab's control becomes an Approve menu with
+  per-scope and enable/withhold-all actions plus per-scope pending flags.
+  Grandfathering and the admin bypass are unchanged. — Claude (AI), 2026-08-18
+
+- **New signups no longer receive public upload permissions**: accounts created
+  from this change forward start with `meta.publicUploads: false`, and verifying
+  the email address no longer grants uploads. `POST /api/v1/attachments/uploads`
+  fails closed with `403 public_uploads_not_approved` until an administrator
+  enables the account, so no upload is reserved and no MPU is opened. Once a new
+  account verifies its email, an `admin.new_user` notification carrying the
+  account details goes to `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default
+  `admin@thingtime.com`), and the **/admin → Users** tab gained an Uploads
+  column, a pending-approval banner, and a per-user Enable/Withhold toggle
+  backed by `POST /api/v1/admin/users/public-uploads`. The flag is tri-state:
+  accounts predating the change have no flag and keep uploading, so no data
+  migration is required, and administrators bypass the gate entirely.
+  — Claude (AI), 2026-08-18
+
+### Fixed
+
 - **PR #99 final security reconciliation**: the current Thingtime serializer
   now treats persisted state strictly as data—functions are omitted on write,
   every legacy function tag is removed without compilation, code-defined
@@ -29,11 +99,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   assignments parse data literals without `eval`. Registration preserves the
   existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
   streaming body cap. — Codex (AI), 2026-08-18
+- **Native iOS drawer and media capture**: the iOS WebView now uses the same
+  fixed drawer trigger as mobile web, so opening the drawer keeps its close
+  control inside the panel instead of translating it with the top nav. The
+  generated app Info.plist now declares camera, microphone, and photo-library
+  purpose strings so WebKit's Take Photo or Video flow requests permission
+  instead of terminating the app. — Codex (AI), 2026-08-17
 - **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
   now lets the controller build an already-previewed commit in the isolated
   `develop` Custom Environment instead of canceling it as a duplicate, while
   the thin `github-actions` control plane remains excluded before every other
   rule. — Codex (AI), 2026-08-17
+- **Manual develop-preview recovery reaches its controller**: the thin `main`
+  listener now converts `workflow_dispatch`'s string PR number to the numeric
+  input required by the protected reusable workflow. Manual recovery no longer
+  fails before GitHub can create a controller job, and the caller contract now
+  locks that typed boundary. — Codex (AI), 2026-08-17
 - **Vercel status in custom environments**: deployment status now checks
   Vercel's system environment and custom target independently, so the
   Preview-backed `develop` target keeps `/api/v1/vercel/status`, `/status`, and
@@ -54,6 +135,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Native iOS per-branch deployment history**: the Vercel deployments API now
+  preserves its existing latest-per-branch response while optionally returning
+  a bounded newest-first history for each branch. The native Web destination
+  drawer presents that history as a second disclosure level, marks the most
+  recent ready deployment as `Last successful` when a newer build is queued,
+  and keeps every specific deployment URL directly selectable. Signed iOS
+  build 15 targets the matching branch preview and is available to internal
+  TestFlight testers. — Codex (AI), 2026-08-18
 - **Recoverable first-session Things space**: a fresh browser can land on
   `/things` and immediately receive the real Things UI through a rate-limited
   temporary user Thing, bounded subscription, normal browser session, and
