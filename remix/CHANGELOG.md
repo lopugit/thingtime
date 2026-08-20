@@ -19,6 +19,68 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #99 final security reconciliation**: the current Thingtime serializer
+  now treats persisted state strictly as data—functions are omitted on write,
+  every legacy function tag is removed without compilation, code-defined
+  defaults refill runtime behavior, and graph-aware repair preserves circular
+  aliases. Explicit Date tags and data-first legacy handling stop repeated
+  hydration from changing ordinary text. The strict app CSP now loads preview
+  freshness from external `/tt-preview-freshness.js`, while active Commander
+  assignments parse data literals without `eval`. Registration preserves the
+  existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
+  streaming body cap. — Codex (AI), 2026-08-18
+
+- **CSP blocked attachment uploads on header-serving deployments**: the
+  application Content-Security-Policy's `connect-src` never allowed the
+  private S3 bucket origin, so on any surface that serves the CSP header
+  (`pr-*.previews.dev.thingtime.com`, `dev.thingtime.com`, staging — and
+  production once the policy ships) the composer's direct-to-S3 part PUT was
+  killed by the browser and every upload failed with "The file could not
+  reach storage. Check your connection and retry." (`*.vercel.app` previews
+  carry no CSP header, which is why uploads kept working there.) `csp.mjs`
+  now derives the exact bucket origin from
+  `THINGTIME_PRIVATE_S3_BUCKET`/`_REGION` at build time, with a regional
+  `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
+  Verified via S3 preflight (bucket CORS already allowed the preview origins
+  — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+
+### Security
+
+- **Canonical scoped-upload UX reconciliation**: every attachment picker now
+  reads the existing public/private approval booleans directly and shows a
+  purpose-specific approval card when its scope is withheld. The obsolete
+  one-boolean upload alias is not retained. Revoking a scope disables new file
+  starts without hiding finish, retry, or cleanup controls for a draft already
+  in progress. — Codex (AI), 2026-08-21
+
+- **Upload approval now has public / private / all scopes**: the
+  signup-permissions gate is split into two independent tri-state flags —
+  `meta.publicUploads` (post/comment/custom-emoji attachments) and the new
+  `meta.privateUploads` (message attachments + own profile media) — both
+  stamped `false` at registration and both privileged meta keys. The upload
+  start gate is purpose-aware (`403 public_uploads_not_approved` /
+  `private_uploads_not_approved`), `POST /api/v1/admin/users/public-uploads`
+  accepts `scope: 'public' | 'private' | 'all'` (default `public`, wire-
+  compatible), and the /admin Users tab's control becomes an Approve menu with
+  per-scope and enable/withhold-all actions plus per-scope pending flags.
+  Grandfathering and the admin bypass are unchanged. — Claude (AI), 2026-08-18
+
+- **New signups no longer receive public upload permissions**: accounts created
+  from this change forward start with `meta.publicUploads: false`, and verifying
+  the email address no longer grants uploads. `POST /api/v1/attachments/uploads`
+  fails closed with `403 public_uploads_not_approved` until an administrator
+  enables the account, so no upload is reserved and no MPU is opened. Once a new
+  account verifies its email, an `admin.new_user` notification carrying the
+  account details goes to `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default
+  `admin@thingtime.com`), and the **/admin → Users** tab gained an Uploads
+  column, a pending-approval banner, and a per-user Enable/Withhold toggle
+  backed by `POST /api/v1/admin/users/public-uploads`. The flag is tri-state:
+  accounts predating the change have no flag and keep uploading, so no data
+  migration is required, and administrators bypass the gate entirely.
+  — Claude (AI), 2026-08-18
+
+### Fixed
+
 - **Manual develop-preview recovery reaches its controller**: the thin `main`
   listener now converts `workflow_dispatch`'s string PR number to the numeric
   input required by the protected reusable workflow. Manual recovery no longer
@@ -820,6 +882,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
 
 ### Fixed
+
+- **PR #99 persisted-state, CSP, and registration-body hardening**: persisted
+  Thingtime functions are no longer serialized or revived with `eval`; Dates
+  use explicit tags so ordinary date-like strings retain their type; Vite and
+  Vercel now share a CSP without `unsafe-eval`; and public registration caps
+  request bodies at 16 KiB while continuing to use the IP-based
+  `auth.register` limiter already merged in PR #167. The pre-paint theme and
+  environment title boot moved to a same-origin external script so they still
+  run under the policy; generated design prototypes retain their required
+  runtime compiler and unpkg access through a path-scoped compatibility policy
+  that never applies to the app shell. See the
+  [PR #99 implementation note](../PRs/99-claude-eval-csp-hardening--persisted-state-csp-register-body-cap.md).
+  This consolidates the useful work from closed PRs #94, #96, #98, #103, and
+  #106 plus stacked PR #102; open cross-tab PR #92 remains a separate feature.
+  — Claude (AI) + Codex (AI), 2026-08-08
 
 - **Sync main→develop fallback PR is now PAT-authored**: the **Sync main into
   develop** workflow's "Open (or reuse) the sync PR" step used `GITHUB_TOKEN`,
