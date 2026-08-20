@@ -1127,7 +1127,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
 
   const isOwner = !!user && !!post.author && user.id === post.author.id;
-  const circle = CIRCLE_META[post.visibility] || CIRCLE_META.public;
+	const circle = mediaThing
+		? { emoji: '🔗', label: 'Inherited audience', hint: 'This media follows the privacy of the Thing it belongs to' }
+		: CIRCLE_META[post.visibility] || CIRCLE_META.public;
 
   // Every reaction token on the post, most-used first — feeds the merged
   // react button (top emojis + total count).

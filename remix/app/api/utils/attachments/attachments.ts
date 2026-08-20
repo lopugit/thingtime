@@ -1263,6 +1263,9 @@ export const annotateAttachment = async (
 			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 		}
 		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+		if (Object.keys(record).some((key) => !['id', 'title', 'description'].includes(key))) {
+			return fail(400, 'Invalid attachment annotation request');
+		}
 		const id = normalizeId(record.id);
 		if (!id) return fail(400, 'Invalid attachment id');
 		const patchField = (value: unknown, label: string): string | null | undefined => {

@@ -2325,18 +2325,17 @@ const sanitizeMediaLayout = (value: unknown): { ok: true; mediaLayout: PostMedia
 		}
 		const rows: number[] = [];
 		for (const entry of pattern) {
-			const size = Number(entry);
-			if (!Number.isInteger(size) || size < 1 || size > MAX_MEDIA_LAYOUT_TRACK) {
+			if (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 1 || entry > MAX_MEDIA_LAYOUT_TRACK) {
 				return fail(400, `mediaLayout.pattern rows must be integers 1-${MAX_MEDIA_LAYOUT_TRACK}`);
 			}
-			rows.push(size);
+			rows.push(entry);
 		}
 		return { ok: true, mediaLayout: { mode, pattern: rows } };
 	}
 
 	// grid
-	const columns = Number(raw.columns ?? 3);
-	if (!Number.isInteger(columns) || columns < 1 || columns > MAX_MEDIA_LAYOUT_TRACK) {
+	const columns = raw.columns === undefined ? 3 : raw.columns;
+	if (typeof columns !== 'number' || !Number.isInteger(columns) || columns < 1 || columns > MAX_MEDIA_LAYOUT_TRACK) {
 		return fail(400, `mediaLayout.columns must be an integer 1-${MAX_MEDIA_LAYOUT_TRACK}`);
 	}
 	let spans: Record<string, MediaLayoutSpan> | undefined;
@@ -2344,16 +2343,21 @@ const sanitizeMediaLayout = (value: unknown): { ok: true; mediaLayout: PostMedia
 		if (typeof raw.spans !== 'object' || Array.isArray(raw.spans)) return fail(400, 'mediaLayout.spans must be an object');
 		const entries = Object.entries(raw.spans as Record<string, unknown>);
 		if (entries.length > MAX_MEDIA_LAYOUT_ENTRIES) return fail(400, `mediaLayout.spans can hold at most ${MAX_MEDIA_LAYOUT_ENTRIES} entries`);
-		const cleaned: Record<string, MediaLayoutSpan> = {};
+		const cleaned: Record<string, MediaLayoutSpan> = Object.create(null);
 		for (const [key, entry] of entries) {
-			if (typeof key !== 'string' || !key || key.length > 200) return fail(400, 'mediaLayout.spans keys must be attachment ids');
+			// Attachment ids are generated UUIDs or att_<sha256> values. Keep the
+			// persisted map free of Mongo path characters and prototype keys rather
+			// than treating arbitrary object properties as attachment identities.
+			if (!/^[A-Za-z0-9][A-Za-z0-9_:-]{0,127}$/.test(key)) {
+				return fail(400, 'mediaLayout.spans keys must be attachment ids');
+			}
 			if (!MEDIA_LAYOUT_SPAN_VALUES.includes(entry as any)) {
 				return fail(400, 'mediaLayout.spans values must be normal, wide, tall, or big');
 			}
 			// normal is the default — storing it would be dead weight
 			if (entry !== 'normal') cleaned[key] = entry as MediaLayoutSpan;
 		}
-		if (Object.keys(cleaned).length) spans = cleaned;
+		if (Object.keys(cleaned).length) spans = { ...cleaned };
 	}
 	return { ok: true, mediaLayout: { mode, columns, ...(spans ? { spans } : {}) } };
 };
