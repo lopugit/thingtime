@@ -19,12 +19,44 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #99 final security reconciliation**: the current Thingtime serializer
+  now treats persisted state strictly as data—functions are omitted on write,
+  every legacy function tag is removed without compilation, code-defined
+  defaults refill runtime behavior, and graph-aware repair preserves circular
+  aliases. Explicit Date tags and data-first legacy handling stop repeated
+  hydration from changing ordinary text. The strict app CSP now loads preview
+  freshness from external `/tt-preview-freshness.js`, while active Commander
+  assignments parse data literals without `eval`. Registration preserves the
+  existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
+  streaming body cap. — Codex (AI), 2026-08-18
+
+- **CSP blocked attachment uploads on header-serving deployments**: the
+  application Content-Security-Policy's `connect-src` never allowed the
+  private S3 bucket origin, so on any surface that serves the CSP header
+  (`pr-*.previews.dev.thingtime.com`, `dev.thingtime.com`, staging — and
+  production once the policy ships) the composer's direct-to-S3 part PUT was
+  killed by the browser and every upload failed with "The file could not
+  reach storage. Check your connection and retry." (`*.vercel.app` previews
+  carry no CSP header, which is why uploads kept working there.) `csp.mjs`
+  now derives the exact bucket origin from
+  `THINGTIME_PRIVATE_S3_BUCKET`/`_REGION` at build time, with a regional
+  `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
+  Verified via S3 preflight (bucket CORS already allowed the preview origins
+  — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+
 - **iOS build 14 TestFlight delivery**: rebuilt the production native shell
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.
   — Codex (AI), 2026-08-18
 
 ### Security
+
+- **Canonical scoped-upload UX reconciliation**: every attachment picker now
+  reads the existing public/private approval booleans directly and shows a
+  purpose-specific approval card when its scope is withheld. The obsolete
+  one-boolean upload alias is not retained. Revoking a scope disables new file
+  starts without hiding finish, retry, or cleanup controls for a draft already
+  in progress. — Codex (AI), 2026-08-21
 
 - **Upload approval now has public / private / all scopes**: the
   signup-permissions gate is split into two independent tri-state flags —
@@ -869,6 +901,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
 
 ### Fixed
+
+- **PR #99 persisted-state, CSP, and registration-body hardening**: persisted
+  Thingtime functions are no longer serialized or revived with `eval`; Dates
+  use explicit tags so ordinary date-like strings retain their type; Vite and
+  Vercel now share a CSP without `unsafe-eval`; and public registration caps
+  request bodies at 16 KiB while continuing to use the IP-based
+  `auth.register` limiter already merged in PR #167. The pre-paint theme and
+  environment title boot moved to a same-origin external script so they still
+  run under the policy; generated design prototypes retain their required
+  runtime compiler and unpkg access through a path-scoped compatibility policy
+  that never applies to the app shell. See the
+  [PR #99 implementation note](../PRs/99-claude-eval-csp-hardening--persisted-state-csp-register-body-cap.md).
+  This consolidates the useful work from closed PRs #94, #96, #98, #103, and
+  #106 plus stacked PR #102; open cross-tab PR #92 remains a separate feature.
+  — Claude (AI) + Codex (AI), 2026-08-08
 
 - **Sync main→develop fallback PR is now PAT-authored**: the **Sync main into
   develop** workflow's "Open (or reuse) the sync PR" step used `GITHUB_TOKEN`,

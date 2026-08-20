@@ -24,6 +24,14 @@ is fixed, and cite the checklist you ran in the PR description.
       still 403s; approve only `public` on another account and confirm the
       reverse; `scope: "all"` enables both, and a request without `scope`
       keeps the legacy public-only behavior.
+- [ ] At desktop and 390px mobile widths, withheld post/comment/custom-emoji
+      composers show the public approval card while withheld message/profile
+      composers show the private card. Approving only one scope unlocks only
+      its matching pickers after revalidation; there is no one-boolean alias.
+- [ ] Revoke a scope while a draft upload is already selected. The picker stops
+      accepting new files, but the current rows and their finish/retry/remove
+      controls remain reachable so lifecycle cleanup still works after
+      revocation. Once the draft is empty, the approval card replaces it.
 - [ ] Confirm the `admin.new_user` message reaches
       `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default `admin@thingtime.com`) with
       the username, display name, email, user id, and signup time. In dev read
@@ -238,12 +246,14 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
-- [ ] Seed the `thingtime` LocalForage value with a legacy unrevivable function
-      plus root `set` / `get` runtime methods, then load `/feed` ONCE: the
+- [ ] Seed the `thingtime` LocalForage value with valid-looking hostile and
+      malformed legacy function tags plus root `set` / `get` runtime
+      methods, then load `/feed` ONCE: no payload executes, the code-defined
+      editor factory is restored, the
       collapsed “What's on your mind?” control opens, Editor.js accepts focus
       and typing, Latest / Filters and the global search remain interactive,
       and the repaired stored snapshot already contains neither runtime method
-      nor the legacy fallback before a second navigation.
+      nor any function source before a second navigation.
 - [ ] Open the feed composer → Thingtime tab: the editor shows exactly ONE
       root property, `New Thing`, with no default children (no `name`).
 - [ ] The draft path is session-scoped (`tmp.<sessionId>.New Thing`): add a
@@ -1100,6 +1110,39 @@ is fixed, and cite the checklist you ran in the PR description.
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
 
+## Register request body cap (`remix/app/routes/api/v1/auth/register/_register.tsx`)
+
+- [ ] Register rejects an oversize body with 413 (`readJsonBody` 16 KiB cap)
+      before validation, bcrypt, or account writes; the existing limiter still
+      consumes the request first, and a normal signup from a fresh IP returns
+      200 with a session cookie.
+
+## Persisted-state codec (`remix/app/Providers/thingtimeSerialization.ts`)
+
+- [ ] `npm run test:persist` passes (tagged Dates, untagged ISO-lookalike user
+      strings including ambiguous legacy values, malformed tag
+      preservation, circular/shared data, invalid Dates, no serialized function
+      source, hostile legacy functions inert, and code-defined default refill).
+- [ ] Live: type a post whose text is a full ISO timestamp (e.g.
+      `2026-01-01T00:00:00.000Z`), reload twice — the text must stay a string
+      (older builds turned it into a Date and rewrote it permanently).
+- [ ] Live: app hydrates under the CSP with no `unsafe-eval`; theme pre-paint
+      and `[LC]`/env title prefix still work from `/tt-boot.js`.
+- [ ] `npm run verify:vercel-output` rejects app `script-src` policies that add
+      `unsafe-inline`/`unsafe-eval`, an inline executable shell script, or a
+      missing `/tt-boot.js` or `/tt-preview-freshness.js`. On a
+      built/Vercel preview, append an inline script
+      element that sets a harmless test variable — CSP blocks it and the
+      variable remains unset.
+- [ ] Commander search/navigation, registered magic-word actions, and data-only
+      assignments (`path = 42`, JSON objects/arrays, quoted/plain strings)
+      work under the strict policy. Program text is stored as text and never
+      executes; never restore global `unsafe-eval` for programmable commands.
+- [ ] A `/docs/design-bundles/<slug>/index.html` prototype still renders: its
+      repo-controlled generated runtime gets the path-scoped `unsafe-eval` +
+      unpkg compatibility policy, while `/`, `/authorize`, and ordinary app
+      routes keep the strict policy without `unsafe-eval`.
+
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
 - [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
@@ -1926,17 +1969,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Things New/View/Arrange controls all respond; production-domain tabs do
       not run this preview freshness check.
 - [ ] On iOS Safari, navigate away from a Vercel preview and return with Back.
-      The inline preview recovery bootstrap loads before the main application
-      entry and a `pageshow.persisted` restore immediately replaces the page
-      with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
+      The external same-origin preview recovery bootstrap loads before the main
+      application entry; a `pageshow.persisted` restore immediately replaces
+      the page with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
       `/things` returns `Cache-Control: private, no-store, max-age=0,
       must-revalidate`, while `/assets/*` remains outside the HTML no-store
       route.
 - [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
-      and the old `Function could not be revived` fallback values, reload Feed
-      and open “What's on your mind?”. Hydration reports no function syntax
-      exception; the composer focuses and edits, Photos opens, close restores
-      the collapsed composer, and Latest / Filters / navigation still respond.
+      hostile, and old failed-revival function tags, reload Feed and open
+      “What's on your mind?”. Hydration executes none of them, removes every
+      tag, restores the code-defined composer functions, and atomically stores
+      the clean snapshot; the composer focuses and edits, Photos opens, close
+      restores the collapsed composer, and Latest / Filters / navigation still
+      respond.
 - [ ] In Mobile Safari with a retained signed-in session and Commander closed,
       physically tap the collapsed “What's on your mind?” control immediately
       after a fresh Feed navigation. The composer opens on that first tap;
