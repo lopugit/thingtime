@@ -2567,8 +2567,9 @@ const staleGenerationBlocker = async (physical: string): Promise<string | null> 
 // server-only root uniqueKeys namespace. New docs stamp at insert
 // (messenger/shared.ts newThingDoc + the friend writer); this stamps legacy
 // docs so their create-race dedupe is structural again, and counts (never
-// touches) data things carrying a reserved key from before the sanitizer
-// reservation — the squat census.
+// touches) data things carrying a relationship-shaped name. Before phase 2
+// that is the squat census; after the namespace reopens it may be intentional
+// ordinary data and remains operator information only.
 
 const relationshipBackfillTargets = (): Array<{ kind: string; field: string }> =>
 	Object.entries(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS).map(([kind, field]) => ({ kind, field }));
@@ -2581,13 +2582,13 @@ const backfillRelationshipUniqueKeys: Migration = {
 	collection: 'things',
 	fromVersion: THINGS_VERSION,
 	toVersion: THINGS_VERSION,
-	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend)',
+	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend/vote)',
 	description:
 		'Stamps the server-only root uniqueKeys dedupe entry (`<field>:<key>` BinData) onto legacy relationship ' +
 		'things whose uniqueness previously rode kind-blind crystal-path unique indexes (retired to lookup ' +
 		'indexes by the boot-time ensure). Idempotent: stamps are deterministic and only docs without ' +
-		'uniqueKeys are touched. Also counts — never modifies — free-form data things carrying a reserved key ' +
-		'at the crystal root: pre-reservation squats or legacy user data to review.',
+		'uniqueKeys are touched. Also counts — never modifies — free-form data things carrying a relationship ' +
+		'name at the crystal root: operator census only, because phase 2 makes those names valid ordinary data.',
 	pending: async () => {
 		const things = await getCollection('things');
 		let total = 0;
@@ -2635,12 +2636,14 @@ const backfillRelationshipUniqueKeys: Migration = {
 			migrated += kindMigrated;
 			if (kindMigrated) notes.push(`${kindMigrated} ${kind} doc(s) stamped`);
 		}
-		const reservedFields = Array.from(new Set(Object.values(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)));
-		for (const field of reservedFields) {
+		const relationshipFields = Array.from(new Set(Object.values(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)));
+		for (const field of relationshipFields) {
 			await assertLease?.();
 			const count = await things.countDocuments({ thingtime: 'data', [`crystal.${field}`]: { $exists: true } } as any);
 			if (count) {
-				notes.push(`${count} data thing(s) carry crystal.${field} at the root (pre-reservation legacy/squats — review, not modified)`);
+				notes.push(
+					`${count} data thing(s) carry crystal.${field} at the root (operator census only — never modified; valid ordinary data after phase 2)`
+				);
 			}
 		}
 		return { dryRun, matched, migrated, created: 0, skipped, notes };

@@ -426,7 +426,7 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     col.createIndex({ shareId: 1 }, { unique: true, sparse: true }),
     // generalized uniqueness for system kinds (username:<u>, hashed email
     // keys, schema:<id>, …) AND relationship dedupe (followKey:<a>:<b>,
-    // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey: — stamped by
+    // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey: — stamped by
     // messenger/shared.ts relationshipUniqueKeys): multikey unique — each
     // element unique across the collection; sparse so ordinary things skip
     // the index entirely. Root field + BinData = no user input can ever
@@ -523,19 +523,12 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       },
       ['targetId_1_ownerId_1_crystal.emoji_1']
     ),
-    // One follow edge per (followed, follower): toggle-on is an idempotent
-    // upsert, deduped under races. Only follow things carry crystal.follow
-    // (constant true) — same marker-field trick as the reaction index, since
-    // partial filters can't reliably scope on the multikey thingtime array.
-    createIndexReplacing(
-      col,
-      { targetId: 1, ownerId: 1 },
-      {
-        name: 'things_follow_unique',
-        unique: true,
-        partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.follow': { $exists: true } }
-      }
-    ),
+    // Retire the superseded follow-marker generation. Current follow writers
+    // use crystal.followKey for lookup and protected root uniqueKeys for
+    // dedupe; no registered schema mints crystal.follow. Leaving this old
+    // kind-blind unique index behind would needlessly constrain ordinary data
+    // Things after the crystal namespace reopens in phase 2.
+    dropIndexRetrying(col, 'things_follow_unique'),
     // One friendship doc per unordered user pair, regardless of who asked:
     // crystal.friendKey is '<minId>~<maxId>', written only by the friend
     // endpoint. Uniqueness rides uniqueKeys ('friendKey:<min>~<max>', stamped
@@ -695,6 +688,18 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { 'crystal.followKey': 1 },
       { name: 'things_follow_key_lookup', partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } },
       ['things_follow_key_unique']
+    ),
+    // Poll voting is deliberately outside this release, but its preview
+    // branch already installed the old kind-blind index in the shared develop
+    // database. Retire it here with the rest of the family so phase 2 can
+    // safely reopen voteKey too. Any existing vote docs are backfilled into
+    // uniqueKeys; this lookup preserves the future query shape without
+    // shipping the poll product surface.
+    createIndexReplacing(
+      col,
+      { 'crystal.voteKey': 1 },
+      { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
+      ['things_vote_key_unique']
     ),
     // Thread replies list under their root message (main chat pages ride the
     // shared { targetId, thingtime, createdAt, shareId } index above).

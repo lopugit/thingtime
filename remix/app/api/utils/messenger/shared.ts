@@ -48,7 +48,8 @@ export const RELATIONSHIP_UNIQUE_CRYSTAL_KEYS: Readonly<Record<string, string>> 
 	chat: 'dmKey',
 	'community-invite': 'inviteCode',
 	'custom-emoji': 'emojiKey',
-	friend: 'friendKey'
+	friend: 'friendKey',
+	vote: 'voteKey'
 };
 
 export const relationshipUniqueKeys = (kind: string, crystal: Record<string, unknown> | null | undefined): Binary[] | undefined => {

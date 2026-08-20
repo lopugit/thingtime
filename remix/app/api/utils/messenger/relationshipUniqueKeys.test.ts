@@ -13,9 +13,12 @@ import { validateThingtimeCrystal } from '~/schemas/registry';
 // waitlist slots). These tests pin the stamp contract: every mapped kind
 // stamps `<crystalField>:<key>` as BinData, unmapped kinds and null keys stay
 // unstamped, and the namespace prefixes can never collide with the existing
-// system key families.
+// system key families. `vote` is included even though its product surface is
+// not part of this release: a preview deployment already created the legacy
+// kind-blind index in the shared develop database, so phase 1 must retire and
+// backfill that family before phase 2 reopens the crystal namespace.
 
-test('the relationship map covers exactly the six retired unique-index families', () => {
+test('the relationship map covers exactly the seven retired unique-index families', () => {
 	assert.deepEqual(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, {
 		follow: 'followKey',
 		'chat-member': 'memberKey',
@@ -23,7 +26,8 @@ test('the relationship map covers exactly the six retired unique-index families'
 		chat: 'dmKey',
 		'community-invite': 'inviteCode',
 		'custom-emoji': 'emojiKey',
-		friend: 'friendKey'
+		friend: 'friendKey',
+		vote: 'voteKey'
 	});
 });
 
@@ -42,7 +46,8 @@ test('every mapped kind stamps through newThingDoc automatically', () => {
 		chat: { chatType: 'dm', dmKey: dmKeyOf('b', 'a') },
 		'community-invite': { inviteCode: 'tt-abc123' },
 		'custom-emoji': { name: 'blob', emojiKey: 'scope:blob' },
-		friend: { status: 'pending', friendKey: 'a~b' }
+		friend: { status: 'pending', friendKey: 'a~b' },
+		vote: { optionIndex: 0, voteKey: 'poll-1~user-1' }
 	};
 	for (const [kind, crystal] of Object.entries(samples)) {
 		const doc = newThingDoc(kind, { ownerId: 'user-1', crystal }) as any;

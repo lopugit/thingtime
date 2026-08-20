@@ -960,18 +960,15 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Unique-slot squat class (closed structurally): relationship dedupe
       rides the server-only root `uniqueKeys` namespace
       (`<crystalField>:<key>` BinData, stamped in `messenger/shared.ts`
-      `newThingDoc` + the friend writer), NEVER kind-blind crystal-path
-      unique indexes — those let any user's data thing with
-      `crystal.followKey = '<followerId>:<followeeId>'` permanently block
-      the victim's real follow (E11000, mostly swallowed by the flows).
-      After a follow/friend/DM/join/invite/emoji create, the doc must carry
-      `uniqueKeys`, a duplicate insert of the same key must E11000 on the
-      `uniqueKeys` index, and the six crystal-path indexes must be the
-      non-unique `things_*_lookup` generation (old `things_*_unique` names
-      dropped by the boot-time ensure swap — verify with `getIndexes()`;
-      the swap converges over two ensure runs when legacy drops race
-      sibling builds). Legacy docs get stamped by the
-      `backfill-relationship-unique-keys` migration (idempotent), whose
+      `newThingDoc` + the friend writer): after a follow/friend/DM/join/
+      invite/emoji create, the doc must carry `uniqueKeys`, a duplicate
+      insert of the same key must E11000 on the `uniqueKeys` index, and the
+      seven crystal-path indexes (including `voteKey`, even while the poll
+      product remains deferred) must be the non-unique `things_*_lookup`
+      generation (old `things_*_unique` names dropped by the boot-time
+      ensure swap, including the superseded `things_follow_unique` marker
+      generation — verify with `getIndexes()`). Legacy docs get stamped by
+      the idempotent `backfill-relationship-unique-keys` migration, whose
       notes also census (never modify) data things carrying relationship
       names from the pre-fix era. Unit coverage:
       `remix/app/api/utils/messenger/relationshipUniqueKeys.test.ts`.
