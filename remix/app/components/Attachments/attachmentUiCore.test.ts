@@ -7,6 +7,7 @@ import {
 	attachmentCleanupAction,
 	attachmentCompleteRetryPhase,
 	attachmentSnapshot,
+	attachmentUploadScopeForPurpose,
 	attachmentUploadError,
 	attachmentUploadFailurePhase,
 	canonicalPostTags,
@@ -19,6 +20,15 @@ import {
 	safeAttachmentMediaKind,
 	shouldFreezeAmbiguousPostSubmission
 } from './attachmentUiCore.ts';
+
+test('upload purposes map to exactly one canonical approval scope', () => {
+	for (const purpose of ['post', 'comment', 'custom-emoji'] as const) {
+		assert.equal(attachmentUploadScopeForPurpose(purpose), 'public');
+	}
+	for (const purpose of ['message', 'profile-avatar', 'profile-banner'] as const) {
+		assert.equal(attachmentUploadScopeForPurpose(purpose), 'private');
+	}
+});
 
 test('only vetted raster image and video types render inline', () => {
 	assert.equal(safeAttachmentMediaKind('image/jpeg', 'image'), 'image');
@@ -86,6 +96,8 @@ test('upload errors are fixed client-authored messages', () => {
 		/verifying this account’s storage balance/i
 	);
 	assert.match(attachmentUploadError({ status: 500, error: 'proxy stack' }, 'upload'), /could not reach storage/i);
+	assert.match(attachmentUploadError({ status: 403, code: 'public_uploads_not_approved' }, 'prepare'), /public media uploads need admin approval/i);
+	assert.match(attachmentUploadError({ status: 403, code: 'private_uploads_not_approved' }, 'prepare'), /private media uploads need admin approval/i);
 	assert.match(
 		attachmentUploadError({ status: 409, code: 'upload_parts_retryable', retryable: true, error: 'private server detail' }, 'complete'),
 		/parts need uploading again/i
