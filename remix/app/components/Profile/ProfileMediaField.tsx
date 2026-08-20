@@ -27,6 +27,7 @@ export type ProfileMediaFieldProps = {
 	ownerId: string;
 	savedUrl: string | null;
 	savedLinkedUrl: string | null;
+	privateUploadsEnabled?: boolean;
 	disabled?: boolean;
 	remainingBytes?: number | null;
 	storageStatus?: 'ready' | 'reconciling' | 'unavailable';
@@ -48,10 +49,12 @@ const statusText = (upload: ComposerAttachmentUpload | undefined): string | null
 };
 
 const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, ProfileMediaFieldProps>((props, ref) => {
-	const { slot, ownerId, savedUrl, savedLinkedUrl, disabled, remainingBytes, storageStatus, onChange } = props;
+	const { slot, ownerId, savedUrl, savedLinkedUrl, privateUploadsEnabled, disabled, remainingBytes, storageStatus, onChange } = props;
 	const lopu = useLopu();
 	const label = slot === 'avatar' ? 'Avatar' : 'Banner';
 	const purpose = slot === 'avatar' ? 'profile-avatar' : 'profile-banner';
+	const uploadsNotGranted = privateUploadsEnabled === false;
+	const pickerDisabled = disabled || uploadsNotGranted;
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
 	const [baselineUrl, setBaselineUrl] = React.useState<string | null>(savedUrl);
 	const [baselineLinkedUrl, setBaselineLinkedUrl] = React.useState<string | null>(savedLinkedUrl);
@@ -271,12 +274,20 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 				</Box>
 			</Flex>
 
+			{uploadsNotGranted ? (
+				<Box border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
+					<Text fontSize="12px" color={MUTED} whiteSpace="normal">
+						🔐 Private media uploads need admin approval during the beta. You can still use a public image URL, remove saved media, and clean up an existing draft.
+					</Text>
+				</Box>
+			) : null}
+
 			<input
 				ref={inputRef}
 				type="file"
 				accept={ACCEPTED_PROFILE_IMAGES}
 				hidden
-				disabled={disabled}
+				disabled={pickerDisabled}
 				aria-label={`Choose ${label.toLowerCase()} image`}
 				onChange={(event) => {
 					choose(event.currentTarget.files);
@@ -358,7 +369,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 								marginTop={1.5}
 								variant="outline"
 								leftIcon={<ImagePlus size={14} />}
-								isDisabled={disabled}
+								isDisabled={pickerDisabled}
 								onClick={() => inputRef.current?.click()}
 							>
 								Replace media
@@ -367,7 +378,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 					) : (
 						<MediaAddTile
 							ariaLabel={`Add ${label.toLowerCase()} media`}
-							disabled={disabled}
+							disabled={pickerDisabled}
 							minHeight={slot === 'avatar' ? '150px' : '120px'}
 							onClick={() => inputRef.current?.click()}
 						>
