@@ -24,6 +24,14 @@ is fixed, and cite the checklist you ran in the PR description.
       still 403s; approve only `public` on another account and confirm the
       reverse; `scope: "all"` enables both, and a request without `scope`
       keeps the legacy public-only behavior.
+- [ ] At desktop and 390px mobile widths, withheld post/comment/custom-emoji
+      composers show the public approval card while withheld message/profile
+      composers show the private card. Approving only one scope unlocks only
+      its matching pickers after revalidation; there is no one-boolean alias.
+- [ ] Revoke a scope while a draft upload is already selected. The picker stops
+      accepting new files, but the current rows and their finish/retry/remove
+      controls remain reachable so lifecycle cleanup still works after
+      revocation. Once the draft is empty, the approval card replaces it.
 - [ ] Confirm the `admin.new_user` message reaches
       `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default `admin@thingtime.com`) with
       the username, display name, email, user id, and signup time. In dev read
