@@ -101,6 +101,14 @@ export type PublicUser = {
 	};
 	activeThemeId: string | null;
 	activeFeedAlgorithmId: string | null;
+	// Upload permissions are OFF for every account created after the
+	// signup-permissions hotfix; an admin turns them on per user from /admin
+	// (see setUserUploadPermissions), per scope or all at once. Accounts
+	// predating the flags have no meta keys and stay enabled — absence means
+	// "grandfathered". Public = post/comment/custom-emoji attachments; private
+	// = message attachments + own profile avatar/banner.
+	publicUploadsEnabled: boolean;
+	privateUploadsEnabled: boolean;
 	// true when meta.admin OR the ADMIN_USERNAMES env allowlist — the client uses
 	// it to reveal the admin panel; the server always re-checks server-side.
 	isAdmin: boolean;
@@ -118,6 +126,20 @@ export type PublicProfile = {
 	createdAt: string;
 	temporary?: boolean;
 };
+
+// Upload permissions. Each scope is tri-state on purpose:
+//   meta.<scope> === false  → withheld (every account created since the
+//                             signup-permissions hotfix starts here,
+//                             INCLUDING after the email is verified)
+//   meta.<scope> === true   → granted by an admin from /admin
+//   absent                  → grandfathered account, still allowed
+// Scopes: `publicUploads` covers publicly viewable surfaces (post, comment,
+// custom-emoji attachments); `privateUploads` covers media only the account's
+// own circles see (message attachments, own profile avatar/banner). "All" is
+// simply both flags. Admins are always allowed regardless of the flags, so a
+// locked-out admin can never be unable to fix the account that grants them.
+export const userPublicUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.publicUploads !== false;
+export const userPrivateUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.privateUploads !== false;
 
 export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null): PublicUser => {
 	const source = subscription?.subjectType === 'user' ? subscription.storage : null;
@@ -160,6 +182,8 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		storage,
 		activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null,
 		activeFeedAlgorithmId: typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
+		publicUploadsEnabled: userPublicUploadsEnabled(user),
+		privateUploadsEnabled: userPrivateUploadsEnabled(user),
 		isAdmin: isAdminDoc(user)
 	};
 };
@@ -1135,6 +1159,14 @@ export type AdminUserRow = {
 	createdAt: string | null;
 	isAdmin: boolean;
 	envAdmin: boolean; // admin via ADMIN_USERNAMES — can't be demoted from the UI
+	emailVerified: boolean;
+	// false while the account waits for an admin to grant that upload scope
+	publicUploadsEnabled: boolean;
+	privateUploadsEnabled: boolean;
+	// true only when the flag was explicitly withheld (i.e. a post-hotfix
+	// signup), so the UI can tell "awaiting approval" from "grandfathered".
+	publicUploadsPending: boolean;
+	privateUploadsPending: boolean;
 };
 
 // Escape user-supplied text before embedding it in a Mongo $regex — shared with
@@ -1154,7 +1186,12 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 	email: doc.email,
 	createdAt: adminCreatedAt(doc.createdAt),
 	isAdmin: isAdminDoc(doc),
-	envAdmin: isEnvAdmin(doc.username)
+	envAdmin: isEnvAdmin(doc.username),
+	emailVerified: !!doc.emailVerified,
+	publicUploadsEnabled: userPublicUploadsEnabled(doc),
+	privateUploadsEnabled: userPrivateUploadsEnabled(doc),
+	publicUploadsPending: doc?.meta?.publicUploads === false && !isAdminDoc(doc),
+	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc)
 });
 
 // Set (or clear) a user's stored admin flag. Env-allowlist admins remain admin
@@ -1179,6 +1216,42 @@ export const setUserAdmin = async (userId: string, admin: boolean): Promise<Admi
 			: Promise.resolve({ matchedCount: 0 } as { matchedCount: number })
 	]);
 	if (!thingRes.matchedCount && !legacyRes.matchedCount) return null;
+	const updated = await findUserById(userId);
+	return updated ? toAdminRow(updated) : null;
+};
+
+// Grant or withhold a user's upload permissions, per scope or both at once
+// ("all"). Unlike `secureAdmin` these are NOT queryable root booleans — the
+// admin dashboard already loads a complete user snapshot and filters
+// client-side, so the flags ride inside the CAS-guarded secure blob's `meta`
+// (same home as activeThemeId) and need no new index or collection generation.
+// Both keys are written in ONE CAS round so an "all" grant can't land half.
+//
+// Both stores are written for the same reason setUserAdmin does it: a dual-era
+// twin left by an interrupted users→things migration would otherwise keep a
+// stale value that the dual-store read resurrects, so a grant would appear not
+// to take. Best-effort per store; either matching counts as applied.
+export type UploadPermissionUpdates = { publicUploads?: boolean; privateUploads?: boolean };
+export const setUserUploadPermissions = async (userId: string, updates: UploadPermissionUpdates): Promise<AdminUserRow | null> => {
+	const keys = (['publicUploads', 'privateUploads'] as const).filter((key) => typeof updates[key] === 'boolean');
+	if (!keys.length) return null;
+	let applied = false;
+	const result = await mutateUserThingSecure(userId, (secure) => {
+		const next = { ...(secure.meta || {}) };
+		for (const key of keys) next[key] = updates[key] === true;
+		secure.meta = next;
+	});
+	if (result === 'contended') throw new SecureWriteContendedError(userId);
+	if (result === 'mutated') applied = true;
+
+	if (ObjectId.isValid(userId)) {
+		const $set: Record<string, unknown> = { updatedAt: new Date() };
+		for (const key of keys) $set[`meta.${key}`] = updates[key] === true;
+		const legacy = await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set });
+		if (legacy.matchedCount) applied = true;
+	}
+
+	if (!applied) return null;
 	const updated = await findUserById(userId);
 	return updated ? toAdminRow(updated) : null;
 };
