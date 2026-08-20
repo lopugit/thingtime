@@ -977,7 +977,8 @@ is fixed, and cite the checklist you ran in the PR description.
       seven crystal-path indexes (including `voteKey`, even while the poll
       product remains deferred) must be the non-unique `things_*_lookup`
       generation (old `things_*_unique` names dropped by the boot-time
-      ensure swap — verify with `getIndexes()`). Legacy docs get stamped by
+      ensure swap, including the superseded `things_follow_unique` marker
+      generation — verify with `getIndexes()`). Legacy docs get stamped by
       the `backfill-relationship-unique-keys` migration, whose notes also
       census (never modify) data things carrying reserved keys from before
       the reservation. The sanitizer reservation above must stay until every

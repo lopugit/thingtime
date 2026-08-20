@@ -535,19 +535,12 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       },
       ['targetId_1_ownerId_1_crystal.emoji_1']
     ),
-    // One follow edge per (followed, follower): toggle-on is an idempotent
-    // upsert, deduped under races. Only follow things carry crystal.follow
-    // (constant true) — same marker-field trick as the reaction index, since
-    // partial filters can't reliably scope on the multikey thingtime array.
-    createIndexReplacing(
-      col,
-      { targetId: 1, ownerId: 1 },
-      {
-        name: 'things_follow_unique',
-        unique: true,
-        partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.follow': { $exists: true } }
-      }
-    ),
+    // Retire the superseded follow-marker generation. Current follow writers
+    // use crystal.followKey for lookup and protected root uniqueKeys for
+    // dedupe; no registered schema mints crystal.follow. Leaving this old
+    // kind-blind unique index behind would needlessly constrain ordinary data
+    // Things after the crystal namespace reopens in phase 2.
+    dropIndexRetrying(col, 'things_follow_unique'),
     // One friendship doc per unordered user pair, regardless of who asked:
     // crystal.friendKey is '<minId>~<maxId>', written only by the friend
     // endpoint. Uniqueness rides uniqueKeys ('friendKey:<min>~<max>', stamped
