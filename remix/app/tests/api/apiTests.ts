@@ -7,6 +7,14 @@ import { apiEndpointDocs } from '~/docs/apiDocs';
 // Math.random here
 const uniqueSuffix = () => `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
+// Documentation-only IPv6 range (RFC 3849), randomized per runner load so the
+// inherited auth.register IP bucket cannot mask the body-cap assertion on
+// repeated local/CI runs.
+const uniqueTestIp = () => {
+  const hex = crypto.randomUUID().replace(/-/g, '');
+  return `2001:db8:${hex.slice(0, 4)}:${hex.slice(4, 8)}:${hex.slice(8, 12)}:${hex.slice(12, 16)}:${hex.slice(16, 20)}:${hex.slice(20, 24)}`;
+};
+
 // Email tests deliver to the configured test inbox via plus aliases so real
 // sends stay contained: support@x.com → support+signup-<suffix>@x.com.
 const DEFAULT_EMAIL_TEST_RECIPIENT = 'support@thingtime.com';
@@ -83,6 +91,19 @@ const uniqueEmailOtpBody = (context: ApiTestContext) => ({
 });
 
 const isObject = (value: any) => value && typeof value === 'object' && !Array.isArray(value);
+
+// Shared by the two app-shaped data-thing tests below: BOTH requests send this
+// exact crystal so the second create collides with the first on (ownerId,
+// crystal.appId, crystal.key). The things_app_data_unique index is partial-
+// filtered to thingtime: 'app-data' docs (see api/utils/mongodb/collections.ts),
+// so free-form data things carrying these keys must both persist — before the
+// kind scoping the second create 409'd on the app-data unique index. Computed
+// once per page load; duplicates across runs are fine (data things are not
+// unique on these keys, by design).
+const appShapedDataCrystal = (() => {
+  const suffix = uniqueSuffix();
+  return { name: `tt-api-test-app-shaped-${suffix}`, appId: `tt-api-test-appid-${suffix}`, key: 'tt-api-test-shared-key' };
+})();
 
 const decodeJwtPayload = (token: unknown) => {
   const encodedPayload = String(token || '').split('.')[1] || '';
@@ -237,6 +258,22 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/auth/register',
     body: {},
     expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Register returned validation error.')
+  },
+  {
+    id: 'auth-register-body-cap',
+    name: 'Register caps body size',
+    description: 'An oversized register body is rejected (413) before it is buffered/validated, rather than parsed in full.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/register',
+    headers: { 'X-Forwarded-For': uniqueTestIp() },
+    // ~64 KB payload, well over the 16 KB route cap.
+    body: { username: 'tt-api-test-oversized', password: 'valid-length-password', pad: 'x'.repeat(64 * 1024) },
+    expect: expectJson(
+      [413],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Oversized register body was rejected with a 413 error shape.'
+    )
   },
   {
     id: 'auth-login-invalid',
@@ -1063,6 +1100,16 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-search-null-condition',
+    name: 'Search rejects null conditions',
+    description: 'A conditions list carrying null is rejected with a 400 error shape instead of a 500.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/search',
+    body: { conditions: [null] },
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Null condition entry was rejected with a 400 error shape.')
+  },
+  {
     id: 'admin-rate-limits-guarded',
     name: 'Rate-limit config is admin-only',
     description: 'Reading the global rate-limit config requires an admin session.',
@@ -1346,6 +1393,50 @@ export const apiTests: ApiTestDefinition[] = [
             Array.isArray(body?.thing?.extended?.nested) &&
             body?.thing?.crystal?.legs === 4,
       'Schema-less create resolved to a data crystal and round-tripped extended verbatim (or was auth/rate limited).'
+    )
+  },
+  {
+    id: 'things-data-app-shaped-create',
+    name: 'Data crystal may carry appId + key',
+    description:
+      'A free-form data thing whose crystal contains appId and key entries is stored (session) — these are ordinary user keys, not reserved app-data fields — or rejected anonymously.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { crystal: appShapedDataCrystal, acl: ['tt:user'], tags: ['tt-api-test'] },
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status !== 200
+          ? body?.ok === false && typeof body?.error === 'string'
+          : body?.ok === true &&
+            Array.isArray(body?.thing?.thingtime) &&
+            body.thing.thingtime.includes('data') &&
+            body?.thing?.crystal?.appId === appShapedDataCrystal.appId &&
+            body?.thing?.crystal?.key === appShapedDataCrystal.key,
+      'Data thing with appId + key crystal entries persisted (or was auth/rate limited).'
+    )
+  },
+  {
+    id: 'things-data-app-shaped-duplicate',
+    name: 'Duplicate app-shaped data crystals do not collide',
+    description:
+      'A second data thing with the SAME appId + key crystal values as the previous test also persists: the app-data unique index is scoped to thingtime app-data docs, so free-form data things never 409 against it (pre-scoping this returned a duplicate-key conflict).',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { crystal: appShapedDataCrystal, acl: ['tt:user'], tags: ['tt-api-test'] },
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status !== 200
+          ? body?.ok === false && typeof body?.error === 'string'
+          : body?.ok === true &&
+            body?.thing?.crystal?.appId === appShapedDataCrystal.appId &&
+            body?.thing?.crystal?.key === appShapedDataCrystal.key,
+      'Second data thing with identical appId + key crystal values persisted alongside the first.'
     )
   },
   {
