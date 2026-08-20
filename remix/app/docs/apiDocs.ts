@@ -7435,7 +7435,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Vercel deployments',
     endpoint: '/api/v1/vercel/deployments',
     summary: 'Returns deployment overview data for environment pickers and dashboards.',
-    detail: 'This route is visible only when deployment status is enabled. It normalizes branch limits and hides itself with 404 otherwise.',
+    detail: 'This route is visible only when deployment status is enabled. It normalizes branch and per-branch history limits, returns one latest deployment per branch for compatibility plus bounded deploymentGroups history, and hides itself with 404 otherwise.',
     auth: {
       mode: 'none',
       description: 'Public status endpoint when enabled by server-side deployment configuration.'
@@ -7443,7 +7443,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'Call with an optional limit, branchLimit, or branches query parameter.',
-      'Use returned deployments to populate preview/environment selectors.',
+      'Set history, historyLimit, or deploymentsPerBranch to include up to 20 recent deployments in each deploymentGroups entry.',
+      'Use deployments for a latest-per-branch selector or deploymentGroups for a nested branch and deployment-history selector.',
       'Handle 404 as intentionally hidden when deployment status is disabled.',
       'Avoid exposing Vercel API tokens; this route returns sanitized overview data only.'
     ],
@@ -7452,7 +7453,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'List deployments',
         description: 'Read up to five branch deployments.',
         method: 'GET',
-        query: { limit: 5 }
+        query: { history: 10, limit: 5 }
       }
     ],
     responseExamples: [

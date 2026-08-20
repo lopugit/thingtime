@@ -109,6 +109,144 @@ final class ThingtimeWebDestinationTests: XCTestCase {
         XCTAssertEqual(Set(destinations.map(\.id)).count, destinations.count)
     }
 
+    func testDeploymentSectionsExposeLastSuccessfulDeploymentAfterQueuedLatest() {
+        let queued = ThingtimeWebDestination.DeploymentSummary(
+            branch: "codex/ios-drawer-camera-crash",
+            commitSha: "queued123456789",
+            createdAt: "2026-08-18T03:00:00.000Z",
+            dashboardUrl: nil,
+            environment: "preview",
+            id: "dpl_queued",
+            readyAt: nil,
+            readyLabel: "just now",
+            state: "queued",
+            url: "https://thingtime-queued-lopugits-projects.vercel.app"
+        )
+        let ready = ThingtimeWebDestination.DeploymentSummary(
+            branch: "codex/ios-drawer-camera-crash",
+            commitSha: "ready123456789",
+            createdAt: "2026-08-18T02:00:00.000Z",
+            dashboardUrl: nil,
+            environment: "preview",
+            id: "dpl_ready",
+            readyAt: "2026-08-18T02:02:00.000Z",
+            readyLabel: "1h",
+            state: "ready",
+            url: "https://thingtime-ready-lopugits-projects.vercel.app"
+        )
+        let group = ThingtimeWebDestination.DeploymentGroup(
+            branch: "codex/ios-drawer-camera-crash",
+            deployments: [queued, ready],
+            id: "codex/ios-drawer-camera-crash"
+        )
+
+        let section = ThingtimeWebDestination.deploymentSections(from: [group]).first
+
+        XCTAssertEqual(section?.deployments.map(\.deployment.id), ["dpl_queued", "dpl_ready"])
+        XCTAssertEqual(section?.latestDeployment?.deployment.state, "queued")
+        XCTAssertEqual(
+            section?.latestSuccessfulDeploymentID,
+            "https://thingtime-ready-lopugits-projects.vercel.app"
+        )
+    }
+
+    func testDeploymentOverviewFallsBackToGroupingLegacyLatestOnlyResponse() {
+        let deployments = [
+            ThingtimeWebDestination.DeploymentSummary(
+                branch: "feature/one",
+                commitSha: nil,
+                createdAt: nil,
+                dashboardUrl: nil,
+                environment: "preview",
+                id: "dpl_one",
+                readyAt: nil,
+                readyLabel: nil,
+                state: "ready",
+                url: "https://thingtime-one-lopugits-projects.vercel.app"
+            ),
+            ThingtimeWebDestination.DeploymentSummary(
+                branch: "feature/two",
+                commitSha: nil,
+                createdAt: nil,
+                dashboardUrl: nil,
+                environment: "preview",
+                id: "dpl_two",
+                readyAt: nil,
+                readyLabel: nil,
+                state: "ready",
+                url: "https://thingtime-two-lopugits-projects.vercel.app"
+            )
+        ]
+        let overview = ThingtimeWebDestination.DeploymentsOverview(
+            deploymentGroups: nil,
+            deployments: deployments
+        )
+
+        XCTAssertEqual(overview.resolvedDeploymentGroups.map(\.branch), ["feature/one", "feature/two"])
+        XCTAssertEqual(overview.resolvedDeploymentGroups.map(\.deployments.count), [1, 1])
+    }
+
+    func testDeploymentOverviewDecodesNestedHistory() throws {
+        let data = Data(
+            #"""
+            {
+              "deployments": [
+                {
+                  "branch": "feature/history",
+                  "id": "dpl_queued",
+                  "state": "queued",
+                  "url": "https://thingtime-queued-lopugits-projects.vercel.app"
+                }
+              ],
+              "deploymentGroups": [
+                {
+                  "branch": "feature/history",
+                  "id": "feature/history",
+                  "deployments": [
+                    {
+                      "branch": "feature/history",
+                      "id": "dpl_queued",
+                      "state": "queued",
+                      "url": "https://thingtime-queued-lopugits-projects.vercel.app"
+                    },
+                    {
+                      "branch": "feature/history",
+                      "id": "dpl_ready",
+                      "state": "ready",
+                      "url": "https://thingtime-ready-lopugits-projects.vercel.app"
+                    }
+                  ]
+                }
+              ]
+            }
+            """#.utf8
+        )
+
+        let overview = try JSONDecoder().decode(
+            ThingtimeWebDestination.DeploymentsOverview.self,
+            from: data
+        )
+
+        XCTAssertEqual(overview.resolvedDeploymentGroups.count, 1)
+        XCTAssertTrue(overview.supportsDeploymentHistory)
+        XCTAssertEqual(
+            overview.resolvedDeploymentGroups.first?.deployments.map(\.state),
+            ["queued", "ready"]
+        )
+    }
+
+    func testTokenlessPreviewHistoryFallsBackToAConfiguredAPI() {
+        let overview = ThingtimeWebDestination.DeploymentsOverview(
+            deploymentGroups: [],
+            deployments: [],
+            configured: false,
+            hasError: false,
+            source: "tokenless"
+        )
+
+        XCTAssertFalse(overview.supportsDeploymentHistory)
+    }
+
     func testVercelDeploymentDestinationRejectsInvalidAPIURLs() {
         let deployment = ThingtimeWebDestination.DeploymentSummary(
             branch: "main",
@@ -128,8 +266,37 @@ final class ThingtimeWebDestinationTests: XCTestCase {
 
     func testDeploymentsAPIURLTargetsThingtimeDeploymentsEndpoint() {
         XCTAssertEqual(
-            ThingtimeWebDestination.deploymentsAPIURL(limit: 5).absoluteString,
-            "https://thingtime.com/api/v1/vercel/deployments?limit=5"
+            ThingtimeWebDestination.deploymentsAPIURL(from: nil, limit: 5).absoluteString,
+            "https://thingtime.com/api/v1/vercel/deployments?limit=5&history=10"
+        )
+    }
+
+    func testDeploymentsAPIURLUsesConfiguredPreviewOrigin() {
+        XCTAssertEqual(
+            ThingtimeWebDestination.deploymentsAPIURL(
+                from: [
+                    "ThingtimeWebURL": "https://thingtime-feature-history-lopugits-projects.vercel.app/feed"
+                ],
+                limit: 5,
+                historyLimit: 3
+            ).absoluteString,
+            "https://thingtime-feature-history-lopugits-projects.vercel.app/api/v1/vercel/deployments?limit=5&history=3"
+        )
+    }
+
+    func testDeploymentsAPIURLsFallBackFromConfiguredPreviewToProduction() {
+        XCTAssertEqual(
+            ThingtimeWebDestination.deploymentsAPIURLs(
+                from: [
+                    "ThingtimeWebURL": "https://thingtime-feature-history-lopugits-projects.vercel.app"
+                ],
+                limit: 5,
+                historyLimit: 3
+            ).map(\.absoluteString),
+            [
+                "https://thingtime-feature-history-lopugits-projects.vercel.app/api/v1/vercel/deployments?limit=5&history=3",
+                "https://thingtime.com/api/v1/vercel/deployments?limit=5&history=3"
+            ]
         )
     }
 }
