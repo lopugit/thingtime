@@ -239,6 +239,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 					ownerId={user.id}
 					savedUrl={user.avatarUrl}
 					savedLinkedUrl={user.avatarLinkedUrl}
+					privateUploadsEnabled={user.privateUploadsEnabled}
 					disabled={saving}
 					remainingBytes={user.storage.remainingBytes}
 					storageStatus={user.storage.status}
@@ -253,6 +254,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 					ownerId={user.id}
 					savedUrl={user.bannerUrl}
 					savedLinkedUrl={user.bannerLinkedUrl}
+					privateUploadsEnabled={user.privateUploadsEnabled}
 					disabled={saving}
 					remainingBytes={user.storage.remainingBytes}
 					storageStatus={user.storage.status}
