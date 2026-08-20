@@ -42,6 +42,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   open tab's next full-tree save from silently reverting newer drawer,
   Commander, Content, or preference changes made elsewhere. See the
   [PR #92 implementation note](../PRs/92-claude-cross-tab-thingtime-sync-s4--cross-tab-sync-for-persisted-thingtime-state.md).
+  — Claude (AI), 2026-08-20
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
   — Codex (AI), 2026-08-18
 
 ### Added
@@ -106,6 +110,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   assignments parse data literals without `eval`. Registration preserves the
   existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
   streaming body cap. — Codex (AI), 2026-08-18
+- **Native iOS drawer and media capture**: the iOS WebView now uses the same
+  fixed drawer trigger as mobile web, so opening the drawer keeps its close
+  control inside the panel instead of translating it with the top nav. The
+  generated app Info.plist now declares camera, microphone, and photo-library
+  purpose strings so WebKit's Take Photo or Video flow requests permission
+  instead of terminating the app. — Codex (AI), 2026-08-17
 - **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
   now lets the controller build an already-previewed commit in the isolated
   `develop` Custom Environment instead of canceling it as a duplicate, while
@@ -136,6 +146,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Native iOS per-branch deployment history**: the Vercel deployments API now
+  preserves its existing latest-per-branch response while optionally returning
+  a bounded newest-first history for each branch. The native Web destination
+  drawer presents that history as a second disclosure level, marks the most
+  recent ready deployment as `Last successful` when a newer build is queued,
+  and keeps every specific deployment URL directly selectable. Signed iOS
+  build 15 targets the matching branch preview and is available to internal
+  TestFlight testers. — Codex (AI), 2026-08-18
 - **Recoverable first-session Things space**: a fresh browser can land on
   `/things` and immediately receive the real Things UI through a rate-limited
   temporary user Thing, bounded subscription, normal browser session, and
