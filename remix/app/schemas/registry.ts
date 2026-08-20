@@ -694,6 +694,14 @@ const attachmentSchema: ThingtimeSchema = {
 			required: true,
 			values: [...ATTACHMENT_MEDIA_KINDS],
 			description: 'Server-derived safe rendering class. SVG, HTML, and unknown types are files, never inline media.'
+		},
+		{
+			name: 'detectedContentType',
+			type: 'string',
+			required: false,
+			max: MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
+			description:
+				'Magic-byte-sniffed MIME type, preserved only when the served contentType stays application/octet-stream so downloads can still name the real container (for example video/x-msvideo for an AVI). Server-written at upload finalization; never client input.'
 		}
 	],
 	example: { name: 'sunset.webp', size: 482013, contentType: 'image/webp', mediaKind: 'image' }
