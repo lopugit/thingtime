@@ -42,6 +42,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
   Verified via S3 preflight (bucket CORS already allowed the preview origins
   — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
 
 ### Added
 
@@ -119,6 +123,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   mutations rather than leaving partial or unmetered rows. See the
   [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
   — Codex (AI), 2026-08-19
+- **Native iOS drawer and media capture**: the iOS WebView now uses the same
+  fixed drawer trigger as mobile web, so opening the drawer keeps its close
+  control inside the panel instead of translating it with the top nav. The
+  generated app Info.plist now declares camera, microphone, and photo-library
+  purpose strings so WebKit's Take Photo or Video flow requests permission
+  instead of terminating the app. — Codex (AI), 2026-08-17
 - **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
   now lets the controller build an already-previewed commit in the isolated
   `develop` Custom Environment instead of canceling it as a duplicate, while
@@ -171,6 +181,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Developer ID/notarization patch before production. See the
   [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
   — Codex (AI), 2026-08-19
+- **Native iOS per-branch deployment history**: the Vercel deployments API now
+  preserves its existing latest-per-branch response while optionally returning
+  a bounded newest-first history for each branch. The native Web destination
+  drawer presents that history as a second disclosure level, marks the most
+  recent ready deployment as `Last successful` when a newer build is queued,
+  and keeps every specific deployment URL directly selectable. Signed iOS
+  build 15 targets the matching branch preview and is available to internal
+  TestFlight testers. — Codex (AI), 2026-08-18
 - **ChatGPT and Claude desktop history in Messenger**: the Electron app now
   discovers local ChatGPT Work/Codex sessions plus the main and Thingtime
   Claude desktop profiles, accepts official ChatGPT/Claude JSON or ZIP exports,
