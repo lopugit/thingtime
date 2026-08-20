@@ -170,6 +170,17 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
         [asyncFetcher]
       ),
+      setUserPublicUploads: useCallback(
+        async (args: { userId: string; enabled: boolean; scope?: 'public' | 'private' | 'all' }) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, enabled: args?.enabled, scope: args?.scope ?? 'public' },
+            {
+              action: '/api/v1/admin/users/public-uploads',
+              errorContext: `${args?.enabled ? 'approve' : 'withhold'} ${args?.scope ?? 'public'} uploads`
+            }
+          ),
+        [asyncFetcher]
+      ),
       migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
 			migrationDiagnostic: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),
@@ -417,7 +428,10 @@ export function useApi() {
               tokenAcl: args?.tokenAcl,
               // move support — only send folderId when the caller provides it
               // (undefined must stay "leave it where it is", null = root)
-              ...(args && 'folderId' in args ? { folderId: args.folderId } : {})
+              ...(args && 'folderId' in args ? { folderId: args.folderId } : {}),
+              // attachment reorder — only send when the caller provides it
+              // (the ids must be a permutation of the post's bound set)
+              ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }
           ),

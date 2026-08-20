@@ -1,3 +1,4 @@
+import { isCanonicalAttachmentContentType } from './attachmentCore';
 import type { AttachmentCrystal, AttachmentMediaKind } from './attachmentCore';
 
 export const ATTACHMENT_INLINE_CONTENT_TYPES = new Set([
@@ -6,8 +7,14 @@ export const ATTACHMENT_INLINE_CONTENT_TYPES = new Set([
 	'image/jpeg',
 	'image/png',
 	'image/webp',
+	'video/3gpp',
+	'video/3gpp2',
 	'video/mp4',
-	'video/webm'
+	'video/ogg',
+	'video/quicktime',
+	'video/webm',
+	'video/x-m4v',
+	'video/x-matroska'
 ]);
 
 const extensionFromName = (name: string) => {
@@ -18,20 +25,29 @@ const extensionFromName = (name: string) => {
 export const detectedAttachmentType = (
 	detectedMime: string | undefined,
 	originalName: string
-): { contentType: string; mediaKind: AttachmentMediaKind } => {
+): { contentType: string; mediaKind: AttachmentMediaKind; detectedContentType?: string } => {
 	const mime = String(detectedMime || '').toLowerCase();
 
 	// file-type can identify many active or browser-executable formats. Only a
-	// deliberately tiny passive raster/video set is ever allowed to render
-	// inline; everything else is stored and delivered as opaque bytes.
+	// deliberately curated passive raster/video set is ever allowed to render
+	// inline: every container a mainstream browser can natively play, and
+	// nothing sniffable into an active document. Codec support inside an
+	// allowed container still varies per browser; the client degrades an
+	// unplayable video to its download row.
 	if (ATTACHMENT_INLINE_CONTENT_TYPES.has(mime)) {
 		return { contentType: mime, mediaKind: mime.startsWith('image/') ? 'image' : 'video' };
 	}
 
-	// file-type identifies QuickTime as video/quicktime. Keep it downloadable:
-	// support varies and the narrow inline policy must not expand by extension.
+	// Everything else is stored and delivered as opaque bytes; the filename
+	// extension never influences the decision. The sniffed type is preserved as
+	// display metadata so a download row can still name the real container
+	// (for example video/x-msvideo for an AVI).
 	void extensionFromName(originalName);
-	return { contentType: 'application/octet-stream', mediaKind: 'file' };
+	return {
+		contentType: 'application/octet-stream',
+		mediaKind: 'file',
+		...(mime && mime !== 'application/octet-stream' && isCanonicalAttachmentContentType(mime) ? { detectedContentType: mime } : {})
+	};
 };
 
 const asciiFilename = (name: string) => {
@@ -59,5 +75,6 @@ export const attachmentPublicProjection = (id: string, crystal: AttachmentCrysta
 	name: crystal.name,
 	size: crystal.size,
 	contentType: crystal.contentType,
-	mediaKind: crystal.mediaKind
+	mediaKind: crystal.mediaKind,
+	...(crystal.detectedContentType ? { detectedContentType: crystal.detectedContentType } : {})
 });

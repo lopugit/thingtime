@@ -8,6 +8,7 @@ const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
+  'all-branch.yml',
   'develop-pr-preview.yml',
   'electron-release.yml',
   'web-ci.yml',
@@ -28,6 +29,16 @@ for (const filename of callers) {
   assert.doesNotMatch(source, /\.github\/(?:actions|scripts)\//, `${filename} must not reference product-branch behavior files`);
   assert.equal((source.match(/^\s+uses:/gm) ?? []).length, 1, `${filename} must contain exactly one reusable-workflow call`);
 }
+
+const developPreviewCaller = readFileSync(
+  resolve(workflowsRoot, 'develop-pr-preview.yml'),
+  'utf8'
+);
+assert.match(
+  developPreviewCaller,
+  /^      pr_number: \$\{\{ fromJSON\(inputs\.pr_number \|\| '0'\) \}\}$/m,
+  'develop-pr-preview.yml must convert the manual dispatch string to the reusable workflow number type'
+);
 
 const promotionCaller = readFileSync(
   resolve(workflowsRoot, 'promote-features-to-main.yml'),
