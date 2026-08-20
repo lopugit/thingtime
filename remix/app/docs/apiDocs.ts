@@ -923,6 +923,70 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-users-public-uploads',
+    group: 'admin',
+    title: 'Approve uploads (public / private / all)',
+    endpoint: '/api/v1/admin/users/public-uploads',
+    summary: 'Grant or withhold a user’s file and media upload permissions, per scope or all at once (admin only).',
+    detail:
+      'POST { userId, enabled, scope } to set meta.publicUploads and/or meta.privateUploads. scope is ' +
+      "'public' (post/comment/custom-emoji attachments — the default when omitted), 'private' (message attachments + " +
+      "the user's own profile avatar/banner), or 'all' (both flags in one write). Accounts created after the " +
+      'signup-permissions hotfix start with BOTH scopes withheld — verifying their email address does NOT grant ' +
+      'uploads — so this endpoint is the manual approval step an admin performs after the “new user” notification ' +
+      'email. While a scope is withheld, POST /api/v1/attachments/uploads returns 403 public_uploads_not_approved or ' +
+      'private_uploads_not_approved for purposes in that scope and no upload can start. Accounts that predate the ' +
+      'flags have no meta keys and remain enabled; admins are always allowed regardless of the flags.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      "POST userId + enabled:true + scope ('public' | 'private' | 'all') to approve that variation; enabled:false withholds it again.",
+      'Read the returned user row (publicUploadsEnabled, privateUploadsEnabled, publicUploadsPending, privateUploadsPending) to update the UI.',
+      'The /admin Users tab lists pending accounts — a *Pending flag is true while that scope’s approval is outstanding.',
+      "Non-admins receive 403; missing userId, a non-boolean enabled, or an unknown scope 400; unknown user 404."
+    ],
+    requestExamples: [
+      {
+        name: 'Approve all uploads',
+        description: 'Enable public AND private file and media uploads for a vetted new user.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', enabled: true, scope: 'all' }
+      },
+      {
+        name: 'Approve private only',
+        description: 'Let the user set profile media and attach in DMs while public uploads stay withheld.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', enabled: true, scope: 'private' }
+      },
+      {
+        name: 'Withhold public uploads',
+        description: 'Revoke the public variation again (scope defaults to public when omitted).',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', enabled: false }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated user row.',
+        body: {
+          ok: true,
+          user: {
+            id: '64f000000000000000000002',
+            username: 'nik',
+            emailVerified: true,
+            publicUploadsEnabled: true,
+            privateUploadsEnabled: true,
+            publicUploadsPending: false,
+            privateUploadsPending: false
+          }
+        }
+      },
+      { status: 400, description: 'Missing userId.', body: { ok: false, error: 'userId is required' } },
+      { status: 404, description: 'Unknown user.', body: { ok: false, error: 'User not found' } }
+    ]
+  }),
+  endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
     group: 'settings',
     title: 'AI workflow model waterfall',
