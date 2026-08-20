@@ -13,7 +13,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "13"
+    CURRENT_PROJECT_VERSION: "15"
     SWIFT_VERSION: "5.9"
     DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
   configs:
@@ -42,6 +42,9 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
         ITSAppUsesNonExemptEncryption: false
+        NSCameraUsageDescription: Thingtime uses the camera so you can take photos and videos to share.
+        NSMicrophoneUsageDescription: Thingtime uses the microphone when you record a video to share.
+        NSPhotoLibraryUsageDescription: Thingtime uses your photo library so you can choose photos and videos to share.
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
