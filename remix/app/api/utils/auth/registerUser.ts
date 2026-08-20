@@ -36,6 +36,10 @@ export type CreateUserAccountInput = {
   accountKind?: 'user' | 'service';
   emailVerificationRequiredBy?: Date | null;
   storageAllowanceBytes?: number;
+  // Opt a creation path INTO an upload scope (admin-provisioned accounts
+  // only). Public signup never sets them — see the meta assignment below.
+  publicUploads?: boolean;
+  privateUploads?: boolean;
   meta?: Record<string, any>;
 };
 
@@ -44,8 +48,10 @@ export type CreateUserAccountResult = { ok: false; status: number; error: string
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 // Privileged meta keys that must never be set at account creation (only via
-// their own admin-gated / authenticated endpoints).
-const PRIVILEGED_META_KEYS = ['admin'];
+// their own admin-gated / authenticated endpoints). `publicUploads` and
+// `privateUploads` join `admin` here: a public signup body must not be able to
+// hand itself the upload permissions this hotfix exists to withhold.
+const PRIVILEGED_META_KEYS = ['admin', 'publicUploads', 'privateUploads'];
 
 // Drop privileged keys from any caller-supplied meta before it's persisted.
 const sanitizeCreateMeta = (meta: unknown): Record<string, any> => {
@@ -98,7 +104,19 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     // Defense-in-depth: privileged flags can never be set at creation time,
     // even if a caller sneaks them into meta. `admin` is granted only via the
     // admin-gated setUserAdmin (auth/admin.ts).
-    meta: sanitizeCreateMeta(input.meta)
+    // File/media uploads start WITHHELD for every newly created account, in
+    // BOTH scopes (public = post/comment/emoji, private = messages + own
+    // profile media) — verifying the email address no longer grants either. An
+    // admin turns them on per user, per scope or all at once, from /admin
+    // (POST /api/v1/admin/users/public-uploads) after the "new user"
+    // notification lands. Both keys are stripped from any caller-supplied meta
+    // above, so this is the only writer at creation time. Accounts that
+    // predate the hotfix have no flags at all and stay enabled.
+    meta: {
+      ...sanitizeCreateMeta(input.meta),
+      publicUploads: input.publicUploads === true,
+      privateUploads: input.privateUploads === true
+    }
   };
 
   if (input.emailVerificationRequiredBy !== undefined) {
