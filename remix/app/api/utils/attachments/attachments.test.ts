@@ -1778,7 +1778,16 @@ const legacyReadyDoc = (overrides: Partial<AttachmentDoc> = {}) =>
 
 test('detection backfill publishes exactly what completion would have and never touches names or sizes', async () => {
 	const docs = [
-		legacyReadyDoc({ shareId: 'att-avi', objectKey: 'objects/att-avi', crystal: { ...attachmentDoc().crystal, name: 'clip.avi' } }),
+		legacyReadyDoc({
+			shareId: 'att-avi',
+			objectKey: 'objects/att-avi',
+			crystal: {
+				...attachmentDoc().crystal,
+				name: 'clip.avi',
+				title: 'Owner title',
+				description: 'Owner description'
+			} as any
+		}),
 		legacyReadyDoc({ shareId: 'att-mov', objectKey: 'objects/att-mov', crystal: { ...attachmentDoc().crystal, name: 'clip.mov' } }),
 		legacyReadyDoc({ shareId: 'att-raw', objectKey: 'objects/att-raw' })
 	];
@@ -1829,7 +1838,9 @@ test('detection backfill publishes exactly what completion would have and never 
 			size: 10 * 1024 * 1024,
 			contentType: 'application/octet-stream',
 			mediaKind: 'file',
-			detectedContentType: 'video/x-msvideo'
+			detectedContentType: 'video/x-msvideo',
+			title: 'Owner title',
+			description: 'Owner description'
 		},
 		versionId: 'version-1'
 	});
@@ -1855,6 +1866,33 @@ test('detection backfill publishes exactly what completion would have and never 
 		hasMore: false,
 		stoppedForTimeBudget: false
 	});
+});
+
+test('detection backfill fails closed instead of erasing malformed annotation metadata', async () => {
+	let wrote = false;
+	const service = createAttachmentService({
+		store: {
+			listReadyUndetected: async () => [
+				legacyReadyDoc({
+					shareId: 'att-malformed-annotation',
+					crystal: { ...attachmentDoc().crystal, title: { unexpected: true } } as any
+				})
+			],
+			upgradeReadyCrystal: async () => {
+				wrote = true;
+				throw new Error('malformed annotation must not be rewritten');
+			}
+		} as any,
+		getS3: () => noopS3({ detectContentType: async () => 'video/quicktime' }),
+		customMongoActive: () => false
+	});
+	const result = await service.backfillDetectedTypes({});
+	assert.equal(result.ok, true);
+	if (result.ok) {
+		assert.equal(result.conflicts, 1);
+		assert.equal(result.upgradedInline, 0);
+	}
+	assert.equal(wrote, false);
 });
 
 test('detection backfill dry run counts changes, writes nothing, and pages with a cursor', async () => {

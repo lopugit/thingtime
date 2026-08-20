@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR #321 legacy detected-type backfill preserves media annotations**:
+  re-detecting a pre-#319 opaque attachment now changes only its server-owned
+  type fields and retains #312's owner-authored title/description exactly;
+  malformed annotation metadata fails closed instead of being erased. — Codex
+  (AI), 2026-08-21
+
 ### Added
 
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the

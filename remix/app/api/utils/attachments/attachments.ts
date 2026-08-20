@@ -637,12 +637,28 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 							undetected += 1;
 							continue;
 						}
+						// #312 adds owner-authored presentation fields to the protected
+						// attachment crystal. Re-detection owns only the type fields: preserve
+						// existing annotation exactly, and fail closed rather than erase a
+						// malformed value written by some other path.
+						const existingPresentation = doc.crystal as AttachmentCrystal & {
+							title?: unknown;
+							description?: unknown;
+						};
+						const presentation: Record<string, string> = {};
+						for (const key of ['title', 'description'] as const) {
+							if (!Object.prototype.hasOwnProperty.call(existingPresentation, key)) continue;
+							const value = existingPresentation[key];
+							if (typeof value !== 'string') throw new AttachmentStoreConflictError(`Attachment ${key} is malformed`);
+							presentation[key] = value;
+						}
 						const crystal: AttachmentCrystal = {
 							name: doc.crystal.name,
 							size: doc.crystal.size,
 							contentType: detected.contentType,
 							mediaKind: detected.mediaKind,
-							...(detected.detectedContentType ? { detectedContentType: detected.detectedContentType } : {})
+							...(detected.detectedContentType ? { detectedContentType: detected.detectedContentType } : {}),
+							...presentation
 						};
 						if (!dryRun) await dependencies.store.upgradeReadyCrystal(doc.shareId, crystal, versionId);
 						if (crystal.contentType === 'application/octet-stream') labeledOpaque += 1;
