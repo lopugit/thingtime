@@ -5,7 +5,8 @@ import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
 import {
   createReadyAttachmentPostInsertHook,
   inspectReadyAttachmentsForPost,
-  prepareAttachmentCascadeForThing
+  prepareAttachmentCascadeForThing,
+  reorderReadyAttachmentsForTarget
 } from '~/api/utils/attachments/attachments';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
 import {
@@ -245,15 +246,17 @@ export const action = async ({ request }: { request: Request }) => {
       );
     }
 
-    const inspected = await inspectReadyAttachmentsForPost(user.id, attachmentRequest.attachmentIds);
-    if (inspected.ok === false) {
-      return json({ ok: false, error: inspected.error }, { status: inspected.status, headers: cors });
+    if (attachmentRequest.kind === 'create') {
+      const inspected = await inspectReadyAttachmentsForPost(user.id, attachmentRequest.attachmentIds);
+      if (inspected.ok === false) {
+        return json({ ok: false, error: inspected.error }, { status: inspected.status, headers: cors });
+      }
+      const attachmentIds = attachmentRequest.attachmentIds as readonly string[];
+      attachmentHooks = {
+        postAttachments: { hasAny: inspected.hasAny, hasVisual: inspected.hasVisual },
+        ...(attachmentIds.length ? { afterInsert: createReadyAttachmentPostInsertHook(attachmentIds) } : {})
+      };
     }
-    const attachmentIds = attachmentRequest.attachmentIds as readonly string[];
-    attachmentHooks = {
-      postAttachments: { hasAny: inspected.hasAny, hasVisual: inspected.hasVisual },
-      ...(attachmentIds.length ? { afterInsert: createReadyAttachmentPostInsertHook(attachmentIds) } : {})
-    };
     bodyForCreate = postBodyWithoutAttachmentIds(body as Record<string, unknown>);
   }
 
@@ -308,7 +311,17 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   if (method === 'PATCH') {
-    const result = await updateThing(viewer, body?.id, body, { replaceCrystal: false }, app);
+    // Reorder before the document update so the projection the client gets
+    // back already lists attachments in the new order. The reorder is an
+    // idempotent permutation stamp — a failed updateThing after it leaves
+    // nothing dangling, and a retry re-applies the same order safely.
+    if (attachmentRequest.present && attachmentRequest.kind === 'reorder') {
+      const reordered = await reorderReadyAttachmentsForTarget(user.id, body?.id, attachmentRequest.attachmentIds);
+      if (reordered.ok === false) {
+        return json({ ok: false, error: reordered.error }, { status: reordered.status, headers: cors });
+      }
+    }
+    const result = await updateThing(viewer, body?.id, bodyForCreate, { replaceCrystal: false }, app);
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
