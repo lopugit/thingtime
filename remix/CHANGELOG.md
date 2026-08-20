@@ -71,6 +71,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Security
 
+- **Canonical scoped-upload UX reconciliation**: every attachment picker now
+  reads the existing public/private approval booleans directly and shows a
+  purpose-specific approval card when its scope is withheld. The obsolete
+  one-boolean upload alias is not retained. Revoking a scope disables new file
+  starts without hiding finish, retry, or cleanup controls for a draft already
+  in progress. — Codex (AI), 2026-08-21
+
 - **Upload approval now has public / private / all scopes**: the
   signup-permissions gate is split into two independent tri-state flags —
   `meta.publicUploads` (post/comment/custom-emoji attachments) and the new
