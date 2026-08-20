@@ -54,8 +54,16 @@ const defaultDependencies: AttachmentMutationDependencies = {
 	readBody: readJsonBody
 };
 
+// Upload purposes by permission scope. Mirrors attachmentUploadIntent in
+// attachments.ts (an absent purpose defaults to 'post'): public purposes land
+// on publicly viewable surfaces, private ones only in the account's own DMs or
+// profile. An unknown purpose is left to the service's own 400 — nothing is
+// reserved either way.
+const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', 'custom-emoji']);
+const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner']);
+
 export const createAttachmentMutationAction = (
-	options: { rateKey: string; service: MutationService },
+	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean },
 	overrides: Partial<AttachmentMutationDependencies> = {}
 ) => {
 	const dependencies = { ...defaultDependencies, ...overrides };
@@ -76,7 +84,6 @@ export const createAttachmentMutationAction = (
 			if (user.accountKind !== 'user') {
 				return json({ ok: false, error: 'Attachments require a user account' }, { status: 403 });
 			}
-
 			const limit = await dependencies.enforceLimit(request, options.rateKey, `user:${user.id}`, { failClosed: true });
 			if (!limit.allowed) {
 				if (limit.unavailable) {
@@ -86,6 +93,34 @@ export const createAttachmentMutationAction = (
 			}
 
 			const body = await dependencies.readBody(request, ATTACHMENT_JSON_BODY_BYTES);
+			// File/media uploads are withheld per SCOPE from new accounts until an
+			// admin grants them (auth/users.ts userPublicUploadsEnabled /
+			// userPrivateUploadsEnabled): the requested purpose decides which flag
+			// gates this start. Sits after the body read because the purpose lives in
+			// the body — a denied attempt still consumes rate budget, which only
+			// throttles retry spam. Gate the START of an upload: nothing is reserved,
+			// no MPU is opened, and every downstream part/complete call has no upload
+			// id to act on. The already-uploaded lifecycle calls
+			// (parts/complete/abort/delete) stay ungated so a permission change
+			// mid-upload can't strand a paid-for reservation.
+			if (options.requireUploadPermission) {
+				const purpose = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>).purpose : undefined;
+				const needsPublic = PUBLIC_UPLOAD_PURPOSES.has(purpose) && !user.publicUploadsEnabled;
+				const needsPrivate = PRIVATE_UPLOAD_PURPOSES.has(purpose) && !user.privateUploadsEnabled;
+				if (needsPublic || needsPrivate) {
+					return json(
+						{
+							ok: false,
+							error: needsPublic
+								? 'Public file and media uploads are awaiting admin approval for this account'
+								: 'Private file and media uploads are awaiting admin approval for this account',
+							code: needsPublic ? 'public_uploads_not_approved' : 'private_uploads_not_approved'
+						},
+						{ status: 403 }
+					);
+				}
+			}
+
 			const result = await options.service(user.id, body);
 			if (result.ok === false) {
 				const { status, ...bodyResult } = result;
