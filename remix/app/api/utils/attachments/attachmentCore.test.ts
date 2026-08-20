@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
 	ATTACHMENT_ENVELOPE_VERSION,
 	ATTACHMENT_STATES,
+	applyAttachmentAnnotationPatch,
 	attachmentMediaKindForContentType,
 	attachmentObjectSizeBytesForAccounting,
 	isAttachmentFinalizationLeaseId,
@@ -287,4 +288,38 @@ test('annotated crystals stay canonical for projection and accounting; foreign k
 	// unknown keys stay rejected
 	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...crystal, objectKey: 'leak' }), null);
 	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ crystal: { ...crystal, extra: true } })), null);
+});
+
+test('annotation preserves server-owned magic-byte detection and rejects non-canonical source metadata', () => {
+	const opaque = {
+		name: 'legacy.avi',
+		size: 42,
+		contentType: 'application/octet-stream',
+		mediaKind: 'file' as const,
+		detectedContentType: 'video/x-msvideo',
+		title: 'Old title'
+	};
+	assert.deepEqual(applyAttachmentAnnotationPatch(opaque, { title: 'Detected video', description: 'Still opaque in this browser' }), {
+		ok: true,
+		crystal: {
+			name: 'legacy.avi',
+			size: 42,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			title: 'Detected video',
+			description: 'Still opaque in this browser',
+			detectedContentType: 'video/x-msvideo'
+		}
+	});
+	assert.deepEqual(applyAttachmentAnnotationPatch(opaque, { title: null }), {
+		ok: true,
+		crystal: {
+			name: 'legacy.avi',
+			size: 42,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			detectedContentType: 'video/x-msvideo'
+		}
+	});
+	assert.equal(applyAttachmentAnnotationPatch({ ...opaque, detectedContentType: 'application/octet-stream' }, { title: 'x' }).ok, false);
 });

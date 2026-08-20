@@ -16,10 +16,10 @@ const crystalOf = (result: ReturnType<typeof validateThingtimeCrystal>): Record<
 	return (result as { ok: true; crystal: Record<string, any> }).crystal;
 };
 
-test('legacy post crystals without mediaLayout stay valid and normalize to null', () => {
+test('legacy and Auto post crystals stay valid with mediaLayout absent', () => {
 	const crystal = crystalOf(validateThingtimeCrystal(['post'], basePost));
-	assert.equal(crystal.mediaLayout, null);
-	assert.equal(crystalOf(validatePost(null)).mediaLayout, null);
+	assert.equal('mediaLayout' in crystal, false);
+	assert.equal('mediaLayout' in crystalOf(validatePost(null)), false);
 });
 
 test('masonry mode stores only the mode', () => {

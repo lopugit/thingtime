@@ -463,6 +463,15 @@ is fixed, and cite the checklist you ran in the PR description.
       when emptied, and the saved values survive reload on card, lightbox, and
       media page. A non-owner and an unauthenticated caller get no pencil and a
       403/401 from the endpoint.
+- [ ] Annotate a legacy opaque attachment that already has a server-written
+      `detectedContentType`. Title/description edits and clears preserve that
+      field exactly, so #319/#321's detected label and accounting survive; a
+      malformed pre-existing crystal fails closed instead of being rewritten.
+- [ ] On `/media/:id`, the timestamp, owner-menu Copy link, and outward Share
+      all resolve to `/media/:id` (never the blank `/post/:id` attachment
+      projection). Repost/quote controls are absent until attachment-target
+      shares have a real renderer, so the media card cannot create an empty
+      feed share.
 - [ ] Media layout editor: on a post with 3+ images, switch Layout between
       Auto 🧱 / Rows 🥞 / Grid 🔳 in the composer AND in edit mode. Rows accepts
       a pattern like 1-2-3 (hero, two, three; extras repeat the last row size),
@@ -474,9 +483,9 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Server bounds: `mediaLayout` rejects pattern rows over 25 entries or
       outside 1..6, columns outside 1..6, spans maps over 25 entries, and
       non-object payloads with a 400; unknown keys are stripped; legacy posts
-      without the field stay valid; lightbox order stays attachment order in
-      every mode; desktop and 375px render every mode with no horizontal
-      overflow.
+      without the field stay valid; Auto removes the `mediaLayout` key rather
+      than storing `null`; lightbox order stays attachment order in every mode;
+      desktop and 375px render every mode with no horizontal overflow.
 - [ ] Drag-resize canvas editor (grid mode): dragging a tile's edge handle
       resizes it snap-to-cell (wide/tall/big), including via touch, with a
       keyboard fallback on a focused tile; the column slider relayouts live;

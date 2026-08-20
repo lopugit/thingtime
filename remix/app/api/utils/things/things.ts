@@ -2752,6 +2752,7 @@ export type AddCommentInput =
       images?: unknown;
       listing?: unknown;
       thing?: unknown;
+			mediaLayout?: unknown;
       tags?: unknown;
 			shareId?: unknown;
 	  };
