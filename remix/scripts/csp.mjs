@@ -22,6 +22,16 @@
 // img-src / media-src allow https:. Embeds render as link-out cards, never
 // iframes, so frame-src stays 'self' (docs design-bundle previews).
 
+// The virtual-hosted S3 endpoint the signed part/content URLs use. Mirrors
+// api/utils/attachments/config.ts (getPrivateS3Config) without importing
+// server code into this build-time script.
+const privateS3Origin = () => {
+	const bucket = String(process.env.THINGTIME_PRIVATE_S3_BUCKET || '').trim();
+	const region = String(process.env.THINGTIME_PRIVATE_S3_REGION || '').trim();
+	if (bucket && region) return `https://${bucket}.s3.${region}.amazonaws.com`;
+	return `https://*.s3.${region || 'ap-southeast-2'}.amazonaws.com`;
+};
+
 const directives = ({ dev = false } = {}) => ({
 	'default-src': ["'self'"],
 	'script-src': [
@@ -40,6 +50,13 @@ const directives = ({ dev = false } = {}) => ({
 	'connect-src': [
 		"'self'",
 		'https://cdn.jsdelivr.net',
+		// Direct-to-S3 attachment uploads: the composer PUTs signed multipart
+		// parts straight at the private bucket (attachments/privateS3), so the
+		// bucket origin must be connectable or every upload dies at the browser
+		// with "The file could not reach storage." Exact origin when the build
+		// env carries the bucket config; regional wildcard fallback otherwise
+		// (local/preview builds without the sensitive env).
+		privateS3Origin(),
 		// Dev only: Vite HMR websocket (separate port) + analytics debug beacons.
 		...(dev ? ['ws:', 'wss:', 'https://va.vercel-scripts.com'] : [])
 	],
