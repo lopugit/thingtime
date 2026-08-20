@@ -22,6 +22,7 @@ export function PreviewFrame({
       src={previewSrc}
       title={`${title} preview`}
       allowFullScreen
+      sandbox="allow-downloads allow-forms allow-modals allow-popups allow-scripts"
       style={{
         border: 0,
         display: 'block',
