@@ -3,8 +3,15 @@ import { Box, Button, Flex, IconButton, Image, Progress, Text } from '@chakra-ui
 import { CheckCircle2, File as FileIcon, Image as ImageIcon, RotateCcw, UploadCloud, Video as VideoIcon, X } from 'lucide-react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MediaAddTile, MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
-import { formatAttachmentBytes, localFileMediaKind, MAX_POST_ATTACHMENTS, sameAttachmentSnapshot } from './attachmentUiCore';
+import {
+	attachmentUploadScopeForPurpose,
+	formatAttachmentBytes,
+	localFileMediaKind,
+	MAX_POST_ATTACHMENTS,
+	sameAttachmentSnapshot
+} from './attachmentUiCore';
 import type { AttachmentComposerSnapshot, AttachmentUploadPurpose, ComposerAttachmentUpload } from './attachmentTypes';
 import { useAttachmentUploads } from './useAttachmentUploads';
 
@@ -251,6 +258,14 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 	} = props;
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
 	const lopu = useLopu();
+	const currentUser = useCurrentUser();
+	const uploadScope = attachmentUploadScopeForPurpose(purpose);
+	const scopeEnabled = currentUser
+		? uploadScope === 'private'
+			? currentUser.privateUploadsEnabled
+			: currentUser.publicUploadsEnabled
+		: undefined;
+	const uploadsNotGranted = scopeEnabled === false;
 	const [dragging, setDragging] = React.useState(false);
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
 	const emittedSnapshotRef = React.useRef<AttachmentComposerSnapshot | null>(null);
@@ -274,7 +289,10 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		onCleanupDeferred,
 		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes, remainingBytes, storageStatus }
 	);
-	const pickerDisabled = disabled || uploads.length >= boundedMaxFiles;
+	// Revocation stops new starts without hiding cleanup/retry controls for a
+	// draft already in progress. Server lifecycle routes remain independently
+	// usable after a scope is withheld.
+	const pickerDisabled = disabled || uploadsNotGranted || uploads.length >= boundedMaxFiles;
 	const visualUploads: ComposerAttachmentUpload[] = [];
 	const fileUploads: ComposerAttachmentUpload[] = [];
 	for (const upload of uploads) {
@@ -298,6 +316,22 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		[addFiles]
 	);
 
+	if (uploadsNotGranted && uploads.length === 0) {
+		return (
+			<Flex flexDirection="column" rowGap={2} role="group" aria-label={ariaLabel}>
+				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
+					Media & files 📎
+				</Text>
+				<Box border={BORDER} borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
+					<Text fontSize="12px" color={MUTED} whiteSpace="normal">
+						🔐 {uploadScope === 'private' ? 'Private' : 'Public'} media uploads need admin approval during the beta. After email
+						verification, an admin is notified; uploads unlock as soon as this scope is approved.
+					</Text>
+				</Box>
+			</Flex>
+		);
+	}
+
 	const storageLabel =
 		storageStatus === 'reconciling'
 			? 'Storage is being verified; the server will check each file.'
@@ -309,6 +343,13 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 
 	return (
 		<Flex flexDirection="column" rowGap={2} role="group" aria-label={ariaLabel}>
+			{uploadsNotGranted ? (
+				<Box border={BORDER} borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
+					<Text fontSize="12px" color={MUTED} whiteSpace="normal">
+						🔐 This upload scope was withheld. New files are disabled; you can still finish, retry, or remove the current draft safely.
+					</Text>
+				</Box>
+			) : null}
 			<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap">
 				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
 					Media & files 📎
