@@ -32,6 +32,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
   Verified via S3 preflight (bucket CORS already allowed the preview origins
   — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
 
 ### Added
 
@@ -56,6 +60,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   wildcard branch”. — Claude (AI), 2026-08-18
 
 ### Security
+
+- **Canonical scoped-upload UX reconciliation**: every attachment picker now
+  reads the existing public/private approval booleans directly and shows a
+  purpose-specific approval card when its scope is withheld. The obsolete
+  one-boolean upload alias is not retained. Revoking a scope disables new file
+  starts without hiding finish, retry, or cleanup controls for a draft already
+  in progress. — Codex (AI), 2026-08-21
 
 - **Upload approval now has public / private / all scopes**: the
   signup-permissions gate is split into two independent tri-state flags —
@@ -95,6 +106,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   assignments parse data literals without `eval`. Registration preserves the
   existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
   streaming body cap. — Codex (AI), 2026-08-18
+- **Native iOS drawer and media capture**: the iOS WebView now uses the same
+  fixed drawer trigger as mobile web, so opening the drawer keeps its close
+  control inside the panel instead of translating it with the top nav. The
+  generated app Info.plist now declares camera, microphone, and photo-library
+  purpose strings so WebKit's Take Photo or Video flow requests permission
+  instead of terminating the app. — Codex (AI), 2026-08-17
 - **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
   now lets the controller build an already-previewed commit in the isolated
   `develop` Custom Environment instead of canceling it as a duplicate, while
@@ -125,6 +142,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Native iOS per-branch deployment history**: the Vercel deployments API now
+  preserves its existing latest-per-branch response while optionally returning
+  a bounded newest-first history for each branch. The native Web destination
+  drawer presents that history as a second disclosure level, marks the most
+  recent ready deployment as `Last successful` when a newer build is queued,
+  and keeps every specific deployment URL directly selectable. Signed iOS
+  build 15 targets the matching branch preview and is available to internal
+  TestFlight testers. — Codex (AI), 2026-08-18
 - **Recoverable first-session Things space**: a fresh browser can land on
   `/things` and immediately receive the real Things UI through a rate-limited
   temporary user Thing, bounded subscription, normal browser session, and
