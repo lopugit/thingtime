@@ -2536,7 +2536,39 @@ const sanitizeDataValue = (
   return { ok: true, value: rootOut };
 };
 
+// Crystal ROOT keys claimed by the KIND-BLIND partial unique indexes in
+// api/utils/mongodb/collections.ts (KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS —
+// things_member_key_unique & friends). Those filters see only `crystal.<key>`,
+// so ANY thing carrying the key at its crystal root enters the index — and a
+// free-form data thing could permanently occupy another user's slot: e.g.
+// crystal.followKey '<followerId>:<followeeId>' squats the victim's follow
+// edge, whose real insert then E11000s while the social flows mostly swallow
+// it. Rejected loudly at the ROOT only — a nested occurrence never forms the
+// indexed path and stays legal. Name-based regardless of value type: the
+// friend index fires on $exists (any type), and one rule is deterministic.
+// voteKey is reserved ahead of its index (poll-voting branch) so that merge
+// can never open a squat window. Every new crystal-key-only unique index MUST
+// add its key here; reservedCrystalRootKeys.test.ts pins the two lists.
+export const RESERVED_CRYSTAL_ROOT_KEYS: ReadonlySet<string> = new Set([
+	'friendKey',
+	'memberKey',
+	'dmKey',
+	'inviteCode',
+	'emojiKey',
+	'followKey',
+	'voteKey'
+]);
+
 const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+	// Checked on the raw input (before the bounded walk) so the rejection names
+	// the reserved key even when the walk would fail elsewhere first. Update
+	// paths validate the MERGED crystal, so a pre-fix squat can't survive an
+	// edit either.
+	for (const key of Object.keys(input)) {
+		if (RESERVED_CRYSTAL_ROOT_KEYS.has(key)) {
+			return fail(400, `crystal.${key} is reserved for platform relationship records — nest it inside another key or rename it`);
+		}
+	}
   const sanitized = sanitizeDataValue(input);
 	if (sanitized.ok === false) return sanitized;
   return { ok: true, crystal: sanitized.value as Record<string, unknown> };

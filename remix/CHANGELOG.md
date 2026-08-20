@@ -112,6 +112,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   flag-id collisions leave ordinary user Things untouched for operator
   review. — Codex (AI), 2026-08-21
 
+- **Relationship uniqueness is structural across all reserved key families**:
+  follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
+  protected root `uniqueKeys` namespace. Boot-time index convergence replaces
+  every kind-blind crystal-path unique index with a non-unique lookup, and the
+  idempotent backfill stamps legacy relationship docs while only reporting
+  suspicious free-form data. The vote family is migrated as security
+  substrate without shipping the deferred polls product; boot convergence also
+  removes the superseded `crystal.follow` marker index that no current writer
+  uses. — Codex (AI), 2026-08-21
 - **Canonical scoped-upload UX reconciliation**: every attachment picker now
   reads the existing public/private approval booleans directly and shows a
   purpose-specific approval card when its scope is withheld. The obsolete

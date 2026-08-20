@@ -900,6 +900,22 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-data-reserved-crystal-root',
+    name: 'Data crystals reject reserved root keys',
+    description:
+      'A free-form data thing cannot claim a crystal root key backing the kind-blind unique indexes (followKey & friends) — that would squat another user\'s follow/membership/DM/invite/emoji slot. Rejected 400 with a session, 401 without; never persisted.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { thingtime: ['data'], crystal: { followKey: 'squatter:victim' } },
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Reserved crystal root key was rejected, never persisted.'
+    )
+  },
+  {
     id: 'things-user-missing-username',
     name: 'User posts require a username',
     description: 'The user-posts route validates the username parameter.',
