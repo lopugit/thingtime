@@ -404,6 +404,29 @@ const thingsCollection = (db: any) => db.collection(physicalCollectionName('thin
 // kind-prefixed indexes serve v1-era docs until the things migration
 // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
 // array), and targetId serves comment/reaction/share lookups.
+// Crystal ROOT keys enforced by KIND-BLIND partial unique indexes below:
+// their filters see only `crystal.<key>` — no kind/thingtime scoping — so ANY
+// thing carrying the key at its crystal root enters the index. The free-form
+// data crystal accepts arbitrary root keys, so without a matching root-key
+// reservation any user could POST a data thing that permanently occupies
+// another user's slot (crystal.followKey '<followerId>:<followeeId>' blocks
+// the victim's real follow with E11000, which the flows mostly swallow).
+// Every key listed here is therefore banned at the data-crystal root —
+// RESERVED_CRYSTAL_ROOT_KEYS in schemas/registry.ts — and
+// schemas/reservedCrystalRootKeys.test.ts fails if a key is added on one
+// side only. Prefer the thingtime-scoped filter pattern
+// (things_app_data_unique) for NEW unique indexes: partial-filter equality on
+// the multikey thingtime array verifiedly includes array-contains matches on
+// MongoDB 8.0, making the index kind-scoped and squat-proof structurally.
+export const KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS: readonly string[] = [
+	'friendKey', // things_friend_unique
+	'memberKey', // things_member_key_unique
+	'dmKey', // things_dm_key_unique
+	'inviteCode', // things_invite_code_unique
+	'emojiKey', // things_emoji_key_unique
+	'followKey' // things_follow_key_unique
+];
+
 const createThingsDataIndexes = (db: any): Promise<any>[] => {
   // Tagged so a createIndex failure names the exact `things.<index>` that
   // broke, whether this runs on the home db or a custom endpoint.
@@ -520,6 +543,8 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // One friendship doc per unordered user pair, regardless of who asked:
     // crystal.friendKey is '<minId>~<maxId>', written only by the friend
     // endpoint. Uniqueness kills duplicate/crossed requests structurally.
+    // Kind-blind ($exists, any type) — friendKey is reserved at the
+    // data-crystal root (KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS above).
     createIndexReplacing(
       col,
       { 'crystal.friendKey': 1 },
@@ -635,7 +660,9 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     ),
     // Messenger (api/utils/messenger). Structural invariants ride single
     // crystal key fields with partial unique indexes (the reaction-index
-    // pattern — acl/thingtime are multikey, so compounds over them are out):
+    // pattern — acl/thingtime are multikey, so compounds over them are out).
+    // All five are kind-blind, so each key is reserved at the data-crystal
+    // root (KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS above):
     // one membership per (chat|community, user)…
     col.createIndex(
       { 'crystal.memberKey': 1 },
