@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Center, Flex } from '@chakra-ui/react';
-import { Command, PanelLeft, Search } from 'lucide-react';
+import { Command, Search } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
@@ -52,7 +52,7 @@ export const Nav = (props) => {
 	const user = useCurrentUser();
 	const claimedUser = user?.temporary ? null : user;
 
-	const { loading, open, toggleOpen, direction, openSearch } = useDrawer();
+	const { loading, open, direction, openSearch } = useDrawer();
 	const { width: drawerWidth, resizing } = useDrawerLiveWidth();
 	const isMobile = useIsMobileViewport();
 
@@ -187,31 +187,6 @@ export const Nav = (props) => {
 					// bg='white'
 					// boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
 				>
-					<Center
-						className="nav-native-drawer-button"
-						as="button"
-						type="button"
-						position="absolute"
-						left={0}
-						top={0}
-						bottom={0}
-						width="56px"
-						display="none"
-						cursor="pointer"
-						opacity={0.75}
-						aria-label={open ? 'Close menu' : 'Open menu'}
-						title={open ? 'Close menu' : 'Open menu'}
-						sx={{
-							WebkitTapHighlightColor: 'transparent',
-							touchAction: 'manipulation',
-							'html.thingtime-native-webview &': {
-								display: 'flex'
-							}
-						}}
-						onClick={toggleOpen}
-					>
-						<PanelLeft size={16} strokeWidth={1.9} />
-					</Center>
 					<Center
 						className="nav-left-section"
 						display={['none', 'flex']}
