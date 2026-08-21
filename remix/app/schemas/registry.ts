@@ -502,6 +502,14 @@ const rootThingSchema: ThingtimeSchema = {
 			description: 'Server-owned avatar/banner slot, present exactly when attachmentPurpose is profile.'
 		},
 		{
+			name: 'moderation',
+			type: 'object',
+			required: false,
+			system: true,
+			description:
+				'Protected server-owned moderation state. Generic Thing create/update input never writes it; only moderation analysis and admin review may stamp it.'
+		},
+		{
 			name: 'attachmentFinalizationLeaseId',
 			type: 'string',
 			required: false,
@@ -694,6 +702,14 @@ const attachmentSchema: ThingtimeSchema = {
 			required: true,
 			values: [...ATTACHMENT_MEDIA_KINDS],
 			description: 'Server-derived safe rendering class. SVG, HTML, and unknown types are files, never inline media.'
+		},
+		{
+			name: 'detectedContentType',
+			type: 'string',
+			required: false,
+			max: MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
+			description:
+				'Magic-byte-sniffed MIME type, preserved only when the served contentType stays application/octet-stream so downloads can still name the real container (for example video/x-msvideo for an AVI). Server-written at upload finalization; never client input.'
 		}
 	],
 	example: { name: 'sunset.webp', size: 482013, contentType: 'image/webp', mediaKind: 'image' }
@@ -2070,6 +2086,7 @@ export const PROTECTED_THINGTIME = [
 	'app-storage',
 	'service-quota',
   MIGRATION_DIAGNOSTIC_THINGTIME,
+	'moderationFlag',
   ...CI_CONTROL_THINGTIME,
   'follow',
   'friend',

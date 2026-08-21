@@ -28,6 +28,13 @@ export type AttachmentPublicMetadata = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	// Magic-byte-sniffed MIME type, present only when the served contentType
+	// collapsed to application/octet-stream so downloads can still name the real
+	// container. Server-written at finalization; never client input.
+	detectedContentType?: string;
+	// Present (true) only when the server-side moderation pipeline stamped the
+	// attachment nsfw — the client renders it blurred behind a consent click
+	nsfw?: boolean;
 };
 
 export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id'>;
@@ -74,7 +81,16 @@ export type AttachmentStorageCandidate = {
 export type AttachmentMetadataResult = { ok: true; crystal: AttachmentCrystal } | { ok: false; error: string };
 
 const SAFE_IMAGE_CONTENT_TYPES = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
-const SAFE_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/ogg', 'video/quicktime', 'video/webm']);
+const SAFE_VIDEO_CONTENT_TYPES = new Set([
+	'video/3gpp',
+	'video/3gpp2',
+	'video/mp4',
+	'video/ogg',
+	'video/quicktime',
+	'video/webm',
+	'video/x-m4v',
+	'video/x-matroska'
+]);
 const SAFE_AUDIO_CONTENT_TYPES = new Set([
 	'audio/aac',
 	'audio/flac',
@@ -111,6 +127,9 @@ const isWellFormedUnicode = (value: string): boolean => {
 	}
 	return true;
 };
+
+export const isCanonicalAttachmentContentType = (value: string): boolean =>
+	value.length > 0 && value.length <= MAX_ATTACHMENT_CONTENT_TYPE_CHARS && CONTENT_TYPE_RE.test(value);
 
 export const attachmentMediaKindForContentType = (contentType: string): AttachmentMediaKind => {
 	if (SAFE_IMAGE_CONTENT_TYPES.has(contentType)) return 'image';
@@ -184,18 +203,40 @@ const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null =>
 	if (!sanitized.ok || !value || typeof value !== 'object' || Array.isArray(value)) return null;
 	const raw = value as Record<string, unknown>;
 	const keys = Object.keys(raw).sort();
-	if (keys.join('\0') !== ['contentType', 'mediaKind', 'name', 'size'].join('\0')) return null;
+	const hasDetected = keys.length === 5;
+	const expectedKeys = hasDetected
+		? ['contentType', 'detectedContentType', 'mediaKind', 'name', 'size']
+		: ['contentType', 'mediaKind', 'name', 'size'];
+	if (keys.join('\0') !== expectedKeys.join('\0')) return null;
+	if (hasDetected) {
+		// The sniffed type is display metadata for opaque downloads only; it may
+		// never restate or contradict a contentType the server serves inline.
+		if (
+			raw.contentType !== 'application/octet-stream' ||
+			typeof raw.detectedContentType !== 'string' ||
+			raw.detectedContentType === 'application/octet-stream' ||
+			!isCanonicalAttachmentContentType(raw.detectedContentType)
+		) {
+			return null;
+		}
+	}
 	return raw.name === sanitized.crystal.name &&
 		raw.size === sanitized.crystal.size &&
 		raw.contentType === sanitized.crystal.contentType &&
 		raw.mediaKind === sanitized.crystal.mediaKind
-		? sanitized.crystal
+		? { ...sanitized.crystal, ...(hasDetected ? { detectedContentType: raw.detectedContentType as string } : {}) }
 		: null;
 };
 
-export const toAttachmentPublicMetadata = (id: unknown, crystal: unknown): AttachmentPublicMetadata | null => {
+// `moderation` is the protected root stamp (api/utils/moderation). Pending and
+// blocked attachments never project publicly: pending is the fail-closed
+// quarantine while analysis/retry runs; blocked is the final quarantine.
+export const toAttachmentPublicMetadata = (id: unknown, crystal: unknown, moderation?: unknown): AttachmentPublicMetadata | null => {
 	const canonical = canonicalAttachmentCrystal(crystal);
-	return typeof id === 'string' && id && canonical ? { id, ...canonical } : null;
+	if (typeof id !== 'string' || !id || !canonical) return null;
+	const status = (moderation as { status?: unknown } | null | undefined)?.status;
+	if (status === 'pending' || status === 'blocked') return null;
+	return { id, ...canonical, ...(status === 'nsfw' ? { nsfw: true as const } : {}) };
 };
 
 // The owner-chosen display position, stamped on each bound attachment thing at

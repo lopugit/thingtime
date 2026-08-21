@@ -24,6 +24,14 @@ is fixed, and cite the checklist you ran in the PR description.
       still 403s; approve only `public` on another account and confirm the
       reverse; `scope: "all"` enables both, and a request without `scope`
       keeps the legacy public-only behavior.
+- [ ] At desktop and 390px mobile widths, withheld post/comment/custom-emoji
+      composers show the public approval card while withheld message/profile
+      composers show the private card. Approving only one scope unlocks only
+      its matching pickers after revalidation; there is no one-boolean alias.
+- [ ] Revoke a scope while a draft upload is already selected. The picker stops
+      accepting new files, but the current rows and their finish/retry/remove
+      controls remain reachable so lifecycle cleanup still works after
+      revocation. Once the draft is empty, the approval card replaces it.
 - [ ] Confirm the `admin.new_user` message reaches
       `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default `admin@thingtime.com`) with
       the username, display name, email, user id, and signup time. In dev read
@@ -188,11 +196,24 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## iOS web destination drawer
 
-- [ ] Confirm `https://thingtime.com/api/v1/vercel/deployments?limit=50` reports
-      `source: "api"`, `hasError: false`, and more than the production `main`
-      deployment before testing the native picker. A tokenless response or
-      `Vercel API returned 403` means the Vercel project token must be repaired
-      and a fresh deployment built before the app can discover previews.
+- [ ] At a phone-width native WebView destination, open the web app navigation
+      drawer from the top-left menu icon. The same fixed icon used by mobile web
+      stays inside the drawer header while the page and top nav move aside; no
+      duplicate icon appears at the drawer's outside edge. Close it, scroll from
+      the page top to bottom, reopen it, and confirm the icon remains tappable.
+- [ ] From any media composer in the native iOS app, choose Add Media → Take
+      Photo or Video. The system requests camera access instead of terminating
+      the app; photo capture returns a selectable file. Repeat with video and
+      confirm microphone permission is requested, then verify Photo Library
+      selection still returns media without a crash.
+- [ ] Confirm
+      `https://thingtime.com/api/v1/vercel/deployments?limit=50&history=10`
+      reports `source: "api"`, `hasError: false`, and `deploymentGroups` with
+      up to ten newest-first deployments per branch before testing the native
+      picker. The compatibility `deployments` array must still expose one
+      latest row per branch. A tokenless response or `Vercel API returned 403`
+      means the Vercel project token must be repaired and a fresh deployment
+      built before the app can discover previews.
 - [ ] Launch the iOS app with at least twelve returned destinations, open the
       left-edge Web destination drawer, and scroll from the first row to the
       final row and back. The header, refresh, and close controls stay pinned;
@@ -201,6 +222,16 @@ is fixed, and cite the checklist you ran in the PR description.
       without dismissing the drawer. Then swipe predominantly left and confirm
       the drawer closes; reopen it, select an off-screen preview, and confirm
       the web view loads that exact URL.
+- [ ] Find a branch whose newest deployment is queued/building and whose prior
+      deployment is ready. Expand the branch row, confirm both deployments are
+      shown newest first and the ready child is labelled `Last successful`,
+      then select that child and verify the WebView loads its immutable URL
+      rather than the queued branch alias. Reopen the drawer and confirm the
+      selected branch expands automatically with the child checkmark visible.
+- [ ] Expand and collapse several branches while scrolling to the bottom and
+      back in portrait and landscape. Nested deployment rows remain inside
+      their branch cards, disclosure controls stay tappable, and vertical
+      scrolling never triggers the horizontal drawer-close gesture.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
@@ -255,6 +286,61 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
+      `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
+      with a red border, light red wash, centered NSFW badge, and a
+      `Show Anyway` button that reveals it (per attachment, per page view).
+      An image named `tt-test-illegal.png` disappears from public payloads and
+      its `/api/v1/attachments/content` URL 404s for non-admins, while a
+      `moderationFlag` row appears in `/admin` → Moderation.
+- [ ] Deliberately hold a just-completed attachment in `pending`: it is absent
+      from another account's attachment projection and content returns not
+      found, while its owner and an admin can still open the exact evidence.
+      Run the moderation sweep after restoring the deterministic provider and
+      confirm it releases the item to `clear`, `nsfw`, or `blocked`.
+- [ ] Generic Things create/update requests cannot set the root `moderation`
+      field or create a `thingtime: moderationFlag` record. Pre-create an
+      ordinary Thing with the deterministic `modflag-<target>` id, analyze a
+      flagged target, and confirm the ordinary Thing remains byte-for-byte
+      ordinary while the target remains `flagPending` for operator review.
+- [ ] With `THINGTIME_MODERATION_PROVIDER=openai+claude` (+ both API keys), a
+      clearly clean image stamps `clear` with provider `openai` (free omni
+      screen, no Claude spend) while an explicit image stamps via provider
+      `claude` (escalated) — check the provider column in `/admin` →
+      Moderation. With `ANTHROPIC_API_KEY` removed, an omni-flagged image still
+      lands `nsfw` (blur + flag) instead of staying pending.
+- [ ] `/admin` → Moderation → AI moderation settings: switching Media uploads
+      to "OpenAI omni only (free)" updates the "running:" label and subsequent
+      uploads stamp provider `openai`; switching either surface to Off stops
+      new stamps. Choices survive a reload (settings collection, not local
+      state).
+- [ ] With an OpenAI key configured, a post/comment containing threatening
+      harassment vanishes from feeds/threads for everyone shortly after
+      creation and a `text` flag row (with excerpt, no View button) appears in
+      `/admin` → Moderation; Clear restores the post, Block re-hides it.
+      Editing a clean post to add flagged text re-screens it.
+- [ ] Hybrid create gate: with text moderation on, posting text that omni
+      flags as block-worthy never appears in any feed/thread — even a refresh
+      fired immediately after posting (the doc is born blocked; a `text` flag
+      row appears for admins). With `TT_TEXT_SCREEN_BUDGET_MS=0` (or omni
+      unreachable) the post is born pending and owner-private until the async
+      verdict or sweep releases it.
+- [ ] Fail-closed pending flow: with text moderation on and omni unreachable
+      (or `TT_TEXT_SCREEN_BUDGET_MS=0`), a new post appears for its author but
+      NOT for other accounts; once omni is reachable again (queue retry or
+      cron sweep) the post appears for everyone and follower notifications
+      arrive at release time. Turning text moderation Off releases any
+      stranded pending posts on the next sweep.
+- [ ] URL-photos moderation: a post created through the multi-URL photo flow
+      pointing at an explicit external image gets flagged (nsfw advisory row
+      with the URL in the excerpt) without any text in the post; editing the
+      listing title or tags of a clean marketplace post to violating text
+      re-screens it.
+- [ ] Text sweep safety net: with text moderation on, manually strip the
+      `moderation` field from a flagged post (simulating a mid-flight death),
+      then hit `/api/v1/moderation/sweep` with the CRON_SECRET bearer (or the
+      admin Run analysis sweep button) — the post gets stamped/flagged and the
+      "text post(s) awaiting analysis" count in `/admin` → Moderation drops.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
@@ -315,6 +401,18 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Feed, profile, nested repost, and permalink cards render vetted raster
       images and videos inline. SVG, HTML, script, and unknown types render only
       as named download rows; their bytes never execute inline.
+- [ ] Upload a QuickTime screen recording (a `.mov`, or a QuickTime container
+      misnamed `.mp4` — check for `ftypqt` magic bytes) plus an MKV or M4V.
+      Each finalizes as its sniffed `video/*` type and plays inline in feed and
+      permalink cards; the decision follows magic bytes, never the filename
+      extension.
+- [ ] Upload a non-web-playable container (for example an AVI) and confirm its
+      download row labels the real sniffed container (for example "AVI video"
+      from `detectedContentType`) instead of `application/octet-stream`, while
+      the bytes still download as opaque octet-stream.
+- [ ] In a browser missing the codec inside an allowed container (for example
+      HEVC QuickTime in Firefox), the failed `<video>` degrades to the named
+      download row instead of an inert black player.
 - [ ] Let a content URL expire at the storage provider and open the attachment
       again: the stable authenticated `/api/v1/attachments/content?id=…` route
       issues fresh access. A private post's attachment fails closed for another
@@ -1447,6 +1545,13 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 
 ## Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`)
 
+- [ ] `/admin` → Moderation lists flags (unreviewed first) with status badges;
+      `View` opens the raw media (blocked media opens for admins only);
+      `Clear` / `NSFW` / `Block` override the verdict with a Lopu toast and
+      stamp reviewedBy; exercise all three overrides on deterministic clear,
+      nsfw, and blocked uploads. `Run analysis sweep` reports
+      analyzed/flagged/skipped counts and drains pending attachments plus
+      verdicts whose flag write was interrupted.
 Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
 restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
 name already on the allowlist is refused, so register FIRST). One command
