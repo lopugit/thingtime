@@ -191,9 +191,9 @@ cookies, credentials, and raw paths; imported provider rows remain read-only.
 
 ## Validation
 
-### Automated and build gates (2026-08-19)
+### Automated and build gates (2026-08-21)
 
-- Swift: `swift test --package-path macos/ThingtimeNode` passed 87/87 tests;
+- Swift: `swift test --package-path macos/ThingtimeNode` passed 92/92 tests;
   the final real long-lived connector-pipe regression slice passed 10/10. Both
   `ThingtimeNode` and `ThingtimeNodeBridge` passed the release build.
 - MCP: typecheck, ordinary build, and `build:desktop` passed; the final suite
@@ -201,18 +201,17 @@ cookies, credentials, and raw paths; imported provider rows remain read-only.
   local-history fallback, project registry, cancellation, live wire, and
   internal-context redaction coverage.
 - Electron: the bridge, registration, verifier, installer, packaging-contract,
-  and pinned-package-manager suite passed 37/37 tests. Changed main/preload and
+  and pinned-package-manager suite passed 47/47 tests. Changed main/preload and
   script files also passed their syntax checks.
-- Remix focused coverage passed 175/175 tests: devices 42, Messenger 28,
+- Remix focused coverage passed 181/181 tests: devices 42, Messenger 34,
   storage 9, quota 11, collections 16, schemas 62, Things 6, and rate limiting
-  1. The fresh complete `test:unit` gate passed 28 TAP groups / 525 Node tests
+  1. The fresh complete `test:unit` gate passed 29 TAP groups / 615 Node tests
      plus its AI model-routing self-test gate.
 - The canonical repository-root `npm run build:vercel` passed, including the
   Vite client, Nitro Vercel output, static shell, and filesystem-route verifier.
 - Targeted lint over 78 changed feature files reported zero errors and five
-  pre-existing `ThingsPage` warnings. The typecheck ratchet reported 146 total
-  errors against the repository baseline of 143, with no error in a changed
-  feature file.
+  pre-existing `ThingsPage` warnings. The final typecheck ratchet passed with
+  135 total errors, down from the repository baseline of 143.
 - Disposable MongoDB replica-set proofs passed for quota admission,
   idempotency, rollback, and the prior 64-index migration: posts, Messenger
   content, and persistent device mirrors are account-byte metered; attachments
@@ -220,10 +219,13 @@ cookies, credentials, and raw paths; imported provider rows remain read-only.
   leaves no partial related rows. Ephemeral command/event delivery remains
   byte/count bounded and TTL-expiring rather than an unmetered archive.
 
-### Canonical local package and install (2026-08-19)
+### Canonical local package and install (2026-08-21)
 
-- `corepack pnpm@10.12.1 --dir electron build` completed with the local
-  Apple Development signing mode. The unpacked app is
+- `THINGTIME_DESKTOP_DEFAULT_ENDPOINT=https://pr-68.previews.dev.thingtime.com/`
+  `THINGTIME_DESKTOP_DEFAULT_ENDPOINT_LABEL='PR #68 preview'`
+  `corepack pnpm@10.12.1 --dir electron build` completed with the local Apple
+  Development signing mode. Its metadata records exact source head
+  `4705ea3cc` and the selected PR #68 deployment. The unpacked app is
   `/Users/lopu/.codex/worktrees/ai-desktop-messenger/thingtime/electron/release/mac-arm64/Thingtime.app`.
 - The source bundle passed `codesign --verify --deep --strict` and
   `electron/scripts/verify-signed-app.mjs --mode local`. Its outer identifier is
@@ -234,21 +236,29 @@ cookies, credentials, and raw paths; imported provider rows remain read-only.
   strict and repository verifier checks. Built and installed designated
   requirements matched for the outer app, node, and bridge. Final executable
   SHA-256 values matched between build and install:
-  `a3c4fe7fde3b1197d366ed50a70227ada237f1466def1c5d4081167974fb2352`
-  (outer), `78074f8b6dbcae3a49c7ce3523d20ed5977f2df5cf22e425ccddc95ed0c95fc8`
+  `1f9cba2b161934fcf83bddbe63c5f91f52b5c7189a90ca3e05e76c523c24e18a`
+  (outer), `1d7ad9245605868e3ffc87dbd8a5fc2d98b32b82b28d4df61f17de99c8d4b505`
   (node), and
-  `16faa6dbccb7574af0f0c133ade1147692564b5a9dfdd714ed839761e1fcdbfe`
+  `6d7e85417783b7ae0006482ac09d10417371cd6b021edf7eba66caa3234ae883`
   (bridge). The packaged ASAR also matched at
-  `cf9b7febb8a74c0c96d835ea4787e60bec02db7e9c01e4511b55baadd9d4fbc4`.
-- The final exact-head installer started launchd-owned node PID 9442 and
-  connector PID 9757. Both remained running unchanged for more than two
-  minutes, beyond the previous 60-second pipe failure, while the Electron main
-  process was absent. `launchctl` reported `runs = 1` and no exit.
-- The preceding feature-identical signed package was also opened at
-  `127.0.0.1:64878` and received Cmd+Q; Electron stopped while its node and
-  connector remained running. A signed-parent status request returned
-  `running`, `unpaired`, and journal count 0; Accessibility and Screen Recording
-  were both denied without a prompt.
+  `9182230f6529ebeba37ca015a8a5797039b142be8e0ad7ea9a0004b81c649cfa`;
+  the packaged endpoint metadata matched at
+  `d5eeb4eccf331714704f20ee1a6f663a273c331f58d5669c676043ef72c55137`.
+- The installed app opened the PR #68 origin and its devices route returned an
+  authenticated `401` JSON response instead of the former `404`. Its settings
+  showed production, development, and PR #68 endpoint choices plus the full
+  built-in icon list. Switching colour tree -> pink -> colour tree reconciled
+  the LaunchAgent each time with exactly one image-only menu item.
+- Cmd+Q removed Electron while node PID 76406 remained. Terminating that exact
+  managed helper then produced one launchd replacement, PID 78050; a direct
+  LaunchServices start of the embedded helper exited without creating a second
+  node or menu item. After Electron relaunched, the exact installed node,
+  connector, and Electron processes remained singular for more than six
+  minutes and the LaunchAgent retained the PR #68 API origin.
+- A signed-renderer permission read returned Accessibility `authorized` and
+  Screen Recording `denied` without prompting. This proves status is read from
+  the helper's live TCC identity rather than hard-coded denied; the denied grant
+  was deliberately not changed or reset.
 
 ### Acceptance boundaries still open
 
