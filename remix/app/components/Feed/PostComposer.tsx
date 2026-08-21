@@ -5,10 +5,14 @@ import { PictureInPicture2, X } from 'lucide-react';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
-import type { AttachmentComposerSnapshot } from '~/components/Attachments/attachmentTypes';
+import { AttachmentReorderGallery } from '~/components/Attachments/AttachmentReorderGallery';
+import { MediaLayoutCanvas, MediaLayoutPicker, SpanCycleButton, parseLayoutPattern, type ComposerLayoutMode } from '~/components/Attachments/MediaLayoutControls';
+import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
+import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 import {
 	canonicalPostTags,
 	matchesCommittedPostCreate,
+	normalizePublicAttachment,
 	shouldFreezeAmbiguousPostSubmission,
 	type CommittedPostExpectation
 } from '~/components/Attachments/attachmentUiCore';
@@ -148,6 +152,19 @@ export const PostComposer = (props: PostComposerProps) => {
   const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
   const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
   const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
+	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
+	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
+		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
+	);
+	const [layoutPattern, setLayoutPattern] = React.useState(
+		editPost?.mediaLayout?.mode === 'rows' && editPost.mediaLayout.pattern?.length ? editPost.mediaLayout.pattern.join('-') : '1-2'
+	);
+	const [layoutColumns, setLayoutColumns] = React.useState(
+		editPost?.mediaLayout?.mode === 'grid' && editPost.mediaLayout.columns ? editPost.mediaLayout.columns : 3
+	);
+	const [layoutSpans, setLayoutSpans] = React.useState<Record<string, MediaLayoutSpan>>(
+		editPost?.mediaLayout?.mode === 'grid' && editPost.mediaLayout.spans ? { ...editPost.mediaLayout.spans } : {}
+	);
   const [posting, setPosting] = React.useState(false);
 	const [submissionUncertain, setSubmissionUncertain] = React.useState(false);
 	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENT_SNAPSHOT);
@@ -180,6 +197,21 @@ export const PostComposer = (props: PostComposerProps) => {
   // edit mode: the thing to seed the draft branch with, captured at mount so
   // the seed effect's deps stay constant
   const editSeedRef = React.useRef(editPost?.thing || null);
+
+	// edit mode: the post's existing attachments, reorderable in place. Binding
+	// is create-only, so edits can only re-sequence — saving sends the ordered
+	// ids exactly when the order actually changed.
+	const editAttachmentsSeedRef = React.useRef<PublicAttachment[]>(
+		(editPost?.attachments || []).flatMap((attachment) => {
+			const normalized = normalizePublicAttachment(attachment);
+			return normalized ? [normalized] : [];
+		})
+	);
+	const [editAttachments, setEditAttachments] = React.useState<PublicAttachment[]>(editAttachmentsSeedRef.current);
+	const editAttachmentOrderChanged =
+		isEdit &&
+		editAttachments.length === editAttachmentsSeedRef.current.length &&
+		editAttachments.some((attachment, index) => attachment.id !== editAttachmentsSeedRef.current[index].id);
 
 	const parsedTags = canonicalPostTags(tagsInput.split(','));
 
@@ -241,9 +273,28 @@ export const PostComposer = (props: PostComposerProps) => {
   const listingValid =
 		title.trim().length > 0 && price.trim() !== '' && Number.isFinite(Number(price)) && Number(price) >= 0 && !!currency && !!category;
 
-	const hasReadyAttachment = attachmentSnapshot.attachments.length > 0;
-	const hasReadyVisualAttachment = attachmentSnapshot.attachments.some(
+	// edit mode has no upload snapshot — the post's existing bound attachments
+	// are the content (an attachment-only post must stay saveable while its
+	// media is being reordered)
+	const hasReadyAttachment = attachmentSnapshot.attachments.length > 0 || (isEdit && editAttachments.length > 0);
+	const hasReadyVisualAttachment =
+		attachmentSnapshot.attachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video') ||
+		(isEdit && editAttachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'));
+
+	// gallery-layout picker visibility + the tier-2 per-tile size badge (grid)
+	const visualLayoutCount = (isEdit ? editAttachments : attachmentSnapshot.attachments).filter(
 		(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
+	).length;
+	const layoutSpanBadge = React.useCallback(
+		(attachment: PublicAttachment) =>
+			attachment.mediaKind === 'image' || attachment.mediaKind === 'video' ? (
+				<SpanCycleButton
+					name={attachment.name}
+					span={layoutSpans[attachment.id] || 'normal'}
+					onChange={(next) => setLayoutSpans((current) => ({ ...current, [attachment.id]: next }))}
+				/>
+			) : null,
+		[layoutSpans]
 	);
 
 	const contentValid =
@@ -302,6 +353,20 @@ export const PostComposer = (props: PostComposerProps) => {
 			: null;
 		const canonicalImages = showPhotos ? validImages : [];
 		const canonicalThing = type === 'thingtime' ? draftThing : null;
+		// gallery layout: auto stores null; spans are pruned to the visual
+		// attachments actually going out with this post
+		const visualIdsForLayout = (isEdit ? editAttachments : attachmentSnapshot.attachments)
+			.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video')
+			.map((attachment) => attachment.id);
+		const prunedSpans = Object.fromEntries(
+			Object.entries(layoutSpans).filter(([id, span]) => span !== 'normal' && visualIdsForLayout.includes(id))
+		) as Record<string, MediaLayoutSpan>;
+		const canonicalMediaLayout: PostMediaLayout | null =
+			visualIdsForLayout.length < 2 || layoutMode === 'auto'
+				? null
+				: layoutMode === 'rows'
+				? { mode: 'rows', pattern: parseLayoutPattern(layoutPattern) || [1, 2] }
+				: { mode: 'grid', columns: layoutColumns, ...(Object.keys(prunedSpans).length ? { spans: prunedSpans } : {}) };
 		const canonicalTags = [...parsedTags, ...(canonicalListing ? [canonicalListing.category] : [])].filter(
 			(tag, index, all) => all.indexOf(tag) === index
 		);
@@ -315,7 +380,8 @@ export const PostComposer = (props: PostComposerProps) => {
 							text: text.trim(),
 							images: canonicalImages,
 							listing: canonicalListing,
-							thing: canonicalThing
+							thing: canonicalThing,
+							mediaLayout: canonicalMediaLayout
 						},
 						tags: canonicalTags,
 						visibility,
@@ -334,6 +400,7 @@ export const PostComposer = (props: PostComposerProps) => {
 		if (showPhotos) currentPayload.images = canonicalImages;
 		if (type === 'thingtime') currentPayload.thing = canonicalThing;
 		if (showListing) currentPayload.listing = canonicalListing;
+		if (canonicalMediaLayout) currentPayload.mediaLayout = canonicalMediaLayout;
 
 		if (!pendingPostSubmissionRef.current && currentPostShareId && (isComment || currentCommittedExpectation)) {
 			pendingPostSubmissionRef.current = {
@@ -380,7 +447,8 @@ export const PostComposer = (props: PostComposerProps) => {
 			if (isEdit) {
 				// full-crystal replace: the server sanitizer rebuilds { type, text,
 				// images, listing, thing } per type, so switching type clears the
-				// fields that no longer apply
+				// fields that no longer apply. A changed attachment order rides along
+				// as the reordered id list (a pure permutation of the bound set).
 				const updated = await api.v1.things.update({
 					id: editPost!.id,
 					crystal: {
@@ -388,10 +456,12 @@ export const PostComposer = (props: PostComposerProps) => {
 						text: text.trim(),
 						images: canonicalImages,
 						listing: canonicalListing,
-						thing: canonicalThing
+						thing: canonicalThing,
+						mediaLayout: canonicalMediaLayout
 					},
 					tags: parsedTags,
-					visibility
+					visibility,
+					...(editAttachmentOrderChanged ? { attachmentIds: editAttachments.map((attachment) => attachment.id) } : {})
 				});
 				finishPost(updated.post);
 			} else {
@@ -742,7 +812,7 @@ export const PostComposer = (props: PostComposerProps) => {
         </Flex>
       )}
 
-				{user && (
+				{user && !isEdit && (
 					<AttachmentComposer
 						ref={attachmentComposerRef}
 						key={`attachments-${user.id}-${composerSession}`}
@@ -753,6 +823,48 @@ export const PostComposer = (props: PostComposerProps) => {
 						remainingBytes={user.storage.remainingBytes}
 						storageStatus={user.storage.status}
 						onChange={setAttachmentSnapshot}
+						tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
+					/>
+				)}
+
+				{/* gallery layout (crystal.mediaLayout) — meaningful from 2 visual
+				attachments; Auto keeps the masonry default (stored null) */}
+				{visualLayoutCount >= 2 && (
+					<MediaLayoutPicker
+						mode={layoutMode}
+						onMode={setLayoutMode}
+						pattern={layoutPattern}
+						onPattern={setLayoutPattern}
+						columns={layoutColumns}
+						onColumns={setLayoutColumns}
+						imageCount={visualLayoutCount}
+					/>
+				)}
+
+				{/* tier 3: the grid canvas — live preview with drag-resize handles */}
+				{visualLayoutCount >= 2 && layoutMode === 'grid' && (
+					<MediaLayoutCanvas
+						attachments={(isEdit ? editAttachments : attachmentSnapshot.attachments).filter(
+							(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
+						)}
+						columns={layoutColumns}
+						onColumns={setLayoutColumns}
+						spans={layoutSpans}
+						onSpanChange={(id, span) => setLayoutSpans((current) => ({ ...current, [id]: span }))}
+						disabled={posting || submissionUncertain}
+					/>
+				)}
+
+				{/* edit mode: attachments bound at create time can only be
+				re-sequenced — the upload panel (which could never save its files
+				into an existing post) is replaced by the reorderable gallery */}
+				{isEdit && editAttachments.length > 0 && (
+					<AttachmentReorderGallery
+						attachments={editAttachments}
+						onChange={setEditAttachments}
+						disabled={posting || submissionUncertain}
+						ariaLabel="Reorder this post's attachments"
+						tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
 					/>
 				)}
 
