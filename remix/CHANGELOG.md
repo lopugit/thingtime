@@ -146,6 +146,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Security
 
+- **Relationship uniqueness is structural across all reserved key families**:
+  follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
+  protected root `uniqueKeys` namespace. Boot-time index convergence replaces
+  every kind-blind crystal-path unique index with a non-unique lookup, and the
+  idempotent backfill stamps legacy relationship docs while only reporting
+  suspicious free-form data. The vote family is migrated as security
+  substrate without shipping the deferred polls product; boot convergence also
+  removes the superseded `crystal.follow` marker index that no current writer
+  uses. — Codex (AI), 2026-08-21
+
 - **Moderation reconciliation and pending-media quarantine**: replayed the
   NSFW/TOS pipeline onto the singular public/private/all upload-permission
   model with no legacy one-boolean gate dependency. Attachment completion now
