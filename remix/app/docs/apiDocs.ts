@@ -2882,6 +2882,66 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		notes: ['No response or log contains the cron secret. Mongo TTL deletion is intentionally disabled.']
 	}),
 	endpoint({
+		id: 'attachment-detection-backfill',
+		group: 'attachments',
+		title: 'Backfill sniffed attachment types',
+		endpoint: '/api/v1/attachments/backfill-detected-types',
+		summary: 'Admin-only sweep that re-runs magic-byte detection for ready attachments finalized before detection existed.',
+		detail:
+			'Ready attachments completed before server-side magic-byte sniffing keep crystal contentType application/octet-stream with no detectedContentType, so browser-playable uploads still render as opaque file cards. Each pass scans those legacy rows in shareId order and publishes exactly what completion would have: browser-playable containers flip to their inline contentType and mediaKind, other canonical sniffed types gain detectedContentType display metadata, and undetectable bytes stay untouched so a later pass under a wider detector can still claim them. Names, byte sizes, object keys, and object versions never change. ' +
+			'Every pass is bounded (at most 200 rows, five workers, a 25-second wall-clock budget) and idempotent — upgraded rows leave the candidate set, so repeated real passes converge. Follow nextCursor while hasMore is true to walk the full backlog; the cursor is required for dry runs, which write nothing and would otherwise rescan the same rows.',
+		auth: {
+			mode: 'session-or-bearer',
+			description:
+				'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403. Same-origin JSON requests only.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST { dryRun: true } first to count what one pass would change without writing.',
+			'POST {} (or { dryRun: false }) to apply one bounded pass for real.',
+			'While hasMore is true, POST again with the returned nextCursor.',
+			'Watch upgradedInline and labeledOpaque against undetected, missingObject, conflicts, and failed in each report.'
+		],
+		requestExamples: [
+			{
+				name: 'Dry-run one pass',
+				description: 'Counts the legacy rows one pass would upgrade, writing nothing.',
+				method: 'POST',
+				body: { dryRun: true }
+			},
+			{
+				name: 'Apply with a cursor',
+				description: 'Continues the sweep after a previous pass reported hasMore.',
+				method: 'POST',
+				body: { cursor: 'att_2f6b0c1d', limit: 200 }
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'One bounded backfill pass.',
+				body: {
+					ok: true,
+					dryRun: false,
+					scanned: 42,
+					upgradedInline: 17,
+					labeledOpaque: 3,
+					undetected: 21,
+					missingObject: 0,
+					conflicts: 1,
+					failed: 0,
+					hasMore: false,
+					stoppedForTimeBudget: false
+				}
+			},
+			{ status: 403, description: 'Signed-in non-admin.', body: { ok: false, error: 'Admins only' } }
+		],
+		notes: [
+			'Detection reads only the first 8 KiB of each object from private S3; nothing is re-uploaded and object-byte storage accounting is unchanged.',
+			'Unavailable while a custom MongoDB data endpoint is active — run it on the canonical deployment.'
+		]
+	}),
+	endpoint({
 		id: 'moderation-sweep',
 		group: 'admin',
 		title: 'Scheduled moderation sweep',

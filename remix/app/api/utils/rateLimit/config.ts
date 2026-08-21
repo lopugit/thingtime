@@ -21,6 +21,8 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // crystal-only writes, same shape as delete
   'attachments.annotate': { limit: 120, windowMs: 60_000, enabled: true },
   'attachments.read': { limit: 600, windowMs: 60_000, enabled: true },
+  // admin-only legacy re-detection sweep; each call is one bounded S3-reading pass
+  'attachments.detectionBackfill': { limit: 30, windowMs: 60_000, enabled: true },
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },
   'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
   // library save toggles (POST /api/v1/things/save) — same shape as reactions
