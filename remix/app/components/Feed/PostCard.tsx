@@ -40,6 +40,7 @@ import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { PostAttachments } from '~/components/Attachments/PostAttachments';
+import { mediaPageUrl } from '~/components/Attachments/attachmentUiCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import { RAINBOW } from '~/theme/rainbow';
@@ -203,6 +204,10 @@ export type PostCardProps = {
   onEngagement?: (event: EngagementEvent) => void;
   // the /post/:id page opens with the conversation expanded
   defaultCommentsOpen?: boolean;
+	// the /media/:id page projects a protected attachment Thing as this card:
+	// interactions stay live, but the owner menu drops edit/privacy/delete
+	// (title/description edit via annotate; lifecycle belongs to the parent post)
+	mediaThing?: boolean;
 };
 
 const authorName = (author: FeedAuthor | null) => (author ? getUserDisplayName(author) : 'Anonymous 👻');
@@ -223,8 +228,8 @@ const formatDwell = (ms: number): string => {
 
 // Every post/comment timestamp is a permalink to its /post/:id page, the way
 // timestamps work on every major platform.
-const TimestampLink = ({ id, createdAt, fontSize = 'xs' }: { id: string; createdAt: string; fontSize?: string }) => (
-  <Link to={`/post/${id}`} title={new Date(createdAt).toLocaleString()}>
+const TimestampLink = ({ id, createdAt, fontSize = 'xs', to }: { id: string; createdAt: string; fontSize?: string; to?: string }) => (
+  <Link to={to || `/post/${id}`} title={new Date(createdAt).toLocaleString()}>
     <Text as="span" fontSize={fontSize} color={MUTED} _hover={{ textDecoration: 'underline', color: INK }}>
       {timeAgo(createdAt)}
     </Text>
@@ -467,7 +472,7 @@ const TagChipRow = ({ tags, compact }: { tags?: string[]; compact?: boolean }) =
 
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing' | 'tags'>;
+type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout'>;
 const PostBody = ({
 	post,
 	compact,
@@ -498,7 +503,7 @@ const PostBody = ({
     {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
-    <PostAttachments attachments={attachments} compact={compact} />
+    <PostAttachments attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} />
     <TagChipRow tags={post.tags} compact={compact} />
   </Flex>
 );
@@ -654,6 +659,7 @@ const buildPendingComment = (user: any, targetId: string, text: string): PostCom
   text,
   images: [],
 	attachments: [],
+	mediaLayout: null,
   listing: null,
   thing: null,
   tags: [],
@@ -1194,7 +1200,8 @@ const CommentRow = (props: {
 // memoised: engagement telemetry re-renders the feed page frequently, and an
 // unchanged post reference should never re-render its card
 export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
-  const { post, onChanged, onEngagement, defaultCommentsOpen } = props;
+  const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing } = props;
+	const permalinkPath = mediaThing ? mediaPageUrl(post.id) : `/post/${post.id}`;
 
   const api = useApi();
   const user = useCurrentUser();
@@ -1252,7 +1259,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isOwner = !!user && !!post.author && user.id === post.author.id;
-  const circle = CIRCLE_META[post.visibility] || CIRCLE_META.public;
+	const circle = mediaThing
+		? { emoji: '🔗', label: 'Inherited audience', hint: 'This media follows the privacy of the Thing it belongs to' }
+		: CIRCLE_META[post.visibility] || CIRCLE_META.public;
 
   // Every reaction token on the post, most-used first — feeds the merged
   // react button (top emojis + total count).
@@ -1343,7 +1352,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
   // menu copy-link: always the clipboard (the share icon owns the native sheet)
   const handleCopyLink = async () => {
-    const url = `${window.location.origin}/post/${post.id}`;
+		const url = `${window.location.origin}${permalinkPath}`;
     try {
       await navigator.clipboard.writeText(url);
       lopu({ title: 'Link copied 🔗', status: 'success', duration: 4000 });
@@ -1618,7 +1627,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // The share icon is OUTWARD share: the native share sheet where the
   // platform has one, copy-link everywhere else. Works logged out too.
   const handleShareLink = async () => {
-    const url = `${window.location.origin}/post/${post.id}`;
+		const url = `${window.location.origin}${permalinkPath}`;
     try {
       if (typeof navigator !== 'undefined' && (navigator as any).share) {
         await (navigator as any).share({ url });
@@ -1724,7 +1733,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               <Text as="span" fontSize="xs" color={MUTED}>
                 {post.author ? `${getUserIdentityDetail(post.author)} · ` : ''}
               </Text>
-              <TimestampLink id={post.id} createdAt={post.createdAt} />
+							<TimestampLink id={post.id} createdAt={post.createdAt} to={mediaThing ? permalinkPath : undefined} />
               <Tooltip label={`${circle.label} — ${circle.hint}`} fontSize="xs" borderRadius="8px" hasArrow>
                 <Text as="span" fontSize="xs" cursor="default">
                   {circle.emoji}
@@ -1736,7 +1745,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             <Menu placement="bottom-end" autoSelect={false}>
               <MenuButton
                 as={IconButton}
-                aria-label="Post options"
+				aria-label={mediaThing ? 'Media options' : 'Post options'}
                 icon={<MoreHorizontal size={16} />}
                 size="xs"
                 variant="ghost"
@@ -1744,29 +1753,35 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 borderRadius="8px"
               />
               <MenuList minWidth="190px" borderRadius={RADIUS_MD} zIndex={10}>
-                <MenuItem fontSize="sm" onClick={handleEditStart}>
-                  Edit ✏️
-                </MenuItem>
+                {!mediaThing && (
+                  <MenuItem fontSize="sm" onClick={handleEditStart}>
+                    Edit ✏️
+                  </MenuItem>
+                )}
                 <MenuItem fontSize="sm" onClick={handleCopyLink}>
                   Copy link 🔗
                 </MenuItem>
-                <MenuDivider />
-                <MenuOptionGroup
-                  title="Privacy"
-                  type="radio"
-                  value={post.visibility}
-                  onChange={(value) => handleVisibilityChange(value as PostVisibility)}
-                >
-                  {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
-                    <MenuItemOption key={key} value={key} fontSize="sm">
-                      {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
-                    </MenuItemOption>
-                  ))}
-                </MenuOptionGroup>
-                <MenuDivider />
-                <MenuItem fontSize="sm" color="var(--tt-danger, #e5484d)" onClick={handleDelete}>
-                  Delete 🗑️
-                </MenuItem>
+                {!mediaThing && (
+                  <>
+                    <MenuDivider />
+                    <MenuOptionGroup
+                      title="Privacy"
+                      type="radio"
+                      value={post.visibility}
+                      onChange={(value) => handleVisibilityChange(value as PostVisibility)}
+                    >
+                      {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
+                        <MenuItemOption key={key} value={key} fontSize="sm">
+                          {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+                        </MenuItemOption>
+                      ))}
+                    </MenuOptionGroup>
+                    <MenuDivider />
+                    <MenuItem fontSize="sm" color="var(--tt-danger, #e5484d)" onClick={handleDelete}>
+                      Delete 🗑️
+                    </MenuItem>
+                  </>
+                )}
               </MenuList>
             </Menu>
           )}
@@ -1829,7 +1844,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 <HashtagText text={post.text} />
               </Text>
             )}
-            <PostAttachments attachments={post.attachments} />
+            <PostAttachments attachments={post.attachments} mediaLayout={post.mediaLayout} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
             ) : (
@@ -1901,7 +1916,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           )}
 
           {/* repost: instant repost OR quote (caption + circle) */}
-          {user ? (
+			{!mediaThing && (user ? (
             <Box position="relative" display="flex">
               <Menu placement="top" autoSelect={false}>
 									<MenuButton as={ActionIcon} icon={<Repeat2 size={18} strokeWidth={2.2} />} count={post.shareCount} label="Repost" />
@@ -1979,7 +1994,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               label="Repost"
               onClick={() => lopu({ title: 'Log in to repost 🔁', status: 'info', duration: 6000 })}
             />
-          )}
+			))}
 
           {/* outward share: native sheet / copy link */}
           <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />

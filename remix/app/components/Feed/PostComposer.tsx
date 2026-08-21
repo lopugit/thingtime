@@ -6,7 +6,9 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
 import { AttachmentReorderGallery } from '~/components/Attachments/AttachmentReorderGallery';
+import { MediaLayoutCanvas, MediaLayoutPicker, SpanCycleButton, parseLayoutPattern, type ComposerLayoutMode } from '~/components/Attachments/MediaLayoutControls';
 import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
+import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 import {
 	canonicalPostTags,
 	matchesCommittedPostCreate,
@@ -170,6 +172,19 @@ export const PostComposer = (props: PostComposerProps) => {
   const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
   const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
   const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
+	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
+	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
+		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
+	);
+	const [layoutPattern, setLayoutPattern] = React.useState(
+		editPost?.mediaLayout?.mode === 'rows' && editPost.mediaLayout.pattern?.length ? editPost.mediaLayout.pattern.join('-') : '1-2'
+	);
+	const [layoutColumns, setLayoutColumns] = React.useState(
+		editPost?.mediaLayout?.mode === 'grid' && editPost.mediaLayout.columns ? editPost.mediaLayout.columns : 3
+	);
+	const [layoutSpans, setLayoutSpans] = React.useState<Record<string, MediaLayoutSpan>>(
+		editPost?.mediaLayout?.mode === 'grid' && editPost.mediaLayout.spans ? { ...editPost.mediaLayout.spans } : {}
+	);
   const [posting, setPosting] = React.useState(false);
 	const [submissionUncertain, setSubmissionUncertain] = React.useState(false);
 	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENT_SNAPSHOT);
@@ -296,6 +311,22 @@ export const PostComposer = (props: PostComposerProps) => {
 		attachmentSnapshot.attachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video') ||
 		(isEdit && editAttachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'));
 
+	// gallery-layout picker visibility + the tier-2 per-tile size badge (grid)
+	const visualLayoutCount = (isEdit ? editAttachments : attachmentSnapshot.attachments).filter(
+		(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
+	).length;
+	const layoutSpanBadge = React.useCallback(
+		(attachment: PublicAttachment) =>
+			attachment.mediaKind === 'image' || attachment.mediaKind === 'video' ? (
+				<SpanCycleButton
+					name={attachment.name}
+					span={layoutSpans[attachment.id] || 'normal'}
+					onChange={(next) => setLayoutSpans((current) => ({ ...current, [attachment.id]: next }))}
+				/>
+			) : null,
+		[layoutSpans]
+	);
+
 	const contentValid =
     type === 'text'
 			? text.trim().length > 0 || hasReadyAttachment
@@ -364,6 +395,20 @@ export const PostComposer = (props: PostComposerProps) => {
 				: type === 'poll'
 					? { kind: 'poll', question: text.trim(), options: parsedPollOptions }
 					: null;
+		// gallery layout: auto stores null; spans are pruned to the visual
+		// attachments actually going out with this post
+		const visualIdsForLayout = (isEdit ? editAttachments : attachmentSnapshot.attachments)
+			.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video')
+			.map((attachment) => attachment.id);
+		const prunedSpans = Object.fromEntries(
+			Object.entries(layoutSpans).filter(([id, span]) => span !== 'normal' && visualIdsForLayout.includes(id))
+		) as Record<string, MediaLayoutSpan>;
+		const canonicalMediaLayout: PostMediaLayout | null =
+			visualIdsForLayout.length < 2 || layoutMode === 'auto'
+				? null
+				: layoutMode === 'rows'
+				? { mode: 'rows', pattern: parseLayoutPattern(layoutPattern) || [1, 2] }
+				: { mode: 'grid', columns: layoutColumns, ...(Object.keys(prunedSpans).length ? { spans: prunedSpans } : {}) };
 		const canonicalTags = [...parsedTags, ...(canonicalListing ? [canonicalListing.category] : [])].filter(
 			(tag, index, all) => all.indexOf(tag) === index
 		);
@@ -377,7 +422,8 @@ export const PostComposer = (props: PostComposerProps) => {
 							text: canonicalText,
 							images: canonicalImages,
 							listing: canonicalListing,
-							thing: canonicalThing
+							thing: canonicalThing,
+							mediaLayout: canonicalMediaLayout
 						},
 						tags: canonicalTags,
 						visibility,
@@ -396,6 +442,7 @@ export const PostComposer = (props: PostComposerProps) => {
 		if (showPhotos) currentPayload.images = canonicalImages;
 		if (apiType === 'thingtime') currentPayload.thing = canonicalThing;
 		if (showListing) currentPayload.listing = canonicalListing;
+		if (canonicalMediaLayout) currentPayload.mediaLayout = canonicalMediaLayout;
 
 		if (!pendingPostSubmissionRef.current && currentPostShareId && (isComment || currentCommittedExpectation)) {
 			pendingPostSubmissionRef.current = {
@@ -451,7 +498,8 @@ export const PostComposer = (props: PostComposerProps) => {
 						text: text.trim(),
 						images: canonicalImages,
 						listing: canonicalListing,
-						thing: canonicalThing
+						thing: canonicalThing,
+						mediaLayout: canonicalMediaLayout
 					},
 					tags: parsedTags,
 					visibility,
@@ -875,6 +923,35 @@ export const PostComposer = (props: PostComposerProps) => {
 						remainingBytes={user.storage.remainingBytes}
 						storageStatus={user.storage.status}
 						onChange={setAttachmentSnapshot}
+						tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
+					/>
+				)}
+
+				{/* gallery layout (crystal.mediaLayout) — meaningful from 2 visual
+				attachments; Auto keeps the masonry default (stored null) */}
+				{visualLayoutCount >= 2 && (
+					<MediaLayoutPicker
+						mode={layoutMode}
+						onMode={setLayoutMode}
+						pattern={layoutPattern}
+						onPattern={setLayoutPattern}
+						columns={layoutColumns}
+						onColumns={setLayoutColumns}
+						imageCount={visualLayoutCount}
+					/>
+				)}
+
+				{/* tier 3: the grid canvas — live preview with drag-resize handles */}
+				{visualLayoutCount >= 2 && layoutMode === 'grid' && (
+					<MediaLayoutCanvas
+						attachments={(isEdit ? editAttachments : attachmentSnapshot.attachments).filter(
+							(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
+						)}
+						columns={layoutColumns}
+						onColumns={setLayoutColumns}
+						spans={layoutSpans}
+						onSpanChange={(id, span) => setLayoutSpans((current) => ({ ...current, [id]: span }))}
+						disabled={posting || submissionUncertain}
 					/>
 				)}
 
@@ -887,6 +964,7 @@ export const PostComposer = (props: PostComposerProps) => {
 						onChange={setEditAttachments}
 						disabled={posting || submissionUncertain}
 						ariaLabel="Reorder this post's attachments"
+						tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
 					/>
 				)}
 

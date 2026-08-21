@@ -23,6 +23,7 @@ import Index from './routes/_index';
 import Login from './routes/login';
 import AdminRoute from './routes/admin';
 import SettingsRoute from './routes/settings';
+import MediaPage from './routes/media';
 import MongoStatusPage from './routes/mongodb-status';
 import Ode from './routes/ode';
 import PostPage from './routes/post';
@@ -161,6 +162,9 @@ export const router = createBrowserRouter([
       { path: 'ode', element: <Ode /> },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },
+			// every attachment is a Thing — its own page with comments/reactions
+			// (post lightbox + file rows deeplink here)
+			{ path: 'media/:id', element: <MediaPage /> },
 			// authenticated permalink for generic Things; protected migration
 			// diagnostics switch to their current-admin, home-plane read endpoint
 			{ path: 'thing/:id', element: <ThingPage /> },

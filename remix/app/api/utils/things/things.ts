@@ -61,6 +61,7 @@ import {
   validateThingtimeCrystal,
   visibilityFromAcl,
   type NotificationType,
+  type PostMediaLayout,
   type ThingVisibility
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
@@ -243,6 +244,8 @@ export type PublicComment = {
   text: string;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
+	// owner-chosen gallery layout for the visual attachments (null = masonry)
+	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   thing: Record<string, any> | null;
   tags: string[];
@@ -269,6 +272,8 @@ export type PublicPost = {
   text: string;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
+	// owner-chosen gallery layout for the visual attachments (null = masonry)
+	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   // thingtime posts: the free-form structured thing under crystal.thing
   thing: Record<string, any> | null;
@@ -657,6 +662,12 @@ const crystalOf = (doc: ThingDoc): Record<string, any> => {
   if (isV2(doc)) return doc.crystal || {};
   return { type: doc.type, text: doc.text || '', images: doc.images || [], listing: doc.listing || null };
 };
+
+// crystal.mediaLayout is sanitized on write; surface it as-is (null = masonry)
+const mediaLayoutOf = (crystal: Record<string, any>): PostMediaLayout | null =>
+	crystal.mediaLayout && typeof crystal.mediaLayout === 'object' && !Array.isArray(crystal.mediaLayout)
+		? (crystal.mediaLayout as PostMediaLayout)
+		: null;
 
 // shareId of the thing this thing is attached to (comment/reaction/share)
 const targetIdOf = (doc: ThingDoc): string | null => {
@@ -1345,6 +1356,7 @@ export type CreatePostInput = {
   images?: unknown;
   listing?: unknown;
   thing?: unknown;
+	mediaLayout?: unknown;
   extended?: unknown;
   acl?: unknown;
   visibility?: unknown;
@@ -1367,7 +1379,7 @@ export const createPost = async (
     ownerId,
     {
       thingtime: ['post'],
-      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing, thing: input.thing },
+      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing, thing: input.thing, mediaLayout: input.mediaLayout },
       extended: input.extended,
       acl: input.acl,
       visibility: input.visibility,
@@ -1794,6 +1806,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       text: comment.text,
       images: (commentCrystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(comment.id) || [],
+			mediaLayout: mediaLayoutOf(commentCrystal),
       listing: (commentCrystal.listing as MarketplaceListing) || null,
       thing:
         commentCrystal.thing && typeof commentCrystal.thing === 'object' && !Array.isArray(commentCrystal.thing)
@@ -1838,6 +1851,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       text: String(crystal.text || ''),
       images: (crystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(doc.shareId) || [],
+			mediaLayout: mediaLayoutOf(crystal),
       listing: (crystal.listing as MarketplaceListing) || null,
       thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
       tags: doc.tags || [],
@@ -2417,11 +2431,16 @@ export const getThing = async (
   }
 
   const isComment = thingtimeOf(doc).includes('comment');
-  const post = isPostThing(doc) || isComment ? (await toPublicPosts([doc], viewer))[0] : null;
+	// Media attachments are Things with their own /media/:id page: the
+	// post-shaped projection carries their reactions, comments, and view
+	// aggregates (those resolvers are target-generic), and the parent walk
+	// links the page back to the post the media is bound to.
+	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
+	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer))[0] : null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
-  if (isComment && targetIdOf(doc)) {
+	if ((isComment || isMediaAttachment) && targetIdOf(doc)) {
     // walk up the thread — depth is unbounded, no rail: the visited set is
     // the only terminator (finite db + no revisits), and the loop is
     // iterative so chain length never touches the call stack
@@ -2954,6 +2973,7 @@ export type AddCommentInput =
       images?: unknown;
       listing?: unknown;
       thing?: unknown;
+			mediaLayout?: unknown;
       tags?: unknown;
 			shareId?: unknown;
 	  };
@@ -3006,12 +3026,13 @@ export const addComment = async (
 		body.images !== undefined ||
 		body.listing !== undefined ||
 		body.thing !== undefined ||
+		body.mediaLayout !== undefined ||
 		options.createHooks?.postAttachments?.hasAny === true;
 
 	const createInput: CreateThingInput = rich
       ? {
           thingtime: ['post', 'comment'],
-          crystal: { type: body.type ?? 'text', text: body.text, images: body.images, listing: body.listing, thing: body.thing },
+          crystal: { type: body.type ?? 'text', text: body.text, images: body.images, listing: body.listing, thing: body.thing, mediaLayout: body.mediaLayout },
           tags: body.tags,
 				shareId: body.shareId,
           targetId: target.shareId
@@ -3092,6 +3113,7 @@ export const addComment = async (
     text: String(crystal.text || ''),
     images: (crystal.images as string[]) || [],
 		attachments: options.attachments || [],
+		mediaLayout: mediaLayoutOf(crystal),
     listing: (crystal.listing as MarketplaceListing) || null,
     thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
     tags: doc.tags || [],

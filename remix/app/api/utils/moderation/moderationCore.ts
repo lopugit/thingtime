@@ -5,6 +5,8 @@
 // them. Public projections expose at most a boolean `nsfw`; `blocked`
 // attachments disappear from public payloads entirely and the content route
 // refuses to serve them.
+// Upload approval remains a separate policy in auth/publicUploads; this module
+// classifies content only after the upload permission decision has been made.
 
 export const MODERATION_STATUSES = ['pending', 'skipped', 'clear', 'nsfw', 'blocked'] as const;
 export type ModerationStatus = (typeof MODERATION_STATUSES)[number];
