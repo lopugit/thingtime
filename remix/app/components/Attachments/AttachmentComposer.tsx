@@ -1,10 +1,12 @@
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Progress, Text } from '@chakra-ui/react';
-import { CheckCircle2, File as FileIcon, Image as ImageIcon, RotateCcw, UploadCloud, Video as VideoIcon, X } from 'lucide-react';
+import { CheckCircle2, File as FileIcon, GripVertical, Image as ImageIcon, RotateCcw, UploadCloud, Video as VideoIcon, X } from 'lucide-react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MediaAddTile, MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
+import { AttachmentAnnotatePopover } from './AttachmentAnnotatePopover';
+import { nudgeTargetId, useMediaReorder, type MediaReorderNudge, type MediaReorderTileProps } from '~/components/Media/useMediaReorder';
 import {
 	attachmentUploadScopeForPurpose,
 	formatAttachmentBytes,
@@ -12,7 +14,7 @@ import {
 	MAX_POST_ATTACHMENTS,
 	sameAttachmentSnapshot
 } from './attachmentUiCore';
-import type { AttachmentComposerSnapshot, AttachmentUploadPurpose, ComposerAttachmentUpload } from './attachmentTypes';
+import type { AttachmentComposerSnapshot, AttachmentUploadPurpose, ComposerAttachmentUpload, PublicAttachment } from './attachmentTypes';
 import { useAttachmentUploads } from './useAttachmentUploads';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -31,6 +33,10 @@ export type AttachmentComposerProps = {
 	allowedContentTypes?: readonly string[];
 	ariaLabel?: string;
 	helperText?: string;
+	// optional per-tile extra control (e.g. the grid-layout size badge) rendered
+	// on READY visual tiles only, bottom-left (grip top-left, X top-right,
+	// pencil bottom-right)
+	tileExtras?: (attachment: PublicAttachment) => React.ReactNode;
 };
 
 export type AttachmentComposerHandle = {
@@ -81,32 +87,101 @@ const UploadVisualPreview = ({ upload }: { upload: ComposerAttachmentUpload }) =
 	);
 };
 
+type UploadReorderProps = {
+	// stable function identities from useMediaReorder — primitives + stable
+	// callbacks keep React.memo effective across per-tile progress ticks
+	reorderGroup?: string;
+	reorderPosition?: number;
+	reorderCount?: number;
+	dragging?: boolean;
+	dropTarget?: boolean;
+	gripProps?: (id: string, group: string) => Record<string, unknown>;
+	tileProps?: (id: string, group: string) => MediaReorderTileProps;
+};
+
+const uploadGripLabel = (name: string, position?: number, count?: number) =>
+	`Reorder ${name} — position ${position} of ${count}. Drag, or use arrow keys to move.`;
+
 const UploadVisualTile = React.memo(
-	(props: { upload: ComposerAttachmentUpload; disabled?: boolean; onRetry: (localId: string) => void; onRemove: (localId: string) => void }) => {
-		const { upload, disabled, onRetry, onRemove } = props;
+	(props: {
+		upload: ComposerAttachmentUpload;
+		disabled?: boolean;
+		onRetry: (localId: string) => void;
+		onRemove: (localId: string) => void;
+		onAnnotated: (localId: string, attachment: PublicAttachment) => void;
+		tileExtras?: (attachment: PublicAttachment) => React.ReactNode;
+	} & UploadReorderProps) => {
+		const { upload, disabled, onRetry, onRemove, onAnnotated, tileExtras, reorderGroup, reorderPosition, reorderCount, dragging, dropTarget, gripProps, tileProps } =
+			props;
 		const busy = upload.status !== 'ready' && upload.status !== 'error';
+		const showGrip = !disabled && !!gripProps && !!reorderGroup && (reorderCount ?? 0) > 1;
 		return (
 			<MediaGalleryTile
 				ariaLabel={upload.file.name}
 				invalid={upload.status === 'error'}
+				dragging={dragging}
+				dropTarget={dropTarget}
+				containerProps={reorderGroup && tileProps ? tileProps(upload.localId, reorderGroup) : undefined}
 				preview={<UploadVisualPreview upload={upload} />}
 				action={
-					<IconButton
-						aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
-						icon={<X size={14} />}
-						size="sm"
-						minWidth="44px"
-						height="44px"
-						position="absolute"
-						top={1}
-						right={1}
-						variant="solid"
-						background="rgba(255, 255, 255, 0.9)"
-						color={MUTED}
-						borderRadius="999px"
-						isDisabled={disabled}
-						onClick={() => onRemove(upload.localId)}
-					/>
+					<>
+						{showGrip ? (
+							<IconButton
+								aria-label={uploadGripLabel(upload.file.name, reorderPosition, reorderCount)}
+								title="Drag to reorder"
+								icon={<GripVertical size={14} />}
+								size="sm"
+								minWidth="44px"
+								height="44px"
+								position="absolute"
+								top={1}
+								left={1}
+								variant="solid"
+								background="rgba(255, 255, 255, 0.9)"
+								color={MUTED}
+								borderRadius="999px"
+								cursor={dragging ? 'grabbing' : 'grab'}
+								{...gripProps(upload.localId, reorderGroup)}
+							/>
+						) : null}
+						{upload.status === 'ready' && upload.attachment ? (
+							<AttachmentAnnotatePopover
+								attachment={upload.attachment}
+								disabled={disabled}
+								onApply={(next) => onAnnotated(upload.localId, next)}
+								triggerProps={{
+									minWidth: '44px',
+									height: '44px',
+									position: 'absolute',
+									bottom: 1,
+									right: 1,
+									variant: 'solid',
+									background: 'rgba(255, 255, 255, 0.9)'
+								}}
+							/>
+						) : null}
+						{upload.status === 'ready' && upload.attachment && tileExtras ? (
+							<Box position="absolute" bottom={1} left={1}>
+								{tileExtras(upload.attachment)}
+							</Box>
+						) : null}
+						<IconButton
+							aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
+							icon={<X size={14} />}
+							size="sm"
+							minWidth="44px"
+							height="44px"
+							position="absolute"
+							top={1}
+							right={1}
+							variant="solid"
+							background="rgba(255, 255, 255, 0.9)"
+							color={MUTED}
+							borderRadius="999px"
+							isDisabled={disabled}
+							onClick={() => onRemove(upload.localId)}
+						/>
+					</>
 				}
 			>
 				<Text fontSize="sm" fontWeight={650} color="var(--tt-ink, #16161a)" noOfLines={1} title={upload.file.name}>
@@ -156,9 +231,17 @@ const UploadVisualTile = React.memo(
 UploadVisualTile.displayName = 'UploadVisualTile';
 
 const UploadFileRow = React.memo(
-	(props: { upload: ComposerAttachmentUpload; disabled?: boolean; onRetry: (localId: string) => void; onRemove: (localId: string) => void }) => {
-		const { upload, disabled, onRetry, onRemove } = props;
+	(props: {
+		upload: ComposerAttachmentUpload;
+		disabled?: boolean;
+		onRetry: (localId: string) => void;
+		onRemove: (localId: string) => void;
+		onAnnotated: (localId: string, attachment: PublicAttachment) => void;
+	} & UploadReorderProps) => {
+		const { upload, disabled, onRetry, onRemove, onAnnotated, reorderGroup, reorderPosition, reorderCount, dragging, dropTarget, gripProps, tileProps } =
+			props;
 		const busy = upload.status !== 'ready' && upload.status !== 'error';
+		const showGrip = !disabled && !!gripProps && !!reorderGroup && (reorderCount ?? 0) > 1;
 		return (
 			<Box
 				padding={2}
@@ -166,8 +249,28 @@ const UploadFileRow = React.memo(
 				borderRadius="var(--tt-radius-md, 12px)"
 				background="var(--tt-card, #ffffff)"
 				minWidth={0}
+				opacity={dragging ? 0.55 : undefined}
+				outline={dropTarget ? '2px solid var(--tt-accent, #7c5cff)' : undefined}
+				outlineOffset={dropTarget ? '1px' : undefined}
+				{...(reorderGroup && tileProps ? tileProps(upload.localId, reorderGroup) : {})}
 			>
 				<Flex alignItems="center" columnGap={3} minWidth={0}>
+					{showGrip ? (
+						<IconButton
+							aria-label={uploadGripLabel(upload.file.name, reorderPosition, reorderCount)}
+							title="Drag to reorder"
+							icon={<GripVertical size={14} />}
+							size="sm"
+							minWidth="44px"
+							height="44px"
+							variant="ghost"
+							color={MUTED}
+							borderRadius="999px"
+							flexShrink={0}
+							cursor={dragging ? 'grabbing' : 'grab'}
+							{...gripProps(upload.localId, reorderGroup)}
+						/>
+					) : null}
 					<Flex
 						alignItems="center"
 						justifyContent="center"
@@ -216,6 +319,14 @@ const UploadFileRow = React.memo(
 							onClick={() => onRetry(upload.localId)}
 						/>
 					) : null}
+					{upload.status === 'ready' && upload.attachment ? (
+						<AttachmentAnnotatePopover
+							attachment={upload.attachment}
+							disabled={disabled}
+							onApply={(next) => onAnnotated(upload.localId, next)}
+							triggerProps={{ minWidth: '44px', height: '44px', flexShrink: 0 }}
+						/>
+					) : null}
 					<IconButton
 						aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
 						icon={<X size={14} />}
@@ -254,7 +365,8 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		maxBytesPerFile,
 		allowedContentTypes,
 		ariaLabel = 'Post attachments',
-		helperText
+		helperText,
+		tileExtras
 	} = props;
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
 	const lopu = useLopu();
@@ -281,7 +393,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			}),
 		[lopu]
 	);
-	const { uploads, addFiles, retry, remove, markCommitted, snapshot } = useAttachmentUploads(
+	const { uploads, addFiles, retry, remove, reorder, markCommitted, updateAttachment, snapshot } = useAttachmentUploads(
 		ownerId,
 		onCleanupError,
 		onSelectionError,
@@ -299,6 +411,27 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		if (localFileMediaKind(upload.file) === 'file') fileUploads.push(upload);
 		else visualUploads.push(upload);
 	}
+
+	// Reordering moves within a section (media grid or file list) — matching
+	// how posts render them — while the underlying uploads array keeps one
+	// combined order that becomes the snapshot's attachmentIds order.
+	const visualIdsRef = React.useRef<string[]>([]);
+	visualIdsRef.current = visualUploads.map((upload) => upload.localId);
+	const fileIdsRef = React.useRef<string[]>([]);
+	fileIdsRef.current = fileUploads.map((upload) => upload.localId);
+	const handleReorderNudge = React.useCallback(
+		(sourceId: string, nudge: MediaReorderNudge) => {
+			const groupIds = visualIdsRef.current.includes(sourceId) ? visualIdsRef.current : fileIdsRef.current;
+			const targetId = nudgeTargetId(groupIds, sourceId, nudge);
+			if (targetId) reorder(sourceId, targetId);
+		},
+		[reorder]
+	);
+	const { draggingId, dropTargetId, tileProps, gripProps } = useMediaReorder({
+		disabled,
+		onMove: reorder,
+		onNudge: handleReorderNudge
+	});
 
 	React.useImperativeHandle(ref, () => ({ markCommitted }), [markCommitted]);
 
@@ -393,17 +526,34 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 				/>
 				<Text fontSize="11px" color={MUTED} paddingBottom={2} whiteSpace="normal">
 					{helperText ||
-						(imageOnly
-							? `${boundedMaxFiles === 1 ? 'One image' : `Up to ${boundedMaxFiles} images`} · drop ${
-									boundedMaxFiles === 1 ? 'it' : 'them'
-							  } anywhere in this panel`
-							: `Photos, videos, or any file · up to ${boundedMaxFiles} · drop files anywhere in this panel`)}
+						`${
+							imageOnly
+								? `${boundedMaxFiles === 1 ? 'One image' : `Up to ${boundedMaxFiles} images`} · drop ${
+										boundedMaxFiles === 1 ? 'it' : 'them'
+								  } anywhere in this panel`
+								: `Photos, videos, or any file · up to ${boundedMaxFiles} · drop files anywhere in this panel`
+						}${uploads.length > 1 ? ' · drag the ⠿ handle to set the order' : ''}`}
 				</Text>
 
 				{visualUploads.length > 0 || uploads.length < boundedMaxFiles ? (
 					<MediaGalleryGrid ariaLabel="Selected media uploads">
-						{visualUploads.map((upload) => (
-							<UploadVisualTile key={upload.localId} upload={upload} disabled={disabled} onRetry={retry} onRemove={remove} />
+						{visualUploads.map((upload, index) => (
+							<UploadVisualTile
+								key={upload.localId}
+								upload={upload}
+								disabled={disabled}
+								onRetry={retry}
+								onRemove={remove}
+								onAnnotated={updateAttachment}
+								tileExtras={tileExtras}
+								reorderGroup="composer-visual"
+								reorderPosition={index + 1}
+								reorderCount={visualUploads.length}
+								dragging={draggingId === upload.localId}
+								dropTarget={dropTargetId === upload.localId}
+								gripProps={gripProps}
+								tileProps={tileProps}
+							/>
 						))}
 						{uploads.length < boundedMaxFiles ? (
 							<MediaAddTile ariaLabel="Add media files" disabled={pickerDisabled} onClick={() => inputRef.current?.click()}>
@@ -418,8 +568,22 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 
 				{fileUploads.length > 0 ? (
 					<Flex flexDirection="column" rowGap={2} paddingTop={visualUploads.length > 0 || uploads.length < boundedMaxFiles ? 2 : 0}>
-						{fileUploads.map((upload) => (
-							<UploadFileRow key={upload.localId} upload={upload} disabled={disabled} onRetry={retry} onRemove={remove} />
+						{fileUploads.map((upload, index) => (
+							<UploadFileRow
+								key={upload.localId}
+								upload={upload}
+								disabled={disabled}
+								onRetry={retry}
+								onRemove={remove}
+								onAnnotated={updateAttachment}
+								reorderGroup="composer-file"
+								reorderPosition={index + 1}
+								reorderCount={fileUploads.length}
+								dragging={draggingId === upload.localId}
+								dropTarget={dropTargetId === upload.localId}
+								gripProps={gripProps}
+								tileProps={tileProps}
+							/>
 						))}
 					</Flex>
 				) : null}
