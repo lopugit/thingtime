@@ -24,12 +24,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Rows/Grid preview no longer silently reopens as Auto after save. — Codex
   (AI), 2026-08-21
 
-- **Develop staging domain ownership restored after media release QA**:
-  `dev.thingtime.com` is again owned exclusively by the protected `develop`
-  Vercel Custom Environment (`gitBranch: null`) after an exact-deployment
-  alias check temporarily changed it into ordinary branch tracking. The
-  controller's environment/domain invariant and S3-preview publisher now pass
-  again. — Codex (AI), 2026-08-21
+- **Develop staging domain kept on the protected branch during PR previews**:
+  `dev.thingtime.com` remains bound exclusively to the literal `develop` Git
+  branch (`gitBranch: develop`, with no custom-environment binding). The
+  `develop` Vercel Custom Environment is reserved for isolated PR deployments
+  and owns no stable domain, so a controller-created preview cannot advance the
+  signed-in staging origin. — Codex (AI), 2026-08-21
 
 - **PR #321 legacy detected-type backfill preserves media annotations**:
   re-detecting a pre-#319 opaque attachment now changes only its server-owned
