@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
 	ATTACHMENT_ENVELOPE_VERSION,
 	ATTACHMENT_STATES,
+	applyAttachmentAnnotationPatch,
 	attachmentMediaKindForContentType,
 	attachmentObjectSizeBytesForAccounting,
 	isAttachmentFinalizationLeaseId,
@@ -51,6 +52,9 @@ test('attachment metadata is canonical, bounded, and derives a safe media kind',
 	assert.equal(attachmentMediaKindForContentType('image/svg+xml'), 'file');
 	assert.equal(attachmentMediaKindForContentType('text/html'), 'file');
 	assert.equal(attachmentMediaKindForContentType('video/mp4'), 'video');
+	assert.equal(attachmentMediaKindForContentType('video/quicktime'), 'video');
+	assert.equal(attachmentMediaKindForContentType('video/x-matroska'), 'video');
+	assert.equal(attachmentMediaKindForContentType('video/x-msvideo'), 'file');
 	assert.equal(attachmentMediaKindForContentType('audio/mpeg'), 'audio');
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad\0name', size: 1, contentType: 'text/plain' }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad\ud800name', size: 1, contentType: 'text/plain' }).ok, false);
@@ -63,6 +67,18 @@ test('attachment metadata is canonical, bounded, and derives a safe media kind',
 		contentType: 'image/png',
 		mediaKind: 'image'
 	});
+	const opaqueCrystal = {
+		name: 'clip.avi',
+		size: 42,
+		contentType: 'application/octet-stream',
+		mediaKind: 'file',
+		detectedContentType: 'video/x-msvideo'
+	};
+	assert.deepEqual(toAttachmentPublicMetadata('attachment-id', opaqueCrystal), { id: 'attachment-id', ...opaqueCrystal });
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...opaqueCrystal, contentType: 'video/mp4', mediaKind: 'video' }), null);
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...opaqueCrystal, detectedContentType: 'application/octet-stream' }), null);
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...opaqueCrystal, detectedContentType: 'VIDEO/X-MSVIDEO' }), null);
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...opaqueCrystal, detectedContentType: 42 }), null);
 });
 
 test('every lifecycle state remains a valid billable attachment envelope', () => {
@@ -146,6 +162,30 @@ test('only an exact server envelope contributes object bytes', () => {
 		null,
 		'a caller cannot forge an inline-safe media kind or a noncanonical crystal'
 	);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(
+			attachment({
+				crystal: {
+					name: 'clip.avi',
+					size: 42,
+					contentType: 'application/octet-stream',
+					mediaKind: 'file',
+					detectedContentType: 'video/x-msvideo'
+				}
+			})
+		),
+		42,
+		'a sniffed display type on an opaque download remains a canonical billable crystal'
+	);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(
+			attachment({
+				crystal: { name: 'clip.mp4', size: 42, contentType: 'video/mp4', mediaKind: 'video', detectedContentType: 'video/x-msvideo' }
+			})
+		),
+		null,
+		'a sniffed display type may never accompany an inline-served contentType'
+	);
 });
 
 test('stored sort order wins over createdAt order; legacy unstamped docs keep their place after stamped ones', () => {
@@ -194,4 +234,92 @@ test('an attachment reorder must be a pure permutation of the bound set', () => 
 	assert.equal(planAttachmentReorder([42], ['42'], 25).ok, false);
 	const overCap = planAttachmentReorder(['a', 'b', 'c'], ['a', 'b', 'c'], 2);
 	assert.equal(overCap.ok === false && overCap.status, 400);
+});
+
+test('owner title/description are optional, bounded, hygienic, and never stored empty', () => {
+	const annotated = sanitizeAttachmentPublicMetadata({
+		name: 'sunset.jpg',
+		size: 42,
+		contentType: 'image/jpeg',
+		title: '  Sunset over the bay  ',
+		description: 'Line one\nline two 🍉'
+	});
+	assert.deepEqual(annotated, {
+		ok: true,
+		crystal: {
+			name: 'sunset.jpg',
+			size: 42,
+			contentType: 'image/jpeg',
+			mediaKind: 'image',
+			title: 'Sunset over the bay',
+			description: 'Line one\nline two 🍉'
+		}
+	});
+	// blanks collapse to ABSENT keys
+	const blank = sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: '   ', description: '' });
+	assert.equal(blank.ok, true);
+	if (blank.ok) {
+		assert.equal('title' in blank.crystal, false);
+		assert.equal('description' in blank.crystal, false);
+	}
+	// titles are single-line; descriptions allow newlines but no other controls
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'two\nlines' }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', description: 'bad\ttab' }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'bad‮title' }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'x'.repeat(201) }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', description: 'x'.repeat(2001) }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 42 }).ok, false);
+});
+
+test('annotated crystals stay canonical for projection and accounting; foreign keys still fail closed', () => {
+	const crystal = {
+		name: 'photo.png',
+		size: 42,
+		contentType: 'image/png',
+		mediaKind: 'image',
+		title: 'A title',
+		description: 'A description'
+	};
+	assert.deepEqual(toAttachmentPublicMetadata('attachment-id', crystal), { id: 'attachment-id', ...crystal });
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ crystal })), 42);
+	// untrimmed or empty stored owner text is NOT canonical
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...crystal, title: ' padded ' }), null);
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...crystal, title: '' }), null);
+	// unknown keys stay rejected
+	assert.equal(toAttachmentPublicMetadata('attachment-id', { ...crystal, objectKey: 'leak' }), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ crystal: { ...crystal, extra: true } })), null);
+});
+
+test('annotation preserves server-owned magic-byte detection and rejects non-canonical source metadata', () => {
+	const opaque = {
+		name: 'legacy.avi',
+		size: 42,
+		contentType: 'application/octet-stream',
+		mediaKind: 'file' as const,
+		detectedContentType: 'video/x-msvideo',
+		title: 'Old title'
+	};
+	assert.deepEqual(applyAttachmentAnnotationPatch(opaque, { title: 'Detected video', description: 'Still opaque in this browser' }), {
+		ok: true,
+		crystal: {
+			name: 'legacy.avi',
+			size: 42,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			title: 'Detected video',
+			description: 'Still opaque in this browser',
+			detectedContentType: 'video/x-msvideo'
+		}
+	});
+	assert.deepEqual(applyAttachmentAnnotationPatch(opaque, { title: null }), {
+		ok: true,
+		crystal: {
+			name: 'legacy.avi',
+			size: 42,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			detectedContentType: 'video/x-msvideo'
+		}
+	});
+	assert.equal(applyAttachmentAnnotationPatch({ ...opaque, detectedContentType: 'application/octet-stream' }, { title: 'x' }).ok, false);
 });

@@ -5,6 +5,7 @@ import { CheckCircle2, File as FileIcon, GripVertical, Image as ImageIcon, Rotat
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MediaAddTile, MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
+import { AttachmentAnnotatePopover } from './AttachmentAnnotatePopover';
 import { nudgeTargetId, useMediaReorder, type MediaReorderNudge, type MediaReorderTileProps } from '~/components/Media/useMediaReorder';
 import {
 	attachmentUploadScopeForPurpose,
@@ -13,7 +14,7 @@ import {
 	MAX_POST_ATTACHMENTS,
 	sameAttachmentSnapshot
 } from './attachmentUiCore';
-import type { AttachmentComposerSnapshot, AttachmentUploadPurpose, ComposerAttachmentUpload } from './attachmentTypes';
+import type { AttachmentComposerSnapshot, AttachmentUploadPurpose, ComposerAttachmentUpload, PublicAttachment } from './attachmentTypes';
 import { useAttachmentUploads } from './useAttachmentUploads';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -32,6 +33,10 @@ export type AttachmentComposerProps = {
 	allowedContentTypes?: readonly string[];
 	ariaLabel?: string;
 	helperText?: string;
+	// optional per-tile extra control (e.g. the grid-layout size badge) rendered
+	// on READY visual tiles only, bottom-left (grip top-left, X top-right,
+	// pencil bottom-right)
+	tileExtras?: (attachment: PublicAttachment) => React.ReactNode;
 };
 
 export type AttachmentComposerHandle = {
@@ -103,8 +108,11 @@ const UploadVisualTile = React.memo(
 		disabled?: boolean;
 		onRetry: (localId: string) => void;
 		onRemove: (localId: string) => void;
+		onAnnotated: (localId: string, attachment: PublicAttachment) => void;
+		tileExtras?: (attachment: PublicAttachment) => React.ReactNode;
 	} & UploadReorderProps) => {
-		const { upload, disabled, onRetry, onRemove, reorderGroup, reorderPosition, reorderCount, dragging, dropTarget, gripProps, tileProps } = props;
+		const { upload, disabled, onRetry, onRemove, onAnnotated, tileExtras, reorderGroup, reorderPosition, reorderCount, dragging, dropTarget, gripProps, tileProps } =
+			props;
 		const busy = upload.status !== 'ready' && upload.status !== 'error';
 		const showGrip = !disabled && !!gripProps && !!reorderGroup && (reorderCount ?? 0) > 1;
 		return (
@@ -135,6 +143,27 @@ const UploadVisualTile = React.memo(
 								cursor={dragging ? 'grabbing' : 'grab'}
 								{...gripProps(upload.localId, reorderGroup)}
 							/>
+						) : null}
+						{upload.status === 'ready' && upload.attachment ? (
+							<AttachmentAnnotatePopover
+								attachment={upload.attachment}
+								disabled={disabled}
+								onApply={(next) => onAnnotated(upload.localId, next)}
+								triggerProps={{
+									minWidth: '44px',
+									height: '44px',
+									position: 'absolute',
+									bottom: 1,
+									right: 1,
+									variant: 'solid',
+									background: 'rgba(255, 255, 255, 0.9)'
+								}}
+							/>
+						) : null}
+						{upload.status === 'ready' && upload.attachment && tileExtras ? (
+							<Box position="absolute" bottom={1} left={1}>
+								{tileExtras(upload.attachment)}
+							</Box>
 						) : null}
 						<IconButton
 							aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
@@ -207,8 +236,10 @@ const UploadFileRow = React.memo(
 		disabled?: boolean;
 		onRetry: (localId: string) => void;
 		onRemove: (localId: string) => void;
+		onAnnotated: (localId: string, attachment: PublicAttachment) => void;
 	} & UploadReorderProps) => {
-		const { upload, disabled, onRetry, onRemove, reorderGroup, reorderPosition, reorderCount, dragging, dropTarget, gripProps, tileProps } = props;
+		const { upload, disabled, onRetry, onRemove, onAnnotated, reorderGroup, reorderPosition, reorderCount, dragging, dropTarget, gripProps, tileProps } =
+			props;
 		const busy = upload.status !== 'ready' && upload.status !== 'error';
 		const showGrip = !disabled && !!gripProps && !!reorderGroup && (reorderCount ?? 0) > 1;
 		return (
@@ -288,6 +319,14 @@ const UploadFileRow = React.memo(
 							onClick={() => onRetry(upload.localId)}
 						/>
 					) : null}
+					{upload.status === 'ready' && upload.attachment ? (
+						<AttachmentAnnotatePopover
+							attachment={upload.attachment}
+							disabled={disabled}
+							onApply={(next) => onAnnotated(upload.localId, next)}
+							triggerProps={{ minWidth: '44px', height: '44px', flexShrink: 0 }}
+						/>
+					) : null}
 					<IconButton
 						aria-label={busy ? `Cancel upload for ${upload.file.name}` : `Remove ${upload.file.name}`}
 						icon={<X size={14} />}
@@ -326,7 +365,8 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		maxBytesPerFile,
 		allowedContentTypes,
 		ariaLabel = 'Post attachments',
-		helperText
+		helperText,
+		tileExtras
 	} = props;
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
 	const lopu = useLopu();
@@ -353,7 +393,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			}),
 		[lopu]
 	);
-	const { uploads, addFiles, retry, remove, reorder, markCommitted, snapshot } = useAttachmentUploads(
+	const { uploads, addFiles, retry, remove, reorder, markCommitted, updateAttachment, snapshot } = useAttachmentUploads(
 		ownerId,
 		onCleanupError,
 		onSelectionError,
@@ -504,6 +544,8 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 								disabled={disabled}
 								onRetry={retry}
 								onRemove={remove}
+								onAnnotated={updateAttachment}
+								tileExtras={tileExtras}
 								reorderGroup="composer-visual"
 								reorderPosition={index + 1}
 								reorderCount={visualUploads.length}
@@ -533,6 +575,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 								disabled={disabled}
 								onRetry={retry}
 								onRemove={remove}
+								onAnnotated={updateAttachment}
 								reorderGroup="composer-file"
 								reorderPosition={index + 1}
 								reorderCount={fileUploads.length}
