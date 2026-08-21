@@ -25,7 +25,9 @@ import {
 	bindReadyCommentAttachmentsToTarget,
 	bindReadyEmojiAttachmentToTarget,
 	bindReadyMessageAttachmentsToTarget,
+	annotateOwnedAttachment,
 	bindReadyAttachmentsToTarget,
+	reorderBoundTargetAttachments,
 	type AttachmentDoc,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
@@ -51,6 +53,9 @@ export const MAX_EXPIRED_ATTACHMENTS_PER_REAP = 1000;
 export const ATTACHMENT_REAP_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_REAP_CONCURRENCY = 5;
 export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
+export const MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN = 200;
+export const ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS = 25 * 1000;
+export const ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY = 5;
 export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji'] as const;
 export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
 export const MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES = 512 * 1024;
@@ -540,6 +545,158 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			};
 		} catch (error) {
 			return knownFailure(error) || unavailable('global expired draft scan', error);
+		}
+	};
+
+	// Re-run magic-byte detection for ready rows finalized before detection
+	// existed (opaque contentType, no sniffed label) and publish exactly what
+	// completion would have: browser-playable containers flip to their inline
+	// contentType/mediaKind, other canonical sniffed types become
+	// detectedContentType display metadata. Undetectable bytes stay untouched —
+	// deliberately, so a later pass under a wider detector can still claim them.
+	const backfillDetectedTypes = async (
+		input: unknown
+	): Promise<
+		AttachmentResult<{
+			dryRun: boolean;
+			scanned: number;
+			upgradedInline: number;
+			labeledOpaque: number;
+			undetected: number;
+			missingObject: number;
+			conflicts: number;
+			failed: number;
+			hasMore: boolean;
+			stoppedForTimeBudget: boolean;
+			nextCursor?: string;
+		}>
+	> => {
+		try {
+			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid backfill request');
+			const raw = input as Record<string, unknown>;
+			if (Object.keys(raw).some((key) => !['dryRun', 'limit', 'cursor'].includes(key))) {
+				return fail(400, 'Invalid backfill request');
+			}
+			if (raw.dryRun !== undefined && typeof raw.dryRun !== 'boolean') return fail(400, 'dryRun must be a boolean');
+			const dryRun = raw.dryRun === true;
+			if (
+				raw.limit !== undefined &&
+				(!Number.isInteger(raw.limit) || Number(raw.limit) < 1 || Number(raw.limit) > MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN)
+			) {
+				return fail(400, `limit must be an integer between 1 and ${MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN}`);
+			}
+			const limit = raw.limit === undefined ? MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN : Number(raw.limit);
+			const cursor = raw.cursor === undefined ? undefined : normalizeId(raw.cursor);
+			if (raw.cursor !== undefined && !cursor) return fail(400, 'Invalid backfill cursor');
+			if (dependencies.customMongoActive()) {
+				return fail(400, 'Attachment maintenance is unavailable with a custom MongoDB endpoint');
+			}
+
+			const docs = await dependencies.store.listReadyUndetected(limit + 1, cursor);
+			const queue = docs.slice(0, limit);
+			const hasMoreFromLimit = docs.length > queue.length;
+			const empty = {
+				ok: true as const,
+				dryRun,
+				scanned: 0,
+				upgradedInline: 0,
+				labeledOpaque: 0,
+				undetected: 0,
+				missingObject: 0,
+				conflicts: 0,
+				failed: 0,
+				hasMore: false,
+				stoppedForTimeBudget: false
+			};
+			if (!queue.length) return empty;
+
+			const s3 = dependencies.getS3();
+			const startedAt = dependencies.clock();
+			let nextIndex = 0;
+			let scanned = 0;
+			let upgradedInline = 0;
+			let labeledOpaque = 0;
+			let undetected = 0;
+			let missingObject = 0;
+			let conflicts = 0;
+			let failed = 0;
+			let stoppedForTimeBudget = false;
+			const worker = async () => {
+				while (nextIndex < queue.length) {
+					if (dependencies.clock() - startedAt >= ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS) {
+						stoppedForTimeBudget = true;
+						return;
+					}
+					let doc = queue[nextIndex++];
+					scanned += 1;
+					try {
+						let versionId = doc.objectVersionId;
+						if (!isAttachmentObjectVersionId(versionId)) {
+							// Adopt the exact current object version the way download and
+							// completion recovery do; a dry run only reads it.
+							const head = await verifiedHeadForDoc(s3, doc);
+							versionId = head.versionId;
+							if (!dryRun) doc = await dependencies.store.setObjectVersionId(doc.ownerId, doc.shareId, versionId);
+						}
+						const detected = detectedAttachmentType(await s3.detectContentType({ objectKey: doc.objectKey, versionId }), doc.crystal.name);
+						if (detected.contentType === 'application/octet-stream' && !detected.detectedContentType) {
+							undetected += 1;
+							continue;
+						}
+						// #312 adds owner-authored presentation fields to the protected
+						// attachment crystal. Re-detection owns only the type fields: preserve
+						// existing annotation exactly, and fail closed rather than erase a
+						// malformed value written by some other path.
+						const existingPresentation = doc.crystal as AttachmentCrystal & {
+							title?: unknown;
+							description?: unknown;
+						};
+						const presentation: Record<string, string> = {};
+						for (const key of ['title', 'description'] as const) {
+							if (!Object.prototype.hasOwnProperty.call(existingPresentation, key)) continue;
+							const value = existingPresentation[key];
+							if (typeof value !== 'string') throw new AttachmentStoreConflictError(`Attachment ${key} is malformed`);
+							presentation[key] = value;
+						}
+						const crystal: AttachmentCrystal = {
+							name: doc.crystal.name,
+							size: doc.crystal.size,
+							contentType: detected.contentType,
+							mediaKind: detected.mediaKind,
+							...(detected.detectedContentType ? { detectedContentType: detected.detectedContentType } : {}),
+							...presentation
+						};
+						if (!dryRun) await dependencies.store.upgradeReadyCrystal(doc.shareId, crystal, versionId);
+						if (crystal.contentType === 'application/octet-stream') labeledOpaque += 1;
+						else upgradedInline += 1;
+					} catch (error) {
+						if (s3.isNotFound(error)) missingObject += 1;
+						else if (error instanceof AttachmentStoreConflictError) conflicts += 1;
+						else {
+							failed += 1;
+							unavailable('detection backfill', error);
+						}
+					}
+				}
+			};
+			await Promise.all(Array.from({ length: Math.min(ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY, queue.length) }, () => worker()));
+			const hasMore = hasMoreFromLimit || nextIndex < queue.length;
+			const lastClaimedId = nextIndex > 0 ? queue[Math.min(nextIndex, queue.length) - 1].shareId : undefined;
+			return {
+				...empty,
+				scanned,
+				upgradedInline,
+				labeledOpaque,
+				undetected,
+				missingObject,
+				conflicts,
+				failed,
+				hasMore,
+				stoppedForTimeBudget,
+				...(hasMore && lastClaimedId ? { nextCursor: lastClaimedId } : {})
+			};
+		} catch (error) {
+			return knownFailure(error) || unavailable('detection backfill scan', error);
 		}
 	};
 
@@ -1223,7 +1380,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		inspectForEmoji,
 		beforeCascade,
 		beforeSessionReplacement,
-		reapExpired
+		reapExpired,
+		backfillDetectedTypes
 	};
 };
 
@@ -1242,12 +1400,71 @@ export const inspectReadyAttachmentForEmoji = service.inspectForEmoji;
 export const prepareAttachmentCascadeForThing = service.beforeCascade;
 export const prepareUnboundAttachmentCleanupForSessionReplacement = service.beforeSessionReplacement;
 export const reapExpiredAttachments = service.reapExpired;
+export const backfillAttachmentDetectedTypes = service.backfillDetectedTypes;
 
 export const createReadyAttachmentPostInsertHook =
 	(attachmentIds: readonly string[], bind = bindReadyAttachmentsToTarget) =>
 	async (doc: { shareId: string; ownerId: string }, session: any) => {
 		await bind(doc.ownerId, attachmentIds, doc.shareId, session);
 	};
+
+// POST /api/v1/attachments/annotate — owner-authored title/description on a
+// ready attachment (draft or bound). The media's own Thing page and the post
+// lightbox render these; binding, audience, and object bytes are untouched.
+export const annotateAttachment = async (
+	ownerId: string,
+	input: unknown
+): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+	try {
+		if (isCustomMongoEndpointActive()) {
+			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+		}
+		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+		if (Object.keys(record).some((key) => !['id', 'title', 'description'].includes(key))) {
+			return fail(400, 'Invalid attachment annotation request');
+		}
+		const id = normalizeId(record.id);
+		if (!id) return fail(400, 'Invalid attachment id');
+		const patchField = (value: unknown, label: string): string | null | undefined => {
+			if (value === undefined) return undefined;
+			if (value === null) return null;
+			if (typeof value !== 'string') throw new AttachmentServiceError(400, `Attachment ${label} must be text`);
+			return value;
+		};
+		const title = patchField(record.title, 'title');
+		const description = patchField(record.description, 'description');
+		if (title === undefined && description === undefined) {
+			return fail(400, 'Provide a title or description to update');
+		}
+		const doc = await annotateOwnedAttachment(ownerId, id, { title, description });
+		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
+		if (!attachment) return fail(409, 'Attachment metadata failed validation after update');
+		return { ok: true, attachment };
+	} catch (error) {
+		return knownFailure(error) || unavailable('annotate', error);
+	}
+};
+
+// PATCH-time reorder: re-stamp the display order of a target's already-bound
+// attachments. Pure permutations only — the store helper rejects any set
+// change, so this can never bind, unbind, or leak an attachment.
+export const reorderReadyAttachmentsForTarget = async (
+	ownerId: string,
+	targetId: unknown,
+	attachmentIds: readonly unknown[]
+): Promise<AttachmentResult> => {
+	try {
+		if (isCustomMongoEndpointActive()) {
+			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+		}
+		const normalizedTargetId = typeof targetId === 'string' ? targetId.trim() : '';
+		if (!normalizedTargetId) return fail(400, 'Thing id is required');
+		await reorderBoundTargetAttachments(ownerId, normalizedTargetId, attachmentIds);
+		return { ok: true };
+	} catch (error) {
+		return knownFailure(error) || unavailable('reorder', error);
+	}
+};
 
 const createReadyAttachmentInsertHook =
 	(attachmentIds: readonly string[], bind: typeof bindReadyAttachmentsToTarget) =>
