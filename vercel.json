@@ -18,6 +18,10 @@
 			"schedule": "17 * * * *"
 		},
 		{
+			"path": "/api/v1/moderation/sweep",
+			"schedule": "29 * * * *"
+		},
+		{
 			"path": "/api/v1/notifications/email/weekly-summary",
 			"schedule": "37 21 * * 0"
 		}
