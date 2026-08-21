@@ -21,6 +21,9 @@ export type PublicAttachment = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	// owner-authored presentation text (media page + lightbox); absent = none
+	title?: string;
+	description?: string;
 	// Server-sniffed real container type, present only when contentType stays an
 	// opaque application/octet-stream download (for example video/x-msvideo).
 	detectedContentType?: string;
