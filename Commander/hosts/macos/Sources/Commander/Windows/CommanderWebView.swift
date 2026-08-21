@@ -113,6 +113,25 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource 
     return url
   }
 
+  static func validatedDestructiveFileURL(for path: String) throws -> URL {
+    let url = try validatedFileURL(for: path)
+    let protectedPaths = Set(
+      [
+        "/",
+        FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path,
+        Bundle.main.bundleURL.standardizedFileURL.path,
+      ]
+        + (FileManager.default.mountedVolumeURLs(
+          includingResourceValuesForKeys: nil,
+          options: [.skipHiddenVolumes]
+        ) ?? []).map { $0.standardizedFileURL.path }
+    )
+    guard url.pathComponents.count > 2, !protectedPaths.contains(url.path) else {
+      throw CommanderFileDragError.protectedPath
+    }
+    return url
+  }
+
   static func fileIconDataURL(for path: String, pixelSize: Int = 64) throws -> String {
     let url = try validatedFileURL(for: path)
     guard pixelSize > 0, pixelSize <= 256,
@@ -216,11 +235,13 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource 
 enum CommanderFileDragError: LocalizedError {
   case invalidPath
   case missingFile
+  case protectedPath
 
   var errorDescription: String? {
     switch self {
     case .invalidPath: "Commander can only drag an absolute local file path."
     case .missingFile: "That file no longer exists. Refresh Commander and try again."
+    case .protectedPath: "Commander will not move or delete a protected filesystem location."
     }
   }
 }

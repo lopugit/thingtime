@@ -6,6 +6,7 @@ import {
   FileSystemIndexerClient,
   type IndexConfiguration,
   type IndexKind,
+  type IndexProgress as FileIndexProgress,
   type IndexRecord,
   type IndexReport,
   type IndexResourceUsage,
@@ -21,6 +22,7 @@ import type {
 } from '@commander/protocol';
 import { applicationDirectories, discoverApplications } from './applications.js';
 import { commanderDataDirectory } from './config.js';
+import { pathActions } from './pathActions.js';
 
 export const APPLICATION_REFRESH_MINUTES = 5;
 
@@ -63,6 +65,8 @@ export class IndexingService {
   #commandCount = 0;
   #lastRunResources: IndexResourceUsage | undefined;
   #lastStatus: IndexStatus | undefined;
+  #progress: IndexingStatus['progress'];
+  #progressSources = new Map<string, number>();
 
   constructor(options: IndexingServiceOptions) {
     this.#platform = options.platform;
@@ -158,6 +162,7 @@ export class IndexingService {
         throw error;
       })
       .finally(() => {
+        if (this.#progress?.scope === scope) this.#progress = undefined;
         this.#running.delete(scope);
         this.#runs.delete(scope);
       });
@@ -199,6 +204,7 @@ export class IndexingService {
       },
       resourceLimits: structuredClone(this.#settings.resourceLimits),
       ...(this.#lastRunResources ? { lastRunResources: structuredClone(this.#lastRunResources) } : {}),
+      ...(this.#progress ? { progress: structuredClone(this.#progress) } : {}),
       ...(this.#message ? { message: this.#message } : {}),
     };
   }
@@ -216,8 +222,10 @@ export class IndexingService {
   }
 
   async #perform(scope: IndexScope): Promise<void> {
+    this.#beginProgress(scope);
     if (scope === 'commands') {
       this.reindexCommands();
+      if (this.#progress) this.#progress.processed = 1;
       return;
     }
     if (scope === 'all') {
@@ -294,6 +302,7 @@ export class IndexingService {
       const report = await writer.index(
         configuration,
         indexTimeoutMs(configuration.resourceLimits?.maxCpuPercent, configuration.maxEntries == null),
+        (progress) => this.#recordProgress(progress),
       );
       this.#lastRunResources = report.resources;
       this.#lastStatus = structuredClone(report.status);
@@ -318,6 +327,41 @@ export class IndexingService {
       }
       throw error;
     }
+  }
+
+  #beginProgress(scope: IndexScope): void {
+    this.#progressSources.clear();
+    const existing = this.#lastStatus?.kinds ?? [];
+    const count = (kind: IndexKind) => existing.find((item) => item.kind === kind)?.count ?? 0;
+    const totals: Record<IndexScope, number> = {
+      all: Math.max(1, (this.#lastStatus?.totalRecords ?? 0) + this.#commandCount),
+      applications: Math.max(1, count('application')),
+      commands: 1,
+      files: Math.max(1, count('file')),
+      directories: Math.max(1, count('directory')),
+    };
+    const labels: Record<IndexScope, string> = {
+      all: 'Indexing Everything',
+      applications: 'Indexing Apps',
+      commands: 'Indexing Commands',
+      files: 'Indexing Files',
+      directories: 'Indexing Folders',
+    };
+    this.#progress = {
+      scope,
+      label: labels[scope],
+      processed: 0,
+      total: totals[scope],
+      startedAtMs: Date.now(),
+    };
+  }
+
+  #recordProgress(progress: FileIndexProgress): void {
+    if (!this.#progress) return;
+    this.#progressSources.set(progress.sourceId, progress.processed);
+    const processed = [...this.#progressSources.values()].reduce((sum, value) => sum + value, 0);
+    this.#progress.processed = processed;
+    this.#progress.total = Math.max(this.#progress.total ?? 0, processed);
   }
 
   async #queryApplications(): Promise<SearchItem[]> {
@@ -408,7 +452,6 @@ export function indexTimeoutMs(maxCpuPercent = 100, unlimited = false): number {
 }
 
 export function indexRecordToSearchItem(record: IndexRecord): SearchItem {
-  const actionTitle = record.kind === 'application' ? 'Open Application' : 'Open';
   return {
     id: indexedItemId(record.kind, record.path),
     title: record.name,
@@ -418,11 +461,7 @@ export function indexRecordToSearchItem(record: IndexRecord): SearchItem {
     icon: record.kind,
     path: record.path,
     favourite: false,
-    actions: [
-      { id: 'open', title: actionTitle, shortcut: '↵' },
-      { id: 'show-in-finder', title: 'Show in Finder', shortcut: '⇧⌘R' },
-      { id: 'copy-path', title: 'Copy Path', shortcut: '⌘C' },
-    ],
+    actions: pathActions(record.kind),
   };
 }
 

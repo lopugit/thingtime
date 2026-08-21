@@ -35,13 +35,17 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
   private let nativeToken: String
   private let showLauncher: () -> Void
   private let hideLauncher: () -> Void
+  private let launcherState: () throws -> [String: Any]
+  private let updateLauncherPin: (Bool) throws -> [String: Any]
+  private let openNewLauncherWindow: () throws -> [String: Any]
   private let commandHotKeyReady: (String) -> Void
-  private let pasteClipboard: (String) async -> [String: Any]
+  private let pasteClipboard: (String, Bool) async -> [String: Any]
   private let pasteTargetName: () -> String?
   private let showSettings: (CommanderSettingsTab?) -> Void
   private let updateHotKeys: (String?, [String: String]?) throws -> Void
   private let updateMenuBar: (Bool) -> Void
   private let updateWindowMode: (String) throws -> Void
+  private let updateWindowPinning: (Bool, Bool, Bool) -> Void
   weak var webView: WKWebView?
 
   init(
@@ -50,15 +54,25 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     loginItem: LaunchAtLoginService,
     showLauncher: @escaping () -> Void,
     hideLauncher: @escaping () -> Void,
+    launcherState: @escaping () throws -> [String: Any] = {
+      ["windowId": "default", "pinned": false, "pinningEnabled": false]
+    },
+    updateLauncherPin: @escaping (Bool) throws -> [String: Any] = { _ in
+      ["windowId": "default", "pinned": false, "pinningEnabled": false]
+    },
+    openNewLauncherWindow: @escaping () throws -> [String: Any] = {
+      ["windowId": "default", "pinned": false, "pinningEnabled": false]
+    },
     commandHotKeyReady: @escaping (String) -> Void = { _ in },
-    pasteClipboard: @escaping (String) async -> [String: Any] = { _ in
+    pasteClipboard: @escaping (String, Bool) async -> [String: Any] = { _, _ in
       ["copied": false, "pasted": false, "requiresAccessibility": false]
     },
     pasteTargetName: @escaping () -> String? = { nil },
     showSettings: @escaping (CommanderSettingsTab?) -> Void,
     updateHotKeys: @escaping (String?, [String: String]?) throws -> Void,
     updateMenuBar: @escaping (Bool) -> Void,
-    updateWindowMode: @escaping (String) throws -> Void
+    updateWindowMode: @escaping (String) throws -> Void,
+    updateWindowPinning: @escaping (Bool, Bool, Bool) -> Void = { _, _, _ in }
   ) {
     self.daemonURL = URL(string: ready.url)!
     self.nativeToken = ready.nativeToken
@@ -66,6 +80,9 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     self.loginItem = loginItem
     self.showLauncher = showLauncher
     self.hideLauncher = hideLauncher
+    self.launcherState = launcherState
+    self.updateLauncherPin = updateLauncherPin
+    self.openNewLauncherWindow = openNewLauncherWindow
     self.commandHotKeyReady = commandHotKeyReady
     self.pasteClipboard = pasteClipboard
     self.pasteTargetName = pasteTargetName
@@ -73,6 +90,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     self.updateHotKeys = updateHotKeys
     self.updateMenuBar = updateMenuBar
     self.updateWindowMode = updateWindowMode
+    self.updateWindowPinning = updateWindowPinning
   }
 
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -146,6 +164,11 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
       switch request.method {
       case "launcher.hide": hideLauncher(); result = nil
       case "launcher.show": showLauncher(); result = nil
+      case "launcher.state": result = try launcherState()
+      case "launcher.pin":
+        guard let pinned = request.params?["pinned"]?.bool else { throw BridgeError.missing("pinned") }
+        result = try updateLauncherPin(pinned)
+      case "launcher.openNewWindow": result = try openNewLauncherWindow()
       case "launcher.commandReady":
         guard let itemID = request.params?["itemId"]?.string,
               itemID.hasPrefix("extension:"),
@@ -177,12 +200,39 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
       case "filesystem.icon":
         guard let path = request.params?["path"]?.string else { throw BridgeError.missing("path") }
         result = ["dataUrl": try CommanderWebView.fileIconDataURL(for: path)]
+      case "filesystem.copy":
+        guard let path = request.params?["path"]?.string else { throw BridgeError.missing("path") }
+        let url = try CommanderWebView.validatedFileURL(for: path)
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.writeObjects([url as NSURL]) else { throw BridgeError.pasteboardWrite }
+        result = ["copied": true]
+      case "filesystem.trash":
+        guard let path = request.params?["path"]?.string else { throw BridgeError.missing("path") }
+        let url = try CommanderWebView.validatedDestructiveFileURL(for: path)
+        var destination: NSURL?
+        try FileManager.default.trashItem(at: url, resultingItemURL: &destination)
+        result = ["trashed": true]
+      case "filesystem.delete":
+        guard let path = request.params?["path"]?.string else { throw BridgeError.missing("path") }
+        let url = try CommanderWebView.validatedDestructiveFileURL(for: path)
+        let confirmation = NSAlert()
+        confirmation.alertStyle = .critical
+        confirmation.messageText = "Delete \(url.lastPathComponent) immediately?"
+        confirmation.informativeText = "This cannot be undone. Move the item to Trash instead if you may need it later."
+        confirmation.addButton(withTitle: "Cancel")
+        confirmation.addButton(withTitle: "Delete Immediately")
+        guard confirmation.runModal() == .alertSecondButtonReturn else {
+          result = ["deleted": false]
+          break
+        }
+        try FileManager.default.removeItem(at: url)
+        result = ["deleted": true]
       case "clipboard.write":
         guard let text = request.params?["text"]?.string else { throw BridgeError.missing("text") }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); result = nil
       case "clipboard.paste":
         guard let text = request.params?["text"]?.string else { throw BridgeError.missing("text") }
-        result = await pasteClipboard(text)
+        result = await pasteClipboard(text, request.params?["preserveClipboard"]?.bool ?? false)
       case "extension.choose": result = chooseExtensionFolder()
       case "hotkey.update":
         guard let shortcut = request.params?["shortcut"]?.string else { throw BridgeError.missing("shortcut") }
@@ -200,11 +250,18 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
         guard let shortcut = request.params?["hotkey"]?.string,
               let openAtLogin = request.params?["openAtLogin"]?.bool,
               let showMenuBarIcon = request.params?["showMenuBarIcon"]?.bool,
-              let windowMode = request.params?["windowMode"]?.string else { throw BridgeError.missing("native settings") }
+              let windowMode = request.params?["windowMode"]?.string,
+              let windowPinning = request.params?["windowPinning"]?.object,
+              let pinningEnabled = windowPinning["enabled"]?.bool,
+              let defaultPinned = windowPinning["defaultPinned"]?.bool,
+              let focusRecentOnCurrentDisplay = windowPinning["focusRecentOnCurrentDisplay"]?.bool else {
+          throw BridgeError.missing("native settings")
+        }
         let commandShortcuts = try decodeCommandShortcuts(request.params?["commandShortcuts"])
         try loginItem.update(enabled: openAtLogin)
         updateMenuBar(showMenuBarIcon)
         try updateWindowMode(windowMode)
+        updateWindowPinning(pinningEnabled, defaultPinned, focusRecentOnCurrentDisplay)
         try updateHotKeys(shortcut, commandShortcuts)
         result = ["applied": true]
       case "credential.claim":
@@ -325,7 +382,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
 }
 
 private enum BridgeError: LocalizedError {
-  case missing(String), invalidURL, invalidSettingsTab(String), invalidCommandShortcuts, unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, daemon(String)
+  case missing(String), invalidURL, invalidSettingsTab(String), invalidCommandShortcuts, unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, pasteboardWrite, daemon(String)
   var errorDescription: String? {
     switch self {
     case .missing(let key): "Native request is missing \(key)."
@@ -336,6 +393,7 @@ private enum BridgeError: LocalizedError {
     case .credentialMissing: "No saved credential exists for this account."
     case .invalidDaemonResponse: "The Commander service returned an invalid response."
     case .responseTooLarge: "The Commander service response exceeds the 1 MiB limit."
+    case .pasteboardWrite: "Commander could not place that item on the clipboard."
     case .daemon(let message): message
     }
   }

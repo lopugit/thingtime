@@ -220,6 +220,17 @@ pub struct SourceReport {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct IndexProgress {
+    pub source_id: String,
+    pub root: String,
+    pub processed: usize,
+    pub indexed: usize,
+    pub skipped: usize,
+    pub errors: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IndexReport {
     pub started_at_ms: i64,
     pub completed_at_ms: i64,
@@ -316,6 +327,14 @@ impl IndexDatabase {
         &mut self,
         configuration: &IndexConfiguration,
     ) -> Result<IndexReport, IndexerError> {
+        self.index_with_progress(configuration, &mut |_| Ok(()))
+    }
+
+    pub fn index_with_progress(
+        &mut self,
+        configuration: &IndexConfiguration,
+        progress: &mut dyn FnMut(&IndexProgress) -> Result<(), IndexerError>,
+    ) -> Result<IndexReport, IndexerError> {
         validate_configuration(configuration)?;
         let governor = Arc::new(ResourceGovernor::new(&configuration.resource_limits)?);
         configure_database_resources(&self.connection, governor.effective())?;
@@ -330,6 +349,7 @@ impl IndexDatabase {
                 Arc::clone(&matcher),
                 configuration.max_entries,
                 Arc::clone(&governor),
+                progress,
             ) {
                 Ok(report) => reports.push(report),
                 Err(error) => {
@@ -478,6 +498,7 @@ impl IndexDatabase {
         matcher: Arc<CustomIgnoreMatcher>,
         max_entries: Option<usize>,
         governor: Arc<ResourceGovernor>,
+        progress: &mut dyn FnMut(&IndexProgress) -> Result<(), IndexerError>,
     ) -> Result<SourceReport, IndexerError> {
         let root = fs::canonicalize(&source.root).map_err(|error| {
             IndexerError::new(
@@ -507,6 +528,7 @@ impl IndexDatabase {
                 generation,
                 governor: Arc::clone(&governor),
             },
+            progress,
         )?;
         let scan_warning = report.diagnostics.first().map(String::as_str);
 
@@ -973,6 +995,7 @@ struct ScanContext<'a> {
 fn scan_and_store(
     transaction: &Transaction<'_>,
     context: ScanContext<'_>,
+    progress: &mut dyn FnMut(&IndexProgress) -> Result<(), IndexerError>,
 ) -> Result<SourceReport, IndexerError> {
     let ScanContext {
         source,
@@ -1016,6 +1039,7 @@ fn scan_and_store(
         by_kind: BTreeMap::new(),
         diagnostics: Vec::new(),
     };
+    emit_index_progress(&report, progress)?;
 
     std::thread::scope(|scope| -> Result<(), IndexerError> {
         let walker_sender = sender.clone();
@@ -1156,13 +1180,32 @@ fn scan_and_store(
                     }
                 }
             }
+            let processed = report.indexed + report.skipped + report.errors;
+            if processed > 0 && processed % 500 == 0 {
+                emit_index_progress(&report, progress)?;
+            }
         }
         if let Some(error) = fatal_error {
             return Err(error);
         }
         Ok(())
     })?;
+    emit_index_progress(&report, progress)?;
     Ok(report)
+}
+
+fn emit_index_progress(
+    report: &SourceReport,
+    callback: &mut dyn FnMut(&IndexProgress) -> Result<(), IndexerError>,
+) -> Result<(), IndexerError> {
+    callback(&IndexProgress {
+        source_id: report.source_id.clone(),
+        root: report.root.clone(),
+        processed: report.indexed + report.skipped + report.errors,
+        indexed: report.indexed,
+        skipped: report.skipped,
+        errors: report.errors,
+    })
 }
 
 enum ScanMessage {

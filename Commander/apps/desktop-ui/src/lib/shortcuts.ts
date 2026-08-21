@@ -67,3 +67,32 @@ export function clearsRecordedShortcut(event: KeyboardEvent): boolean {
     (event.key === 'Backspace' || event.key === 'Delete')
   );
 }
+
+export function shortcutMatchesKeyboardEvent(shortcut: string, event: KeyboardEvent): boolean {
+  const parts = new Set(
+    shortcut
+      .split('+')
+      .map((part) => part.trim())
+      .filter(Boolean),
+  );
+  const expectedKey = [...parts].find((part) => !['Command', 'Control', 'Option', 'Shift'].includes(part));
+  if (!expectedKey) return false;
+  if (event.metaKey !== parts.has('Command')) return false;
+  if (event.ctrlKey !== parts.has('Control')) return false;
+  if (event.altKey !== parts.has('Option')) return false;
+  if (event.shiftKey !== parts.has('Shift')) return false;
+  return shortcutEventKey(event) === expectedKey.toUpperCase();
+}
+
+function shortcutEventKey(event: KeyboardEvent): string {
+  return (
+    CODE_KEYS[event.code] ??
+    (/^Key[A-Z]$/.test(event.code)
+      ? event.code.slice(3)
+      : /^Digit\d$/.test(event.code)
+        ? event.code.slice(5)
+        : event.key.length === 1
+          ? event.key.toUpperCase()
+          : event.key)
+  ).toUpperCase();
+}

@@ -6,6 +6,10 @@ export const RECENT_SEARCH_COMMAND_LIMIT = 8;
 export const RECENT_SEARCH_MAX_LENGTH = 256;
 export const SEARCH_PREFERENCE_STORAGE_LIMIT = 10_000;
 export const SEARCH_PREFERENCE_MAX_COUNT = 1_000_000;
+export const SEARCH_CACHE_MIN_BYTES = 8 * 1024 * 1024;
+export const SEARCH_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+export const SEARCH_CACHE_MIN_TTL_MINUTES = 5;
+export const SEARCH_CACHE_MAX_TTL_MINUTES = 7 * 24 * 60;
 export const COMMAND_SHORTCUT_LIMIT = 256;
 export const INDEXING_ROOT_LIMIT = 32;
 export const INDEXING_IGNORE_RULE_LIMIT = 256;
@@ -43,12 +47,34 @@ export type WindowMode = 'default' | 'compact';
 export type TextSize = 'default' | 'large';
 export type SearchItemKind =
   'builtin' | 'system' | 'application' | 'file' | 'directory' | 'extension' | 'command' | 'quicklink';
+export type SearchCategory = 'applications' | 'commands' | 'files';
+export type EmojiDefaultAction = 'paste' | 'paste-and-copy' | 'copy' | 'copy-unicode';
 export type SettingsTab = 'general' | 'extensions' | 'search' | 'sync' | 'account' | 'advanced' | 'about';
 export type CommanderViewId = 'emoji-symbols';
 export type CommandShortcutMap = Record<string, string>;
 export type IndexKind = 'application' | 'file' | 'directory';
 export type IndexScope = 'all' | 'applications' | 'commands' | 'files' | 'directories';
 export type IndexIgnoreRuleKind = 'glob' | 'regex';
+
+export const SEARCH_CATEGORIES = [
+  'applications',
+  'commands',
+  'files',
+] as const satisfies readonly SearchCategory[];
+
+export const DEFAULT_SEARCH_CACHE_SETTINGS: SearchCacheSettings = {
+  enabled: true,
+  directory: null,
+  maxSizeBytes: 256 * 1024 * 1024,
+  ttlMinutes: 24 * 60,
+};
+
+export const DEFAULT_WINDOW_PINNING_SETTINGS: WindowPinningSettings = {
+  enabled: true,
+  defaultPinned: false,
+  focusRecentOnCurrentDisplay: true,
+  shortcut: 'Command+Shift+P',
+};
 
 export const DEFAULT_INDEXING_SETTINGS: IndexingSettings = {
   version: INDEXING_SETTINGS_VERSION,
@@ -371,6 +397,68 @@ export function normalizeCommandShortcuts(value: unknown): CommandShortcutMap {
   return shortcuts;
 }
 
+export function normalizeSearchCategoryOrder(value: unknown): SearchCategory[] {
+  const requested = Array.isArray(value)
+    ? value.filter(
+        (candidate): candidate is SearchCategory =>
+          typeof candidate === 'string' && (SEARCH_CATEGORIES as readonly string[]).includes(candidate),
+      )
+    : [];
+  return [...new Set([...requested, ...SEARCH_CATEGORIES])];
+}
+
+export function normalizeSearchCacheSettings(value: unknown): SearchCacheSettings {
+  const candidate =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Partial<SearchCacheSettings>)
+      : {};
+  const directory = typeof candidate.directory === 'string' ? candidate.directory.trim().slice(0, 4_096) : '';
+  return {
+    enabled:
+      typeof candidate.enabled === 'boolean' ? candidate.enabled : DEFAULT_SEARCH_CACHE_SETTINGS.enabled,
+    directory: directory || null,
+    maxSizeBytes: boundedInteger(
+      candidate.maxSizeBytes,
+      SEARCH_CACHE_MIN_BYTES,
+      SEARCH_CACHE_MAX_BYTES,
+      DEFAULT_SEARCH_CACHE_SETTINGS.maxSizeBytes,
+    ),
+    ttlMinutes: boundedInteger(
+      candidate.ttlMinutes,
+      SEARCH_CACHE_MIN_TTL_MINUTES,
+      SEARCH_CACHE_MAX_TTL_MINUTES,
+      DEFAULT_SEARCH_CACHE_SETTINGS.ttlMinutes,
+    ),
+  };
+}
+
+export function normalizeWindowPinningSettings(value: unknown): WindowPinningSettings {
+  const candidate =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Partial<WindowPinningSettings>)
+      : {};
+  const shortcut = normalizedText(candidate.shortcut, 128);
+  return {
+    enabled:
+      typeof candidate.enabled === 'boolean' ? candidate.enabled : DEFAULT_WINDOW_PINNING_SETTINGS.enabled,
+    defaultPinned:
+      typeof candidate.defaultPinned === 'boolean'
+        ? candidate.defaultPinned
+        : DEFAULT_WINDOW_PINNING_SETTINGS.defaultPinned,
+    focusRecentOnCurrentDisplay:
+      typeof candidate.focusRecentOnCurrentDisplay === 'boolean'
+        ? candidate.focusRecentOnCurrentDisplay
+        : DEFAULT_WINDOW_PINNING_SETTINGS.focusRecentOnCurrentDisplay,
+    shortcut: shortcut ?? DEFAULT_WINDOW_PINNING_SETTINGS.shortcut,
+  };
+}
+
+export function normalizeEmojiDefaultAction(value: unknown): EmojiDefaultAction {
+  return value === 'paste' || value === 'paste-and-copy' || value === 'copy' || value === 'copy-unicode'
+    ? value
+    : 'paste';
+}
+
 export function normalizeIndexingSettings(value: unknown): IndexingSettings {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const candidate = source as Partial<IndexingSettings>;
@@ -494,6 +582,10 @@ export interface CommanderSettings {
   textSize: TextSize;
   hotkey: string;
   commandShortcuts: CommandShortcutMap;
+  resultCategoryOrder: SearchCategory[];
+  searchCache: SearchCacheSettings;
+  emojiDefaultAction: EmojiDefaultAction;
+  windowPinning: WindowPinningSettings;
   indexing: IndexingSettings;
   activeAccountId: string | null;
   thingtimeBaseUrl: string;
@@ -501,6 +593,26 @@ export interface CommanderSettings {
   syncRevision: number;
   syncUpdatedAt: string | null;
   syncDirty: boolean;
+}
+
+export interface SearchCacheSettings {
+  enabled: boolean;
+  directory: string | null;
+  maxSizeBytes: number;
+  ttlMinutes: number;
+}
+
+export interface SearchCacheStatus extends SearchCacheSettings {
+  effectiveDirectory: string;
+  sizeBytes: number;
+  entryCount: number;
+}
+
+export interface WindowPinningSettings {
+  enabled: boolean;
+  defaultPinned: boolean;
+  focusRecentOnCurrentDisplay: boolean;
+  shortcut: string;
 }
 
 export interface IndexIgnoreRule {
@@ -571,7 +683,16 @@ export interface IndexingStatus {
   };
   resourceLimits: IndexingResourceLimits;
   lastRunResources?: IndexingResourceUsage;
+  progress?: IndexingProgress;
   message?: string;
+}
+
+export interface IndexingProgress {
+  scope: IndexScope;
+  label: string;
+  processed: number;
+  total?: number;
+  startedAtMs: number;
 }
 
 export interface CommanderAccount {
@@ -688,6 +809,14 @@ export interface SearchResponse {
   hits: SearchHit[];
 }
 
+export interface SearchStreamEvent {
+  type: 'results';
+  phase: 'cache' | 'catalog' | 'filesystem' | 'complete';
+  hits: SearchHit[];
+  complete: boolean;
+  cached: boolean;
+}
+
 export interface SearchErrorResponse {
   error: { code: string; message: string };
 }
@@ -739,11 +868,17 @@ export interface NativeRequest<T = unknown> {
   method:
     | 'launcher.hide'
     | 'launcher.show'
+    | 'launcher.state'
+    | 'launcher.pin'
+    | 'launcher.openNewWindow'
     | 'launcher.commandReady'
     | 'application.quit'
     | 'window.beginDrag'
     | 'filesystem.beginDrag'
     | 'filesystem.icon'
+    | 'filesystem.copy'
+    | 'filesystem.trash'
+    | 'filesystem.delete'
     | 'settings.open'
     | 'application.open'
     | 'application.pasteTarget'
@@ -785,6 +920,7 @@ export interface NativeSettingsSnapshot {
   openAtLogin: boolean;
   showMenuBarIcon: boolean;
   windowMode: WindowMode;
+  windowPinning: WindowPinningSettings;
 }
 
 export interface SettingsOpenRequest {
@@ -807,6 +943,10 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   textSize: 'default',
   hotkey: 'Command+Space',
   commandShortcuts: {},
+  resultCategoryOrder: [...SEARCH_CATEGORIES],
+  searchCache: { ...DEFAULT_SEARCH_CACHE_SETTINGS },
+  emojiDefaultAction: 'paste',
+  windowPinning: { ...DEFAULT_WINDOW_PINNING_SETTINGS },
   indexing: {
     ...DEFAULT_INDEXING_SETTINGS,
     roots: [...DEFAULT_INDEXING_SETTINGS.roots],

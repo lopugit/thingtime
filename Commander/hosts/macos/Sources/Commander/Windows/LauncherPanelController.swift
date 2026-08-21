@@ -24,6 +24,8 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     "window.dispatchEvent(new CustomEvent('commander:launcher-opened'))"
   private let panel: NSPanel
   private let webView: CommanderWebView
+  let id: UUID
+  var didBecomeKey: ((UUID) -> Void)?
   private var contentReady = false
   private var pendingShow = false
   private var pendingCommandItemID: String?
@@ -35,20 +37,32 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   private var isPresented = false
   private var commandPresentationItemID: String?
   private var commandPresentationFallback: Task<Void, Never>?
+  private var requestedScreen: NSScreen?
+  private(set) var isPinned: Bool
+  private var pinningEnabled: Bool
 
-  init(ready: DaemonReady, bridge: CommanderNativeBridge) {
+  init(
+    id: UUID = UUID(),
+    ready: DaemonReady,
+    bridge: CommanderNativeBridge,
+    pinned: Bool = false,
+    pinningEnabled: Bool = true
+  ) {
     let panel = CommanderPanel(
       contentRect: NSRect(origin: .zero, size: LauncherWindowMode.standard.size),
       styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
       backing: .buffered,
       defer: false
     )
+    self.id = id
     self.panel = panel
     self.webView = CommanderWebView(ready: ready, surface: "launcher", bridge: bridge)
+    self.isPinned = pinningEnabled && pinned
+    self.pinningEnabled = pinningEnabled
     super.init()
     panel.delegate = self
     panel.level = .statusBar
-    panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+    panel.collectionBehavior = Self.collectionBehavior(pinned: self.isPinned)
     panel.isOpaque = false
     panel.backgroundColor = .clear
     panel.hasShadow = true
@@ -80,7 +94,18 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     }
   }
 
-  func show() { requestShow(commandItemID: nil) }
+  func show(on screen: NSScreen? = nil) {
+    requestedScreen = screen
+    requestShow(commandItemID: nil)
+  }
+
+  func focus() {
+    guard contentReady else {
+      show()
+      return
+    }
+    present(reposition: false)
+  }
 
   func runCommandHotKey(itemID: String) { requestShow(commandItemID: itemID) }
 
@@ -101,7 +126,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     } else {
       cancelCommandHotKeyPresentation()
     }
-    present()
+    present(reposition: true)
     Task { [weak self] in
       guard let self else { return }
       _ = try? await self.webView.evaluateJavaScript(Self.launcherOpenedScript)
@@ -115,9 +140,10 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     }
   }
 
-  private func present() {
+  private func present(reposition: Bool) {
     isPresented = true
-    centerOnActiveScreen()
+    if reposition { center(on: requestedScreen) }
+    requestedScreen = nil
     NSApp.unhide(nil)
     NSApp.activate(ignoringOtherApps: true)
     panel.makeKeyAndOrderFront(nil)
@@ -140,21 +166,29 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     return pasteTarget.localizedName
   }
 
-  func paste(_ text: String) async -> [String: Any] {
+  func paste(_ text: String, preserveClipboard: Bool) async -> [String: Any] {
+    let previousClipboard = preserveClipboard ? PasteboardSnapshot.capture() : nil
     NSPasteboard.general.clearContents()
-    let copied = NSPasteboard.general.setString(text, forType: .string)
+    let wrotePasteValue = NSPasteboard.general.setString(text, forType: .string)
     var result: [String: Any] = [
-      "copied": copied,
+      "copied": wrotePasteValue && !preserveClipboard,
       "pasted": false,
       "requiresAccessibility": false,
     ]
     if let pasteTargetName { result["targetApplication"] = pasteTargetName }
-    guard copied else { return result }
-    guard AXIsProcessTrusted() else {
-      result["requiresAccessibility"] = true
+    guard wrotePasteValue else {
+      previousClipboard?.restore()
       return result
     }
-    guard let pasteTarget, !pasteTarget.isTerminated else { return result }
+    guard AXIsProcessTrusted() else {
+      result["requiresAccessibility"] = true
+      previousClipboard?.restore()
+      return result
+    }
+    guard let pasteTarget, !pasteTarget.isTerminated else {
+      previousClipboard?.restore()
+      return result
+    }
 
     hide()
     _ = pasteTarget.activate(options: [.activateAllWindows])
@@ -163,6 +197,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     guard let source = CGEventSource(stateID: .hidSystemState),
           let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
           let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+      previousClipboard?.restore()
       return result
     }
     keyDown.flags = .maskCommand
@@ -170,16 +205,55 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     keyDown.post(tap: .cghidEventTap)
     keyUp.post(tap: .cghidEventTap)
     result["pasted"] = true
+    if let previousClipboard {
+      try? await Task.sleep(for: .milliseconds(180))
+      previousClipboard.restore()
+    }
     return result
   }
   func toggle() {
     if NSApp.isHidden {
       show()
+    } else if isPinned && isPresented && panel.isVisible {
+      focus()
     } else if (isPresented && panel.isVisible) || pendingShow || showPending {
       hide()
     } else {
       show()
     }
+  }
+
+  func setPinning(enabled: Bool, pinned: Bool? = nil) {
+    pinningEnabled = enabled
+    isPinned = enabled && (pinned ?? isPinned)
+    panel.collectionBehavior = Self.collectionBehavior(pinned: isPinned)
+    dispatchWindowState()
+  }
+
+  @discardableResult
+  func setPinned(_ pinned: Bool) -> [String: Any] {
+    isPinned = pinningEnabled && pinned
+    panel.collectionBehavior = Self.collectionBehavior(pinned: isPinned)
+    dispatchWindowState()
+    return statePayload
+  }
+
+  var statePayload: [String: Any] {
+    [
+      "windowId": id.uuidString.lowercased(),
+      "pinned": isPinned,
+      "pinningEnabled": pinningEnabled,
+    ]
+  }
+
+  var isVisible: Bool { panel.isVisible && isPresented }
+
+  var screenNumber: NSNumber? {
+    let screen = panel.screen ?? NSScreen.screens.max { left, right in
+      NSIntersectionRect(left.frame, panel.frame).width * NSIntersectionRect(left.frame, panel.frame).height
+        < NSIntersectionRect(right.frame, panel.frame).width * NSIntersectionRect(right.frame, panel.frame).height
+    }
+    return screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
   }
 
   func setWindowMode(_ mode: LauncherWindowMode) {
@@ -213,6 +287,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   func windowDidResignKey(_ notification: Notification) {
     guard !fileDragInProgress else { return }
+    guard !isPinned else { return }
     let commandPresentationWasActive = commandPresentationItemID != nil
     let hasOtherKeyWindow = NSApp.keyWindow.map { $0 !== panel } ?? false
     if !Self.shouldRestoreAfterResign(
@@ -239,6 +314,10 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
       }
       self.hide()
     }
+  }
+
+  func windowDidBecomeKey(_ notification: Notification) {
+    didBecomeKey?(id)
   }
 
   func beginCommandHotKeyPresentation(itemID: String) {
@@ -294,7 +373,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     fileDragInProgress = active
     guard !active else { return }
     if completed {
-      hide()
+      if !isPinned { hide() }
     } else if panel.isVisible {
       NSApp.activate(ignoringOtherApps: true)
       panel.makeKeyAndOrderFront(nil)
@@ -321,13 +400,53 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     webView.evaluateJavaScript("document.querySelector('input')?.focus()")
   }
 
-  private func centerOnActiveScreen() {
+  private func center(on preferredScreen: NSScreen?) {
     let mouse = NSEvent.mouseLocation
-    let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+    let screen = preferredScreen
+      ?? NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+      ?? NSScreen.main
     guard let visible = screen?.visibleFrame else { return }
     let size = panel.frame.size
     let origin = NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - min(100, visible.height * 0.12))
     panel.setFrameOrigin(origin)
     panel.invalidateShadow()
+  }
+
+  private func dispatchWindowState() {
+    guard let data = try? JSONSerialization.data(withJSONObject: statePayload),
+          let json = String(data: data, encoding: .utf8) else { return }
+    webView.evaluateJavaScript(
+      "window.dispatchEvent(new CustomEvent('commander:window-state',{detail:\(json)}))"
+    )
+  }
+
+  private static func collectionBehavior(pinned: Bool) -> NSWindow.CollectionBehavior {
+    var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    if !pinned { behavior.insert(.transient) }
+    return behavior
+  }
+}
+
+private struct PasteboardSnapshot {
+  let items: [[NSPasteboard.PasteboardType: Data]]
+
+  static func capture() -> PasteboardSnapshot {
+    let items = NSPasteboard.general.pasteboardItems?.map { item in
+      Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
+        item.data(forType: type).map { (type, $0) }
+      })
+    } ?? []
+    return PasteboardSnapshot(items: items)
+  }
+
+  func restore() {
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    let restored = items.map { values in
+      let item = NSPasteboardItem()
+      for (type, data) in values { item.setData(data, forType: type) }
+      return item
+    }
+    if !restored.isEmpty { pasteboard.writeObjects(restored) }
   }
 }

@@ -449,6 +449,55 @@ describe('Commander daemon HTTP trust boundaries', () => {
         ],
       });
 
+      const resetSearchCache = await fetch(`${server.url}/api/search/cache`, {
+        method: 'DELETE',
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(resetSearchCache.status).toBe(200);
+
+      const streamedSearch = await fetch(`${server.url}/api/search/stream?q=settings`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(streamedSearch.status).toBe(200);
+      expect(streamedSearch.headers.get('content-type')).toContain('application/x-ndjson');
+      const streamedEvents = (await streamedSearch.text())
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { phase: string; complete: boolean; hits: unknown[] });
+      expect(streamedEvents).toMatchObject([
+        { phase: 'catalog', complete: false, hits: expect.any(Array) },
+        { phase: 'complete', complete: true, hits: expect.any(Array) },
+      ]);
+
+      await vi.waitFor(async () => {
+        const status = await fetch(`${server!.url}/api/search/cache/status`, {
+          headers: { 'x-commander-session': server!.token },
+        });
+        expect(await status.json()).toMatchObject({
+          enabled: true,
+          entryCount: 1,
+          effectiveDirectory: expect.stringContaining('search-results-v1'),
+        });
+      });
+      const cachedSearch = await fetch(`${server.url}/api/search/stream?q=settings`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      const cachedEvents = (await cachedSearch.text())
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { phase: string; cached: boolean });
+      expect(cachedEvents[0]).toMatchObject({ phase: 'cache', cached: true });
+
+      const clearedCache = await fetch(`${server.url}/api/search/cache`, {
+        method: 'DELETE',
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(clearedCache.status).toBe(200);
+      expect(await clearedCache.json()).toMatchObject({
+        ok: true,
+        status: { entryCount: 0, sizeBytes: 0 },
+      });
+
       const missingClaim = await fetch(`${server.url}/api/native/credentials/claim`, {
         method: 'POST',
         headers: {

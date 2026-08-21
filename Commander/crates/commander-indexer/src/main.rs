@@ -3,8 +3,8 @@
 #![forbid(unsafe_code)]
 
 use commander_indexer::{
-    IndexConfiguration, IndexDatabase, IndexKind, IndexerError, IndexerErrorBody,
-    IndexerErrorResponse, IndexerRequest, QueryRequest,
+    IndexConfiguration, IndexDatabase, IndexKind, IndexProgress, IndexerError, IndexerErrorBody,
+    IndexerErrorResponse, IndexerOperation, IndexerRequest, IndexerSuccessResponse, QueryRequest,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -15,6 +15,14 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 const MAX_REQUEST_LINE_BYTES: usize = 16 * 1024 * 1024;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IndexerProgressResponse<'a> {
+    id: &'a str,
+    event: &'static str,
+    progress: &'a IndexProgress,
+}
 
 const HELP: &str = "commander-indexer
 
@@ -132,9 +140,41 @@ fn serve(
         match parsed {
             Ok(request) => {
                 let id = request.id.clone();
-                match database.handle_request(request) {
-                    Ok(response) => write_json_line(&mut writer, &response)?,
-                    Err(error) => write_error(&mut writer, id, &error)?,
+                match request.operation {
+                    IndexerOperation::Index { configuration } => {
+                        let report =
+                            database.index_with_progress(&configuration, &mut |progress| {
+                                write_json_line(
+                                    &mut writer,
+                                    &IndexerProgressResponse {
+                                        id: &id,
+                                        event: "progress",
+                                        progress,
+                                    },
+                                )
+                            });
+                        match report.and_then(|report| {
+                            serde_json::to_value(report)
+                                .map_err(|error| {
+                                    IndexerError::new("serialization_error", error.to_string())
+                                })
+                                .map(|result| IndexerSuccessResponse {
+                                    id: id.clone(),
+                                    ok: true,
+                                    result,
+                                })
+                        }) {
+                            Ok(response) => write_json_line(&mut writer, &response)?,
+                            Err(error) => write_error(&mut writer, id, &error)?,
+                        }
+                    }
+                    operation => match database.handle_request(IndexerRequest {
+                        id: id.clone(),
+                        operation,
+                    }) {
+                        Ok(response) => write_json_line(&mut writer, &response)?,
+                        Err(error) => write_error(&mut writer, id, &error)?,
+                    },
                 }
             }
             Err(error) => {

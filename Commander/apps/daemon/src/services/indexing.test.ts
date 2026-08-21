@@ -18,9 +18,18 @@ describe('filesystem index search item bridge', () => {
       icon: 'file',
       path: '/Users/test/Documents/report.pdf',
       actions: [
-        { id: 'open', title: 'Open' },
-        { id: 'show-in-finder', title: 'Show in Finder' },
-        { id: 'copy-path', title: 'Copy Path' },
+        { id: 'open', title: 'Open', shortcut: '↵' },
+        { id: 'show-in-finder', title: 'Show in Finder', shortcut: '⇧⌘R' },
+        { id: 'copy-file', title: 'Copy', shortcut: '⌘C' },
+        { id: 'copy-path', title: 'Copy Path', shortcut: '⇧⌘C' },
+        { id: 'copy-name', title: 'Copy Name' },
+        { id: 'move-to-trash', title: 'Move to Trash', shortcut: '⌘⌫', destructive: true },
+        {
+          id: 'delete',
+          title: 'Delete Immediately…',
+          shortcut: '⌥⌘⌫',
+          destructive: true,
+        },
       ],
     });
     expect(decodeIndexedItemId(item.id)).toEqual({

@@ -81,6 +81,9 @@ function state(): CommanderState {
     bootstrap,
     query: '',
     hits: [],
+    searchPending: false,
+    resultsStale: false,
+    indexingStatus: null,
     recentSearches: [],
     selectedIndex: 0,
     actionsOpen: false,
@@ -96,6 +99,7 @@ function state(): CommanderState {
     reportError: vi.fn(),
     saveSettings: vi.fn(),
     refresh: vi.fn(),
+    refreshSearch: vi.fn(),
   };
 }
 

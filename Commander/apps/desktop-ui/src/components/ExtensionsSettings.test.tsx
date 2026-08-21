@@ -172,12 +172,12 @@ describe('Your Raycast extensions', () => {
     );
   });
 
-  it('lists Commander-native equivalents under Bundled Raycast Commands', () => {
+  it('lists Commander-native equivalents under Bundled Commands', () => {
     renderExtensions([emojiExtension, macosSystemExtension]);
 
     fireEvent.click(screen.getByRole('button', { name: 'Bundled' }));
 
-    expect(screen.getByText('Bundled Raycast Commands')).toBeVisible();
+    expect(screen.getByText('Bundled Commands')).toBeVisible();
     expect(screen.getByText('Emoji & Symbols')).toBeVisible();
     expect(screen.queryByText('macOS System')).not.toBeInTheDocument();
     expect(screen.getByText('1 bundled command · by Thingtime')).toBeVisible();

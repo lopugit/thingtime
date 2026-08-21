@@ -12,16 +12,20 @@ const indexer = new FileSystemIndexerClient({
   databasePath: '/path/to/files.sqlite3',
 });
 
-await indexer.index({
-  ...configuration,
-  resourceLimits: {
-    maxThreads: 2,
-    maxParallelism: 2,
-    maxOpenDirectories: 16,
-    maxCpuPercent: 60,
-    maxMemoryMiB: 512,
+await indexer.index(
+  {
+    ...configuration,
+    resourceLimits: {
+      maxThreads: 2,
+      maxParallelism: 2,
+      maxOpenDirectories: 16,
+      maxCpuPercent: 60,
+      maxMemoryMiB: 512,
+    },
   },
-});
+  undefined,
+  (progress) => console.log(progress.sourceId, progress.processed, progress.indexed),
+);
 const { records } = await indexer.query({ query: 'invoice', kinds: ['file'], limit: 30 });
 await indexer.close();
 ```
@@ -35,3 +39,6 @@ omitted. A completed `IndexReport.resources` records the effective worker count,
 logical CPU count, average whole-machine CPU share, peak resident memory,
 throttle time, queue capacity, and SQLite cache budget. A host can also supply a
 per-call timeout as the second argument to `index(configuration, timeoutMs)`.
+An optional third argument receives correlated, per-source progress events while
+the long-running index request remains pending. Clients that do not supply it
+remain wire-compatible with the final report-only behavior.

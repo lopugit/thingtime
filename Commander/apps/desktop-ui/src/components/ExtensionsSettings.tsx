@@ -26,7 +26,7 @@ import { CommanderIcon } from './CommanderIcon.js';
 
 type ExtensionMode = 'installed' | 'bundled' | 'store' | 'raycast';
 
-const bundledRaycastExtensionIds = new Set(['builtin:emoji-symbols']);
+const bundledExtensionIds = new Set(['builtin:emoji-symbols']);
 
 export function ExtensionsSettings({
   initial,
@@ -203,7 +203,7 @@ export function ExtensionsSettings({
   const visibleBundled = installed.filter(
     (extension) =>
       extension.source === 'builtin' &&
-      bundledRaycastExtensionIds.has(extension.id) &&
+      bundledExtensionIds.has(extension.id) &&
       fuzzyMatches(
         `${extension.title} ${extension.description} ${extension.commands.map((command) => command.title).join(' ')}`,
       ),
@@ -332,8 +332,8 @@ export function ExtensionsSettings({
               <PackageCheck />
             </span>
             <div>
-              <strong>Bundled Raycast Commands</strong>
-              <small>Commander-native versions of useful commands that Raycast bundles into its app.</small>
+              <strong>Bundled Commands</strong>
+              <small>Commander-native commands included with the app.</small>
             </div>
           </header>
           <div className="store-grid bundled-command-grid">
@@ -357,6 +357,33 @@ export function ExtensionsSettings({
                     {extension.commands.length === 1 ? 'command' : 'commands'} · by{' '}
                     {extension.author ?? 'Thingtime'}
                   </small>
+                  {extension.id === 'builtin:emoji-symbols' ? (
+                    <>
+                      <small>Inspired by the bundled Raycast Emoji &amp; Symbols command.</small>
+                      <label className="bundled-preference-row">
+                        <span>
+                          <strong>Default Return action</strong>
+                          <small>Choose what happens when you press Return on an emoji.</small>
+                        </span>
+                        <select
+                          aria-label="Emoji default Return action"
+                          value={settings.emojiDefaultAction}
+                          onChange={(event) =>
+                            onChange({
+                              ...settings,
+                              emojiDefaultAction: event.currentTarget
+                                .value as CommanderSettings['emojiDefaultAction'],
+                            })
+                          }
+                        >
+                          <option value="paste">Paste to Current App (keep clipboard)</option>
+                          <option value="paste-and-copy">Paste and Copy to Clipboard</option>
+                          <option value="copy">Copy to Clipboard</option>
+                          <option value="copy-unicode">Copy Unicode Code Points</option>
+                        </select>
+                      </label>
+                    </>
+                  ) : null}
                   <span className="bundled-shortcut-list">
                     {extension.commands.map((command) => {
                       const itemId = extensionCommandItemId(extension.id, command.name);

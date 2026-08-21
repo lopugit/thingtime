@@ -3,6 +3,7 @@ import type {
   BootstrapResponse,
   CommanderViewId,
   CommanderSettings,
+  IndexingStatus,
   RecentSearch,
   RecentSearchCommand,
   SearchHit,
@@ -15,6 +16,9 @@ export interface CommanderState {
   bootstrap: BootstrapResponse | null;
   query: string;
   hits: SearchHit[];
+  searchPending: boolean;
+  resultsStale: boolean;
+  indexingStatus: IndexingStatus | null;
   recentSearches: RecentSearch[];
   selectedIndex: number;
   actionsOpen: boolean;
@@ -30,27 +34,32 @@ export interface CommanderState {
   reportError(value: string | null): void;
   saveSettings(settings: CommanderSettings): Promise<void>;
   refresh(): Promise<void>;
+  refreshSearch(): void;
 }
 
 export function useCommander(): CommanderState {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [query, setQueryState] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
+  const [searchPending, setSearchPending] = useState(false);
+  const [resultsStale, setResultsStale] = useState(false);
+  const [indexingStatus, setIndexingStatus] = useState<IndexingStatus | null>(null);
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<CommanderViewId | null>(null);
+  const [searchRefresh, setSearchRefresh] = useState(0);
   const requestSequence = useRef(0);
   const recentSearchSequence = useRef(0);
   const queryRef = useRef('');
   const recentSearchesRef = useRef<RecentSearch[]>([]);
 
   const setQuery = useCallback((value: string) => {
+    if (value !== queryRef.current) setResultsStale(true);
     queryRef.current = value;
     setQueryState(value);
-    setHits([]);
     setSelectedIndex(0);
     setActionsOpen(false);
   }, []);
@@ -68,6 +77,25 @@ export function useCommander(): CommanderState {
   }, []);
 
   useEffect(() => void refresh(), [refresh]);
+
+  useEffect(() => {
+    if (!bootstrap) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const status = await api.indexingStatus();
+        if (!cancelled) setIndexingStatus(status);
+      } catch {
+        // Search remains available while the optional index status is temporarily unavailable.
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 1_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [bootstrap]);
 
   useEffect(() => {
     if (!notice) return;
@@ -107,19 +135,41 @@ export function useCommander(): CommanderState {
   useEffect(() => {
     if (!bootstrap) return;
     const sequence = ++requestSequence.current;
+    const controller = new AbortController();
+    setSearchPending(true);
     const timer = window.setTimeout(() => {
       void api
-        .search(query)
-        .then(({ hits: next }) => {
-          if (sequence !== requestSequence.current) return;
-          setHits(next);
-          setSelectedIndex(0);
-          setError(null);
-        })
-        .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Search failed'));
+        .streamSearch(
+          query,
+          (event) => {
+            if (sequence !== requestSequence.current) return;
+            if (event.hits.length || event.complete) {
+              setHits(event.hits);
+              setResultsStale(false);
+            }
+            setSearchPending(!event.complete);
+            setError(null);
+          },
+          controller.signal,
+        )
+        .then(
+          () => {
+            if (sequence === requestSequence.current) setSearchPending(false);
+          },
+          (reason: unknown) => {
+            if (controller.signal.aborted || sequence !== requestSequence.current) return;
+            setSearchPending(false);
+            setError(reason instanceof Error ? reason.message : 'Search failed');
+          },
+        );
     }, 35);
-    return () => window.clearTimeout(timer);
-  }, [bootstrap, query]);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [bootstrap, query, searchRefresh]);
+
+  const refreshSearch = useCallback(() => setSearchRefresh((current) => current + 1), []);
 
   const saveSettings = useCallback(
     async (settings: CommanderSettings) => {
@@ -148,10 +198,22 @@ export function useCommander(): CommanderState {
         const nativeResult = await nativeRequest<{
           path?: string;
           allowUntrustedBuildScripts?: boolean;
+          copied?: boolean;
+          trashed?: boolean;
+          deleted?: boolean;
         }>(request.method, request.params);
         if (request.method === 'extension.choose' && nativeResult?.path) {
           await api.sideload(nativeResult.path, nativeResult.allowUntrustedBuildScripts === true);
           await refresh();
+        }
+        if (request.method === 'filesystem.copy' && nativeResult?.copied) setNotice('Item copied');
+        if (request.method === 'filesystem.trash' && nativeResult?.trashed) {
+          setNotice('Moved to Trash');
+          refreshSearch();
+        }
+        if (request.method === 'filesystem.delete' && nativeResult?.deleted) {
+          setNotice('Deleted immediately');
+          refreshSearch();
         }
       }
       const nativeOwnsLauncherLifecycle =
@@ -163,7 +225,7 @@ export function useCommander(): CommanderState {
       setActionsOpen(false);
       setError(null);
     },
-    [refresh],
+    [refresh, refreshSearch],
   );
 
   useEffect(() => {
@@ -183,6 +245,9 @@ export function useCommander(): CommanderState {
       bootstrap,
       query,
       hits,
+      searchPending,
+      resultsStale,
+      indexingStatus,
       recentSearches,
       selectedIndex,
       actionsOpen,
@@ -198,11 +263,15 @@ export function useCommander(): CommanderState {
       reportError: setError,
       saveSettings,
       refresh,
+      refreshSearch,
     }),
     [
       bootstrap,
       query,
       hits,
+      searchPending,
+      resultsStale,
+      indexingStatus,
       recentSearches,
       selectedIndex,
       actionsOpen,
@@ -214,6 +283,7 @@ export function useCommander(): CommanderState {
       executeCommand,
       saveSettings,
       refresh,
+      refreshSearch,
     ],
   );
 }

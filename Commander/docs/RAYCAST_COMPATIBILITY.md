@@ -55,13 +55,14 @@ no-view command that launches the installed macOS app by bundle identifier. The 
 with it, including its image commands and assets. These Commander-owned commands do not expand the compatibility
 claims for third-party extensions in the matrix above.
 
-## Bundled Raycast Commands
+## Bundled Commands
 
 Some Raycast commands are part of the host application rather than a public extension package, so there is no
 source package for Your Raycast or Sideload to import. Commander lists its clean-room native equivalents under a
-separate **Bundled Raycast Commands** category instead of misrepresenting them as imported extensions.
+separate **Bundled** category instead of misrepresenting them as imported extensions.
 
-The first bundled equivalent is **Emoji & Symbols → Search Emoji & Symbols**. It provides semantic Unicode/CLDR
+The first bundled equivalent is **Emoji & Symbols → Search Emoji & Symbols**, inspired by Raycast's picker. It
+provides semantic Unicode/CLDR
 search, an eight-column keyboard-navigable grid, category and skin-tone filters, local recents, copy/Unicode actions,
 and native paste-back to the app that was active before Commander opened. On macOS, automatic paste requires the
 existing Accessibility grant; without it, Commander copies the selection and keeps the picker open with an explicit

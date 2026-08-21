@@ -71,9 +71,21 @@ fn service_processes_correlated_requests_and_survives_invalid_json() {
     )
     .expect("index request");
     stdin.flush().expect("flush index");
-    let mut third = String::new();
-    stdout.read_line(&mut third).expect("index response");
-    let third: Value = serde_json::from_str(&third).expect("index JSON");
+    let mut progress_events = Vec::new();
+    let third = loop {
+        let mut line = String::new();
+        stdout.read_line(&mut line).expect("index response");
+        let value: Value = serde_json::from_str(&line).expect("index JSON");
+        if value["event"] == "progress" {
+            progress_events.push(value);
+        } else {
+            break value;
+        }
+    };
+    assert!(!progress_events.is_empty());
+    assert_eq!(progress_events[0]["id"], "index-1");
+    assert_eq!(progress_events[0]["progress"]["sourceId"], "fixture");
+    assert_eq!(progress_events.last().unwrap()["progress"]["processed"], 1);
     assert_eq!(third["id"], "index-1");
     assert_eq!(third["ok"], true);
     assert_eq!(third["result"]["indexed"], 1);

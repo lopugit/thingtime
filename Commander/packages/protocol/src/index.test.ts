@@ -5,9 +5,51 @@ import {
   fuzzyTextScore,
   INDEXING_SETTINGS_VERSION,
   normalizeIndexingSettings,
+  normalizeSearchCacheSettings,
+  normalizeSearchCategoryOrder,
   normalizeSearchPreferences,
+  normalizeWindowPinningSettings,
   recordSearchPreference,
 } from './index.js';
+
+describe('Commander presentation settings', () => {
+  it('normalizes category ordering without duplicates and restores missing categories', () => {
+    expect(normalizeSearchCategoryOrder(['files', 'files', 'commands'])).toEqual([
+      'files',
+      'commands',
+      'applications',
+    ]);
+  });
+
+  it('bounds cache and window pinning preferences while preserving valid overrides', () => {
+    expect(
+      normalizeSearchCacheSettings({
+        enabled: false,
+        directory: ' ~/Commander Cache ',
+        maxSizeBytes: Number.MAX_SAFE_INTEGER,
+        ttlMinutes: 1,
+      }),
+    ).toMatchObject({
+      enabled: false,
+      directory: '~/Commander Cache',
+      maxSizeBytes: 2 * 1024 * 1024 * 1024,
+      ttlMinutes: 5,
+    });
+    expect(
+      normalizeWindowPinningSettings({
+        enabled: true,
+        defaultPinned: true,
+        focusRecentOnCurrentDisplay: false,
+        shortcut: ' Command+Shift+P ',
+      }),
+    ).toEqual({
+      enabled: true,
+      defaultPinned: true,
+      focusRecentOnCurrentDisplay: false,
+      shortcut: 'Command+Shift+P',
+    });
+  });
+});
 
 describe('normalizeIndexingSettings', () => {
   it('migrates legacy settings to safe local indexing defaults', () => {

@@ -1,17 +1,57 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { ArrowRight, Command, CornerDownLeft, Search } from 'lucide-react';
-import type { RecentSearch, RecentSearchCommand, SearchHit } from '@commander/protocol';
+import {
+  AppWindow,
+  ArrowRight,
+  Command,
+  CornerDownLeft,
+  Files,
+  PanelTop,
+  Pin,
+  PinOff,
+  Plus,
+  RefreshCw,
+  Search,
+  Terminal,
+} from 'lucide-react';
+import type {
+  IndexingStatus,
+  RecentSearch,
+  RecentSearchCommand,
+  SearchCategory,
+  SearchHit,
+} from '@commander/protocol';
 import { RECENT_SEARCH_PREVIEW_LIMIT } from '@commander/protocol';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
+import { shortcutMatchesKeyboardEvent } from '../lib/shortcuts.js';
 import { ActionsPanel } from './ActionsPanel.js';
 import { CommanderIcon } from './CommanderIcon.js';
+import { ResultContextMenu } from './ResultContextMenu.js';
 import { ResultIcon } from './ResultIcon.js';
 
 type HistoryRow =
   | { type: 'query'; search: RecentSearch }
   | { type: 'command'; search: RecentSearch; command: RecentSearchCommand };
+
+type SearchGroup = {
+  category: SearchCategory;
+  title: string;
+  hits: SearchHit[];
+  startIndex: number;
+};
+
+interface LauncherWindowState {
+  windowId: string;
+  pinned: boolean;
+  pinningEnabled: boolean;
+}
+
+const categoryTitles: Record<SearchCategory, string> = {
+  applications: 'Apps',
+  commands: 'Commands',
+  files: 'Files & Folders',
+};
 
 function buildHistoryRows(searches: readonly RecentSearch[]): HistoryRow[] {
   return searches.flatMap((search) => [
@@ -33,10 +73,74 @@ function commandHistoryEntry(hit: SearchHit, actionId: string): RecentSearchComm
   };
 }
 
+function categoryForHit(hit: SearchHit): SearchCategory {
+  if (hit.kind === 'application') return 'applications';
+  if (hit.kind === 'file' || hit.kind === 'directory') return 'files';
+  return 'commands';
+}
+
+function groupedHits(
+  hits: readonly SearchHit[],
+  order: readonly SearchCategory[],
+  initialIndex: number,
+): { groups: SearchGroup[]; flattened: SearchHit[] } {
+  const byCategory = new Map<SearchCategory, SearchHit[]>([
+    ['applications', []],
+    ['commands', []],
+    ['files', []],
+  ]);
+  for (const hit of hits) byCategory.get(categoryForHit(hit))?.push(hit);
+  const priority = new Map(order.map((category, index) => [category, index]));
+  const populated = [...byCategory.entries()]
+    .filter((entry): entry is [SearchCategory, SearchHit[]] => entry[1].length > 0)
+    .sort(
+      ([leftCategory, left], [rightCategory, right]) =>
+        (right[0]?.score ?? 0) - (left[0]?.score ?? 0) ||
+        (priority.get(leftCategory) ?? 99) - (priority.get(rightCategory) ?? 99),
+    );
+  let offset = initialIndex;
+  const groups = populated.map(([category, categoryHits]) => {
+    const group = {
+      category,
+      title: categoryTitles[category],
+      hits: categoryHits,
+      startIndex: offset,
+    };
+    offset += categoryHits.length;
+    return group;
+  });
+  return { groups, flattened: groups.flatMap((group) => group.hits) };
+}
+
+function displayTitle(hit: SearchHit): string {
+  return hit.kind === 'application' ? hit.title.replace(/\.app$/i, '') : hit.title;
+}
+
+function indexActivity(status: IndexingStatus | null): string | null {
+  const progress = status?.progress;
+  if (progress) {
+    const count = progress.processed.toLocaleString();
+    const total = progress.total?.toLocaleString();
+    return `${progress.label} · ${count}${total ? ` / ${total}` : ''}`;
+  }
+  const scope = status?.running[0];
+  if (!scope) return null;
+  const label = scope === 'all' ? 'Everything' : scope[0]!.toUpperCase() + scope.slice(1);
+  return `Indexing ${label}…`;
+}
+
 export function Launcher({ state }: { state: CommanderState }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const pinControlRef = useRef<HTMLDivElement>(null);
   const lastPointerPosition = useRef<{ x: number; y: number } | null>(null);
   const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ item: SearchHit; x: number; y: number } | null>(null);
+  const [pinMenuOpen, setPinMenuOpen] = useState(false);
+  const [windowState, setWindowState] = useState<LauncherWindowState>({
+    windowId: 'browser',
+    pinned: state.bootstrap?.settings.windowPinning.defaultPinned ?? false,
+    pinningEnabled: state.bootstrap?.settings.windowPinning.enabled ?? false,
+  });
   const historyVisible = !state.query.trim() && state.recentSearches.length > 0;
   const visibleSearches = useMemo(
     () =>
@@ -45,10 +149,22 @@ export function Launcher({ state }: { state: CommanderState }) {
   );
   const historyRows = useMemo(() => buildHistoryRows(visibleSearches), [visibleSearches]);
   const historyCount = historyVisible ? historyRows.length : 0;
-  const totalRows = historyCount + state.hits.length;
+  const searchGroups = useMemo(
+    () =>
+      groupedHits(
+        state.hits,
+        state.bootstrap?.settings.resultCategoryOrder ?? ['applications', 'commands', 'files'],
+        historyCount,
+      ),
+    [historyCount, state.bootstrap?.settings.resultCategoryOrder, state.hits],
+  );
+  const totalRows = historyCount + searchGroups.flattened.length;
   const selectedHistoryRow =
     historyVisible && state.selectedIndex < historyCount ? historyRows[state.selectedIndex] : undefined;
-  const selected = selectedHistoryRow ? undefined : state.hits[state.selectedIndex - historyCount];
+  const selected = selectedHistoryRow
+    ? undefined
+    : searchGroups.flattened[state.selectedIndex - historyCount];
+  const activity = indexActivity(state.indexingStatus);
 
   const selectFromPointer = useCallback(
     (index: number, event: ReactPointerEvent<HTMLElement>) => {
@@ -60,30 +176,78 @@ export function Launcher({ state }: { state: CommanderState }) {
     [state],
   );
 
+  const refreshWindowState = useCallback(async () => {
+    const next = await nativeRequest<LauncherWindowState>('launcher.state');
+    if (next) setWindowState(next);
+  }, []);
+
+  const setPinned = useCallback(
+    async (pinned: boolean) => {
+      try {
+        const next = await nativeRequest<LauncherWindowState>('launcher.pin', { pinned });
+        if (next) setWindowState(next);
+        setPinMenuOpen(false);
+      } catch (error) {
+        state.reportError(error instanceof Error ? error.message : 'Could not change the window pin');
+      }
+    },
+    [state],
+  );
+
   useEffect(() => inputRef.current?.focus(), []);
 
   useEffect(() => {
-    const resetHistory = () => setHistoryExpanded(false);
+    const resetHistory = () => {
+      setHistoryExpanded(false);
+      setContextMenu(null);
+      void refreshWindowState();
+    };
+    const updateWindowState = (event: Event) => {
+      const detail = (event as CustomEvent<LauncherWindowState>).detail;
+      if (detail && typeof detail.pinned === 'boolean') setWindowState(detail);
+    };
     window.addEventListener('commander:launcher-opened', resetHistory);
-    return () => window.removeEventListener('commander:launcher-opened', resetHistory);
-  }, []);
+    window.addEventListener('commander:window-state', updateWindowState);
+    void refreshWindowState();
+    return () => {
+      window.removeEventListener('commander:launcher-opened', resetHistory);
+      window.removeEventListener('commander:window-state', updateWindowState);
+    };
+  }, [refreshWindowState]);
+
+  useEffect(() => {
+    if (!pinMenuOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (pinControlRef.current?.contains(event.target as Node)) return;
+      setPinMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', dismiss, true);
+    return () => window.removeEventListener('pointerdown', dismiss, true);
+  }, [pinMenuOpen]);
 
   useEffect(() => {
     const selectedRow = document.querySelector<HTMLElement>('.result-row.selected');
     if (typeof selectedRow?.scrollIntoView === 'function') selectedRow.scrollIntoView({ block: 'nearest' });
   }, [state.selectedIndex]);
 
-  const runAction = useCallback(
-    async (actionId: string) => {
+  const runHitAction = useCallback(
+    async (hit: SearchHit, actionId: string) => {
       try {
-        if (!selected) return;
-        await state.rememberRecentSearch(state.query, commandHistoryEntry(selected, actionId));
-        await state.executeCommand(selected.id, actionId, state.query);
+        if (state.resultsStale) return;
+        await state.rememberRecentSearch(state.query, commandHistoryEntry(hit, actionId));
+        await state.executeCommand(hit.id, actionId, state.query);
       } catch (error) {
         state.reportError(error instanceof Error ? error.message : 'Command failed');
       }
     },
-    [selected, state],
+    [state],
+  );
+
+  const runAction = useCallback(
+    async (actionId: string) => {
+      if (selected) await runHitAction(selected, actionId);
+    },
+    [runHitAction, selected],
   );
 
   const runHistoryCommand = useCallback(
@@ -108,11 +272,18 @@ export function Launcher({ state }: { state: CommanderState }) {
       void runHistoryCommand(selectedHistoryRow);
       return;
     }
-    if (selected) void runAction(selected.actions[0]?.id ?? 'open');
-  }, [runAction, runHistoryCommand, selected, selectedHistoryRow, state]);
+    if (selected) void runHitAction(selected, selected.actions[0]?.id ?? 'open');
+  }, [runHistoryCommand, runHitAction, selected, selectedHistoryRow, state]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const pinning = state.bootstrap?.settings.windowPinning;
+      if (pinning?.enabled && shortcutMatchesKeyboardEvent(pinning.shortcut, event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        void setPinned(!windowState.pinned);
+        return;
+      }
       if (state.actionsOpen && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
       if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -120,15 +291,22 @@ export function Launcher({ state }: { state: CommanderState }) {
       } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         state.setSelectedIndex(Math.max(0, state.selectedIndex - 1));
-      } else if (event.key === 'Enter' && (selected || selectedHistoryRow)) {
+      } else if (event.key === 'Enter' && (selectedHistoryRow || (selected && !state.resultsStale))) {
         event.preventDefault();
         runSelected();
-      } else if (selected && event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
+      } else if (
+        selected &&
+        !state.resultsStale &&
+        event.key.toLowerCase() === 'k' &&
+        (event.metaKey || event.ctrlKey)
+      ) {
         event.preventDefault();
         state.setActionsOpen(!state.actionsOpen);
       } else if (event.key === 'Escape') {
         event.preventDefault();
-        if (state.actionsOpen) state.setActionsOpen(false);
+        if (contextMenu) setContextMenu(null);
+        else if (pinMenuOpen) setPinMenuOpen(false);
+        else if (state.actionsOpen) state.setActionsOpen(false);
         else
           void state
             .rememberRecentSearch(state.query)
@@ -140,7 +318,67 @@ export function Launcher({ state }: { state: CommanderState }) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [runSelected, selected, selectedHistoryRow, state, totalRows]);
+  }, [
+    contextMenu,
+    pinMenuOpen,
+    runSelected,
+    selected,
+    selectedHistoryRow,
+    setPinned,
+    state,
+    totalRows,
+    windowState.pinned,
+  ]);
+
+  const renderHit = (hit: SearchHit, rowIndex: number) => {
+    const rowSelected = rowIndex === state.selectedIndex;
+    return (
+      <button
+        type="button"
+        role="option"
+        aria-selected={rowSelected}
+        aria-disabled={state.resultsStale}
+        className={`${rowSelected ? 'result-row selected' : 'result-row'}${hit.path ? ' draggable-result' : ''}${state.resultsStale ? ' stale-result' : ''}`}
+        key={hit.id}
+        onPointerMove={(event) => selectFromPointer(rowIndex, event)}
+        onPointerDown={(event) => {
+          if (event.button !== 0 || !hit.path) return;
+          if (state.resultsStale) return;
+          state.setSelectedIndex(rowIndex);
+          void nativeRequest('filesystem.beginDrag', { path: hit.path }).catch((error: unknown) =>
+            state.reportError(error instanceof Error ? error.message : 'Could not drag that file'),
+          );
+        }}
+        onContextMenu={(event) => {
+          if (!hit.path) return;
+          if (state.resultsStale) return;
+          event.preventDefault();
+          state.setSelectedIndex(rowIndex);
+          state.setActionsOpen(false);
+          setContextMenu({ item: hit, x: event.clientX, y: event.clientY });
+        }}
+        onDoubleClick={() => void runHitAction(hit, hit.actions[0]?.id ?? 'open')}
+      >
+        <ResultIcon icon={hit.icon} kind={hit.kind} path={hit.path} />
+        <span className="result-copy">
+          <span className="result-title">{displayTitle(hit)}</span>
+          {hit.subtitle ? <span className="result-subtitle">{hit.subtitle}</span> : null}
+        </span>
+        <span className="result-badges">
+          {hit.kind === 'application' ? <span className="app-extension-badge">.app</span> : null}
+          <span className="result-kind">{hit.kind === 'builtin' ? 'Command' : hit.kind}</span>
+        </span>
+        {rowSelected ? (
+          <span className="result-enter">
+            <span>{hit.actions[0]?.title ?? 'Open'}</span>
+            <CornerDownLeft />
+          </span>
+        ) : (
+          <ArrowRight className="row-chevron" />
+        )}
+      </button>
+    );
+  };
 
   return (
     <main className="launcher-shell">
@@ -152,11 +390,11 @@ export function Launcher({ state }: { state: CommanderState }) {
           <Search className="search-leading" aria-hidden="true" />
           <input
             ref={inputRef}
-            aria-label="Search apps and commands"
+            aria-label="Search apps, commands, files and folders"
             autoCapitalize="none"
             autoComplete="off"
             autoCorrect="off"
-            placeholder="Search for apps and commands…"
+            placeholder="Search apps, commands, files and folders…"
             spellCheck={false}
             value={state.query}
             onChange={(event) => state.setQuery(event.target.value)}
@@ -175,7 +413,7 @@ export function Launcher({ state }: { state: CommanderState }) {
         <div className="result-region">
           <div className="section-heading">
             <span role="heading" aria-level={2}>
-              {state.query ? 'Results' : historyVisible ? 'History' : 'Suggestions'}
+              {historyVisible ? 'History' : 'Results'}
             </span>
             {historyVisible ? (
               <span className="history-heading-actions">
@@ -198,7 +436,10 @@ export function Launcher({ state }: { state: CommanderState }) {
                 ) : null}
               </span>
             ) : (
-              <span>{state.hits.length}</span>
+              <span className={state.searchPending ? 'result-count updating' : 'result-count'}>
+                {state.searchPending ? <RefreshCw aria-label="Updating results" /> : null}
+                {state.hits.length}
+              </span>
             )}
           </div>
           <div
@@ -278,7 +519,7 @@ export function Launcher({ state }: { state: CommanderState }) {
                   );
                 })
               : null}
-            {historyVisible ? (
+            {historyVisible && searchGroups.groups.length ? (
               <div className="section-heading result-section-heading">
                 <span role="heading" aria-level={2}>
                   Suggestions
@@ -286,57 +527,43 @@ export function Launcher({ state }: { state: CommanderState }) {
                 <span>{state.hits.length}</span>
               </div>
             ) : null}
-            {state.hits.map((hit, index) => {
-              const rowIndex = historyCount + index;
-              return (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={rowIndex === state.selectedIndex}
-                  className={`${rowIndex === state.selectedIndex ? 'result-row selected' : 'result-row'}${hit.path ? ' draggable-result' : ''}`}
-                  key={hit.id}
-                  onPointerMove={(event) => selectFromPointer(rowIndex, event)}
-                  onPointerDown={(event) => {
-                    if (event.button !== 0 || !hit.path) return;
-                    state.setSelectedIndex(rowIndex);
-                    void nativeRequest('filesystem.beginDrag', { path: hit.path }).catch((error: unknown) =>
-                      state.reportError(error instanceof Error ? error.message : 'Could not drag that file'),
-                    );
-                  }}
-                  onDoubleClick={() => void runAction(hit.actions[0]?.id ?? 'open')}
-                >
-                  <ResultIcon icon={hit.icon} kind={hit.kind} path={hit.path} />
-                  <span className="result-copy">
-                    <span className="result-title">{hit.title}</span>
-                    {hit.subtitle ? <span className="result-subtitle">{hit.subtitle}</span> : null}
-                  </span>
-                  <span className="result-kind">{hit.kind === 'builtin' ? 'Command' : hit.kind}</span>
-                  {rowIndex === state.selectedIndex ? (
-                    <span className="result-enter">
-                      <span>Open</span>
-                      <CornerDownLeft />
+            {searchGroups.groups.map((group) => (
+              <Fragment key={group.category}>
+                <div className="category-heading">
+                  <span>
+                    {group.category === 'applications' ? <AppWindow /> : null}
+                    {group.category === 'commands' ? <Terminal /> : null}
+                    {group.category === 'files' ? <Files /> : null}
+                    <span role="heading" aria-level={3}>
+                      {group.title}
                     </span>
-                  ) : (
-                    <ArrowRight className="row-chevron" />
-                  )}
-                </button>
-              );
-            })}
+                  </span>
+                  <span>{group.hits.length}</span>
+                </div>
+                {group.hits.map((hit, index) => renderHit(hit, group.startIndex + index))}
+              </Fragment>
+            ))}
             {!totalRows ? (
               <div className="empty-state">
-                <Command />
-                <strong>No commands found</strong>
-                <span>Try an application, extension, or Commander setting.</span>
+                {state.searchPending ? <RefreshCw className="search-spinner" /> : <Command />}
+                <strong>{state.searchPending ? 'Searching…' : 'No results found'}</strong>
+                <span>
+                  {state.searchPending
+                    ? 'Checking commands and the filesystem index.'
+                    : 'Try an application, command, file, folder, or Commander setting.'}
+                </span>
               </div>
             ) : null}
           </div>
         </div>
 
         <footer className="launcher-footer">
-          <span className="connection-dot" />
+          <span className={activity ? 'connection-dot indexing' : 'connection-dot'} />
           <span>{state.bootstrap?.platform ?? 'desktop'}</span>
           {state.error ? (
             <span className="footer-error">{state.error}</span>
+          ) : activity ? (
+            <span className="footer-index-progress">{activity}</span>
           ) : (
             <span>{state.notice ?? 'Commander is ready'}</span>
           )}
@@ -345,10 +572,59 @@ export function Launcher({ state }: { state: CommanderState }) {
           <kbd>↑↓</kbd>
           <span>Open</span>
           <kbd>↵</kbd>
+          <div className="pin-control" ref={pinControlRef}>
+            <button
+              type="button"
+              className={windowState.pinned ? 'pin-button pinned' : 'pin-button'}
+              aria-label={windowState.pinned ? 'Unpin Commander window' : 'Pin Commander window'}
+              aria-pressed={windowState.pinned}
+              disabled={!state.bootstrap?.settings.windowPinning.enabled}
+              title="Click to pin · Right-click for window options"
+              onClick={() => void setPinned(!windowState.pinned)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setPinMenuOpen((current) => !current);
+              }}
+            >
+              <PanelTop />
+              {windowState.pinned ? <span className="pin-indicator" /> : null}
+            </button>
+            {pinMenuOpen ? (
+              <aside className="pin-menu" aria-label="Commander window options">
+                <button type="button" onClick={() => void setPinned(!windowState.pinned)}>
+                  {windowState.pinned ? <PinOff /> : <Pin />}
+                  <span>{windowState.pinned ? 'Unpin Window' : 'Pin Window'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPinMenuOpen(false);
+                    void nativeRequest('launcher.openNewWindow').catch((error: unknown) =>
+                      state.reportError(
+                        error instanceof Error ? error.message : 'Could not open a new window',
+                      ),
+                    );
+                  }}
+                >
+                  <Plus />
+                  <span>Open New Window</span>
+                </button>
+              </aside>
+            ) : null}
+          </div>
         </footer>
       </section>
       {state.actionsOpen && selected ? (
         <ActionsPanel item={selected} onAction={(id) => void runAction(id)} />
+      ) : null}
+      {contextMenu ? (
+        <ResultContextMenu
+          item={contextMenu.item}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onAction={(actionId) => void runHitAction(contextMenu.item, actionId)}
+          onDismiss={() => setContextMenu(null)}
+        />
       ) : null}
     </main>
   );

@@ -104,7 +104,17 @@ final class CommanderWebViewTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: file) }
 
     XCTAssertEqual(try CommanderWebView.validatedFileURL(for: file.path), file.standardizedFileURL)
+    XCTAssertEqual(
+      try CommanderWebView.validatedDestructiveFileURL(for: file.path),
+      file.standardizedFileURL
+    )
     XCTAssertThrowsError(try CommanderWebView.validatedFileURL(for: "relative/file.txt"))
+    XCTAssertThrowsError(try CommanderWebView.validatedDestructiveFileURL(for: "/"))
+    XCTAssertThrowsError(
+      try CommanderWebView.validatedDestructiveFileURL(
+        for: FileManager.default.homeDirectoryForCurrentUser.path
+      )
+    )
     XCTAssertThrowsError(
       try CommanderWebView.validatedFileURL(
         for: FileManager.default.temporaryDirectory
@@ -251,6 +261,51 @@ final class CommanderWebViewTests: XCTestCase {
     )
     XCTAssertTrue(script.contains("commander:command-hotkey"))
     XCTAssertTrue(script.contains(#"detail:"extension:test:command-'\"""#))
+  }
+
+  func testPinnedLauncherDoesNotUseTransientCollectionBehaviorOrDismissOnKeyLoss() {
+    let ready = DaemonReady(
+      type: "ready",
+      protocolVersion: 1,
+      port: 1,
+      url: "http://127.0.0.1:1",
+      sessionToken: "test-session",
+      nativeToken: "test-native",
+      pid: 1
+    )
+    let bridge = CommanderNativeBridge(
+      ready: ready,
+      keychain: KeychainStore(),
+      loginItem: LaunchAtLoginService(),
+      showLauncher: {},
+      hideLauncher: {},
+      showSettings: { _ in },
+      updateHotKeys: { _, _ in },
+      updateMenuBar: { _ in },
+      updateWindowMode: { _ in }
+    )
+    let controller = LauncherPanelController(
+      ready: ready,
+      bridge: bridge,
+      pinned: true,
+      pinningEnabled: true
+    )
+    let panel = controller.panelForTesting
+    defer { controller.shutdown() }
+
+    panel.orderFront(nil)
+    XCTAssertTrue(controller.isPinned)
+    XCTAssertFalse(panel.collectionBehavior.contains(.transient))
+    XCTAssertEqual(controller.statePayload["pinned"] as? Bool, true)
+
+    controller.windowDidResignKey(
+      Notification(name: NSWindow.didResignKeyNotification, object: panel)
+    )
+    XCTAssertTrue(panel.isVisible)
+
+    controller.setPinned(false)
+    XCTAssertFalse(controller.isPinned)
+    XCTAssertTrue(panel.collectionBehavior.contains(.transient))
   }
 
   private func descendants(of view: NSView) -> [NSView] {

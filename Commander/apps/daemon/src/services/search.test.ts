@@ -140,4 +140,24 @@ describe('SearchService transient filesystem candidates', () => {
       { id: 'catalog' },
     ]);
   });
+
+  it('uses category order as a modest default boost that learned ranking can overcome', async () => {
+    const service = new SearchService();
+    const command = item('command', 'Open Thingtime');
+    const application = { ...item('application', 'Open Thingtime'), kind: 'application' as const };
+    const file = { ...item('file', 'Open Thingtime'), kind: 'file' as const };
+    service.setItems([command]);
+
+    await expect(
+      service.search('open thingtime', 30, [application, file], {}, ['applications', 'commands', 'files']),
+    ).resolves.toMatchObject([{ id: 'application' }, { id: 'command' }, { id: 'file' }]);
+
+    await expect(
+      service.search('open thingtime', 30, [application, file], { file: 10_000 }, [
+        'applications',
+        'commands',
+        'files',
+      ]),
+    ).resolves.toMatchObject([{ id: 'file' }, { id: 'application' }, { id: 'command' }]);
+  });
 });
