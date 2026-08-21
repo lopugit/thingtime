@@ -442,7 +442,10 @@ export function useApi() {
               tokenAcl: args?.tokenAcl,
               // move support — only send folderId when the caller provides it
               // (undefined must stay "leave it where it is", null = root)
-              ...(args && 'folderId' in args ? { folderId: args.folderId } : {})
+              ...(args && 'folderId' in args ? { folderId: args.folderId } : {}),
+              // attachment reorder — only send when the caller provides it
+              // (the ids must be a permutation of the post's bound set)
+              ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }
           ),

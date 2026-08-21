@@ -26,6 +26,7 @@ import {
 	bindReadyEmojiAttachmentToTarget,
 	bindReadyMessageAttachmentsToTarget,
 	bindReadyAttachmentsToTarget,
+	reorderBoundTargetAttachments,
 	type AttachmentDoc,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
@@ -1248,6 +1249,27 @@ export const createReadyAttachmentPostInsertHook =
 	async (doc: { shareId: string; ownerId: string }, session: any) => {
 		await bind(doc.ownerId, attachmentIds, doc.shareId, session);
 	};
+
+// PATCH-time reorder: re-stamp the display order of a target's already-bound
+// attachments. Pure permutations only — the store helper rejects any set
+// change, so this can never bind, unbind, or leak an attachment.
+export const reorderReadyAttachmentsForTarget = async (
+	ownerId: string,
+	targetId: unknown,
+	attachmentIds: readonly unknown[]
+): Promise<AttachmentResult> => {
+	try {
+		if (isCustomMongoEndpointActive()) {
+			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+		}
+		const normalizedTargetId = typeof targetId === 'string' ? targetId.trim() : '';
+		if (!normalizedTargetId) return fail(400, 'Thing id is required');
+		await reorderBoundTargetAttachments(ownerId, normalizedTargetId, attachmentIds);
+		return { ok: true };
+	} catch (error) {
+		return knownFailure(error) || unavailable('reorder', error);
+	}
+};
 
 const createReadyAttachmentInsertHook =
 	(attachmentIds: readonly string[], bind: typeof bindReadyAttachmentsToTarget) =>
