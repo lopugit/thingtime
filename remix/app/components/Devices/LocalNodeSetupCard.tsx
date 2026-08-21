@@ -30,7 +30,8 @@ export const LocalNodeSetupCard = ({
 			kind: 'screen-recording' as const,
 			label: 'Screen Recording',
 			detail: 'Optional preflight for the bounded screen-sharing foundation.',
-			status: state.permissions.find((permission) => permission.kind === 'screenRecording' || permission.kind === 'screen-recording')?.status || 'denied'
+			status:
+				state.permissions.find((permission) => permission.kind === 'screenRecording' || permission.kind === 'screen-recording')?.status || 'denied'
 		}
 	];
 	const missingPermissions = permissions.filter((permission) => permission.status !== 'authorized');
@@ -59,14 +60,14 @@ export const LocalNodeSetupCard = ({
 							{state.loading
 								? 'checking'
 								: recoverablePairing
-									? 'resume pairing'
+								? 'resume pairing'
 								: ready
-									? 'ready'
-									: registered && paired
-									? 'privacy setup'
-										: registered
-											? 'ready to pair'
-											: 'not running'}
+								? 'ready'
+								: registered && paired
+								? 'privacy setup'
+								: registered
+								? 'ready to pair'
+								: 'not running'}
 						</Badge>
 					</Flex>
 					<Text color="var(--tt-muted, #71717a)" fontSize="12px" lineHeight="1.45" marginTop={1} whiteSpace="normal">
@@ -147,7 +148,7 @@ export const LocalNodeSetupCard = ({
 									controlKey={`permission-${permission.kind}`}
 									deviceId="local-node"
 									input={{ permissionKind: permission.kind }}
-									label="Open settings"
+									label="Request access"
 									onAction={onAction}
 									size="xs"
 								/>

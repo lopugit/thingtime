@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
+const { existsSync, readFileSync } = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
@@ -66,13 +66,35 @@ test('packaging contract ignores the complete pre-signed native app', () => {
 		'Contents/Helpers/Thingtime Node.app/Contents/MacOS/ThingtimeNode',
 		'Contents/Helpers/Thingtime Node.app/Contents/MacOS/ThingtimeNodeBridge'
 	]) {
-		assert.equal(patterns.some((pattern) => pattern.test(relativePath)), true, relativePath);
+		assert.equal(
+			patterns.some((pattern) => pattern.test(relativePath)),
+			true,
+			relativePath
+		);
 	}
 	assert.deepEqual(
 		packageJson.build.extraFiles.map((entry) => entry.to),
 		['Helpers/Thingtime Node.app']
 	);
-	assert.equal(packageJson.build.extraFiles.some((entry) => /LaunchAgents/iu.test(entry.to)), false);
+	assert.equal(
+		packageJson.build.extraFiles.some((entry) => /LaunchAgents/iu.test(entry.to)),
+		false
+	);
+});
+
+test('mac packaging uses the adaptive Thingtime Icon Composer artwork', () => {
+	const electronDir = path.resolve(__dirname, '..');
+	const packageJson = JSON.parse(readFileSync(path.join(electronDir, 'package.json'), 'utf8'));
+	assert.equal(packageJson.build.mac.icon, 'build/Thingtime.icon');
+	const icon = JSON.parse(readFileSync(path.join(electronDir, packageJson.build.mac.icon, 'icon.json'), 'utf8'));
+	assert.deepEqual(icon['supported-platforms'].squares, ['macOS']);
+	assert.equal(
+		icon['fill-specializations'].some((entry) => entry.appearance === 'dark'),
+		true
+	);
+	for (const asset of ['canopy.svg', 'trunk.svg']) {
+		assert.equal(existsSync(path.join(electronDir, packageJson.build.mac.icon, 'Assets', asset)), true);
+	}
 });
 
 test('local and production builders use the exact package-manager pin through Corepack', () => {

@@ -2,7 +2,7 @@
 
 - Branch: `codex/thingtime-mcp-desktop-connectors`
 - Pull request: <https://github.com/lopugit/thingtime/pull/68>
-- Date: 2026-07-13; platform integration updated 2026-08-19
+- Date: 2026-07-13; platform integration updated 2026-08-21
 
 ## Goal
 
@@ -138,6 +138,38 @@ relational shape for later ThingtimeDB storage and platform chat views.
   notarization credentials; the exact control-plane patch is recorded under
   `electron/PRODUCTION_RELEASE.md`.
 
+### 2026-08-21 installed-node follow-up
+
+- Electron now owns a versioned, atomic local endpoint-profile store. It seeds
+  production, development, and the preview intended by the build; accepts up to
+  32 named custom HTTPS/loopback origins; rejects credentials, paths, query
+  strings, fragments, and cross-origin redirects; and probes the devices API
+  before a confirmed transactional switch. The renderer and LaunchAgent always
+  use the same selected origin, while native Keychain credentials and durable
+  journals are separately scoped by its canonical hash. Production migrates
+  the legacy credential and keeps the legacy production journal files so an
+  upgrade cannot forget an in-flight idempotency outcome or live cursor.
+- The old plain URL override is removed. The drawer's **Thingtime desktop**
+  settings and the native application menu expose the same recoverable endpoint
+  choices. Custom profiles remain local and may be added/removed independently;
+  neither local endpoint metadata nor custom-icon paths are sent to Thingtime.
+- The node status item is now artwork-only and selectable: colour, template,
+  black, white, pink, or blue four-square trees; colour/template/black/white
+  full pixel wordmarks; or a normalized private custom image. Electron packages
+  exact Thingtime canopy/trunk artwork as an Icon Composer `.icon` with light
+  and dark background appearances.
+- Permission status stays non-prompting during startup and polling. An explicit
+  **Request access** action now invokes the signed helper's native Accessibility
+  or Screen Recording request, opens the matching system pane, and refreshes
+  after focus/relaunch. The helper remains the TCC identity.
+- The managed agent is unconditionally `KeepAlive`, while an Electron-managed
+  bundle exits when macOS tries to start it outside the private Mach-service
+  launch context. This converts Privacy & Security **Quit & Reopen** into one
+  launchd-owned replacement instead of duplicate menu items. Pair/resume/unpair
+  and permission operations now have one native confirmation and a 120-second
+  bridge response window instead of competing confirmations and a 15-second
+  timeout.
+
 ## Security and product boundaries
 
 MCP gives a host a standard way to invoke this server; it does not give the
@@ -174,7 +206,7 @@ cookies, credentials, and raw paths; imported provider rows remain read-only.
 - Remix focused coverage passed 175/175 tests: devices 42, Messenger 28,
   storage 9, quota 11, collections 16, schemas 62, Things 6, and rate limiting
   1. The fresh complete `test:unit` gate passed 28 TAP groups / 525 Node tests
-  plus its AI model-routing self-test gate.
+     plus its AI model-routing self-test gate.
 - The canonical repository-root `npm run build:vercel` passed, including the
   Vite client, Nitro Vercel output, static shell, and filesystem-route verifier.
 - Targeted lint over 78 changed feature files reported zero errors and five

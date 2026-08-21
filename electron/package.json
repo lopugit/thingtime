@@ -66,6 +66,7 @@
 		],
 		"mac": {
 			"category": "public.app-category.productivity",
+			"icon": "build/Thingtime.icon",
 			"entitlements": "build/entitlements.mac.plist",
 			"entitlementsInherit": "build/entitlements.mac.inherit.plist",
 			"hardenedRuntime": true,

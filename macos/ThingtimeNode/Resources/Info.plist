@@ -26,5 +26,7 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>ThingtimeNodeElectronManaged</key>
+    <false/>
 </dict>
 </plist>

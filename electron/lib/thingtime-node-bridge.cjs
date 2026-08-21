@@ -15,6 +15,7 @@ const MANAGED_PLIST_MARKER = 'Managed by Thingtime Electron';
 const MAX_FRAME_BYTES = 1_048_576;
 const MAX_ERROR_BYTES = 16_384;
 const BRIDGE_TIMEOUT_MS = 17_000;
+const PRESENCE_BRIDGE_TIMEOUT_MS = 127_000;
 const MAX_COMMAND_ID_BYTES = 512;
 const MAX_LOCAL_PROJECTS = 128;
 const MAX_PROJECT_PATH_BYTES = 4_096;
@@ -22,10 +23,7 @@ const MAX_PROJECT_REGISTRY_BYTES = 1_048_576;
 const ALLOWED_SIGNATURE_MODES = new Set(['local', 'production', 'runtime']);
 const LOCAL_SIGNING_AUTHORITY_PREFIX = 'Apple Development:';
 const PRODUCTION_SIGNING_AUTHORITY_PREFIX = 'Developer ID Application:';
-const ELECTRON_ENTITLEMENTS = new Set([
-	'com.apple.security.cs.allow-jit',
-	'com.apple.security.cs.allow-unsigned-executable-memory'
-]);
+const ELECTRON_ENTITLEMENTS = new Set(['com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory']);
 
 const CONNECTOR_OPERATIONS = new Set([
 	'connector/list',
@@ -46,6 +44,19 @@ const DEVICE_ACTION_KINDS = new Set([
 	'application.activate',
 	'application.launch',
 	'application.quit'
+]);
+const MENU_BAR_ICON_IDS = new Set([
+	'tree-color',
+	'tree-template',
+	'tree-black',
+	'tree-white',
+	'tree-pink',
+	'tree-blue',
+	'wordmark-color',
+	'wordmark-template',
+	'wordmark-black',
+	'wordmark-white',
+	'custom'
 ]);
 
 class ThingtimeNodeBridgeError extends Error {
@@ -174,7 +185,16 @@ function plistKey(value) {
 	return `        <key>${xmlEscape(value)}</key>`;
 }
 
-function buildLaunchAgentPlist({ helperExecutable, electronExecutable, runtimePath, childEnvironment, apiBaseUrl, projectRegistryPath = null }) {
+function buildLaunchAgentPlist({
+	helperExecutable,
+	electronExecutable,
+	runtimePath,
+	childEnvironment,
+	apiBaseUrl,
+	projectRegistryPath = null,
+	menuBarIconId = 'tree-color',
+	menuBarCustomIconPath = null
+}) {
 	for (const [label, value] of [
 		['helper executable', helperExecutable],
 		['Electron executable', electronExecutable],
@@ -205,6 +225,17 @@ function buildLaunchAgentPlist({ helperExecutable, electronExecutable, runtimePa
 		THINGTIME_NODE_CONNECTOR_ENV_JSON: JSON.stringify(connectorEnvironment)
 	};
 	if (apiBaseUrl) environment.THINGTIME_NODE_API_BASE_URL = apiBaseUrl;
+	if (!MENU_BAR_ICON_IDS.has(menuBarIconId)) {
+		throw new ThingtimeNodeBridgeError('invalid_request', 'Thingtime Node menu bar icon is invalid.');
+	}
+	environment.THINGTIME_NODE_MENU_BAR_ICON = menuBarIconId;
+	if (menuBarCustomIconPath) {
+		boundedString(menuBarCustomIconPath, 'custom menu bar icon path', 4_096);
+		if (!path.isAbsolute(menuBarCustomIconPath)) {
+			throw new ThingtimeNodeBridgeError('invalid_request', 'Custom menu bar icon path must be absolute.');
+		}
+		environment.THINGTIME_NODE_MENU_BAR_CUSTOM_ICON_PATH = menuBarCustomIconPath;
+	}
 
 	const environmentXml = Object.entries(environment)
 		.sort(([left], [right]) => left.localeCompare(right))
@@ -225,10 +256,7 @@ ${plistString(helperExecutable)}
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-    </dict>
+    <true/>
     <key>LimitLoadToSessionType</key>
     <string>Aqua</string>
     <key>ProcessType</key>
@@ -250,7 +278,10 @@ ${environmentXml}
 }
 
 function projectLabelFromPath(projectPath) {
-	const source = path.basename(projectPath).replace(/[\\/\p{Cc}\p{Cf}]/gu, ' ').trim();
+	const source = path
+		.basename(projectPath)
+		.replace(/[\\/\p{Cc}\p{Cf}]/gu, ' ')
+		.trim();
 	if (!source) return 'Project';
 	let label = '';
 	let size = 0;
@@ -492,11 +523,9 @@ async function leafCertificateFingerprint(targetPath, runner = runProcess) {
 	const temporaryRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'thingtime-signature-'));
 	const certificatePrefix = path.join(temporaryRoot, 'certificate-');
 	try {
-		const extraction = await runner(
-			'/usr/bin/codesign',
-			['--display', `--extract-certificates=${certificatePrefix}`, targetPath],
-			{ maximumOutputBytes: MAX_ERROR_BYTES }
-		);
+		const extraction = await runner('/usr/bin/codesign', ['--display', `--extract-certificates=${certificatePrefix}`, targetPath], {
+			maximumOutputBytes: MAX_ERROR_BYTES
+		});
 		if (extraction.status !== 0) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', 'Thingtime signing certificate details are unavailable.');
 		}
@@ -780,7 +809,9 @@ class ThingtimeNodeIntegration {
 		const response = await this.runner(paths.bridgeExecutable, [], {
 			input: encoded,
 			maximumOutputBytes: MAX_FRAME_BYTES,
-			timeoutMs: BRIDGE_TIMEOUT_MS
+			timeoutMs: ['pairing.claim', 'pairing.resume', 'pairing.unpair', 'permissions.request'].includes(method)
+				? PRESENCE_BRIDGE_TIMEOUT_MS
+				: BRIDGE_TIMEOUT_MS
 		});
 		if (response.status !== 0) {
 			throw new ThingtimeNodeBridgeError('node_unavailable', 'Thingtime Node bridge exited unexpectedly.');
@@ -881,23 +912,36 @@ class ThingtimeNodeIntegration {
 		}
 	}
 
-	async registerService({ projectRegistryPath = null } = {}) {
+	servicePlist(
+		paths,
+		{
+			projectRegistryPath = null,
+			apiBaseUrl = this.environment.THINGTIME_NODE_API_BASE_URL || null,
+			menuBarIconId = this.environment.THINGTIME_NODE_MENU_BAR_ICON || 'tree-color',
+			menuBarCustomIconPath = this.environment.THINGTIME_NODE_MENU_BAR_CUSTOM_ICON_PATH || null
+		} = {}
+	) {
+		if (apiBaseUrl) boundedString(apiBaseUrl, 'Thingtime Node API base URL', 2_048);
+		return buildLaunchAgentPlist({
+			apiBaseUrl,
+			childEnvironment: safeConnectorEnvironment(this.environment),
+			electronExecutable: paths.electronExecutable,
+			helperExecutable: paths.helperExecutable,
+			menuBarCustomIconPath,
+			menuBarIconId,
+			projectRegistryPath,
+			runtimePath: paths.runtimePath
+		});
+	}
+
+	async registerService(options = {}) {
 		const paths = this.paths();
 		await this.verify(paths);
 		if (!this.app.isPackaged && this.environment.THINGTIME_NODE_ALLOW_DEV_REGISTRATION !== '1') {
 			throw new ThingtimeNodeBridgeError('signed_app_required', 'Register Thingtime Node from a stably signed packaged Thingtime app.');
 		}
 
-		const apiBaseUrl = this.environment.THINGTIME_NODE_API_BASE_URL || null;
-		if (apiBaseUrl) boundedString(apiBaseUrl, 'Thingtime Node API base URL', 2_048);
-		const plist = buildLaunchAgentPlist({
-			apiBaseUrl,
-			childEnvironment: safeConnectorEnvironment(this.environment),
-			electronExecutable: paths.electronExecutable,
-			helperExecutable: paths.helperExecutable,
-			projectRegistryPath,
-			runtimePath: paths.runtimePath
-		});
+		const plist = this.servicePlist(paths, options);
 		const launchAgentDirectory = path.dirname(paths.launchAgentPath);
 		await fsPromises.mkdir(launchAgentDirectory, { mode: 0o700, recursive: true });
 
@@ -947,6 +991,21 @@ class ThingtimeNodeIntegration {
 			throw error;
 		}
 		return this.status();
+	}
+
+	async reconcileRegisteredService(options = {}) {
+		const paths = this.paths();
+		const registration = await this.registrationStatus();
+		if (!registration.registered) return this.status();
+		await this.verify(paths);
+		const existing = await readManagedLaunchAgent(paths.launchAgentPath);
+		if (existing === null) {
+			throw new ThingtimeNodeBridgeError(
+				'login_item_conflict',
+				'A Thingtime Node service is registered without a Thingtime Electron-managed LaunchAgent and was left unchanged.'
+			);
+		}
+		return existing === this.servicePlist(paths, options) ? this.status() : this.registerService(options);
 	}
 
 	async unregisterService() {

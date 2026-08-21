@@ -243,7 +243,7 @@ is fixed, and cite the checklist you ran in the PR description.
       without copying dependency files from another checkout.
 - [ ] Run `npm run worktree-setup` again: it exits successfully without
       reinstalling, then `corepack pnpm --dir remix run lint:files --
-      scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 - [ ] In a disposable worktree, remove one transitive pnpm link required by
       ESLint while leaving every direct dependency link present, then run the
       targeted lint command: the startup probe performs one forced relink and
@@ -800,7 +800,7 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
       `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
-      runner)`, while both required-context companion jobs have distinct
+runner)`, while both required-context companion jobs have distinct
       skipped names and cannot satisfy a failed real job. Reusable callers keep
       the same inner names under their existing `control-plane /` prefix.
 - [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
@@ -1018,7 +1018,7 @@ is fixed, and cite the checklist you ran in the PR description.
       confirm Graphify leaves its backend default unforced. Run
       `node remix/scripts/workflow-caller-contract.mjs --self-test` in the
       product branch and `node .github/scripts/workflow-control-plane-contract.mjs
-      --self-test` in the `github-actions` control plane to prove both the
+--self-test` in the `github-actions` control plane to prove both the
       delegated callers and every AI runtime remain bound to the contract.
 - [ ] Request an AI-backed Lopu musing with an Anthropic key and confirm its
       Anthropic request uses the same current Admin primary. Reorder from Opus
@@ -1624,11 +1624,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       nsfw, and blocked uploads. `Run analysis sweep` reports
       analyzed/flagged/skipped counts and drains pending attachments plus
       verdicts whose flag write was interrupted.
-Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
-restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
-name already on the allowlist is refused, so register FIRST). One command
-re-checks the whole management plane end-to-end:
-`TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
+      Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
+      restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
+      name already on the allowlist is refused, so register FIRST). One command
+      re-checks the whole management plane end-to-end:
+      `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
       the dashboard (Users / Apps / Tiers / CI Control / System tabs) for admins; the drawer's
@@ -2024,24 +2024,52 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       both checks against `~/Applications/Thingtime.app`, and compare the outer
       app/node/bridge team identifiers, designated requirements, and executable
       hashes between build and install.
+- [ ] Confirm electron-builder compiled `electron/build/Thingtime.icon` into
+      the installed app. Inspect Finder/Dock in light and dark appearance: both
+      must keep the exact green canopy/brown trunk artwork legible against the
+      adaptive background, with no stale generic Electron icon.
+- [ ] Build with `THINGTIME_DESKTOP_DEFAULT_ENDPOINT` set to the intended PR
+      deployment. In **Thingtime desktop** settings, confirm production,
+      development, and that preview are pre-populated; add at least two named
+      custom origins, select between them, remove an inactive custom entry, and
+      reject credentials/query/fragment/non-loopback HTTP. A selected endpoint
+      must serve `/api/v1/devices` (authenticated data or 401/403, never 404),
+      become the renderer origin and LaunchAgent API origin together, and keep
+      its Keychain/journal pairing scope isolated from every other endpoint.
 - [ ] Explicitly register the installed node login service, verify its
       plist passes `plutil -lint`, uses valid `<key>` fields, its executable and
       runtime resolve inside the verified installed app, and its registry
       resolves to the exact private user-data file. Bootstrap must not issue an
       unconditional immediate kickstart. Replace an exact old managed node,
       then confirm launchd owns one new PID with `runs = 1` and no exit.
-- [ ] Open the exact installed Electron app, record its loopback-only internal
-      URL, and Quit with Cmd+Q. Electron must stop while the launchd node and
+- [ ] Open the exact installed Electron app, record its selected deployment
+      origin and bundled loopback fallback, and Quit with Cmd+Q. Electron must
+      stop while the launchd node and
       connector remain alive from the installed bundle for more than two
       minutes. Signed-parent status must remain responsive; relaunch Electron
       and unregister through the same confirmed UI without touching a foreign
       agent/process.
+- [ ] Select every built-in menu-bar artwork (colour/template/black/white/pink/
+      blue tree and colour/template/black/white wordmark), plus one custom
+      image. Verify one image-only status item with a readable accessibility
+      label; no plain `Thingtime Node` title and no private custom path may reach
+      renderer or cloud state.
+- [ ] Exercise **Pair this Mac**, resume, unpair, and **Request access** through
+      the signed Electron app. Each presence-gated operation gets one native
+      confirmation and can remain open for normal human response time without
+      the one-shot bridge timing out. In Privacy & Security, click Apple's
+      **Quit & Reopen** only as the user: launchd must replace the helper with
+      exactly one node PID and one menu item; a direct LaunchServices start of
+      the embedded helper must exit instead of creating a duplicate.
 - [ ] Permission preflight must not prompt. Without grants, Accessibility and
       Screen Recording operations fail closed with actionable instructions.
-      After the user grants the exact installed signed bundle, relaunch that
-      bundle and prove one harmless protected Accessibility focus/read and one
-      real bounded frame capture. Never automate a TCC toggle/reset, and do not
-      invoke the system-lock action without explicit confirmation.
+      The explicit **Request access** action must invoke the matching native
+      system request before opening the exact settings pane, then refresh after
+      focus/relaunch. After the user grants the exact installed signed bundle,
+      relaunch that bundle and prove one harmless protected Accessibility
+      focus/read and one real bounded frame capture. Never automate a TCC
+      toggle/reset, and do not invoke the system-lock action without explicit
+      confirmation.
 - [ ] Treat the local Apple Development result only as stable local/TCC proof.
       Gatekeeper rejection is expected for that non-distribution identity.
       Before any direct-distribution release, patch the protected
@@ -2305,7 +2333,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       application entry; a `pageshow.persisted` restore immediately replaces
       the page with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
       `/things` returns `Cache-Control: private, no-store, max-age=0,
-      must-revalidate`, while `/assets/*` remains outside the HTML no-store
+must-revalidate`, while `/assets/*` remains outside the HTML no-store
       route.
 - [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
       hostile, and old failed-revival function tags, reload Feed and open

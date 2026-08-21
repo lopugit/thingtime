@@ -51,10 +51,8 @@ const methodForAction = (bridge: ReturnType<typeof getElectronBridge>, action: D
 	if (action === 'begin-pairing') return Boolean(bridge?.nodeCompletePairing || bridge?.nodeResumePairing);
 	if (action === 'complete-pairing') return Boolean(bridge?.nodeCompletePairing);
 	if (action === 'unpair') return Boolean(bridge?.nodeUnpair);
-	if (action === 'open-permission-settings') return Boolean(bridge?.nodeOpenPermissionSettings);
+	if (action === 'request-permission' || action === 'open-permission-settings') return Boolean(bridge?.nodeOpenPermissionSettings);
 	if (action === 'register-project') return Boolean(bridge?.nodeAddProject);
-	// Permission prompts remain preflight-only. The settings deep link above is
-	// a deliberate renderer gesture, validated and confirmed by Electron.
 	return false;
 };
 
@@ -69,6 +67,7 @@ export type LocalThingtimeNodeState = {
 export const useLocalThingtimeNode = (selectedDeviceId?: string | null, onPaired?: () => void | Promise<void>) => {
 	const lopu = useLopu();
 	const lopuRef = useRef(lopu);
+	const permissionPollGenerationRef = useRef(0);
 	lopuRef.current = lopu;
 	const bridge = typeof window === 'undefined' ? undefined : getElectronBridge();
 	const [state, setState] = useState<LocalThingtimeNodeState>({
@@ -121,6 +120,24 @@ export const useLocalThingtimeNode = (selectedDeviceId?: string | null, onPaired
 		return () => window.removeEventListener('focus', refreshAfterSettings);
 	}, [bridge?.nodeGetStatus, refresh]);
 
+	useEffect(
+		() => () => {
+			permissionPollGenerationRef.current += 1;
+		},
+		[]
+	);
+
+	const refreshPermissionChanges = useCallback(() => {
+		const generation = ++permissionPollGenerationRef.current;
+		void (async () => {
+			for (const delay of [1_500, 4_000, 8_000]) {
+				await new Promise((resolve) => window.setTimeout(resolve, delay));
+				if (permissionPollGenerationRef.current !== generation) return;
+				await refresh();
+			}
+		})();
+	}, [refresh]);
+
 	const isSelectedLocalNode = Boolean(selectedDeviceId) && Boolean(state.status?.deviceId) && selectedDeviceId === state.status?.deviceId;
 
 	const controlFor = useCallback<DeviceControlResolver>(
@@ -132,7 +149,7 @@ export const useLocalThingtimeNode = (selectedDeviceId?: string | null, onPaired
 			if (!supported) {
 				policy = blockedPolicy(
 					action === 'request-permission' || action === 'open-permission-settings'
-						? 'Thingtime Desktop can preflight this permission, but does not prompt for it from the web UI.'
+						? 'This signed Thingtime Desktop build cannot request that macOS permission.'
 						: 'This setup control is only available in a compatible Thingtime Desktop build.'
 				);
 			} else if (action === 'begin-pairing' && state.status?.loginItem?.registered !== true) {
@@ -217,11 +234,15 @@ export const useLocalThingtimeNode = (selectedDeviceId?: string | null, onPaired
 						const commandId = intent.commandId || inputString(intent.input?.commandId);
 						if (!commandId) throw new Error('Unpairing requires a server command id.');
 						await currentBridge?.nodeUnpair?.({ commandId });
-					} else if (intent.action === 'open-permission-settings') {
+					} else if (intent.action === 'request-permission' || intent.action === 'open-permission-settings') {
 						const rawKind = inputString(intent.input?.permissionKind);
 						const kind = rawKind === 'accessibility' || rawKind === 'screen-recording' ? rawKind : null;
 						if (!kind) throw new Error('Choose Accessibility or Screen Recording.');
-						await currentBridge?.nodeOpenPermissionSettings?.({ kind });
+						const result = await currentBridge?.nodeOpenPermissionSettings?.({ kind });
+						if (result?.permissions) {
+							setState((previous) => ({ ...previous, permissions: result.permissions || previous.permissions }));
+						}
+						if (result?.opened) refreshPermissionChanges();
 					} else if (intent.action === 'register-project') {
 						const result = await currentBridge?.nodeAddProject?.();
 						if (result?.cancelled === false) {
@@ -245,7 +266,7 @@ export const useLocalThingtimeNode = (selectedDeviceId?: string | null, onPaired
 			};
 			void run();
 		},
-		[onPaired, refresh]
+		[onPaired, refresh, refreshPermissionChanges]
 	);
 
 	return useMemo(

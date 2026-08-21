@@ -14,6 +14,11 @@ public enum PermissionPreflightState: String, Codable, Equatable, Sendable {
     case denied
 }
 
+public enum ThingtimePermissionKind: String, Codable, Equatable, Sendable {
+    case accessibility
+    case screenRecording = "screen-recording"
+}
+
 public struct PermissionPreflight: Codable, Equatable, Sendable {
     public let accessibility: PermissionPreflightState
     public let screenRecording: PermissionPreflightState
@@ -157,6 +162,17 @@ public final class DeviceTelemetryCollector {
             accessibility: AXIsProcessTrusted() ? .granted : .denied,
             screenRecording: CGPreflightScreenCaptureAccess() ? .granted : .denied
         )
+    }
+
+    public func requestPermission(_ kind: ThingtimePermissionKind) -> PermissionPreflight {
+        switch kind {
+        case .accessibility:
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+        case .screenRecording:
+            _ = CGRequestScreenCaptureAccess()
+        }
+        return permissionPreflight()
     }
 
     public func snapshot(now: Date = Date()) -> DeviceTelemetry {

@@ -1,7 +1,5 @@
 import React from 'react';
-import { Box, Button, Center, Flex, Input, Switch, Text } from '@chakra-ui/react';
-import { stringify } from 'flatted';
-import localforage from 'localforage';
+import { Box, Button, Center, Flex, Input, Select, Switch, Text } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
 
@@ -17,42 +15,16 @@ import { useTtTheme } from '~/hooks/useTtTheme';
 import { getUserMention } from '~/utils/userIdentity';
 import {
 	electronAutoUpdateSettingPath,
-	electronUrlSettingKey,
-	electronUrlSettingPath,
 	getElectronAutoUpdateEnabled,
 	getElectronBridge,
-	getElectronSettingUrl,
-	loadElectronUrl,
-	normalizeElectronUrl,
 	type ThingtimeDesktopInfo,
+	type ThingtimeDesktopSettings,
 	type ThingtimeDesktopUpdateInfo
 } from '~/utils/electronBridge';
 
 // User/app settings surface opened from the drawer's avatar button.
 // Desktop: centre-aligned floating modal. Mobile: full-width slide-up sheet
 // layered over the drawer / shifted page.
-
-const waitForElectronSetting = (settingKey: string, expectedValue: string) =>
-	new Promise<void>((resolve) => {
-		if (typeof window === 'undefined') {
-			resolve();
-			return;
-		}
-
-		const startedAt = Date.now();
-		const check = () => {
-			const currentValue = window.thingtime?.settings?.electron?.[settingKey];
-
-			if (currentValue === expectedValue || Date.now() - startedAt > 1500) {
-				resolve();
-				return;
-			}
-
-			requestAnimationFrame(check);
-		};
-
-		check();
-	});
 
 export const UserSettingsModal = () => {
 	const {
@@ -96,16 +68,15 @@ export const UserSettingsModal = () => {
 	// two-frame mount so the open transition animates from the hidden state
 	const [visible, setVisible] = React.useState(false);
 	const [desktopInfo, setDesktopInfo] = React.useState<ThingtimeDesktopInfo | null>(null);
-	const [electronUrlDraft, setElectronUrlDraft] = React.useState('');
-	const [electronUrlLoading, setElectronUrlLoading] = React.useState(false);
+	const [endpointLabelDraft, setEndpointLabelDraft] = React.useState('');
+	const [endpointUrlDraft, setEndpointUrlDraft] = React.useState('');
+	const [electronSettingsLoading, setElectronSettingsLoading] = React.useState(false);
 	const [electronUpdateInfo, setElectronUpdateInfo] = React.useState<ThingtimeDesktopUpdateInfo | null>(null);
 	const [electronUpdateLoading, setElectronUpdateLoading] = React.useState(false);
 	const [electronUpdateDownloadLoading, setElectronUpdateDownloadLoading] = React.useState(false);
-	const electronUrlInputRef = React.useRef<HTMLInputElement | null>(null);
 	const electronSessionHash = desktopInfo?.sessionHash || '';
-	const electronStoredUrl = getElectronSettingUrl(thingtime, electronSessionHash);
+	const desktopSettings = desktopInfo?.desktopSettings || null;
 	const electronAutoUpdateEnabled = getElectronAutoUpdateEnabled(thingtime, electronSessionHash);
-	const electronSettingPathLabel = electronSessionHash ? electronUrlSettingPath(electronSessionHash) : '';
 	const electronAutoUpdatePathLabel = electronSessionHash ? electronAutoUpdateSettingPath(electronSessionHash) : '';
 
 	React.useEffect(() => {
@@ -241,17 +212,6 @@ export const UserSettingsModal = () => {
 	}, [accountModalOpen]);
 
 	React.useEffect(() => {
-		if (!accountModalOpen || !desktopInfo) {
-			return;
-		}
-
-		const savedUrl = normalizeElectronUrl(electronStoredUrl);
-		const currentUrl = normalizeElectronUrl(desktopInfo.currentUrl);
-		const originUrl = normalizeElectronUrl(desktopInfo.origin);
-		setElectronUrlDraft(savedUrl || currentUrl || originUrl);
-	}, [accountModalOpen, desktopInfo?.currentUrl, desktopInfo?.origin, desktopInfo, electronStoredUrl]);
-
-	React.useEffect(() => {
 		if (!accountModalOpen) {
 			return;
 		}
@@ -267,64 +227,117 @@ export const UserSettingsModal = () => {
 		};
 	}, [accountModalOpen]);
 
-	const handleElectronUrlLoad = React.useCallback(
-		async (rawUrl: string, options?: { clearSavedUrl?: boolean }) => {
+	const applyDesktopSettings = React.useCallback((settings: ThingtimeDesktopSettings) => {
+		setDesktopInfo((current) => (current ? { ...current, desktopSettings: settings } : current));
+	}, []);
+
+	const handleEndpointSelect = React.useCallback(
+		async (endpointId: string) => {
 			const bridge = getElectronBridge();
-			const sessionHash = desktopInfo?.sessionHash;
-			const targetUrl = normalizeElectronUrl(rawUrl);
-
-			if (!bridge || !sessionHash) {
-				return;
-			}
-
-			if (!targetUrl) {
-				lopu({
-					title: 'Enter a valid URL',
-					description: 'Use an http:// or https:// URL.',
-					status: 'error',
-					duration: 6000
-				});
-				return;
-			}
-
-			const storedValue = options?.clearSavedUrl ? '' : targetUrl;
-			const settingKey = electronUrlSettingKey(sessionHash);
-
-			setThingtime(electronUrlSettingPath(sessionHash), storedValue, {
-				ignoreUndoRedo: true,
-				namespace: 'electron'
-			});
-			setElectronUrlDraft(targetUrl);
-			setElectronUrlLoading(true);
-
+			if (!bridge?.selectEndpoint || endpointId === desktopSettings?.selectedEndpointId) return;
+			setElectronSettingsLoading(true);
 			try {
-				await waitForElectronSetting(settingKey, storedValue);
-
-				if (window.thingtime) {
-					await localforage.setItem('thingtime', stringify(window.thingtime));
-				}
-
-				const nextInfo = await loadElectronUrl(bridge, targetUrl);
-				setDesktopInfo(nextInfo);
-				lopu({
-					title: storedValue ? 'Electron URL updated' : 'Loaded bundled app',
-					status: 'success',
-					duration: 5000
-				});
+				const info = await bridge.selectEndpoint({ endpointId });
+				setDesktopInfo(info);
 			} catch (error) {
-				console.error('Unable to load Thingtime desktop URL', error);
 				lopu({
-					title: 'Could not load URL',
-					description: error instanceof Error ? error.message : 'Thingtime desktop rejected that URL.',
+					title: 'Could not switch API endpoint',
+					description: error instanceof Error ? error.message : 'Thingtime desktop rejected that endpoint.',
+					status: 'error',
+					duration: 8000
+				});
+			} finally {
+				setElectronSettingsLoading(false);
+			}
+		},
+		[desktopSettings?.selectedEndpointId, lopu]
+	);
+
+	const handleEndpointAdd = React.useCallback(async () => {
+		const bridge = getElectronBridge();
+		if (!bridge?.addEndpoint) return;
+		setElectronSettingsLoading(true);
+		try {
+			applyDesktopSettings(await bridge.addEndpoint({ label: endpointLabelDraft, url: endpointUrlDraft }));
+			setEndpointLabelDraft('');
+			setEndpointUrlDraft('');
+			lopu({ title: 'API endpoint saved ✨', status: 'success', duration: 5000 });
+		} catch (error) {
+			lopu({
+				title: 'Could not save endpoint',
+				description: error instanceof Error ? error.message : 'Thingtime desktop rejected that endpoint.',
+				status: 'error',
+				duration: 7000
+			});
+		} finally {
+			setElectronSettingsLoading(false);
+		}
+	}, [applyDesktopSettings, endpointLabelDraft, endpointUrlDraft, lopu]);
+
+	const handleEndpointRemove = React.useCallback(
+		async (endpointId: string) => {
+			const bridge = getElectronBridge();
+			if (!bridge?.removeEndpoint) return;
+			setElectronSettingsLoading(true);
+			try {
+				applyDesktopSettings(await bridge.removeEndpoint({ endpointId }));
+			} catch (error) {
+				lopu({
+					title: 'Could not remove endpoint',
+					description: error instanceof Error ? error.message : 'Thingtime desktop could not remove that endpoint.',
 					status: 'error',
 					duration: 7000
 				});
 			} finally {
-				setElectronUrlLoading(false);
+				setElectronSettingsLoading(false);
 			}
 		},
-		[desktopInfo, lopu, setThingtime]
+		[applyDesktopSettings, lopu]
 	);
+
+	const handleMenuBarIconSelect = React.useCallback(
+		async (iconId: string) => {
+			const bridge = getElectronBridge();
+			if (!bridge?.selectMenuBarIcon) return;
+			setElectronSettingsLoading(true);
+			try {
+				applyDesktopSettings(await bridge.selectMenuBarIcon({ iconId }));
+				lopu({ title: 'Menu bar icon updated ✨', status: 'success', duration: 5000 });
+			} catch (error) {
+				lopu({
+					title: 'Could not change menu bar icon',
+					description: error instanceof Error ? error.message : 'Thingtime desktop rejected that icon.',
+					status: 'error',
+					duration: 7000
+				});
+			} finally {
+				setElectronSettingsLoading(false);
+			}
+		},
+		[applyDesktopSettings, lopu]
+	);
+
+	const handleMenuBarIconUpload = React.useCallback(async () => {
+		const bridge = getElectronBridge();
+		if (!bridge?.uploadMenuBarIcon) return;
+		setElectronSettingsLoading(true);
+		try {
+			const result = await bridge.uploadMenuBarIcon();
+			if ('settings' in result) {
+				applyDesktopSettings(result.settings);
+				lopu({ title: 'Custom menu bar icon installed ✨', status: 'success', duration: 5000 });
+			}
+		} catch (error) {
+			lopu({
+				title: 'Could not use custom icon',
+				description: error instanceof Error ? error.message : 'Thingtime desktop could not read that image.',
+				status: 'error',
+				duration: 7000
+			});
+		} finally {
+			setElectronSettingsLoading(false);
+		}
+	}, [applyDesktopSettings, lopu]);
 
 	const handleElectronAutoUpdateChange = React.useCallback(
 		(enabled: boolean) => {
@@ -480,142 +493,162 @@ export const UserSettingsModal = () => {
 				</Flex>
 			</Flex>
 
-			{desktopInfo?.sessionHash && (
+			{desktopInfo && (
 				<Flex flexDirection="column" rowGap={3}>
 					<Text fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
-						Electron
+						Thingtime desktop
 					</Text>
 					<Flex flexDirection="column" rowGap={2}>
-						<Box minWidth={0}>
-							<Text fontSize="sm">Session URL</Text>
-							<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
-								{electronSettingPathLabel}
+						<Text fontSize="sm">API endpoint</Text>
+						<Select
+							size="sm"
+							value={desktopSettings?.selectedEndpointId || ''}
+							isDisabled={electronSettingsLoading || !desktopSettings}
+							onChange={(event) => handleEndpointSelect(event.target.value)}
+						>
+							{desktopSettings?.endpointProfiles.map((endpoint) => (
+								<option key={endpoint.id} value={endpoint.id}>
+									{endpoint.label}
+								</option>
+							))}
+						</Select>
+						<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
+							{desktopSettings?.selectedEndpoint.url || 'No endpoint selected'}
+						</Text>
+						<Text fontSize="xs" opacity={0.55}>
+							The window and Thingtime Node use this same deployment. Pairing stays separate per endpoint.
+						</Text>
+						{desktopInfo.desktopSettingsLastError && (
+							<Text fontSize="xs" color="red.500" wordBreak="break-word">
+								{desktopInfo.desktopSettingsLastError}
 							</Text>
-						</Box>
-						<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap">
+						)}
+						{desktopSettings?.endpointProfiles.some((endpoint) => endpoint.source === 'custom') && (
+							<Flex flexDirection="column" rowGap={1}>
+								{desktopSettings.endpointProfiles
+									.filter((endpoint) => endpoint.source === 'custom')
+									.map((endpoint) => (
+										<Flex key={endpoint.id} alignItems="center" columnGap={2} minWidth={0}>
+											<Text fontSize="xs" flex="1" minWidth={0} wordBreak="break-all">
+												{endpoint.label} · {endpoint.url}
+											</Text>
+											<Button
+												size="xs"
+												variant="ghost"
+												isDisabled={electronSettingsLoading || endpoint.id === desktopSettings.selectedEndpointId}
+												onClick={() => handleEndpointRemove(endpoint.id)}
+											>
+												Remove
+											</Button>
+										</Flex>
+									))}
+							</Flex>
+						)}
+						<Flex columnGap={2} rowGap={2} flexWrap="wrap">
 							<Input
-								ref={electronUrlInputRef}
 								size="sm"
-								flex="1 1 260px"
-								minWidth={0}
-								value={electronUrlDraft}
-								placeholder={desktopInfo.origin || 'https://thingtime.com/'}
-								onChange={(event) => setElectronUrlDraft(event.target.value)}
+								flex="1 1 150px"
+								value={endpointLabelDraft}
+								placeholder="Preview name"
+								onChange={(event) => setEndpointLabelDraft(event.target.value)}
+							/>
+							<Input
+								size="sm"
+								flex="2 1 260px"
+								value={endpointUrlDraft}
+								placeholder="https://pr-123.previews.dev.thingtime.com/"
+								onChange={(event) => setEndpointUrlDraft(event.target.value)}
 								onKeyDown={(event) => {
-									if (event.key === 'Enter') {
-										handleElectronUrlLoad(electronUrlInputRef.current?.value || electronUrlDraft);
-									}
+									if (event.key === 'Enter') handleEndpointAdd();
 								}}
 							/>
 							<Button
 								size="xs"
-								variant="solid"
-								isLoading={electronUrlLoading}
-								onClick={() => handleElectronUrlLoad(electronUrlInputRef.current?.value || electronUrlDraft)}
-							>
-								Load
-							</Button>
-						</Flex>
-						<Flex columnGap={2} rowGap={2} flexWrap="wrap">
-							<Button
-								size="xs"
 								variant="outline"
-								isDisabled={!desktopInfo.origin || electronUrlLoading}
-								onClick={() => handleElectronUrlLoad(desktopInfo.origin || '', { clearSavedUrl: true })}
+								isLoading={electronSettingsLoading}
+								isDisabled={!endpointLabelDraft.trim() || !endpointUrlDraft.trim()}
+								onClick={handleEndpointAdd}
 							>
-								Bundled
+								Add endpoint
 							</Button>
-							<Button
-								size="xs"
-								variant="outline"
-								isDisabled={electronUrlLoading}
-								onClick={() => handleElectronUrlLoad('https://thingtime.com/')}
-							>
-								Production
-							</Button>
-							{electronStoredUrl && (
-								<Button
-									size="xs"
-									variant="ghost"
-									isDisabled={electronUrlLoading}
-									onClick={() => {
-										setThingtime(electronSettingPath(electronSessionHash), '', {
-											ignoreUndoRedo: true,
-											namespace: 'electron'
-										});
-										setElectronUrlDraft(normalizeElectronUrl(desktopInfo.currentUrl) || normalizeElectronUrl(desktopInfo.origin));
-									}}
-								>
-									Clear
-								</Button>
-							)}
-							</Flex>
-						</Flex>
-						<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop="1px solid" borderColor="blackAlpha.100">
-							<Flex alignItems="center" columnGap={4}>
-								<Box minWidth={0}>
-									<Text fontSize="sm">Updates</Text>
-									<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
-										{electronAutoUpdatePathLabel}
-									</Text>
-								</Box>
-								<Switch
-									marginLeft="auto"
-									isChecked={electronAutoUpdateEnabled}
-									onChange={(event) => handleElectronAutoUpdateChange(event.target.checked)}
-								></Switch>
-							</Flex>
-							<Text fontSize="xs" opacity={0.55} wordBreak="break-word">
-								{electronUpdateInfo?.message ||
-									`Current version ${desktopInfo.appVersion || 'unknown'}. Downloads use the latest GitHub release asset for Electron App Release.`}
-							</Text>
-							{electronUpdateInfo?.asset?.name && (
-								<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
-									{electronUpdateInfo.asset.name}
-								</Text>
-							)}
-							{electronUpdateInfo?.downloadPath && (
-								<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
-									{electronUpdateInfo.downloadPath}
-								</Text>
-							)}
-							<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap">
-								<Button size="xs" variant="outline" isLoading={electronUpdateLoading} onClick={handleElectronUpdateCheck}>
-									Check
-								</Button>
-								<Button
-									size="xs"
-									variant="solid"
-									isLoading={electronUpdateDownloadLoading}
-									onClick={handleElectronUpdateDownload}
-								>
-									Download
-								</Button>
-								{electronUpdateInfo?.releaseUrl && (
-									<Button as="a" size="xs" variant="ghost" href={electronUpdateInfo.releaseUrl} target="_blank" rel="noreferrer">
-										Release
-									</Button>
-								)}
-								{electronUpdateInfo?.checkedAt && (
-									<Text fontSize="xs" opacity={0.5}>
-										{new Date(electronUpdateInfo.checkedAt).toLocaleString()}
-									</Text>
-								)}
-							</Flex>
 						</Flex>
 					</Flex>
-				)}
+					<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop="1px solid" borderColor="blackAlpha.100">
+						<Text fontSize="sm">Thingtime Node menu bar icon</Text>
+						<Select
+							size="sm"
+							value={desktopSettings?.selectedMenuBarIconId || ''}
+							isDisabled={electronSettingsLoading || !desktopSettings}
+							onChange={(event) => handleMenuBarIconSelect(event.target.value)}
+						>
+							{desktopSettings?.menuBarIcons.map((icon) => (
+								<option key={icon.id} value={icon.id} disabled={icon.custom && !desktopSettings.customMenuBarIconConfigured}>
+									{icon.label}
+								</option>
+							))}
+						</Select>
+						<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap">
+							<Button size="xs" variant="outline" isLoading={electronSettingsLoading} onClick={handleMenuBarIconUpload}>
+								Upload custom icon
+							</Button>
+							<Text fontSize="xs" opacity={0.55}>
+								Changing this restarts only the managed node.
+							</Text>
+						</Flex>
+					</Flex>
+					<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop="1px solid" borderColor="blackAlpha.100">
+						<Flex alignItems="center" columnGap={4}>
+							<Box minWidth={0}>
+								<Text fontSize="sm">Updates</Text>
+								<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
+									{electronAutoUpdatePathLabel || 'Local desktop update preference'}
+								</Text>
+							</Box>
+							<Switch
+								marginLeft="auto"
+								isChecked={electronAutoUpdateEnabled}
+								onChange={(event) => handleElectronAutoUpdateChange(event.target.checked)}
+							></Switch>
+						</Flex>
+						<Text fontSize="xs" opacity={0.55} wordBreak="break-word">
+							{electronUpdateInfo?.message ||
+								`Current version ${desktopInfo.appVersion || 'unknown'}. Downloads use the latest GitHub release asset for Electron App Release.`}
+						</Text>
+						{electronUpdateInfo?.asset?.name && (
+							<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
+								{electronUpdateInfo.asset.name}
+							</Text>
+						)}
+						{electronUpdateInfo?.downloadPath && (
+							<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
+								{electronUpdateInfo.downloadPath}
+							</Text>
+						)}
+						<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap">
+							<Button size="xs" variant="outline" isLoading={electronUpdateLoading} onClick={handleElectronUpdateCheck}>
+								Check
+							</Button>
+							<Button size="xs" variant="solid" isLoading={electronUpdateDownloadLoading} onClick={handleElectronUpdateDownload}>
+								Download
+							</Button>
+							{electronUpdateInfo?.releaseUrl && (
+								<Button as="a" size="xs" variant="ghost" href={electronUpdateInfo.releaseUrl} target="_blank" rel="noreferrer">
+									Release
+								</Button>
+							)}
+							{electronUpdateInfo?.checkedAt && (
+								<Text fontSize="xs" opacity={0.5}>
+									{new Date(electronUpdateInfo.checkedAt).toLocaleString()}
+								</Text>
+							)}
+						</Flex>
+					</Flex>
+				</Flex>
+			)}
 
 			{/* drawer preferences */}
 			<Flex flexDirection="column" rowGap={0}>
-				<Text
-					paddingBottom={2}
-					fontSize="10px"
-					fontWeight={600}
-					letterSpacing="0.08em"
-					textTransform="uppercase"
-					opacity={0.45}
-				>
+				<Text paddingBottom={2} fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
 					Drawer
 				</Text>
 
@@ -634,22 +667,14 @@ export const UserSettingsModal = () => {
 
 				{settingRow(
 					'Search closes drawer',
-					<Switch
-						isChecked={searchClosesDrawer}
-						onChange={(e) => setSearchClosesDrawer(e.target.checked)}
-					></Switch>,
+					<Switch isChecked={searchClosesDrawer} onChange={(e) => setSearchClosesDrawer(e.target.checked)}></Switch>,
 					'Close the drawer when opening search'
 				)}
 
 				{settingRow(
 					'Top-level items',
 					<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap" justifyContent="flex-end">
-						<Button
-							size="xs"
-							variant="outline"
-							onClick={lowerTopLevelLimit}
-							isDisabled={!topLevelLimitIsUnlimited && topLevelLimitValue <= 1}
-						>
+						<Button size="xs" variant="outline" onClick={lowerTopLevelLimit} isDisabled={!topLevelLimitIsUnlimited && topLevelLimitValue <= 1}>
 							−
 						</Button>
 						<Text minWidth="74px" textAlign="center" fontSize="sm">
@@ -715,14 +740,7 @@ export const UserSettingsModal = () => {
 
 			{/* theming */}
 			<Flex flexDirection="column" rowGap={0}>
-				<Text
-					paddingBottom={2}
-					fontSize="10px"
-					fontWeight={600}
-					letterSpacing="0.08em"
-					textTransform="uppercase"
-					opacity={0.45}
-				>
+				<Text paddingBottom={2} fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
 					Theming
 				</Text>
 
@@ -732,12 +750,7 @@ export const UserSettingsModal = () => {
 						{builtinThemes.map((builtin) => {
 							const active = preset === builtin.name && !hasOverrides && !appliedThemeShareId;
 							return (
-								<Button
-									key={builtin.name}
-									size="xs"
-									variant={active ? 'solid' : 'ghost'}
-									onClick={() => handlePreset(builtin.name)}
-								>
+								<Button key={builtin.name} size="xs" variant={active ? 'solid' : 'ghost'} onClick={() => handlePreset(builtin.name)}>
 									{builtin.name}
 								</Button>
 							);

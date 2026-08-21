@@ -1,0 +1,74 @@
+{
+	"color-space-for-untagged-svg-colors": "display-p3",
+	"fill-specializations": [
+		{
+			"value": {
+				"solid": "srgb:0.97647,0.97647,0.98431,1.00000"
+			}
+		},
+		{
+			"appearance": "dark",
+			"value": {
+				"solid": "srgb:0.07059,0.07059,0.07843,1.00000"
+			}
+		}
+	],
+	"groups": [
+		{
+			"layers": [
+				{
+					"fill-specializations": [
+						{
+							"value": {
+								"solid": "srgb:0.65882,0.90196,0.11373,1.00000"
+							}
+						}
+					],
+					"glass-specializations": [
+						{
+							"value": false
+						},
+						{
+							"appearance": "dark",
+							"value": false
+						}
+					],
+					"hidden": false,
+					"image-name": "canopy.svg",
+					"name": "canopy"
+				},
+				{
+					"fill-specializations": [
+						{
+							"value": {
+								"solid": "srgb:0.61176,0.35294,0.23529,1.00000"
+							}
+						}
+					],
+					"glass-specializations": [
+						{
+							"value": false
+						},
+						{
+							"appearance": "dark",
+							"value": false
+						}
+					],
+					"hidden": false,
+					"image-name": "trunk.svg",
+					"name": "trunk"
+				}
+			],
+			"lighting": "combined",
+			"name": "Thingtime tree",
+			"specular": false,
+			"translucency": {
+				"enabled": false,
+				"value": 0.5
+			}
+		}
+	],
+	"supported-platforms": {
+		"squares": ["macOS"]
+	}
+}

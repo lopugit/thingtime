@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 import Security
 import ThingtimeNodeCore
@@ -32,7 +33,7 @@ private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
                 )))
                 return
             }
-            if access == .pairingMutation {
+            if access == .pairingMutation || access == .permissionMutation {
                 let approved = await LocalPairingPresenceGate.shared.confirm(method: request.method)
                 guard approved else {
                     reply(Self.encoded(.failure(
@@ -67,9 +68,13 @@ private final class LocalPairingPresenceGate {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = method == "pairing.unpair"
-            ? "Allow Thingtime to unpair this Mac?"
-            : "Allow Thingtime to pair this Mac?"
+        if method == "pairing.unpair" {
+            alert.messageText = "Allow Thingtime to unpair this Mac?"
+        } else if method == "permissions.request" {
+            alert.messageText = "Allow Thingtime Node to request a macOS permission?"
+        } else {
+            alert.messageText = "Allow Thingtime to pair this Mac?"
+        }
         alert.informativeText = "Only continue if you just requested this action in the Thingtime desktop app."
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Cancel")
@@ -175,6 +180,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private var listener: NSXPCListener?
     private var listenerDelegate: XPCListenerDelegate?
     private var summaryItem: NSMenuItem?
+    private let launchdManaged = ProcessInfo.processInfo.environment["THINGTIME_NODE_MACH_SERVICE"] == "1"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -182,8 +188,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         configureMenu()
         do {
             let telemetry = self.telemetry
-            let journal = try CommandJournal(fileURL: CommandJournal.defaultFileURL())
-            let credentialStore = KeychainDeviceCredentialStore()
+            let baseURL = try apiBaseURL()
+            let endpointScope = try ThingtimeNodeEndpointScope(baseURL: baseURL)
+            let journal = try CommandJournal(fileURL: endpointScope.commandJournalFileURL())
+            let credentialStore = KeychainDeviceCredentialStore(
+                account: endpointScope.credentialAccount,
+                legacyAccount: endpointScope.legacyCredentialAccount
+            )
             let pairing = PairingManager(store: credentialStore)
             let connectorConfiguration = try connectorConfiguration()
             let connector = ConnectorRuntime(configuration: connectorConfiguration)
@@ -194,10 +205,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             let actionExecutor = SafeActionExecutor(telemetry: telemetry)
             let apiClient = try ThingtimeAPIClient(
-                baseURL: try apiBaseURL(),
+                baseURL: endpointScope.canonicalBaseURL,
                 credentialStore: credentialStore
             )
-            let liveSync = try LiveAISyncCoordinator { body in
+            let liveSync = try LiveAISyncCoordinator(fileURL: endpointScope.liveAIJournalFileURL()) { body in
                 try await apiClient.syncLiveAI(body)
             }
             let controller = ThingtimeNodeController(
@@ -348,7 +359,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             ThingtimeNodeLog.lifecycle.info("Thingtime Node started")
         } catch {
             summaryItem?.title = "Node unavailable"
-            statusItem.button?.title = "Thingtime Node !"
             ThingtimeNodeLog.lifecycle.error("Thingtime Node setup failed: \(error.localizedDescription, privacy: .public)")
         }
     }
@@ -370,7 +380,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func configureMenu() {
-        statusItem.button?.title = "Thingtime Node"
+        let environment = ProcessInfo.processInfo.environment
+        let iconID = ThingtimeMenuBarIconID(environmentValue: environment["THINGTIME_NODE_MENU_BAR_ICON"])
+        let image = ThingtimeMenuBarIconRenderer.image(
+            id: iconID,
+            customPath: environment["THINGTIME_NODE_MENU_BAR_CUSTOM_ICON_PATH"]
+        )
+        statusItem.length = image.size.width + 8
+        statusItem.button?.title = ""
+        statusItem.button?.image = image
+        statusItem.button?.imagePosition = .imageOnly
         statusItem.button?.setAccessibilityLabel("Thingtime Node")
         let menu = NSMenu()
         let summary = NSMenuItem(title: "Starting…", action: nil, keyEquivalent: "")
@@ -381,7 +400,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Refresh Status", action: #selector(refreshStatus(_:)), keyEquivalent: "r"))
         menu.addItem(NSMenuItem(title: "Open Thingtime", action: #selector(openThingtime(_:)), keyEquivalent: "o"))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Thingtime Node", action: #selector(quit(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(
+            title: launchdManaged ? "Restart Thingtime Node" : "Quit Thingtime Node",
+            action: #selector(quit(_:)),
+            keyEquivalent: "q"
+        ))
         menu.items.forEach { $0.target = self }
         statusItem.menu = menu
     }
@@ -392,16 +415,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             let response = await controller.handle(NodeRequest(method: "node.status"))
             if response.ok, let status = try? response.result?.decode(NodeStatus.self) {
                 summaryItem?.title = status.pairing.paired ? "Paired · Node healthy" : "Ready to pair"
-                statusItem.button?.title = "Thingtime Node"
             } else {
                 summaryItem?.title = "Node degraded"
-                statusItem.button?.title = "Thingtime Node !"
             }
         }
     }
 
     @objc private func openThingtime(_ sender: Any?) {
-        guard let url = URL(string: "https://thingtime.com/things") else { return }
+        guard let url = URL(string: "things", relativeTo: try? apiBaseURL()) else { return }
         NSWorkspace.shared.open(url)
     }
 
@@ -452,6 +473,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 private enum ThingtimeNodeApplication {
     @MainActor
     static func main() {
+        if Bundle.main.object(forInfoDictionaryKey: "ThingtimeNodeElectronManaged") as? Bool == true,
+           ProcessInfo.processInfo.environment["THINGTIME_NODE_MACH_SERVICE"] != "1" {
+            // System Settings may relaunch a TCC client through LaunchServices.
+            // The Electron-embedded helper is launchd-owned, so that unmanaged
+            // copy exits before creating a second menu item or control loop.
+            exit(EXIT_SUCCESS)
+        }
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate

@@ -12,6 +12,7 @@ public enum ThingtimeNodeXPC {
 public enum ThingtimeNodeXPCRequestAccess: Equatable, Sendable {
     case onboardingRead
     case pairingMutation
+    case permissionMutation
     case forbidden
 }
 
@@ -27,10 +28,12 @@ public enum ThingtimeNodeXPCRequestPolicy {
         "pairing.resume",
         "pairing.unpair"
     ]
+    private static let permissionMutations: Set<String> = ["permissions.request"]
 
     public static func access(for method: String) -> ThingtimeNodeXPCRequestAccess {
         if onboardingReads.contains(method) { return .onboardingRead }
         if pairingMutations.contains(method) { return .pairingMutation }
+        if permissionMutations.contains(method) { return .permissionMutation }
         return .forbidden
     }
 }

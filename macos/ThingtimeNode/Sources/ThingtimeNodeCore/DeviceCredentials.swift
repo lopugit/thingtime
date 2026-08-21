@@ -36,16 +36,29 @@ public protocol DeviceCredentialStore: Sendable {
 public final class KeychainDeviceCredentialStore: DeviceCredentialStore, @unchecked Sendable {
     private let service: String
     private let account: String
+    private let legacyAccount: String?
     private let pendingPairingAccount: String
+    private let legacyPendingPairingAccount: String?
 
-    public init(service: String = "com.thingtime.desktop.node", account: String = "device-credential-v1") {
+    public init(
+        service: String = "com.thingtime.desktop.node",
+        account: String = "device-credential-v1",
+        legacyAccount: String? = nil
+    ) {
         self.service = service
         self.account = account
+        self.legacyAccount = legacyAccount == account ? nil : legacyAccount
         pendingPairingAccount = account + ".pending-pairing-claim-v1"
+        legacyPendingPairingAccount = self.legacyAccount.map { $0 + ".pending-pairing-claim-v1" }
     }
 
     public func load() async throws -> DeviceCredential? {
-        try load(DeviceCredential.self, account: account)
+        if let credential = try load(DeviceCredential.self, account: account) { return credential }
+        guard let legacyAccount,
+              let credential = try load(DeviceCredential.self, account: legacyAccount) else { return nil }
+        try save(credential, account: account)
+        try delete(account: legacyAccount)
+        return credential
     }
 
     public func save(_ credential: DeviceCredential) async throws {
@@ -54,10 +67,16 @@ public final class KeychainDeviceCredentialStore: DeviceCredentialStore, @unchec
 
     public func delete() async throws {
         try delete(account: account)
+        if let legacyAccount { try delete(account: legacyAccount) }
     }
 
     public func loadPendingPairingClaim() async throws -> PendingPairingClaim? {
-        try load(PendingPairingClaim.self, account: pendingPairingAccount)
+        if let claim = try load(PendingPairingClaim.self, account: pendingPairingAccount) { return claim }
+        guard let legacyPendingPairingAccount,
+              let claim = try load(PendingPairingClaim.self, account: legacyPendingPairingAccount) else { return nil }
+        try save(claim, account: pendingPairingAccount)
+        try delete(account: legacyPendingPairingAccount)
+        return claim
     }
 
     public func savePendingPairingClaim(_ claim: PendingPairingClaim) async throws {
@@ -66,6 +85,7 @@ public final class KeychainDeviceCredentialStore: DeviceCredentialStore, @unchec
 
     public func deletePendingPairingClaim() async throws {
         try delete(account: pendingPairingAccount)
+        if let legacyPendingPairingAccount { try delete(account: legacyPendingPairingAccount) }
     }
 
     private func load<Value: Decodable>(_ type: Value.Type, account: String) throws -> Value? {

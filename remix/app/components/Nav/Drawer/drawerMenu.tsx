@@ -4,7 +4,13 @@
 
 import type { ThingMode } from '../../Thingtime/thingRoute';
 
-export interface DrawerSubItem {
+export interface DrawerItemVisibility {
+	authOnly?: boolean;
+	guestOnly?: boolean;
+	adminOnly?: boolean;
+}
+
+export interface DrawerSubItem extends DrawerItemVisibility {
 	id: string;
 	label: string;
 	icon?: string;
@@ -14,13 +20,9 @@ export interface DrawerSubItem {
 	mode?: ThingMode;
 	// optional group name; grouped items render under an expand/collapse header
 	group?: string;
-	// visibility filters against the current user
-	authOnly?: boolean;
-	guestOnly?: boolean;
-	adminOnly?: boolean;
 }
 
-export interface DrawerTopItem {
+export interface DrawerTopItem extends DrawerItemVisibility {
 	id: string;
 	label: string;
 	icon: string;
@@ -156,10 +158,7 @@ export const DRAWER_KEEP_OPEN_DEFAULT_IDS: string[] = ['dev', 'status', 'brandin
 // The one resolver for "does clicking this item close the drawer?" — shared
 // by the click handlers (useDrawer.closesOnClick) and the settings toggles so
 // the checkboxes always show the behavior that will actually happen.
-export const drawerItemClosesOnClick = (
-	closeOnClick: Record<string, boolean> | undefined,
-	itemId: string
-): boolean => {
+export const drawerItemClosesOnClick = (closeOnClick: Record<string, boolean> | undefined, itemId: string): boolean => {
 	const saved = closeOnClick?.[itemId];
 	if (typeof saved === 'boolean') {
 		return saved;

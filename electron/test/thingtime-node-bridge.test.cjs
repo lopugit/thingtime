@@ -44,6 +44,7 @@ async function makeSignedNodeFixture() {
 		bootstrapPlists: [],
 		bootoutCalls: 0,
 		bridgeRuns: 0,
+		bridgeTimeouts: [],
 		certificateByTarget: new Map(),
 		certificateExtractionArguments: [],
 		failBootstrapCount: 0,
@@ -81,6 +82,7 @@ async function makeSignedNodeFixture() {
 		}
 		if (command === bridgeExecutable) {
 			state.bridgeRuns += 1;
+			state.bridgeTimeouts.push(options.timeoutMs);
 			const request = JSON.parse(Buffer.from(options.input).toString('utf8'));
 			return {
 				status: 0,
@@ -141,6 +143,8 @@ test('launch agent is deterministic, escaped, and contains the packaged runtime 
 		},
 		electronExecutable: '/Applications/Thingtime.app/Contents/MacOS/Thingtime',
 		helperExecutable: '/Applications/Thingtime.app/Contents/Helpers/Thingtime Node.app/Contents/MacOS/ThingtimeNode',
+		menuBarCustomIconPath: '/Users/test/Library/Application Support/Thingtime/thingtime-node/menu-bar-custom.png',
+		menuBarIconId: 'wordmark-template',
 		projectRegistryPath: '/Users/test/Library/Application Support/Thingtime/thingtime-node/projects.json',
 		runtimePath: '/Applications/Thingtime.app/Contents/Resources/ai/thingtime-node-runtime.mjs'
 	};
@@ -161,8 +165,24 @@ test('launch agent is deterministic, escaped, and contains the packaged runtime 
 	assert.match(first, /projects\.json/u);
 	assert.match(first, /<key>THINGTIME_NODE_MACH_SERVICE<\/key>/u);
 	assert.match(first, /<key>THINGTIME_NODE_CONNECTOR_ENV_JSON<\/key>/u);
+	assert.match(first, /<key>THINGTIME_NODE_MENU_BAR_ICON<\/key>\s*<string>wordmark-template<\/string>/u);
+	assert.match(first, /<key>THINGTIME_NODE_MENU_BAR_CUSTOM_ICON_PATH<\/key>/u);
+	assert.match(first, /<key>KeepAlive<\/key>\s*<true\/>/u);
+	assert.doesNotMatch(first, /SuccessfulExit/u);
 	assert.doesNotMatch(first, /<string>THINGTIME_NODE_MACH_SERVICE<\/string>/u);
 	assert.doesNotMatch(first, /OPENAI_API_KEY|ANTHROPIC_API_KEY/u);
+});
+
+test('launch agent rejects unknown or relative menu bar icon configuration', () => {
+	const base = {
+		apiBaseUrl: 'https://thingtime.com/',
+		childEnvironment: {},
+		electronExecutable: '/Applications/Thingtime.app/Contents/MacOS/Thingtime',
+		helperExecutable: '/Applications/Thingtime.app/Contents/Helpers/Thingtime Node.app/Contents/MacOS/ThingtimeNode',
+		runtimePath: '/Applications/Thingtime.app/Contents/Resources/ai/thingtime-node-runtime.mjs'
+	};
+	assert.throws(() => buildLaunchAgentPlist({ ...base, menuBarIconId: 'unknown' }), /menu bar icon/u);
+	assert.throws(() => buildLaunchAgentPlist({ ...base, menuBarIconId: 'custom', menuBarCustomIconPath: 'relative.png' }), /absolute/u);
 });
 
 test('writes an atomic 0600 local project registry and returns only a public reference', async () => {
@@ -301,6 +321,17 @@ test('revalidates the native bridge signature before every execution', async () 
 	}
 });
 
+test('presence-gated pairing and permission requests allow bounded human confirmation time', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.request('node.status');
+		await fixture.integration.request('permissions.request', { kind: 'accessibility' }, 'permission-1');
+		assert.deepEqual(fixture.state.bridgeTimeouts, [17_000, 127_000]);
+	} finally {
+		await rm(fixture.root, { recursive: true, force: true });
+	}
+});
+
 test('revalidates helper identity immediately before launchd registration', async () => {
 	const fixture = await makeSignedNodeFixture();
 	try {
@@ -321,11 +352,35 @@ test('re-registers the managed node with only the private registry file path', a
 		assert.match(fixture.state.bootstrapPlists[0], /THINGTIME_NODE_PROJECT_REGISTRY_PATH/u);
 		assert.match(fixture.state.bootstrapPlists[0], /projects\.json/u);
 		assert.doesNotMatch(fixture.state.bootstrapPlists[0], /projectPaths|Empty Project/u);
-		assert.equal(fixture.state.launchctlCalls.some(([operation]) => operation === 'kickstart'), false);
+		assert.equal(
+			fixture.state.launchctlCalls.some(([operation]) => operation === 'kickstart'),
+			false
+		);
 		assert.ok(
 			fixture.state.launchctlCalls.findIndex(([operation]) => operation === 'enable') <
 				fixture.state.launchctlCalls.findIndex(([operation]) => operation === 'bootstrap')
 		);
+	} finally {
+		await rm(fixture.root, { recursive: true, force: true });
+	}
+});
+
+test('reconciles endpoint and menu icon changes without restarting an unchanged node', async () => {
+	const fixture = await makeSignedNodeFixture();
+	const options = {
+		apiBaseUrl: 'https://pr-68.previews.dev.thingtime.com/',
+		menuBarIconId: 'tree-color'
+	};
+	try {
+		await fixture.integration.registerService(options);
+		assert.equal(fixture.state.bootstrapCalls, 1);
+		await fixture.integration.reconcileRegisteredService(options);
+		assert.equal(fixture.state.bootstrapCalls, 1);
+		await fixture.integration.reconcileRegisteredService({ ...options, menuBarIconId: 'tree-pink' });
+		assert.equal(fixture.state.bootstrapCalls, 2);
+		assert.match(fixture.state.bootstrapPlists[1], /THINGTIME_NODE_API_BASE_URL/u);
+		assert.match(fixture.state.bootstrapPlists[1], /pr-68\.previews\.dev\.thingtime\.com/u);
+		assert.match(fixture.state.bootstrapPlists[1], /tree-pink/u);
 	} finally {
 		await rm(fixture.root, { recursive: true, force: true });
 	}
@@ -354,10 +409,7 @@ test('packaging verification extracts leaf certificates with the macOS equals-fo
 		assert.equal(fixture.state.certificateExtractionArguments.length, 2);
 		for (const args of fixture.state.certificateExtractionArguments) {
 			assert.equal(args.includes('--extract-certificates'), false);
-			assert.match(
-				args.find((argument) => argument.startsWith('--extract-certificates=')) || '',
-				/^--extract-certificates=\/.*\/certificate-$/u
-			);
+			assert.match(args.find((argument) => argument.startsWith('--extract-certificates=')) || '', /^--extract-certificates=\/.*\/certificate-$/u);
 		}
 	} finally {
 		await rm(fixture.root, { recursive: true, force: true });

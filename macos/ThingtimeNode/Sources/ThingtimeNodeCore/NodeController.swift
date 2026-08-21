@@ -30,6 +30,10 @@ public actor ThingtimeNodeController {
         let pairingSecret: String
     }
 
+    private struct PermissionRequestParameters: Decodable {
+        let kind: ThingtimePermissionKind
+    }
+
     private struct ActionEnvelope: Codable {
         let action: SafeActionRequest
         let context: SafeActionContext
@@ -88,6 +92,7 @@ public actor ThingtimeNodeController {
         "pairing.claim",
         "pairing.resume",
         "pairing.unpair",
+        "permissions.request",
         "action.execute",
         "connector.start",
         "connector.stop",
@@ -264,6 +269,9 @@ public actor ThingtimeNodeController {
         case "pairing.unpair":
             try await pairingScopeChanged(nil)
             result = try await JSONValue.from(pairing.unpair())
+        case "permissions.request":
+            let parameters = try request.parameters.decode(PermissionRequestParameters.self)
+            result = try await JSONValue.from(telemetry.requestPermission(parameters.kind))
         case "action.execute":
             let envelope = try request.parameters.decode(ActionEnvelope.self)
             result = try await actionExecutor.execute(action: envelope.action, context: envelope.context)

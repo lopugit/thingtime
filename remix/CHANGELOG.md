@@ -19,6 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Desktop node endpoint, permissions, relaunch, and identity follow-up**:
+  Electron now stores a local list of named API origins, seeds the build's PR
+  preview, probes `/api/v1/devices` before switching, and moves the renderer,
+  LaunchAgent, Keychain, and journals to the same deployment scope. Explicit
+  native permission requests refresh TCC preflight, the KeepAlive helper
+  suppresses duplicate LaunchServices relaunches, and pairing confirmations
+  allow normal human response time. The menu bar is an image-only selectable
+  Thingtime tree/wordmark (including pink and private custom artwork), while
+  the Electron bundle uses adaptive light/dark Icon Composer artwork. — Codex
+  (AI), 2026-08-21
+
 - **Media layout selections now reach the Things API**: the shared client API
   transport preserves `mediaLayout` for post creation and rich comments, so a
   Rows/Grid preview no longer silently reopens as Auto after save. — Codex
@@ -98,8 +109,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `canView` + thread loading), other flags queue an advisory `moderationFlag`
   with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
   and its stamps are final for the pipeline. A new hourly cron
-  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
-  29) retries text moderation lost to mid-flight process deaths or provider
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute 29) retries text moderation lost to mid-flight process deaths or provider
   outages and drains off-era backlog for free, plus the standard attachment
   sweep; the admin sweep button runs both batches and the tab shows the text
   backlog count. Post creation adds a hybrid sync gate: the free omni screen
@@ -161,8 +171,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `canView` + thread loading), other flags queue an advisory `moderationFlag`
   with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
   and its stamps are final for the pipeline. A new hourly cron
-  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
-  29) retries text moderation lost to mid-flight process deaths or provider
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute 29) retries text moderation lost to mid-flight process deaths or provider
   outages and drains off-era backlog for free, plus the standard attachment
   sweep; the admin sweep button runs both batches and the tab shows the text
   backlog count. Post creation adds a hybrid sync gate: the free omni screen
@@ -486,14 +495,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `remix/.vercel/output`. The deployment contract covers both invariants. —
   Codex (AI), 2026-08-17
 - **Vercel builds now start at the repository root without deploying the thin
-	CI branch**: root `vercel.json` installs only the Remix workspace, a tested
-	wrapper preserves the existing Vite/Nitro verification before staging the
-	Build Output API artifact at root `.vercel/output`, and the attachment-cleanup
-	and weekly-summary crons now live in that same root config. Both config and the
-	ignored-build decision exclude `github-actions`. The matching control-plane
-	config disables Git deployments for that branch and its descendants. Setup
-	and live verification steps are recorded in README, TESTING, and
-	VERCEL_DEPLOYMENTS. — Codex (AI), 2026-08-17
+  CI branch**: root `vercel.json` installs only the Remix workspace, a tested
+  wrapper preserves the existing Vite/Nitro verification before staging the
+  Build Output API artifact at root `.vercel/output`, and the attachment-cleanup
+  and weekly-summary crons now live in that same root config. Both config and the
+  ignored-build decision exclude `github-actions`. The matching control-plane
+  config disables Git deployments for that branch and its descendants. Setup
+  and live verification steps are recorded in README, TESTING, and
+  VERCEL_DEPLOYMENTS. — Codex (AI), 2026-08-17
 - **Root bootstrap no longer exposes server secrets**: browser-visible loader
   configuration is now built from an explicit status-origin allowlist instead
   of every `THINGTIME_*` variable, and `/api/root-data` is private, no-store,

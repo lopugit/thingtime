@@ -72,15 +72,17 @@ and open acceptance boundaries for PR #68 are recorded in its
 ## Runtime
 
 The Electron main process starts the bundled Nitro server on a free
-`127.0.0.1` port and opens the desktop window to that local origin. External
-links are opened with the OS browser unless the user has explicitly switched
-the desktop window to that URL's origin. The renderer keeps `nodeIntegration`
-disabled and uses a narrow preload bridge for desktop metadata, validated URL
-switching, and normalized AI source batches. AI discovery and reads accept only
-the bundled app, Thingtime production/dev, or an exact comma-separated origin
-supplied through `THINGTIME_DESKTOP_AI_TRUSTED_ORIGINS` for an intentional local
-test. The bridge never returns provider credentials, cookies, archive paths, or
-raw app-data roots.
+`127.0.0.1` port as a fail-safe, then opens the desktop window at the selected
+Thingtime deployment. A build can seed an intended preview with
+`THINGTIME_DESKTOP_DEFAULT_ENDPOINT`; the renderer and node always use that
+same deployment origin for relative `/api` calls. If the remote UI cannot load,
+the app falls back to the bundled loopback UI without silently changing the
+saved endpoint. External links open with the OS browser unless their origin is
+one of the exact local endpoint profiles. The renderer keeps `nodeIntegration`
+disabled and uses a narrow preload bridge for desktop metadata, validated
+endpoint settings, and normalized AI source batches. The bridge never returns
+provider credentials, cookies, archive paths, custom-icon paths, or raw
+app-data roots.
 
 The same origin check protects the local-node bridge. Renderer code gets fixed
 operations only: node status, login-service register/unregister, pairing,
@@ -107,8 +109,12 @@ Login registration is always an explicit confirmed user action. Electron writes
 a per-user LaunchAgent containing valid ordinary `<key>` fields and absolute
 paths into the installed signed app, validates the plist, then calls
 `/bin/launchctl` with fixed arguments (never through a shell). Bootstrap is not
-followed by an unconditional immediate kickstart. The agent launches the
-embedded node and gives it the Electron executable plus
+followed by an unconditional immediate kickstart. The agent is `RunAtLoad` and
+`KeepAlive`, so a Privacy & Security **Quit & Reopen** or crash produces one
+launchd-owned replacement. The embedded helper refuses a direct LaunchServices
+start unless its private Mach-service marker is present, preventing a second
+menu item when macOS relaunches the permission identity. The agent receives the
+selected endpoint and menu-icon identifier, plus the Electron executable and
 `thingtime-node-runtime.mjs`. The MCP child receives only a small operational
 environment allowlist (`PATH`, home/temp/user/locale paths, and `CODEX_HOME`),
 plus `ELECTRON_RUN_AS_NODE`; API keys and arbitrary renderer values are never
@@ -126,11 +132,13 @@ registered login node remains independently managed until the user turns it
 off. The PR #68 installed-app acceptance additionally proves that Cmd+Q stops
 Electron while both the launchd node and connector remain running.
 
-Accessibility and Screen Recording are preflight-only here. No startup path,
-renderer call, or login-agent action prompts for TCC permission. Device writes
-are refused while the session is locked, and non-telemetry writes require an
-unspoofable native Electron confirmation dialog before the signed bridge marks
-them approved.
+Accessibility and Screen Recording remain non-prompting during startup and
+status refresh. The settings UI's explicit **Request access** action invokes the
+prompting system API in the signed native helper, then opens the exact Privacy &
+Security pane and refreshes preflight after the system relaunch cycle. Device
+writes are refused while the session is locked, and non-telemetry writes
+require an unspoofable native Electron confirmation dialog before the signed
+bridge marks them approved.
 
 On macOS, the desktop window uses a hidden native titlebar so the web UI can
 occupy the titlebar row. The preload metadata exposes titlebar measurements;
@@ -138,13 +146,24 @@ the renderer applies `html.thingtime-electron-desktop` and reserves the traffic
 light area before placing the drawer trigger and top nav content. The top nav is
 marked draggable, with inputs, links, and buttons marked non-draggable.
 
-The drawer settings modal shows an **Electron** section inside the desktop app.
-It writes the selected destination to
-`thingtime.settings.electron.${sessionHash}URL`, where `sessionHash` is derived
-from Electron's app data path for this install. Blank/unset means "use the
-bundled local app". The app also exposes a Thingtime menu with **Load Bundled
-App** and **Load Production** entries so users can recover if they load a URL
-that does not include the switcher UI.
+The drawer settings modal shows a **Thingtime desktop** section inside the
+desktop app. Endpoint profiles are stored locally in a versioned, atomic `0600`
+`desktop-settings.json` under Electron's app-data directory. Production,
+development, and the build's intended preview are pre-populated; users can add
+up to 32 named HTTPS (or loopback HTTP) origins and remove inactive custom
+profiles. Switching first probes `/api/v1/devices`, confirms the change, then
+updates the renderer and LaunchAgent transactionally; a failed switch restores
+both. Credentials, paths, query strings, fragments, and cross-origin redirects
+are rejected. The Thingtime application menu mirrors the saved profiles so a
+working endpoint remains selectable if a remote renderer is broken.
+
+The same local settings choose the native menu-bar artwork: coloured,
+template, black, white, pink, or blue four-square tree; coloured/template/
+black/white full pixel wordmark; or one private custom image normalized to a
+bounded PNG. Only the chosen public identifier enters the LaunchAgent unless
+the custom option is active. The Electron app icon is an Icon Composer
+`.icon` bundle whose exact Thingtime canopy/trunk artwork has light and dark
+background appearances; electron-builder compiles it during macOS packaging.
 
 The same settings surface includes an **Updates** section. Auto-check is stored
 at `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled` and defaults to

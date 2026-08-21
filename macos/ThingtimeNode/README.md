@@ -9,7 +9,9 @@ XPC surface, and a supervised connector subprocess boundary.
 
 - Device snapshots: name/model/OS/architecture, output volume, session state,
   running applications, active displays, and Accessibility/Screen Recording
-  **preflight** state.
+  **preflight** state. Startup and status reads never prompt. A separate
+  journaled `permissions.request` method is available only through the signed,
+  presence-gated bridge after the user presses **Request access**.
 - Safe actions: telemetry refresh, output volume, activate a running app, and
   launch an installed app. Remote mutations deny while locked and require an
   explicit approval bit.
@@ -49,6 +51,15 @@ XPC surface, and a supervised connector subprocess boundary.
   and closed visible events are queued through a durable exact-retry sync
   journal; completed visible chat text is persisted by the server while
   transient deltas/control events expire separately.
+- Endpoint isolation: every canonical deployment origin gets a separate
+  Keychain account, command journal, and live-sync journal. Production alone
+  migrates the former unscoped credential and retains the legacy production
+  journal filenames, preserving in-flight idempotency and live cursors across
+  upgrade; selecting a preview cannot reuse or leak that pairing state.
+- Menu-bar identity: the status item is artwork-only (with an accessibility
+  label) and renders the selected Thingtime tree or full pixel wordmark in
+  colour, template, black, white, pink, or blue variants. A custom local image
+  is fitted to the status-item canvas without exposing its path remotely.
 - View-only capture foundation: ScreenCaptureKit selects a display
   deterministically and emits bounded JPEG frames only after explicit approval,
   unlocked-session validation, and a non-prompting Screen Recording preflight.
@@ -58,9 +69,9 @@ XPC surface, and a supervised connector subprocess boundary.
 The package intentionally does **not** provide arbitrary computer control,
 input synthesis, shell execution, or a remote screen media transport. Until an
 authenticated peer transport is installed, the web UI must report screen view
-as unavailable and must not start capture or invent a stream. No startup path
-calls a TCC prompting API; permission grants remain an explicit signed-app user
-gesture.
+as unavailable and must not start capture or invent a stream. No startup or
+telemetry path calls a TCC prompting API; permission requests remain an
+explicit signed-app user gesture.
 
 ## Idempotent command contract
 
@@ -117,12 +128,17 @@ Thingtime.app/
 
 The Electron app is authoritative for login registration. After an explicit
 user action it writes a marked per-user LaunchAgent with absolute paths to the
-installed helper and bundled connector runtime, then registers that file with
-`launchctl`. Do not package a second static LaunchAgent in either application
-bundle. Sign nested code first, then sign the outer Electron app with the same
-leaf certificate. A production release must update the Electron packaging
-workflow to include this Swift build, Developer ID signing, hardened runtime,
-notarization, and staple verification.
+installed helper and bundled connector runtime, the canonical selected API
+origin, and the selected menu-icon identifier, then registers that file with
+`launchctl`. The agent is `RunAtLoad`/`KeepAlive`; the embedded bundle carries
+an Electron-managed marker and exits harmlessly when LaunchServices tries to
+start it without launchd's private Mach-service environment. This keeps Privacy
+& Security **Quit & Reopen** to one node and one menu item. Do not package a
+second static LaunchAgent in either application bundle. Sign nested code first,
+then sign the outer Electron app with the same leaf certificate. A production
+release must update the Electron packaging workflow to include this Swift
+build, Developer ID signing, hardened runtime, notarization, and staple
+verification.
 
 The standalone bundle includes the equivalent self-relative LaunchAgent plist
 so its menu can enable or disable login startup during native development.

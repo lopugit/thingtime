@@ -6,7 +6,8 @@ const net = require('node:net');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
-const { app, BrowserWindow, dialog, ipcMain, shell, Menu } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, Menu, nativeImage } = require('electron');
+const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const {
 	ThingtimeNodeBridgeError,
 	ThingtimeNodeIntegration,
@@ -18,8 +19,6 @@ const {
 
 const repoRoot = path.resolve(__dirname, '..');
 const localWebOutput = path.join(__dirname, 'dist', 'web', '.output');
-const productionUrl = 'https://thingtime.com/';
-const clearElectronUrlParam = 'thingtimeDesktopClearUrl';
 const electronReleaseLabel = process.env.THINGTIME_DESKTOP_RELEASE_LABEL || 'Electron App Release';
 const updateFeedUrl = process.env.THINGTIME_DESKTOP_UPDATE_FEED_URL || 'https://api.github.com/repos/lopugit/thingtime/releases?per_page=20';
 const macTitlebar = {
@@ -35,6 +34,8 @@ let webBuildMetadata = null;
 let mainWindow = null;
 let sessionHash = null;
 let aiConnectorsPromise = null;
+let desktopSettings = null;
+let desktopSettingsLastError = null;
 const aiSyncSessions = new Map();
 const thingtimeNode = new ThingtimeNodeIntegration({ app, electronDir: __dirname });
 
@@ -650,7 +651,18 @@ function trustedAiBridgeOrigins() {
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
-  return new Set([appOrigin, 'https://thingtime.com', 'https://www.thingtime.com', 'https://dev.thingtime.com', ...configured].filter(Boolean));
+	const endpointOrigins = desktopSettings ? desktopSettings.snapshot().endpointProfiles.map((entry) => new URL(entry.url).origin) : [];
+	return new Set(
+		[
+			appOrigin,
+			activeContentOrigin,
+			'https://thingtime.com',
+			'https://www.thingtime.com',
+			'https://dev.thingtime.com',
+			...endpointOrigins,
+			...configured
+		].filter(Boolean)
+	);
 }
 
 function requireTrustedAiBridgeEvent(event) {
@@ -696,6 +708,36 @@ function nodeProjectRegistryPath() {
 	return path.join(app.getPath('userData'), 'thingtime-node', 'projects.json');
 }
 
+function configuredNodeRegistration() {
+	if (!desktopSettings) throw new Error('Thingtime desktop settings are not ready.');
+	return {
+		...desktopSettings.nodeRegistration(),
+		projectRegistryPath: nodeProjectRegistryPath()
+	};
+}
+
+async function reconcileConfiguredNode() {
+	if (process.platform !== 'darwin' || !desktopSettings) return null;
+	await ensureLocalProjectRegistry(nodeProjectRegistryPath());
+	return thingtimeNode.reconcileRegisteredService(configuredNodeRegistration());
+}
+
+async function initializeDesktopSettings() {
+	desktopSettings = new DesktopSettingsStore({
+		filePath: path.join(app.getPath('userData'), 'desktop-settings.json'),
+		metadata: readWebBuildMetadata()
+	});
+	await desktopSettings.initialize();
+	try {
+		await reconcileConfiguredNode();
+		desktopSettingsLastError = null;
+	} catch (error) {
+		desktopSettingsLastError = error instanceof Error ? error.message : String(error);
+		console.warn('Unable to reconcile Thingtime Node configuration', error);
+	}
+	return desktopSettings.snapshot();
+}
+
 async function nodeRegisterService(event) {
 	requireMacNode(event);
 	const confirmed = await confirmNodeChange({
@@ -708,7 +750,7 @@ async function nodeRegisterService(event) {
 	if (!confirmed) return thingtimeNode.status();
 	const projectRegistryPath = nodeProjectRegistryPath();
 	await ensureLocalProjectRegistry(projectRegistryPath);
-	return thingtimeNode.registerService({ projectRegistryPath });
+	return thingtimeNode.registerService({ ...configuredNodeRegistration(), projectRegistryPath });
 }
 
 async function nodeAddProject(event) {
@@ -725,7 +767,7 @@ async function nodeAddProject(event) {
 	if (selection.canceled || selection.filePaths.length !== 1) return { cancelled: true };
 	const projectRegistryPath = nodeProjectRegistryPath();
 	const project = await registerLocalProject(projectRegistryPath, selection.filePaths[0]);
-	const status = await thingtimeNode.registerService({ projectRegistryPath });
+	const status = await thingtimeNode.registerService({ ...configuredNodeRegistration(), projectRegistryPath });
 	return { cancelled: false, project, status };
 }
 
@@ -759,13 +801,8 @@ async function nodeCompletePairing(event, request) {
 	if (!pairingSecret || !commandId) {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Pairing requires a secret and commandId.');
 	}
-	const confirmed = await confirmNodeChange({
-		title: 'Pair this Mac with Thingtime?',
-		message: 'Connect this Mac to your Thingtime account?',
-		detail: 'Thingtime Node will store a device credential in your macOS Keychain and begin syncing approved device state.',
-		confirmLabel: 'Pair Mac'
-	});
-	if (!confirmed) return thingtimeNode.status();
+	// The signed helper presents the authoritative local-presence confirmation.
+	// Avoid stacking a second Electron dialog in front of it.
 	await thingtimeNode.request('pairing.claim', { pairingSecret }, commandId);
 	return thingtimeNode.status();
 }
@@ -774,13 +811,6 @@ async function nodeResumePairing(event, request) {
 	requireMacNode(event);
 	const commandId = typeof request?.commandId === 'string' ? request.commandId : '';
 	if (!commandId) throw new ThingtimeNodeBridgeError('invalid_request', 'Resuming pairing requires a commandId.');
-	const confirmed = await confirmNodeChange({
-		title: 'Resume pairing this Mac?',
-		message: 'Finish connecting this Mac to your Thingtime account?',
-		detail: 'Thingtime Node will retry only the exact pending signed pairing claim stored in your macOS Keychain.',
-		confirmLabel: 'Resume Pairing'
-	});
-	if (!confirmed) return thingtimeNode.status();
 	await thingtimeNode.request('pairing.resume', {}, commandId);
 	return thingtimeNode.status();
 }
@@ -789,13 +819,6 @@ async function nodeUnpair(event, request) {
 	requireMacNode(event);
 	const commandId = typeof request?.commandId === 'string' ? request.commandId : '';
 	if (!commandId) throw new ThingtimeNodeBridgeError('invalid_request', 'Unpairing requires a commandId.');
-	const confirmed = await confirmNodeChange({
-		title: 'Unpair this Mac?',
-		message: 'Remove this Mac from Thingtime Node?',
-		detail: 'The local device credential will be removed from the macOS Keychain. The login node remains installed until you turn it off separately.',
-		confirmLabel: 'Unpair Mac'
-	});
-	if (!confirmed) return thingtimeNode.status();
 	await thingtimeNode.request('pairing.unpair', {}, commandId);
 	return thingtimeNode.status();
 }
@@ -825,17 +848,10 @@ async function nodeOpenPermissionSettings(event, request) {
 	}
 	const paths = thingtimeNode.paths();
 	await thingtimeNode.verify(paths);
-	const confirmed = await confirmNodeChange({
-		title: `Open ${permission.label} settings?`,
-		message: `Allow Thingtime Node in macOS ${permission.label}?`,
-		detail:
-			'In Privacy & Security, add or enable the signed “Thingtime Node” helper. Finder will also reveal the exact helper bundled with this Thingtime app.',
-		confirmLabel: 'Open Settings'
-	});
-	if (!confirmed) return { kind, opened: false };
+	const permissions = normalizePermissions(await thingtimeNode.request('permissions.request', { kind }, `permission-${crypto.randomUUID()}`));
 	shell.showItemInFolder(paths.helperApp);
 	await shell.openExternal(permission.url);
-	return { kind, opened: true };
+	return { kind, opened: true, permissions: permissions.permissions };
 }
 
 async function nodeConnectorCommand(event, request) {
@@ -948,11 +964,175 @@ async function cancelAiSync(event, request) {
   return { ok: true };
 }
 
+function requireDesktopSettings() {
+	if (!desktopSettings) throw new Error('Thingtime desktop settings are not ready.');
+	return desktopSettings;
+}
+
+function probeThingtimeEndpoint(rawUrl, redirectCount = 0) {
+	const target = new URL('/api/v1/devices?limit=1', rawUrl);
+	const client = target.protocol === 'http:' ? http : https;
+	return new Promise((resolve, reject) => {
+		const request = client.get(
+			target,
+			{ headers: { Accept: 'application/json', 'User-Agent': `Thingtime/${getCurrentAppVersion()}` } },
+			(response) => {
+				const status = response.statusCode || 0;
+				const location = response.headers.location;
+				if ([301, 302, 303, 307, 308].includes(status) && location && redirectCount < 3) {
+					response.resume();
+					const redirected = new URL(location, target);
+					if (redirected.origin !== target.origin) {
+						reject(new Error('That Thingtime endpoint redirects its API to another origin.'));
+						return;
+					}
+					resolve(probeThingtimeEndpoint(redirected.origin, redirectCount + 1));
+					return;
+				}
+				const contentType = String(response.headers['content-type'] || '').toLowerCase();
+				response.resume();
+				if (status === 401 || status === 403 || (status >= 200 && status < 300 && contentType.includes('json'))) {
+					resolve({ ok: true, status });
+					return;
+				}
+				const detail =
+					status === 404 ? 'This deployment does not expose the computers API yet.' : `The computers API returned HTTP ${status || 'unknown'}.`;
+				reject(new Error(detail));
+			}
+		);
+		request.setTimeout(10_000, () => request.destroy(new Error('The Thingtime endpoint check timed out.')));
+		request.on('error', reject);
+	});
+}
+
+async function switchDesktopEndpoint(endpointId, { confirm = true } = {}) {
+	const settings = requireDesktopSettings();
+	const before = settings.snapshot();
+	const target = before.endpointProfiles.find((entry) => entry.id === String(endpointId || ''));
+	if (!target) throw new Error('Choose a known Thingtime API endpoint.');
+	if (target.id === before.selectedEndpointId) return getDesktopInfo();
+	await probeThingtimeEndpoint(target.url);
+	if (confirm) {
+		const approved = await confirmNodeChange({
+			title: 'Switch Thingtime API endpoint?',
+			message: `Use ${target.label} for this Thingtime app and Mac node?`,
+			detail: `${target.url}\n\nThe desktop window and Thingtime Node will use the same deployment. Pairing is kept separately for each endpoint.`,
+			confirmLabel: 'Switch Endpoint'
+		});
+		if (!approved) return getDesktopInfo();
+	}
+	try {
+		await settings.selectEndpoint(target.id);
+		await reconcileConfiguredNode();
+		await loadDesktopUrl(target.url);
+		desktopSettingsLastError = null;
+		createApplicationMenu();
+		return getDesktopInfo();
+	} catch (error) {
+		await settings.selectEndpoint(before.selectedEndpointId);
+		let rollbackError = null;
+		try {
+			await reconcileConfiguredNode();
+			await loadDesktopUrl(before.selectedEndpoint.url);
+		} catch (caughtRollbackError) {
+			rollbackError = caughtRollbackError;
+		}
+		desktopSettingsLastError = rollbackError instanceof Error ? rollbackError.message : rollbackError ? String(rollbackError) : null;
+		createApplicationMenu();
+		throw error;
+	}
+}
+
+async function desktopSelectEndpoint(event, request) {
+	requireTrustedAiBridgeEvent(event);
+	return switchDesktopEndpoint(request?.endpointId);
+}
+
+async function desktopAddEndpoint(event, request) {
+	requireTrustedAiBridgeEvent(event);
+	const settings = await requireDesktopSettings().addEndpoint({ label: request?.label, url: request?.url });
+	createApplicationMenu();
+	return settings;
+}
+
+async function desktopRemoveEndpoint(event, request) {
+	requireTrustedAiBridgeEvent(event);
+	const settings = await requireDesktopSettings().removeEndpoint(request?.endpointId);
+	createApplicationMenu();
+	return settings;
+}
+
+async function selectMenuBarIcon(iconId, customIconPath) {
+	const settings = requireDesktopSettings();
+	const previous = settings.snapshot().selectedMenuBarIconId;
+	try {
+		const snapshot = await settings.selectMenuBarIcon(iconId, customIconPath);
+		await reconcileConfiguredNode();
+		desktopSettingsLastError = null;
+		return snapshot;
+	} catch (error) {
+		await settings.selectMenuBarIcon(previous);
+		throw error;
+	}
+}
+
+async function desktopSelectMenuBarIcon(event, request) {
+	requireTrustedAiBridgeEvent(event);
+	return selectMenuBarIcon(request?.iconId);
+}
+
+async function desktopUploadMenuBarIcon(event) {
+	requireTrustedAiBridgeEvent(event);
+	const selection = await dialog.showOpenDialog(mainWindow || undefined, {
+		title: 'Choose a Thingtime Node menu bar icon',
+		buttonLabel: 'Use Icon',
+		properties: ['openFile'],
+		filters: [
+			{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'tiff', 'gif'] },
+			{ name: 'All files', extensions: ['*'] }
+		]
+	});
+	if (selection.canceled || selection.filePaths.length !== 1) return { cancelled: true };
+	const sourcePath = selection.filePaths[0];
+	const sourceStat = await fs.promises.lstat(sourcePath);
+	if (!sourceStat.isFile() || sourceStat.isSymbolicLink() || sourceStat.size > 10 * 1024 * 1024) {
+		throw new Error('Choose a regular image no larger than 10 MB.');
+	}
+	const image = nativeImage.createFromPath(sourcePath);
+	if (image.isEmpty()) throw new Error('That file is not a readable image.');
+	const dimensions = image.getSize();
+	const scale = Math.min(1, 256 / Math.max(dimensions.width, dimensions.height));
+	const normalized =
+		scale < 1
+			? image.resize({
+					width: Math.max(1, Math.round(dimensions.width * scale)),
+					height: Math.max(1, Math.round(dimensions.height * scale)),
+					quality: 'best'
+			  })
+			: image;
+	const png = normalized.toPNG();
+	if (!png.length || png.length > 4 * 1024 * 1024) throw new Error('The normalized icon is too large.');
+	const directory = path.join(app.getPath('userData'), 'thingtime-node');
+	const targetPath = path.join(directory, 'menu-bar-custom.png');
+	const temporaryPath = `${targetPath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+	await fs.promises.mkdir(directory, { mode: 0o700, recursive: true });
+	try {
+		await fs.promises.writeFile(temporaryPath, png, { flag: 'wx', mode: 0o600 });
+		await fs.promises.rename(temporaryPath, targetPath);
+		await fs.promises.chmod(targetPath, 0o600);
+	} finally {
+		await fs.promises.rm(temporaryPath, { force: true });
+	}
+	return { cancelled: false, settings: await selectMenuBarIcon('custom', targetPath) };
+}
+
 function getDesktopInfo() {
   return {
     appVersion: getCurrentAppVersion(),
     contentOrigin: activeContentOrigin || appOrigin,
     currentUrl: mainWindow?.webContents.getURL() || appOrigin,
+		desktopSettings: desktopSettings?.snapshot() || null,
+		desktopSettingsLastError,
     isPackaged: app.isPackaged,
     origin: appOrigin,
     platform: process.platform,
@@ -982,6 +1162,10 @@ async function loadDesktopUrl(rawUrl) {
   }
 
   const targetUrl = normalizeDesktopUrl(rawUrl);
+	const known = requireDesktopSettings()
+		.snapshot()
+		.endpointProfiles.some((entry) => entry.url === targetUrl);
+	if (!known) throw new Error('Add this deployment as a Thingtime API endpoint before loading it.');
   activeContentOrigin = new URL(targetUrl).origin;
   await mainWindow.loadURL(targetUrl);
 
@@ -992,17 +1176,8 @@ function showLoadUrlError(error) {
   dialog.showErrorBox('Thingtime URL failed', error instanceof Error ? error.message : String(error));
 }
 
-function loadMenuUrl(url) {
-  loadDesktopUrl(url).catch(showLoadUrlError);
-}
-
-function withClearSavedUrlParam(rawUrl) {
-  const url = new URL(rawUrl);
-  url.searchParams.set(clearElectronUrlParam, '1');
-  return url.href;
-}
-
 function createApplicationMenu() {
+	const endpointSettings = desktopSettings?.snapshot();
   const template = [
     ...(process.platform === 'darwin'
       ? [
@@ -1016,18 +1191,13 @@ function createApplicationMenu() {
       label: 'Thingtime',
       submenu: [
         {
-          label: 'Load Bundled App',
-          accelerator: 'CommandOrControl+Alt+L',
-          click: () => {
-            if (appOrigin) {
-              loadMenuUrl(withClearSavedUrlParam(appOrigin));
-            }
-          }
-        },
-        {
-          label: 'Load Production',
-          accelerator: 'CommandOrControl+Alt+P',
-          click: () => loadMenuUrl(productionUrl)
+					label: 'API Endpoint',
+					submenu: (endpointSettings?.endpointProfiles || []).map((endpoint) => ({
+						label: endpoint.label,
+						type: 'radio',
+						checked: endpoint.id === endpointSettings?.selectedEndpointId,
+						click: () => switchDesktopEndpoint(endpoint.id).catch(showLoadUrlError)
+					}))
         },
         { type: 'separator' },
         { role: 'reload' },
@@ -1093,11 +1263,28 @@ function createWindow(startUrl) {
     shell.openExternal(url);
   });
 
-  mainWindow.loadURL(startUrl);
+	mainWindow.loadURL(startUrl).catch((error) => {
+		desktopSettingsLastError = error instanceof Error ? error.message : String(error);
+		if (appOrigin && new URL(startUrl).origin !== new URL(appOrigin).origin) {
+			mainWindow?.loadURL(appOrigin).catch(showLoadUrlError);
+		}
+	});
 }
 
 ipcMain.handle('thingtime-desktop:get-info', () => getDesktopInfo());
-ipcMain.handle('thingtime-desktop:load-url', (_event, url) => loadDesktopUrl(url));
+ipcMain.handle('thingtime-desktop:get-settings', (event) => {
+	requireTrustedAiBridgeEvent(event);
+	return requireDesktopSettings().snapshot();
+});
+ipcMain.handle('thingtime-desktop:add-endpoint', (event, request) => desktopAddEndpoint(event, request));
+ipcMain.handle('thingtime-desktop:remove-endpoint', (event, request) => desktopRemoveEndpoint(event, request));
+ipcMain.handle('thingtime-desktop:select-endpoint', (event, request) => desktopSelectEndpoint(event, request));
+ipcMain.handle('thingtime-desktop:select-menu-bar-icon', (event, request) => desktopSelectMenuBarIcon(event, request));
+ipcMain.handle('thingtime-desktop:upload-menu-bar-icon', (event) => desktopUploadMenuBarIcon(event));
+ipcMain.handle('thingtime-desktop:load-url', (event, url) => {
+	requireTrustedAiBridgeEvent(event);
+	return loadDesktopUrl(url);
+});
 ipcMain.handle('thingtime-desktop:check-for-updates', () => checkForUpdates());
 ipcMain.handle('thingtime-desktop:download-update-bundle', () => downloadUpdateBundle());
 ipcMain.handle('thingtime-desktop:ai-discover', (event) => discoverAiSources(event));
@@ -1137,8 +1324,9 @@ if (!singleInstanceLock) {
 	app
 		.whenReady()
     .then(startNitroServer)
-    .then((origin) => {
-      createWindow(origin);
+		.then(async () => {
+			const settings = await initializeDesktopSettings();
+			createWindow(settings.selectedEndpoint.url);
       createApplicationMenu();
     })
     .catch((error) => {
@@ -1149,7 +1337,8 @@ if (!singleInstanceLock) {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0 && appOrigin) {
-    createWindow(appOrigin);
+		const startUrl = desktopSettings?.snapshot().selectedEndpoint.url || appOrigin;
+		createWindow(startUrl);
   }
 });
 

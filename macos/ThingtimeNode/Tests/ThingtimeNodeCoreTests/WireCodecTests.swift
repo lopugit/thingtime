@@ -27,6 +27,7 @@ final class WireCodecTests: XCTestCase {
         for method in ["pairing.claim", "pairing.resume", "pairing.unpair"] {
             XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.access(for: method), .pairingMutation)
         }
+        XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.access(for: "permissions.request"), .permissionMutation)
         for method in [
             "telemetry.snapshot",
             "command.status",

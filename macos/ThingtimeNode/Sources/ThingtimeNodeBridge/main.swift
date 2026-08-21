@@ -156,7 +156,9 @@ private enum ThingtimeNodeBridge {
         }
         service.request(input) { data in reply.finish(data) }
 
-        let response = reply.wait(seconds: 15)
+        let response = reply.wait(
+            seconds: ThingtimeNodeXPCRequestPolicy.access(for: request.method) == .onboardingRead ? 15 : 120
+        )
             ?? encoded(.failure(id: request.id, code: "node_timeout", message: "Thingtime Node did not respond in time."))
         connection.invalidate()
         FileHandle.standardOutput.write(response)

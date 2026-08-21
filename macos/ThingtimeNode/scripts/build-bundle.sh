@@ -49,6 +49,9 @@ if [[ "${THINGTIME_NODE_EMBEDDED:-0}" != "1" ]]; then
 fi
 /usr/bin/plutil -replace CFBundleShortVersionString -string "${VERSION}" "${CONTENTS_PATH}/Info.plist"
 /usr/bin/plutil -replace CFBundleVersion -string "${BUILD_NUMBER}" "${CONTENTS_PATH}/Info.plist"
+if [[ "${THINGTIME_NODE_EMBEDDED:-0}" == "1" ]]; then
+    /usr/bin/plutil -replace ThingtimeNodeElectronManaged -bool true "${CONTENTS_PATH}/Info.plist"
+fi
 /usr/bin/xattr -cr "${APP_PATH}"
 
 SIGNING_IDENTITY="${THINGTIME_NODE_SIGNING_IDENTITY:-}"

@@ -58,6 +58,7 @@ private actor TestControlPlaneClient: ControlPlaneClient {
 
 private actor ConcurrentDispatchProbe {
     private(set) var dispatched: [String] = []
+    private(set) var completed: [String] = []
     private(set) var maximumSerialDispatches = 0
     private var activeSerialDispatches = 0
     private var completedControls = Set<String>()
@@ -77,6 +78,7 @@ private actor ConcurrentDispatchProbe {
                     )
                 }
             }
+            completed.append(command.commandID)
             return .success(id: command.leaseID)
         }
 
@@ -93,6 +95,7 @@ private actor ConcurrentDispatchProbe {
             )
         }
         completedControls.insert(command.commandID)
+        completed.append(command.commandID)
         if completedControls.isSuperset(of: ["interrupt", "steer"]) { releaseQueue = true }
         activeSerialDispatches -= 1
         return .success(id: command.leaseID)
@@ -328,18 +331,19 @@ final class ControlPlaneSchedulerTests: XCTestCase {
         await scheduler.stop()
 
         let dispatched = await probe.dispatched
+        let completed = await probe.completed
         let maximumSerialDispatches = await probe.maximumSerialDispatches
         let reports = await client.reports
         let heartbeatCounts = await client.leaseHeartbeatCounts
         XCTAssertEqual(dispatched, ["queue", "interrupt", "steer"])
         XCTAssertEqual(reports.count, 3)
         XCTAssertLessThan(
-            try XCTUnwrap(reports.firstIndex(where: { $0.commandID == "interrupt" })),
-            try XCTUnwrap(reports.firstIndex(where: { $0.commandID == "queue" }))
+            try XCTUnwrap(completed.firstIndex(of: "interrupt")),
+            try XCTUnwrap(completed.firstIndex(of: "queue"))
         )
         XCTAssertLessThan(
-            try XCTUnwrap(reports.firstIndex(where: { $0.commandID == "steer" })),
-            try XCTUnwrap(reports.firstIndex(where: { $0.commandID == "queue" }))
+            try XCTUnwrap(completed.firstIndex(of: "steer")),
+            try XCTUnwrap(completed.firstIndex(of: "queue"))
         )
         XCTAssertGreaterThan(heartbeatCounts["queue", default: 0], 0)
         XCTAssertEqual(maximumSerialDispatches, 1)

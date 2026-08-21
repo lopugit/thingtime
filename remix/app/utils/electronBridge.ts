@@ -1,7 +1,31 @@
+export type ThingtimeDesktopEndpointProfile = {
+	id: string;
+	label: string;
+	url: string;
+	source: 'built-in' | 'build' | 'custom';
+};
+
+export type ThingtimeDesktopMenuBarIcon = {
+	id: string;
+	label: string;
+	custom?: boolean;
+};
+
+export type ThingtimeDesktopSettings = {
+	customMenuBarIconConfigured: boolean;
+	endpointProfiles: ThingtimeDesktopEndpointProfile[];
+	menuBarIcons: ThingtimeDesktopMenuBarIcon[];
+	selectedEndpoint: ThingtimeDesktopEndpointProfile;
+	selectedEndpointId: string;
+	selectedMenuBarIconId: string;
+};
+
 export type ThingtimeDesktopInfo = {
 	appVersion?: string;
 	contentOrigin?: string | null;
 	currentUrl?: string | null;
+	desktopSettings?: ThingtimeDesktopSettings | null;
+	desktopSettingsLastError?: string | null;
 	isPackaged?: boolean;
 	origin?: string | null;
 	platform?: string;
@@ -166,6 +190,12 @@ export type ThingtimeDesktopBridge = {
 	checkForUpdates?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	downloadUpdateBundle?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;
+	getDesktopSettings?: () => Promise<ThingtimeDesktopSettings>;
+	addEndpoint?: (request: { label: string; url: string }) => Promise<ThingtimeDesktopSettings>;
+	removeEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopSettings>;
+	selectEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopInfo>;
+	selectMenuBarIcon?: (request: { iconId: string }) => Promise<ThingtimeDesktopSettings>;
+	uploadMenuBarIcon?: () => Promise<{ cancelled: true } | { cancelled: false; settings: ThingtimeDesktopSettings }>;
 	loadUrl?: (url: string) => Promise<ThingtimeDesktopInfo>;
 	navigateToUrl?: (url: string) => Promise<ThingtimeDesktopInfo>;
 	// Narrow local-node setup and macOS privacy surface. Ordinary device
@@ -182,11 +212,9 @@ export type ThingtimeDesktopBridge = {
 	nodeOpenPermissionSettings?: (request: { kind: 'accessibility' | 'screen-recording' }) => Promise<{
 		kind: 'accessibility' | 'screen-recording';
 		opened: boolean;
+		permissions?: ThingtimeNodePermission[];
 	}>;
-	nodeAddProject?: () => Promise<
-		| { cancelled: true }
-		| { cancelled: false; project: ThingtimeNodeProjectReference; status: ThingtimeNodeStatus }
-	>;
+	nodeAddProject?: () => Promise<{ cancelled: true } | { cancelled: false; project: ThingtimeNodeProjectReference; status: ThingtimeNodeStatus }>;
 	nodeConnector?: (request: ThingtimeNodeConnectorRequest) => Promise<unknown>;
 	nodeDevice?: (request: ThingtimeNodeDeviceRequest) => Promise<unknown>;
 	platform?: string;
