@@ -1015,6 +1015,21 @@ is fixed, and cite the checklist you ran in the PR description.
       coverage: `remix/app/schemas/reservedCrystalRootKeys.test.ts` (also
       pins the reserved list to the index list in `collections.ts`); API
       coverage: `things-data-reserved-crystal-root` in the /tests suite.
+- [ ] Relationship dedupe rides the server-only root `uniqueKeys` namespace
+      (`<crystalField>:<key>` BinData, stamped in `messenger/shared.ts`
+      `newThingDoc` + the friend writer): after a follow/friend/DM/join/
+      invite/emoji create, the doc must carry `uniqueKeys`, a duplicate
+      insert of the same key must E11000 on the `uniqueKeys` index, and the
+      seven crystal-path indexes (including `voteKey`, even while the poll
+      product remains deferred) must be the non-unique `things_*_lookup`
+      generation (old `things_*_unique` names dropped by the boot-time
+      ensure swap, including the superseded `things_follow_unique` marker
+      generation — verify with `getIndexes()`). Legacy docs get stamped by
+      the `backfill-relationship-unique-keys` migration, whose notes also
+      census (never modify) data things carrying reserved keys from before
+      the reservation. The sanitizer reservation above must stay until every
+      deployment DB has swapped (phase 2 deletes it). Unit coverage:
+      `remix/app/api/utils/messenger/relationshipUniqueKeys.test.ts`.
 
 ## Feed & profile advanced filters (`remix/app/components/Feed/AdvancedFilters.tsx`)
 
