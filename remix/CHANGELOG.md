@@ -24,18 +24,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Rows/Grid preview no longer silently reopens as Auto after save. — Codex
   (AI), 2026-08-21
 
-- **Develop staging domain binding restored**: `dev.thingtime.com` is again
-  attached to the exact `develop` Git branch (`customEnvironmentId: null`),
-  so controller-managed PR deployments in the shared pre-production
-  environment cannot move the stable signed-in S3 staging origin away from
-  the current integration branch. — Codex (AI), 2026-08-21
+- **Develop staging domain kept on the protected branch during PR previews**:
+  `dev.thingtime.com` remains bound exclusively to the literal `develop` Git
+  branch (`gitBranch: develop`, with no custom-environment binding). The
+  `develop` Vercel Custom Environment is reserved for isolated PR deployments
+  and owns no stable domain, so a controller-created preview cannot advance the
+  signed-in staging origin. — Codex (AI), 2026-08-21
 
 - **PR #321 legacy detected-type backfill preserves media annotations**:
   re-detecting a pre-#319 opaque attachment now changes only its server-owned
   type fields and retains #312's owner-authored title/description exactly;
   malformed annotation metadata fails closed instead of being erased. — Codex
   (AI), 2026-08-21
-
 - **PR #312 media integration hardening**: attachment annotation now preserves
   server-owned magic-byte `detectedContentType`, Auto layout removes the
   optional `mediaLayout` key, and media-card permalinks consistently use
@@ -45,18 +45,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   annotation accepts only its documented request fields, and media cards label
   their audience as inherited instead of incorrectly falling back to Public.
   — Codex (AI), 2026-08-21
-
-- **PR #99 final security reconciliation**: the current Thingtime serializer
-  now treats persisted state strictly as data—functions are omitted on write,
-  every legacy function tag is removed without compilation, code-defined
-  defaults refill runtime behavior, and graph-aware repair preserves circular
-  aliases. Explicit Date tags and data-first legacy handling stop repeated
-  hydration from changing ordinary text. The strict app CSP now loads preview
-  freshness from external `/tt-preview-freshness.js`, while active Commander
-  assignments parse data literals without `eval`. Registration preserves the
-  existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
-  streaming body cap. — Codex (AI), 2026-08-18
-
+- **Build-all push handoff permission boundary**: the thin product-branch
+  listener now grants `actions: write`, allowing the protected reusable
+  workflow's push-only handoff to dispatch its supported-event worker instead
+  of being rejected by GitHub before any job starts. The caller contract pins
+  the required grant. — Codex (AI), 2026-08-21
 - **CSP blocked attachment uploads on header-serving deployments**: the
   application Content-Security-Policy's `connect-src` never allowed the
   private S3 bucket origin, so on any surface that serves the CSP header
@@ -70,6 +63,73 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
   Verified via S3 preflight (bucket CORS already allowed the preview origins
   — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
+
+### Added
+
+- **Admin AI-moderation settings + free omni text moderation (2026-08-19,
+  Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
+  card choosing the provider per surface — media uploads (default / tiered /
+  free openai-only / claude / off) and post/comment text (default / free
+  openai / off) — stored under `Thingtime.ModerationSettings` and overriding
+  the env default. New text pipeline: post/comment/share `crystal.text` is
+  screened by the free omni endpoint on create and on edit; block-worthy
+  categories quarantine the thing (hidden from feeds/threads/search via
+  `canView` + thread loading), other flags queue an advisory `moderationFlag`
+  with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
+  and its stamps are final for the pipeline. A new hourly cron
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
+  29) retries text moderation lost to mid-flight process deaths or provider
+  outages and drains off-era backlog for free, plus the standard attachment
+  sweep; the admin sweep button runs both batches and the tab shows the text
+  backlog count. Post creation adds a hybrid sync gate: the free omni screen
+  races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
+  insert so flagged posts are born stamped (blocked content never renders,
+  even briefly), while timeouts/outages produce owner-private pending posts
+  for the async pipeline — moderation can never break posting; a per-instance circuit breaker
+  (3 failures → open, 60s cooldown) skips the omni call during confirmed
+  outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
+  obtainable while the surface is on, posts are born PENDING — owner-private
+  until the async queue / hourly cron screens and releases them (creation
+  notifications fire at release); `TT_TEXT_SCREEN_BUDGET_MS=0` becomes
+  async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
+  combined free request: prose + listing text + tags + legacy external image
+  URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
+
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
+- **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
+  moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
+  `omni-moderation-latest` endpoint screens every image first; clean images
+  stamp `clear` at $0 and only flagged/borderline images escalate to the paid
+  Claude vision call (fail-safes: omni outage → straight to Claude; Claude
+  outage → omni-flagged images stamp `nsfw`/blur instead of pending). New env:
+  `OPENAI_API_KEY` reused for the screen, optional
+  `TT_MODERATION_ESCALATION_SCORE` (default 0.2);
+  `THINGTIME_MODERATION_PROVIDER` accepts `openai+claude` (alias `tiered`) and
+  standalone `openai`, and the unset default picks the tiered pipeline when
+  both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
+  (PR #308 note has details).
 
 ### Added
 
@@ -145,6 +205,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   flag-id collisions leave ordinary user Things untouched for operator
   review. — Codex (AI), 2026-08-21
 
+- **Relationship uniqueness is structural across all reserved key families**:
+  follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
+  protected root `uniqueKeys` namespace. Boot-time index convergence replaces
+  every kind-blind crystal-path unique index with a non-unique lookup, and the
+  idempotent backfill stamps legacy relationship docs while only reporting
+  suspicious free-form data. The vote family is migrated as security
+  substrate without shipping the deferred polls product; boot convergence also
+  removes the superseded `crystal.follow` marker index that no current writer
+  uses. — Codex (AI), 2026-08-21
+
 - **Canonical scoped-upload UX reconciliation**: every attachment picker now
   reads the existing public/private approval booleans directly and shows a
   purpose-specific approval card when its scope is withheld. The obsolete
@@ -195,6 +265,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #99 final security reconciliation**: the current Thingtime serializer
+  now treats persisted state strictly as data—functions are omitted on write,
+  every legacy function tag is removed without compilation, code-defined
+  defaults refill runtime behavior, and graph-aware repair preserves circular
+  aliases. Explicit Date tags and data-first legacy handling stop repeated
+  hydration from changing ordinary text. The strict app CSP now loads preview
+  freshness from external `/tt-preview-freshness.js`, while active Commander
+  assignments parse data literals without `eval`. Registration preserves the
+  existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
+  streaming body cap. — Codex (AI), 2026-08-18
+- **Native iOS drawer and media capture**: the iOS WebView now uses the same
+  fixed drawer trigger as mobile web, so opening the drawer keeps its close
+  control inside the panel instead of translating it with the top nav. The
+  generated app Info.plist now declares camera, microphone, and photo-library
+  purpose strings so WebKit's Take Photo or Video flow requests permission
+  instead of terminating the app. — Codex (AI), 2026-08-17
+- **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
+  now lets the controller build an already-previewed commit in the isolated
+  `develop` Custom Environment instead of canceling it as a duplicate, while
+  the thin `github-actions` control plane remains excluded before every other
+  rule. — Codex (AI), 2026-08-17
 - **Manual develop-preview recovery reaches its controller**: the thin `main`
   listener now converts `workflow_dispatch`'s string PR number to the numeric
   input required by the protected reusable workflow. Manual recovery no longer
@@ -220,6 +311,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Native iOS per-branch deployment history**: the Vercel deployments API now
+  preserves its existing latest-per-branch response while optionally returning
+  a bounded newest-first history for each branch. The native Web destination
+  drawer presents that history as a second disclosure level, marks the most
+  recent ready deployment as `Last successful` when a newer build is queued,
+  and keeps every specific deployment URL directly selectable. Signed iOS
+  build 15 targets the matching branch preview and is available to internal
+  TestFlight testers. — Codex (AI), 2026-08-18
 - **Recoverable first-session Things space**: a fresh browser can land on
   `/things` and immediately receive the real Things UI through a rate-limited
   temporary user Thing, bounded subscription, normal browser session, and
