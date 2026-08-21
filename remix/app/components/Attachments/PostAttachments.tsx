@@ -1,5 +1,7 @@
 import React from 'react';
-import { Box, Flex, Text } from '@chakra-ui/react';
+// Grid/Image are gone: the owner-chosen layouts below render their own
+// masonry/rows/grid containers, and each image tile is a Box `as="img"`.
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Download, File as FileIcon } from 'lucide-react';
 
 import { attachmentContentUrl, attachmentTypeLabel, formatAttachmentBytes, normalizePublicAttachment } from './attachmentUiCore';
@@ -9,6 +11,91 @@ import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 
 const BORDER = '1px solid var(--tt-border, #ececef)';
 const MUTED = 'var(--tt-muted, #9a9aa6)';
+const DANGER = 'var(--tt-danger, #e5484d)';
+
+// Server-tagged NSFW media stays fetchable but renders unrecognizable until
+// the viewer opts in: heavy blur + slight transparency under a light red wash,
+// a red border, and a centered NSFW badge with a "Show Anyway" reveal. The
+// tag comes from the protected moderation stamp — nothing client-side can
+// clear it except this per-render reveal click.
+const NsfwShield = ({
+	name,
+	compact,
+	fill,
+	onReveal,
+	children
+}: {
+	name: string;
+	compact?: boolean;
+	// fill: the parent tile already owns the box (the aspect-ratio rows/grid
+	// layouts absolutely position their image), so the shield and its blurred
+	// child stretch to that box instead of flowing at the child's natural height.
+	fill?: boolean;
+	onReveal: () => void;
+	children: React.ReactNode;
+}) => (
+	<Box
+		position={fill ? 'absolute' : 'relative'}
+		inset={fill ? 0 : undefined}
+		overflow="hidden"
+		borderRadius="var(--tt-radius-md, 12px)"
+		border={`2px solid ${DANGER}`}
+		role="group"
+		aria-label={`${name || 'Attachment'} is hidden as NSFW`}
+	>
+		{/* scale hides the blur's transparent edge bleed inside the crop */}
+		<Box
+			filter="blur(64px)"
+			opacity={0.92}
+			transform="scale(1.15)"
+			pointerEvents="none"
+			aria-hidden
+			position={fill ? 'absolute' : undefined}
+			inset={fill ? 0 : undefined}
+		>
+			{children}
+		</Box>
+		<Flex
+			position="absolute"
+			inset={0}
+			background="rgba(229, 72, 77, 0.22)"
+			flexDirection="column"
+			alignItems="center"
+			justifyContent="center"
+			rowGap={compact ? 1.5 : 2.5}
+			padding={2}
+		>
+			<Text
+				fontFamily="mono"
+				fontSize={compact ? '10px' : '11px'}
+				fontWeight={700}
+				letterSpacing="0.14em"
+				textTransform="uppercase"
+				color="#ffffff"
+				background={DANGER}
+				paddingX={2.5}
+				paddingY={1}
+				borderRadius="999px"
+			>
+				NSFW
+			</Text>
+			<Button
+				size={compact ? 'xs' : 'sm'}
+				borderRadius="999px"
+				background="rgba(255, 255, 255, 0.92)"
+				color="var(--tt-ink, #16161a)"
+				_hover={{ background: '#ffffff' }}
+				onClick={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					onReveal();
+				}}
+			>
+				Show Anyway
+			</Button>
+		</Flex>
+	</Box>
+);
 
 // A post's attachment gallery. Images honor the post's owner-chosen
 // crystal.mediaLayout: absent/masonry = natural-aspect CSS-columns masonry
@@ -123,6 +210,15 @@ export const PostAttachments = ({
 	compact?: boolean;
 	ariaLabel?: string;
 }) => {
+	// Per-render reveal consent; navigating away re-shields.
+	const [revealedIds, setRevealedIds] = React.useState<ReadonlySet<string>>(new Set());
+	const reveal = React.useCallback((id: string) => {
+		setRevealedIds((current) => {
+			const next = new Set(current);
+			next.add(id);
+			return next;
+		});
+	}, []);
 	const normalized = (attachments || []).flatMap((attachment) => {
 		const value = normalizePublicAttachment(attachment);
 		return value ? [value] : [];
@@ -138,21 +234,19 @@ export const PostAttachments = ({
 
 	const layout: PostMediaLayout = mediaLayout && images.length > 1 ? mediaLayout : { mode: 'masonry' };
 
-	const tile = (attachment: PublicAttachment, index: number, tileSx: Record<string, unknown>, fill: boolean) => (
-		<Box
-			key={attachment.id}
-			as="button"
-			type="button"
-			display="block"
-			width="100%"
-			position="relative"
-			borderRadius="var(--tt-radius-md, 12px)"
-			overflow="hidden"
-			cursor="zoom-in"
-			sx={tileSx}
-			aria-label={`View ${attachment.title || attachment.name}`}
-			onClick={() => setLightbox({ open: true, index })}
-		>
+	// Still-shielded media is withheld from the lightbox too. The modal renders
+	// images unblurred and steps through them with arrow keys, so leaving them in
+	// would walk a viewer onto media they never consented to see. Attachment
+	// order is otherwise untouched; revealing puts the image straight back.
+	const lightboxImages = images.filter((attachment) => !(attachment.nsfw === true && !revealedIds.has(attachment.id)));
+
+	const tile = (attachment: PublicAttachment, index: number, tileSx: Record<string, unknown>, fill: boolean) => {
+		// Server-tagged NSFW media stays shielded until this render's consent
+		// click. A shielded tile is deliberately inert rather than a zoom button:
+		// the lightbox renders the image unblurred, so it must not be reachable
+		// before the viewer opts in. Revealing turns it back into a normal tile.
+		const shielded = attachment.nsfw === true && !revealedIds.has(attachment.id);
+		const image = (
 			<Box
 				as="img"
 				src={attachmentContentUrl(attachment.id)}
@@ -168,24 +262,55 @@ export const PostAttachments = ({
 				transition="transform 120ms ease"
 				_hover={{ transform: 'scale(1.015)' }}
 			/>
-			{attachment.title ? (
-				<Box
-					position="absolute"
-					left={0}
-					right={0}
-					bottom={0}
-					paddingX={2.5}
-					paddingY={1.5}
-					background="linear-gradient(transparent, rgba(10, 10, 14, 0.62))"
-					textAlign="left"
-				>
-					<Text fontSize="11px" fontWeight={650} color="white" noOfLines={1}>
-						{attachment.title}
-					</Text>
-				</Box>
-			) : null}
-		</Box>
-	);
+		);
+		return (
+			<Box
+				key={attachment.id}
+				as={shielded ? 'div' : 'button'}
+				type={shielded ? undefined : 'button'}
+				display="block"
+				width="100%"
+				position="relative"
+				borderRadius="var(--tt-radius-md, 12px)"
+				overflow="hidden"
+				cursor={shielded ? 'default' : 'zoom-in'}
+				sx={tileSx}
+				aria-label={shielded ? undefined : `View ${attachment.title || attachment.name}`}
+				// the lightbox skips shielded media, so open it at this image's index
+				// within that list rather than its attachment-order index
+				onClick={shielded ? undefined : () => setLightbox({ open: true, index: Math.max(0, lightboxImages.indexOf(attachment)) })}
+			>
+				{shielded ? (
+					<NsfwShield
+						name={attachment.title || attachment.name}
+						compact={compact}
+						fill={fill}
+						onReveal={() => reveal(attachment.id)}
+					>
+						{image}
+					</NsfwShield>
+				) : (
+					image
+				)}
+				{attachment.title && !shielded ? (
+					<Box
+						position="absolute"
+						left={0}
+						right={0}
+						bottom={0}
+						paddingX={2.5}
+						paddingY={1.5}
+						background="linear-gradient(transparent, rgba(10, 10, 14, 0.62))"
+						textAlign="left"
+					>
+						<Text fontSize="11px" fontWeight={650} color="white" noOfLines={1}>
+							{attachment.title}
+						</Text>
+					</Box>
+				) : null}
+			</Box>
+		);
+	};
 
 	// rows mode: pre-compute each image's (row, index) placement in attachment order
 	const rowChunks: { attachment: PublicAttachment; index: number }[][] = [];
@@ -248,9 +373,16 @@ export const PostAttachments = ({
 				</Box>
 			)}
 
-			{videos.map((attachment) => (
-				<AttachmentVideo key={attachment.id} attachment={attachment} compact={compact} />
-			))}
+			{videos.map((attachment) => {
+				const video = <AttachmentVideo attachment={attachment} compact={compact} />;
+				return attachment.nsfw && !revealedIds.has(attachment.id) ? (
+					<NsfwShield key={attachment.id} name={attachment.name} compact={compact} onReveal={() => reveal(attachment.id)}>
+						{video}
+					</NsfwShield>
+				) : (
+					video
+				);
+			})}
 
 			{files.length > 0 && (
 				<Flex flexDirection="column" rowGap={1.5}>
@@ -261,7 +393,7 @@ export const PostAttachments = ({
 			)}
 
 			<MediaLightbox
-				attachments={images}
+				attachments={lightboxImages}
 				index={lightbox.index}
 				isOpen={lightbox.open}
 				onClose={() => setLightbox((state) => ({ ...state, open: false }))}

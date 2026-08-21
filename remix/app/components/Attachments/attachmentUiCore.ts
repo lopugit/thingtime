@@ -88,7 +88,9 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		// a generic download until Thingtime ships a vetted inline audio player.
 		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind),
 		...(title ? { title } : {}),
-		...(description ? { description } : {})
+		...(description ? { description } : {}),
+		// only an explicit server true survives — nothing client-side can set it
+		...(record.nsfw === true ? { nsfw: true } : {})
 	};
 };
 
@@ -251,7 +253,8 @@ export const sameAttachmentSnapshot = (left: AttachmentComposerSnapshot, right: 
 			leftAttachment.size !== rightAttachment.size ||
 			leftAttachment.contentType !== rightAttachment.contentType ||
 			leftAttachment.detectedContentType !== rightAttachment.detectedContentType ||
-			leftAttachment.mediaKind !== rightAttachment.mediaKind
+			leftAttachment.mediaKind !== rightAttachment.mediaKind ||
+			leftAttachment.nsfw !== rightAttachment.nsfw
 		) {
 			return false;
 		}

@@ -27,6 +27,9 @@ export type PublicAttachment = {
 	// Server-sniffed real container type, present only when contentType stays an
 	// opaque application/octet-stream download (for example video/x-msvideo).
 	detectedContentType?: string;
+	// stamped true by the server moderation pipeline; media renders blurred
+	// behind a "Show Anyway" consent click
+	nsfw?: boolean;
 };
 
 export type AttachmentUploadStatus = 'queued' | 'preparing' | 'uploading' | 'finalizing' | 'ready' | 'error';
