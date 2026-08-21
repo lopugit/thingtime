@@ -19,6 +19,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Media layout selections now reach the Things API**: the shared client API
+  transport preserves `mediaLayout` for post creation and rich comments, so a
+  Rows/Grid preview no longer silently reopens as Auto after save. — Codex
+  (AI), 2026-08-21
+
 - **PR #321 legacy detected-type backfill preserves media annotations**:
   re-detecting a pre-#319 opaque attachment now changes only its server-owned
   type fields and retains #312's owner-authored title/description exactly;
