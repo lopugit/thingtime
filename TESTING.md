@@ -1003,6 +1003,18 @@ is fixed, and cite the checklist you ran in the PR description.
       drop data.
 - [ ] `["post","data"]` combinations still 400 (data crystals stand alone);
       a thingtime post's free-form payload lives ONLY under `crystal.thing`.
+- [ ] Unique-slot squat guard: POSTing a data thing whose crystal ROOT
+      carries a reserved key (`followKey`, `friendKey`, `memberKey`, `dmKey`,
+      `inviteCode`, `emojiKey`, `voteKey`) must 400 naming the key — with any
+      value type — for creates AND edits of pre-fix docs (updates validate
+      the merged crystal). Nested occurrences (e.g. `profile.followKey`) and
+      non-reserved names (`followKeys`) still save. Without this, a data
+      thing with `crystal.followKey = '<followerId>:<followeeId>'` enters the
+      kind-blind `things_follow_key_unique` index and permanently blocks the
+      victim's real follow (E11000, mostly swallowed by the flows). Unit
+      coverage: `remix/app/schemas/reservedCrystalRootKeys.test.ts` (also
+      pins the reserved list to the index list in `collections.ts`); API
+      coverage: `things-data-reserved-crystal-root` in the /tests suite.
 
 ## Feed & profile advanced filters (`remix/app/components/Feed/AdvancedFilters.tsx`)
 
