@@ -1109,19 +1109,8 @@ is fixed, and cite the checklist you ran in the PR description.
       drop data.
 - [ ] `["post","data"]` combinations still 400 (data crystals stand alone);
       a thingtime post's free-form payload lives ONLY under `crystal.thing`.
-- [ ] Unique-slot squat guard: POSTing a data thing whose crystal ROOT
-      carries a reserved key (`followKey`, `friendKey`, `memberKey`, `dmKey`,
-      `inviteCode`, `emojiKey`, `voteKey`) must 400 naming the key — with any
-      value type — for creates AND edits of pre-fix docs (updates validate
-      the merged crystal). Nested occurrences (e.g. `profile.followKey`) and
-      non-reserved names (`followKeys`) still save. Without this, a data
-      thing with `crystal.followKey = '<followerId>:<followeeId>'` enters the
-      kind-blind `things_follow_key_unique` index and permanently blocks the
-      victim's real follow (E11000, mostly swallowed by the flows). Unit
-      coverage: `remix/app/schemas/reservedCrystalRootKeys.test.ts` (also
-      pins the reserved list to the index list in `collections.ts`); API
-      coverage: `things-data-reserved-crystal-root` in the /tests suite.
-- [ ] Relationship dedupe rides the server-only root `uniqueKeys` namespace
+- [ ] Unique-slot squat class (closed structurally): relationship dedupe
+      rides the server-only root `uniqueKeys` namespace
       (`<crystalField>:<key>` BinData, stamped in `messenger/shared.ts`
       `newThingDoc` + the friend writer): after a follow/friend/DM/join/
       invite/emoji create, the doc must carry `uniqueKeys`, a duplicate
@@ -1131,11 +1120,20 @@ is fixed, and cite the checklist you ran in the PR description.
       generation (old `things_*_unique` names dropped by the boot-time
       ensure swap, including the superseded `things_follow_unique` marker
       generation — verify with `getIndexes()`). Legacy docs get stamped by
-      the `backfill-relationship-unique-keys` migration, whose notes also
-      census (never modify) data things carrying reserved keys from before
-      the reservation. The sanitizer reservation above must stay until every
-      deployment DB has swapped (phase 2 deletes it). Unit coverage:
+      the idempotent `backfill-relationship-unique-keys` migration, whose
+      notes also census (never modify) data things carrying relationship
+      names from the pre-fix era. Unit coverage:
       `remix/app/api/utils/messenger/relationshipUniqueKeys.test.ts`.
+- [ ] The data-crystal namespace reserves NO names: a data thing carrying
+      `followKey`, `memberKey`, `dmKey`, `inviteCode`, `emojiKey`,
+      `friendKey`, or `voteKey` at its crystal root (any nesting, any value
+      type) saves as ordinary data, collides with nothing, and never blocks
+      or is blocked by real relationship flows — verify a data thing with
+      `crystal.followKey` equal to a real pair key coexists with that real
+      follow. New unique indexes over crystal paths reachable by free-form
+      data crystals are forbidden (see KIND-BLIND HISTORY in
+      `collections.ts`); dedupe belongs in `uniqueKeys`. API coverage:
+      `things-data-relationship-names-open` in the /tests suite.
 
 ## Feed & profile advanced filters (`remix/app/components/Feed/AdvancedFilters.tsx`)
 
