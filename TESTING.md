@@ -328,6 +328,17 @@ is fixed, and cite the checklist you ran in the PR description.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] With two or more selected files, drag the ⠿ grip (mouse AND touch) to
+      reorder media tiles and file rows; arrow keys on a focused grip move one
+      step, Home/End jump to the edges. Tiles reorder live while dragging, a
+      tile drag never triggers the panel's file-drop styling, and the posted
+      card renders images and files in exactly the chosen order after reload.
+- [ ] Edit a post with 2+ attachments: the composer shows the read-only
+      reorderable gallery (no upload panel), dragging or arrow keys reorder it,
+      Save persists the order (card + `/post/:id` + reload agree), and saving
+      with no changes sends no attachment reorder. A stale edit saved after the
+      post's attachments changed fails with the refresh-and-reorder 409 rather
+      than half-applying.
 - [ ] Cancel an in-flight file, remove a completed draft file, and retry both a
       failed part upload and a failed completion. No file is silently omitted,
       duplicated, charged twice, or left in a permanent uploading state.
@@ -361,6 +372,26 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Feed, profile, nested repost, and permalink cards render vetted raster
       images and videos inline. SVG, HTML, script, and unknown types render only
       as named download rows; their bytes never execute inline.
+- [ ] Upload a QuickTime screen recording (a `.mov`, or a QuickTime container
+      misnamed `.mp4` — check for `ftypqt` magic bytes) plus an MKV or M4V.
+      Each finalizes as its sniffed `video/*` type and plays inline in feed and
+      permalink cards; the decision follows magic bytes, never the filename
+      extension.
+- [ ] Upload a non-web-playable container (for example an AVI) and confirm its
+      download row labels the real sniffed container (for example "AVI video"
+      from `detectedContentType`) instead of `application/octet-stream`, while
+      the bytes still download as opaque octet-stream.
+- [ ] In a browser missing the codec inside an allowed container (for example
+      HEVC QuickTime in Firefox), the failed `<video>` degrades to the named
+      download row instead of an inert black player.
+- [ ] For a ready upload finalized before magic-byte detection (crystal
+      `application/octet-stream`, no `detectedContentType`, renders as a file
+      card), run the admin `POST /api/v1/attachments/backfill-detected-types`
+      sweep — `dryRun: true` first, then for real, following `nextCursor` while
+      `hasMore` — and confirm the already-posted attachment flips to inline
+      video (or gains its sniffed download label) without re-uploading, with
+      name, size, and any owner-authored title/description unchanged. A repeat
+      run reports zero changes.
 - [ ] Let a content URL expire at the storage provider and open the attachment
       again: the stable authenticated `/api/v1/attachments/content?id=…` route
       issues fresh access. A private post's attachment fails closed for another
@@ -442,6 +473,64 @@ is fixed, and cite the checklist you ran in the PR description.
       draft or delete its post. The exact S3 version disappears and the account
       storage meter returns to its starting value without touching the
       production bucket.
+
+## Media thing pages — masonry, lightbox, `/media/:id`, annotate (`remix/app/components/Attachments/`, `remix/app/routes/media.tsx`)
+
+- [ ] A post with 3+ images renders the image section as a CSS-columns masonry
+      (natural aspect ratios, `break-inside` avoided) with 1/2/3 responsive
+      columns; at desktop and 375px mobile widths there is no horizontal
+      overflow, and video/file sections keep their existing layouts.
+- [ ] Clicking (and keyboard-activating) a masonry image opens the lightbox:
+      full image, title/description when present, prev/next across only that
+      post's images, an Open-page link to `/media/:id`, a download link, and
+      Esc/backdrop close. Error-state tiles never open a broken lightbox.
+- [ ] `/media/:id` renders inside the Thingtime UI shell (nav, centered
+      max-width): large media, title/description, author, a link back to the
+      parent post, plus working reactions and comments on the media thing
+      itself. Comments/reactions persist after reload, an unknown or private id
+      404s safely, and `GET /api/v1/things?id=<attachmentId>` leaks no private
+      object fields.
+- [ ] As the owner, use the pencil affordance on a ready composer tile, an
+      edit-gallery tile, and the `/media/:id` page to set/edit title (≤200) and
+      description (≤2000). The editor saves via `/api/v1/attachments/annotate`,
+      updates optimistically (revert + Lopu toast on failure), clears fields
+      when emptied, and the saved values survive reload on card, lightbox, and
+      media page. A non-owner and an unauthenticated caller get no pencil and a
+      403/401 from the endpoint.
+- [ ] Annotate a legacy opaque attachment that already has a server-written
+      `detectedContentType`. Title/description edits and clears preserve that
+      field exactly, so #319/#321's detected label and accounting survive; a
+      malformed pre-existing crystal fails closed instead of being rewritten.
+- [ ] On `/media/:id`, the timestamp, owner-menu Copy link, and outward Share
+      all resolve to `/media/:id` (never the blank `/post/:id` attachment
+      projection). Repost/quote controls are absent until attachment-target
+      shares have a real renderer, so the media card cannot create an empty
+      feed share.
+- [ ] Media layout editor: on a post with 3+ images, switch Layout between
+      Auto 🧱 / Rows 🥞 / Grid 🔳 in the composer AND in edit mode. Rows accepts
+      a pattern like 1-2-3 (hero, two, three; extras repeat the last row size),
+      Grid gets a 1-6 column stepper plus per-tile size badges cycling
+      normal → wide → tall → big. Saved layouts persist through create, edit,
+      reload, and render identically for a non-owner viewer; Auto clears
+      `mediaLayout` from the crystal. Layout controls only appear with 2+
+      visual attachments and never break the drag-reorder grips.
+- [ ] Media layout transport: after creating a post or rich comment through
+      `useApi`, reopen the editor and confirm the selected Rows/Grid mode,
+      columns/pattern, and non-default spans survived the client request. A
+      correct pre-submit preview is not sufficient evidence of persistence.
+- [ ] Server bounds: `mediaLayout` rejects pattern rows over 25 entries or
+      outside 1..6, columns outside 1..6, spans maps over 25 entries, and
+      non-object payloads with a 400; unknown keys are stripped; legacy posts
+      without the field stay valid; Auto removes the `mediaLayout` key rather
+      than storing `null`; lightbox order stays attachment order in every mode;
+      desktop and 375px render every mode with no horizontal overflow.
+- [ ] Drag-resize canvas editor (grid mode): dragging a tile's edge handle
+      resizes it snap-to-cell (wide/tall/big), including via touch, with a
+      keyboard fallback on a focused tile; the column slider relayouts live;
+      the resulting layout matches what non-edit viewers see after save.
+- [ ] Deleting the parent post (and separately a single attachment) cascades:
+      the media thing's own comments/reactions are removed, its `/media/:id`
+      404s, and no orphan child things remain.
 
 ## Profile avatar and banner media (`remix/app/components/Profile/`)
 
@@ -1003,19 +1092,8 @@ is fixed, and cite the checklist you ran in the PR description.
       drop data.
 - [ ] `["post","data"]` combinations still 400 (data crystals stand alone);
       a thingtime post's free-form payload lives ONLY under `crystal.thing`.
-- [ ] Unique-slot squat guard: POSTing a data thing whose crystal ROOT
-      carries a reserved key (`followKey`, `friendKey`, `memberKey`, `dmKey`,
-      `inviteCode`, `emojiKey`, `voteKey`) must 400 naming the key — with any
-      value type — for creates AND edits of pre-fix docs (updates validate
-      the merged crystal). Nested occurrences (e.g. `profile.followKey`) and
-      non-reserved names (`followKeys`) still save. Without this, a data
-      thing with `crystal.followKey = '<followerId>:<followeeId>'` enters the
-      kind-blind `things_follow_key_unique` index and permanently blocks the
-      victim's real follow (E11000, mostly swallowed by the flows). Unit
-      coverage: `remix/app/schemas/reservedCrystalRootKeys.test.ts` (also
-      pins the reserved list to the index list in `collections.ts`); API
-      coverage: `things-data-reserved-crystal-root` in the /tests suite.
-- [ ] Relationship dedupe rides the server-only root `uniqueKeys` namespace
+- [ ] Unique-slot squat class (closed structurally): relationship dedupe
+      rides the server-only root `uniqueKeys` namespace
       (`<crystalField>:<key>` BinData, stamped in `messenger/shared.ts`
       `newThingDoc` + the friend writer): after a follow/friend/DM/join/
       invite/emoji create, the doc must carry `uniqueKeys`, a duplicate
@@ -1025,11 +1103,20 @@ is fixed, and cite the checklist you ran in the PR description.
       generation (old `things_*_unique` names dropped by the boot-time
       ensure swap, including the superseded `things_follow_unique` marker
       generation — verify with `getIndexes()`). Legacy docs get stamped by
-      the `backfill-relationship-unique-keys` migration, whose notes also
-      census (never modify) data things carrying reserved keys from before
-      the reservation. The sanitizer reservation above must stay until every
-      deployment DB has swapped (phase 2 deletes it). Unit coverage:
+      the idempotent `backfill-relationship-unique-keys` migration, whose
+      notes also census (never modify) data things carrying relationship
+      names from the pre-fix era. Unit coverage:
       `remix/app/api/utils/messenger/relationshipUniqueKeys.test.ts`.
+- [ ] The data-crystal namespace reserves NO names: a data thing carrying
+      `followKey`, `memberKey`, `dmKey`, `inviteCode`, `emojiKey`,
+      `friendKey`, or `voteKey` at its crystal root (any nesting, any value
+      type) saves as ordinary data, collides with nothing, and never blocks
+      or is blocked by real relationship flows — verify a data thing with
+      `crystal.followKey` equal to a real pair key coexists with that real
+      follow. New unique indexes over crystal paths reachable by free-form
+      data crystals are forbidden (see KIND-BLIND HISTORY in
+      `collections.ts`); dedupe belongs in `uniqueKeys`. API coverage:
+      `things-data-relationship-names-open` in the /tests suite.
 
 ## Feed & profile advanced filters (`remix/app/components/Feed/AdvancedFilters.tsx`)
 

@@ -385,6 +385,20 @@ export function useApi() {
 					return ret;
 				},
 				[asyncFetcher]
+			),
+			// owner title/description on a ready attachment (media page + lightbox
+			// text) — omit a field to keep it, null/'' clears it
+			annotate: useCallback(
+				async (args: { id: string; title?: string | null; description?: string | null }) =>
+					asyncFetcher.submit(
+						{
+							id: args?.id,
+							...(args && 'title' in args ? { title: args.title } : {}),
+							...(args && 'description' in args ? { description: args.description } : {})
+						},
+						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details' }
+					),
+				[asyncFetcher]
 			)
 		},
     things: {
@@ -442,7 +456,10 @@ export function useApi() {
               tokenAcl: args?.tokenAcl,
               // move support — only send folderId when the caller provides it
               // (undefined must stay "leave it where it is", null = root)
-              ...(args && 'folderId' in args ? { folderId: args.folderId } : {})
+              ...(args && 'folderId' in args ? { folderId: args.folderId } : {}),
+              // attachment reorder — only send when the caller provides it
+              // (the ids must be a permutation of the post's bound set)
+              ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }
           ),
@@ -484,11 +501,11 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-					const { type, text, images, listing, thing, thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId } = args;
+					const { type, text, images, listing, thing, mediaLayout, thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId } = args;
           // unified shape when thingtime is given, legacy post shape otherwise
           const payload = Array.isArray(thingtime)
 						? { thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId }
-						: { type, text, images, listing, thing, acl, visibility, tags, attachmentIds, shareId };
+						: { type, text, images, listing, thing, mediaLayout, acl, visibility, tags, attachmentIds, shareId };
 					const ret = asyncFetcher.submit(payload, { action: '/api/v1/things' });
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
@@ -506,11 +523,11 @@ export function useApi() {
       save: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }), [asyncFetcher]),
       comment: useCallback(
         // simple text comments send { id, text }; rich comments add
-				// type/images/listing/thing/tags/attachments — comments share the post schema
+				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
         async (args) => {
-					const { id, text, type, images, listing, thing, tags, shareId, attachmentIds } = args || {};
+					const { id, text, type, images, listing, thing, mediaLayout, tags, shareId, attachmentIds } = args || {};
 					const ret = asyncFetcher.submit(
-						{ id, text, type, images, listing, thing, tags, shareId, attachmentIds },
+						{ id, text, type, images, listing, thing, mediaLayout, tags, shareId, attachmentIds },
 						{ action: '/api/v1/things/comment' }
 					);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
