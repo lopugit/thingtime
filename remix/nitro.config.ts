@@ -20,7 +20,6 @@ const apiRoutes = [...apiV1RouteKeys, ...apiV1DocsRouteKeys];
 
 export default defineNitroConfig({
   serverDir: 'server',
-  modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
   routes: {
     ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
