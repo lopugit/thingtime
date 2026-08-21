@@ -19,6 +19,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Build-all push handoff permission boundary**: the thin product-branch
+  listener now grants `actions: write`, allowing the protected reusable
+  workflow's push-only handoff to dispatch its supported-event worker instead
+  of being rejected by GitHub before any job starts. The caller contract pins
+  the required grant. — Codex (AI), 2026-08-21
 - **Desktop mesh node and connector stay alive independently of Electron**:
   LaunchAgent generation now emits valid property-list `<key>` fields and
   registration no longer performs an unconditional immediate kickstart. The
@@ -110,7 +115,69 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
   (PR #308 note has details).
 
+### Added
+
+- **Admin AI-moderation settings + free omni text moderation (2026-08-19,
+  Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
+  card choosing the provider per surface — media uploads (default / tiered /
+  free openai-only / claude / off) and post/comment text (default / free
+  openai / off) — stored under `Thingtime.ModerationSettings` and overriding
+  the env default. New text pipeline: post/comment/share `crystal.text` is
+  screened by the free omni endpoint on create and on edit; block-worthy
+  categories quarantine the thing (hidden from feeds/threads/search via
+  `canView` + thread loading), other flags queue an advisory `moderationFlag`
+  with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
+  and its stamps are final for the pipeline. A new hourly cron
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
+  29) retries text moderation lost to mid-flight process deaths or provider
+  outages and drains off-era backlog for free, plus the standard attachment
+  sweep; the admin sweep button runs both batches and the tab shows the text
+  backlog count. Post creation adds a hybrid sync gate: the free omni screen
+  races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
+  insert so flagged posts are born stamped (blocked content never renders,
+  even briefly), while timeouts/outages produce owner-private pending posts
+  for the async pipeline — moderation can never break posting; a per-instance circuit breaker
+  (3 failures → open, 60s cooldown) skips the omni call during confirmed
+  outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
+  obtainable while the surface is on, posts are born PENDING — owner-private
+  until the async queue / hourly cron screens and releases them (creation
+  notifications fire at release); `TT_TEXT_SCREEN_BUDGET_MS=0` becomes
+  async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
+  combined free request: prose + listing text + tags + legacy external image
+  URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
+
+- **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
+  moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
+  `omni-moderation-latest` endpoint screens every image first; clean images
+  stamp `clear` at $0 and only flagged/borderline images escalate to the paid
+  Claude vision call (fail-safes: omni outage → straight to Claude; Claude
+  outage → omni-flagged images stamp `nsfw`/blur instead of pending). New env:
+  `OPENAI_API_KEY` reused for the screen, optional
+  `TT_MODERATION_ESCALATION_SCORE` (default 0.2);
+  `THINGTIME_MODERATION_PROVIDER` accepts `openai+claude` (alias `tiered`) and
+  standalone `openai`, and the unset default picks the tiered pipeline when
+  both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
+  (PR #308 note has details).
+
 ### Security
+
+- **Crystal namespace reopened after structural uniqueness migration**: once
+  phase 1 has replaced every relationship crystal-path unique index and the
+  relationship `uniqueKeys` backfill has converged, free-form data may again
+  use `followKey`, `friendKey`, `memberKey`, `dmKey`, `inviteCode`,
+  `emojiKey`, and `voteKey`. Those values enter no platform unique index;
+  system dedupe remains exclusively in protected server-owned `uniqueKeys`.
+  — Codex (AI), 2026-08-21
+
+- **Relationship uniqueness is structural across all reserved key families**:
+  follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
+  protected root `uniqueKeys` namespace. Boot-time index convergence replaces
+  every kind-blind crystal-path unique index with a non-unique lookup, and the
+  idempotent backfill stamps legacy relationship docs while only reporting
+  suspicious free-form data. The vote family is migrated as security
+  substrate without shipping the deferred polls product; boot convergence also
+  removes the superseded `crystal.follow` marker index that no current writer
+  uses. — Codex (AI), 2026-08-21
 
 - **Moderation reconciliation and pending-media quarantine**: replayed the
   NSFW/TOS pipeline onto the singular public/private/all upload-permission
@@ -131,6 +198,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   substrate without shipping the deferred polls product; boot convergence also
   removes the superseded `crystal.follow` marker index that no current writer
   uses. — Codex (AI), 2026-08-21
+
 - **Canonical scoped-upload UX reconciliation**: every attachment picker now
   reads the existing public/private approval booleans directly and shows a
   purpose-specific approval card when its scope is withheld. The obsolete

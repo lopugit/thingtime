@@ -33,7 +33,7 @@ export const emojiScopeKey = (scope: string, name: string) => `${scope}:${name}`
 // sparse unique multikey index in collections.ts that already holds
 // username/email/schema/waitlist slots) — NOT kind-blind crystal-path unique
 // indexes: crystal paths are user-writable in free-form data things (the
-// squat class RESERVED_CRYSTAL_ROOT_KEYS guards during the transition), root
+// squat class — see KIND-BLIND HISTORY in collections.ts), root
 // fields are not reachable by any user input. One map keyed by kind, stamped
 // inside newThingDoc so no writer can forget; the friend writer (users/
 // social.ts) and the backfill migration stamp through the same helper.
