@@ -16,6 +16,8 @@ export const ATTACHMENT_MEDIA_KINDS = ['image', 'video', 'audio', 'file'] as con
 export type AttachmentMediaKind = (typeof ATTACHMENT_MEDIA_KINDS)[number];
 
 export const MAX_ATTACHMENT_NAME_CHARS = 255;
+export const MAX_ATTACHMENT_TITLE_CHARS = 200;
+export const MAX_ATTACHMENT_DESCRIPTION_CHARS = 2000;
 export const MAX_ATTACHMENT_CONTENT_TYPE_CHARS = 127;
 export const MAX_ATTACHMENT_OBJECT_KEY_CHARS = 1024;
 export const MAX_ATTACHMENT_OBJECT_VERSION_ID_CHARS = 1024;
@@ -28,6 +30,10 @@ export type AttachmentPublicMetadata = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	// owner-authored presentation metadata for the media's own Thing page and
+	// lightbox — optional, absent on legacy attachments, never empty strings
+	title?: string;
+	description?: string;
 	// Magic-byte-sniffed MIME type, present only when the served contentType
 	// collapsed to application/octet-stream so downloads can still name the real
 	// container. Server-written at finalization; never client input.
@@ -38,6 +44,12 @@ export type AttachmentPublicMetadata = {
 };
 
 export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id'>;
+
+export type AttachmentAnnotationPatch = {
+	// undefined = leave untouched, null/'' = clear, string = set (trimmed)
+	title?: string | null;
+	description?: string | null;
+};
 
 // These fields live on the protected Thing root, never in its public crystal.
 // The upload service owns every value; generic Thing input has no path that
@@ -138,6 +150,48 @@ export const attachmentMediaKindForContentType = (contentType: string): Attachme
 	return 'file';
 };
 
+// Single-line owner text (titles): the same hygiene as filenames.
+const sanitizeAttachmentLine = (
+	value: unknown,
+	maxChars: number,
+	label: string
+): { ok: true; value?: string } | { ok: false; error: string } => {
+	if (value === undefined || value === null) return { ok: true };
+	if (typeof value !== 'string') return { ok: false, error: `Attachment ${label} must be text` };
+	const trimmed = value.trim();
+	if (!trimmed) return { ok: true };
+	if (trimmed.length > maxChars) return { ok: false, error: `Attachment ${label}s can contain at most ${maxChars} characters` };
+	if (UNSAFE_FILENAME_CHAR_RE.test(trimmed)) return { ok: false, error: `Attachment ${label}s cannot contain control or format characters` };
+	if (!isWellFormedUnicode(trimmed)) return { ok: false, error: `Attachment ${label}s must contain valid Unicode` };
+	return { ok: true, value: trimmed };
+};
+
+// Multi-line owner text (descriptions): newlines allowed, every other control
+// or format character still rejected.
+const UNSAFE_MULTILINE_CHAR_RE = /[\p{Cf}\p{Cs}]/u;
+const sanitizeAttachmentBlock = (
+	value: unknown,
+	maxChars: number,
+	label: string
+): { ok: true; value?: string } | { ok: false; error: string } => {
+	if (value === undefined || value === null) return { ok: true };
+	if (typeof value !== 'string') return { ok: false, error: `Attachment ${label} must be text` };
+	const trimmed = value.trim();
+	if (!trimmed) return { ok: true };
+	if (trimmed.length > maxChars) return { ok: false, error: `Attachment ${label}s can contain at most ${maxChars} characters` };
+	for (let index = 0; index < trimmed.length; index += 1) {
+		const code = trimmed.charCodeAt(index);
+		if ((code <= 0x1f && code !== 0x0a) || code === 0x7f) {
+			return { ok: false, error: `Attachment ${label}s cannot contain control characters` };
+		}
+	}
+	if (UNSAFE_MULTILINE_CHAR_RE.test(trimmed)) {
+		return { ok: false, error: `Attachment ${label}s cannot contain format characters` };
+	}
+	if (!isWellFormedUnicode(trimmed)) return { ok: false, error: `Attachment ${label}s must contain valid Unicode` };
+	return { ok: true, value: trimmed };
+};
+
 export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMetadataResult => {
 	if (!input || typeof input !== 'object' || Array.isArray(input)) {
 		return { ok: false, error: 'Attachment metadata must be an object' };
@@ -164,6 +218,11 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 		return { ok: false, error: 'Attachment contentType must be a valid MIME type' };
 	}
 
+	const title = sanitizeAttachmentLine(raw.title, MAX_ATTACHMENT_TITLE_CHARS, 'title');
+	if (title.ok === false) return title;
+	const description = sanitizeAttachmentBlock(raw.description, MAX_ATTACHMENT_DESCRIPTION_CHARS, 'description');
+	if (description.ok === false) return description;
+
 	return {
 		ok: true,
 		crystal: {
@@ -172,7 +231,10 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 			contentType,
 			// Always derive this from the normalized content type. A caller cannot
 			// label HTML/SVG/arbitrary bytes as inline-safe image or video content.
-			mediaKind: attachmentMediaKindForContentType(contentType)
+			mediaKind: attachmentMediaKindForContentType(contentType),
+			// blank owner text is stored as ABSENT, never as an empty string
+			...(title.value ? { title: title.value } : {}),
+			...(description.value ? { description: description.value } : {})
 		}
 	};
 };
@@ -198,16 +260,23 @@ export const isAttachmentFinalizationLeaseId = (value: unknown): value is string
 	value.length <= MAX_ATTACHMENT_FINALIZATION_LEASE_ID_CHARS &&
 	/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
 
+const REQUIRED_ATTACHMENT_CRYSTAL_KEYS = ['contentType', 'mediaKind', 'name', 'size'] as const;
+// Owner-authored presentation text plus the server-written sniffed container
+// type; each is validated below before a crystal counts as canonical.
+const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['title', 'description', 'detectedContentType']);
+
 const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null => {
 	const sanitized = sanitizeAttachmentPublicMetadata(value);
 	if (!sanitized.ok || !value || typeof value !== 'object' || Array.isArray(value)) return null;
 	const raw = value as Record<string, unknown>;
-	const keys = Object.keys(raw).sort();
-	const hasDetected = keys.length === 5;
-	const expectedKeys = hasDetected
-		? ['contentType', 'detectedContentType', 'mediaKind', 'name', 'size']
-		: ['contentType', 'mediaKind', 'name', 'size'];
-	if (keys.join('\0') !== expectedKeys.join('\0')) return null;
+	const keys = Object.keys(raw);
+	// still a closed shape: every required key present, extras only from the
+	// optional set (legacy four-key crystals stay canonical)
+	if (REQUIRED_ATTACHMENT_CRYSTAL_KEYS.some((key) => !(key in raw))) return null;
+	if (keys.some((key) => !(REQUIRED_ATTACHMENT_CRYSTAL_KEYS as readonly string[]).includes(key) && !OPTIONAL_ATTACHMENT_CRYSTAL_KEYS.has(key))) {
+		return null;
+	}
+	const hasDetected = 'detectedContentType' in raw;
 	if (hasDetected) {
 		// The sniffed type is display metadata for opaque downloads only; it may
 		// never restate or contradict a contentType the server serves inline.
@@ -223,9 +292,38 @@ const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null =>
 	return raw.name === sanitized.crystal.name &&
 		raw.size === sanitized.crystal.size &&
 		raw.contentType === sanitized.crystal.contentType &&
-		raw.mediaKind === sanitized.crystal.mediaKind
+		raw.mediaKind === sanitized.crystal.mediaKind &&
+		raw.title === sanitized.crystal.title &&
+		raw.description === sanitized.crystal.description
 		? { ...sanitized.crystal, ...(hasDetected ? { detectedContentType: raw.detectedContentType as string } : {}) }
 		: null;
+};
+
+// Apply owner-authored presentation text to an already-canonical attachment
+// crystal. The magic-byte detector's optional detectedContentType is
+// server-owned metadata: annotation must preserve it exactly, never accept it
+// from the patch and never silently erase it.
+export const applyAttachmentAnnotationPatch = (
+	value: unknown,
+	patch: AttachmentAnnotationPatch
+): AttachmentMetadataResult => {
+	const before = canonicalAttachmentCrystal(value);
+	if (!before) return { ok: false, error: 'Attachment metadata is not canonical' };
+	const sanitized = sanitizeAttachmentPublicMetadata({
+		name: before.name,
+		size: before.size,
+		contentType: before.contentType,
+		title: patch.title === undefined ? before.title : patch.title,
+		description: patch.description === undefined ? before.description : patch.description
+	});
+	if (!sanitized.ok) return sanitized;
+	return {
+		ok: true,
+		crystal: {
+			...sanitized.crystal,
+			...(before.detectedContentType ? { detectedContentType: before.detectedContentType } : {})
+		}
+	};
 };
 
 // `moderation` is the protected root stamp (api/utils/moderation). Pending and
