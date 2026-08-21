@@ -6,7 +6,7 @@ import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys, newThingDoc, 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { fromBin } from '../auth/users.ts';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { RESERVED_CRYSTAL_ROOT_KEYS } from '~/schemas/registry';
+import { validateThingtimeCrystal } from '~/schemas/registry';
 
 // Relationship dedupe rides the server-only root uniqueKeys namespace (the
 // sparse unique multikey index that already holds username/email/schema/
@@ -77,12 +77,16 @@ test('relationship prefixes are disjoint from the other uniqueKeys families', ()
 	}
 });
 
-test('every mapped crystal field is reserved at the data-crystal root during the transition', () => {
-	// Until every deployment DB has swapped its old kind-blind unique indexes
-	// to lookups (boot-time ensure), the sanitizer reservation is what stops
-	// squats — a mapped field missing from RESERVED_CRYSTAL_ROOT_KEYS would
-	// reopen the window on not-yet-swapped DBs.
+test('the data-crystal namespace is fully open — relationship names are ordinary user data', () => {
+	// With dedupe on root uniqueKeys and the crystal-path indexes non-unique,
+	// a data thing carrying any relationship field name at its crystal root
+	// enters no unique index: it can neither squat a real relationship nor be
+	// rejected. This pins the un-reservation (phase 2) — no name in the open
+	// namespace is special.
 	for (const field of Object.values(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)) {
-		assert.ok(RESERVED_CRYSTAL_ROOT_KEYS.has(field), `'${field}' must stay in RESERVED_CRYSTAL_ROOT_KEYS until the swap completes everywhere`);
+		const result = validateThingtimeCrystal(['data'], { [field]: 'any:value' });
+		assert.equal(result.ok, true, `crystal.${field} must save as ordinary data`);
 	}
+	const voteResult = validateThingtimeCrystal(['data'], { voteKey: 'poll:user' });
+	assert.equal(voteResult.ok, true, 'voteKey (poll branch) must be ordinary data too');
 });

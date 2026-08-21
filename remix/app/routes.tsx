@@ -11,6 +11,7 @@ import Authorize from './routes/authorize';
 import Feed from './routes/feed';
 import Index from './routes/_index';
 import Login from './routes/login';
+import MediaPage from './routes/media';
 import PostPage from './routes/post';
 import Profile from './routes/profile';
 import Register from './routes/register';
@@ -160,6 +161,9 @@ export const router = createBrowserRouter([
       { path: 'ode', lazy: lazyRoute(() => import('./routes/ode')) },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },
+			// every attachment is a Thing — its own page with comments/reactions
+			// (post lightbox + file rows deeplink here)
+			{ path: 'media/:id', element: <MediaPage /> },
 			// authenticated permalink for generic Things; protected migration
 			// diagnostics switch to their current-admin, home-plane read endpoint
 			{ path: 'thing/:id', element: <ThingPage /> },
