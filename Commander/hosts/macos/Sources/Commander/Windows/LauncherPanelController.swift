@@ -2,8 +2,57 @@ import AppKit
 import ApplicationServices
 
 private final class CommanderPanel: NSPanel {
+  var resizeSurfaceInset = CommanderWebView.launcherSurfaceInset
+  private var resizeSession: (
+    edges: CommanderResizeEdges,
+    frame: NSRect,
+    mouseLocation: NSPoint
+  )?
+
   override var canBecomeKey: Bool { true }
   override var canBecomeMain: Bool { false }
+
+  override func sendEvent(_ event: NSEvent) {
+    switch event.type {
+    case .leftMouseDown where styleMask.contains(.resizable):
+      let mouseLocation = convertPoint(toScreen: event.locationInWindow)
+      let edges = CommanderWebView.resizeEdges(
+        at: mouseLocation,
+        frame: frame.insetBy(
+          dx: resizeSurfaceInset,
+          dy: resizeSurfaceInset
+        ),
+        handleWidth: CommanderWebView.resizeHandleWidth
+      )
+      if !edges.isEmpty {
+        resizeSession = (edges, frame, mouseLocation)
+        return
+      }
+    case .leftMouseDragged:
+      if let resizeSession {
+        setFrame(
+          CommanderWebView.resizedFrame(
+            from: resizeSession.frame,
+            edges: resizeSession.edges,
+            startingMouseLocation: resizeSession.mouseLocation,
+            mouseLocation: convertPoint(toScreen: event.locationInWindow),
+            minimumSize: minSize
+          ),
+          display: true
+        )
+        invalidateShadow()
+        return
+      }
+    case .leftMouseUp:
+      if resizeSession != nil {
+        resizeSession = nil
+        invalidateShadow()
+        return
+      }
+    default: break
+    }
+    super.sendEvent(event)
+  }
 }
 
 enum LauncherWindowMode: String, Sendable {
@@ -16,13 +65,20 @@ enum LauncherWindowMode: String, Sendable {
     case .compact: NSSize(width: 720, height: 360)
     }
   }
+
+  var minimumSize: NSSize {
+    switch self {
+    case .standard: NSSize(width: 520, height: 300)
+    case .compact: NSSize(width: 480, height: 240)
+    }
+  }
 }
 
 @MainActor
 final class LauncherPanelController: NSObject, NSWindowDelegate {
   private static let launcherOpenedScript =
     "window.dispatchEvent(new CustomEvent('commander:launcher-opened'))"
-  private let panel: NSPanel
+  private let panel: CommanderPanel
   private let webView: CommanderWebView
   let id: UUID
   var didBecomeKey: ((UUID) -> Void)?
@@ -50,7 +106,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   ) {
     let panel = CommanderPanel(
       contentRect: NSRect(origin: .zero, size: LauncherWindowMode.standard.size),
-      styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
+      styleMask: [.borderless, .nonactivatingPanel, .resizable, .fullSizeContentView],
       backing: .buffered,
       defer: false
     )
@@ -71,6 +127,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     // it as visible. Commander owns dismissal through windowDidResignKey instead.
     panel.hidesOnDeactivate = false
     panel.animationBehavior = .utilityWindow
+    panel.minSize = LauncherWindowMode.standard.minimumSize
     panel.contentView = webView
     panel.contentView?.wantsLayer = true
     panel.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
@@ -78,7 +135,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     panel.contentView?.superview?.layer?.backgroundColor = NSColor.clear.cgColor
     webView.frame = NSRect(origin: .zero, size: LauncherWindowMode.standard.size)
     webView.autoresizingMask = [.width, .height]
-    webView.maskToSurface(inset: 18, cornerRadius: 19)
+    webView.maskToSurface(inset: CommanderWebView.launcherSurfaceInset, cornerRadius: 19)
     webView.firstPresentationReady = { [weak self] in
       guard let self else { return }
       self.contentReady = true
@@ -259,7 +316,10 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   func setWindowMode(_ mode: LauncherWindowMode) {
     guard mode != windowMode else { return }
     windowMode = mode
-    webView.maskToSurface(inset: mode == .compact ? 12 : 18, cornerRadius: 19)
+    panel.minSize = mode.minimumSize
+    let surfaceInset: CGFloat = mode == .compact ? 12 : CommanderWebView.launcherSurfaceInset
+    panel.resizeSurfaceInset = surfaceInset
+    webView.maskToSurface(inset: surfaceInset, cornerRadius: 19)
     let size = mode.size
     guard panel.isVisible else {
       panel.setContentSize(size)

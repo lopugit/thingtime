@@ -394,7 +394,8 @@ impl IndexDatabase {
         }
         let kinds = normalized_kinds(&request.kinds);
         let query = request.query.trim();
-        let mut records = if query.chars().count() >= 3 {
+        let query_length = query.chars().count();
+        let mut records = if query_length >= 3 {
             let mut matches = self.query_fts(query, &kinds, request.limit)?;
             rank_records(&mut matches, query);
             if matches.is_empty() {
@@ -406,6 +407,8 @@ impl IndexDatabase {
                 rank_records(&mut matches, query);
             }
             matches
+        } else if query_length > 0 {
+            self.query_prefix(query, &kinds, request.limit)?
         } else {
             let mut matches = self.query_like(query, &kinds, request.limit)?;
             rank_records(&mut matches, query);
@@ -620,6 +623,50 @@ impl IndexDatabase {
             row_to_record,
         )?;
         collect_rows(rows)
+    }
+
+    fn query_prefix(
+        &self,
+        query: &str,
+        kinds: &[IndexKind],
+        limit: usize,
+    ) -> Result<Vec<IndexRecord>, IndexerError> {
+        let prefix = format!("{}%", escape_like(query));
+        let mut records = Vec::with_capacity(limit.saturating_mul(kinds.len()));
+        let mut statement = self.connection.prepare(
+            "SELECT path, name, parent, kind, modified_at_ms, size
+             FROM records
+             WHERE kind = ?1
+               AND name LIKE ?2 ESCAPE '\\' COLLATE NOCASE
+             ORDER BY name COLLATE NOCASE
+             LIMIT ?3",
+        )?;
+        for kind in kinds {
+            let rows = statement.query_map(
+                params![
+                    kind.as_str(),
+                    &prefix,
+                    i64::try_from(limit).unwrap_or(i64::MAX)
+                ],
+                row_to_record,
+            )?;
+            records.extend(collect_rows(rows)?);
+        }
+        for record in &mut records {
+            record.score = if record.name.eq_ignore_ascii_case(query) {
+                100_000
+            } else {
+                80_000 - i64::try_from(record.name.chars().count()).unwrap_or(i64::MAX)
+            };
+        }
+        records.sort_by(|left, right| {
+            right
+                .score
+                .cmp(&left.score)
+                .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+                .then_with(|| left.path.cmp(&right.path))
+        });
+        Ok(records)
     }
 
     fn query_like(
@@ -2155,6 +2202,32 @@ mod tests {
             .expect("query")
             .records;
         assert_eq!(records[0].name, "invoice.txt");
+    }
+
+    #[test]
+    fn short_query_uses_the_indexed_name_prefix_path() {
+        let temp = TempDir::new().expect("tempdir");
+        write(temp.path().join("earth.txt"), "earth").expect("earth");
+        write(temp.path().join("dream.txt"), "dream").expect("dream");
+        let mut database = database(&temp);
+        database
+            .index(&configuration(temp.path(), vec![IndexKind::File]))
+            .expect("index");
+
+        let records = database
+            .query(&QueryRequest {
+                query: "ea".to_owned(),
+                kinds: vec![IndexKind::File],
+                limit: 20,
+            })
+            .expect("short prefix query")
+            .records;
+
+        assert_eq!(
+            records.first().map(|record| record.name.as_str()),
+            Some("earth.txt")
+        );
+        assert!(records.iter().all(|record| record.name.starts_with("ea")));
     }
 
     #[test]

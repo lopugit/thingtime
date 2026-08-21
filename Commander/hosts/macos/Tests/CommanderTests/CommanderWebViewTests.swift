@@ -75,6 +75,8 @@ final class CommanderWebViewTests: XCTestCase {
     XCTAssertEqual(panel.backgroundColor.alphaComponent, 0)
     XCTAssertTrue(panel.hasShadow)
     XCTAssertTrue(panel.isMovableByWindowBackground)
+    XCTAssertTrue(panel.styleMask.contains(.resizable))
+    XCTAssertEqual(panel.minSize, LauncherWindowMode.standard.minimumSize)
     XCTAssertTrue(panel.contentView is CommanderWebView)
     XCTAssertEqual(panel.contentView?.layer?.backgroundColor?.alpha, 0)
     XCTAssertEqual(panel.contentView?.superview?.layer?.backgroundColor?.alpha, 0)
@@ -87,7 +89,102 @@ final class CommanderWebViewTests: XCTestCase {
     XCTAssertTrue(
       LauncherPanelController.launcherOpenedScriptForTesting.contains("commander:launcher-opened")
     )
+    let resizedFrame = NSRect(
+      origin: panel.frame.origin,
+      size: NSSize(width: panel.frame.width + 120, height: panel.frame.height + 80)
+    )
+    panel.setFrame(resizedFrame, display: false)
+    XCTAssertEqual(panel.frame.size, resizedFrame.size)
+    controller.setWindowMode(.compact)
+    webView.layoutSubtreeIfNeeded()
+    XCTAssertEqual(panel.minSize, LauncherWindowMode.compact.minimumSize)
+    XCTAssertEqual(
+      (webView.layer?.mask as? CAShapeLayer)?.path?.boundingBox,
+      webView.bounds.insetBy(dx: 12, dy: 12)
+    )
     controller.shutdown()
+  }
+
+  func testOpenNewWindowPinOverrideWinsOverTheGlobalDefault() {
+    XCTAssertFalse(
+      CommanderAppDelegate.initialPinnedState(defaultPinned: false, pinnedOverride: nil)
+    )
+    XCTAssertTrue(
+      CommanderAppDelegate.initialPinnedState(defaultPinned: false, pinnedOverride: true)
+    )
+  }
+
+  func testLauncherResizeMathSupportsEveryCornerAndMinimumSize() {
+    let frame = NSRect(x: 100, y: 100, width: 780, height: 560)
+    let minimum = NSSize(width: 520, height: 300)
+    let surfaceFrame = frame.insetBy(
+      dx: CommanderWebView.launcherSurfaceInset,
+      dy: CommanderWebView.launcherSurfaceInset
+    )
+    XCTAssertEqual(
+      CommanderWebView.resizeEdges(
+        at: NSPoint(x: surfaceFrame.maxX, y: surfaceFrame.minY),
+        frame: surfaceFrame,
+        handleWidth: CommanderWebView.resizeHandleWidth
+      ),
+      [.bottom, .right]
+    )
+    XCTAssertTrue(
+      CommanderWebView.resizeEdges(
+        at: NSPoint(x: frame.maxX, y: frame.minY),
+        frame: surfaceFrame,
+        handleWidth: CommanderWebView.resizeHandleWidth
+      ).isEmpty
+    )
+    let cases: [(CommanderResizeEdges, NSPoint, NSPoint, NSRect)] = [
+      (
+        [.top, .left],
+        NSPoint(x: 100, y: 660),
+        NSPoint(x: 20, y: 740),
+        NSRect(x: 20, y: 100, width: 860, height: 640)
+      ),
+      (
+        [.top, .right],
+        NSPoint(x: 880, y: 660),
+        NSPoint(x: 980, y: 740),
+        NSRect(x: 100, y: 100, width: 880, height: 640)
+      ),
+      (
+        [.bottom, .left],
+        NSPoint(x: 100, y: 100),
+        NSPoint(x: 20, y: 20),
+        NSRect(x: 20, y: 20, width: 860, height: 640)
+      ),
+      (
+        [.bottom, .right],
+        NSPoint(x: 880, y: 100),
+        NSPoint(x: 980, y: 20),
+        NSRect(x: 100, y: 20, width: 880, height: 640)
+      ),
+    ]
+    for (edges, start, current, expected) in cases {
+      XCTAssertEqual(
+        CommanderWebView.resizedFrame(
+          from: frame,
+          edges: edges,
+          startingMouseLocation: start,
+          mouseLocation: current,
+          minimumSize: minimum
+        ),
+        expected
+      )
+    }
+
+    XCTAssertEqual(
+      CommanderWebView.resizedFrame(
+        from: frame,
+        edges: [.bottom, .right],
+        startingMouseLocation: NSPoint(x: 880, y: 100),
+        mouseLocation: NSPoint(x: 0, y: 1_000),
+        minimumSize: minimum
+      ),
+      NSRect(x: 100, y: 360, width: 520, height: 300)
+    )
   }
 
   func testSettingsDeepLinkDispatchesOnlyKnownTabs() {

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +15,7 @@ describe('Commander daemon HTTP trust boundaries', () => {
     await mkdir(uiPath);
     await writeFile(path.join(uiPath, 'launcher.html'), '<!doctype html><title>Commander test</title>');
     vi.stubEnv('COMMANDER_DATA_DIR', path.join(temporary, 'data'));
+    vi.stubEnv('COMMANDER_CACHE_DIR', path.join(temporary, 'cache'));
 
     let server: CommanderServer | undefined;
     try {
@@ -487,6 +488,7 @@ describe('Commander daemon HTTP trust boundaries', () => {
         .split('\n')
         .map((line) => JSON.parse(line) as { phase: string; cached: boolean });
       expect(cachedEvents[0]).toMatchObject({ phase: 'cache', cached: true });
+      expect(cachedEvents.map((event) => event.phase)).toEqual(['cache', 'complete']);
 
       const clearedCache = await fetch(`${server.url}/api/search/cache`, {
         method: 'DELETE',
@@ -513,4 +515,128 @@ describe('Commander daemon HTTP trust boundaries', () => {
       await rm(temporary, { recursive: true, force: true });
     }
   });
+
+  it('re-ranks a nearby cached filesystem candidate set without a catalog-only downgrade', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-stream-cache-test-'));
+    const uiPath = path.join(temporary, 'ui');
+    const indexerPath = path.join(temporary, 'fake-indexer.mjs');
+    await mkdir(uiPath);
+    await writeFile(path.join(uiPath, 'launcher.html'), '<!doctype html><title>Commander test</title>');
+    await writeFile(indexerPath, fakeIndexerSource(), { mode: 0o700 });
+    await chmod(indexerPath, 0o700);
+    vi.stubEnv('COMMANDER_DATA_DIR', path.join(temporary, 'data'));
+    vi.stubEnv('COMMANDER_CACHE_DIR', path.join(temporary, 'cache'));
+
+    let server: CommanderServer | undefined;
+    try {
+      server = await createCommanderServer({
+        host: '127.0.0.1',
+        port: 0,
+        uiPath,
+        indexerBinary: indexerPath,
+        platform: 'macos',
+      });
+      const headers = { 'x-commander-session': server.token };
+      const first = await fetch(`${server.url}/api/search/stream?q=comm`, { headers });
+      expect((await streamEvents(first)).at(-1)).toMatchObject({
+        phase: 'filesystem',
+        complete: true,
+      });
+
+      const refined = await fetch(`${server.url}/api/search/stream?q=comma`, { headers });
+      const refinedEvents = await streamEvents(refined);
+      expect(refinedEvents[0]).toMatchObject({ phase: 'cache', cached: true, complete: false });
+      expect(refinedEvents.map((event) => event.phase)).toEqual(['cache', 'filesystem']);
+      expect(refinedEvents[0]?.hits).toEqual(
+        expect.arrayContaining([expect.objectContaining({ title: 'Commander-notes.md', kind: 'file' })]),
+      );
+    } finally {
+      await server?.close();
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
 });
+
+async function streamEvents(response: Response): Promise<StreamEvent[]> {
+  expect(response.status).toBe(200);
+  return (await response.text())
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as StreamEvent);
+}
+
+interface StreamEvent {
+  phase: string;
+  cached: boolean;
+  complete: boolean;
+  hits: Array<{ title: string; kind: string }>;
+}
+
+function fakeIndexerSource(): string {
+  return `#!/usr/bin/env node
+import { createInterface } from 'node:readline';
+const now = Date.now();
+const status = {
+  schemaVersion: 3,
+  totalRecords: 2,
+  databaseSizeBytes: 1024,
+  kinds: ['application', 'file', 'directory'].map((kind) => ({
+    kind,
+    count: kind === 'directory' ? 0 : 1,
+    lastIndexedAtMs: now,
+    lastDurationMs: 1,
+  })),
+};
+const application = {
+  path: '/Applications/Fixture.app',
+  name: 'Fixture.app',
+  parent: '/Applications',
+  kind: 'application',
+  score: 100,
+};
+const file = {
+  path: '/tmp/Commander-notes.md',
+  name: 'Commander-notes.md',
+  parent: '/tmp',
+  kind: 'file',
+  score: 100,
+};
+createInterface({ input: process.stdin }).on('line', (line) => {
+  const request = JSON.parse(line);
+  const reply = (result) => process.stdout.write(JSON.stringify({ id: request.id, ok: true, result }) + '\\n');
+  if (request.operation === 'status') return reply(status);
+  if (request.operation === 'lookup') return reply(null);
+  if (request.operation === 'index') {
+    return reply({
+      startedAtMs: now,
+      completedAtMs: now,
+      durationMs: 0,
+      indexed: 0,
+      skipped: 0,
+      errors: 0,
+      sources: [],
+      status,
+      resources: {
+        effective: {
+          logicalCpuCount: 1,
+          workerThreads: 1,
+          maxOpenDirectories: 1,
+          maxCpuPercent: 100,
+          maxMemoryMiB: 128,
+          channelCapacity: 1,
+          sqliteCacheKib: 1024,
+        },
+        cpuTimeMs: 0,
+        averageCpuPercent: 0,
+        peakMemoryBytes: 0,
+        throttledMs: 0,
+        memoryChecks: 0,
+      },
+    });
+  }
+  const query = request.request?.query ?? '';
+  const records = query ? [file] : [application];
+  setTimeout(() => reply({ records }), query ? 60 : 0);
+});
+`;
+}

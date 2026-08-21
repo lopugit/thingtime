@@ -338,7 +338,7 @@ export function Launcher({ state }: { state: CommanderState }) {
         role="option"
         aria-selected={rowSelected}
         aria-disabled={state.resultsStale}
-        className={`${rowSelected ? 'result-row selected' : 'result-row'}${hit.path ? ' draggable-result' : ''}${state.resultsStale ? ' stale-result' : ''}`}
+        className={`${rowSelected ? 'result-row selected' : 'result-row'}${hit.path ? ' draggable-result' : ''}`}
         key={hit.id}
         onPointerMove={(event) => selectFromPointer(rowIndex, event)}
         onPointerDown={(event) => {

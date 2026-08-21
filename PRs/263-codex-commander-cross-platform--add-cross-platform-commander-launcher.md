@@ -257,6 +257,16 @@ environment.
   matching cached/live phase arrives, removing both the empty flash and the
   stale-Return race. Result snapshots are private owner-only files with
   configurable enablement, directory, size, expiry, reveal, and clear controls.
+- The cache now warms its newest snapshots into a bounded in-memory LRU and
+  persists the raw filesystem candidate set beside each final frame. Exact
+  repeats return without a disk read; query refinements re-rank the nearest
+  compatible cached candidate set while the live index catches up. A cached
+  filesystem frame is never replaced by a catalog-only intermediate frame, and
+  byte-for-byte-equivalent live results retain their mounted React rows.
+- One- and two-character Rust index queries now use the `(kind, name)` prefix
+  index with a bounded per-kind candidate read. They no longer perform a
+  `%term%` name/path scan over the full filesystem database; trigram substring
+  and typo search continues from three characters onward.
 - Launcher results are grouped into Apps, Commands, and Files & Folders. Their
   order is draggable in Settings and expressed as a modest rank boost, so an
   exceptionally strong text or learned match can still win. Application rows
@@ -274,6 +284,12 @@ environment.
   shortcut, current-display most-recent focus, and multiple independent windows
   from the icon's context menu. Pinned panels leave transient collection
   behavior and do not dismiss on key loss.
+- Borderless launcher panels now carry AppKit's native resizable style,
+  mode-specific minimum sizes, and panel-level edge-drag handling aligned to
+  the visible rounded surface rather than its transparent shadow gutter. Every
+  edge and corner can therefore resize the WebKit launcher without restoring
+  the opaque outer rectangle. The explicit Open New Window action overrides
+  the global default and always creates its new launcher pinned.
 - The WebKit canvas remains transparent outside the shaped panel, while the
   actual launcher surface is an isolated solid surface rather than a delayed
   backdrop-filter composition. This preserves the rounded exterior without the
@@ -288,14 +304,15 @@ environment.
 
 ## Verification
 
-- Commander TypeScript: 120 tests passed across protocol (11), filesystem client
-  (3), compatibility (19), UI (55), and daemon (32) packages; typecheck,
+- Commander TypeScript: 124 tests passed across protocol (11), filesystem client
+  (3), compatibility (19), UI (56), and daemon (35) packages; typecheck,
   ESLint, Prettier, and package builds passed.
-- Rust: 54 tests passed across command search (23 unit + 5 JSONL) and filesystem
-  indexing (25 unit + 1 JSONL); formatting and strict Clippy with warnings
+- Rust: 55 tests passed across command search (23 unit + 5 JSONL) and filesystem
+  indexing (26 unit + 1 JSONL); formatting and strict Clippy with warnings
   denied passed.
-- Swift: eleven WebKit/panel, settings-deep-link, file-drag, and command-hotkey
-  regressions passed; the release build passed with warnings treated as errors.
+- Swift: thirteen WebKit/panel, resizing, pin-state, settings-deep-link,
+  file-drag, and command-hotkey regressions passed; the release build passed
+  with warnings treated as errors.
 - `Commander/script/build_and_run.sh --verify` built, Apple Development signed,
   installed, and launched the exact follow-up app at
   `~/Applications/Commander.app`.
@@ -307,6 +324,22 @@ environment.
   the explicit `.app` badge, a solid inner surface, and only transparent pixels
   outside the rounded panel. The installed Settings window rendered the new
   Search tab alongside the existing sections without clipping.
+- On the installed 1.19-million-row index, an exact two-character cache frame
+  painted in 14.9 ms and its fresh filesystem frame completed in 67.6 ms; an
+  uncached two-character query completed in 81 ms, its repeat cache painted in
+  2.4 ms, and a nearest-prefix refinement painted cached candidates in 17.8 ms
+  before its 37.8 ms live frame. Direct long-lived Rust queries measured about
+  99-122 ms for one- and two-character prefixes and 25 ms for a three-character
+  query, replacing the former 2.5-2.7 second full-database short-query scan.
+- Physical CoreGraphics pointer QA against the installed signed panel resized
+  bottom-right from 780x560 to 875x636, then expanded top-left, top-right, and
+  bottom-left with the correct anchored edges. The live launcher remained
+  responsive and visually clipped to its rounded solid surface at 1055x756,
+  then returned cleanly to 780x560. Compact mode separately resized from
+  720x360 to 780x400 through its narrower visible gutter before the saved mode
+  was restored to Default. The real footer context menu's Open New Window
+  action created a focused launcher whose pin control reported `on` even though
+  the original and global default were unpinned.
 - Before the unlimited migration, the optimized standalone indexer scanned
   500,000 real home metadata entries in
   15.6–17.0 seconds with the measured two-worker default (versus 21.9 seconds at

@@ -456,10 +456,9 @@ describe('Launcher keyboard navigation', () => {
     const commander = state({ searchPending: true, resultsStale: true });
     render(<Launcher state={commander} />);
 
-    expect(screen.getByRole('option', { name: /Commander Settings/ })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
+    const staleResult = screen.getByRole('option', { name: /Commander Settings/ });
+    expect(staleResult).toHaveAttribute('aria-disabled', 'true');
+    expect(staleResult).not.toHaveClass('stale-result');
     fireEvent.keyDown(window, { key: 'Enter' });
     expect(commander.executeCommand).not.toHaveBeenCalled();
   });

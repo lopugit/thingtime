@@ -144,7 +144,7 @@ export function useCommander(): CommanderState {
           (event) => {
             if (sequence !== requestSequence.current) return;
             if (event.hits.length || event.complete) {
-              setHits(event.hits);
+              setHits((current) => (sameSearchHits(current, event.hits) ? current : event.hits));
               setResultsStale(false);
             }
             setSearchPending(!event.complete);
@@ -285,5 +285,43 @@ export function useCommander(): CommanderState {
       refresh,
       refreshSearch,
     ],
+  );
+}
+
+function sameSearchHits(current: readonly SearchHit[], next: readonly SearchHit[]): boolean {
+  return (
+    current.length === next.length &&
+    current.every(
+      (hit, index) =>
+        hit.id === next[index]?.id &&
+        hit.score === next[index]?.score &&
+        hit.title === next[index]?.title &&
+        hit.subtitle === next[index]?.subtitle &&
+        hit.kind === next[index]?.kind &&
+        hit.icon === next[index]?.icon &&
+        hit.path === next[index]?.path &&
+        hit.favourite === next[index]?.favourite &&
+        hit.preferenceScore === next[index]?.preferenceScore &&
+        hit.extensionId === next[index]?.extensionId &&
+        hit.commandName === next[index]?.commandName &&
+        hit.keywords.length === next[index]?.keywords.length &&
+        hit.keywords.every((keyword, keywordIndex) => keyword === next[index]?.keywords[keywordIndex]) &&
+        hit.actions.length === next[index]?.actions.length &&
+        hit.actions.every((action, actionIndex) => {
+          const nextAction = next[index]?.actions[actionIndex];
+          return (
+            action.id === nextAction?.id &&
+            action.title === nextAction?.title &&
+            action.shortcut === nextAction?.shortcut &&
+            action.destructive === nextAction?.destructive
+          );
+        }) &&
+        hit.matchedRanges.length === next[index]?.matchedRanges.length &&
+        hit.matchedRanges.every(
+          (range, rangeIndex) =>
+            range.start === next[index]?.matchedRanges[rangeIndex]?.start &&
+            range.end === next[index]?.matchedRanges[rangeIndex]?.end,
+        ),
+    )
   );
 }
