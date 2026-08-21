@@ -257,6 +257,61 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
+      `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
+      with a red border, light red wash, centered NSFW badge, and a
+      `Show Anyway` button that reveals it (per attachment, per page view).
+      An image named `tt-test-illegal.png` disappears from public payloads and
+      its `/api/v1/attachments/content` URL 404s for non-admins, while a
+      `moderationFlag` row appears in `/admin` → Moderation.
+- [ ] Deliberately hold a just-completed attachment in `pending`: it is absent
+      from another account's attachment projection and content returns not
+      found, while its owner and an admin can still open the exact evidence.
+      Run the moderation sweep after restoring the deterministic provider and
+      confirm it releases the item to `clear`, `nsfw`, or `blocked`.
+- [ ] Generic Things create/update requests cannot set the root `moderation`
+      field or create a `thingtime: moderationFlag` record. Pre-create an
+      ordinary Thing with the deterministic `modflag-<target>` id, analyze a
+      flagged target, and confirm the ordinary Thing remains byte-for-byte
+      ordinary while the target remains `flagPending` for operator review.
+- [ ] With `THINGTIME_MODERATION_PROVIDER=openai+claude` (+ both API keys), a
+      clearly clean image stamps `clear` with provider `openai` (free omni
+      screen, no Claude spend) while an explicit image stamps via provider
+      `claude` (escalated) — check the provider column in `/admin` →
+      Moderation. With `ANTHROPIC_API_KEY` removed, an omni-flagged image still
+      lands `nsfw` (blur + flag) instead of staying pending.
+- [ ] `/admin` → Moderation → AI moderation settings: switching Media uploads
+      to "OpenAI omni only (free)" updates the "running:" label and subsequent
+      uploads stamp provider `openai`; switching either surface to Off stops
+      new stamps. Choices survive a reload (settings collection, not local
+      state).
+- [ ] With an OpenAI key configured, a post/comment containing threatening
+      harassment vanishes from feeds/threads for everyone shortly after
+      creation and a `text` flag row (with excerpt, no View button) appears in
+      `/admin` → Moderation; Clear restores the post, Block re-hides it.
+      Editing a clean post to add flagged text re-screens it.
+- [ ] Hybrid create gate: with text moderation on, posting text that omni
+      flags as block-worthy never appears in any feed/thread — even a refresh
+      fired immediately after posting (the doc is born blocked; a `text` flag
+      row appears for admins). With `TT_TEXT_SCREEN_BUDGET_MS=0` (or omni
+      unreachable) the post is born pending and owner-private until the async
+      verdict or sweep releases it.
+- [ ] Fail-closed pending flow: with text moderation on and omni unreachable
+      (or `TT_TEXT_SCREEN_BUDGET_MS=0`), a new post appears for its author but
+      NOT for other accounts; once omni is reachable again (queue retry or
+      cron sweep) the post appears for everyone and follower notifications
+      arrive at release time. Turning text moderation Off releases any
+      stranded pending posts on the next sweep.
+- [ ] URL-photos moderation: a post created through the multi-URL photo flow
+      pointing at an explicit external image gets flagged (nsfw advisory row
+      with the URL in the excerpt) without any text in the post; editing the
+      listing title or tags of a clean marketplace post to violating text
+      re-screens it.
+- [ ] Text sweep safety net: with text moderation on, manually strip the
+      `moderation` field from a flagged post (simulating a mid-flight death),
+      then hit `/api/v1/moderation/sweep` with the CRON_SECRET bearer (or the
+      admin Run analysis sweep button) — the post gets stamped/flagged and the
+      "text post(s) awaiting analysis" count in `/admin` → Moderation drops.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
@@ -1425,6 +1480,13 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 
 ## Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`)
 
+- [ ] `/admin` → Moderation lists flags (unreviewed first) with status badges;
+      `View` opens the raw media (blocked media opens for admins only);
+      `Clear` / `NSFW` / `Block` override the verdict with a Lopu toast and
+      stamp reviewedBy; exercise all three overrides on deterministic clear,
+      nsfw, and blocked uploads. `Run analysis sweep` reports
+      analyzed/flagged/skipped counts and drains pending attachments plus
+      verdicts whose flag write was interrupted.
 Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
 restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
 name already on the allowlist is refused, so register FIRST). One command
