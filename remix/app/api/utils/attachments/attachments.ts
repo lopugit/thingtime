@@ -39,6 +39,7 @@ import {
 } from './attachmentPresentation';
 import { PrivateS3ConfigError } from './config';
 import { getPrivateS3, type AttachmentObjectHead, type AttachmentS3, type AttachmentUploadedPart } from './privateS3';
+import { queueAttachmentModeration } from '../moderation/analyzeAttachment';
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_READY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -76,6 +77,9 @@ type AttachmentServiceDependencies = {
 	customMongoActive: () => boolean;
 	canViewTarget: (viewer: AttachmentViewer, attachment: AttachmentDoc) => Promise<boolean>;
 	clock: () => number;
+	// Fire-and-forget NSFW/TOS analysis kickoff after markReady; optional so
+	// unit tests that stub the store never trigger network analysis.
+	queueModeration?: (shareId: string) => void;
 };
 
 class AttachmentServiceError extends Error {
@@ -246,7 +250,8 @@ const defaultDependencies: AttachmentServiceDependencies = {
 	uuid: randomUUID,
 	customMongoActive: isCustomMongoEndpointActive,
 	canViewTarget: canViewHomeAttachmentTarget,
-	clock: Date.now
+	clock: Date.now,
+	queueModeration: queueAttachmentModeration
 };
 
 export const createAttachmentService = (overrides: Partial<AttachmentServiceDependencies> = {}) => {
@@ -836,6 +841,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					return fail(409, 'Attachment object version is unavailable');
 				}
 				await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+				dependencies.queueModeration?.(doc.shareId);
 				return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
 			}
 			if (!finalizationClaim.acquired) {
@@ -942,6 +948,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				return fail(409, 'Attachment object version is unavailable');
 			}
 			await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+			// Moderation runs AFTER the upload is durable and never affects the
+			// response — the analyzer stamps the protected root field async and the
+			// admin sweep retries anything that misses this kickoff.
+			dependencies.queueModeration?.(doc.shareId);
 			return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
 		} catch (error) {
 			return knownFailure(error) || unavailable('complete', error);
@@ -1029,6 +1039,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!id) return fail(404, 'Attachment not found');
 			let doc = await dependencies.store.getById(id);
 			if (!doc || doc.attachmentState !== 'ready') return fail(404, 'Attachment not found');
+			// Pending analysis fails closed for everyone except the owner preview and
+			// an administrator reviewing evidence. Blocked attachments stay admin-only.
+			// 404 (not 403) keeps moderation state from becoming an existence oracle.
+			if (doc.moderation?.status === 'blocked' && !viewer?.isAdmin) return fail(404, 'Attachment not found');
+			if (doc.moderation?.status === 'pending' && !viewer?.isAdmin && viewer?.id !== doc.ownerId) {
+				return fail(404, 'Attachment not found');
+			}
 			// Unbound drafts are owner-previewable only while their reservation is
 			// live. Profile replacement stamps immediate expiry in the same Mongo
 			// transaction that removes the user-slot reference, making the old object
