@@ -68,6 +68,17 @@ export type AttachmentDoc = {
 	// owner-chosen display position within the bound target (stamped at
 	// bind/reorder time; legacy bound docs without it sort by createdAt)
 	attachmentSortIndex?: number;
+	// Protected moderation stamp (api/utils/moderation) — written only by the
+	// server-side analysis pipeline and admin review, never by upload input.
+	moderation?: {
+		status: 'pending' | 'skipped' | 'clear' | 'nsfw' | 'blocked';
+		categories?: string[];
+		provider?: string;
+		model?: string;
+		analyzedAt?: Date;
+		reason?: string;
+		flagPending?: boolean;
+	};
 	createdAt: Date;
 	updatedAt: Date;
 };
@@ -417,6 +428,10 @@ export const attachmentStore: AttachmentStore = {
 				crystal,
 				objectVersionId,
 				attachmentState: 'ready' as const,
+				// Quarantine every newly durable object until analysis either clears/
+				// flags it or deliberately marks it skipped. This lands before complete
+				// returns, so a fast bind cannot expose unscreened bytes during outage.
+				moderation: { status: 'pending' as const },
 				attachmentExpiresAt: expiresAt,
 				updatedAt: new Date()
 			};
@@ -441,6 +456,7 @@ export const attachmentStore: AttachmentStore = {
 						crystal,
 						objectVersionId,
 						attachmentState: 'ready',
+						moderation: { status: 'pending' },
 						attachmentExpiresAt: expiresAt,
 						sizeBytes: nextSize,
 						updatedAt: next.updatedAt
