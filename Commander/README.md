@@ -122,7 +122,9 @@ below 25% CPU extends that shorter deadline proportionally, up to 15 minutes.
 The launcher footer replaces its idle status with the current source label and live processed/indexed count during
 a scan. Search settings also expose the result-section order and a private cache policy: enable/disable, maximum
 size, expiry, custom cache-directory override, reveal, and clear. Cache files contain result metadata only, use
-owner-only permissions, and are never included in Thingtime cloud settings sync.
+owner-only permissions, and are never included in Thingtime cloud settings sync. Commander warms recent snapshots
+into a bounded in-memory tier and re-ranks cached filesystem candidates while a refined live query completes, so
+typing never has to blank or temporarily downgrade the list to catalog-only results.
 
 ## Raycast companion command
 

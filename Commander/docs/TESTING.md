@@ -20,9 +20,13 @@
       bundle beneath a disposable root. Index All and verify each reference is searchable without crawling the app
       bundle or following the link.
 - [ ] With more results than fit in the launcher, use a mouse wheel or trackpad over the rows and confirm the list scrolls while the header and footer remain fixed.
-- [ ] Start from populated results, type a different query, and verify the prior rows remain visibly stale and
-      non-executable until cached/live batches stream in. No empty-state flash may appear, and the first cached batch
-      must paint before the slower filesystem batch when one exists.
+- [ ] Start from populated results, type a different query, and verify the prior rows remain visually unchanged but
+      non-executable until cached/live batches stream in. No dim, empty-state, or catalog-only flash may appear; the
+      first exact or nearest-prefix cached batch must paint before the live filesystem batch, and an identical final
+      batch must not remount the rows.
+- [ ] With an index above one million records, time cold and repeated two-character filesystem searches such as `ea`.
+      Verify the cold path uses the bounded indexed prefix lookup rather than a whole-database contains scan, then
+      type a refinement and repeat the query to confirm warmed candidate and exact-result cache frames paint promptly.
 - [ ] Verify populated search results render as Apps, Commands, and Files & Folders sections. App names omit the
       filename suffix while showing a compact `.app` badge. A very strong text/learned match may place a lower-priority
       section first instead of category preference forcing an irrelevant result above it.
@@ -45,10 +49,14 @@
 - [ ] Verify default and compact modes; expansion never shows an unrendered blank region.
 - [ ] Force-terminate the native host once; its parent watchdog must stop the daemon and Rust child and release port 47820 before relaunch.
 - [ ] Drag the launcher by its icon/header chrome; the window follows the pointer without moving focus into the search field.
+- [ ] Drag each launcher corner and edge inward and outward in default and compact modes. Verify native resize cursors
+      appear, the panel follows the pointer down to its mode-specific minimum, and content remains usable without an
+      opaque outer rectangle.
 - [ ] Pin the launcher from the bottom-right window icon, focus another app, and verify the pinned window remains
       visible. Command-Space must focus the most recently used Commander window on the current display. Right-click
-      the icon and choose Open New Window; verify both windows retain independent queries. Exercise the configured
-      pin/unpin shortcut and confirm the icon's active opacity follows native pinned state.
+      the icon and choose Open New Window; verify the newly created window starts pinned even when the global default
+      is off, and both windows retain independent queries. Exercise the configured pin/unpin shortcut and confirm the
+      icon's active opacity follows native pinned state.
 - [ ] Run an index while the launcher is visible. Verify the idle footer is replaced by the active source label and
       processed/indexed counts, advances without reopening the launcher, then returns to ready when complete.
 - [ ] Search `emoji` or `symbols`, run Search Emoji & Symbols, and verify the launcher changes into the eight-column picker without opening Settings or an external app.

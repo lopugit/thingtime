@@ -126,6 +126,71 @@ describe('useCommander launcher sessions', () => {
     expect(result.current.resultsStale).toBe(true);
   });
 
+  it('keeps an identical cached result frame mounted when the live filesystem frame completes', async () => {
+    const originalHit: SearchHit = {
+      id: 'builtin:settings',
+      title: 'Commander Settings',
+      kind: 'builtin',
+      keywords: ['settings'],
+      favourite: true,
+      actions: [{ id: 'open-settings', title: 'Open Settings' }],
+      score: 100,
+      matchedRanges: [],
+    };
+    const cachedHit: SearchHit = {
+      id: 'file:/tmp/Commander-notes.md',
+      title: 'Commander-notes.md',
+      subtitle: '/tmp/Commander-notes.md',
+      path: '/tmp/Commander-notes.md',
+      kind: 'file',
+      keywords: ['commander'],
+      favourite: false,
+      actions: [{ id: 'open', title: 'Open' }],
+      score: 200,
+      matchedRanges: [],
+    };
+    let releaseLiveResults: (() => void) | undefined;
+    vi.mocked(api.streamSearch).mockImplementation(async (query, onEvent) => {
+      if (!query) {
+        onEvent({
+          type: 'results',
+          phase: 'complete',
+          hits: [originalHit],
+          complete: true,
+          cached: false,
+        });
+        return;
+      }
+      onEvent({
+        type: 'results',
+        phase: 'cache',
+        hits: [cachedHit],
+        complete: false,
+        cached: true,
+      });
+      await new Promise<void>((resolve) => {
+        releaseLiveResults = resolve;
+      });
+      onEvent({
+        type: 'results',
+        phase: 'filesystem',
+        hits: [{ ...cachedHit, matchedRanges: [] }],
+        complete: true,
+        cached: false,
+      });
+    });
+    const { result } = renderHook(() => useCommander());
+    await waitFor(() => expect(result.current.hits).toEqual([originalHit]));
+
+    act(() => result.current.setQuery('commander'));
+    await waitFor(() => expect(result.current.hits).toEqual([cachedHit]));
+    const cachedFrame = result.current.hits;
+    await act(async () => releaseLiveResults?.());
+    await waitFor(() => expect(result.current.searchPending).toBe(false));
+
+    expect(result.current.hits).toBe(cachedFrame);
+  });
+
   it('runs a native action and hides the launcher through the shared command executor', async () => {
     vi.mocked(api.execute).mockResolvedValueOnce({
       ok: true,

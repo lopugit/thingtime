@@ -152,9 +152,6 @@
 .result-row.selected {
   background: var(--selected);
 }
-.result-row.stale-result {
-  opacity: 0.56;
-}
 .result-icon {
   display: inline-flex;
   width: 36px;

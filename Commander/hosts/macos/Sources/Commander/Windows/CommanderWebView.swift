@@ -1,6 +1,15 @@
 import AppKit
 import WebKit
 
+struct CommanderResizeEdges: OptionSet {
+  let rawValue: Int
+
+  static let left = CommanderResizeEdges(rawValue: 1 << 0)
+  static let right = CommanderResizeEdges(rawValue: 1 << 1)
+  static let bottom = CommanderResizeEdges(rawValue: 1 << 2)
+  static let top = CommanderResizeEdges(rawValue: 1 << 3)
+}
+
 @MainActor
 final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource {
   override var isOpaque: Bool { false }
@@ -16,6 +25,8 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource 
   private let allowedOrigin: String
   private var surfaceMask: (inset: CGFloat, cornerRadius: CGFloat)?
   private var preparedFileDragURL: URL?
+  static let launcherSurfaceInset: CGFloat = 18
+  static let resizeHandleWidth: CGFloat = 10
 
   init(ready: DaemonReady, surface: String, bridge: CommanderNativeBridge) {
     self.allowedOrigin = URL(string: ready.url)!.commanderOrigin
@@ -43,6 +54,30 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource 
   override func layout() {
     super.layout()
     updateSurfaceMask()
+  }
+
+  override func resetCursorRects() {
+    super.resetCursorRects()
+    guard let surfaceMask else { return }
+    let surfaceBounds = bounds.insetBy(dx: surfaceMask.inset, dy: surfaceMask.inset)
+    let width = min(Self.resizeHandleWidth, surfaceBounds.width / 2)
+    let height = min(Self.resizeHandleWidth, surfaceBounds.height / 2)
+    addCursorRect(
+      NSRect(x: surfaceBounds.minX, y: surfaceBounds.minY, width: width, height: surfaceBounds.height),
+      cursor: .resizeLeftRight
+    )
+    addCursorRect(
+      NSRect(x: surfaceBounds.maxX - width, y: surfaceBounds.minY, width: width, height: surfaceBounds.height),
+      cursor: .resizeLeftRight
+    )
+    addCursorRect(
+      NSRect(x: surfaceBounds.minX, y: surfaceBounds.minY, width: surfaceBounds.width, height: height),
+      cursor: .resizeUpDown
+    )
+    addCursorRect(
+      NSRect(x: surfaceBounds.minX, y: surfaceBounds.maxY - height, width: surfaceBounds.width, height: height),
+      cursor: .resizeUpDown
+    )
   }
 
   func maskToSurface(inset: CGFloat, cornerRadius: CGFloat) {
@@ -76,6 +111,46 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource 
   override func mouseUp(with event: NSEvent) {
     cancelPreparedFileDrag()
     super.mouseUp(with: event)
+  }
+
+  static func resizedFrame(
+    from startingFrame: NSRect,
+    edges: CommanderResizeEdges,
+    startingMouseLocation: NSPoint,
+    mouseLocation: NSPoint,
+    minimumSize: NSSize
+  ) -> NSRect {
+    let delta = NSPoint(
+      x: mouseLocation.x - startingMouseLocation.x,
+      y: mouseLocation.y - startingMouseLocation.y
+    )
+    var frame = startingFrame
+    if edges.contains(.left) {
+      frame.size.width = max(minimumSize.width, startingFrame.width - delta.x)
+      frame.origin.x = startingFrame.maxX - frame.width
+    } else if edges.contains(.right) {
+      frame.size.width = max(minimumSize.width, startingFrame.width + delta.x)
+    }
+    if edges.contains(.bottom) {
+      frame.size.height = max(minimumSize.height, startingFrame.height - delta.y)
+      frame.origin.y = startingFrame.maxY - frame.height
+    } else if edges.contains(.top) {
+      frame.size.height = max(minimumSize.height, startingFrame.height + delta.y)
+    }
+    return frame
+  }
+
+  static func resizeEdges(
+    at point: NSPoint,
+    frame: NSRect,
+    handleWidth: CGFloat
+  ) -> CommanderResizeEdges {
+    var edges: CommanderResizeEdges = []
+    if abs(point.x - frame.minX) <= handleWidth { edges.insert(.left) }
+    if abs(point.x - frame.maxX) <= handleWidth { edges.insert(.right) }
+    if abs(point.y - frame.minY) <= handleWidth { edges.insert(.bottom) }
+    if abs(point.y - frame.maxY) <= handleWidth { edges.insert(.top) }
+    return edges
   }
 
   func prepareFileDrag(path: String) throws {

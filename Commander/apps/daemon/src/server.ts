@@ -75,6 +75,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   const platform = options.platform ?? currentPlatform();
   const search = new SearchService(options.rustBinary);
   const searchCache = new SearchResultCache(store.snapshot().settings.searchCache);
+  const searchCacheWarm = searchCache.warm().catch(() => undefined);
   const extensions = new RaycastExtensionRuntime();
   const thingtime = new ThingtimeService();
   const localRaycast = new RaycastLocalService();
@@ -109,6 +110,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   });
   applications = await indexing.initialize();
   refreshCatalog();
+  await searchCacheWarm;
   if (indexingSettingsMigrated) void indexing.start('all').catch(() => undefined);
 
   const server = http.createServer(async (request, response) => {
@@ -147,45 +149,82 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     onUpdate?: (event: SearchStreamEvent) => void,
   ): Promise<SearchHit[]> => {
     const snapshot = store.snapshot();
-    const key = JSON.stringify({
-      version: 1,
-      query: query.trim().toLowerCase(),
+    const normalizedQuery = query.trim().toLowerCase();
+    const contextKey = JSON.stringify({
+      version: 2,
       order: snapshot.settings.resultCategoryOrder,
       windowMode: snapshot.settings.windowMode,
       favourites: snapshot.settings.showFavouritesInCompactMode,
       revision: searchRevision,
     });
-    const cached = await searchCache.get(key);
-    if (cached?.length)
+    const key = JSON.stringify({
+      version: 1,
+      query: normalizedQuery,
+      order: snapshot.settings.resultCategoryOrder,
+      windowMode: snapshot.settings.windowMode,
+      favourites: snapshot.settings.showFavouritesInCompactMode,
+      revision: searchRevision,
+    });
+    const indexedItemsPromise = indexing.queryItems(query);
+    const cached = await searchCache.lookup({ key, contextKey, query: normalizedQuery });
+    const preferenceScores = store.preferenceScores(query);
+    let emittedCachedResults = false;
+    if (cached?.exact && cached.hits.length) {
       onUpdate?.({
         type: 'results',
         phase: 'cache',
-        hits: cached,
+        hits: cached.hits,
         complete: false,
         cached: true,
       });
+      emittedCachedResults = true;
+    } else if (cached?.indexedItems.length) {
+      let previewHits = await search.search(
+        query,
+        30,
+        cached.indexedItems,
+        preferenceScores,
+        snapshot.settings.resultCategoryOrder,
+      );
+      previewHits = compactFavourites(previewHits, query, snapshot.settings);
+      if (previewHits.length) {
+        onUpdate?.({
+          type: 'results',
+          phase: 'cache',
+          hits: previewHits,
+          complete: false,
+          cached: true,
+        });
+        emittedCachedResults = true;
+      }
+    }
 
-    const preferenceScores = store.preferenceScores(query);
-    let catalogHits = await search.search(
+    if (!emittedCachedResults) {
+      let catalogHits = await search.search(
+        query,
+        30,
+        [],
+        preferenceScores,
+        snapshot.settings.resultCategoryOrder,
+      );
+      catalogHits = compactFavourites(catalogHits, query, snapshot.settings);
+      onUpdate?.({
+        type: 'results',
+        phase: 'catalog',
+        hits: catalogHits,
+        complete: false,
+        cached: false,
+      });
+    }
+
+    const indexedItems = await indexedItemsPromise;
+    let hits = await search.search(
       query,
       30,
-      [],
+      indexedItems,
       preferenceScores,
       snapshot.settings.resultCategoryOrder,
     );
-    catalogHits = compactFavourites(catalogHits, query, snapshot.settings);
-    onUpdate?.({
-      type: 'results',
-      phase: 'catalog',
-      hits: catalogHits,
-      complete: false,
-      cached: false,
-    });
-
-    const indexedItems = await indexing.queryItems(query);
-    let hits = indexedItems.length
-      ? await search.search(query, 30, indexedItems, preferenceScores, snapshot.settings.resultCategoryOrder)
-      : catalogHits;
     hits = compactFavourites(hits, query, snapshot.settings);
     onUpdate?.({
       type: 'results',
@@ -194,7 +233,9 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       complete: true,
       cached: false,
     });
-    void searchCache.put(key, hits).catch(() => undefined);
+    void searchCache
+      .put({ key, contextKey, query: normalizedQuery, hits, indexedItems })
+      .catch(() => undefined);
     return hits;
   };
 
