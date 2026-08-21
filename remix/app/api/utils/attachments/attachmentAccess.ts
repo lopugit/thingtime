@@ -4,7 +4,7 @@ import { getHomeThingsCollection, getUsersCollection } from '../mongodb/collecti
 import { ACL_ALL, ACL_INHERIT, ACL_OWNER, aclAllows, aclFromVisibility, type ThingVisibility } from '../../../schemas/registry';
 import type { AttachmentPurpose, ProfileAttachmentSlot } from './attachmentCore';
 
-export type AttachmentAccessViewer = { id: string; username?: string | null } | null;
+export type AttachmentAccessViewer = { id: string; username?: string | null; isAdmin?: boolean } | null;
 
 type AttachmentTargetAclDoc = {
 	shareId: string;
