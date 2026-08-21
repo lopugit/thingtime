@@ -203,7 +203,7 @@ export const PostAttachments = ({
 			)}
 
 			{videos.map((attachment) => {
-				const video = <AttachmentVideo attachment={attachment} compact={compact} />;
+				const video = <AttachmentVideo key={attachment.id} attachment={attachment} compact={compact} />;
 				return attachment.nsfw && !revealedIds.has(attachment.id) ? (
 					<NsfwShield key={attachment.id} name={attachment.name} compact={compact} onReveal={() => reveal(attachment.id)}>
 						{video}
