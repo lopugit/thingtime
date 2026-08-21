@@ -16,6 +16,7 @@ import {
 	attachmentMpuSettlementAt,
 	attachmentObjectlessPendingDeleteFence,
 	AttachmentBindingError,
+	AttachmentStoreConflictError,
 	expiredAttachmentDraftFilter,
 	type AttachmentDoc
 } from './attachmentStore';
@@ -592,6 +593,59 @@ test('completion trusts S3 list/head data, detects magic bytes, and returns cano
 			contentType: 'image/png',
 			mediaKind: 'image'
 		});
+	}
+});
+
+test('completion publishes browser-playable containers inline and preserves sniffed types on opaque downloads', async () => {
+	const cases = [
+		{ sniffed: 'video/quicktime', expected: { contentType: 'video/quicktime', mediaKind: 'video' } },
+		{ sniffed: 'video/x-matroska', expected: { contentType: 'video/x-matroska', mediaKind: 'video' } },
+		{
+			sniffed: 'video/x-msvideo',
+			expected: { contentType: 'application/octet-stream', mediaKind: 'file', detectedContentType: 'video/x-msvideo' }
+		}
+	] as const;
+	for (const { sniffed, expected } of cases) {
+		const pending = attachmentDoc();
+		let readyCrystal: any;
+		let claimedLease = '';
+		const store: any = {
+			claimFinalizing: async (_ownerId: string, _id: string, leaseId: string) => {
+				claimedLease = leaseId;
+				return {
+					doc: { ...pending, attachmentState: 'finalizing', attachmentFinalizationLeaseId: leaseId },
+					acquired: true
+				};
+			},
+			renewFinalizing: async (_ownerId: string, _id: string, leaseId: string) =>
+				leaseId === claimedLease ? { ...pending, attachmentState: 'finalizing', attachmentFinalizationLeaseId: leaseId } : null,
+			markReady: async (_ownerId: string, _id: string, crystal: any, objectVersionId: string) => {
+				readyCrystal = crystal;
+				return attachmentDoc({ attachmentState: 'ready', crystal, objectVersionId, uploadId: undefined });
+			}
+		};
+		const s3 = noopS3({
+			listParts: async () => [
+				{ partNumber: 1, etag: 'etag-1', sizeBytes: 8 * 1024 * 1024, checksumSha256: checksum(1) },
+				{ partNumber: 2, etag: 'etag-2', sizeBytes: 2 * 1024 * 1024, checksumSha256: checksum(2) }
+			],
+			headObject: async () => ({
+				sizeBytes: pending.objectSizeBytes,
+				checksumSha256: `${checksum(3)}-2`,
+				checksumType: 'COMPOSITE',
+				attachmentId: pending.shareId,
+				versionId: 'version-1'
+			}),
+			detectContentType: async () => sniffed,
+			markObjectReady: async () => {}
+		});
+		const service = createAttachmentService({ store, getS3: () => s3, now: () => now });
+		const result = await service.complete('user-1', { uploadId: 'attachment-1' });
+		assert.equal(result.ok, true, sniffed);
+		assert.deepEqual(readyCrystal, { name: 'launch.bin', size: 10 * 1024 * 1024, ...expected }, sniffed);
+		if (result.ok) {
+			assert.deepEqual(result.attachment, { id: 'attachment-1', name: 'launch.bin', size: 10 * 1024 * 1024, ...expected }, sniffed);
+		}
 	}
 });
 
@@ -1739,4 +1793,338 @@ test('global expired draft scan is expiry-first, unattached, bounded, and repeat
 		stoppedForTimeBudget: false
 	});
 	assert.equal(events.filter((event) => event === 'delete:objects/attachment-1').length, 1);
+});
+
+// Rows finalized before magic-byte detection existed: ready, opaque crystal,
+// no sniffed label — the detection backfill's exact candidate shape.
+const legacyReadyDoc = (overrides: Partial<AttachmentDoc> = {}) =>
+	attachmentDoc({
+		attachmentState: 'ready',
+		uploadId: undefined,
+		objectVersionId: 'version-1',
+		targetId: 'post-1',
+		attachmentExpiresAt: undefined,
+		...overrides
+	});
+
+test('detection backfill publishes exactly what completion would have and never touches names or sizes', async () => {
+	const docs = [
+		legacyReadyDoc({
+			shareId: 'att-avi',
+			objectKey: 'objects/att-avi',
+			crystal: {
+				...attachmentDoc().crystal,
+				name: 'clip.avi',
+				title: 'Owner title',
+				description: 'Owner description'
+			} as any
+		}),
+		legacyReadyDoc({ shareId: 'att-mov', objectKey: 'objects/att-mov', crystal: { ...attachmentDoc().crystal, name: 'clip.mov' } }),
+		legacyReadyDoc({ shareId: 'att-raw', objectKey: 'objects/att-raw' })
+	];
+	const sniffed: Record<string, string | undefined> = {
+		'objects/att-avi': 'video/x-msvideo',
+		'objects/att-mov': 'video/quicktime',
+		'objects/att-raw': undefined
+	};
+	let listArgs: unknown[] = [];
+	const upgrades = new Map<string, { crystal: any; versionId: string }>();
+	const service = createAttachmentService({
+		store: {
+			listReadyUndetected: async (...args: unknown[]) => {
+				listArgs = args;
+				return docs;
+			},
+			upgradeReadyCrystal: async (id: string, crystal: any, versionId: string) => {
+				upgrades.set(id, { crystal, versionId });
+				return legacyReadyDoc({ shareId: id, crystal });
+			}
+		} as any,
+		getS3: () => noopS3({ detectContentType: async ({ objectKey }) => sniffed[objectKey] }),
+		customMongoActive: () => false
+	});
+
+	const result = await service.backfillDetectedTypes({});
+	assert.deepEqual(result, {
+		ok: true,
+		dryRun: false,
+		scanned: 3,
+		upgradedInline: 1,
+		labeledOpaque: 1,
+		undetected: 1,
+		missingObject: 0,
+		conflicts: 0,
+		failed: 0,
+		hasMore: false,
+		stoppedForTimeBudget: false
+	});
+	assert.deepEqual(listArgs, [201, undefined]);
+	assert.deepEqual(upgrades.get('att-mov'), {
+		crystal: { name: 'clip.mov', size: 10 * 1024 * 1024, contentType: 'video/quicktime', mediaKind: 'video' },
+		versionId: 'version-1'
+	});
+	assert.deepEqual(upgrades.get('att-avi'), {
+		crystal: {
+			name: 'clip.avi',
+			size: 10 * 1024 * 1024,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			detectedContentType: 'video/x-msvideo',
+			title: 'Owner title',
+			description: 'Owner description'
+		},
+		versionId: 'version-1'
+	});
+	// Undetectable bytes stay untouched so a later, wider detector can claim them.
+	assert.equal(upgrades.has('att-raw'), false);
+
+	// Once the candidate set is empty a re-run reports pure zeros — idempotent.
+	const drained = createAttachmentService({
+		store: { listReadyUndetected: async () => [] } as any,
+		getS3: () => noopS3(),
+		customMongoActive: () => false
+	});
+	assert.deepEqual(await drained.backfillDetectedTypes({}), {
+		ok: true,
+		dryRun: false,
+		scanned: 0,
+		upgradedInline: 0,
+		labeledOpaque: 0,
+		undetected: 0,
+		missingObject: 0,
+		conflicts: 0,
+		failed: 0,
+		hasMore: false,
+		stoppedForTimeBudget: false
+	});
+});
+
+test('detection backfill fails closed instead of erasing malformed annotation metadata', async () => {
+	let wrote = false;
+	const service = createAttachmentService({
+		store: {
+			listReadyUndetected: async () => [
+				legacyReadyDoc({
+					shareId: 'att-malformed-annotation',
+					crystal: { ...attachmentDoc().crystal, title: { unexpected: true } } as any
+				})
+			],
+			upgradeReadyCrystal: async () => {
+				wrote = true;
+				throw new Error('malformed annotation must not be rewritten');
+			}
+		} as any,
+		getS3: () => noopS3({ detectContentType: async () => 'video/quicktime' }),
+		customMongoActive: () => false
+	});
+	const result = await service.backfillDetectedTypes({});
+	assert.equal(result.ok, true);
+	if (result.ok) {
+		assert.equal(result.conflicts, 1);
+		assert.equal(result.upgradedInline, 0);
+	}
+	assert.equal(wrote, false);
+});
+
+test('detection backfill dry run counts changes, writes nothing, and pages with a cursor', async () => {
+	const docs = [
+		legacyReadyDoc({ shareId: 'att-1', objectKey: 'objects/att-1' }),
+		legacyReadyDoc({ shareId: 'att-2', objectKey: 'objects/att-2' }),
+		legacyReadyDoc({ shareId: 'att-3', objectKey: 'objects/att-3' })
+	];
+	const listCalls: Array<unknown[]> = [];
+	let wrote = false;
+	const service = createAttachmentService({
+		store: {
+			listReadyUndetected: async (...args: unknown[]) => {
+				listCalls.push(args);
+				const after = args[1] as string | undefined;
+				return docs.filter((doc) => !after || doc.shareId > after).slice(0, Number(args[0]));
+			},
+			upgradeReadyCrystal: async () => {
+				wrote = true;
+				throw new Error('dry run must not write');
+			},
+			setObjectVersionId: async () => {
+				wrote = true;
+				throw new Error('dry run must not write');
+			}
+		} as any,
+		getS3: () => noopS3({ detectContentType: async () => 'video/quicktime' }),
+		customMongoActive: () => false
+	});
+
+	const first = await service.backfillDetectedTypes({ dryRun: true, limit: 2 });
+	assert.deepEqual(first, {
+		ok: true,
+		dryRun: true,
+		scanned: 2,
+		upgradedInline: 2,
+		labeledOpaque: 0,
+		undetected: 0,
+		missingObject: 0,
+		conflicts: 0,
+		failed: 0,
+		hasMore: true,
+		stoppedForTimeBudget: false,
+		nextCursor: 'att-2'
+	});
+	assert.deepEqual(listCalls[0], [3, undefined]);
+
+	const second = await service.backfillDetectedTypes({ dryRun: true, limit: 2, cursor: 'att-2' });
+	assert.deepEqual(listCalls[1], [3, 'att-2']);
+	assert.equal(second.ok, true);
+	if (second.ok) {
+		assert.equal(second.scanned, 1);
+		assert.equal(second.hasMore, false);
+		assert.equal('nextCursor' in second, false);
+	}
+	assert.equal(wrote, false);
+});
+
+test('detection backfill adopts missing object versions and counts gone objects and losing races', async () => {
+	const versionless = legacyReadyDoc({ shareId: 'att-nover', objectKey: 'objects/att-nover', objectVersionId: undefined });
+	const gone = legacyReadyDoc({ shareId: 'att-gone', objectKey: 'objects/att-gone' });
+	const raced = legacyReadyDoc({ shareId: 'att-raced', objectKey: 'objects/att-raced' });
+	const events: string[] = [];
+	const upgrades = new Map<string, { versionId: string }>();
+	const s3 = noopS3({
+		headObject: async () => ({
+			sizeBytes: versionless.objectSizeBytes,
+			checksumSha256: `${checksum(3)}-2`,
+			checksumType: 'COMPOSITE',
+			attachmentId: versionless.shareId,
+			versionId: 'version-9'
+		}),
+		detectContentType: async ({ objectKey }) => {
+			if (objectKey === 'objects/att-gone') {
+				throw Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' });
+			}
+			return 'video/quicktime';
+		},
+		isNotFound: (error) => (error as any)?.name === 'NoSuchKey'
+	});
+	const store: any = {
+		listReadyUndetected: async () => [versionless, gone, raced],
+		setObjectVersionId: async (_ownerId: string, id: string, versionId: string) => {
+			events.push(`adopt:${id}:${versionId}`);
+			return legacyReadyDoc({ shareId: id, objectKey: `objects/${id}`, objectVersionId: versionId });
+		},
+		upgradeReadyCrystal: async (id: string, _crystal: any, versionId: string) => {
+			if (id === 'att-raced') throw new AttachmentStoreConflictError();
+			upgrades.set(id, { versionId });
+			return legacyReadyDoc({ shareId: id });
+		}
+	};
+	const service = createAttachmentService({ store, getS3: () => s3, customMongoActive: () => false });
+
+	const result = await service.backfillDetectedTypes({});
+	assert.deepEqual(result, {
+		ok: true,
+		dryRun: false,
+		scanned: 3,
+		upgradedInline: 1,
+		labeledOpaque: 0,
+		undetected: 0,
+		missingObject: 1,
+		conflicts: 1,
+		failed: 0,
+		hasMore: false,
+		stoppedForTimeBudget: false
+	});
+	assert.deepEqual(events, ['adopt:att-nover:version-9']);
+	assert.deepEqual(upgrades.get('att-nover'), { versionId: 'version-9' });
+
+	// A dry run reads the recovered version but never persists it.
+	events.length = 0;
+	const dry = await service.backfillDetectedTypes({ dryRun: true });
+	assert.equal(dry.ok, true);
+	assert.deepEqual(events, []);
+});
+
+test('detection backfill validates input, fails closed off the home plane, and stops on its wall-clock budget', async () => {
+	const untouched = createAttachmentService({
+		store: {
+			listReadyUndetected: async () => {
+				throw new Error('must not list');
+			}
+		} as any,
+		getS3: () => noopS3(),
+		customMongoActive: () => false
+	});
+	assert.deepEqual(await untouched.backfillDetectedTypes(null), { ok: false, status: 400, error: 'Invalid backfill request' });
+	assert.deepEqual(await untouched.backfillDetectedTypes({ nonsense: true }), { ok: false, status: 400, error: 'Invalid backfill request' });
+	assert.deepEqual(await untouched.backfillDetectedTypes({ dryRun: 'yes' }), { ok: false, status: 400, error: 'dryRun must be a boolean' });
+	assert.deepEqual(await untouched.backfillDetectedTypes({ limit: 0 }), {
+		ok: false,
+		status: 400,
+		error: 'limit must be an integer between 1 and 200'
+	});
+	assert.deepEqual(await untouched.backfillDetectedTypes({ limit: 201 }), {
+		ok: false,
+		status: 400,
+		error: 'limit must be an integer between 1 and 200'
+	});
+	assert.deepEqual(await untouched.backfillDetectedTypes({ cursor: ' bad cursor ' }), {
+		ok: false,
+		status: 400,
+		error: 'Invalid backfill cursor'
+	});
+
+	const customPlane = createAttachmentService({
+		store: {} as any,
+		getS3: () => noopS3(),
+		customMongoActive: () => true
+	});
+	assert.deepEqual(await customPlane.backfillDetectedTypes({}), {
+		ok: false,
+		status: 400,
+		error: 'Attachment maintenance is unavailable with a custom MongoDB endpoint'
+	});
+
+	const unconfigured = createAttachmentService({
+		store: { listReadyUndetected: async () => [legacyReadyDoc()] } as any,
+		getS3: () => {
+			throw new PrivateS3ConfigError();
+		},
+		customMongoActive: () => false
+	});
+	assert.deepEqual(await unconfigured.backfillDetectedTypes({}), {
+		ok: false,
+		status: 503,
+		error: 'Private attachment storage is not configured',
+		code: 'storage_unconfigured',
+		retryable: false
+	});
+
+	let clockCalls = 0;
+	let detections = 0;
+	const budgeted = createAttachmentService({
+		clock: () => (clockCalls++ === 0 ? 0 : 25_000),
+		store: {
+			listReadyUndetected: async () => [legacyReadyDoc({ shareId: 'att-1' }), legacyReadyDoc({ shareId: 'att-2' })]
+		} as any,
+		getS3: () =>
+			noopS3({
+				detectContentType: async () => {
+					detections += 1;
+					return 'video/quicktime';
+				}
+			}),
+		customMongoActive: () => false
+	});
+	assert.deepEqual(await budgeted.backfillDetectedTypes({}), {
+		ok: true,
+		dryRun: false,
+		scanned: 0,
+		upgradedInline: 0,
+		labeledOpaque: 0,
+		undetected: 0,
+		missingObject: 0,
+		conflicts: 0,
+		failed: 0,
+		hasMore: true,
+		stoppedForTimeBudget: true
+	});
+	assert.equal(detections, 0);
 });

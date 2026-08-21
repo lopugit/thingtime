@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createAttachmentMutationAction, isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
+import { createAttachmentDetectionBackfillAction } from './backfill-detected-types/_backfill-detected-types';
 import { createAttachmentCleanupLoader } from './cleanup/_cleanup';
 import { createAttachmentContentLoader } from './content/_content';
 
@@ -283,6 +284,86 @@ test('cleanup route requires the exact cron bearer secret with no user-auth fall
 	});
 	assert.equal(authorized.headers.get('Cache-Control'), 'private, no-store, max-age=0');
 	assert.equal(reaps, 1);
+});
+
+test('detection backfill route is admin-only, same-origin JSON, and forwards one bounded pass', async () => {
+	const report = {
+		ok: true as const,
+		dryRun: true,
+		scanned: 1,
+		upgradedInline: 1,
+		labeledOpaque: 0,
+		undetected: 0,
+		missingObject: 0,
+		conflicts: 0,
+		failed: 0,
+		hasMore: false,
+		stoppedForTimeBudget: false
+	};
+	const serviceInputs: unknown[] = [];
+	const handler = (overrides: Record<string, unknown> = {}) =>
+		createAttachmentDetectionBackfillAction({
+			admin: async () => ({ user: { id: 'admin-1' } }) as any,
+			enforceLimit: allowed as any,
+			service: async (input: unknown) => {
+				serviceInputs.push(input);
+				return report;
+			},
+			...overrides
+		} as any);
+
+	// anonymous and signed-in non-admin callers never reach the service
+	const anonymous = await handler({ admin: async () => ({ error: { status: 401, message: 'Unauthorized' } }) })({
+		request: post({ dryRun: true })
+	});
+	assert.equal(anonymous.status, 401);
+	const nonAdmin = await handler({ admin: async () => ({ error: { status: 403, message: 'Admins only' } }) })({
+		request: post({ dryRun: true })
+	});
+	assert.equal(nonAdmin.status, 403);
+	assert.deepEqual(await nonAdmin.json(), { ok: false, error: 'Admins only' });
+
+	// transport gates fire before auth: cross-origin, wrong media type, wrong method
+	const crossOrigin = await handler()({
+		request: new Request(endpoint, {
+			method: 'POST',
+			headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' },
+			body: '{}'
+		})
+	});
+	assert.equal(crossOrigin.status, 403);
+	const wrongType = await handler()({ request: post('{}', { 'Content-Type': 'text/plain' }) });
+	assert.equal(wrongType.status, 415);
+	const wrongMethod = await handler()({
+		request: new Request(endpoint, {
+			method: 'PUT',
+			headers: { Origin: 'https://thingtime.example', 'Content-Type': 'application/json' },
+			body: '{}'
+		})
+	});
+	assert.equal(wrongMethod.status, 405);
+	assert.equal(serviceInputs.length, 0);
+
+	// throttled admins get the shared 429 shape
+	const limited = await handler({
+		enforceLimit: async () => ({ allowed: false, limit: 30, remaining: 0, resetAt: new Date(Date.now() + 60_000).toISOString() })
+	})({ request: post({}) });
+	assert.equal(limited.status, 429);
+	assert.equal(serviceInputs.length, 0);
+
+	// a real admin call forwards the body and returns the pass report privately
+	const okResponse = await handler()({ request: post({ dryRun: true, limit: 50 }) });
+	assert.equal(okResponse.status, 200);
+	assert.deepEqual(await okResponse.json(), report);
+	assert.equal(okResponse.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+	assert.deepEqual(serviceInputs, [{ dryRun: true, limit: 50 }]);
+
+	// service failures pass their status through unchanged
+	const failing = await handler({
+		service: async () => ({ ok: false as const, status: 400, error: 'Invalid backfill request' })
+	})({ request: post({}) });
+	assert.equal(failing.status, 400);
+	assert.deepEqual(await failing.json(), { ok: false, error: 'Invalid backfill request' });
 });
 
 test('cleanup route fails closed when CRON_SECRET is unavailable', async () => {
