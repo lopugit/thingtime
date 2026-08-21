@@ -26,6 +26,10 @@
 # Doctor commits ride on `all` itself and are cherry-pick-replayed onto the
 # next rebuild; a fixup that stops applying (the source PRs healed) is dropped
 # silently. Unchanged inputs skip the build check and every model round.
+# `anthropics/claude-code-action` rejects push events, including a reusable
+# workflow called by a push listener. Push-triggered calls therefore dispatch
+# one bot-authored workflow_dispatch worker on the protected github-actions
+# ref; only that supported-event worker may enter the rebuild/doctor path.
 #
 # Security model (matches the resolver): the model has NO shell and NO git —
 # it only edits files; both checkouts use persist-credentials: false, so no
@@ -53,12 +57,33 @@ permissions:
 # Standalone dispatches on the github-actions ref dedupe against themselves;
 # called runs dedupe through the caller listener's identical group.
 concurrency:
-  group: all-branch-rebuild
+  # Keep the tiny push handoff separate from the worker it dispatches so the
+  # worker cannot cancel its own caller before the caller reports success.
+  group: all-branch-${{ github.event_name == 'push' && 'handoff' || 'worker' }}
   cancel-in-progress: true
 
 jobs:
+  handoff:
+    name: Hand off push rebuild to the github-actions control plane
+    if: github.repository == 'lopugit/thingtime' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch supported-event rebuild
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          jq -n '{ref:"github-actions"}' \
+            | gh api --method POST \
+                "repos/$REPO/actions/workflows/all-branch.yml/dispatches" \
+                --input -
+
   rebuild:
-    if: github.repository == 'lopugit/thingtime'
+    if: github.repository == 'lopugit/thingtime' && github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
