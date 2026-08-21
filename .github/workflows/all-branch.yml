@@ -20,6 +20,10 @@ on:
   workflow_dispatch:
 
 permissions:
+  # The protected implementation's push-only handoff dispatches its supported
+  # workflow_dispatch worker. Reusable workflows cannot elevate beyond this
+  # caller, so omitting this grant makes the whole run fail at startup.
+  actions: write
   contents: write
   pull-requests: read
 
