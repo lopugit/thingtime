@@ -1,7 +1,9 @@
 # Stable event listener only. The wildcard `all` branch builder (PR discovery,
 # stack ordering, merge/conflict policy, and push handling) is versioned on the
-# protected github-actions branch; this caller carries triggers, permissions,
-# and concurrency only.
+# protected github-actions branch; this caller carries triggers and
+# permissions only. Concurrency dedup lives in the implementation — a caller
+# sharing the called workflow's group deadlocks the pair, which is why no
+# listener in this repo declares one.
 
 name: Build all branch
 
@@ -20,12 +22,6 @@ on:
 permissions:
   contents: write
   pull-requests: read
-
-# Rebuilds are idempotent full rebuilds; a superseded run has nothing worth
-# finishing, so bursts collapse to the newest trigger.
-concurrency:
-  group: all-branch-rebuild
-  cancel-in-progress: true
 
 jobs:
   control-plane:

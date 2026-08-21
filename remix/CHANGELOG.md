@@ -17,7 +17,56 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CSP blocked attachment uploads on header-serving deployments**: the
+  application Content-Security-Policy's `connect-src` never allowed the
+  private S3 bucket origin, so on any surface that serves the CSP header
+  (`pr-*.previews.dev.thingtime.com`, `dev.thingtime.com`, staging — and
+  production once the policy ships) the composer's direct-to-S3 part PUT was
+  killed by the browser and every upload failed with "The file could not
+  reach storage. Check your connection and retry." (`*.vercel.app` previews
+  carry no CSP header, which is why uploads kept working there.) `csp.mjs`
+  now derives the exact bucket origin from
+  `THINGTIME_PRIVATE_S3_BUCKET`/`_REGION` at build time, with a regional
+  `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
+  Verified via S3 preflight (bucket CORS already allowed the preview origins
+  — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
+
 ### Added
+
+- **Admin AI-moderation settings + free omni text moderation (2026-08-19,
+  Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
+  card choosing the provider per surface — media uploads (default / tiered /
+  free openai-only / claude / off) and post/comment text (default / free
+  openai / off) — stored under `Thingtime.ModerationSettings` and overriding
+  the env default. New text pipeline: post/comment/share `crystal.text` is
+  screened by the free omni endpoint on create and on edit; block-worthy
+  categories quarantine the thing (hidden from feeds/threads/search via
+  `canView` + thread loading), other flags queue an advisory `moderationFlag`
+  with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
+  and its stamps are final for the pipeline. A new hourly cron
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
+  29) retries text moderation lost to mid-flight process deaths or provider
+  outages and drains off-era backlog for free, plus the standard attachment
+  sweep; the admin sweep button runs both batches and the tab shows the text
+  backlog count. Post creation adds a hybrid sync gate: the free omni screen
+  races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
+  insert so flagged posts are born stamped (blocked content never renders,
+  even briefly), while timeouts/outages produce owner-private pending posts
+  for the async pipeline — moderation can never break posting; a per-instance circuit breaker
+  (3 failures → open, 60s cooldown) skips the omni call during confirmed
+  outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
+  obtainable while the surface is on, posts are born PENDING — owner-private
+  until the async queue / hourly cron screens and releases them (creation
+  notifications fire at release); `TT_TEXT_SCREEN_BUDGET_MS=0` becomes
+  async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
+  combined free request: prose + listing text + tags + legacy external image
+  URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
 
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean
@@ -38,6 +87,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
   recording every merge and skip. See README “Branch automation: the `all`
   wildcard branch”. — Claude (AI), 2026-08-18
+- **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
+  moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
+  `omni-moderation-latest` endpoint screens every image first; clean images
+  stamp `clear` at $0 and only flagged/borderline images escalate to the paid
+  Claude vision call (fail-safes: omni outage → straight to Claude; Claude
+  outage → omni-flagged images stamp `nsfw`/blur instead of pending). New env:
+  `OPENAI_API_KEY` reused for the screen, optional
+  `TT_MODERATION_ESCALATION_SCORE` (default 0.2);
+  `THINGTIME_MODERATION_PROVIDER` accepts `openai+claude` (alias `tiered`) and
+  standalone `openai`, and the unset default picks the tiered pipeline when
+  both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
+  (PR #308 note has details).
 
 - **Connections: real SSO account linking + virtual YouTube subscriptions.**
   OAuth begin/callback endpoints (state = short-lived signed JWT bound to the
@@ -73,6 +134,32 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Security
 
+- **Moderation reconciliation and pending-media quarantine**: replayed the
+  NSFW/TOS pipeline onto the singular public/private/all upload-permission
+  model with no legacy one-boolean gate dependency. Attachment completion now
+  atomically records `pending`; pending and blocked media are absent from
+  public projections/content routes while owner/admin evidence access and
+  bounded sweep recovery remain available. Generic Things writes cannot forge
+  root moderation state or moderation-flag control Things, and deterministic
+  flag-id collisions leave ordinary user Things untouched for operator
+  review. — Codex (AI), 2026-08-21
+
+- **Relationship uniqueness is structural across all reserved key families**:
+  follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
+  protected root `uniqueKeys` namespace. Boot-time index convergence replaces
+  every kind-blind crystal-path unique index with a non-unique lookup, and the
+  idempotent backfill stamps legacy relationship docs while only reporting
+  suspicious free-form data. The vote family is migrated as security
+  substrate without shipping the deferred polls product; boot convergence also
+  removes the superseded `crystal.follow` marker index that no current writer
+  uses. — Codex (AI), 2026-08-21
+- **Canonical scoped-upload UX reconciliation**: every attachment picker now
+  reads the existing public/private approval booleans directly and shows a
+  purpose-specific approval card when its scope is withheld. The obsolete
+  one-boolean upload alias is not retained. Revoking a scope disables new file
+  starts without hiding finish, retry, or cleanup controls for a draft already
+  in progress. — Codex (AI), 2026-08-21
+
 - **Upload approval now has public / private / all scopes**: the
   signup-permissions gate is split into two independent tri-state flags —
   `meta.publicUploads` (post/comment/custom-emoji attachments) and the new
@@ -99,6 +186,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   migration is required, and administrators bypass the gate entirely.
   — Claude (AI), 2026-08-18
 
+### Added
+
+- **NSFW/TOS media moderation pipeline**: uploaded images are analyzed
+  asynchronously after `complete` (provider-pluggable: Claude API vision via
+  `THINGTIME_MODERATION_PROVIDER=claude`, deterministic `test` provider, or
+  `off`), stamping a protected `moderation` root field on the attachment
+  thing. NSFW media renders behind a heavy blur + red wash with a centered
+  NSFW badge and "Show Anyway" reveal; TOS/illegal verdicts quarantine the
+  media (dropped from public payloads, content route 404s for non-admins)
+  and log a `moderationFlag` thing. New `/admin` → Moderation tab reviews
+  flags (Clear/NSFW/Block overrides, audit-stamped) and runs a bounded
+  analysis sweep via `GET/POST /api/v1/admin/moderation`. See the
+  [PR #308 implementation notes](../PRs/308-claude-nsfw-tos-media-moderation--nsfw-tos-media-moderation-pipeline.md).
+  — Claude (AI), 2026-08-18
+
 ### Fixed
 
 - **PR #99 final security reconciliation**: the current Thingtime serializer
@@ -111,6 +213,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   assignments parse data literals without `eval`. Registration preserves the
   existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
   streaming body cap. — Codex (AI), 2026-08-18
+- **Native iOS drawer and media capture**: the iOS WebView now uses the same
+  fixed drawer trigger as mobile web, so opening the drawer keeps its close
+  control inside the panel instead of translating it with the top nav. The
+  generated app Info.plist now declares camera, microphone, and photo-library
+  purpose strings so WebKit's Take Photo or Video flow requests permission
+  instead of terminating the app. — Codex (AI), 2026-08-17
 - **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
   now lets the controller build an already-previewed commit in the isolated
   `develop` Custom Environment instead of canceling it as a duplicate, while
@@ -141,6 +249,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Native iOS per-branch deployment history**: the Vercel deployments API now
+  preserves its existing latest-per-branch response while optionally returning
+  a bounded newest-first history for each branch. The native Web destination
+  drawer presents that history as a second disclosure level, marks the most
+  recent ready deployment as `Last successful` when a newer build is queued,
+  and keeps every specific deployment URL directly selectable. Signed iOS
+  build 15 targets the matching branch preview and is available to internal
+  TestFlight testers. — Codex (AI), 2026-08-18
 - **Recoverable first-session Things space**: a fresh browser can land on
   `/things` and immediately receive the real Things UI through a rate-limited
   temporary user Thing, bounded subscription, normal browser session, and

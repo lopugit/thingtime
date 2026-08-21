@@ -1,10 +1,33 @@
-import type { AttachmentComposerSnapshot, AttachmentMediaKind, ComposerAttachmentUpload, PublicAttachment } from './attachmentTypes';
+import type {
+	AttachmentComposerSnapshot,
+	AttachmentMediaKind,
+	AttachmentUploadPurpose,
+	ComposerAttachmentUpload,
+	PublicAttachment
+} from './attachmentTypes';
 
 const INLINE_IMAGE_TYPES = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
-const INLINE_VIDEO_TYPES = new Set(['video/mp4', 'video/webm']);
+// Mirrors the server's ATTACHMENT_INLINE_CONTENT_TYPES video set. Codec support
+// inside a container still varies per browser; PostAttachments degrades an
+// unplayable video to its download row via the element's error event.
+const INLINE_VIDEO_TYPES = new Set([
+	'video/3gpp',
+	'video/3gpp2',
+	'video/mp4',
+	'video/ogg',
+	'video/quicktime',
+	'video/webm',
+	'video/x-m4v',
+	'video/x-matroska'
+]);
 export const MAX_POST_ATTACHMENTS = 25;
 const MAX_POST_TAGS = 12;
 const MAX_POST_TAG_CHARS = 40;
+
+export type AttachmentUploadScope = 'public' | 'private';
+
+export const attachmentUploadScopeForPurpose = (purpose: AttachmentUploadPurpose): AttachmentUploadScope =>
+	purpose === 'message' || purpose === 'profile-avatar' || purpose === 'profile-banner' ? 'private' : 'public';
 
 // Mirrors the createThing tag canonicalizer so ambiguous POST reconciliation
 // compares the exact committed payload rather than the raw composer text.
@@ -41,15 +64,62 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 	const contentType = typeof record.contentType === 'string' ? record.contentType.trim().toLowerCase() : 'application/octet-stream';
 	const size = Number(record.size);
 	if (!id || !name || !Number.isSafeInteger(size) || size < 0) return null;
+	const detectedRaw = typeof record.detectedContentType === 'string' ? record.detectedContentType.trim().toLowerCase() : '';
+	const detectedContentType =
+		detectedRaw && detectedRaw !== contentType && detectedRaw !== 'application/octet-stream' && detectedRaw.includes('/') ? detectedRaw : '';
 	return {
 		id,
 		name,
 		size,
 		contentType,
+		...(detectedContentType ? { detectedContentType } : {}),
 		// Audio is valid canonical server metadata, but is intentionally treated as
 		// a generic download until Thingtime ships a vetted inline audio player.
-		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind)
+		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind),
+		// only an explicit server true survives — nothing client-side can set it
+		...(record.nsfw === true ? { nsfw: true } : {})
 	};
+};
+
+// Display names for containers the server can sniff but never renders inline,
+// plus common claimed types; anything unmapped shows its raw MIME string.
+const FRIENDLY_CONTENT_TYPE_LABELS: Record<string, string> = {
+	'application/gzip': 'GZIP archive',
+	'application/pdf': 'PDF document',
+	'application/vnd.rar': 'RAR archive',
+	'application/x-7z-compressed': '7-Zip archive',
+	'application/zip': 'ZIP archive',
+	'audio/aac': 'AAC audio',
+	'audio/flac': 'FLAC audio',
+	'audio/midi': 'MIDI audio',
+	'audio/mpeg': 'MP3 audio',
+	'audio/ogg': 'Ogg audio',
+	'audio/opus': 'Opus audio',
+	'audio/vnd.wave': 'WAV audio',
+	'audio/wav': 'WAV audio',
+	'audio/x-m4a': 'M4A audio',
+	'audio/x-wav': 'WAV audio',
+	'image/bmp': 'BMP image',
+	'image/heic': 'HEIC image',
+	'image/heif': 'HEIF image',
+	'image/tiff': 'TIFF image',
+	'video/mp2t': 'MPEG-TS video',
+	'video/mpeg': 'MPEG video',
+	'video/quicktime': 'QuickTime video',
+	'video/vnd.avi': 'AVI video',
+	'video/x-flv': 'FLV video',
+	'video/x-ms-asf': 'ASF video',
+	'video/x-ms-wmv': 'WMV video',
+	'video/x-msvideo': 'AVI video'
+};
+
+export const attachmentTypeLabel = (attachment: Pick<PublicAttachment, 'contentType' | 'detectedContentType'>): string => {
+	const shown =
+		attachment.contentType === 'application/octet-stream' && attachment.detectedContentType
+			? attachment.detectedContentType
+			: attachment.contentType;
+	if (!shown || shown === 'application/octet-stream') return 'File';
+	return FRIENDLY_CONTENT_TYPE_LABELS[shown] || shown;
 };
 
 export const attachmentContentUrl = (id: string, download = false): string => {
@@ -96,6 +166,12 @@ export const attachmentUploadError = (
 		Number(context.remainingBytes) >= 0 &&
 		Number(context.fileSizeBytes) > Number(context.remainingBytes);
 	if (status === 401) return 'Your session expired. Log in again before uploading this file.';
+	if (code === 'public_uploads_not_approved') {
+		return 'Public media uploads need admin approval during the beta. After email verification, an admin can approve this account.';
+	}
+	if (code === 'private_uploads_not_approved') {
+		return 'Private media uploads need admin approval during the beta. After email verification, an admin can approve this account.';
+	}
 	if (status === 403) return 'This account is not allowed to upload that file.';
 	if (status === 413) return 'This file is larger than Thingtime can accept.';
 	if (status === 429) return 'Uploads are moving too quickly. Wait a moment, then retry this file.';
@@ -160,7 +236,9 @@ export const sameAttachmentSnapshot = (left: AttachmentComposerSnapshot, right: 
 			leftAttachment.name !== rightAttachment.name ||
 			leftAttachment.size !== rightAttachment.size ||
 			leftAttachment.contentType !== rightAttachment.contentType ||
-			leftAttachment.mediaKind !== rightAttachment.mediaKind
+			leftAttachment.detectedContentType !== rightAttachment.detectedContentType ||
+			leftAttachment.mediaKind !== rightAttachment.mediaKind ||
+			leftAttachment.nsfw !== rightAttachment.nsfw
 		) {
 			return false;
 		}
