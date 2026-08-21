@@ -167,6 +167,15 @@ const customEnvironmentDomainNames = (domains) =>
 		.map((domain) => (typeof domain === 'string' ? domain : domain?.name ?? domain?.domain))
 		.filter((domain) => typeof domain === 'string');
 
+const stableDevelopDomainBindingIssue = (customEnvironment, stableDomain, config) => {
+	if (customEnvironmentDomainNames(customEnvironment?.domains).length !== 0) return 'custom-environment-domain-present';
+	if (stableDomain?.projectId !== config.projectId) return 'wrong-project';
+	if (stableDomain?.verified !== true) return 'unverified';
+	if (stableDomain?.gitBranch !== 'develop') return 'wrong-git-branch';
+	if (stableDomain?.customEnvironmentId != null && stableDomain.customEnvironmentId !== '') return 'custom-environment-bound';
+	return null;
+};
+
 const runtimeConfig = () => ({
 	repository: safeRepository(requiredEnv('GITHUB_REPOSITORY')),
 	repositoryId: boundedInteger(requiredEnv('GITHUB_REPOSITORY_ID'), 'GitHub repository id'),
@@ -392,7 +401,8 @@ const runSelfTest = () => {
 		projectId: 'prj_example',
 		projectName: 'thingtime',
 		gitRepoId: 4242,
-		customEnvironmentId: 'env_develop'
+		customEnvironmentId: 'env_develop',
+		stableDevelopDomain: 'dev.thingtime.com'
 	};
 
 	equal(classifyPullRequest(base, config.repository, config.repositoryId), { allowed: true });
@@ -455,6 +465,48 @@ const runSelfTest = () => {
 		'legacy.example.com'
 	]);
 	equal(customEnvironmentDomainNames(null), []);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [] },
+			{
+				projectId: config.projectId,
+				verified: true,
+				gitBranch: 'develop',
+				customEnvironmentId: null
+			},
+			config
+		),
+		null
+	);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [] },
+			{
+				projectId: config.projectId,
+				verified: true,
+				gitBranch: 'develop',
+				customEnvironmentId: ''
+			},
+			config
+		),
+		null
+	);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [{ name: config.stableDevelopDomain }] },
+			{ projectId: config.projectId, verified: true, gitBranch: 'develop', customEnvironmentId: null },
+			config
+		),
+		'custom-environment-domain-present'
+	);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [] },
+			{ projectId: config.projectId, verified: true, gitBranch: null, customEnvironmentId: config.customEnvironmentId },
+			config
+		),
+		'wrong-git-branch'
+	);
 
 	const deployment = {
 		id: 'dpl_example',
@@ -867,21 +919,12 @@ const assertVercelConfiguration = async (config) => {
 	if (customEnvironment?.id !== config.customEnvironmentId || customEnvironment?.slug !== 'develop') {
 		throw new Error('Vercel custom environment identity did not match develop');
 	}
-	const environmentDomains = customEnvironmentDomainNames(customEnvironment.domains);
-	if (environmentDomains.length !== 1 || environmentDomains[0] !== config.stableDevelopDomain) {
-		throw new Error('Develop custom environment must own exactly the stable develop domain');
-	}
-
 	const stableDomain = await vercelRequest(
 		`/v9/projects/${encodeURIComponent(config.projectId)}/domains/${encodeURIComponent(config.stableDevelopDomain)}`
 	);
-	if (
-		stableDomain?.projectId !== config.projectId ||
-		stableDomain?.verified !== true ||
-		stableDomain?.gitBranch != null ||
-		stableDomain?.customEnvironmentId !== config.customEnvironmentId
-	) {
-		throw new Error('Stable develop domain must be verified and attached only to the develop custom environment');
+	const stableDomainIssue = stableDevelopDomainBindingIssue(customEnvironment, stableDomain, config);
+	if (stableDomainIssue) {
+		throw new Error(`Stable develop domain must track only the develop Git branch (${stableDomainIssue})`);
 	}
 
 	const wildcardDomainName = `*.${config.previewAliasSuffix}`;

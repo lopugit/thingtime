@@ -141,15 +141,61 @@ jobs:
             echo "::error::Opening the sync PR needs SYNC_BRANCHES_PAT or CONFLICT_RESOLVER_PAT — a PR created by GITHUB_TOKEN would run no CI."
             exit 1
           fi
-          existing=$(gh pr list --repo "${{ github.repository }}" --base develop --head main --state open --json number --jq '.[0].number')
+
+          # Keep lookup and creation on the REST API. `gh pr` uses GraphQL,
+          # where a transient gateway error can arrive after GitHub has already
+          # committed the mutation. Always verify the desired postcondition
+          # after an error so a created PR does not leave this run false-red.
+          find_sync_pr() {
+            local attempt existing
+            for attempt in 1 2 3 4; do
+              if existing=$(gh api --method GET "repos/${{ github.repository }}/pulls" \
+                -f state=open \
+                -f base=develop \
+                -f head="${{ github.repository_owner }}:main" \
+                --jq '.[0].number // empty'); then
+                printf '%s' "$existing"
+                return 0
+              fi
+              if [ "$attempt" -lt 4 ]; then
+                sleep $((attempt * 2))
+              fi
+            done
+            return 1
+          }
+
+          existing=""
+          if ! existing=$(find_sync_pr); then
+            echo "::warning::Could not query the standing sync PR after bounded retries; attempting the idempotent create path."
+          fi
           if [ -n "$existing" ]; then
             echo "Sync PR #$existing is already open and tracks main automatically." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          gh pr create \
-            --repo "${{ github.repository }}" \
-            --base develop \
-            --head main \
-            --title "Sync main into develop" \
-            --body "Automated sync opened by the *Sync main into develop* workflow because main could not be merged into develop directly (merge conflicts, or the merge touches workflow files that GITHUB_TOKEN cannot push). Resolve any conflicts here and merge — this PR's head is \`main\`, so it picks up new commits on its own."
-          echo "Opened a sync PR (main → develop)." >> "$GITHUB_STEP_SUMMARY"
+
+          sync_pr_body="Automated sync opened by the *Sync main into develop* workflow because main could not be merged into develop directly (merge conflicts, or the merge touches workflow files that GITHUB_TOKEN cannot push). Resolve any conflicts here and merge — this PR's head is \`main\`, so it picks up new commits on its own."
+          for attempt in 1 2 3; do
+            created=""
+            if created=$(gh api --method POST "repos/${{ github.repository }}/pulls" \
+              -f base=develop \
+              -f head=main \
+              -f title="Sync main into develop" \
+              -f body="$sync_pr_body" \
+              --jq '.number'); then
+              echo "Opened sync PR #$created (main → develop)." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            echo "::warning::Sync PR creation attempt $attempt failed; checking whether GitHub committed it despite the API error."
+            existing=""
+            if existing=$(find_sync_pr) && [ -n "$existing" ]; then
+              echo "Sync PR #$existing exists after a transient create error and tracks main automatically." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 3))
+            fi
+          done
+
+          echo "::error::Could not open or find the main → develop sync PR after bounded retries."
+          exit 1
