@@ -1,4 +1,10 @@
-import type { AttachmentComposerSnapshot, AttachmentMediaKind, ComposerAttachmentUpload, PublicAttachment } from './attachmentTypes';
+import type {
+	AttachmentComposerSnapshot,
+	AttachmentMediaKind,
+	AttachmentUploadPurpose,
+	ComposerAttachmentUpload,
+	PublicAttachment
+} from './attachmentTypes';
 
 const INLINE_IMAGE_TYPES = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
 // Mirrors the server's ATTACHMENT_INLINE_CONTENT_TYPES video set. Codec support
@@ -17,6 +23,11 @@ const INLINE_VIDEO_TYPES = new Set([
 export const MAX_POST_ATTACHMENTS = 25;
 const MAX_POST_TAGS = 12;
 const MAX_POST_TAG_CHARS = 40;
+
+export type AttachmentUploadScope = 'public' | 'private';
+
+export const attachmentUploadScopeForPurpose = (purpose: AttachmentUploadPurpose): AttachmentUploadScope =>
+	purpose === 'message' || purpose === 'profile-avatar' || purpose === 'profile-banner' ? 'private' : 'public';
 
 // Mirrors the createThing tag canonicalizer so ambiguous POST reconciliation
 // compares the exact committed payload rather than the raw composer text.
@@ -64,7 +75,9 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		...(detectedContentType ? { detectedContentType } : {}),
 		// Audio is valid canonical server metadata, but is intentionally treated as
 		// a generic download until Thingtime ships a vetted inline audio player.
-		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind)
+		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind),
+		// only an explicit server true survives — nothing client-side can set it
+		...(record.nsfw === true ? { nsfw: true } : {})
 	};
 };
 
@@ -153,6 +166,12 @@ export const attachmentUploadError = (
 		Number(context.remainingBytes) >= 0 &&
 		Number(context.fileSizeBytes) > Number(context.remainingBytes);
 	if (status === 401) return 'Your session expired. Log in again before uploading this file.';
+	if (code === 'public_uploads_not_approved') {
+		return 'Public media uploads need admin approval during the beta. After email verification, an admin can approve this account.';
+	}
+	if (code === 'private_uploads_not_approved') {
+		return 'Private media uploads need admin approval during the beta. After email verification, an admin can approve this account.';
+	}
 	if (status === 403) return 'This account is not allowed to upload that file.';
 	if (status === 413) return 'This file is larger than Thingtime can accept.';
 	if (status === 429) return 'Uploads are moving too quickly. Wait a moment, then retry this file.';
@@ -218,7 +237,8 @@ export const sameAttachmentSnapshot = (left: AttachmentComposerSnapshot, right: 
 			leftAttachment.size !== rightAttachment.size ||
 			leftAttachment.contentType !== rightAttachment.contentType ||
 			leftAttachment.detectedContentType !== rightAttachment.detectedContentType ||
-			leftAttachment.mediaKind !== rightAttachment.mediaKind
+			leftAttachment.mediaKind !== rightAttachment.mediaKind ||
+			leftAttachment.nsfw !== rightAttachment.nsfw
 		) {
 			return false;
 		}
