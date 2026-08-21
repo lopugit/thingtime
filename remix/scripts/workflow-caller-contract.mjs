@@ -60,6 +60,26 @@ assert.match(
   'promote-features-to-main.yml must grant the protected promoter permission to dispatch its resolver'
 );
 
+const allBranchCaller = readFileSync(
+  resolve(workflowsRoot, 'all-branch.yml'),
+  'utf8'
+);
+const allBranchPermissionsStart = allBranchCaller.indexOf('\npermissions:\n');
+const allBranchJobsStart = allBranchCaller.indexOf('\njobs:\n');
+assert.ok(
+  allBranchPermissionsStart >= 0 && allBranchJobsStart > allBranchPermissionsStart,
+  'all-branch.yml must retain a top-level permissions block'
+);
+const allBranchPermissions = allBranchCaller.slice(
+  allBranchPermissionsStart,
+  allBranchJobsStart
+);
+assert.match(
+  allBranchPermissions,
+  /^  actions: write$/m,
+  'all-branch.yml must let the protected push handoff dispatch its supported-event worker'
+);
+
 const filesUnder = (root) => {
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
