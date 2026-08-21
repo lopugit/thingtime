@@ -1140,9 +1140,9 @@
     "semantic_hash": "2c876691ea163b0306ebf575cf88e1b4"
   },
   "remix/app/hooks/useApi.tsx": {
-    "mtime": 1787292350.407524,
-    "ast_hash": "4948b9afe5f49998a3625dfc85da6d19",
-    "semantic_hash": "4948b9afe5f49998a3625dfc85da6d19"
+    "mtime": 1787294851.220052,
+    "ast_hash": "8926fbfa2a9be911d5b39edbf14d61f0",
+    "semantic_hash": "8926fbfa2a9be911d5b39edbf14d61f0"
   },
   "remix/app/hooks/useAsyncFetcher.tsx": {
     "mtime": 1787292221.5711718,
@@ -6142,7 +6142,7 @@
   "PRs/326-claude-crystal-reservation-removal.md": {
     "mtime": 1787292221.2297635,
     "ast_hash": "7fad0187d9d964eae454807c4090886c",
-    "semantic_hash": ""
+    "semantic_hash": "7fad0187d9d964eae454807c4090886c"
   },
   "remix/app/components/Attachments/AttachmentAnnotatePopover.tsx": {
     "mtime": 1787292487.356481,
@@ -6192,11 +6192,11 @@
   "PRs/312-claude-media-thing-pages--media-thing-pages-and-layouts.md": {
     "mtime": 1787292541.809046,
     "ast_hash": "1606568a46b77f24267dcbb2c8902319",
-    "semantic_hash": ""
+    "semantic_hash": "1606568a46b77f24267dcbb2c8902319"
   },
   "PRs/321-claude-attachment-detected-type-backfill.md": {
     "mtime": 1787292562.2313113,
     "ast_hash": "f2775d781f0ff841a24b3de5bef4a2bb",
-    "semantic_hash": ""
+    "semantic_hash": "f2775d781f0ff841a24b3de5bef4a2bb"
   }
 }

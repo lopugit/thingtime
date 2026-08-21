@@ -514,6 +514,10 @@ is fixed, and cite the checklist you ran in the PR description.
       reload, and render identically for a non-owner viewer; Auto clears
       `mediaLayout` from the crystal. Layout controls only appear with 2+
       visual attachments and never break the drag-reorder grips.
+- [ ] Media layout transport: after creating a post or rich comment through
+      `useApi`, reopen the editor and confirm the selected Rows/Grid mode,
+      columns/pattern, and non-default spans survived the client request. A
+      correct pre-submit preview is not sufficient evidence of persistence.
 - [ ] Server bounds: `mediaLayout` rejects pattern rows over 25 entries or
       outside 1..6, columns outside 1..6, spans maps over 25 entries, and
       non-object payloads with a 400; unknown keys are stripped; legacy posts

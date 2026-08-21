@@ -19,6 +19,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Media layout selections now reach the Things API**: the shared client API
+  transport preserves `mediaLayout` for post creation and rich comments, so a
+  Rows/Grid preview no longer silently reopens as Auto after save. — Codex
+  (AI), 2026-08-21
+
 - **Develop staging domain binding restored**: `dev.thingtime.com` is again
   attached to the exact `develop` Git branch (`customEnvironmentId: null`),
   so controller-managed PR deployments in the shared pre-production
