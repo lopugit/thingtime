@@ -19,6 +19,33 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Media layout selections now reach the Things API**: the shared client API
+  transport preserves `mediaLayout` for post creation and rich comments, so a
+  Rows/Grid preview no longer silently reopens as Auto after save. — Codex
+  (AI), 2026-08-21
+
+- **Develop staging domain binding restored**: `dev.thingtime.com` is again
+  attached to the exact `develop` Git branch (`customEnvironmentId: null`),
+  so controller-managed PR deployments in the shared pre-production
+  environment cannot move the stable signed-in S3 staging origin away from
+  the current integration branch. — Codex (AI), 2026-08-21
+
+- **PR #321 legacy detected-type backfill preserves media annotations**:
+  re-detecting a pre-#319 opaque attachment now changes only its server-owned
+  type fields and retains #312's owner-authored title/description exactly;
+  malformed annotation metadata fails closed instead of being erased. — Codex
+  (AI), 2026-08-21
+
+- **PR #312 media integration hardening**: attachment annotation now preserves
+  server-owned magic-byte `detectedContentType`, Auto layout removes the
+  optional `mediaLayout` key, and media-card permalinks consistently use
+  `/media/:id`. Internal repost/quote controls stay hidden on media Things
+  until attachment-target shares have a non-empty renderer. Gallery layout
+  numbers and span keys are now strict rather than coercible/prototype-shaped,
+  annotation accepts only its documented request fields, and media cards label
+  their audience as inherited instead of incorrectly falling back to Public.
+  — Codex (AI), 2026-08-21
+
 - **PR #99 final security reconciliation**: the current Thingtime serializer
   now treats persisted state strictly as data—functions are omitted on write,
   every legacy function tag is removed without compilation, code-defined
@@ -89,6 +116,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   (PR #308 note has details).
 
 ### Security
+
+- **Crystal namespace reopened after structural uniqueness migration**: once
+  phase 1 has replaced every relationship crystal-path unique index and the
+  relationship `uniqueKeys` backfill has converged, free-form data may again
+  use `followKey`, `friendKey`, `memberKey`, `dmKey`, `inviteCode`,
+  `emojiKey`, and `voteKey`. Those values enter no platform unique index;
+  system dedupe remains exclusively in protected server-owned `uniqueKeys`.
+  — Codex (AI), 2026-08-21
 
 - **Relationship uniqueness is structural across all reserved key families**:
   follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
