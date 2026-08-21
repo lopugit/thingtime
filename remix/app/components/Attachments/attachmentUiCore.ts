@@ -59,7 +59,9 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		contentType,
 		// Audio is valid canonical server metadata, but is intentionally treated as
 		// a generic download until Thingtime ships a vetted inline audio player.
-		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind)
+		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind),
+		// only an explicit server true survives — nothing client-side can set it
+		...(record.nsfw === true ? { nsfw: true } : {})
 	};
 };
 
@@ -177,7 +179,8 @@ export const sameAttachmentSnapshot = (left: AttachmentComposerSnapshot, right: 
 			leftAttachment.name !== rightAttachment.name ||
 			leftAttachment.size !== rightAttachment.size ||
 			leftAttachment.contentType !== rightAttachment.contentType ||
-			leftAttachment.mediaKind !== rightAttachment.mediaKind
+			leftAttachment.mediaKind !== rightAttachment.mediaKind ||
+			leftAttachment.nsfw !== rightAttachment.nsfw
 		) {
 			return false;
 		}
