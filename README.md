@@ -625,6 +625,98 @@ test recipient (or a plus alias of it).
 
 ### Private S3 media and attachments
 
+Uploaded images are moderated asynchronously after upload: attachment
+completion atomically stamps protected `moderation.status: pending` before the
+upload can be projected or served publicly. Pending media stays available only
+to its owner and admins as evidence; other callers receive not found until a
+provider-pluggable NSFW/TOS analysis releases it. NSFW media then renders
+heavily blurred behind a "Show Anyway" click; TOS/illegal verdicts remain
+quarantined and log a protected `moderationFlag` for the `/admin` → Moderation
+review queue. Provider failures leave the item pending rather than fabricating
+a clear verdict, and the bounded retry sweep recovers both missed analysis and
+missed flag writes.
+
+The recommended production provider is the tiered `openai+claude` pipeline:
+OpenAI's **free** `omni-moderation-latest` endpoint screens every image first,
+clean images stamp `clear` at $0, and only flagged/borderline images escalate
+to a paid Claude vision call for the policy-nuanced verdict (see
+`docs/ai-api-cost-analysis.md`). Note the free screen cannot detect CSAM in
+images (OpenAI's `sexual/minors` category is text-only) and cannot apply
+Thingtime's "artistic nudity still blurs" rule — that is exactly why flagged
+and borderline images always escalate, and why omni alone never stamps
+`blocked`. If Claude is unreachable, omni-flagged images fail safe to `nsfw`
+(blurred + flagged for admin review); if OpenAI is unreachable, every image
+goes straight to Claude.
+
+```sh
+THINGTIME_MODERATION_PROVIDER="openai+claude"  # 'openai+claude' (alias 'tiered') | 'claude' | 'openai' | 'test' | 'off'
+                                               # unset default by keys: both → openai+claude; ANTHROPIC only → claude;
+                                               # OPENAI only → openai; neither → off
+ANTHROPIC_API_KEY="<key>"                # Claude API key (escalation / claude provider)
+OPENAI_API_KEY="<key>"                   # OpenAI key for the free omni-moderation screen
+TT_MODERATION_MODEL="claude-opus-5"      # optional Claude model override
+TT_MODERATION_ESCALATION_SCORE="0.2"     # optional; escalate unflagged images whose max
+                                         # image-category score meets this 0..1 threshold
+```
+
+Note: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
+feature — their presence alone activates image moderation when
+`THINGTIME_MODERATION_PROVIDER` is unset. Set it to `off` explicitly in
+environments that carry the keys for musing but must not moderate. An
+unrecognized provider value warns and falls back to the key-based default
+rather than silently disabling moderation.
+
+Admins control which AI runs each moderation surface from `/admin` →
+Moderation → "AI moderation settings": media uploads (default / tiered
+openai+claude / free openai-only / claude / off) and post/comment text
+(default / free openai / off). Admin choices are stored in the settings
+collection and override the env default; "default" delegates back to the
+env/key logic above. Post and comment text is screened by the free
+omni-moderation endpoint whenever an OpenAI key exists: block-worthy
+categories (sexual/minors, threatening harassment/hate, violent-illicit,
+self-harm instructions) quarantine the post/comment — it vanishes from every
+feed, thread, and search for everyone — while other flagged categories queue
+an advisory `moderationFlag` (with a bounded text excerpt as evidence) for
+the admin review queue without hiding the content. Edited text is re-screened;
+admin review verdicts are final until an admin changes them.
+
+Post creation is FAIL-CLOSED while text moderation is on: the free omni
+screen races a bounded time budget (`TT_TEXT_SCREEN_BUDGET_MS`, default
+600ms) BEFORE the insert, and a verdict in time means the post is born
+stamped — blocked content never renders anywhere. When no verdict can be
+obtained (omni outage, circuit breaker open, or `TT_TEXT_SCREEN_BUDGET_MS=0`
+async-release mode) the post is born **pending: visible only to its owner**
+until the async queue or the hourly cron screens and releases it — its
+creation notifications fire at release, when followers can actually see it.
+No post-family content ever goes public unscreened while the surface is on;
+turning the surface off publishes normally (and the sweep releases any
+stranded pending docs so an off flip can't orphan them). The budget is
+measured entirely server→OpenAI (client speed is irrelevant), and the
+per-instance breaker (3 failures → open 60s) skips the omni call during
+confirmed outages so posting stays fast — posts just arrive born-pending.
+Edits stay async.
+
+Text screening covers every omni-judgeable public surface of a post-family
+thing in one free combined request: prose (`crystal.text`), marketplace
+listing text (title/location/category/condition), tags, and the legacy
+external image URLs (`crystal.images`, capped at 8/post — omni fetches the
+URLs itself, so the multi-URL photos flow is moderated too; URL images follow
+the same image-blind `sexual/minors` limitation as omni-only media, so they
+flag/advisory rather than auto-block). Known coverage gaps, deliberate for
+now: video and non-image file CONTENTS (needs frame-extraction/AV infra) and
+profile bio/display-name (different write path).
+
+A scheduled safety net (`GET /api/v1/moderation/sweep`, Vercel Cron at minute
+29 each hour, `CRON_SECRET` bearer — same contract as the attachments cleanup
+cron) retries moderation the fire-and-forget kickoffs lost: post-family things
+with real text and no moderation stamp (process death between the post write
+and the verdict stamp, provider outages), pending attachments, and verdicts
+whose protected moderation flag still needs to be written. Because the omni
+screen is free, the same job also gradually drains any
+backlog from periods when text moderation was off; it no-ops while the text
+surface is off. The `/admin` → Moderation "Run analysis sweep" button drains
+the same batches on demand and shows the text backlog count.
+
 Posts, comments and replies, Messenger messages and thread replies, custom
 reaction emoji, and profile avatar/banner images use direct, checksummed
 multipart uploads to a private S3 bucket. The browser receives short-lived part
