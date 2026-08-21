@@ -19,6 +19,32 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Media layout selections now reach the Things API**: the shared client API
+  transport preserves `mediaLayout` for post creation and rich comments, so a
+  Rows/Grid preview no longer silently reopens as Auto after save. — Codex
+  (AI), 2026-08-21
+
+- **Develop staging domain kept on the protected branch during PR previews**:
+  `dev.thingtime.com` remains bound exclusively to the literal `develop` Git
+  branch (`gitBranch: develop`, with no custom-environment binding). The
+  `develop` Vercel Custom Environment is reserved for isolated PR deployments
+  and owns no stable domain, so a controller-created preview cannot advance the
+  signed-in staging origin. — Codex (AI), 2026-08-21
+
+- **PR #321 legacy detected-type backfill preserves media annotations**:
+  re-detecting a pre-#319 opaque attachment now changes only its server-owned
+  type fields and retains #312's owner-authored title/description exactly;
+  malformed annotation metadata fails closed instead of being erased. — Codex
+  (AI), 2026-08-21
+- **PR #312 media integration hardening**: attachment annotation now preserves
+  server-owned magic-byte `detectedContentType`, Auto layout removes the
+  optional `mediaLayout` key, and media-card permalinks consistently use
+  `/media/:id`. Internal repost/quote controls stay hidden on media Things
+  until attachment-target shares have a non-empty renderer. Gallery layout
+  numbers and span keys are now strict rather than coercible/prototype-shaped,
+  annotation accepts only its documented request fields, and media cards label
+  their audience as inherited instead of incorrectly falling back to Public.
+  — Codex (AI), 2026-08-21
 - **Build-all push handoff permission boundary**: the thin product-branch
   listener now grants `actions: write`, allowing the protected reusable
   workflow's push-only handoff to dispatch its supported-event worker instead
