@@ -913,6 +913,22 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-data-reserved-crystal-root',
+    name: 'Data crystals reject reserved root keys',
+    description:
+      'A free-form data thing cannot claim a crystal root key backing the kind-blind unique indexes (followKey & friends) — that would squat another user\'s follow/membership/DM/invite/emoji slot. Rejected 400 with a session, 401 without; never persisted.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { thingtime: ['data'], crystal: { followKey: 'squatter:victim' } },
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Reserved crystal root key was rejected, never persisted.'
+    )
+  },
+  {
     id: 'things-user-missing-username',
     name: 'User posts require a username',
     description: 'The user-posts route validates the username parameter.',
@@ -1149,6 +1165,25 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/admin/set-admin',
     body: { userId: '000000000000000000000000', admin: true },
     expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin promote attempt was rejected.')
+  },
+  {
+    id: 'admin-moderation-guarded',
+    name: 'Moderation queue is admin-only',
+    description: 'Reading the NSFW/TOS moderation review queue requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/moderation',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin moderation read was rejected.')
+  },
+  {
+    id: 'admin-moderation-review-guarded',
+    name: 'Moderation review is admin-only',
+    description: 'Overriding a moderation verdict requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/moderation',
+    body: { action: 'review', attachmentId: '000000000000000000000000', verdict: 'block' },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin review attempt was rejected.')
   },
   {
     id: 'admin-users-overview-guarded',
