@@ -404,31 +404,19 @@ const thingsCollection = (db: any) => db.collection(physicalCollectionName('thin
 // kind-prefixed indexes serve v1-era docs until the things migration
 // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
 // array), and targetId serves comment/reaction/share lookups.
-// Crystal ROOT keys whose kind-blind partial unique indexes are RETIRED in
-// favor of the server-only root uniqueKeys namespace (see the uniqueKeys
-// index below + messenger/shared.ts relationshipUniqueKeys). The old filters
-// saw only `crystal.<key>` — no kind scoping — so a free-form data thing
-// could occupy another user's slot (crystal.followKey
-// '<followerId>:<followeeId>' blocked the victim's real follow with E11000).
-// Each key is still banned at the free-form data-crystal root
-// (RESERVED_CRYSTAL_ROOT_KEYS in schemas/registry.ts, pinned by
-// schemas/reservedCrystalRootKeys.test.ts) as the TRANSITION guard: a
-// deployment DB keeps its old unique indexes until its boot-time ensure runs
-// the swap below, and the reservation must outlive those indexes everywhere
-// before it can be deleted. Never add a new crystal-path unique index — put
-// dedupe in uniqueKeys (or, where a crystal index is truly needed, use the
-// thingtime-scoped filter pattern of things_app_data_unique: partial-filter
-// equality on the multikey thingtime array verifiedly includes
-// array-contains matches on MongoDB 8.0).
-export const KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS: readonly string[] = [
-	'friendKey', // was things_friend_unique → lookup + uniqueKeys 'friendKey:<min>~<max>'
-	'memberKey', // was things_member_key_unique → lookup + uniqueKeys 'memberKey:<container>:<user>'
-	'dmKey', // was things_dm_key_unique → lookup + uniqueKeys 'dmKey:<a>:<b>'
-	'inviteCode', // was things_invite_code_unique → lookup + uniqueKeys 'inviteCode:<code>'
-	'emojiKey', // was things_emoji_key_unique → lookup + uniqueKeys 'emojiKey:<scope>:<name>'
-	'followKey', // was things_follow_key_unique → lookup + uniqueKeys 'followKey:<follower>:<followee>'
-	'voteKey' // was things_vote_key_unique → lookup + uniqueKeys 'voteKey:<poll>~<user>'
-];
+// KIND-BLIND HISTORY (the unique-slot squat class): the relationship key
+// indexes below were once UNIQUE with filters that saw only `crystal.<key>`
+// — no kind scoping — so a free-form data thing carrying e.g.
+// crystal.followKey '<followerId>:<followeeId>' entered the index and
+// permanently blocked the victim's real follow with E11000. Their
+// uniqueness now rides the server-only root uniqueKeys namespace (index
+// below + messenger/shared.ts relationshipUniqueKeys), the crystal-path
+// indexes are plain lookups, and data crystals reserve no names. NEVER add
+// a new unique index over a crystal path reachable by free-form data
+// crystals: put dedupe in uniqueKeys, or — where a crystal-path unique
+// index is truly needed — use the thingtime-scoped filter pattern of
+// things_app_data_unique (partial-filter equality on the multikey thingtime
+// array verifiedly includes array-contains matches on MongoDB 8.0).
 
 const createThingsDataIndexes = (db: any): Promise<any>[] => {
   // Tagged so a createIndex failure names the exact `things.<index>` that
@@ -668,9 +656,9 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // legacy docs by the backfill-relationship-unique-keys migration. The
     // crystal-path indexes here serve the findOne/$in query shapes only;
     // their old kind-blind UNIQUE ancestors were squattable through
-    // free-form data crystals (KIND_BLIND_UNIQUE_CRYSTAL_ROOT_KEYS above)
-    // and are retired by each swap, create-then-drop, so a lookup index
-    // stays live throughout:
+    // free-form data crystals (see KIND-BLIND HISTORY above) and are
+    // retired by each swap, create-then-drop, so a lookup index stays
+    // live throughout:
     createIndexReplacing(
       col,
       { 'crystal.memberKey': 1 },

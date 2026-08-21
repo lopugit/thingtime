@@ -19,6 +19,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Build-all push handoff permission boundary**: the thin product-branch
+  listener now grants `actions: write`, allowing the protected reusable
+  workflow's push-only handoff to dispatch its supported-event worker instead
+  of being rejected by GitHub before any job starts. The caller contract pins
+  the required grant. — Codex (AI), 2026-08-21
 - **CSP blocked attachment uploads on header-serving deployments**: the
   application Content-Security-Policy's `connect-src` never allowed the
   private S3 bucket origin, so on any surface that serves the CSP header
@@ -145,6 +150,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   (PR #308 note has details).
 
 ### Security
+
+- **Crystal namespace reopened after structural uniqueness migration**: once
+  phase 1 has replaced every relationship crystal-path unique index and the
+  relationship `uniqueKeys` backfill has converged, free-form data may again
+  use `followKey`, `friendKey`, `memberKey`, `dmKey`, `inviteCode`,
+  `emojiKey`, and `voteKey`. Those values enter no platform unique index;
+  system dedupe remains exclusively in protected server-owned `uniqueKeys`.
+  — Codex (AI), 2026-08-21
+
+- **Relationship uniqueness is structural across all reserved key families**:
+  follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
+  protected root `uniqueKeys` namespace. Boot-time index convergence replaces
+  every kind-blind crystal-path unique index with a non-unique lookup, and the
+  idempotent backfill stamps legacy relationship docs while only reporting
+  suspicious free-form data. The vote family is migrated as security
+  substrate without shipping the deferred polls product; boot convergence also
+  removes the superseded `crystal.follow` marker index that no current writer
+  uses. — Codex (AI), 2026-08-21
 
 - **Moderation reconciliation and pending-media quarantine**: replayed the
   NSFW/TOS pipeline onto the singular public/private/all upload-permission
