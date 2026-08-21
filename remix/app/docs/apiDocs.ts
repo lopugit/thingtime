@@ -1412,6 +1412,78 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-moderation',
+    group: 'admin',
+    title: 'Moderation review queue',
+    endpoint: '/api/v1/admin/moderation',
+    summary: 'Review NSFW/TOS moderation flags, override verdicts, and sweep unanalyzed media (admin only).',
+    detail:
+      'GET returns the moderationFlag review queue (newest unreviewed first; media AND post/comment-text flags, text rows carry a bounded excerpt), counts of flags and ready attachments still awaiting analysis, plus the Admin AI-moderation settings ({ settings, effective }). POST with { action: "review", attachmentId, verdict: "clear" | "nsfw" | "block", targetKind?: "attachment" | "text" } overrides the protected moderation stamp — blocked media/text stops being served immediately (admins can still open media for evidence), cleared content serves again. POST with { action: "sweep" } analyzes a bounded batch of ready attachments the async pipeline missed; run repeatedly to drain. POST with { action: "settings", settings: { mediaProvider, textProvider } } saves the per-surface AI provider choices (mediaProvider: default | openai+claude | openai | claude | off; textProvider: default | openai | off) — an admin choice overrides the THINGTIME_MODERATION_PROVIDER env default.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to load flags + counts for the /admin Moderation tab.',
+      'POST { action: "review", attachmentId, verdict } to override a verdict; the flag records reviewedBy/reviewedAt.',
+      'POST { action: "sweep" } after deploys or provider outages to analyze pending/unstamped ready attachments.',
+      'POST { action: "settings", settings } to pick which AI runs media and text moderation; GET echoes the saved choices plus what each surface effectively runs.',
+      'Non-admins receive 403; unknown attachmentId 404; invalid verdict/action/settings 400.'
+    ],
+    requestExamples: [
+      {
+        name: 'Load the review queue',
+        description: 'Flags plus analysis backlog counts.',
+        method: 'GET'
+      },
+      {
+        name: 'Uphold a block',
+        description: 'Confirm a TOS verdict after reviewing the media.',
+        method: 'POST',
+        body: { action: 'review', attachmentId: '64f000000000000000000031', verdict: 'block' }
+      },
+      {
+        name: 'Run an analysis sweep',
+        description: 'Analyze a bounded batch of unanalyzed ready attachments.',
+        method: 'POST',
+        body: { action: 'sweep' }
+      },
+      {
+        name: 'Use free omni moderation everywhere',
+        description: 'Point both surfaces at OpenAI omni-moderation.',
+        method: 'POST',
+        body: { action: 'settings', settings: { mediaProvider: 'openai', textProvider: 'openai' } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Review queue.',
+        body: {
+          ok: true,
+          flags: [
+            {
+              id: 'modflag-64f000000000000000000031',
+              attachmentId: '64f000000000000000000031',
+              status: 'nsfw',
+              categories: ['explicit-nudity'],
+              reason: 'Detected explicit nudity.',
+              provider: 'claude',
+              model: 'claude-opus-5',
+              attachmentOwnerId: '64f000000000000000000002',
+              attachmentName: 'photo.png',
+              attachmentPurpose: 'post',
+              reviewedBy: null,
+              reviewedAt: null,
+              createdAt: '2026-08-18T00:00:00.000Z',
+              updatedAt: '2026-08-18T00:00:00.000Z'
+            }
+          ],
+          counts: { flags: 1, unanalyzedReady: 0 }
+        }
+      },
+      { status: 400, description: 'Bad action.', body: { ok: false, error: 'action must be review or sweep' } }
+    ]
+  }),
+  endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
     group: 'settings',
     title: 'AI workflow model waterfall',
@@ -3241,6 +3313,45 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
 		],
 		notes: ['No response or log contains the cron secret. Mongo TTL deletion is intentionally disabled.']
+	}),
+	endpoint({
+		id: 'moderation-sweep',
+		group: 'admin',
+		title: 'Scheduled moderation sweep',
+		endpoint: '/api/v1/moderation/sweep',
+		summary: 'Internal hourly job that retries moderation the async kickoffs lost — unmoderated post/comment text and unanalyzed ready attachments.',
+		detail:
+			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. Failures stay unstamped and retry on the next run. There is no session, PAT, app-token, or service-account fallback.',
+		auth: {
+			mode: 'bearer',
+			description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
+		},
+		methods: ['GET'],
+		steps: [
+			'Configure CRON_SECRET only in the deployment environment.',
+			'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
+			'Monitor failed counts; later invocations safely retry anything still unstamped.'
+		],
+		requestExamples: [
+			{
+				name: 'Scheduled sweep',
+				description: 'Vercel supplies the private Authorization header automatically.',
+				method: 'GET'
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'One bounded sweep pass over both surfaces.',
+				body: {
+					ok: true,
+					text: { scanned: 3, analyzed: 3, flagged: 1, failed: 0, skippedOff: false },
+					attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 }
+				}
+			},
+			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
+		],
+		notes: ['No response or log contains the cron secret. Free omni text screening makes draining the off-era backlog costless.']
 	}),
   endpoint({
     id: 'themes',
