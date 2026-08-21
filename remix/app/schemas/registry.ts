@@ -2616,6 +2616,74 @@ export type ThingtimeCrystalValidationOptions = {
 	postAttachments?: { hasAny: boolean; hasVisual: boolean };
 };
 
+// Owner-chosen gallery layout for a post's visual attachments. Post-LEVEL
+// presentation data (one bounded object on the post crystal), never a field on
+// the attachments themselves — absent means the automatic masonry default.
+// Shared with the client so the composer controls and this validator agree.
+export const MEDIA_LAYOUT_MODES = ['masonry', 'rows', 'grid'] as const;
+export const MEDIA_LAYOUT_SPAN_VALUES = ['normal', 'wide', 'tall', 'big'] as const;
+export const MAX_MEDIA_LAYOUT_ENTRIES = 25; // pattern rows + span entries share the attachment cap
+export const MAX_MEDIA_LAYOUT_TRACK = 6; // max images per row / grid columns
+export type MediaLayoutSpan = (typeof MEDIA_LAYOUT_SPAN_VALUES)[number];
+export type PostMediaLayout = {
+	mode: (typeof MEDIA_LAYOUT_MODES)[number];
+	pattern?: number[];
+	columns?: number;
+	spans?: Record<string, MediaLayoutSpan>;
+};
+
+const sanitizeMediaLayout = (value: unknown): { ok: true; mediaLayout: PostMediaLayout | null } | Fail => {
+	if (value === undefined || value === null) return { ok: true, mediaLayout: null };
+	if (typeof value !== 'object' || Array.isArray(value)) return fail(400, 'mediaLayout must be an object');
+	const raw = value as Record<string, unknown>;
+	const mode = MEDIA_LAYOUT_MODES.includes(raw.mode as any) ? (raw.mode as PostMediaLayout['mode']) : null;
+	if (!mode) return fail(400, 'mediaLayout.mode must be masonry, rows, or grid');
+	if (mode === 'masonry') return { ok: true, mediaLayout: { mode } };
+
+	if (mode === 'rows') {
+		const pattern = raw.pattern;
+		if (!Array.isArray(pattern) || !pattern.length || pattern.length > MAX_MEDIA_LAYOUT_ENTRIES) {
+			return fail(400, `mediaLayout.pattern must be 1-${MAX_MEDIA_LAYOUT_ENTRIES} row sizes`);
+		}
+		const rows: number[] = [];
+		for (const entry of pattern) {
+			if (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 1 || entry > MAX_MEDIA_LAYOUT_TRACK) {
+				return fail(400, `mediaLayout.pattern rows must be integers 1-${MAX_MEDIA_LAYOUT_TRACK}`);
+			}
+			rows.push(entry);
+		}
+		return { ok: true, mediaLayout: { mode, pattern: rows } };
+	}
+
+	// grid
+	const columns = raw.columns === undefined ? 3 : raw.columns;
+	if (typeof columns !== 'number' || !Number.isInteger(columns) || columns < 1 || columns > MAX_MEDIA_LAYOUT_TRACK) {
+		return fail(400, `mediaLayout.columns must be an integer 1-${MAX_MEDIA_LAYOUT_TRACK}`);
+	}
+	let spans: Record<string, MediaLayoutSpan> | undefined;
+	if (raw.spans !== undefined && raw.spans !== null) {
+		if (typeof raw.spans !== 'object' || Array.isArray(raw.spans)) return fail(400, 'mediaLayout.spans must be an object');
+		const entries = Object.entries(raw.spans as Record<string, unknown>);
+		if (entries.length > MAX_MEDIA_LAYOUT_ENTRIES) return fail(400, `mediaLayout.spans can hold at most ${MAX_MEDIA_LAYOUT_ENTRIES} entries`);
+		const cleaned: Record<string, MediaLayoutSpan> = Object.create(null);
+		for (const [key, entry] of entries) {
+			// Attachment ids are generated UUIDs or att_<sha256> values. Keep the
+			// persisted map free of Mongo path characters and prototype keys rather
+			// than treating arbitrary object properties as attachment identities.
+			if (!/^[A-Za-z0-9][A-Za-z0-9_:-]{0,127}$/.test(key)) {
+				return fail(400, 'mediaLayout.spans keys must be attachment ids');
+			}
+			if (!MEDIA_LAYOUT_SPAN_VALUES.includes(entry as any)) {
+				return fail(400, 'mediaLayout.spans values must be normal, wide, tall, or big');
+			}
+			// normal is the default — storing it would be dead weight
+			if (entry !== 'normal') cleaned[key] = entry as MediaLayoutSpan;
+		}
+		if (Object.keys(cleaned).length) spans = { ...cleaned };
+	}
+	return { ok: true, mediaLayout: { mode, columns, ...(spans ? { spans } : {}) } };
+};
+
 const sanitizePostCrystal = (
 	input: Record<string, unknown>,
 	appliedIds: string[],
@@ -2701,7 +2769,13 @@ const sanitizePostCrystal = (
 		return fail(400, 'Image posts need at least one image or video attachment');
 	}
 
-  return { ok: true, crystal: { type, text, images, listing, thing } };
+	const layout = sanitizeMediaLayout(input.mediaLayout);
+	if (layout.ok === false) return layout;
+
+	return {
+		ok: true,
+		crystal: { type, text, images, listing, thing, ...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}) }
+	};
 };
 
 const sanitizeCommentCrystal = (input: Record<string, unknown>, ids?: string[]): { ok: true; crystal: Record<string, unknown> } | Fail => {
