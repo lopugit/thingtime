@@ -2220,7 +2220,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
 
-Automated first: `pnpm --dir remix run verify:connections` (45 real-API
+Automated first: `pnpm --dir remix run verify:connections` (94 real-API
 checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 
 - [ ] `/connections` renders the provider catalog signed-out with a quiet
@@ -2255,7 +2255,8 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       channels" connection; the connection row shows "N channels"; Unsubscribe
       removes just that channel; the merged uploads feed interleaves channels
       newest-first; two users' lists stay independent while a shared video
-      stays ONE post (sourceIds) with unified comments.
+      stays ONE post (one external-post-source row per sourcing account) with
+      unified comments.
 - [ ] Feed deepening: scrolling past the synced end (or "Fetch older from
       your apps") pulls older provider pages without resetting scroll
       position, and repeated deepens stop at the per-account depth cap.
@@ -2263,3 +2264,18 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       `ext-` shareIds are refused on generic create/update; the connections
       kinds never appear in the generic /things browser; unlink removes only
       the caller's link and the shared account retires with its last link.
+- [ ] Relational source membership (regression — the post doc must never grow
+      per linker): with two Thingtime accounts linked to ONE external
+      identity, a synced post's `acl` is exactly the constant `tt:extsourced`
+      (personal) or `tt:all` (public) — never `tt:extacct/<accountId>`, which
+      would both grow without bound on a viral post and disclose the other
+      members' external-account ids through `PublicPost.acl`. The post carries
+      no `sourceIds` array; membership is one `external-post-source` row per
+      (post, account). Unlinking revokes that viewer instantly while every
+      other linked member still sees the post, and a feed page never shows the
+      same post twice even when two of the viewer's own accounts source it.
+- [ ] Migration `relational-external-post-sources` (admin → /docs/schemas):
+      dry run reports the pending legacy posts, the live run creates the
+      membership rows + rewrites the acl + unsets `sourceIds`, a legacy
+      `tt:extacct/` post stays visible to its linked member both BEFORE and
+      AFTER the run, and a second run is a no-op.

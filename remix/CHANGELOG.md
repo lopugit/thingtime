@@ -19,6 +19,33 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Third-party connections: a viral external post could grow without bound,
+  and leaked who else was reading it** (PR #295). A synced `external-post`
+  carried its source membership as an embedded root `sourceIds` array plus, for
+  personal-timeline providers, one `tt:extacct/<accountId>` ACL entry per
+  sourcing account. Because personal providers give each user their own
+  external account, "per source" meant *per user*: a post that surfaced in
+  10k home timelines accumulated 10k array elements and 10k ACL entries on one
+  document — monotonic growth toward Mongo's 16 MB cap on exactly the hottest
+  documents, a whole-document rewrite on every sync, and a privacy leak, since
+  `toPublicPosts` projects `acl` verbatim, so every reader received the
+  external-account ids of everyone else who sourced the post. Membership is now
+  relational per FUNDAMENTALS §3: one `external-post-source` thing per (post,
+  sourcing account), a canonical root-`targetId` child of the post,
+  `uniqueKeys`-deduped, with the post's publish time denormalized onto the row
+  so the connections feed pages membership directly on the existing
+  `(thingtime, crystal.accountId, createdAt, shareId)` index. The post's own
+  ACL is now a CONSTANT — `tt:all` for public providers, `tt:extsourced` for
+  personal ones — resolved live against the reader's links, so it names no
+  account, discloses nothing, and never grows. Unlinking still revokes
+  instantly (links, not materialized grants, are the authorization truth), and
+  retiring an account's last link now drains its membership rows instead of
+  leaving dead index entries. Legacy rows keep resolving through the
+  compatibility path; the admin `relational-external-post-sources` migration
+  converts them (drilled end-to-end: 20/20, including that a legacy post stays
+  visible to its member both before and after, and that a re-run is a no-op).
+  `verify:connections` is now 94/94. — Claude (AI), 2026-08-21
+
 - **Media layout selections now reach the Things API**: the shared client API
   transport preserves `mediaLayout` for post creation and rich comments, so a
   Rows/Grid preview no longer silently reopens as Auto after save. — Codex

@@ -484,18 +484,22 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // schema browse page scans the whole data partition
     col.createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
     col.createIndex({ thingtime: 1, 'crystal.schema': 1 }),
-    // Connections: the external-post feed read (linked accounts' synced posts,
-    // newest first, chrono cursor) and external-account-link reverse lookups
-    // ("who links this account") both filter one kind + crystal.accountId —
-    // thingtime is the only multikey field, so the compound is legal.
+    // Connections: the external-post-source feed read (the viewer's accounts'
+    // membership rows, newest first, chrono cursor) and external-account-link
+    // reverse lookups ("who links this account") both filter one kind +
+    // crystal.accountId — thingtime is the only multikey field, so the
+    // compound is legal. This is the hot connections-feed index.
     col.createIndex({ thingtime: 1, 'crystal.accountId': 1, createdAt: -1, shareId: 1 }),
     // One external post can arrive through MANY sources (two users' virtual
-    // channel lists, a real subscription + a public follow, …) — membership
-    // lives in the root sourceIds array. sourceIds is the only multikey field
-    // here (partial: only synced external posts carry it).
+    // channel lists, a real subscription + a public follow, …). Membership is
+    // RELATIONAL — one external-post-source row per (post, account) — so this
+    // serves the reverse question the tt:extsourced audience asks: "does this
+    // viewer's account source this exact post?". Its unbounded-array ancestor
+    // (root sourceIds, one element per sourcing account) is retired by the
+    // relational-external-post-sources migration.
     col.createIndex(
-      { sourceIds: 1, createdAt: -1, shareId: 1 },
-      { partialFilterExpression: { sourceIds: { $exists: true } } }
+      { thingtime: 1, targetId: 1, 'crystal.accountId': 1 },
+      { partialFilterExpression: { targetId: { $type: 'string' } } }
     ),
     // acl and thingtime are both arrays — Mongo forbids two multikey fields
     // in one compound index, so the audience index stands alone

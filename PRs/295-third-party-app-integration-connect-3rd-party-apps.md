@@ -67,14 +67,50 @@ URLs, stripHtml ReDoS hardening, legacy $or index defeat — plus ~14 cleanups
 (shared sha48/fail/cursor helpers, pagedGraphFeed, oauthCredsFor, page-clamp
 helpers, verdict batching/pruning/cache policy, external author links).
 
+## Round 3 — relational source membership
+
+The §3 debt the earlier rounds logged turned out to be sharper than "bounded
+but inelegant". `sourceIds` and the per-source `tt:extacct/<accountId>` acl
+entries each grew by one element per *sourcing account*, and personal-timeline
+providers mint one account per user — so on a post that surfaces in many home
+timelines both arrays grew per user, with no cap: monotonic growth toward the
+16 MB document ceiling on the hottest docs, a full-document rewrite per sync,
+and — because `toPublicPosts` projects `acl` verbatim — every reader received
+the external-account ids of everyone else who sourced the post.
+
+Membership is now one `external-post-source` thing per (post, account):
+canonical root `targetId` child of the post, `uniqueKeys`-deduped on
+`sourceKey:<postId>:<accountId>`, with the post's publish time denormalized
+onto the row so the feed pages membership directly (same sort, same chrono
+cursor, same existing `(thingtime, crystal.accountId, createdAt, shareId)`
+index) and then fetches that page's posts. Rows are de-duplicated by post so a
+viewer holding two accounts that both source a post still sees it once, and the
+cursor rides the last row actually consumed.
+
+The post's acl became a CONSTANT: `tt:all` (public) or `tt:extsourced`
+(personal). `tt:extsourced` names no account, so it discloses nothing and
+cannot grow; it resolves live through `viewer.extSourcedPostIds`, primed for
+free from the membership page the feed already read (single-doc paths — the
+permalink, comment chains — pay one indexed existence check, memoised per
+request). `aclAllows`/`aclEntryMatches` take an optional `docId` for this;
+callers that don't pass it simply never match the entry, which fails closed.
+Retiring an account's last link now also drains its membership rows.
+
+`relational-external-post-sources` migrates legacy residue (rows keep resolving
+through the retained `tt:extacct/` compatibility branch until it runs). Drilled
+end-to-end against the real admin API — 20/20 — including that a legacy post
+stays visible to its linked member *both before and after* the run, that an
+outsider stays 404 throughout, and that a second run is a no-op.
+`verify:connections`: **94/94** (was 81).
+
 ## Known boundaries / future work
 
-- Per-post acl grants and sourceIds are bounded (MAX_LINKS_PER_ACCOUNT=100,
-  MAX_LINKS_PER_USER=50) but the §3-clean long-term shape is relational
-  per-(post, member) grant docs.
+All of these are external constraints, not outstanding code:
+
 - LinkedIn feed content is partner-gated (identity-only link today); X
   timeline reads need a paid API tier.
-- Form-style OAuth exchange/refresh could consolidate into a grant-helper
-  factory (rotation-aware) before the next provider lands.
 - Live SSO pulls need the owner's app credentials in `remix/.env` (env names
   in README "SSO account linking").
+
+(The round-2 form-OAuth grant factory and the round-3 relational membership
+retired the two architectural items previously listed here.)

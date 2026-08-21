@@ -49,7 +49,12 @@ export const RELATIONSHIP_UNIQUE_CRYSTAL_KEYS: Readonly<Record<string, string>> 
 	'community-invite': 'inviteCode',
 	'custom-emoji': 'emojiKey',
 	friend: 'friendKey',
-	vote: 'voteKey'
+	vote: 'voteKey',
+	// connections: one membership row per (external post, sourcing account).
+	// Stamped directly by the sync writer (connections/connections.ts), which
+	// bulk-upserts rather than going through newThingDoc; listed here so the
+	// backfill migration and the census cover it like every other relationship.
+	'external-post-source': 'sourceKey'
 };
 
 export const relationshipUniqueKeys = (kind: string, crystal: Record<string, unknown> | null | undefined): Binary[] | undefined => {

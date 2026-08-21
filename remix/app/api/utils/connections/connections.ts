@@ -2,7 +2,14 @@ import type { Binary } from 'mongodb';
 
 import { fromBin, toBin } from '../auth/users';
 import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
-import { chronoCursorClause, parseChronoCursor, toPublicPosts, viewerOf, type PublicPost } from '../things/things';
+import {
+  chronoCursorClause,
+  parseChronoCursor,
+  primeExtSourcedPostIds,
+  toPublicPosts,
+  viewerOf,
+  type PublicPost
+} from '../things/things';
 import {
   connectionProviderById,
   oauthCredsFor,
@@ -20,7 +27,7 @@ import {
   type YoutubeChannelRef
 } from './providers';
 import { fail, sha48, type Fail } from './shared';
-import { ACL_ALL, ACL_EXTACCT_PREFIX, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { ACL_ALL, ACL_EXT_SOURCED, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 // Third-party app connections (FUNDAMENTALS.md §3). Three protected kinds:
 //
@@ -35,11 +42,16 @@ import { ACL_ALL, ACL_EXTACCT_PREFIX, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } fr
 //     shareId so re-syncs are idempotent upserts (CI-store pattern, including
 //     the source-timestamp not-older guard). Lives on the DATA plane so
 //     Thingtime comments/reactions attach to it by targetId exactly like any
-//     native post, and /post/:id permalinks resolve. Public-content providers
-//     write tt:all posts; personal-algorithm providers carry ONE
-//     tt:extacct/<accountId> audience entry per source — membership resolves
-//     live against viewers' links at acl evaluation (unlink revokes
-//     instantly, nothing materializes per member).
+//     native post, and /post/:id permalinks resolve. Its acl is CONSTANT and
+//     bounded: `tt:all` for public-content providers, `tt:extsourced` for
+//     personal-algorithm ones.
+//   • `external-post-source` — the relational (post, account) membership doc
+//     (§3: appended data is relational). It is BOTH the feed's index — the
+//     read pages membership by account, newest first — and the live
+//     authorization truth behind `tt:extsourced`. One post reached through a
+//     second account adds a ROW, never an array element, so a viral post's
+//     doc never grows and no reader learns who else sources it. Unlink
+//     revokes instantly because links, not grants, are evaluated.
 //
 // The `ext-` shareId prefix is reserved in sanitizeShareId so clients can
 // never squat a sync destination, and all three kinds are PROTECTED_THINGTIME
@@ -49,12 +61,13 @@ import { ACL_ALL, ACL_EXTACCT_PREFIX, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } fr
 export const EXTERNAL_ACCOUNT_KIND = 'external-account';
 export const EXTERNAL_LINK_KIND = 'external-account-link';
 export const EXTERNAL_POST_KIND = 'external-post';
+export const EXTERNAL_POST_SOURCE_KIND = 'external-post-source';
 
 const MAX_LINKS_PER_USER = 50;
-// FUNDAMENTALS §3 bound: each linked user of a personal account adds one acl
-// grant to that account's posts, so linkers-per-account must be finite for the
-// embedded acl array to stay bounded. (The long-term §3-clean evolution is
-// relational per-(post, member) grant docs.)
+// Soft product limit on how many Thingtime accounts may share one external
+// identity. Since membership went relational (external-post-source rows), it
+// is no longer a structural safety rail — nothing on the post doc grows with
+// linkers any more — just a sane cap on credential sharing.
 const MAX_LINKS_PER_ACCOUNT = 100;
 // don't hammer providers: a per-account fetch at most once per window; reads
 // inside the window serve the already-synced posts
@@ -73,6 +86,16 @@ export const externalLinkShareId = (userId: string, accountShareId: string): str
 // so the same video stays ONE post no matter how it arrived
 export const externalPostShareId = (namespace: string, externalId: string): string =>
   `ext-post-${sha48([namespace, externalId])}`;
+
+// one membership row per (post, sourcing account) — deterministic so a re-sync
+// upserts the same row instead of minting duplicates
+export const externalPostSourceShareId = (postShareId: string, accountShareId: string): string =>
+  `ext-source-${sha48([postShareId, accountShareId])}`;
+
+// structural dedupe rides root uniqueKeys via crystal.sourceKey, exactly like
+// the messenger relationship keys (see messenger/shared.ts)
+export const externalPostSourceKey = (postShareId: string, accountShareId: string): string =>
+  `${postShareId}:${accountShareId}`;
 
 const postNamespaceOf = (provider: ConnectionProvider): string => provider.postNamespace || provider.id;
 
@@ -331,16 +354,25 @@ export const unlinkConnection = async (
   await home.deleteOne({ shareId: linkId, thingtime: EXTERNAL_LINK_KIND, ownerId: user.id });
   const accountId = String(link?.crystal?.accountId || '');
   if (accountId) {
-    // membership IS the authorization, and tt:extacct/ audiences evaluate it
-    // LIVE against the viewer's links — deleting the link above already
-    // revoked this member's access to the account's personal posts, with no
-    // grant sweep to run.
+    // The LINK is the authorization: tt:extsourced resolves the viewer's
+    // links → their accounts → external-post-source rows, live, at every read.
+    // Deleting the link above already revoked this member's access to the
+    // account's personal posts, with no grant sweep to run. The membership
+    // rows stay — they describe the ACCOUNT's relationship to the posts, not
+    // this user's, and another linked user may still hold that account.
     // Last link gone → retire the shared account thing (and any credentials
     // in its secure blob); synced external posts stay — they are inert
     // public/audience content other users' comments may hang off.
     const remaining = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountId });
     if (remaining === 0) {
       await home.deleteOne({ shareId: accountId, thingtime: EXTERNAL_ACCOUNT_KIND });
+      // The account is gone, so no viewer can ever match its membership rows
+      // again — drain them rather than leaving dead index entries that every
+      // feed read still has to skip past. The POSTS survive (other sources
+      // and existing comment threads may reference them); only this account's
+      // claim on them disappears.
+      const things = await getThingsCollection();
+      await things.deleteMany({ thingtime: EXTERNAL_POST_SOURCE_KIND, 'crystal.accountId': accountId } as any);
     }
   }
   return { ok: true, removed: true };
@@ -356,10 +388,9 @@ const composePostText = (item: ExternalFeedItem): string => {
 };
 
 // Idempotent upsert of one provider item as an external-post thing — the CI
-// current-state pattern: $set refreshes content guarded by source timestamp,
-// $setOnInsert stamps identity. Personal-visibility posts additionally
-// $addToSet the syncing viewer's grant so every linked user earns access on
-// their own sync (and never anyone else).
+// current-state pattern: $set refreshes content, $setOnInsert stamps identity.
+// Each sync also upserts this account's relational external-post-source row,
+// which is what the feed pages and what tt:extsourced authorizes against.
 // Feed ordering rides createdAt; provider dates are attacker-influenced, so
 // clamp them to a sane window — a pre-1970 (or far-future) stamp would mint
 // cursors the pager rejects and loop pagination forever.
@@ -383,16 +414,14 @@ const upsertExternalPosts = async (
   const namespace = postNamespaceOf(provider);
   // one post, many sources: the SAME video/post reached through a second
   // account (another user's virtual channel list, a real subscription,
-  // another subreddit multi …) lists every source and stays ONE doc —
-  // comments and reactions unify on it. One membership object serves the
-  // main path AND the race retry so the two can never diverge. Personal
-  // audiences are ONE tt:extacct/<account> entry per SOURCE (bounded tiny) —
-  // membership resolves live against viewers' links at acl evaluation, so
-  // unlink revokes instantly and no per-member grants ever materialize.
-  const membership = {
-    sourceIds: accountShareId,
-    ...(provider.contentVisibility === 'personal' ? { acl: `${ACL_EXTACCT_PREFIX}${accountShareId}` } : {})
-  };
+  // another subreddit multi …) stays ONE doc — comments and reactions unify
+  // on it — and each source adds a relational external-post-source ROW, not
+  // an array element (§3). The post's own acl is therefore CONSTANT: `tt:all`
+  // for public content, `tt:extsourced` for personal, resolved live against
+  // the reader's membership. $addToSet (not $setOnInsert) because a post can
+  // legitimately arrive public-first and personal-later, or vice versa.
+  const personal = provider.contentVisibility === 'personal';
+  const audience = { acl: personal ? ACL_EXT_SOURCED : ACL_ALL };
   const operations = items.map((item) => {
     const shareId = externalPostShareId(namespace, item.externalId);
     const publishedAt = clampPublishedAt(item.publishedAt, now);
@@ -427,13 +456,12 @@ const upsertExternalPosts = async (
             },
             updatedAt: now
           },
-          $addToSet: membership,
+          $addToSet: audience,
           $setOnInsert: {
             schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
             shareId,
             thingtime: [EXTERNAL_POST_KIND],
             ownerId: 'system',
-            ...(provider.contentVisibility === 'personal' ? {} : { acl: [ACL_ALL] }),
             storageClass: 'control',
             targetId: null,
             tags: [],
@@ -445,8 +473,56 @@ const upsertExternalPosts = async (
       }
     };
   });
+  // Membership rows are written whether or not the post bodies changed — the
+  // post may already exist from ANOTHER account's sync, and this account's
+  // claim on it is exactly what the feed read and tt:extsourced evaluate.
+  const stampSources = async () => {
+    const rows = items.map((item) => {
+      const postShareId = externalPostShareId(namespace, item.externalId);
+      const sourceKey = externalPostSourceKey(postShareId, accountShareId);
+      return {
+        updateOne: {
+          filter: { shareId: externalPostSourceShareId(postShareId, accountShareId), thingtime: EXTERNAL_POST_SOURCE_KIND },
+          update: {
+            $set: { updatedAt: now },
+            $setOnInsert: {
+              schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+              thingtime: [EXTERNAL_POST_SOURCE_KIND],
+              ownerId: 'system',
+              // never directly readable — the post it points at carries the
+              // audience, and this kind is PROTECTED from generic CRUD
+              acl: [],
+              storageClass: 'control',
+              // canonical v2 child relation (§3): the parent's stable shareId
+              targetId: postShareId,
+              crystal: { accountId: accountShareId, provider: provider.id, sourceKey },
+              // structural dedupe on the server-only root namespace
+              uniqueKeys: [toBin(`sourceKey:${sourceKey}`)],
+              extended: null,
+              tags: [],
+              // denormalized post publish time: the feed pages MEMBERSHIP by
+              // this field, so it must sort identically to the post itself
+              createdAt: clampPublishedAt(item.publishedAt, now)
+            }
+          },
+          upsert: true
+        }
+      };
+    });
+    try {
+      await things.bulkWrite(rows as any, { ordered: false });
+    } catch (err: any) {
+      // concurrent syncs of the same (post, account) race to the same
+      // deterministic row — a pure duplicate-key batch already converged
+      const writeErrors = Array.isArray(err?.writeErrors) ? err.writeErrors : null;
+      const benign = writeErrors ? writeErrors.every((error: any) => error?.code === 11000) : err?.code === 11000;
+      if (!benign) throw err;
+    }
+  };
+
   try {
     const result = await things.bulkWrite(operations as any, { ordered: false });
+    await stampSources();
     return (result.upsertedCount || 0) + (result.modifiedCount || 0);
   } catch (err: any) {
     // Only a batch whose EVERY write error is a duplicate-key race (two
@@ -455,8 +531,11 @@ const upsertExternalPosts = async (
     const writeErrors = Array.isArray(err?.writeErrors) ? err.writeErrors : null;
     const benign = writeErrors ? writeErrors.every((error: any) => error?.code === 11000) : err?.code === 11000;
     if (!benign) throw err;
+    // the racing writer created the posts; this account still needs its own
+    // membership rows and (for a visibility-widening re-sync) the audience
     const shareIds = items.map((item) => externalPostShareId(namespace, item.externalId));
-    await things.updateMany({ shareId: { $in: shareIds }, thingtime: EXTERNAL_POST_KIND }, { $addToSet: membership });
+    await things.updateMany({ shareId: { $in: shareIds }, thingtime: EXTERNAL_POST_KIND }, { $addToSet: audience });
+    await stampSources();
     return 0;
   }
 };
@@ -582,30 +661,66 @@ export const readConnectionsFeed = async (
   let nextCursor: string | null = null;
   if (accountIds.length) {
     const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_PAGE), MAX_FEED_PAGE);
-    // membership rides the root sourceIds array ONLY (every sync stamps it,
-    // and a second representation would defeat the partial index — the $or it
-    // replaces forced a whole-partition scan since index-union subplanning
-    // only applies to a rooted $or)
-    const match: Record<string, any> = { thingtime: EXTERNAL_POST_KIND, sourceIds: { $in: accountIds } };
+    // Membership is relational (§3): page the external-post-source ROWS for
+    // the viewer's accounts, newest first, then fetch that page's posts. The
+    // rows carry the post's publish time as their own createdAt, so this sorts
+    // and cursors identically to paging the posts directly — and it rides the
+    // existing (thingtime, crystal.accountId, createdAt, shareId) index.
+    const match: Record<string, any> = {
+      thingtime: EXTERNAL_POST_SOURCE_KIND,
+      'crystal.accountId': { $in: accountIds }
+    };
     // the shared chrono-cursor grammar from things.ts — one parser, one format
     const parsed = parseChronoCursor(query.cursor);
     const pageMatch = parsed ? { $and: [match, chronoCursorClause(parsed)] } : match;
     const things = await getThingsCollection();
-    const docs: any[] = await things
+    // one post reachable through TWO of the viewer's own accounts yields two
+    // adjacent rows (same createdAt); over-fetch so de-duplication can't
+    // shrink the page below the requested size, capped so a viewer with many
+    // overlapping accounts still can't inflate the query
+    const rowLimit = Math.min(limit * 2, MAX_FEED_PAGE * 2) + 1;
+    const rows: any[] = await things
       .find(pageMatch)
       .sort({ createdAt: -1, shareId: 1 })
-      .limit(limit + 1)
+      .limit(rowLimit)
       .toArray();
-    const page = docs.slice(0, limit);
-    const last = page[page.length - 1];
-    const lastMs = last ? new Date(last.createdAt).getTime() : NaN;
+
+    // de-dupe by post, preserving row order; the cursor rides the last ROW we
+    // actually consumed so the next page resumes exactly after it
+    const seen = new Set<string>();
+    const consumed: any[] = [];
+    const postIds: string[] = [];
+    for (const row of rows) {
+      const postId = String(row?.targetId || '');
+      if (!postId) continue;
+      if (!seen.has(postId)) {
+        if (postIds.length >= limit) break;
+        seen.add(postId);
+        postIds.push(postId);
+      }
+      consumed.push(row);
+    }
+    const lastRow = consumed[consumed.length - 1];
+    const lastMs = lastRow ? new Date(lastRow.createdAt).getTime() : NaN;
+    const exhausted = consumed.length >= rows.length;
     // never mint a cursor the parser would reject (dates are clamped at
     // upsert, but pre-clamp rows must not wedge pagination into a loop)
-    nextCursor = docs.length > limit && last && Number.isFinite(lastMs) && lastMs > 0 ? `${lastMs}_${last.shareId}` : null;
+    nextCursor = !exhausted && lastRow && Number.isFinite(lastMs) && lastMs > 0 ? `${lastMs}_${lastRow.shareId}` : null;
 
+    const postsById = new Map<string, any>();
+    if (postIds.length) {
+      const docs: any[] = await things.find({ shareId: { $in: postIds }, thingtime: EXTERNAL_POST_KIND }).toArray();
+      for (const doc of docs) postsById.set(String(doc.shareId), doc);
+    }
+    const page = postIds.map((id) => postsById.get(id)).filter(Boolean);
+
+    // the membership rows we just read ARE the tt:extsourced answer for this
+    // page — prime the viewer so acl evaluation costs no further queries
+    const viewer = viewerOf({ id: user.id, username: user.username });
+    primeExtSourcedPostIds(viewer, postIds);
     // toPublicPosts surfaces the third-party author from extended.external
     // (same path the /post/:id permalink uses)
-    posts = await toPublicPosts(page as any, viewerOf({ id: user.id, username: user.username }));
+    posts = await toPublicPosts(page as any, viewer);
   }
 
   return {

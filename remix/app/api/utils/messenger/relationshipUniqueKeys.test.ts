@@ -18,7 +18,12 @@ import { validateThingtimeCrystal } from '~/schemas/registry';
 // kind-blind index in the shared develop database, so phase 1 must retire and
 // backfill that family before phase 2 reopens the crystal namespace.
 
-test('the relationship map covers exactly the seven retired unique-index families', () => {
+// `external-post-source` joins the map from the other direction: it is a NEW
+// relationship (one membership row per external post × sourcing account, see
+// connections/connections.ts) rather than a retired unique-index family, so it
+// never had a kind-blind ancestor to retire. It is listed here because the
+// backfill migration and the data-thing census walk this map.
+test('the relationship map covers exactly the retired unique-index families plus external-post-source', () => {
 	assert.deepEqual(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, {
 		follow: 'followKey',
 		'chat-member': 'memberKey',
@@ -27,7 +32,8 @@ test('the relationship map covers exactly the seven retired unique-index familie
 		'community-invite': 'inviteCode',
 		'custom-emoji': 'emojiKey',
 		friend: 'friendKey',
-		vote: 'voteKey'
+		vote: 'voteKey',
+		'external-post-source': 'sourceKey'
 	});
 });
 

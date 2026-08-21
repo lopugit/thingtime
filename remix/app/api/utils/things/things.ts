@@ -44,6 +44,7 @@ import {
   ACL_INHERIT,
   ACL_OWNER,
 	ACL_EXTACCT_PREFIX,
+	ACL_EXT_SOURCED,
 	APP_STORAGE_RESERVED_ID_PREFIX,
   COLLECTION_SCHEMA_VERSIONS,
 	EXTERNAL_RESERVED_ID_PREFIX,
@@ -332,9 +333,14 @@ export type Viewer = {
   pat?: { tokenId: string; onlyCreatedThings: boolean } | null;
   friendIds?: ReadonlySet<string>;
   // external-account shareIds the viewer holds connections links to — serves
-  // tt:extacct/ audiences; loaded LAZILY (ensureExtAccountIds) only when a
-  // doc under evaluation actually carries the prefix
+  // LEGACY tt:extacct/ audiences; loaded LAZILY (ensureExtAccountIds) only
+  // when a doc under evaluation actually carries the prefix
   extAccountIds?: ReadonlySet<string>;
+  // external-post shareIds this viewer sources — serves the constant
+  // tt:extsourced audience. Grows only with the posts actually evaluated in
+  // this request (ensureExtSourced), and the feed primes it in bulk from the
+  // membership page it already read.
+  extSourcedPostIds?: ReadonlySet<string>;
 } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
 
@@ -367,6 +373,63 @@ const ensureExtAccountIds = async (viewer: Viewer): Promise<Viewer> => {
 const hasExtacctAudience = (doc: ThingDoc): boolean => {
   const acl = Array.isArray(doc.acl) ? doc.acl : [];
   return acl.some((entry) => typeof entry === 'string' && entry.includes(ACL_EXTACCT_PREFIX));
+};
+
+const hasExtSourcedAudience = (doc: ThingDoc): boolean => {
+  const acl = Array.isArray(doc.acl) ? doc.acl : [];
+  return acl.some((entry) => typeof entry === 'string' && entry.includes(ACL_EXT_SOURCED));
+};
+
+// Prime the viewer's sourced-post set for a known batch of external post ids.
+// The connections feed already paged the membership docs to build its page, so
+// it seeds the answer for free; other paths (permalinks, comment chains) come
+// through ensureExtSourced below with a single id.
+export const primeExtSourcedPostIds = (viewer: Viewer, postIds: Iterable<string>): void => {
+  if (!viewer?.id) return;
+  const known = new Set(viewer.extSourcedPostIds || []);
+  for (const id of postIds) if (id) known.add(id);
+  (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
+  const asked = extSourcedAsked.get(viewer) || new Set<string>();
+  for (const id of postIds) if (id) asked.add(id);
+  extSourcedAsked.set(viewer, asked);
+};
+
+// Which post ids we have already RESOLVED for this viewer — distinct from the
+// positive set, so a miss is cached too and never re-queried. Keyed weakly on
+// the viewer object, which read paths already thread per request.
+const extSourcedAsked = new WeakMap<object, Set<string>>();
+
+// Lazily resolve whether the viewer sources ONE external post, memoised per
+// request path (the same viewer object is threaded through page loops). One
+// indexed existence check per previously-unseen post; the feed path primes
+// instead, so this only ever fires for single-doc reads.
+const ensureExtSourced = async (viewer: Viewer, postId: string): Promise<Viewer> => {
+  if (!viewer?.id || !postId) return viewer;
+  const asked = extSourcedAsked.get(viewer) || new Set<string>();
+  if (asked.has(postId)) return viewer;
+  await ensureExtAccountIds(viewer);
+  const accountIds = [...(viewer.extAccountIds || [])];
+  asked.add(postId);
+  extSourcedAsked.set(viewer, asked);
+  if (accountIds.length) {
+    const things = await getThingsCollection();
+    const hit = await things.findOne(
+      { thingtime: 'external-post-source', targetId: postId, 'crystal.accountId': { $in: accountIds } } as any,
+      { projection: { _id: 1 } }
+    );
+    if (hit) {
+      const known = new Set(viewer.extSourcedPostIds || []);
+      known.add(postId);
+      (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
+      return viewer;
+    }
+  }
+  // resolved-and-absent still needs an initialized set, or aclAllows can't
+  // tell "loaded, not a member" from "never loaded"
+  if (!viewer.extSourcedPostIds) {
+    (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = new Set<string>();
+  }
+  return viewer;
 };
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
@@ -1888,7 +1951,9 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 		return false;
 	}
   if (viewer?.id && doc.ownerId === viewer.id) return true;
-  return aclAllows(aclOf(doc), viewer, doc.ownerId);
+  // shareId serves the constant tt:extsourced audience, whose membership is
+  // per-(post, viewer) rather than encoded in the entry itself
+  return aclAllows(aclOf(doc), viewer, doc.ownerId, doc.shareId);
 };
 
 // Target-attached things resolve visibility through their inherit chain (see
@@ -1914,9 +1979,10 @@ export const canViewInherited = async (
 	}
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
   if (!terminal) return false;
-  // tt:extacct/ audiences (synced external posts and their comment chains)
-  // resolve against the viewer's linked accounts — loaded lazily here, once
-  // per request path (ensureExtAccountIds memoises on the viewer object)
+  // tt:extsourced / legacy tt:extacct/ audiences (synced external posts and
+  // their comment chains) resolve live against the viewer's connections —
+  // loaded lazily here and memoised on the viewer object for the request path
+  if (hasExtSourcedAudience(terminal)) await ensureExtSourced(viewer, terminal.shareId);
   if (hasExtacctAudience(terminal)) await ensureExtAccountIds(viewer);
   return canView(terminal, viewer);
 };

@@ -353,8 +353,73 @@ const run = async () => {
   check('channel search requires auth', searchWall.status === 401);
   await api('/api/v1/connections/unlink', { cookie: bo.cookie, method: 'POST', body: { id: ytConnection?.id } });
 
+  console.log('\nJ. relational source membership (§3: no unbounded arrays on the post)');
+  // Section G retired the earlier demo account, so establish a fresh shared
+  // identity: ana and bo both link the SAME demo handle, meaning one account
+  // sources the posts for two members. The post doc must not grow per linker,
+  // and its acl must never name an account (PublicPost.acl reaches every
+  // reader, so a per-source entry would disclose the other members' accounts).
+  const sharedHandle = `shared-${suffix}`;
+  const anaShare = await api('/api/v1/connections', {
+    cookie: ana.cookie,
+    method: 'POST',
+    body: { provider: 'demo', fields: { handle: sharedHandle } }
+  });
+  const boShare = await api('/api/v1/connections', {
+    cookie: bo.cookie,
+    method: 'POST',
+    body: { provider: 'demo', fields: { handle: sharedHandle } }
+  });
+  check(
+    'two members converge on one shared external account',
+    anaShare.status === 200 &&
+      boShare.status === 200 &&
+      anaShare.body?.connection?.account?.id === boShare.body?.connection?.account?.id
+  );
+  const anaShape = await api('/api/v1/connections/feed?limit=5', { cookie: ana.cookie });
+  const shapePost = anaShape.body?.posts?.[0];
+  check('external post still resolves after the relational refactor', anaShape.status === 200 && !!shapePost);
+  check(
+    'personal post carries the CONSTANT tt:extsourced audience',
+    Array.isArray(shapePost?.acl) && shapePost.acl.includes('tt:extsourced')
+  );
+  check(
+    'post acl names NO external account (no tt:extacct/ leak to readers)',
+    Array.isArray(shapePost?.acl) && shapePost.acl.every((entry) => !String(entry).includes('tt:extacct/'))
+  );
+  check(
+    'post acl stays bounded (a constant audience, not one entry per linker)',
+    Array.isArray(shapePost?.acl) && shapePost.acl.length <= 2
+  );
+  check('the embedded sourceIds array is gone from the wire shape', shapePost?.sourceIds === undefined);
+  // bo reaches the SAME post doc through his own link — one post, many sources
+  const boShape = await api('/api/v1/connections/feed?limit=5', { cookie: bo.cookie });
+  const boSame = (boShape.body?.posts || []).some((post) => post.id === shapePost?.id);
+  check('a second linked user reaches the SAME post doc (one post, many sources)', boSame);
+  // membership is the live authorization: an outsider with no link is denied
+  const outsiderShape = await api(`/api/v1/things?id=${shapePost?.id}`, { cookie: outsider.cookie });
+  check('tt:extsourced denies a viewer who sources nothing', outsiderShape.status === 404);
+  check('tt:extsourced denies an anonymous viewer', (await api(`/api/v1/things?id=${shapePost?.id}`)).status === 404);
+  // paging must not double-count a post reachable through more than one row
+  const paged = await api('/api/v1/connections/feed?limit=10', { cookie: ana.cookie });
+  const pagedIds = (paged.body?.posts || []).map((post) => post.id);
+  check('feed page contains no duplicate posts', pagedIds.length === new Set(pagedIds).size);
+  check('feed page honours its limit', pagedIds.length <= 10);
+  // unlinking revokes instantly — links, not materialized grants, are the truth
+  const anaLinks = await api('/api/v1/connections', { cookie: ana.cookie });
+  const demoLink = (anaLinks.body?.connections || []).find((connection) => connection.provider === 'demo');
+  await api('/api/v1/connections/unlink', { cookie: ana.cookie, method: 'POST', body: { id: demoLink?.id } });
+  check(
+    'unlink revokes tt:extsourced instantly (no grant sweep)',
+    (await api(`/api/v1/things?id=${shapePost?.id}`, { cookie: ana.cookie })).status === 404
+  );
+  check(
+    'the other linked user still sees the post after their peer unlinks',
+    (await api(`/api/v1/things?id=${shapePost?.id}`, { cookie: bo.cookie })).status === 200
+  );
+
   if (process.env.TT_VERIFY_LIVE === '1') {
-    console.log('\nJ. live network pull (TT_VERIFY_LIVE=1)');
+    console.log('\nK. live network pull (TT_VERIFY_LIVE=1)');
     const hn = await api('/api/v1/connections', { cookie: bo.cookie, method: 'POST', body: { provider: 'hackernews', fields: { feed: 'top' } } });
     check('hackernews connects', hn.status === 200);
     const hnFeed = await api('/api/v1/connections/feed?limit=10&sync=force', { cookie: bo.cookie });
