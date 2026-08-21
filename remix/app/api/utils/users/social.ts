@@ -9,6 +9,7 @@ import { getHomeThingsCollection as getThingsCollection, getUsersCollection } fr
 import { findUserById, findUserByUsername } from '../auth/users';
 import type { PublicProfile } from '../auth/users';
 import { isFollowing, toggleFollow } from '../messenger/follows';
+import { relationshipUniqueKeys } from '../messenger/shared';
 import { emitNotification } from '../notifications/notifications';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
@@ -168,6 +169,11 @@ export const friendAction = async (
           schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
           thingtime: ['friend'],
           crystal: { status: 'pending', friendKey: key },
+          // dedupe rides the server-only uniqueKeys namespace (messenger/
+          // shared.ts) — the same stamp newThingDoc applies for the other
+          // relationship kinds; this writer builds its doc inline for the
+          // owner-only acl, so it stamps through the shared helper directly
+          uniqueKeys: relationshipUniqueKeys('friend', { friendKey: key }),
           ownerId: viewer.id,
           acl: [ACL_OWNER],
           targetId,

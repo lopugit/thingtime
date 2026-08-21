@@ -35,7 +35,7 @@ for (const forbidden of ["'unsafe-inline'", "'unsafe-eval'"]) {
 // Every executable script must be external and same-origin. The policy has no
 // inline hash/nonce allowance, so an inline bootstrap would be present in the
 // HTML but silently blocked by the browser.
-const inlineExecutableScripts = [...indexHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(([, attributes]) => {
+const inlineExecutableScripts = [...indexHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)].filter(([, attributes]) => {
 	if (/\bsrc\s*=/i.test(attributes)) return false;
 	const typeMatch = attributes.match(/\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
 	const type = (typeMatch?.[1] || typeMatch?.[2] || typeMatch?.[3] || '').toLowerCase();
@@ -195,14 +195,23 @@ for (const route of routes) {
 		throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' outside design bundles (route ${route.src}).`);
 	}
 }
+// Sets make these exact CSP-token checks. A string substring check would also
+// accept an attacker-controlled host that merely embeds the approved URL.
+const designBundleScriptSources = new Set(getDirectiveSources(designBundlesCsp, 'script-src'));
+const designBundleConnectSources = new Set(getDirectiveSources(designBundlesCsp, 'connect-src'));
+const designBundleSandboxTokens = new Set(getDirectiveSources(designBundlesCsp, 'sandbox'));
 if (
-	!designBundlesCsp.includes("'unsafe-eval'") ||
-	!designBundlesCsp.includes('https://unpkg.com') ||
-	!designBundlesCsp.includes('sandbox allow-scripts')
+	!designBundleScriptSources.has("'unsafe-eval'") ||
+	!designBundleScriptSources.has('https://unpkg.com') ||
+	!designBundleConnectSources.has('https://unpkg.com') ||
+	!designBundleSandboxTokens.has('allow-scripts')
 ) {
 	throw new Error('Design-bundle CSP lost its generated-runtime compatibility sources.');
 }
-if (designBundlesCsp.includes('allow-same-origin') || designBundlesCsp.includes('allow-popups-to-escape-sandbox')) {
+if (
+	designBundleSandboxTokens.has('allow-same-origin') ||
+	designBundleSandboxTokens.has('allow-popups-to-escape-sandbox')
+) {
 	throw new Error('Design-bundle CSP lost its opaque-origin popup containment.');
 }
 if (!authorizeCsp.includes("frame-ancestors 'none'")) {
