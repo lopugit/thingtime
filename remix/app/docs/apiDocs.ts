@@ -2686,7 +2686,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		summary: 'Verifies every S3 part and publishes canonical attachment metadata idempotently.',
 		detail:
 			'The server lists parts itself, requires consecutive numbers, exact expected sizes, ETags, and SHA-256 checksums, then completes and HEAD-verifies the object. ' +
-			'It reads only a small prefix to detect a narrow inline-safe raster/video type. Active and generic formats stay application/octet-stream downloads. Repeating a successful request is safe.',
+			'It reads only a small prefix to detect an inline-safe raster/video type (AVIF/GIF/JPEG/PNG/WebP images; MP4, WebM, QuickTime, M4V, Ogg, 3GPP, 3GPP2, and Matroska video). ' +
+			'Active and generic formats stay application/octet-stream downloads, with the sniffed container preserved as detectedContentType display metadata when one was recognized. Repeating a successful request is safe.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
@@ -2695,8 +2696,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'Wait for every direct S3 PUT to succeed.',
 			'POST the uploadId; do not send browser-trusted ETags or sizes.',
-			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata.',
-			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields.'
+			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata (plus detectedContentType when the object stays a generic download).',
+			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } re-sorts a post’s bound set later.'
 		],
 		requestExamples: [
 			{
@@ -2769,6 +2770,56 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
+		id: 'attachment-annotate',
+		group: 'attachments',
+		title: 'Annotate attachment',
+		endpoint: '/api/v1/attachments/annotate',
+		summary: 'Sets or clears an owned ready attachment’s title and description.',
+		detail:
+			'Every attachment is a Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation text that page (and the post lightbox) renders: title up to 200 single-line characters, description up to 2000 characters (newlines allowed). Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched. Works on ready drafts before posting and on attachments already bound to a post, comment, or message. Crystal growth is charged to the owner’s storage quota exactly like any other Thing edit.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST the canonical attachment id with title and/or description.',
+			'Omit a field to leave it unchanged; send null or an empty string to clear it.',
+			'Store the returned attachment metadata (it includes the updated title/description).',
+			'Retry a 409 after refreshing — the attachment changed or is still uploading.'
+		],
+		requestExamples: [
+			{
+				name: 'Title a photo',
+				description: 'Set presentation text on an owned ready attachment.',
+				method: 'POST',
+				body: {
+					id: '3bda8208-625c-4f5d-941f-348020021848',
+					title: 'Sunset over the bay',
+					description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Updated public metadata.',
+				body: {
+					ok: true,
+					attachment: {
+						id: '3bda8208-625c-4f5d-941f-348020021848',
+						name: 'sunset.jpg',
+						size: 482133,
+						contentType: 'image/jpeg',
+						mediaKind: 'image',
+						title: 'Sunset over the bay',
+						description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
+					}
+				}
+			}
+		]
+	}),
+	endpoint({
 		id: 'attachment-delete',
 		group: 'attachments',
 		title: 'Delete attachment',
@@ -2804,7 +2855,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
-			'Only magic-byte-verified AVIF/GIF/JPEG/PNG/WebP and MP4/WebM may render inline. Add download=1 to force attachment/octet-stream for every type.',
+			'Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
 		auth: {
 			mode: 'optional',
 			description:
@@ -2887,6 +2938,66 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
 		],
 		notes: ['No response or log contains the cron secret. Mongo TTL deletion is intentionally disabled.']
+	}),
+	endpoint({
+		id: 'attachment-detection-backfill',
+		group: 'attachments',
+		title: 'Backfill sniffed attachment types',
+		endpoint: '/api/v1/attachments/backfill-detected-types',
+		summary: 'Admin-only sweep that re-runs magic-byte detection for ready attachments finalized before detection existed.',
+		detail:
+			'Ready attachments completed before server-side magic-byte sniffing keep crystal contentType application/octet-stream with no detectedContentType, so browser-playable uploads still render as opaque file cards. Each pass scans those legacy rows in shareId order and publishes exactly what completion would have: browser-playable containers flip to their inline contentType and mediaKind, other canonical sniffed types gain detectedContentType display metadata, and undetectable bytes stay untouched so a later pass under a wider detector can still claim them. Names, byte sizes, object keys, and object versions never change. ' +
+			'Every pass is bounded (at most 200 rows, five workers, a 25-second wall-clock budget) and idempotent — upgraded rows leave the candidate set, so repeated real passes converge. Follow nextCursor while hasMore is true to walk the full backlog; the cursor is required for dry runs, which write nothing and would otherwise rescan the same rows.',
+		auth: {
+			mode: 'session-or-bearer',
+			description:
+				'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403. Same-origin JSON requests only.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST { dryRun: true } first to count what one pass would change without writing.',
+			'POST {} (or { dryRun: false }) to apply one bounded pass for real.',
+			'While hasMore is true, POST again with the returned nextCursor.',
+			'Watch upgradedInline and labeledOpaque against undetected, missingObject, conflicts, and failed in each report.'
+		],
+		requestExamples: [
+			{
+				name: 'Dry-run one pass',
+				description: 'Counts the legacy rows one pass would upgrade, writing nothing.',
+				method: 'POST',
+				body: { dryRun: true }
+			},
+			{
+				name: 'Apply with a cursor',
+				description: 'Continues the sweep after a previous pass reported hasMore.',
+				method: 'POST',
+				body: { cursor: 'att_2f6b0c1d', limit: 200 }
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'One bounded backfill pass.',
+				body: {
+					ok: true,
+					dryRun: false,
+					scanned: 42,
+					upgradedInline: 17,
+					labeledOpaque: 3,
+					undetected: 21,
+					missingObject: 0,
+					conflicts: 1,
+					failed: 0,
+					hasMore: false,
+					stoppedForTimeBudget: false
+				}
+			},
+			{ status: 403, description: 'Signed-in non-admin.', body: { ok: false, error: 'Admins only' } }
+		],
+		notes: [
+			'Detection reads only the first 8 KiB of each object from private S3; nothing is re-uploaded and object-byte storage accounting is unchanged.',
+			'Unavailable while a custom MongoDB data endpoint is active — run it on the canonical deployment.'
+		]
 	}),
 	endpoint({
 		id: 'moderation-sweep',
@@ -5482,6 +5593,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
       "GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
+      'PATCH { id, attachmentIds } reorders a post’s (or rich comment’s) private attachments for display: the list must be a pure permutation of the ids already bound to that thing — additions/removals are rejected (409 when the bound set changed). Same-origin JSON from a full user session only, like attachment creation.',
       'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
     ],
@@ -7135,7 +7247,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Vercel deployments',
     endpoint: '/api/v1/vercel/deployments',
     summary: 'Returns deployment overview data for environment pickers and dashboards.',
-    detail: 'This route is visible only when deployment status is enabled. It normalizes branch limits and hides itself with 404 otherwise.',
+    detail: 'This route is visible only when deployment status is enabled. It normalizes branch and per-branch history limits, returns one latest deployment per branch for compatibility plus bounded deploymentGroups history, and hides itself with 404 otherwise.',
     auth: {
       mode: 'none',
       description: 'Public status endpoint when enabled by server-side deployment configuration.'
@@ -7143,7 +7255,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'Call with an optional limit, branchLimit, or branches query parameter.',
-      'Use returned deployments to populate preview/environment selectors.',
+      'Set history, historyLimit, or deploymentsPerBranch to include up to 20 recent deployments in each deploymentGroups entry.',
+      'Use deployments for a latest-per-branch selector or deploymentGroups for a nested branch and deployment-history selector.',
       'Handle 404 as intentionally hidden when deployment status is disabled.',
       'Avoid exposing Vercel API tokens; this route returns sanitized overview data only.'
     ],
@@ -7152,7 +7265,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'List deployments',
         description: 'Read up to five branch deployments.',
         method: 'GET',
-        query: { limit: 5 }
+        query: { history: 10, limit: 5 }
       }
     ],
     responseExamples: [
