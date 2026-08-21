@@ -55,6 +55,9 @@ jobs:
       - name: Verify patch hygiene
         run: git diff --check
 
+      - name: Validate all-branch event and doctor contracts
+        run: node .github/scripts/build-all-branch.mjs --self-test
+
   contract-advisories:
     name: Contract advisories (non-blocking)
     runs-on: ubuntu-latest

@@ -47,6 +47,8 @@
 name: Build all branch
 
 on:
+  push:
+    branches: [github-actions]
   workflow_call:
   workflow_dispatch:
 
