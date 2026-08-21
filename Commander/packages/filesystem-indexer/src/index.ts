@@ -91,6 +91,15 @@ export interface IndexReport {
   resources: IndexResourceUsage;
 }
 
+export interface IndexProgress {
+  sourceId: string;
+  root: string;
+  processed: number;
+  indexed: number;
+  skipped: number;
+  errors: number;
+}
+
 export interface EffectiveResourceLimits {
   logicalCpuCount: number;
   workerThreads: number;
@@ -128,10 +137,17 @@ interface ErrorResponse {
   error: { code: string; message: string };
 }
 
+interface ProgressResponse {
+  id: string;
+  event: 'progress';
+  progress: IndexProgress;
+}
+
 interface PendingRequest {
   resolve(value: unknown): void;
   reject(error: Error): void;
   timer: ReturnType<typeof setTimeout>;
+  onProgress?: (progress: IndexProgress) => void;
 }
 
 export interface FileSystemIndexerClientOptions {
@@ -162,10 +178,15 @@ export class FileSystemIndexerClient {
     return this.#request<IndexStatus>({ operation: 'status' });
   }
 
-  index(configuration: IndexConfiguration, timeoutMs?: number): Promise<IndexReport> {
+  index(
+    configuration: IndexConfiguration,
+    timeoutMs?: number,
+    onProgress?: (progress: IndexProgress) => void,
+  ): Promise<IndexReport> {
     return this.#request<IndexReport>(
       { operation: 'index', configuration },
       timeoutMs ?? this.#options.indexTimeoutMs ?? DEFAULT_INDEX_TIMEOUT_MS,
+      onProgress,
     );
   }
 
@@ -222,7 +243,11 @@ export class FileSystemIndexerClient {
     );
   }
 
-  #request<T>(operation: RequestOperation, timeoutMs?: number): Promise<T> {
+  #request<T>(
+    operation: RequestOperation,
+    timeoutMs?: number,
+    onProgress?: (progress: IndexProgress) => void,
+  ): Promise<T> {
     if (!this.#process) this.#start();
     const child = this.#process!;
     const id = `indexer-${process.pid}-${++this.#sequence}`;
@@ -235,6 +260,7 @@ export class FileSystemIndexerClient {
         resolve: (value) => resolve(value as T),
         reject,
         timer,
+        ...(onProgress ? { onProgress } : {}),
       });
       child.stdin.write(`${JSON.stringify({ id, ...operation })}\n`, (error) => {
         if (!error) return;
@@ -248,9 +274,9 @@ export class FileSystemIndexerClient {
   }
 
   #receive(line: string): void {
-    let response: SuccessResponse<unknown> | ErrorResponse;
+    let response: SuccessResponse<unknown> | ErrorResponse | ProgressResponse;
     try {
-      response = JSON.parse(line) as SuccessResponse<unknown> | ErrorResponse;
+      response = JSON.parse(line) as SuccessResponse<unknown> | ErrorResponse | ProgressResponse;
     } catch (error) {
       this.#failPending(
         new Error(
@@ -265,6 +291,10 @@ export class FileSystemIndexerClient {
     }
     const pending = this.#pending.get(response.id);
     if (!pending) return;
+    if ('event' in response) {
+      if (response.event === 'progress') pending.onProgress?.(response.progress);
+      return;
+    }
     this.#pending.delete(response.id);
     clearTimeout(pending.timer);
     if (response.ok) pending.resolve(response.result);

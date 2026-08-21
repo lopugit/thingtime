@@ -30,7 +30,7 @@ describe('EmojiPicker', () => {
         return { copied: true, pasted: true, requiresAccessibility: false, targetApplication: 'Notes' };
       return undefined;
     });
-    render(<EmojiPicker platform="macos" onBack={vi.fn()} />);
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
     await waitFor(() =>
       expect(nativeRequest).toHaveBeenCalledWith('launcher.commandReady', {
         itemId: 'extension:builtin:emoji-symbols:search-emoji-symbols',
@@ -46,14 +46,19 @@ describe('EmojiPicker', () => {
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    await waitFor(() => expect(nativeRequest).toHaveBeenCalledWith('clipboard.paste', { text: '❤️' }));
+    await waitFor(() =>
+      expect(nativeRequest).toHaveBeenCalledWith('clipboard.paste', {
+        text: '❤️',
+        preserveClipboard: true,
+      }),
+    );
     expect(JSON.parse(window.localStorage.getItem('commander-emoji-recents-v1') ?? '[]')).toContain(
       'emoji:2764',
     );
   });
 
   it('navigates the grid with arrows and opens the action selector with Command-K', async () => {
-    render(<EmojiPicker platform="macos" onBack={vi.fn()} />);
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
     const input = screen.getByRole('textbox', { name: 'Search emoji and symbols' });
     expect(input).toHaveAttribute('autocorrect', 'off');
     expect(input).toHaveAttribute('autocapitalize', 'none');
@@ -78,7 +83,7 @@ describe('EmojiPicker', () => {
         return { copied: true, pasted: true, requiresAccessibility: false, targetApplication: 'Notes' };
       return undefined;
     });
-    const firstRender = render(<EmojiPicker platform="macos" onBack={vi.fn()} />);
+    const firstRender = render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Search emoji and symbols' }), {
       target: { value: 'heart' },
     });
@@ -97,7 +102,7 @@ describe('EmojiPicker', () => {
     });
 
     firstRender.unmount();
-    render(<EmojiPicker platform="macos" onBack={vi.fn()} />);
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Search emoji and symbols' }), {
       target: { value: 'heart' },
     });
@@ -113,7 +118,7 @@ describe('EmojiPicker', () => {
       if (method === 'clipboard.paste') return { copied: true, pasted: false, requiresAccessibility: true };
       return method === 'application.pasteTarget' ? { name: 'ChatGPT' } : undefined;
     });
-    render(<EmojiPicker platform="macos" onBack={vi.fn()} />);
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Search emoji and symbols' }), {
       target: { value: 'red heart' },
     });
@@ -121,14 +126,12 @@ describe('EmojiPicker', () => {
 
     fireEvent.keyDown(window, { key: 'Enter' });
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'allow Commander in Accessibility to paste automatically',
-    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Allow Commander in Accessibility to paste');
   });
 
   it('returns to Commander with Escape', () => {
     const onBack = vi.fn();
-    render(<EmojiPicker platform="macos" onBack={onBack} />);
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={onBack} />);
 
     fireEvent.keyDown(window, { key: 'Escape' });
 

@@ -63,6 +63,9 @@ function state(overrides: Partial<CommanderState> = {}): CommanderState {
     bootstrap,
     query: 'settings',
     hits,
+    searchPending: false,
+    resultsStale: false,
+    indexingStatus: null,
     recentSearches: [],
     selectedIndex: 0,
     actionsOpen: false,
@@ -78,6 +81,7 @@ function state(overrides: Partial<CommanderState> = {}): CommanderState {
     reportError: vi.fn(),
     saveSettings: vi.fn(),
     refresh: vi.fn(),
+    refreshSearch: vi.fn(),
     ...overrides,
   };
 }
@@ -127,7 +131,9 @@ describe('Launcher keyboard navigation', () => {
     ['Control-A on Windows', { ...bootstrap, platform: 'windows' as const }, { ctrlKey: true }],
   ])('selects the complete focused search query with %s', (_shortcut, platformBootstrap, modifier) => {
     render(<Launcher state={state({ bootstrap: platformBootstrap })} />);
-    const input = screen.getByRole('textbox', { name: 'Search apps and commands' }) as HTMLInputElement;
+    const input = screen.getByRole('textbox', {
+      name: 'Search apps, commands, files and folders',
+    }) as HTMLInputElement;
     input.focus();
     input.setSelectionRange(2, 5);
 
@@ -139,7 +145,9 @@ describe('Launcher keyboard navigation', () => {
 
   it('preserves the standard macOS Control-A editing shortcut', () => {
     render(<Launcher state={state()} />);
-    const input = screen.getByRole('textbox', { name: 'Search apps and commands' }) as HTMLInputElement;
+    const input = screen.getByRole('textbox', {
+      name: 'Search apps, commands, files and folders',
+    }) as HTMLInputElement;
     input.focus();
     input.setSelectionRange(2, 5);
 
@@ -151,7 +159,9 @@ describe('Launcher keyboard navigation', () => {
 
   it('disables browser spelling and autocorrect UI in the root search field', () => {
     render(<Launcher state={state()} />);
-    const input = screen.getByRole('textbox', { name: 'Search apps and commands' });
+    const input = screen.getByRole('textbox', {
+      name: 'Search apps, commands, files and folders',
+    });
 
     expect(input).toHaveAttribute('autocomplete', 'off');
     expect(input).toHaveAttribute('autocapitalize', 'none');
@@ -396,5 +406,107 @@ describe('Launcher keyboard navigation', () => {
       }),
     );
     expect(commander.setSelectedIndex).toHaveBeenCalledWith(0);
+  });
+
+  it('groups ranked results and renders application names without the package suffix', () => {
+    const application = { ...hits[1]!, title: 'Notes.app', score: 10_000 };
+    render(<Launcher state={state({ hits: [hits[0]!, application] })} />);
+
+    const headings = screen.getAllByRole('heading', { level: 3 });
+    expect(headings.map((heading) => heading.textContent)).toEqual(['Apps', 'Commands']);
+    expect(screen.getByText('Notes', { selector: '.result-title' })).toBeVisible();
+    expect(screen.getByText('.app', { selector: '.app-extension-badge' })).toBeVisible();
+  });
+
+  it('opens a path-specific right-click menu with Finder, copy, trash, and delete actions', async () => {
+    const file: SearchHit = {
+      ...hits[1]!,
+      id: 'index:file:report',
+      title: 'report.pdf',
+      subtitle: '/Users/test/report.pdf',
+      path: '/Users/test/report.pdf',
+      kind: 'file',
+      actions: [
+        { id: 'open', title: 'Open' },
+        { id: 'show-in-finder', title: 'Show in Finder' },
+        { id: 'copy-file', title: 'Copy' },
+        { id: 'copy-path', title: 'Copy Path' },
+        { id: 'move-to-trash', title: 'Move to Trash', destructive: true },
+        { id: 'delete', title: 'Delete Immediately…', destructive: true },
+      ],
+    };
+    const commander = state({ hits: [file], selectedIndex: 0 });
+    render(<Launcher state={commander} />);
+
+    fireEvent.contextMenu(screen.getByRole('option', { name: /report.pdf/ }), {
+      clientX: 180,
+      clientY: 140,
+    });
+
+    expect(screen.getByRole('menuitem', { name: /Show in Finder/ })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: /^Copy$/ })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: /Move to Trash/ })).toBeVisible();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move to Trash/ }));
+    await waitFor(() =>
+      expect(commander.executeCommand).toHaveBeenCalledWith(file.id, 'move-to-trash', 'settings'),
+    );
+  });
+
+  it('keeps stale results visible but non-executable while the next search is streaming', () => {
+    const commander = state({ searchPending: true, resultsStale: true });
+    render(<Launcher state={commander} />);
+
+    expect(screen.getByRole('option', { name: /Commander Settings/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(commander.executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('shows live index progress in the footer', () => {
+    render(
+      <Launcher
+        state={state({
+          indexingStatus: {
+            available: true,
+            running: ['files'],
+            totalRecords: 4_000,
+            databaseSizeBytes: 1_024,
+            kinds: [],
+            commands: { count: 20 },
+            automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 360 },
+            resourceLimits: DEFAULT_SETTINGS.indexing.resourceLimits,
+            progress: {
+              scope: 'files',
+              label: 'Indexing Files',
+              processed: 1_250,
+              total: 4_000,
+              startedAtMs: 1,
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Indexing Files · 1,250 / 4,000')).toBeVisible();
+  });
+
+  it('pins the current window and offers a right-click Open New Window action', async () => {
+    vi.mocked(nativeRequest).mockImplementation(async (method) => {
+      if (method === 'launcher.state') return { windowId: 'window-1', pinned: false, pinningEnabled: true };
+      if (method === 'launcher.pin') return { windowId: 'window-1', pinned: true, pinningEnabled: true };
+      return undefined;
+    });
+    render(<Launcher state={state()} />);
+    const pin = screen.getByRole('button', { name: 'Pin Commander window' });
+
+    fireEvent.click(pin);
+    await waitFor(() => expect(nativeRequest).toHaveBeenCalledWith('launcher.pin', { pinned: true }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Unpin Commander window' })).toBeVisible());
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Unpin Commander window' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open New Window' }));
+    await waitFor(() => expect(nativeRequest).toHaveBeenCalledWith('launcher.openNewWindow'));
   });
 });

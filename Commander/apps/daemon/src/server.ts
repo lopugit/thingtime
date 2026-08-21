@@ -11,7 +11,9 @@ import type {
   IndexScope,
   NativeRequest,
   RecentSearchCommand,
+  SearchHit,
   SearchItem,
+  SearchStreamEvent,
   StoreExtension,
 } from '@commander/protocol';
 import { PROTOCOL_VERSION } from '@commander/protocol';
@@ -44,6 +46,7 @@ import { PersistentStore } from './services/persistence.js';
 import { macosSystemExtension, macosSystemShortcutURL } from './services/macosSystem.js';
 import { preferenceValuesForCommand, RaycastLocalService } from './services/raycastLocal.js';
 import { SearchService } from './services/search.js';
+import { SearchResultCache } from './services/searchCache.js';
 import { ThingtimeService } from './services/thingtime.js';
 
 const MIME: Record<string, string> = {
@@ -71,12 +74,14 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   const indexingSettingsMigrated = store.consumeIndexingMigration();
   const platform = options.platform ?? currentPlatform();
   const search = new SearchService(options.rustBinary);
+  const searchCache = new SearchResultCache(store.snapshot().settings.searchCache);
   const extensions = new RaycastExtensionRuntime();
   const thingtime = new ThingtimeService();
   const localRaycast = new RaycastLocalService();
   const credentials = new Map<string, string>();
   let pendingCredential: { accountId: string; token: string; createdAt: number } | null = null;
   let applications: SearchItem[] = [];
+  let searchRevision = 0;
 
   const refreshCatalog = () => {
     const state = store.snapshot();
@@ -85,6 +90,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       ...extensionItems(availableExtensions(state.extensions, platform)),
       ...applications,
     ]);
+    searchRevision += 1;
   };
   const indexing = new IndexingService({
     binaryPath: options.indexerBinary,
@@ -136,6 +142,62 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   if (!address || typeof address === 'string') throw new Error('Commander daemon did not bind a TCP port');
   const baseUrl = `http://${options.host}:${address.port}`;
 
+  const searchNow = async (
+    query: string,
+    onUpdate?: (event: SearchStreamEvent) => void,
+  ): Promise<SearchHit[]> => {
+    const snapshot = store.snapshot();
+    const key = JSON.stringify({
+      version: 1,
+      query: query.trim().toLowerCase(),
+      order: snapshot.settings.resultCategoryOrder,
+      windowMode: snapshot.settings.windowMode,
+      favourites: snapshot.settings.showFavouritesInCompactMode,
+      revision: searchRevision,
+    });
+    const cached = await searchCache.get(key);
+    if (cached?.length)
+      onUpdate?.({
+        type: 'results',
+        phase: 'cache',
+        hits: cached,
+        complete: false,
+        cached: true,
+      });
+
+    const preferenceScores = store.preferenceScores(query);
+    let catalogHits = await search.search(
+      query,
+      30,
+      [],
+      preferenceScores,
+      snapshot.settings.resultCategoryOrder,
+    );
+    catalogHits = compactFavourites(catalogHits, query, snapshot.settings);
+    onUpdate?.({
+      type: 'results',
+      phase: 'catalog',
+      hits: catalogHits,
+      complete: false,
+      cached: false,
+    });
+
+    const indexedItems = await indexing.queryItems(query);
+    let hits = indexedItems.length
+      ? await search.search(query, 30, indexedItems, preferenceScores, snapshot.settings.resultCategoryOrder)
+      : catalogHits;
+    hits = compactFavourites(hits, query, snapshot.settings);
+    onUpdate?.({
+      type: 'results',
+      phase: indexedItems.length ? 'filesystem' : 'complete',
+      hits,
+      complete: true,
+      cached: false,
+    });
+    void searchCache.put(key, hits).catch(() => undefined);
+    return hits;
+  };
+
   async function routeApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
     const state = store.snapshot();
     const extensionsForState = availableExtensions(state.extensions, platform);
@@ -160,16 +222,35 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     }
     if (request.method === 'GET' && url.pathname === '/api/search') {
       const query = url.searchParams.get('q') ?? '';
-      const indexedItems = await indexing.queryItems(query);
-      let hits = await search.search(query, 30, indexedItems, store.preferenceScores(query));
-      if (
-        !query.trim() &&
-        state.settings.windowMode === 'compact' &&
-        state.settings.showFavouritesInCompactMode
-      ) {
-        hits = hits.filter((hit) => hit.favourite);
+      return json(response, 200, { hits: await searchNow(query) });
+    }
+    if (request.method === 'GET' && url.pathname === '/api/search/stream') {
+      const query = url.searchParams.get('q') ?? '';
+      response.writeHead(200, {
+        'content-type': 'application/x-ndjson; charset=utf-8',
+        'cache-control': 'no-store',
+        connection: 'keep-alive',
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
+      });
+      try {
+        await searchNow(query, (event) => {
+          if (!response.destroyed) response.write(`${JSON.stringify(event)}\n`);
+        });
+      } catch (error) {
+        if (!response.destroyed)
+          response.write(
+            `${JSON.stringify({ error: error instanceof Error ? error.message : 'Search failed' })}\n`,
+          );
       }
-      return json(response, 200, { hits });
+      if (!response.destroyed) response.end();
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/api/search/cache/status')
+      return json(response, 200, await searchCache.status());
+    if (request.method === 'DELETE' && url.pathname === '/api/search/cache') {
+      await searchCache.clear();
+      return json(response, 200, { ok: true, status: await searchCache.status() });
     }
     if (request.method === 'GET' && url.pathname === '/api/index/status')
       return json(response, 200, await indexing.status());
@@ -189,6 +270,8 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     if (request.method === 'PUT' && url.pathname === '/api/settings') {
       const settings = await store.setSettings(await readBody<CommanderSettings>(request));
       indexing.updateSettings(settings);
+      searchCache.updateSettings(settings.searchCache);
+      searchRevision += 1;
       return json(response, 200, { settings });
     }
     if (request.method === 'GET' && url.pathname === '/api/extensions')
@@ -303,6 +386,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         search.items().find((candidate) => candidate.id === itemId) ?? (await indexing.resolveItem(itemId));
       if (!item) return json(response, 404, { error: 'Search item not found' });
       await store.recordSearchSelection(typeof query === 'string' ? query : '', itemId, actionId);
+      searchRevision += 1;
       if (actionId === 'open-settings')
         return json(response, 200, {
           ok: true,
@@ -339,6 +423,26 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         return json(response, 200, {
           ok: true,
           nativeRequest: { method: 'clipboard.write', params: { text: item.path } },
+        });
+      if (actionId === 'copy-name' && item.path)
+        return json(response, 200, {
+          ok: true,
+          nativeRequest: { method: 'clipboard.write', params: { text: path.basename(item.path) } },
+        });
+      if (actionId === 'copy-file' && item.path)
+        return json(response, 200, {
+          ok: true,
+          nativeRequest: { method: 'filesystem.copy', params: { path: item.path } },
+        });
+      if (actionId === 'move-to-trash' && item.path)
+        return json(response, 200, {
+          ok: true,
+          nativeRequest: { method: 'filesystem.trash', params: { path: item.path } },
+        });
+      if (actionId === 'delete' && item.path)
+        return json(response, 200, {
+          ok: true,
+          nativeRequest: { method: 'filesystem.delete', params: { path: item.path } },
         });
       if ((item.kind === 'application' || item.kind === 'file' || item.kind === 'directory') && item.path)
         return json(response, 200, {
@@ -539,6 +643,12 @@ function commanderIndexScope(commandName: string): IndexScope | undefined {
   if (commandName === indexFilesCommandName) return 'files';
   if (commandName === indexDirectoriesCommandName) return 'directories';
   return undefined;
+}
+
+function compactFavourites(hits: SearchHit[], query: string, settings: CommanderSettings): SearchHit[] {
+  return !query.trim() && settings.windowMode === 'compact' && settings.showFavouritesInCompactMode
+    ? hits.filter((hit) => hit.favourite)
+    : hits;
 }
 
 async function readBody<T>(request: IncomingMessage): Promise<T> {

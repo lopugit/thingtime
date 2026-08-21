@@ -98,6 +98,9 @@ rewriting unchanged trigram rows.
 
 `serve --database <path>` reads one request per line and writes one response
 per line. Each request carries an `id`, and each response echoes it, so clients
-can safely multiplex queries and long-running scans. Status uses indexed row
-counts rather than expensive distinct-path scans; the Node client terminates a
-timed-out child and starts a clean replacement on its next request.
+can safely multiplex queries and long-running scans. An index request emits
+zero or more correlated `{"id":"…","event":"progress","progress":{…}}`
+lines before its single final success/error response; existing hosts can ignore
+unknown event lines. Status uses indexed row counts rather than expensive
+distinct-path scans; the Node client terminates a timed-out child and starts a
+clean replacement on its next request.

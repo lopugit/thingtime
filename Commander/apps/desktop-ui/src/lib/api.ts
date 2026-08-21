@@ -11,6 +11,8 @@ import type {
   RecentSearch,
   RecentSearchCommand,
   SearchHit,
+  SearchCacheStatus,
+  SearchStreamEvent,
   StoreExtension,
 } from '@commander/protocol';
 
@@ -34,9 +36,45 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
+async function streamSearch(
+  value: string,
+  onEvent: (event: SearchStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`/api/search/stream?q=${encodeURIComponent(value)}`, {
+    headers: daemonHeaders(),
+    ...(signal ? { signal } : {}),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Search failed (${response.status})`);
+  }
+  if (!response.body) throw new Error('Streaming search is unavailable');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = '';
+  while (true) {
+    const { value: chunk, done } = await reader.read();
+    buffered += decoder.decode(chunk, { stream: !done });
+    const lines = buffered.split('\n');
+    buffered = done ? '' : (lines.pop() ?? '');
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const event = JSON.parse(line) as SearchStreamEvent & { error?: string };
+      if (event.error) throw new Error(event.error);
+      onEvent(event);
+    }
+    if (done) break;
+  }
+}
+
 export const api = {
   bootstrap: () => request<BootstrapResponse>('/api/bootstrap'),
   search: (value: string) => request<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(value)}`),
+  streamSearch,
+  searchCacheStatus: () => request<SearchCacheStatus>('/api/search/cache/status'),
+  clearSearchCache: () =>
+    request<{ ok: true; status: SearchCacheStatus }>('/api/search/cache', { method: 'DELETE' }),
   addRecentSearch: (value: string, command?: RecentSearchCommand) =>
     request<{ recentSearches: RecentSearch[] }>('/api/history', {
       method: 'POST',

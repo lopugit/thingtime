@@ -2,6 +2,7 @@ import { readdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { SearchItem } from '@commander/protocol';
+import { pathActions } from './pathActions.js';
 
 const macApplicationDirectories = [
   '/Applications',
@@ -45,11 +46,7 @@ async function readApplications(directory: string): Promise<SearchItem[]> {
           icon: 'application',
           path: path.join(directory, entry.name),
           favourite: false,
-          actions: [
-            { id: 'open', title: 'Open Application', shortcut: '↵' },
-            { id: 'show-in-finder', title: 'Show in Finder', shortcut: '⇧⌘R' },
-            { id: 'copy-path', title: 'Copy Path', shortcut: '⌘C' },
-          ],
+          actions: pathActions('application'),
         } satisfies SearchItem;
       });
   } catch {

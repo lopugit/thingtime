@@ -10,7 +10,8 @@ import { useCommander } from './useCommander.js';
 vi.mock('../lib/api.js', () => ({
   api: {
     bootstrap: vi.fn(),
-    search: vi.fn(),
+    streamSearch: vi.fn(),
+    indexingStatus: vi.fn(),
     addRecentSearch: vi.fn(),
     saveSettings: vi.fn(),
     execute: vi.fn(),
@@ -43,7 +44,25 @@ describe('useCommander launcher sessions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.bootstrap).mockResolvedValue(bootstrap);
-    vi.mocked(api.search).mockResolvedValue({ hits: [] });
+    vi.mocked(api.streamSearch).mockImplementation(async (_query, onEvent) => {
+      onEvent({
+        type: 'results',
+        phase: 'complete',
+        hits: [],
+        complete: true,
+        cached: false,
+      });
+    });
+    vi.mocked(api.indexingStatus).mockResolvedValue({
+      available: true,
+      running: [],
+      totalRecords: 0,
+      databaseSizeBytes: 0,
+      kinds: [],
+      commands: { count: 0 },
+      automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 360 },
+      resourceLimits: DEFAULT_SETTINGS.indexing.resourceLimits,
+    });
     vi.mocked(api.addRecentSearch).mockImplementation(async (query, command) => ({
       recentSearches: [
         { query, commands: command ? [command] : [] },
@@ -72,7 +91,7 @@ describe('useCommander launcher sessions', () => {
     ]);
   });
 
-  it('clears results immediately when a new query starts so Return cannot run a stale item', async () => {
+  it('keeps the last results visible until the next streamed search produces an update', async () => {
     const staleHit: SearchHit = {
       id: 'builtin:settings',
       title: 'Commander Settings',
@@ -83,14 +102,28 @@ describe('useCommander launcher sessions', () => {
       score: 100,
       matchedRanges: [],
     };
-    vi.mocked(api.search).mockResolvedValueOnce({ hits: [staleHit] });
+    vi.mocked(api.streamSearch).mockImplementation(async (query, onEvent) => {
+      if (!query) {
+        onEvent({
+          type: 'results',
+          phase: 'complete',
+          hits: [staleHit],
+          complete: true,
+          cached: false,
+        });
+        return;
+      }
+      await new Promise<void>(() => undefined);
+    });
     const { result } = renderHook(() => useCommander());
     await waitFor(() => expect(result.current.hits).toEqual([staleHit]));
 
     act(() => result.current.setQuery('emoji'));
 
-    expect(result.current.hits).toEqual([]);
+    expect(result.current.hits).toEqual([staleHit]);
     expect(result.current.selectedIndex).toBe(0);
+    expect(result.current.searchPending).toBe(true);
+    expect(result.current.resultsStale).toBe(true);
   });
 
   it('runs a native action and hides the launcher through the shared command executor', async () => {

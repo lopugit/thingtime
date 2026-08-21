@@ -56,17 +56,22 @@ describe('FileSystemIndexerClient', () => {
       prefixArguments: [fixture],
     });
     try {
-      const response = (await client.index({
-        sources: [{ id: 'documents', root: '/tmp', kinds: ['file', 'directory'] }],
-        maxEntries: null,
-        resourceLimits: {
-          maxThreads: 6,
-          maxParallelism: 3,
-          maxOpenDirectories: 9,
-          maxCpuPercent: 45,
-          maxMemoryMiB: 384,
+      const progress: number[] = [];
+      const response = (await client.index(
+        {
+          sources: [{ id: 'documents', root: '/tmp', kinds: ['file', 'directory'] }],
+          maxEntries: null,
+          resourceLimits: {
+            maxThreads: 6,
+            maxParallelism: 3,
+            maxOpenDirectories: 9,
+            maxCpuPercent: 45,
+            maxMemoryMiB: 384,
+          },
         },
-      })) as unknown as { configuration: Record<string, unknown> };
+        undefined,
+        (event) => progress.push(event.processed),
+      )) as unknown as { configuration: Record<string, unknown> };
       expect(response.configuration).toMatchObject({
         maxEntries: null,
         resourceLimits: {
@@ -77,6 +82,7 @@ describe('FileSystemIndexerClient', () => {
           maxMemoryMiB: 384,
         },
       });
+      expect(progress).toEqual([12]);
     } finally {
       await client.close();
     }

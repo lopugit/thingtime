@@ -145,7 +145,7 @@ environment.
   the daemon and native bridge, so Extensions and Accounts open their exact tabs.
   Result selection now reacts to pointer movement instead of hover re-entry, so
   a stationary cursor cannot steal keyboard selection after a query rerender.
-- Extensions Settings now separates Commander-owned **Bundled Raycast Commands**
+- Extensions Settings now separates Commander-owned **Bundled Commands**
   from imported extensions. The first bundled equivalent is Emoji & Symbols:
   semantic Unicode/CLDR search, an eight-column keyboard grid, categories, skin
   tones, local recents, copy/Unicode actions, and native paste-back to the app
@@ -250,15 +250,51 @@ environment.
   a protocol child after timeout so a pathological query cannot poison later
   searches or status polls.
 
+## Streaming search, native result actions, and window follow-up
+
+- Search now serves newline-delimited cache, catalog, and filesystem phases. The
+  renderer keeps the previous result set visible but non-executable until a
+  matching cached/live phase arrives, removing both the empty flash and the
+  stale-Return race. Result snapshots are private owner-only files with
+  configurable enablement, directory, size, expiry, reveal, and clear controls.
+- Launcher results are grouped into Apps, Commands, and Files & Folders. Their
+  order is draggable in Settings and expressed as a modest rank boost, so an
+  exceptionally strong text or learned match can still win. Application rows
+  hide the filename suffix while retaining an explicit `.app` badge.
+- Filesystem-backed rows gained type-aware right-click menus. Native handlers
+  provide open/reveal, Finder-style file copy, path/name copy, recoverable Trash,
+  and a separately confirmed permanent delete boundary. Filesystem roots,
+  mounted-volume roots, the current home folder, and the running app bundle are
+  hard-blocked from both destructive operations.
+- Rust index requests now emit correlated per-source progress events without
+  changing the single final JSONL response. The reusable Node client exposes an
+  optional progress callback, Commander aggregates simultaneous sources, and
+  the launcher footer paints the active label and processed/indexed counts.
+- Launcher panels now support native pin/unpin state, a configurable global pin
+  shortcut, current-display most-recent focus, and multiple independent windows
+  from the icon's context menu. Pinned panels leave transient collection
+  behavior and do not dismiss on key loss.
+- The WebKit canvas remains transparent outside the shaped panel, while the
+  actual launcher surface is an isolated solid surface rather than a delayed
+  backdrop-filter composition. This preserves the rounded exterior without the
+  inner window becoming translucent after focus/compositor changes.
+- Extensions now uses the generic **Bundled** label. Emoji & Symbols alone notes
+  its Raycast inspiration and exposes a persisted default Return action. The
+  default native paste snapshots and restores the prior macOS pasteboard;
+  paste-and-copy, copy emoji, and copy Unicode remain explicit alternatives.
+- The repository's canonical AI guidance now requires a reasonably chosen
+  settings surface for future meaningful features whenever user customization
+  is safe and coherent, together with defaults, migration, and tests.
+
 ## Verification
 
-- Commander TypeScript: 109 tests passed across protocol (9), filesystem client
-  (3), compatibility (19), UI (49), and daemon (29) packages; typecheck,
+- Commander TypeScript: 120 tests passed across protocol (11), filesystem client
+  (3), compatibility (19), UI (55), and daemon (32) packages; typecheck,
   ESLint, Prettier, and package builds passed.
 - Rust: 54 tests passed across command search (23 unit + 5 JSONL) and filesystem
   indexing (25 unit + 1 JSONL); formatting and strict Clippy with warnings
   denied passed.
-- Swift: ten WebKit/panel, settings-deep-link, file-drag, and command-hotkey
+- Swift: eleven WebKit/panel, settings-deep-link, file-drag, and command-hotkey
   regressions passed; the release build passed with warnings treated as errors.
 - `Commander/script/build_and_run.sh --verify` built, Apple Development signed,
   installed, and launched the exact follow-up app at
@@ -266,6 +302,11 @@ environment.
 - The installed signature, stable designated requirement, Node JIT
   entitlements, process ancestry, daemon health, and bundled executable paths
   were verified.
+- Installed multi-display WebKit QA showed the launcher on the display containing
+  the pointer, with Apps grouped above Files & Folders, a native Commander icon,
+  the explicit `.app` badge, a solid inner surface, and only transparent pixels
+  outside the rounded panel. The installed Settings window rendered the new
+  Search tab alongside the existing sections without clipping.
 - Before the unlimited migration, the optimized standalone indexer scanned
   500,000 real home metadata entries in
   15.6–17.0 seconds with the measured two-worker default (versus 21.9 seconds at

@@ -6,6 +6,7 @@ import type {
   SearchItem,
   SearchRequest,
   SearchResponse,
+  SearchCategory,
 } from '@commander/protocol';
 import { fuzzyTextScore } from '@commander/protocol';
 
@@ -38,9 +39,13 @@ export class SearchService {
     limit = 30,
     additionalItems: SearchItem[] = [],
     preferenceScores: Readonly<Record<string, number>> = {},
+    categoryOrder: readonly SearchCategory[] = ['applications', 'commands', 'files'],
   ): Promise<SearchHit[]> {
     const items = mergeItems(this.#items, additionalItems).map((item) => {
-      const preferenceScore = Math.min(100_000, Math.max(0, preferenceScores[item.id] ?? 0));
+      const preferenceScore = Math.min(
+        100_000,
+        Math.max(0, preferenceScores[item.id] ?? 0) + categoryPreferenceScore(item, categoryOrder),
+      );
       return preferenceScore ? { ...item, preferenceScore } : item;
     });
     const child = this.#rust;
@@ -118,6 +123,18 @@ export class SearchService {
       pending.reject(error);
     }
   }
+}
+
+function categoryPreferenceScore(item: SearchItem, order: readonly SearchCategory[]): number {
+  const category: SearchCategory =
+    item.kind === 'application'
+      ? 'applications'
+      : item.kind === 'file' || item.kind === 'directory'
+        ? 'files'
+        : 'commands';
+  const index = order.indexOf(category);
+  if (index < 0) return 0;
+  return Math.max(0, order.length - index - 1) * 600;
 }
 
 function mergeItems(catalog: SearchItem[], additional: SearchItem[]): SearchItem[] {

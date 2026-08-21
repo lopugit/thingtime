@@ -54,6 +54,7 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
       openAtLogin: settings.openAtLogin,
       showMenuBarIcon: settings.showMenuBarIcon,
       windowMode: settings.windowMode,
+      windowPinning: settings.windowPinning,
     }).catch((error: unknown) => {
       state.reportError(error instanceof Error ? error.message : 'Could not apply native settings');
     });
@@ -63,6 +64,7 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
     state.bootstrap?.settings.openAtLogin,
     state.bootstrap?.settings.showMenuBarIcon,
     state.bootstrap?.settings.windowMode,
+    state.bootstrap?.settings.windowPinning,
   ]);
 
   if (!state.bootstrap) {
@@ -88,6 +90,7 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
       <Suspense fallback={<Launcher state={state} />}>
         <EmojiPicker
           platform={state.bootstrap.platform}
+          defaultAction={state.bootstrap.settings.emojiDefaultAction}
           onBack={() => {
             state.setActiveView(null);
             state.setActionsOpen(false);

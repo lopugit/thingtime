@@ -9,6 +9,10 @@ portable from day one.
 - global Commander shortcut on macOS (defaults to Command-Space; customizable in Settings);
 - typo-tolerant fuzzy application, command, extension, file, folder, and Store search with deterministic Rust
   ranking plus bounded device-local preference learning from the result a user actually chooses;
+- disk-backed last-known-result caching and incremental search streaming, so a new query keeps useful prior results
+  visible until live application, command, file, and folder matches arrive;
+- grouped Apps, Commands, and Files & Folders sections with draggable category priority, a modest default app boost,
+  native file icons, compact `.app` badges, and learned/text relevance that can still overcome the preferred order;
 - automatic application-directory watching with five-minute reconciliation, configurable six-hour file/folder
   refresh, and built-in Index Now, Index Apps, Index Commands, Index Files, and Index Directories commands;
 - inherited `.gitignore`/Git excludes plus user-defined wildcard and regular-expression ignore rules, editable with
@@ -20,15 +24,20 @@ portable from day one.
 - per-command global shortcuts with click-to-record bindings in Extensions Settings, native conflict validation,
   and rollback to the previously working shortcut set;
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
+- type-aware right-click menus, including Finder reveal, file copy, path/name copy, recoverable Trash, and confirmed
+  permanent delete actions for filesystem-backed results;
 - searchable Commander Settings results with tab-aware deep links into the separate native settings window;
 - a Raycast-shaped built-in Commander extension with separate quit, hide-window, and open-window commands;
-- a Bundled Raycast Commands catalog led by a native Search Emoji & Symbols picker with semantic search,
-  categories, skin tones, recents, keyboard navigation, copy actions, and paste-back to the previously active app;
+- a Bundled Commands catalog led by a Commander-native Search Emoji & Symbols picker inspired by Raycast, with
+  semantic search, categories, skin tones, recents, keyboard navigation, configurable Return actions, and
+  paste-back that restores the user's previous clipboard;
 - launcher queries clear on every reopen while private, device-local search sessions remain available in a first
   History section, led by the newest command launched from each search and followed by its search term as a separate
   top-level result;
 - launch-at-login, menu-bar icon, favourites-in-compact-mode, window mode, appearance, and text-size preferences;
 - draggable native launcher and Settings chrome plus physical-key shortcut recording for modified macOS keys;
+- optional pinned launcher windows, a configurable pin shortcut, per-display recent-window focus, and a native
+  Open New Window action for keeping multiple independent Commander searches available;
 - Finder-compatible drag-out from application/file search results using validated native file URLs, so a result can
   be dropped into Terminal, Finder, System Settings, or another macOS file target without browsing for it again;
 - installed extension management, safe folder/ZIP sideloading with opt-in source builds, live Store browsing, and a
@@ -55,10 +64,10 @@ metadata equals working compatibility. The exact matrix and roadmap are in
 [`docs/RAYCAST_COMPATIBILITY.md`](docs/RAYCAST_COMPATIBILITY.md).
 
 Commander-owned equivalents of Raycast commands that have no importable extension package appear separately under
-**Extensions → Bundled Raycast Commands**. The first is Search Emoji & Symbols: its searchable Unicode/CLDR catalog
-is powered by [Emojibase](https://emojibase.dev/) data under the MIT license, while its view, actions, recents, and
-native paste behavior are implemented by Commander. The complete attribution is bundled with every app build and
-tracked in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+**Extensions → Bundled**. The first is Search Emoji & Symbols, a Commander-native command inspired by Raycast's
+picker. Its searchable Unicode/CLDR catalog is powered by [Emojibase](https://emojibase.dev/) data under the MIT
+license, while its view, actions, recents, and native paste behavior are implemented by Commander. The complete
+attribution is bundled with every app build and tracked in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Architecture
 
@@ -109,6 +118,11 @@ directly to the system pane; without that permission, use explicitly allowed fol
 a bounded 15-minute writer window; a custom-capped scan normally stops a blocked writer after 90 seconds, keeps the
 prior committed snapshot searchable, and reports actionable guidance. Deliberately constraining a capped indexer
 below 25% CPU extends that shorter deadline proportionally, up to 15 minutes.
+
+The launcher footer replaces its idle status with the current source label and live processed/indexed count during
+a scan. Search settings also expose the result-section order and a private cache policy: enable/disable, maximum
+size, expiry, custom cache-directory override, reveal, and clear. Cache files contain result metadata only, use
+owner-only permissions, and are never included in Thingtime cloud settings sync.
 
 ## Raycast companion command
 

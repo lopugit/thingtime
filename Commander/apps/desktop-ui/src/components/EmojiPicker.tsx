@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowLeft, ChevronDown, CornerDownLeft, Search, Smile, WandSparkles } from 'lucide-react';
 import {
   extensionCommandItemId,
+  type EmojiDefaultAction,
   type NativePasteResult,
   type Platform,
   type SearchHit,
@@ -33,7 +34,15 @@ const PAGE_SIZE = 240;
 const GRID_COLUMNS = 8;
 const COMMAND_ITEM_ID = extensionCommandItemId('builtin:emoji-symbols', 'search-emoji-symbols');
 
-export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Platform }) {
+export function EmojiPicker({
+  onBack,
+  platform,
+  defaultAction,
+}: {
+  onBack(): void;
+  platform: Platform;
+  defaultAction: EmojiDefaultAction;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const lastPointerPosition = useRef<{ x: number; y: number } | null>(null);
   const learnedSelectionID = useRef<string | null>(null);
@@ -123,15 +132,25 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
           setStatus(`${value} copied to the clipboard`);
           return;
         }
-        const result = await nativeRequest<NativePasteResult>('clipboard.paste', { text: value });
+        const preserveClipboard = actionID === 'paste';
+        const result = await nativeRequest<NativePasteResult>('clipboard.paste', {
+          text: value,
+          preserveClipboard,
+        });
         if (!result) {
+          if (preserveClipboard)
+            throw new Error('Paste to the current app requires the Commander desktop host');
           await browserClipboard(value);
           setStatus(`${value} copied to the clipboard`);
         } else if (!result.pasted) {
           setStatus(
             result.requiresAccessibility
-              ? `${value} copied — allow Commander in Accessibility to paste automatically`
-              : `${value} copied to the clipboard`,
+              ? preserveClipboard
+                ? `Allow Commander in Accessibility to paste ${value} without changing your clipboard`
+                : `${value} copied — allow Commander in Accessibility to paste automatically`
+              : preserveClipboard
+                ? `${value} could not be pasted`
+                : `${value} copied to the clipboard`,
           );
         }
       } catch (error) {
@@ -167,7 +186,7 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
       }
       if (event.key === 'Enter' && selected) {
         event.preventDefault();
-        void runAction('paste');
+        void runAction(defaultAction);
         return;
       }
       const maximum = Math.max(0, visible.length - 1);
@@ -182,7 +201,7 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [actionsOpen, onBack, runAction, selected, selectedIndex, visible.length]);
+  }, [actionsOpen, defaultAction, onBack, runAction, selected, selectedIndex, visible.length]);
 
   const actionItem = useMemo<SearchHit | undefined>(() => {
     if (!selected) return undefined;
@@ -194,7 +213,8 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
       keywords: [...selected.keywords],
       favourite: false,
       actions: [
-        { id: 'paste', title: `Paste ${selectedValue}`, shortcut: '↵' },
+        { id: 'paste', title: `Paste ${selectedValue} (Keep Clipboard)`, shortcut: '↵' },
+        { id: 'paste-and-copy', title: 'Paste and Keep on Clipboard' },
         { id: 'copy', title: 'Copy to Clipboard', shortcut: '⌘↵' },
         { id: 'copy-unicode', title: 'Copy Unicode Code Points', shortcut: '⇧⌘C' },
       ],
@@ -302,7 +322,7 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
                     title={entry.label}
                     onPointerMove={(event) => selectFromPointer(index, event)}
                     onClick={() => setSelectedIndex(index)}
-                    onDoubleClick={() => void runAction('paste', entry)}
+                    onDoubleClick={() => void runAction(defaultAction, entry)}
                   >
                     <span>{value}</span>
                   </button>
@@ -342,7 +362,7 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
             <span className="footer-spacer" />
           )}
           <span className="emoji-primary-action">
-            {targetApplication ? `Paste to ${targetApplication}` : 'Paste'} <kbd>↵</kbd>
+            {emojiActionLabel(defaultAction, targetApplication)} <kbd>↵</kbd>
           </span>
           <span className="footer-divider" />
           <span>Actions</span>
@@ -355,6 +375,13 @@ export function EmojiPicker({ onBack, platform }: { onBack(): void; platform: Pl
       </section>
     </main>
   );
+}
+
+function emojiActionLabel(action: EmojiDefaultAction, targetApplication: string | null): string {
+  if (action === 'copy') return 'Copy to Clipboard';
+  if (action === 'copy-unicode') return 'Copy Unicode';
+  const target = targetApplication ? ` to ${targetApplication}` : '';
+  return action === 'paste' ? `Paste${target}` : `Paste & Copy${target}`;
 }
 
 async function writeClipboard(value: string): Promise<void> {

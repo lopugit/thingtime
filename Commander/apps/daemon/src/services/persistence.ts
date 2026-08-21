@@ -12,10 +12,14 @@ import {
   addRecentSearch as prependRecentSearch,
   DEFAULT_SETTINGS,
   normalizeCommandShortcuts,
+  normalizeEmojiDefaultAction,
   normalizeIndexingSettings,
   normalizeRecentSearches,
   normalizeSearchPreferenceQuery,
   normalizeSearchPreferences,
+  normalizeSearchCacheSettings,
+  normalizeSearchCategoryOrder,
+  normalizeWindowPinningSettings,
   recordSearchPreference,
 } from '@commander/protocol';
 import type { RaycastExtensionPreferenceState } from './raycastLocal.js';
@@ -41,6 +45,10 @@ function normalizedSettings(settings: Partial<CommanderSettings> | undefined): C
   return {
     ...merged,
     commandShortcuts: normalizeCommandShortcuts(settings?.commandShortcuts),
+    resultCategoryOrder: normalizeSearchCategoryOrder(settings?.resultCategoryOrder),
+    searchCache: normalizeSearchCacheSettings(settings?.searchCache),
+    emojiDefaultAction: normalizeEmojiDefaultAction(settings?.emojiDefaultAction),
+    windowPinning: normalizeWindowPinningSettings(settings?.windowPinning),
     indexing: normalizeIndexingSettings(settings?.indexing),
     thingtimeClientId: clientId || DEFAULT_SETTINGS.thingtimeClientId,
   };
@@ -72,6 +80,12 @@ export class PersistentStore {
         JSON.stringify(parsed.settings?.commandShortcuts ?? {}) !== JSON.stringify(settings.commandShortcuts);
       const indexingNeedsMigration =
         JSON.stringify(parsed.settings?.indexing) !== JSON.stringify(settings.indexing);
+      const searchPresentationNeedsMigration =
+        JSON.stringify(parsed.settings?.resultCategoryOrder) !==
+          JSON.stringify(settings.resultCategoryOrder) ||
+        JSON.stringify(parsed.settings?.searchCache) !== JSON.stringify(settings.searchCache) ||
+        parsed.settings?.emojiDefaultAction !== settings.emojiDefaultAction ||
+        JSON.stringify(parsed.settings?.windowPinning) !== JSON.stringify(settings.windowPinning);
       this.#indexingMigrationPending = indexingNeedsMigration;
       const recentSearches = normalizeRecentSearches(parsed.recentSearches);
       const historyNeedsMigration =
@@ -94,6 +108,7 @@ export class PersistentStore {
         clientIdNeedsMigration ||
         shortcutsNeedMigration ||
         indexingNeedsMigration ||
+        searchPresentationNeedsMigration ||
         historyNeedsMigration ||
         preferencesNeedMigration
       )

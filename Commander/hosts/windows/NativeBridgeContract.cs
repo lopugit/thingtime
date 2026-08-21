@@ -2,18 +2,28 @@ namespace Thingtime.Commander;
 
 public sealed record NativeRequest(string Id, string Method, object? Params);
 public sealed record NativeResponse(string Id, bool Ok, object? Result = null, string? Error = null);
+public sealed record WindowPinningSettings(
+    bool Enabled,
+    bool DefaultPinned,
+    bool FocusRecentOnCurrentDisplay,
+    string Shortcut);
+public sealed record LauncherWindowState(string WindowId, bool Pinned, bool PinningEnabled);
 public sealed record NativeSettingsSnapshot(
     string Hotkey,
     IReadOnlyDictionary<string, string> CommandShortcuts,
     bool OpenAtLogin,
     bool ShowMenuBarIcon,
-    string WindowMode);
+    string WindowMode,
+    WindowPinningSettings WindowPinning);
 public sealed record CredentialKey(string Issuer, string ClientId, string AccountId);
 
 public interface INativeBridge
 {
     Task HideLauncherAsync();
     Task ShowLauncherAsync();
+    Task<LauncherWindowState> GetLauncherStateAsync();
+    Task<LauncherWindowState> SetLauncherPinnedAsync(bool pinned);
+    Task<LauncherWindowState> OpenNewLauncherWindowAsync();
     Task CommandPresentationReadyAsync(string itemId);
     Task QuitApplicationAsync();
     Task BeginWindowDragAsync();
@@ -23,8 +33,11 @@ public interface INativeBridge
     Task OpenApplicationAsync(string pathOrUrl);
     Task<string?> GetPasteTargetAsync();
     Task RevealAsync(string path);
+    Task CopyFileAsync(string path);
+    Task MoveToTrashAsync(string path);
+    Task<bool> DeleteFileAsync(string path);
     Task WriteClipboardAsync(string text);
-    Task<object?> PasteClipboardAsync(string text);
+    Task<object?> PasteClipboardAsync(string text, bool preserveClipboard);
     Task<string?> ChooseExtensionPathAsync();
     Task UpdateHotkeyAsync(string shortcut);
     Task UpdateCommandHotkeysAsync(IReadOnlyDictionary<string, string> shortcuts);

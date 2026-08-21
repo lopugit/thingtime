@@ -6,6 +6,10 @@
 - [ ] Search for an application or path-backed file/folder and confirm its real Finder icon replaces the generic Commander glyph.
 - [ ] Create a disposable file and folder beneath an indexed root, run Index Files Now and Index Directories Now,
       then verify both appear in root search with native icons, Open, Show in Finder, Copy Path, and Finder-compatible drag-out.
+- [ ] Right-click a disposable app, file, and directory result. Verify the type-appropriate menu offers Open, Show in
+      Finder, Copy File, Copy Path, and Copy Name; Move to Trash is recoverable, while Delete Permanently requires
+      explicit confirmation and removes only the selected disposable item. Confirm filesystem roots, mounted-volume
+      roots, the current home folder, and the running Commander bundle are rejected by both destructive actions.
 - [ ] Search `index now`; verify the built-in Index Now command appears with separate Apps, Commands, Files, and
       Directories commands. Run Index Apps after installing a disposable app and verify it appears without restarting Commander.
 - [ ] Search typo variants such as `settngs`, `extensoin`, and `raycsat`; verify apps, built-ins, extension commands,
@@ -16,6 +20,12 @@
       bundle beneath a disposable root. Index All and verify each reference is searchable without crawling the app
       bundle or following the link.
 - [ ] With more results than fit in the launcher, use a mouse wheel or trackpad over the rows and confirm the list scrolls while the header and footer remain fixed.
+- [ ] Start from populated results, type a different query, and verify the prior rows remain visibly stale and
+      non-executable until cached/live batches stream in. No empty-state flash may appear, and the first cached batch
+      must paint before the slower filesystem batch when one exists.
+- [ ] Verify populated search results render as Apps, Commands, and Files & Folders sections. App names omit the
+      filename suffix while showing a compact `.app` badge. A very strong text/learned match may place a lower-priority
+      section first instead of category preference forcing an irrelevant result above it.
 
 - [ ] Global shortcut opens the launcher over the active application without moving focus elsewhere first.
 - [ ] The first visible frame contains rendered UI; there is no white, transparent, or stale flash.
@@ -35,12 +45,21 @@
 - [ ] Verify default and compact modes; expansion never shows an unrendered blank region.
 - [ ] Force-terminate the native host once; its parent watchdog must stop the daemon and Rust child and release port 47820 before relaunch.
 - [ ] Drag the launcher by its icon/header chrome; the window follows the pointer without moving focus into the search field.
+- [ ] Pin the launcher from the bottom-right window icon, focus another app, and verify the pinned window remains
+      visible. Command-Space must focus the most recently used Commander window on the current display. Right-click
+      the icon and choose Open New Window; verify both windows retain independent queries. Exercise the configured
+      pin/unpin shortcut and confirm the icon's active opacity follows native pinned state.
+- [ ] Run an index while the launcher is visible. Verify the idle footer is replaced by the active source label and
+      processed/indexed counts, advances without reopening the launcher, then returns to ready when complete.
 - [ ] Search `emoji` or `symbols`, run Search Emoji & Symbols, and verify the launcher changes into the eight-column picker without opening Settings or an external app.
 - [ ] In the emoji picker, search `heart`; verify semantic matches, category and skin-tone selectors, Left/Right/Up/Down navigation, selected-cell scrolling, and Command-K actions. Command-Return copies and Shift-Command-C copies Unicode code points.
 - [ ] Type `ear` and verify macOS does not show a spelling/correction pill over the picker; while the search field remains focused, arrow keys must move the selected emoji instead of entering correction UI. Search misspellings such as `haert` and `hert` and verify relevant heart emoji still appear.
 - [ ] Search `heart`, arrow to a non-leading heart, and choose it twice. Reopen the picker and search `heart` again; verify that emoji is promoted. Quit/relaunch Commander and repeat the query to verify the bounded device-local query/emoji counts persist.
 - [ ] Bind Search Emoji & Symbols to Command-E. With another app active, press Command-E and immediately type `heart`; the picker must remain visible and focused. Dismiss it, then press Command-Space once and verify the normal launcher reappears. Repeat after hiding Commander with Command-H to confirm the global shortcut restores the app in one press.
 - [ ] Open Commander over a disposable TextEdit document, choose an emoji, and press Return. With Commander trusted in Accessibility, verify the launcher closes and the emoji is pasted into that original app; without trust, verify the picker stays open and clearly reports the clipboard-only fallback without prompting on launch.
+- [ ] In Extensions → Bundled, change Emoji & Symbols' Return action among Paste to Current App, Paste and Keep a
+      Copy, Copy Emoji, and Copy Unicode. Verify each persists across relaunch. For Paste to Current App, seed the
+      clipboard with unique text, paste an emoji into TextEdit, then verify the unique clipboard content is restored.
 - [ ] Reopen Commander after leaving the emoji picker and verify the normal launcher returns with an empty query. Reopen the picker and verify its Recently Used ordering and selected skin tone persist locally.
 
 ## Settings
@@ -52,6 +71,11 @@
 - [ ] Toggle menu-bar visibility and verify exactly one Commander item exists when enabled.
 - [ ] Verify light, dark, and system appearance plus default/large text size without clipping.
 - [ ] Verify favourites-in-compact-mode is disabled unless Compact is selected.
+- [ ] In General → Pinned Windows, toggle pinning, default-pinned behavior, and current-display recent-window focus;
+      record a non-conflicting pin shortcut, relaunch, and verify every control remains effective.
+- [ ] In Search → Results & Cache, drag all three result sections into a new order and verify the launcher follows it.
+      Set a custom cache folder, size, and expiry; close/reopen Settings, verify they persist, reveal the effective
+      folder, clear it, and verify size/entry count return to zero without changing the filesystem index.
 - [ ] Open Search → Search Index. Verify application, command, file, and folder counts update while a scan runs;
       Index All and each scoped button remain responsive and Settings can scroll to the final ignore row without clipping.
 - [ ] Verify Include hidden files starts enabled, Maximum entries starts blank/Unlimited, and the database footprint
@@ -98,7 +122,7 @@
 - [ ] Execute a compatible prebuilt no-view command and confirm a worker crash cannot terminate the daemon.
 - [ ] Verify Installed contains the enabled built-in Commander extension with Close Commander, Close Commander Window, and Open Commander native commands.
 - [ ] Verify the macOS System built-in exposes its indexed destinations and per-command shortcut controls on macOS, while Windows/Linux bootstrap catalogs omit it.
-- [ ] Open Bundled Raycast Commands and verify Emoji & Symbols appears separately from installed/sideloaded extensions with its built-in badge and Search Emoji & Symbols command count.
+- [ ] Open Bundled and verify Emoji & Symbols appears separately from installed/sideloaded extensions with its built-in badge, Raycast-inspired description, Search Emoji & Symbols command count, and default Return-action control.
 - [ ] Import `Commander/extensions/raycast/`, run its no-view Open Commander command from Raycast after Commander has quit, and verify the installed app relaunches with a focused, empty query.
 
 ## Thingtime accounts and sync
@@ -112,7 +136,10 @@
 
 ## Visual QA
 
-- [ ] Open the native launcher above light and dark desktop content; only the compositor-masked rounded launcher surface and its shadow are visible, with no larger rectangular panel/WebView background at first paint or after search/actions updates.
+- [ ] Open the native launcher above light and dark desktop content; only the compositor-masked rounded launcher
+      surface and its shadow are visible, with no larger rectangular panel/WebView background at first paint, after
+      at least ten seconds focused, after focus loss/return, or after search/actions updates. The inner launcher
+      surface itself must remain fully opaque throughout.
 - [ ] Compare launcher and settings screenshots against `design/commander-concept.png` and the three user references.
 - [ ] Inspect every settings tab and the open Actions state at native window sizes.
 - [ ] Resize Settings to its minimum and a large desktop size; no clipping, overlap, or horizontal overflow.

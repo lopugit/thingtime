@@ -7,6 +7,7 @@ import { CloudSyncSettings } from './CloudSyncSettings.js';
 import { ExtensionsSettings } from './ExtensionsSettings.js';
 import { GeneralSettings } from './GeneralSettings.js';
 import { IndexingSettings } from './IndexingSettings.js';
+import { SearchPreferencesSettings } from './SearchPreferencesSettings.js';
 import { beginWindowDrag } from '../lib/nativeBridge.js';
 
 const tabs: Array<{ id: SettingsTab; title: string; Icon: typeof Settings2 }> = [
@@ -207,6 +208,7 @@ function SearchSettings({
           </span>
         </div>
       </div>
+      <SearchPreferencesSettings settings={settings} onChange={onChange} onError={onError} />
       <IndexingSettings settings={settings} onChange={onChange} onError={onError} />
     </div>
   );
