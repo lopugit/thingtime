@@ -1111,6 +1111,37 @@ test('download authorization keeps active files opaque and hides unauthorized ex
 	assert.match(signed[0].contentDisposition, /^attachment;/);
 });
 
+test('pending moderation quarantines bytes from the audience while owner and admin evidence access remain available', async () => {
+	const file = attachmentDoc({
+		attachmentState: 'ready',
+		targetId: 'post-1',
+		objectVersionId: 'version-1',
+		uploadId: undefined,
+		moderation: { status: 'pending' }
+	});
+	let signed = 0;
+	const service = createAttachmentService({
+		store: { getById: async () => file } as any,
+		canViewTarget: async () => true,
+		getS3: () =>
+			noopS3({
+				signDownload: async () => {
+					signed += 1;
+					return { url: 'https://s3.example/private', expiresAt: now.toISOString() };
+				}
+			})
+	});
+
+	assert.deepEqual(await service.download({ id: 'reader' }, file.shareId, false), {
+		ok: false,
+		status: 404,
+		error: 'Attachment not found'
+	});
+	assert.equal((await service.download({ id: file.ownerId }, file.shareId, false)).ok, true);
+	assert.equal((await service.download({ id: 'admin-1', isAdmin: true }, file.shareId, false)).ok, true);
+	assert.equal(signed, 2);
+});
+
 test('download never authorizes a home S3 object against a custom data plane', async () => {
 	let storeReads = 0;
 	let visibilityChecks = 0;
