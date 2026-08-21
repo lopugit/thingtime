@@ -30,9 +30,17 @@ const directClientFiles = sourceFiles(appRoot)
 
 assert.deepEqual(
   directClientFiles,
-  ['app/api/utils/lopu/musing.ts'],
+  ['app/api/utils/lopu/musing.ts', 'app/api/utils/moderation/claudeProvider.ts'],
   'new direct AI clients must be added to the Thingtime Admin model-routing contract'
 );
+
+// Attachment moderation routes its model through the same admin waterfall;
+// TT_MODERATION_MODEL is only the provider default for the 'default' slot.
+const moderation = readFileSync(join(remixRoot, 'app/api/utils/moderation/claudeProvider.ts'), 'utf8');
+assert.match(moderation, /getAiPreferredModelWaterfall/);
+assert.match(moderation, /resolveAiPreferredClaudeModel/);
+assert.match(moderation, /resolveAiPreferredClaudeModel\(await getAiPreferredModelWaterfall\(\), providerDefaultModel\)/);
+assert.doesNotMatch(moderation, /model:\s*env\.TT_MODERATION_MODEL/);
 
 const musing = readFileSync(join(remixRoot, directClientFiles[0]), 'utf8');
 assert.match(musing, /getAiPreferredModelWaterfall/);
