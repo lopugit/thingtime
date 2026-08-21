@@ -22,6 +22,9 @@ const MAX_RECONCILE_PULL_REQUESTS = 100;
 const MAX_GITHUB_PAGES = 10;
 const REQUEST_TIMEOUT_MS = 30_000;
 const CANCEL_TIMEOUT_MS = 2 * 60 * 1000;
+const STABLE_DEVELOP_TIMEOUT_MS = 10 * 60 * 1000;
+const STABLE_DEVELOP_POLL_MS = 5_000;
+const MAX_STABLE_DEPLOYMENTS = 50;
 
 class HttpError extends Error {
 	constructor(status, code) {
@@ -167,6 +170,39 @@ const customEnvironmentDomainNames = (domains) =>
 		.map((domain) => (typeof domain === 'string' ? domain : domain?.name ?? domain?.domain))
 		.filter((domain) => typeof domain === 'string');
 
+const stableDevelopDomainBindingIssue = (customEnvironment, stableDomain, config) => {
+	if (customEnvironmentDomainNames(customEnvironment?.domains).length !== 0) return 'custom-environment-domain-present';
+	if (stableDomain?.projectId !== config.projectId) return 'wrong-project';
+	if (stableDomain?.verified !== true) return 'unverified';
+	if (stableDomain?.gitBranch !== 'develop') return 'wrong-git-branch';
+	if (stableDomain?.customEnvironmentId != null && stableDomain.customEnvironmentId !== '') return 'custom-environment-bound';
+	return null;
+};
+
+const stableDevelopDeploymentIssue = (deployment, config, expectedSha) => {
+	if (!deployment || typeof deployment !== 'object') return 'missing-deployment';
+	if (!/^dpl_[A-Za-z0-9]+$/.test(deployment.id ?? '')) return 'invalid-deployment-id';
+	if (deployment.projectId !== config.projectId) return 'wrong-project';
+	if (deployment.customEnvironment?.id !== config.customEnvironmentId || deployment.customEnvironment?.slug !== 'develop') {
+		return 'wrong-environment';
+	}
+	if (deployment.meta?.[WORKFLOW_DEPLOYMENT_MARKER] === '1') return 'pr-preview-deployment';
+	if (deployment.gitSource?.type !== 'github') return 'wrong-git-provider';
+	if (String(deployment.gitSource?.repoId ?? '') !== String(config.gitRepoId)) return 'wrong-git-repository';
+	if (deployment.gitSource?.ref !== 'develop') return 'wrong-git-ref';
+	if (deployment.gitSource?.prId != null) return 'pull-request-deployment';
+	if (!/^[0-9a-f]{40}$/.test(deployment.gitSource?.sha ?? '')) return 'invalid-git-sha';
+	if (expectedSha && deployment.gitSource.sha !== expectedSha) return 'wrong-git-sha';
+	if (String(deployment.meta?.githubRepoId ?? '') !== String(config.gitRepoId)) return 'metadata-git-repository-mismatch';
+	const [repositoryOwner, repositoryName] = config.repository.split('/');
+	if (deployment.meta?.githubCommitOrg !== repositoryOwner || deployment.meta?.githubCommitRepo !== repositoryName) {
+		return 'metadata-repository-name-mismatch';
+	}
+	if (deployment.meta?.githubCommitRef !== 'develop') return 'metadata-ref-mismatch';
+	if (deployment.meta?.githubCommitSha !== deployment.gitSource.sha) return 'metadata-sha-mismatch';
+	return null;
+};
+
 const runtimeConfig = () => ({
 	repository: safeRepository(requiredEnv('GITHUB_REPOSITORY')),
 	repositoryId: boundedInteger(requiredEnv('GITHUB_REPOSITORY_ID'), 'GitHub repository id'),
@@ -278,7 +314,8 @@ const deploymentPayload = ({ pullRequest, config }) => {
 		name: config.projectName,
 		project: config.projectId,
 		customEnvironmentSlugOrId: config.customEnvironmentId,
-		// Only Git-connected develop builds may advance the Custom Environment's stable domain.
+		// PR deployments receive only their exact PR alias. The stable develop alias
+		// is promoted separately after an exact native develop deployment is READY.
 		autoAssignCustomDomains: false,
 		gitSource: {
 			type: 'github',
@@ -343,12 +380,25 @@ const choosePreferredDeployment = (deployments, expectedSha) =>
 			return readiness || Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0);
 		})[0] ?? null;
 
-const deploymentListParams = (config, { prNumber = null, sha = null, until = null } = {}) => {
+const chooseStableDevelopDeployment = (deployments, config, expectedSha) =>
+	deployments
+		.filter(
+			(deployment) =>
+				stableDevelopDeploymentIssue(deployment, config, expectedSha) === null &&
+				(deployment.readyState === 'READY' || ACTIVE_STATES.has(deployment.readyState))
+		)
+		.sort((left, right) => {
+			const readiness = Number(right.readyState === 'READY') - Number(left.readyState === 'READY');
+			return readiness || Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0);
+		})[0] ?? null;
+
+const deploymentListParams = (config, { prNumber = null, sha = null, until = null, workflowOwned = true } = {}) => {
 	const params = new URLSearchParams({
 		projectId: config.projectId,
-		limit: '100',
-		[`meta-${WORKFLOW_DEPLOYMENT_MARKER}`]: '1'
+		limit: '100'
 	});
+	if (workflowOwned) params.set(`meta-${WORKFLOW_DEPLOYMENT_MARKER}`, '1');
+	if (prNumber !== null && !workflowOwned) throw new Error('PR deployment filters require workflow ownership');
 	if (prNumber !== null) params.set('meta-githubPrId', String(boundedInteger(prNumber, 'PR number')));
 	if (sha) {
 		if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Vercel deployment SHA filter is invalid');
@@ -392,7 +442,8 @@ const runSelfTest = () => {
 		projectId: 'prj_example',
 		projectName: 'thingtime',
 		gitRepoId: 4242,
-		customEnvironmentId: 'env_develop'
+		customEnvironmentId: 'env_develop',
+		stableDevelopDomain: 'dev.thingtime.com'
 	};
 
 	equal(classifyPullRequest(base, config.repository, config.repositoryId), { allowed: true });
@@ -455,6 +506,48 @@ const runSelfTest = () => {
 		'legacy.example.com'
 	]);
 	equal(customEnvironmentDomainNames(null), []);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [] },
+			{
+				projectId: config.projectId,
+				verified: true,
+				gitBranch: 'develop',
+				customEnvironmentId: null
+			},
+			config
+		),
+		null
+	);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [] },
+			{
+				projectId: config.projectId,
+				verified: true,
+				gitBranch: 'develop',
+				customEnvironmentId: ''
+			},
+			config
+		),
+		null
+	);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [{ name: config.stableDevelopDomain }] },
+			{ projectId: config.projectId, verified: true, gitBranch: 'develop', customEnvironmentId: null },
+			config
+		),
+		'custom-environment-domain-present'
+	);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [] },
+			{ projectId: config.projectId, verified: true, gitBranch: null, customEnvironmentId: config.customEnvironmentId },
+			config
+		),
+		'wrong-git-branch'
+	);
 
 	const deployment = {
 		id: 'dpl_example',
@@ -498,6 +591,48 @@ const runSelfTest = () => {
 	);
 	equal(choosePreferredDeployment([deployment], base.head.sha)?.id, deployment.id);
 	equal(choosePreferredDeployment([{ ...deployment, readyState: 'ERROR' }], base.head.sha), null);
+	const developSha = 'd'.repeat(40);
+	const stableDeployment = {
+		id: 'dpl_stable',
+		projectId: config.projectId,
+		createdAt: 3,
+		readyState: 'READY',
+		customEnvironment: { id: config.customEnvironmentId, slug: 'develop' },
+		meta: {
+			githubCommitOrg: 'lopugit',
+			githubCommitRepo: 'thingtime',
+			githubCommitRef: 'develop',
+			githubCommitSha: developSha,
+			githubRepoId: String(config.gitRepoId),
+			// Vercel can associate the standing develop-to-main PR in metadata even
+			// though this is a native develop branch deployment. gitSource.prId is
+			// the authoritative non-PR fence.
+			githubPrId: '289'
+		},
+		gitSource: { type: 'github', repoId: config.gitRepoId, sha: developSha, ref: 'develop', prId: null }
+	};
+	equal(stableDevelopDeploymentIssue(stableDeployment, config, developSha), null);
+	equal(
+		stableDevelopDeploymentIssue(
+			{ ...stableDeployment, meta: { ...stableDeployment.meta, [WORKFLOW_DEPLOYMENT_MARKER]: '1' } },
+			config,
+			developSha
+		),
+		'pr-preview-deployment'
+	);
+	equal(
+		stableDevelopDeploymentIssue(
+			{ ...stableDeployment, gitSource: { ...stableDeployment.gitSource, prId: 201 } },
+			config,
+			developSha
+		),
+		'pull-request-deployment'
+	);
+	equal(stableDevelopDeploymentIssue(stableDeployment, config, 'e'.repeat(40)), 'wrong-git-sha');
+	equal(chooseStableDevelopDeployment([stableDeployment], config, developSha)?.id, stableDeployment.id);
+	equal(chooseStableDevelopDeployment([{ ...stableDeployment, readyState: 'ERROR' }], config, developSha), null);
+	equal(developRefSha({ ref: 'refs/heads/develop', object: { type: 'commit', sha: developSha } }), developSha);
+	throws(() => developRefSha({ ref: 'refs/heads/main', object: { type: 'commit', sha: developSha } }));
 	equal(Object.fromEntries(deploymentListParams(config, { prNumber: 201, sha: base.head.sha, until: 123 })), {
 		projectId: config.projectId,
 		limit: '100',
@@ -506,7 +641,13 @@ const runSelfTest = () => {
 		sha: base.head.sha,
 		until: '123'
 	});
+	equal(Object.fromEntries(deploymentListParams(config, { sha: developSha, workflowOwned: false })), {
+		projectId: config.projectId,
+		limit: '100',
+		sha: developSha
+	});
 	throws(() => deploymentListParams(config, { prNumber: 0 }));
+	throws(() => deploymentListParams(config, { prNumber: 201, workflowOwned: false }));
 	throws(() => deploymentListParams(config, { sha: 'not-a-sha' }));
 	truthy(IDEMPOTENT_METHODS.has('GET'));
 	truthy(!IDEMPOTENT_METHODS.has('POST'));
@@ -653,6 +794,18 @@ const vercelRequest = (path, options = {}) => {
 };
 
 const getPullRequest = async (repository, number) => githubRequest(`/repos/${repository}/pulls/${boundedInteger(number, 'PR number')}`);
+
+const developRefSha = (reference) => {
+	if (reference?.ref !== 'refs/heads/develop' || reference?.object?.type !== 'commit' || !/^[0-9a-f]{40}$/.test(reference.object.sha ?? '')) {
+		throw new Error('GitHub develop ref was invalid');
+	}
+	return reference.object.sha;
+};
+
+const getDevelopHeadSha = async (config) => {
+	const reference = await githubRequest(`/repos/${config.repository}/git/ref/heads/develop`);
+	return developRefSha(reference);
+};
 
 const parseRepositoryDispatch = (event) => {
 	if (event?.action !== CONTROLLER_DISPATCH_TYPE || !event.client_payload) {
@@ -867,21 +1020,12 @@ const assertVercelConfiguration = async (config) => {
 	if (customEnvironment?.id !== config.customEnvironmentId || customEnvironment?.slug !== 'develop') {
 		throw new Error('Vercel custom environment identity did not match develop');
 	}
-	const environmentDomains = customEnvironmentDomainNames(customEnvironment.domains);
-	if (environmentDomains.length !== 1 || environmentDomains[0] !== config.stableDevelopDomain) {
-		throw new Error('Develop custom environment must own exactly the stable develop domain');
-	}
-
 	const stableDomain = await vercelRequest(
 		`/v9/projects/${encodeURIComponent(config.projectId)}/domains/${encodeURIComponent(config.stableDevelopDomain)}`
 	);
-	if (
-		stableDomain?.projectId !== config.projectId ||
-		stableDomain?.verified !== true ||
-		stableDomain?.gitBranch != null ||
-		stableDomain?.customEnvironmentId !== config.customEnvironmentId
-	) {
-		throw new Error('Stable develop domain must be verified and attached only to the develop custom environment');
+	const stableDomainIssue = stableDevelopDomainBindingIssue(customEnvironment, stableDomain, config);
+	if (stableDomainIssue) {
+		throw new Error(`Stable develop domain must track only the develop Git branch (${stableDomainIssue})`);
 	}
 
 	const wildcardDomainName = `*.${config.previewAliasSuffix}`;
@@ -930,13 +1074,13 @@ const verifyPublishedAlias = async (aliasUrl) => {
 
 const deploymentDetail = async (deploymentId) => vercelRequest(`/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true`);
 
-const listDeploymentSummaries = async (config, { prNumber = null, sha = null } = {}) => {
+const listDeploymentSummaries = async (config, { prNumber = null, sha = null, workflowOwned = true } = {}) => {
 	const results = [];
 	const seenIds = new Set();
 	const seenCursors = new Set();
 	let until = null;
 	for (let page = 0; page < MAX_DEPLOYMENT_PAGES; page += 1) {
-		const params = deploymentListParams(config, { prNumber, sha, until });
+		const params = deploymentListParams(config, { prNumber, sha, until, workflowOwned });
 		const response = await vercelRequest(`/v7/deployments?${params}`);
 		if (!Array.isArray(response?.deployments)) throw new Error('Vercel deployment list response was invalid');
 		for (const deployment of response.deployments) {
@@ -977,6 +1121,25 @@ const listWorkflowDeployments = async (config, { prNumber = null, sha = null } =
 		if (issue) throw new Error(`Workflow deployment ownership check failed (${issue})`);
 		if (sha && detail.gitSource.sha !== sha) throw new Error('Vercel SHA filter returned a mismatched deployment');
 		details.push(detail);
+	}
+	return details;
+};
+
+const listStableDevelopDeployments = async (config, sha) => {
+	const summaries = await listDeploymentSummaries(config, { sha, workflowOwned: false });
+	if (summaries.length > MAX_STABLE_DEPLOYMENTS) {
+		throw new Error('Stable develop deployment detail scan exceeded its safety bound');
+	}
+	const details = [];
+	for (const candidate of summaries) {
+		const id = candidate.uid ?? candidate.id;
+		if (!/^dpl_[A-Za-z0-9]+$/.test(id ?? '')) continue;
+		try {
+			details.push(await deploymentDetail(id));
+		} catch (error) {
+			if (error instanceof HttpError && error.status === 404) continue;
+			throw error;
+		}
 	}
 	return details;
 };
@@ -1053,6 +1216,24 @@ const getOwnedAlias = async (config, alias) => {
 	}
 };
 
+const getStableDevelopAliasBinding = async (config) => {
+	const found = await getOwnedAlias(config, config.stableDevelopDomain);
+	if (!found) return null;
+	if (!/^dpl_[A-Za-z0-9]+$/.test(found.deploymentId ?? '')) {
+		throw new Error('Stable develop alias did not point to a deployment');
+	}
+	let deployment;
+	try {
+		deployment = await deploymentDetail(found.deploymentId);
+	} catch (error) {
+		if (error instanceof HttpError && error.status === 404) {
+			throw new Error('Stable develop alias pointed to a missing deployment');
+		}
+		throw error;
+	}
+	return { alias: config.stableDevelopDomain, record: found, deployment };
+};
+
 const getAliasBinding = async (config, prNumber) => {
 	const alias = previewAlias(prNumber, config.previewAliasSuffix);
 	const found = await getOwnedAlias(config, alias);
@@ -1101,6 +1282,84 @@ const assignAliasVerified = async (config, deployment, prNumber) => {
 	const verified = await getAliasBinding(config, prNumber);
 	if (verified?.deployment.id !== deployment.id) throw new Error('Alias did not resolve to the expected deployment');
 	return { alias, oldDeploymentId: assignment.oldDeploymentId ?? null };
+};
+
+const assignStableDevelopAliasVerified = async (config, deployment, expectedSha) => {
+	const issue = stableDevelopDeploymentIssue(deployment, config, expectedSha);
+	if (issue || deployment.readyState !== 'READY') {
+		throw new Error(`Refusing to publish an unverified stable develop deployment (${issue ?? deployment.readyState})`);
+	}
+	if ((await getDevelopHeadSha(config)) !== expectedSha) return { headChanged: true, oldDeploymentId: null };
+
+	const existing = await getStableDevelopAliasBinding(config);
+	if (existing?.deployment.id === deployment.id) {
+		return { headChanged: false, oldDeploymentId: null };
+	}
+
+	let assignment = null;
+	try {
+		assignment = await vercelRequest(`/v2/deployments/${encodeURIComponent(deployment.id)}/aliases`, {
+			method: 'POST',
+			accept: [200],
+			retries: 0,
+			body: { alias: config.stableDevelopDomain }
+		});
+	} catch (error) {
+		const reconciled = await getStableDevelopAliasBinding(config);
+		if (reconciled?.deployment.id !== deployment.id) throw error;
+		assignment = reconciled.record;
+	}
+	if (assignment?.alias !== config.stableDevelopDomain) {
+		throw new Error('Vercel assigned an unexpected stable develop alias');
+	}
+	const verified = await getStableDevelopAliasBinding(config);
+	if (verified?.deployment.id !== deployment.id) {
+		throw new Error('Stable develop alias did not resolve to the expected deployment');
+	}
+	await assertVercelConfiguration(config);
+	await verifyPublishedAlias(`https://${config.stableDevelopDomain}`);
+	return {
+		headChanged: (await getDevelopHeadSha(config)) !== expectedSha,
+		oldDeploymentId: assignment.oldDeploymentId ?? null
+	};
+};
+
+const reconcileStableDevelopAlias = async (config, { waitForReady = false } = {}) => {
+	await assertVercelConfiguration(config);
+	const timeoutAt = Date.now() + STABLE_DEVELOP_TIMEOUT_MS;
+	for (;;) {
+		const expectedSha = await getDevelopHeadSha(config);
+		const binding = await getStableDevelopAliasBinding(config);
+		const bindingIssue = binding ? stableDevelopDeploymentIssue(binding.deployment, config, expectedSha) : 'missing-alias';
+		if (binding && bindingIssue === null && binding.deployment.readyState === 'READY') {
+			console.log(`Stable develop alias already current: ${config.stableDevelopDomain} -> ${expectedSha}`);
+			return { changed: false, deploymentId: binding.deployment.id, sha: expectedSha };
+		}
+
+		const deployments = await listStableDevelopDeployments(config, expectedSha);
+		const preferred = chooseStableDevelopDeployment(deployments, config, expectedSha);
+		if (preferred?.readyState === 'READY') {
+			const assigned = await assignStableDevelopAliasVerified(config, preferred, expectedSha);
+			if (assigned.headChanged) {
+				if (!waitForReady && Date.now() >= timeoutAt) {
+					console.log('Stable develop alias promotion deferred because develop advanced during assignment');
+					return { changed: true, deferred: true, deploymentId: preferred.id, sha: expectedSha };
+				}
+				continue;
+			}
+			console.log(`Stable develop alias promoted: ${config.stableDevelopDomain} -> ${preferred.id} (${expectedSha})`);
+			return { changed: true, deploymentId: preferred.id, sha: expectedSha };
+		}
+
+		if (!waitForReady) {
+			console.log(`Stable develop alias promotion deferred: current=${expectedSha}; binding=${bindingIssue}; deployment=${preferred?.readyState ?? 'missing'}`);
+			return { changed: false, deferred: true, deploymentId: binding?.deployment.id ?? null, sha: expectedSha };
+		}
+		if (Date.now() >= timeoutAt) {
+			throw new Error(`Timed out waiting for the exact develop deployment (${expectedSha})`);
+		}
+		await delay(STABLE_DEVELOP_POLL_MS);
+	}
 };
 
 const prepareDeployment = async (config, pullRequest) => {
@@ -1409,6 +1668,7 @@ const main = async () => {
 	let config = runtimeConfig();
 	const eventName = requiredEnv('GITHUB_EVENT_NAME');
 	if (eventName === 'schedule') {
+		await reconcileStableDevelopAlias(config);
 		await reconcile(config);
 		return;
 	}
@@ -1431,6 +1691,13 @@ const main = async () => {
 	}
 	const action = dispatch?.action ?? String(event.action ?? 'workflow_dispatch');
 	const classification = classifyPullRequest(pullRequest, config.repository, config.repositoryId);
+	const mergedIntoDevelop =
+		action === 'closed' &&
+		pullRequest.state === 'closed' &&
+		pullRequest.merged === true &&
+		pullRequest.base?.ref === 'develop' &&
+		Number(pullRequest.base?.repo?.id) === config.repositoryId &&
+		pullRequest.base?.repo?.full_name === config.repository;
 
 	if (!classification.allowed) {
 		const cleanupRelevant = CLEANUP_ACTIONS.has(action) || pullRequest.base?.ref === 'develop' || event.changes?.base?.ref?.from === 'develop';
@@ -1439,6 +1706,11 @@ const main = async () => {
 			await handleIneligible(config, pullRequest, reason);
 		} else {
 			console.log(`Skipped unrelated PR #${prNumber}: ${classification.reason}`);
+		}
+		if (mergedIntoDevelop) {
+			await assertTrustedPrincipal(config, config.actor, 'actor');
+			await assertTrustedPrincipal(config, pullRequest.merged_by?.login, 'merger');
+			await reconcileStableDevelopAlias(config, { waitForReady: true });
 		}
 		return;
 	}
@@ -1452,6 +1724,7 @@ const main = async () => {
 		}
 		throw error;
 	}
+	await reconcileStableDevelopAlias(config);
 	await deploy(config, pullRequest);
 };
 
