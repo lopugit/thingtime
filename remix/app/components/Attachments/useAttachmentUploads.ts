@@ -13,7 +13,7 @@ import {
 	multipartPartRange,
 	normalizePublicAttachment
 } from './attachmentUiCore';
-import type { AttachmentUploadOptions, ComposerAttachmentUpload, SignedUploadPart } from './attachmentTypes';
+import type { AttachmentUploadOptions, ComposerAttachmentUpload, PublicAttachment, SignedUploadPart } from './attachmentTypes';
 import { registerAttachmentDraftCleanup } from './attachmentDraftCleanup';
 
 const MAX_CONCURRENT_FILES = 3;
@@ -446,6 +446,16 @@ export const useAttachmentUploads = (
 		for (const id of attachmentIds) committedAttachmentIdsRef.current.add(id);
 	}, []);
 
+	// Reflect an owner annotate (title/description) the popover already
+	// persisted server-side onto the matching READY upload's projection.
+	const updateAttachment = React.useCallback((localId: string, attachment: PublicAttachment) => {
+		setUploads((current) =>
+			current.map((upload) =>
+				upload.localId === localId && upload.status === 'ready' && upload.attachment?.id === attachment.id ? { ...upload, attachment } : upload
+			)
+		);
+	}, []);
+
 	const flushDraftsBeforeSessionChange = React.useCallback(async () => {
 		const current = uploadsRef.current;
 		if (!current.length) return;
@@ -524,6 +534,7 @@ export const useAttachmentUploads = (
 		remove,
 		reorder,
 		markCommitted,
+		updateAttachment,
 		snapshot
 	};
 };

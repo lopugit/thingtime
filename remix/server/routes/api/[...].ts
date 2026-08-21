@@ -47,6 +47,8 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/apps/public': () => import('../../../app/routes/api/v1/apps/public/_public'),
   'v1/apps/storage': () => import('../../../app/routes/api/v1/apps/storage/_storage'),
   'v1/apps/update': () => import('../../../app/routes/api/v1/apps/update/_update'),
+  'v1/attachments/backfill-detected-types': () => import('../../../app/routes/api/v1/attachments/backfill-detected-types/_backfill-detected-types'),
+  'v1/attachments/annotate': () => import('../../../app/routes/api/v1/attachments/annotate/_annotate'),
   'v1/attachments/content': () => import('../../../app/routes/api/v1/attachments/content/_content'),
   'v1/attachments/cleanup': () => import('../../../app/routes/api/v1/attachments/cleanup/_cleanup'),
   'v1/moderation/sweep': () => import('../../../app/routes/api/v1/moderation/sweep/_sweep'),
