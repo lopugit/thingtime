@@ -19,6 +19,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #312 media integration hardening**: attachment annotation now preserves
+  server-owned magic-byte `detectedContentType`, Auto layout removes the
+  optional `mediaLayout` key, and media-card permalinks consistently use
+  `/media/:id`. Internal repost/quote controls stay hidden on media Things
+  until attachment-target shares have a non-empty renderer. Gallery layout
+  numbers and span keys are now strict rather than coercible/prototype-shaped,
+  annotation accepts only its documented request fields, and media cards label
+  their audience as inherited instead of incorrectly falling back to Public.
+  — Codex (AI), 2026-08-21
 - **Build-all push handoff permission boundary**: the thin product-branch
   listener now grants `actions: write`, allowing the protected reusable
   workflow's push-only handoff to dispatch its supported-event worker instead
