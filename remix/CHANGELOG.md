@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Develop staging domain binding restored**: `dev.thingtime.com` is again
+  attached to the exact `develop` Git branch (`customEnvironmentId: null`),
+  so controller-managed PR deployments in the shared pre-production
+  environment cannot move the stable signed-in S3 staging origin away from
+  the current integration branch. — Codex (AI), 2026-08-21
+
 - **PR #321 legacy detected-type backfill preserves media annotations**:
   re-detecting a pre-#319 opaque attachment now changes only its server-owned
   type fields and retains #312's owner-authored title/description exactly;
