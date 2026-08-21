@@ -595,6 +595,59 @@ test('completion trusts S3 list/head data, detects magic bytes, and returns cano
 	}
 });
 
+test('completion publishes browser-playable containers inline and preserves sniffed types on opaque downloads', async () => {
+	const cases = [
+		{ sniffed: 'video/quicktime', expected: { contentType: 'video/quicktime', mediaKind: 'video' } },
+		{ sniffed: 'video/x-matroska', expected: { contentType: 'video/x-matroska', mediaKind: 'video' } },
+		{
+			sniffed: 'video/x-msvideo',
+			expected: { contentType: 'application/octet-stream', mediaKind: 'file', detectedContentType: 'video/x-msvideo' }
+		}
+	] as const;
+	for (const { sniffed, expected } of cases) {
+		const pending = attachmentDoc();
+		let readyCrystal: any;
+		let claimedLease = '';
+		const store: any = {
+			claimFinalizing: async (_ownerId: string, _id: string, leaseId: string) => {
+				claimedLease = leaseId;
+				return {
+					doc: { ...pending, attachmentState: 'finalizing', attachmentFinalizationLeaseId: leaseId },
+					acquired: true
+				};
+			},
+			renewFinalizing: async (_ownerId: string, _id: string, leaseId: string) =>
+				leaseId === claimedLease ? { ...pending, attachmentState: 'finalizing', attachmentFinalizationLeaseId: leaseId } : null,
+			markReady: async (_ownerId: string, _id: string, crystal: any, objectVersionId: string) => {
+				readyCrystal = crystal;
+				return attachmentDoc({ attachmentState: 'ready', crystal, objectVersionId, uploadId: undefined });
+			}
+		};
+		const s3 = noopS3({
+			listParts: async () => [
+				{ partNumber: 1, etag: 'etag-1', sizeBytes: 8 * 1024 * 1024, checksumSha256: checksum(1) },
+				{ partNumber: 2, etag: 'etag-2', sizeBytes: 2 * 1024 * 1024, checksumSha256: checksum(2) }
+			],
+			headObject: async () => ({
+				sizeBytes: pending.objectSizeBytes,
+				checksumSha256: `${checksum(3)}-2`,
+				checksumType: 'COMPOSITE',
+				attachmentId: pending.shareId,
+				versionId: 'version-1'
+			}),
+			detectContentType: async () => sniffed,
+			markObjectReady: async () => {}
+		});
+		const service = createAttachmentService({ store, getS3: () => s3, now: () => now });
+		const result = await service.complete('user-1', { uploadId: 'attachment-1' });
+		assert.equal(result.ok, true, sniffed);
+		assert.deepEqual(readyCrystal, { name: 'launch.bin', size: 10 * 1024 * 1024, ...expected }, sniffed);
+		if (result.ok) {
+			assert.deepEqual(result.attachment, { id: 'attachment-1', name: 'launch.bin', size: 10 * 1024 * 1024, ...expected }, sniffed);
+		}
+	}
+});
+
 test('completed part verification rejects gaps, wrong sizes, and malformed checksums', () => {
 	assert.deepEqual(
 		validateCompletedAttachmentParts(10 * 1024 * 1024, [
@@ -1056,6 +1109,37 @@ test('download authorization keeps active files opaque and hides unauthorized ex
 	assert.equal((await service.download({ id: 'reader' }, 'attachment-1', false)).ok, true);
 	assert.equal(signed[0].contentType, 'application/octet-stream');
 	assert.match(signed[0].contentDisposition, /^attachment;/);
+});
+
+test('pending moderation quarantines bytes from the audience while owner and admin evidence access remain available', async () => {
+	const file = attachmentDoc({
+		attachmentState: 'ready',
+		targetId: 'post-1',
+		objectVersionId: 'version-1',
+		uploadId: undefined,
+		moderation: { status: 'pending' }
+	});
+	let signed = 0;
+	const service = createAttachmentService({
+		store: { getById: async () => file } as any,
+		canViewTarget: async () => true,
+		getS3: () =>
+			noopS3({
+				signDownload: async () => {
+					signed += 1;
+					return { url: 'https://s3.example/private', expiresAt: now.toISOString() };
+				}
+			})
+	});
+
+	assert.deepEqual(await service.download({ id: 'reader' }, file.shareId, false), {
+		ok: false,
+		status: 404,
+		error: 'Attachment not found'
+	});
+	assert.equal((await service.download({ id: file.ownerId }, file.shareId, false)).ok, true);
+	assert.equal((await service.download({ id: 'admin-1', isAdmin: true }, file.shareId, false)).ok, true);
+	assert.equal(signed, 2);
 });
 
 test('download never authorizes a home S3 object against a custom data plane', async () => {

@@ -8,6 +8,7 @@ import {
 	ATTACHMENT_THINGTIME,
 	isAttachmentFinalizationLeaseId,
 	isAttachmentObjectVersionId,
+	planAttachmentReorder,
 	type AttachmentCrystal,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
@@ -62,6 +63,20 @@ export type AttachmentDoc = {
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
+	// owner-chosen display position within the bound target (stamped at
+	// bind/reorder time; legacy bound docs without it sort by createdAt)
+	attachmentSortIndex?: number;
+	// Protected moderation stamp (api/utils/moderation) — written only by the
+	// server-side analysis pipeline and admin review, never by upload input.
+	moderation?: {
+		status: 'pending' | 'skipped' | 'clear' | 'nsfw' | 'blocked';
+		categories?: string[];
+		provider?: string;
+		model?: string;
+		analyzedAt?: Date;
+		reason?: string;
+		flagPending?: boolean;
+	};
 	createdAt: Date;
 	updatedAt: Date;
 };
@@ -409,6 +424,10 @@ export const attachmentStore: AttachmentStore = {
 				crystal,
 				objectVersionId,
 				attachmentState: 'ready' as const,
+				// Quarantine every newly durable object until analysis either clears/
+				// flags it or deliberately marks it skipped. This lands before complete
+				// returns, so a fast bind cannot expose unscreened bytes during outage.
+				moderation: { status: 'pending' as const },
 				attachmentExpiresAt: expiresAt,
 				updatedAt: new Date()
 			};
@@ -433,6 +452,7 @@ export const attachmentStore: AttachmentStore = {
 						crystal,
 						objectVersionId,
 						attachmentState: 'ready',
+						moderation: { status: 'pending' },
 						attachmentExpiresAt: expiresAt,
 						sizeBytes: nextSize,
 						updatedAt: next.updatedAt
@@ -710,31 +730,68 @@ const bindReadyAttachmentsForPurpose = async (
 		throw new AttachmentBindingError(409, 'One or more attachments are unavailable or already attached');
 	}
 
-	const write = await things.updateMany(
-		{
-			shareId: { $in: ids },
-			ownerId,
-			thingtime: ATTACHMENT_THINGTIME,
-			attachmentState: 'ready',
-			$and: [
-				purposeFence,
-				{ attachmentProfileSlot: { $exists: false } },
-				{
-			$or: [
-				{ targetId, attachmentExpiresAt: { $exists: false } },
-				{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
-			]
+	// One update per id so each doc gets its list position stamped — the id
+	// order the client sent IS the display order the target renders.
+	const write = await things.bulkWrite(
+		ids.map((id, index) => ({
+			updateOne: {
+				filter: {
+					shareId: id,
+					ownerId,
+					thingtime: ATTACHMENT_THINGTIME,
+					attachmentState: 'ready',
+					$and: [
+						purposeFence,
+						{ attachmentProfileSlot: { $exists: false } },
+						{
+							$or: [
+								{ targetId, attachmentExpiresAt: { $exists: false } },
+								{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
+							]
+						}
+					]
+				},
+				update: {
+					$set: { targetId, acl: [ACL_INHERIT], attachmentPurpose: purpose, attachmentSortIndex: index, updatedAt: now },
+					$unset: { attachmentExpiresAt: '', attachmentProfileSlot: '' }
 				}
-			]
-		} as any,
-		{
-			$set: { targetId, acl: [ACL_INHERIT], attachmentPurpose: purpose, updatedAt: now },
-			$unset: { attachmentExpiresAt: '', attachmentProfileSlot: '' }
-		},
-		{ session }
+			}
+		})) as any,
+		{ session, ordered: true }
 	);
 	if (write.matchedCount !== ids.length) {
 		throw new AttachmentBindingError(409, `One or more attachments changed while the ${attachmentPurposeLabel[purpose]} was being created`);
+	}
+};
+
+// Re-stamp the display order of the ready attachments already bound to one
+// target. The requested list must be a pure permutation of the bound set —
+// planAttachmentReorder rejects everything else, so a stale client can never
+// half-apply an order after the post's attachments changed.
+export const reorderBoundTargetAttachments = async (ownerId: string, targetId: string, requestedIds: readonly unknown[]): Promise<void> => {
+	if (isCustomMongoEndpointActive()) {
+		throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+	}
+	if (!targetId.trim()) throw new AttachmentBindingError(400, 'Attachment target is required');
+	const things = await getHomeThingsCollection();
+	const fence = { ownerId, thingtime: ATTACHMENT_THINGTIME, attachmentState: 'ready', targetId };
+	const bound = (await things.find(fence as any, { projection: { shareId: 1 } }).toArray()) as Array<{ shareId: string }>;
+	const plan = planAttachmentReorder(
+		requestedIds,
+		bound.map((doc) => String(doc.shareId)),
+		MAX_ATTACHMENTS_PER_TARGET
+	);
+	if (!plan.ok) throw new AttachmentBindingError(plan.status, plan.error);
+	if (!plan.orderedIds.length) return;
+	const now = new Date();
+	const write = await things.bulkWrite(
+		plan.orderedIds.map((shareId, index) => ({
+			updateOne: { filter: { ...fence, shareId }, update: { $set: { attachmentSortIndex: index, updatedAt: now } } }
+		})) as any,
+		{ ordered: true }
+	);
+	if (write.matchedCount !== plan.orderedIds.length) {
+		throw new AttachmentBindingError(409, 'The attachments on this post changed — refresh and reorder again');
 	}
 };
 

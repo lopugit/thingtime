@@ -5,10 +5,12 @@ import { PictureInPicture2, X } from 'lucide-react';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
-import type { AttachmentComposerSnapshot } from '~/components/Attachments/attachmentTypes';
+import { AttachmentReorderGallery } from '~/components/Attachments/AttachmentReorderGallery';
+import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import {
 	canonicalPostTags,
 	matchesCommittedPostCreate,
+	normalizePublicAttachment,
 	shouldFreezeAmbiguousPostSubmission,
 	type CommittedPostExpectation
 } from '~/components/Attachments/attachmentUiCore';
@@ -181,6 +183,21 @@ export const PostComposer = (props: PostComposerProps) => {
   // the seed effect's deps stay constant
   const editSeedRef = React.useRef(editPost?.thing || null);
 
+	// edit mode: the post's existing attachments, reorderable in place. Binding
+	// is create-only, so edits can only re-sequence — saving sends the ordered
+	// ids exactly when the order actually changed.
+	const editAttachmentsSeedRef = React.useRef<PublicAttachment[]>(
+		(editPost?.attachments || []).flatMap((attachment) => {
+			const normalized = normalizePublicAttachment(attachment);
+			return normalized ? [normalized] : [];
+		})
+	);
+	const [editAttachments, setEditAttachments] = React.useState<PublicAttachment[]>(editAttachmentsSeedRef.current);
+	const editAttachmentOrderChanged =
+		isEdit &&
+		editAttachments.length === editAttachmentsSeedRef.current.length &&
+		editAttachments.some((attachment, index) => attachment.id !== editAttachmentsSeedRef.current[index].id);
+
 	const parsedTags = canonicalPostTags(tagsInput.split(','));
 
 	const validImages = canonicalLinkedImageUrls(linkedImages);
@@ -241,10 +258,13 @@ export const PostComposer = (props: PostComposerProps) => {
   const listingValid =
 		title.trim().length > 0 && price.trim() !== '' && Number.isFinite(Number(price)) && Number(price) >= 0 && !!currency && !!category;
 
-	const hasReadyAttachment = attachmentSnapshot.attachments.length > 0;
-	const hasReadyVisualAttachment = attachmentSnapshot.attachments.some(
-		(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
-	);
+	// edit mode has no upload snapshot — the post's existing bound attachments
+	// are the content (an attachment-only post must stay saveable while its
+	// media is being reordered)
+	const hasReadyAttachment = attachmentSnapshot.attachments.length > 0 || (isEdit && editAttachments.length > 0);
+	const hasReadyVisualAttachment =
+		attachmentSnapshot.attachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video') ||
+		(isEdit && editAttachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'));
 
 	const contentValid =
     type === 'text'
@@ -380,7 +400,8 @@ export const PostComposer = (props: PostComposerProps) => {
 			if (isEdit) {
 				// full-crystal replace: the server sanitizer rebuilds { type, text,
 				// images, listing, thing } per type, so switching type clears the
-				// fields that no longer apply
+				// fields that no longer apply. A changed attachment order rides along
+				// as the reordered id list (a pure permutation of the bound set).
 				const updated = await api.v1.things.update({
 					id: editPost!.id,
 					crystal: {
@@ -391,7 +412,8 @@ export const PostComposer = (props: PostComposerProps) => {
 						thing: canonicalThing
 					},
 					tags: parsedTags,
-					visibility
+					visibility,
+					...(editAttachmentOrderChanged ? { attachmentIds: editAttachments.map((attachment) => attachment.id) } : {})
 				});
 				finishPost(updated.post);
 			} else {
@@ -742,7 +764,7 @@ export const PostComposer = (props: PostComposerProps) => {
         </Flex>
       )}
 
-				{user && (
+				{user && !isEdit && (
 					<AttachmentComposer
 						ref={attachmentComposerRef}
 						key={`attachments-${user.id}-${composerSession}`}
@@ -753,6 +775,18 @@ export const PostComposer = (props: PostComposerProps) => {
 						remainingBytes={user.storage.remainingBytes}
 						storageStatus={user.storage.status}
 						onChange={setAttachmentSnapshot}
+					/>
+				)}
+
+				{/* edit mode: attachments bound at create time can only be
+				re-sequenced — the upload panel (which could never save its files
+				into an existing post) is replaced by the reorderable gallery */}
+				{isEdit && editAttachments.length > 0 && (
+					<AttachmentReorderGallery
+						attachments={editAttachments}
+						onChange={setEditAttachments}
+						disabled={posting || submissionUncertain}
+						ariaLabel="Reorder this post's attachments"
 					/>
 				)}
 

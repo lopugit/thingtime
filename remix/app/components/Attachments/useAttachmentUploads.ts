@@ -427,6 +427,21 @@ export const useAttachmentUploads = (
 		[cleanupUpload, onCleanupDeferred, onCleanupError]
 	);
 
+	// Move one upload to another upload's position (the snapshot's attachmentIds
+	// order follows this array, so this IS the order the server will store).
+	const reorder = React.useCallback((sourceLocalId: string, targetLocalId: string) => {
+		if (sourceLocalId === targetLocalId) return;
+		const current = uploadsRef.current;
+		const from = current.findIndex((upload) => upload.localId === sourceLocalId);
+		const to = current.findIndex((upload) => upload.localId === targetLocalId);
+		if (from < 0 || to < 0 || from === to) return;
+		const next = [...current];
+		const [moved] = next.splice(from, 1);
+		next.splice(to, 0, moved);
+		uploadsRef.current = next;
+		setUploads(next);
+	}, []);
+
 	const markCommitted = React.useCallback((attachmentIds: string[]) => {
 		for (const id of attachmentIds) committedAttachmentIdsRef.current.add(id);
 	}, []);
@@ -507,6 +522,7 @@ export const useAttachmentUploads = (
 		replaceFiles,
 		retry,
 		remove,
+		reorder,
 		markCommitted,
 		snapshot
 	};

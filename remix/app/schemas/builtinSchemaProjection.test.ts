@@ -19,7 +19,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // a new registry field should appear (or be knowingly dropped as a record/
 // reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
-  attachment: ['name', 'size', 'contentType', 'mediaKind'],
+  attachment: ['name', 'size', 'contentType', 'mediaKind', 'detectedContentType'],
   post: ['type', 'text', 'images', 'listing'], // thing: record → dropped
   comment: ['text'],
   reaction: ['emoji'],
@@ -116,20 +116,22 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.ok(PROTECTED_THINGTIME.includes('attachment'));
 	assert.ok(PROTECTED_THINGTIME.includes('app'));
 	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
+	assert.ok(PROTECTED_THINGTIME.includes('moderationFlag'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-pull-request'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-event'));
 	assert.equal(isProtectedThingtime(['app']), true);
 	assert.equal(isProtectedThingtime(['attachment']), true);
 	assert.equal(isProtectedThingtime(['migration-diagnostic']), true);
+	assert.equal(isProtectedThingtime(['moderationFlag']), true);
 	assert.equal(isProtectedThingtime(['ci-workflow-run']), true);
 	assert.equal(isProtectedThingtime(['data', 'app']), true);
 	assert.equal(isProtectedThingtime(['user']), true);
 });
 
-test('managed attachment purpose, profile slot, user references, and emoji reference are closed server-owned root fields', () => {
+test('managed attachment, moderation, user, and emoji fields are closed server-owned root fields', () => {
 	const root = thingtimeSchemas.find((schema) => schema.id === 'thing')!;
 	const fields = new Map(root.fields.map((field) => [field.name, field]));
-	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'avatarAttachmentId', 'bannerAttachmentId', 'emojiAttachmentId']) {
+	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'moderation', 'avatarAttachmentId', 'bannerAttachmentId', 'emojiAttachmentId']) {
 		assert.equal(fields.get(name)?.system, true, name);
 		assert.equal(fields.get(name)?.required, false, name);
 	}

@@ -17,7 +17,24 @@ import {
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { userSubscriptionLedgerMatch } from '../subscriptions/subscriptionIdentity';
 import { attachmentCascadeCleanupTargets } from '../attachments/attachmentCascadeCore';
-import { toAttachmentPublicMetadata, type AttachmentPublicMetadata, type AttachmentPurpose } from '../attachments/attachmentCore';
+import {
+	orderAttachmentDocsByStoredSort,
+	toAttachmentPublicMetadata,
+	type AttachmentPublicMetadata,
+	type AttachmentPurpose
+} from '../attachments/attachmentCore';
+import {
+	moderatedContentFingerprint,
+	pendingModerationStamp,
+	postInsertModerationPlan,
+	queueTextModeration,
+	screenTextForCreate,
+	setModerationReleaseNotifier,
+	TEXT_MODERATED_THINGTIMES,
+	upsertTextModerationFlag
+} from '../moderation/analyzeText';
+import { hasModeratedContent, moderatedContentOf } from '../moderation/textModeration';
+import { attachmentIsBlocked, attachmentModerationStatus } from '../moderation/moderationCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
@@ -983,7 +1000,9 @@ export const createThing = async (
   if (isFail(folderAssignment)) return folderAssignment;
 
   if (validated.thingtime.includes('comment') && target) {
-    const commentCount = await countCommentsOf(target);
+		// includeBlocked: the cap is a physical doc bound — blocked spam must not
+		// free up quota for more child docs under the same post
+		const commentCount = await countCommentsOf(target, { includeBlocked: true });
     if (commentCount >= MAX_COMMENTS_PER_POST) return fail(400, 'This post has reached its comment limit');
   }
 
@@ -1053,6 +1072,23 @@ export const createThing = async (
 		const charge = await chargeAppStorage(app, sizeBytes);
 		if (charge.ok === false) return fail(charge.status, charge.error);
 	}
+	// Hybrid create-time text screen: bounded free omni race. A verdict in
+	// time means the doc is BORN stamped (a blocked post never renders
+	// anywhere, not even in a feed refresh between insert and async verdict);
+	// timeout/outage/off resolves null and the async queue + hourly sweep own
+	// it. screenTextForCreate never throws and never exceeds its budget.
+	if (thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind))) {
+		const moderatedContent = moderatedContentOf(doc as any);
+		if (hasModeratedContent(moderatedContent)) {
+			const screen = await screenTextForCreate(moderatedContent);
+			if (screen.kind === 'verdict') (doc as any).moderation = screen.stamp;
+			// fail-closed: no verdict while the surface is ON → born PENDING
+			// (owner-private) until the async queue / hourly cron releases it
+			else if (screen.kind === 'unavailable') (doc as any).moderation = pendingModerationStamp(moderatedContent);
+			// 'skip' (surface off / custom plane) publishes normally, unstamped
+		}
+	}
+
   try {
 		if (billable || registeredApp || target || hooks.afterInsert) {
 			await withMongoTransaction(async (session) => {
@@ -1102,9 +1138,39 @@ export const createThing = async (
     throw err;
   }
 
-  // notification side effects — emit* never throws, so a notification hiccup
-  // can't fail the write that triggered it
+	// Post-insert moderation plan (pure helper, unit-tested):
+	//   notify     — born-blocked docs are invisible everywhere, so followers
+	//                are never notified about content they can't open
+	//   inlineFlag — a born-flagged doc's admin moderationFlag lands in the
+	//                SAME request as its stamp; only if that write fails does
+	//                the flagPending marker + hourly sweep own it
+	//   queueAsync — no sync verdict: the ordinary async screen runs as before
+	const moderationPlan = postInsertModerationPlan(doc as any);
+	if (moderationPlan.notify) {
+		// notification side effects — emit* never throws, so a notification
+		// hiccup can't fail the write that triggered it
   await emitCreationNotifications(doc, target, asOwner);
+	}
+	if (moderationPlan.inlineFlag) {
+		try {
+			const home = await getHomeThingsCollection();
+			const flaggedContent = moderatedContentOf(doc as any);
+			await upsertTextModerationFlag(
+				home,
+				doc as any,
+				(doc as any).moderation,
+				flaggedContent.text.trim() || `[image urls] ${flaggedContent.imageUrls.slice(0, 3).join(' ')}`,
+				new Date()
+			);
+			await things.updateOne({ shareId: doc.shareId, 'moderation.flagPending': true } as any, { $unset: { 'moderation.flagPending': '' } } as any);
+		} catch (error) {
+			// flagPending stays on the stamp — the hourly sweep retries the flag
+			console.warn('[moderation] inline flag write failed; sweep will retry:', (error as Error)?.message || error);
+			queueTextModeration(doc.shareId);
+		}
+	} else if (moderationPlan.queueAsync) {
+		queueTextModeration(doc.shareId);
+	}
   return { ok: true, doc };
 };
 
@@ -1311,19 +1377,19 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   const things = await getThingsCollection();
   const [related, legacyRelational, shareCounts] = await Promise.all([
     things
-      .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] } } as any)
+      .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] }, 'moderation.status': { $nin: ['blocked', 'pending'] } } as any)
       .sort({ createdAt: 1, shareId: 1 })
       .toArray() as Promise<any[]>,
     // interim relational era: kind:'reaction'/'comment' docs linked by parentId
     // (written by the pre-unification relational model; converted by the things
     // migration, folded here until then)
     things
-      .find({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids } } as any)
+      .find({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids }, 'moderation.status': { $nin: ['blocked', 'pending'] } } as any)
       .sort({ createdAt: 1 })
       .toArray() as Promise<any[]>,
     things
       .aggregate([
-        { $match: { $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } },
+        { $match: { 'moderation.status': { $nin: ['blocked', 'pending'] }, $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } },
         { $group: { _id: { $ifNull: ['$targetId', '$shareOfId'] }, count: { $sum: 1 } } }
       ])
       .toArray() as Promise<any[]>
@@ -1390,19 +1456,25 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
     const withDocs = depth < SHIPPED_REPLY_LEVELS;
     const [levelReactions, replyGroups] = await Promise.all([
       things
-        .find({ targetId: { $in: levelIds }, thingtime: 'reaction' } as any)
+        .find({ targetId: { $in: levelIds }, thingtime: 'reaction', 'moderation.status': { $nin: ['blocked', 'pending'] } } as any)
         .sort({ createdAt: 1, shareId: 1 })
         .toArray() as Promise<any[]>,
+      // blocked replies neither ship as docs nor inflate per-level counts —
+      // this mirrors the first-pass related queries above (a blocked doc must
+      // vanish from EVERY thread payload, not just level 1)
       things
         .aggregate(
           withDocs
             ? [
-                { $match: { targetId: { $in: levelIds }, thingtime: 'comment' } },
+                { $match: { targetId: { $in: levelIds }, thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } } },
                 { $sort: { createdAt: -1, shareId: 1 } },
                 { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
                 { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
               ]
-            : [{ $match: { targetId: { $in: levelIds }, thingtime: 'comment' } }, { $group: { _id: '$targetId', count: { $sum: 1 } } }]
+            : [
+                { $match: { targetId: { $in: levelIds }, thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } } },
+                { $group: { _id: '$targetId', count: { $sum: 1 } } }
+              ]
         )
         .toArray() as Promise<any[]>
     ]);
@@ -1445,13 +1517,14 @@ const resolvePostAttachments = async (
 	const things = await getThingsCollection();
 	const docs = (await things
 		.find({ thingtime: 'attachment', targetId: { $in: ids }, attachmentState: 'ready' } as any)
-		.project({ shareId: 1, targetId: 1, ownerId: 1, attachmentPurpose: 1, crystal: 1, createdAt: 1 })
+		.project({ shareId: 1, targetId: 1, ownerId: 1, attachmentPurpose: 1, attachmentSortIndex: 1, crystal: 1, moderation: 1, createdAt: 1 })
 		.sort({ createdAt: 1, shareId: 1 })
 		.toArray()) as any[];
-	for (const doc of docs) {
+	// stamped display order wins; legacy unstamped docs keep createdAt order
+	for (const doc of orderAttachmentDocsByStoredSort(docs)) {
 		const targetId = typeof doc.targetId === 'string' ? doc.targetId : '';
 		const expected = expectedTargets?.get(targetId);
-		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
+		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
 		if (
 			!targetId ||
 			!attachment ||
@@ -1467,6 +1540,23 @@ const resolvePostAttachments = async (
 		byTarget.set(targetId, current);
 	}
 	return byTarget;
+};
+
+// The trusted attachment context updateThing feeds the crystal validator —
+// the PATCH equivalent of the route-inspected postAttachments hook on create.
+// Bound attachments are server-authored state, so live presence is exactly as
+// trustworthy as the create-time inspection, and an attachment-only post must
+// stay editable (its content IS the bound media).
+const boundAttachmentPresence = async (ownerId: string, targetId: string): Promise<{ hasAny: boolean; hasVisual: boolean }> => {
+	const things = await getThingsCollection();
+	const docs = (await things
+		.find({ thingtime: 'attachment', targetId, ownerId, attachmentState: 'ready' } as any)
+		.project({ 'crystal.mediaKind': 1 })
+		.toArray()) as any[];
+	return {
+		hasAny: docs.length > 0,
+		hasVisual: docs.some((doc) => doc?.crystal?.mediaKind === 'image' || doc?.crystal?.mediaKind === 'video')
+	};
 };
 
 // Total comment count for whole threads (every descendant, not just direct
@@ -1487,7 +1577,9 @@ const resolveThreadCounts = async (ids: string[]): Promise<Map<string, number>> 
           connectFromField: 'shareId',
           connectToField: 'targetId',
           as: 'thread',
-          restrictSearchWithMatch: { thingtime: 'comment' }
+          // blocked comments (and via graph pruning their whole subtrees)
+          // don't count — totals must match the visible lists
+          restrictSearchWithMatch: { thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } }
         }
       },
       { $project: { shareId: 1, total: { $size: '$thread' } } }
@@ -1712,6 +1804,21 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
 	if (thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME)) return false;
+	// Moderation-blocked things vanish from every ordinary read for everyone —
+	// owner included, same as blocked attachments. Admins review through the
+	// moderationFlag queue (which carries a bounded excerpt), never this path.
+	if (attachmentIsBlocked(doc as any)) return false;
+	// Text-moderation PENDING = born private: the owner sees their own post
+	// while it waits for a verdict (omni outage / async-release mode); nobody
+	// else does until the screen releases it. Kind-scoped so in-flight
+	// ATTACHMENT analysis (also status pending) keeps today's visibility.
+	if (
+		attachmentModerationStatus(doc as any) === 'pending' &&
+		thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
+		doc.ownerId !== viewer?.id
+	) {
+		return false;
+	}
   if (viewer?.id && doc.ownerId === viewer.id) return true;
   return aclAllows(aclOf(doc), viewer, doc.ownerId);
 };
@@ -1726,6 +1833,17 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
+	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
+	// terminal — a blocked or born-private comment under a clean post must
+	// vanish for non-owners too
+	if (attachmentIsBlocked(doc as any)) return false;
+	if (
+		attachmentModerationStatus(doc as any) === 'pending' &&
+		thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
+		doc.ownerId !== viewer?.id
+	) {
+		return false;
+	}
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
   return !!terminal && canView(terminal, viewer);
 };
@@ -1849,6 +1967,17 @@ const appMembershipOk = (app: AppNamespaceScope, doc: ThingDoc): boolean => {
 // thing is as visible as that thing; a chain that escapes the namespace or
 // breaks fails closed).
 const appNamespaceVerdict = async (app: AppNamespaceScope, doc: ThingDoc): Promise<boolean> => {
+	// moderation-blocked docs are invisible under app lenses too — this path
+	// never reaches canView, so it needs its own gate; born-pending docs are
+	// visible only when the lens acts for their owner
+	if (attachmentIsBlocked(doc as any)) return false;
+	if (
+		attachmentModerationStatus(doc as any) === 'pending' &&
+		thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
+		String(doc.ownerId) !== app.ownerId
+	) {
+		return false;
+	}
   if (!appMembershipOk(app, doc)) return false;
   let judged: ThingDoc = doc;
   if (aclOf(doc).includes(ACL_INHERIT)) {
@@ -1954,11 +2083,15 @@ export const appShapeProjections = async (
   });
 };
 
-const countCommentsOf = async (target: ThingDoc): Promise<number> => {
+const countCommentsOf = async (target: ThingDoc, options: { includeBlocked?: boolean } = {}): Promise<number> => {
   const things = await getThingsCollection();
+	// visible counts must match what the read paths render (blocked comments
+	// are excluded everywhere); the comment CAP passes includeBlocked because
+	// it doubles as a physical per-post doc bound
+	const blockedClause = options.includeBlocked ? {} : { 'moderation.status': { $nin: ['blocked', 'pending'] } };
   const [standalone, legacyRelational] = await Promise.all([
-    things.countDocuments({ targetId: target.shareId, thingtime: 'comment' } as any),
-    things.countDocuments({ kind: 'comment', parentId: target.shareId } as any)
+    things.countDocuments({ targetId: target.shareId, thingtime: 'comment', ...blockedClause } as any),
+    things.countDocuments({ kind: 'comment', parentId: target.shareId, ...blockedClause } as any)
   ]);
   return standalone + legacyRelational + (target.comments || []).length;
 };
@@ -2867,7 +3000,9 @@ export const addComment = async (
     // self-author shaped by the acting grant; count fenced to the namespace
     await appShapeProjections(app, [doc], [comment]);
     const things = await getThingsCollection();
-    const commentCount = await things.countDocuments(withMatch({ targetId: target.shareId, thingtime: 'comment' }, ...appMatchClauses(app)) as any);
+    const commentCount = await things.countDocuments(
+			withMatch({ targetId: target.shareId, thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } }, ...appMatchClauses(app)) as any
+		);
     return { ok: true, comment, commentCount };
   }
 
@@ -3445,7 +3580,12 @@ export const updateThing = async (
   }
   const patch = input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal) ? (input.crystal as Record<string, unknown>) : {};
   const nextCrystal = options.replaceCrystal ? patch : { ...crystalOf(doc), ...patch };
-  const validated = validateThingtimeCrystal(thingtime, nextCrystal);
+	// Post edits validate with the same trusted attachment context creates get:
+	// an attachment-only post's crystal has no text/images, and without this
+	// the sanitizer would reject every edit of it with "Say something first".
+	const postAttachments =
+		thingtime.includes('post') && !isCustomMongoEndpointActive() ? await boundAttachmentPresence(doc.ownerId, doc.shareId) : undefined;
+	const validated = validateThingtimeCrystal(thingtime, nextCrystal, { postAttachments });
   if (isFail(validated)) return validated;
 
   // Re-run the createThing provenance check ONLY when this write changes the
@@ -3658,6 +3798,17 @@ export const updateThing = async (
 		delete updated.storageClass;
 		delete updated.storageAccountingVersion;
 		if (!storageScope) delete updated.sizeBytes;
+	}
+
+	// Edited moderated content (prose, listing text, tags, image URLs) gets
+	// re-screened: the old verdict describes content that no longer exists
+	// (emptied content clears a stale pipeline stamp). The analyzer refuses to
+	// overwrite admin review stamps and no-ops on custom data planes.
+	if (
+		thingtimeOf(updated).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
+		moderatedContentFingerprint(moderatedContentOf(updated as any)) !== moderatedContentFingerprint(moderatedContentOf(doc as any))
+	) {
+		queueTextModeration(doc.shareId);
 	}
 
   const thing = (await toPublicThings([updated], viewer))[0];
@@ -3995,3 +4146,15 @@ export const getPostFeatures = async (viewerInput: string | Viewer, shareIds: st
     .toArray()) as any as ThingDoc[];
   return new Map(docs.filter((doc) => canView(doc, viewer)).map((doc) => [doc.shareId, featuresOf(doc)]));
 };
+
+// Registered at module scope: when the moderation pipeline RELEASES a
+// born-pending doc (verdict clear/nsfw), its creation notifications fire now —
+// followers hear about a post at the moment it becomes visible to them.
+setModerationReleaseNotifier((shareId) => {
+	void (async () => {
+		const doc = await findThing(shareId);
+		if (!doc) return;
+		const target = (doc as any).targetId ? await findThing(String((doc as any).targetId)) : null;
+		await emitCreationNotifications(doc, target, asViewer(String(doc.ownerId)));
+	})().catch((error) => console.warn('[moderation] release notification failed:', (error as Error)?.message || error));
+});

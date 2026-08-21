@@ -171,14 +171,28 @@ export function useApi() {
         [asyncFetcher]
       ),
       setUserPublicUploads: useCallback(
-        async (args: { userId: string; enabled: boolean }) =>
+        async (args: { userId: string; enabled: boolean; scope?: 'public' | 'private' | 'all' }) =>
           asyncFetcher.submit(
-            { userId: args?.userId, enabled: args?.enabled },
+            { userId: args?.userId, enabled: args?.enabled, scope: args?.scope ?? 'public' },
             {
               action: '/api/v1/admin/users/public-uploads',
-              errorContext: args?.enabled ? 'approve public uploads' : 'withhold public uploads'
+              errorContext: `${args?.enabled ? 'approve' : 'withhold'} ${args?.scope ?? 'public'} uploads`
             }
           ),
+        [asyncFetcher]
+      ),
+      moderation: useCallback(async () => getJson('/api/v1/admin/moderation'), []),
+      moderationReview: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { action: 'review', attachmentId: args?.attachmentId, verdict: args?.verdict, targetKind: args?.targetKind },
+            { action: '/api/v1/admin/moderation' }
+          ),
+        [asyncFetcher]
+      ),
+      moderationSweep: useCallback(async () => asyncFetcher.submit({ action: 'sweep' }, { action: '/api/v1/admin/moderation' }), [asyncFetcher]),
+      moderationSettings: useCallback(
+        async (args) => asyncFetcher.submit({ action: 'settings', settings: args?.settings }, { action: '/api/v1/admin/moderation' }),
         [asyncFetcher]
       ),
       migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
@@ -428,7 +442,10 @@ export function useApi() {
               tokenAcl: args?.tokenAcl,
               // move support — only send folderId when the caller provides it
               // (undefined must stay "leave it where it is", null = root)
-              ...(args && 'folderId' in args ? { folderId: args.folderId } : {})
+              ...(args && 'folderId' in args ? { folderId: args.folderId } : {}),
+              // attachment reorder — only send when the caller provides it
+              // (the ids must be a permutation of the post's bound set)
+              ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }
           ),
