@@ -8,6 +8,7 @@ const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
+  'all-branch.yml',
   'develop-pr-preview.yml',
   'electron-release.yml',
   'web-ci.yml',
@@ -57,6 +58,26 @@ assert.match(
   promotionPermissions,
   /^  actions: write$/m,
   'promote-features-to-main.yml must grant the protected promoter permission to dispatch its resolver'
+);
+
+const allBranchCaller = readFileSync(
+  resolve(workflowsRoot, 'all-branch.yml'),
+  'utf8'
+);
+const allBranchPermissionsStart = allBranchCaller.indexOf('\npermissions:\n');
+const allBranchJobsStart = allBranchCaller.indexOf('\njobs:\n');
+assert.ok(
+  allBranchPermissionsStart >= 0 && allBranchJobsStart > allBranchPermissionsStart,
+  'all-branch.yml must retain a top-level permissions block'
+);
+const allBranchPermissions = allBranchCaller.slice(
+  allBranchPermissionsStart,
+  allBranchJobsStart
+);
+assert.match(
+  allBranchPermissions,
+  /^  actions: write$/m,
+  'all-branch.yml must let the protected push handoff dispatch its supported-event worker'
 );
 
 const filesUnder = (root) => {

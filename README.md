@@ -19,7 +19,7 @@ Claude, and other compatible tools read the same instructions. Update
 
 Thingtime keeps executable CI/CD behavior on the long-lived, protected
 `github-actions` branch. Product branches (`main`, `develop`, feature branches,
-and promotion branches) retain only seven small event listeners in
+and promotion branches) retain only a small set of thin event listeners in
 `.github/workflows/`: GitHub must be able to discover a workflow file on the
 ref/default branch that receives a native `push`, `pull_request_target`,
 `schedule`, `repository_dispatch`, or `workflow_dispatch` event. Each listener
@@ -1087,6 +1087,50 @@ PRs it creates will not trigger CI, and promotion branches touching
 repository secret (fine-grained token with Contents + Pull requests +
 Workflows read/write, placeholder value `github_pat_...`) to lift both limits;
 `SYNC_BRANCHES_PAT` / `CONFLICT_RESOLVER_PAT` are honoured as fallbacks.
+
+## Branch automation: the `all` wildcard branch
+
+`all` is a generated everything-branch: `develop` + `main` + every open PR
+(stacked branch → branch PRs included) merged together, so all in-progress
+work can be tried in one place. **Build all branch**
+(`.github/workflows/all-branch.yml`) rebuilds it from scratch and force-pushes
+the result on every push to `develop`/`main`, on every open-PR change, and
+hourly:
+
+- Rebuilds start from `develop`, merge `main`, then merge open PR heads in
+  stack order (parents before children, ascending PR number within a layer)
+  with `-X theirs` plus a matching theirs-biased fallback for modify/delete
+  conflicts — later PRs win contested hunks, and a conflict never stops the
+  train. A PR whose merge cannot complete at all is skipped, not fatal.
+- `ALL_BRANCH.md` at the branch root records exactly what went in (base tips,
+  every merged PR and how it merged, every skipped PR with its reason). The
+  rebuild is deterministic, so the branch is only force-pushed when the
+  resulting tree actually changed.
+- Never base work on `all`, never open PRs from it, and expect
+  `git reset --hard origin/all` when tracking it locally — history is
+  rewritten on every rebuild.
+- Fork PRs are excluded (their unreviewed code would otherwise reach this
+  repo's Vercel builds without the usual fork-authorization step). Label any
+  PR `no-all` to keep it out of the union.
+- Semantic collisions — two PRs adding the same helper merge textually clean,
+  so no git conflict ever exists, yet the union build breaks — are handled by
+  the AI **build doctor**: after each input-changed rebuild the union build
+  runs (install, then the full Vercel-parity remix build, with a mechanical
+  lockfile repair first), and on failure up to three guarded, edit-files-only Claude
+  rounds (the conflict resolver's action pin, model waterfall, and security
+  posture) repair the tree. Out-of-scope edits are reverted, commits are
+  credential-scanned, and the build is re-verified mechanically. Doctor
+  fixups ride on `all` and are cherry-pick-replayed onto the next rebuild,
+  dropping silently once the source PRs heal for real; an exhausted doctor
+  leaves a marker commit and retries once before waiting for input movement.
+  Needs the resolver's `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`
+  secret; without it the union is pushed unhealed.
+- `.github` on `all` is pinned to `develop`'s copy (workflows never execute on
+  `all`, and this keeps force-pushes within the default `GITHUB_TOKEN`'s
+  powers). If a rebuild still trips GitHub's workflow-file push restriction,
+  the builder re-pins `.github` to the previous `all` state and retries.
+- Vercel builds `all` like any other product branch, so it doubles as a living
+  everything-preview.
 
 ## Vercel deployment status
 
