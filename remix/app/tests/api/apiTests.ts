@@ -1154,6 +1154,25 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin promote attempt was rejected.')
   },
   {
+    id: 'admin-moderation-guarded',
+    name: 'Moderation queue is admin-only',
+    description: 'Reading the NSFW/TOS moderation review queue requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/moderation',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin moderation read was rejected.')
+  },
+  {
+    id: 'admin-moderation-review-guarded',
+    name: 'Moderation review is admin-only',
+    description: 'Overriding a moderation verdict requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/moderation',
+    body: { action: 'review', attachmentId: '000000000000000000000000', verdict: 'block' },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin review attempt was rejected.')
+  },
+  {
     id: 'admin-users-overview-guarded',
     name: 'Users overview is admin-only',
     description: 'The /admin Users tab data requires an admin session.',
