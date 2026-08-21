@@ -19,7 +19,6 @@ const apiRoutes = [...apiV1RouteKeys, ...apiV1DocsRouteKeys];
 
 export default defineNitroConfig({
   serverDir: 'server',
-  modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
   // The Vite shell copied by sync:nitro-template. Nitro's default assets:server
   // mount resolves to <rootDir>/assets (which does not exist here), so the page
