@@ -157,6 +157,16 @@ export function isForbiddenDoctorPath(path) {
   return base === ".gitattributes" || base === "pnpm-lock.yaml" || base === "package-lock.json";
 }
 
+// The protected controller is a trusted nested checkout, so the outer repo
+// reports it as one untracked `control-plane/` entry. Preserve that exact root
+// between doctor rounds; its contents remain forbidden and the staging/clean
+// commands exclude the directory mechanically.
+export function shouldRevertDoctorStatusPath(path) {
+  const p = String(path ?? "");
+  if (p === "control-plane" || p === "control-plane/") return false;
+  return isForbiddenDoctorPath(p);
+}
+
 const readState = () => {
   try {
     return JSON.parse(readFileSync(STATE_FILE, "utf8"));
@@ -470,6 +480,13 @@ function selfTest() {
       "package-lock.json",
     ];
     for (const path of forbidden) assert.equal(isForbiddenDoctorPath(path), true, `${path} must be forbidden`);
+    assert.equal(shouldRevertDoctorStatusPath("control-plane/"), false, "the trusted controller checkout must survive doctor rounds");
+    assert.equal(
+      shouldRevertDoctorStatusPath("control-plane/.github/scripts/build-all-branch.mjs"),
+      true,
+      "nested controller paths must remain forbidden"
+    );
+    assert.equal(shouldRevertDoctorStatusPath(".github/workflows/all-branch.yml"), true);
     const allowed = [
       "remix/app/components/Feed/PostCard.tsx",
       "README.md",
@@ -761,7 +778,7 @@ function doctorCommitMode(round) {
     const status = entry.slice(0, 2);
     const path = entry.slice(3);
     index += status.startsWith("R") || status.startsWith("C") ? 2 : 1;
-    if (!isForbiddenDoctorPath(path)) continue;
+    if (!shouldRevertDoctorStatusPath(path)) continue;
     if (status === "??") rmSync(path, { recursive: true, force: true });
     else tryGit("checkout", "HEAD", "--", path);
     reverted.push(path);
