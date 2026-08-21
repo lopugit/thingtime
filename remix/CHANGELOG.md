@@ -30,6 +30,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   environment cannot move the stable signed-in S3 staging origin away from
   the current integration branch. — Codex (AI), 2026-08-21
 
+- **Stable develop alias advances only to an exact native develop build**: the
+  protected controller fences the current GitHub `develop` SHA, Vercel project,
+  repository, custom environment, native non-PR Git source, READY state, and
+  post-assignment domain binding before moving `dev.thingtime.com`. Merged PRs
+  wait boundedly for their build, while scheduled reconciliation provides an
+  idempotent recovery path. — Codex (AI), 2026-08-21
+
 - **PR #321 legacy detected-type backfill preserves media annotations**:
   re-detecting a pre-#319 opaque attachment now changes only its server-owned
   type fields and retains #312's owner-authored title/description exactly;
