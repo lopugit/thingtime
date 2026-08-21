@@ -13,7 +13,7 @@ import {
 	multipartPartRange,
 	normalizePublicAttachment
 } from './attachmentUiCore';
-import type { AttachmentUploadOptions, ComposerAttachmentUpload, SignedUploadPart } from './attachmentTypes';
+import type { AttachmentUploadOptions, ComposerAttachmentUpload, PublicAttachment, SignedUploadPart } from './attachmentTypes';
 import { registerAttachmentDraftCleanup } from './attachmentDraftCleanup';
 
 const MAX_CONCURRENT_FILES = 3;
@@ -427,8 +427,33 @@ export const useAttachmentUploads = (
 		[cleanupUpload, onCleanupDeferred, onCleanupError]
 	);
 
+	// Move one upload to another upload's position (the snapshot's attachmentIds
+	// order follows this array, so this IS the order the server will store).
+	const reorder = React.useCallback((sourceLocalId: string, targetLocalId: string) => {
+		if (sourceLocalId === targetLocalId) return;
+		const current = uploadsRef.current;
+		const from = current.findIndex((upload) => upload.localId === sourceLocalId);
+		const to = current.findIndex((upload) => upload.localId === targetLocalId);
+		if (from < 0 || to < 0 || from === to) return;
+		const next = [...current];
+		const [moved] = next.splice(from, 1);
+		next.splice(to, 0, moved);
+		uploadsRef.current = next;
+		setUploads(next);
+	}, []);
+
 	const markCommitted = React.useCallback((attachmentIds: string[]) => {
 		for (const id of attachmentIds) committedAttachmentIdsRef.current.add(id);
+	}, []);
+
+	// Reflect an owner annotate (title/description) the popover already
+	// persisted server-side onto the matching READY upload's projection.
+	const updateAttachment = React.useCallback((localId: string, attachment: PublicAttachment) => {
+		setUploads((current) =>
+			current.map((upload) =>
+				upload.localId === localId && upload.status === 'ready' && upload.attachment?.id === attachment.id ? { ...upload, attachment } : upload
+			)
+		);
 	}, []);
 
 	const flushDraftsBeforeSessionChange = React.useCallback(async () => {
@@ -507,7 +532,9 @@ export const useAttachmentUploads = (
 		replaceFiles,
 		retry,
 		remove,
+		reorder,
 		markCommitted,
+		updateAttachment,
 		snapshot
 	};
 };
