@@ -21,6 +21,9 @@ export type PublicAttachment = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	// stamped true by the server moderation pipeline; media renders blurred
+	// behind a "Show Anyway" consent click
+	nsfw?: boolean;
 };
 
 export type AttachmentUploadStatus = 'queued' | 'preparing' | 'uploading' | 'finalizing' | 'ready' | 'error';
