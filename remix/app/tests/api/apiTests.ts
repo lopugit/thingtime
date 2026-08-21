@@ -900,19 +900,19 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
-    id: 'things-data-reserved-crystal-root',
-    name: 'Data crystals reject reserved root keys',
+    id: 'things-data-relationship-names-open',
+    name: 'Data crystals may carry relationship key names',
     description:
-      'A free-form data thing cannot claim a crystal root key backing the kind-blind unique indexes (followKey & friends) — that would squat another user\'s follow/membership/DM/invite/emoji slot. Rejected 400 with a session, 401 without; never persisted.',
+      'Relationship dedupe rides the server-only root uniqueKeys namespace, so a data thing carrying followKey (or memberKey, dmKey, …) at its crystal root is ordinary user data: it enters no unique index, squats nothing, and saves normally (401 anonymous).',
     group: 'things',
     method: 'POST',
     path: '/api/v1/things',
     mutates: true,
-    body: { thingtime: ['data'], crystal: { followKey: 'squatter:victim' } },
+    body: { thingtime: ['data'], crystal: { followKey: 'just:data', memberKey: 'mine', note: 'relationship names are not reserved' }, visibility: 'private' },
     expect: expectJson(
-      [400, 401],
-      (body) => body?.ok === false && typeof body?.error === 'string',
-      'Reserved crystal root key was rejected, never persisted.'
+      [200, 401],
+      (body) => (body?.ok === true && (body?.thing?.id || body?.post?.id)) || (body?.ok === false && typeof body?.error === 'string'),
+      'Relationship names saved as ordinary data (or 401 anonymous).'
     )
   },
   {
