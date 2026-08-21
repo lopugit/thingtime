@@ -167,6 +167,25 @@ export function shouldRevertDoctorStatusPath(path) {
   return isForbiddenDoctorPath(p);
 }
 
+// Keep the push handoff executable, not merely documented. GitHub only runs
+// a workflow for events declared in its top-level `on` block; the handoff job
+// is unreachable if that trigger drifts away.
+export function assertAllBranchWorkflowContract(workflowText) {
+  const text = String(workflowText ?? "").replaceAll("\r\n", "\n");
+  const triggerBlock = text.split("\npermissions:", 1)[0];
+  assert.match(
+    triggerBlock,
+    /\non:\n(?:[ \t].*\n)*?  push:\n    branches: \[github-actions\]\n/,
+    "all-branch workflow must trigger on pushes to github-actions"
+  );
+  assert.match(text, /\n  handoff:\n[\s\S]*?github\.event_name == 'push'/, "push events must enter the handoff job");
+  assert.match(
+    text,
+    /\n  rebuild:\n[\s\S]*?github\.event_name != 'push'/,
+    "push events must stay out of the unsupported rebuild/doctor job"
+  );
+}
+
 const readState = () => {
   try {
     return JSON.parse(readFileSync(STATE_FILE, "utf8"));
@@ -495,6 +514,13 @@ function selfTest() {
       "AI_ALL.md",
     ];
     for (const path of allowed) assert.equal(isForbiddenDoctorPath(path), false, `${path} must be editable`);
+  }
+
+  // The action rejects push events, so the push listener must remain wired to
+  // the supported workflow_dispatch handoff path.
+  {
+    const workflow = readFileSync(new URL("../workflows/all-branch.yml", import.meta.url), "utf8");
+    assertAllBranchWorkflowContract(workflow);
   }
 }
 
