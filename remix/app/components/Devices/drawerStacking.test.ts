@@ -15,6 +15,10 @@ test('device drawer controls remain interactive inside the Electron drag band', 
 
 	assert.match(source, /aria-label="Close device details"/u);
 	assert.match(source, /aria-label="Resize device details panel"/u);
+	assert.match(source, /left=\{0\}/u);
+	assert.match(source, /title="Drag this edge to resize device details"/u);
+	assert.match(source, /<GripVertical size=\{13\}/u);
+	assert.doesNotMatch(source, /left=\{-2\}/u);
 	assert.match(source, /sx=\{\{ WebkitAppRegion: 'no-drag' \}\}/u);
 	assert.match(source, /aria-expanded=\{expanded\}/u);
 	assert.match(source, /setExpanded\(\(current\) => !current\)/u);

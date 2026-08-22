@@ -22,11 +22,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Interactive, resizable device details drawer**: the close control and panel
   surface are now explicit Electron `no-drag` regions, so the 44px X remains
   clickable even where the native title-bar drag band crosses the drawer.
-  Desktop users can drag the drawer's left edge between bounded viewport-safe
-  widths (or use arrow keys), while Node, observed state, applications,
-  connectors, screen, approvals, and command activity can each be collapsed
-  independently. Mobile keeps the existing full-width drawer. — Codex (AI),
-  2026-08-22
+  Desktop users now get an always-visible grip and a generous 24px hit area
+  wholly inside the drawer's left edge, which can be dragged between bounded
+  viewport-safe widths (or adjusted with arrow keys). Node, observed state,
+  applications, connectors, screen, approvals, and command activity can each
+  be collapsed independently. Mobile keeps the existing full-width drawer. —
+  Codex (AI), 2026-08-22
 
 - **Paired-node optimistic status, clickable device drawers, offline deep-link
   reloads, and launch restart**: background node checks now preserve the last

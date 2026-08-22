@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 
 import { Box, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, Text } from '@chakra-ui/react';
-import { ChevronDown, CircleAlert, LockKeyhole, WifiOff } from 'lucide-react';
+import { ChevronDown, CircleAlert, GripVertical, LockKeyhole, WifiOff } from 'lucide-react';
 
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 
@@ -244,7 +244,7 @@ export const DeviceDetailsDrawer = memo(
 						bottom={0}
 						cursor="ew-resize"
 						display={{ base: 'none', md: 'block' }}
-						left={-2}
+						left={0}
 						onDoubleClick={() => setDrawerWidth(clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth))}
 						onKeyDown={resizeWithKeyboard}
 						onPointerCancel={finishResize}
@@ -256,24 +256,46 @@ export const DeviceDetailsDrawer = memo(
 						tabIndex={0}
 						top={0}
 						touchAction="none"
-						width={4}
+						title="Drag this edge to resize device details"
+						width={6}
 						zIndex={3}
 						sx={{ WebkitAppRegion: 'no-drag' }}
-						_after={{
+						_before={{
 							background: resizing ? 'var(--tt-accent, #ec4899)' : 'var(--tt-border-strong, #d4d4d8)',
 							borderRadius: '999px',
-							bottom: 10,
+							bottom: 0,
 							content: '""',
-							left: '7px',
-							opacity: resizing ? 1 : 0,
+							left: 0,
+							opacity: resizing ? 1 : 0.5,
 							position: 'absolute',
-							top: 10,
-							transition: 'opacity 120ms ease',
+							top: 0,
+							transition: 'background 120ms ease, opacity 120ms ease',
 							width: '2px'
 						}}
-						_hover={{ _after: { opacity: 1 } }}
-						_focusVisible={{ _after: { opacity: 1 } }}
-					/>
+						_hover={{ _before: { opacity: 1 } }}
+						_focusVisible={{ boxShadow: 'inset 0 0 0 2px var(--tt-accent, #ec4899)', _before: { opacity: 1 } }}
+					>
+						<Flex
+							alignItems="center"
+							aria-hidden
+							background="var(--tt-card, #ffffff)"
+							border="1px solid var(--tt-border-strong, #d4d4d8)"
+							borderRadius="999px"
+							boxShadow="0 2px 10px rgba(23, 23, 28, 0.14)"
+							color={resizing ? 'var(--tt-accent, #ec4899)' : 'var(--tt-muted, #71717a)'}
+							height="64px"
+							justifyContent="center"
+							left="3px"
+							pointerEvents="none"
+							position="absolute"
+							top="50%"
+							transform="translateY(-50%)"
+							transition="border-color 120ms ease, color 120ms ease, box-shadow 120ms ease"
+							width="16px"
+						>
+							<GripVertical size={13} strokeWidth={2.25} />
+						</Flex>
+					</Box>
 					<DrawerCloseButton
 						aria-label="Close device details"
 						height={11}

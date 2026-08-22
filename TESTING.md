@@ -2136,9 +2136,10 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       scroll, and non-destructive drawer controls remain clickable at desktop
       and 390 CSS px, with no invisible full-page interception.
 - [ ] In the exact installed Electron app, open that device drawer and click
-      its 44px X while it overlaps the native title-bar band. Reopen it, drag
-      the left edge narrower and wider until both bounds engage, then focus the
-      separator and use Left/Right (Home resets). Collapse and reopen Node,
+      its 44px X while it overlaps the native title-bar band. Reopen it and
+      confirm the left edge has an always-visible centred grip with a forgiving
+      in-panel hover target; drag that grip narrower and wider until both bounds
+      engage, then focus the separator and use Left/Right (Home resets). Collapse and reopen Node,
       observed state, applications, connectors, screen, approvals, and command
       activity independently; no section toggle may close the drawer or block
       another control. At 390 CSS px the resize edge is absent, the drawer

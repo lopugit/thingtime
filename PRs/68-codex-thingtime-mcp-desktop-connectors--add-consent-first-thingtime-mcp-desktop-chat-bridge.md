@@ -495,10 +495,12 @@ an offline database or offline conflict resolution layer.
 - The device drawer surface, its enlarged 44px close control, resize separator,
   and disclosure buttons are explicit Electron `no-drag` regions. This keeps
   them interactive even when the portal overlaps the native title-bar drag
-  band. The desktop drawer now has a pointer-captured left resize edge bounded
-  to 420–900px and the available viewport, keyboard resizing, and a
-  double-click reset. Mobile remains full width and does not expose a resize
-  handle.
+  band. After installed-app feedback showed that the original half-outside,
+  hover-only edge was too difficult to discover and hit, the desktop drawer now
+  keeps a 24px pointer-captured resize target wholly inside the panel and shows
+  a persistent centred grip. It remains bounded to 420–900px and the available
+  viewport, supports keyboard resizing and a double-click reset, and leaves
+  mobile full width without a resize handle.
 - Node, observed state, applications, connectors, screen, approvals, and
   command activity are independently accessible disclosure sections. Each
   control exposes its current expanded state and associated panel without
@@ -508,7 +510,10 @@ an offline database or offline conflict resolution layer.
   pointer click on **Close device details** dismissed it. After reopening, all
   seven sections collapsed and reopened independently. Real left-edge drags
   changed the accessible drawer width from 560px to 432px and then to 573px;
-  double-click restored 560px. No device mutation was invoked.
+  double-click restored 560px. After the visible-grip follow-up, the exact
+  rebuilt installed app exposed the persistent grip and 24px in-panel target;
+  real drags changed its splitter from 560px to 435px and then to 703px, and a
+  double-click again restored 560px. No device mutation was invoked.
 - Final focused validation is devices `48/48`, Electron `56/56`, and the
   typecheck ratchet at `136` errors versus its `143` baseline. The canonical
   build and installed copy both pass deep/strict code-signing verification with
