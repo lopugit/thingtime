@@ -43,6 +43,17 @@ final class WireCodecTests: XCTestCase {
         }
     }
 
+	func testXPCPresenceTimeoutsFinishBeforeTheServerPairingChallengeExpires() {
+		XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.confirmationTimeoutSeconds(for: "pairing.claim"), 540)
+		XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.confirmationTimeoutSeconds(for: "pairing.resume"), 540)
+		XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.bridgeResponseTimeoutSeconds(for: "pairing.claim"), 555)
+		XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.confirmationTimeoutSeconds(for: "pairing.unpair"), 120)
+		XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.confirmationTimeoutSeconds(for: "permissions.request"), 120)
+		XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.bridgeResponseTimeoutSeconds(for: "permissions.request"), 135)
+		XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.bridgeResponseTimeoutSeconds(for: "node.status"), 15)
+		XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.confirmationTimeoutSeconds(for: "action.execute"), 0)
+	}
+
     func testConnectorNDJSONCodec() throws {
         let command = ConnectorCommand(id: "c1", operation: "chat.send", payload: .object(["text": .string("hi")]))
         let encoded = try ConnectorWireCodec.encode(command)

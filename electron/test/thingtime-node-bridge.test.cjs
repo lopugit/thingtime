@@ -9,6 +9,7 @@ const test = require('node:test');
 const {
 	buildLaunchAgentPlist,
 	ensureLocalProjectRegistry,
+	nodeRequestTimeoutMs,
 	normalizeNodeStatus,
 	parseCodeSignatureDetails,
 	safeConnectorEnvironment,
@@ -327,8 +328,12 @@ test('presence-gated pairing and permission requests allow bounded human confirm
 	const fixture = await makeSignedNodeFixture();
 	try {
 		await fixture.integration.request('node.status');
+		await fixture.integration.request('pairing.claim', { pairingSecret: 'pair-secret' }, 'pair-1');
+		await fixture.integration.request('pairing.resume', {}, 'pair-resume-1');
+		await fixture.integration.request('pairing.unpair', {}, 'unpair-1');
 		await fixture.integration.request('permissions.request', { kind: 'accessibility' }, 'permission-1');
-		assert.deepEqual(fixture.state.bridgeTimeouts, [17_000, 127_000]);
+		assert.deepEqual(fixture.state.bridgeTimeouts, [17_000, 562_000, 562_000, 142_000, 142_000]);
+		assert.equal(nodeRequestTimeoutMs('node.status'), 17_000);
 	} finally {
 		await rm(fixture.root, { recursive: true, force: true });
 	}

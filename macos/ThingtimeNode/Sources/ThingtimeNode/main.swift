@@ -60,11 +60,18 @@ private final class LocalPairingPresenceGate {
     static let shared = LocalPairingPresenceGate()
 
     private var presenting = false
+	private weak var activeAlert: NSAlert?
+	private var timeoutTimer: Timer?
 
     func confirm(method: String) -> Bool {
         guard !presenting else { return false }
         presenting = true
-        defer { presenting = false }
+		defer {
+			timeoutTimer?.invalidate()
+			timeoutTimer = nil
+			activeAlert = nil
+			presenting = false
+		}
 
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -78,9 +85,26 @@ private final class LocalPairingPresenceGate {
         alert.informativeText = "Only continue if you just requested this action in the Thingtime desktop app."
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Cancel")
+		activeAlert = alert
+		let timeout = ThingtimeNodeXPCRequestPolicy.confirmationTimeoutSeconds(for: method)
+		if timeout > 0 {
+			timeoutTimer = Timer.scheduledTimer(
+				timeInterval: timeout,
+				target: self,
+				selector: #selector(expireConfirmation(_:)),
+				userInfo: nil,
+				repeats: false
+			)
+		}
         NSApp.activate(ignoringOtherApps: true)
         return alert.runModal() == .alertFirstButtonReturn
     }
+
+	@objc private func expireConfirmation(_ timer: Timer) {
+		guard presenting, timer === timeoutTimer else { return }
+		NSApp.abortModal()
+		activeAlert?.window.orderOut(nil)
+	}
 }
 
 private struct PeerSignatureValidator {

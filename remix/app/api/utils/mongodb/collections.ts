@@ -411,13 +411,35 @@ const LEGACY_DEVICE_TTL_INDEXES = [
 	'things_device_approval_ttl'
 ] as const;
 
+// Indexes installed by superseded Things-era implementations. None of these
+// names is part of the current index plan: their query paths are now served by
+// the general thingtime/owner indexes, protected uniqueKeys, or migrated v2
+// fields. Prune them before creating anything so a database already sitting at
+// MongoDB's 64-index ceiling can still converge instead of failing every
+// bootstrap and blocking unrelated schema migrations.
+export const RETIRED_THINGS_INDEXES = [
+	'notification_unread',
+	'shareOfId_1',
+	'sourceIds_1_createdAt_-1_shareId_1',
+	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1',
+	'things_passkey_link_key_unique'
+] as const;
+
+// Home-only: a custom data endpoint belongs to the user and may legitimately
+// use one of these historical names for its own index. Never remove an index
+// from that foreign database merely because Thingtime retired its home copy.
+export const pruneRetiredHomeThingsIndexes = async (db: any) => {
+	const col = taggedCollection(thingsCollection(db), 'things');
+	for (const name of RETIRED_THINGS_INDEXES) await dropIndexRetrying(col, name);
+};
+
 // Pre-release mesh builds used one unique/TTL index per protected device kind
 // and could take `things_v2` to MongoDB's hard 64-index ceiling. Converge those
 // rows and indexes before the normal parallel ensure: first backfill the shared
 // fields, drop only the non-unique legacy TTL indexes to make room, create the
 // replacement constraints, then remove the redundant unique indexes. This
 // preserves uniqueness throughout upgrades and leaves future index headroom.
-const migrateDeviceIndexLayout = async (db: any) => {
+export const migrateDeviceIndexLayout = async (db: any) => {
 	const raw = thingsCollection(db);
 	const col = taggedCollection(raw, 'things');
 	const keyFields = [
@@ -516,7 +538,7 @@ const migrateDeviceIndexLayout = async (db: any) => {
 // things_app_data_unique (partial-filter equality on the multikey thingtime
 // array verifiedly includes array-contains matches on MongoDB 8.0).
 
-const createThingsDataIndexes = (db: any): Promise<any>[] => {
+export const createThingsDataIndexes = (db: any): Promise<any>[] => {
   // Tagged so a createIndex failure names the exact `things.<index>` that
   // broke, whether this runs on the home db or a custom endpoint.
   const col = taggedCollection(thingsCollection(db), 'things');
@@ -918,6 +940,10 @@ export const ensureIndexes = async () => {
       // carries a custom endpoint override (e.g. via enforceRateLimit), and
       // the control-plane index set must never land on an override DB.
       const db = await getHomeThingtimeDb();
+			// Capacity recovery must happen before either the shared device indexes
+			// or the normal parallel ensure. On a full collection, trying to create
+			// first can never reach the later cleanup.
+			await pruneRetiredHomeThingsIndexes(db);
 			await migrateDeviceIndexLayout(db);
       // indexes land on the current-generation physical collections; createIndex
       // failures are tagged with `<logical>.<index name>` (via taggedCollection)

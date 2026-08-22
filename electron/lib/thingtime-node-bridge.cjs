@@ -15,7 +15,8 @@ const MANAGED_PLIST_MARKER = 'Managed by Thingtime Electron';
 const MAX_FRAME_BYTES = 1_048_576;
 const MAX_ERROR_BYTES = 16_384;
 const BRIDGE_TIMEOUT_MS = 17_000;
-const PRESENCE_BRIDGE_TIMEOUT_MS = 127_000;
+const PRESENCE_BRIDGE_TIMEOUT_MS = 142_000;
+const PAIRING_BRIDGE_TIMEOUT_MS = 562_000;
 const MAX_COMMAND_ID_BYTES = 512;
 const MAX_LOCAL_PROJECTS = 128;
 const MAX_PROJECT_PATH_BYTES = 4_096;
@@ -119,6 +120,12 @@ function nodeRequest(method, parameters = {}, suppliedCommandId) {
 	}
 	boundedJson(request, 'node request');
 	return request;
+}
+
+function nodeRequestTimeoutMs(method) {
+	if (method === 'pairing.claim' || method === 'pairing.resume') return PAIRING_BRIDGE_TIMEOUT_MS;
+	if (method === 'pairing.unpair' || method === 'permissions.request') return PRESENCE_BRIDGE_TIMEOUT_MS;
+	return BRIDGE_TIMEOUT_MS;
 }
 
 function validateConnectorRequest(value) {
@@ -816,9 +823,7 @@ class ThingtimeNodeIntegration {
 		const response = await this.runner(paths.bridgeExecutable, [], {
 			input: encoded,
 			maximumOutputBytes: MAX_FRAME_BYTES,
-			timeoutMs: ['pairing.claim', 'pairing.resume', 'pairing.unpair', 'permissions.request'].includes(method)
-				? PRESENCE_BRIDGE_TIMEOUT_MS
-				: BRIDGE_TIMEOUT_MS
+			timeoutMs: nodeRequestTimeoutMs(method)
 		});
 		if (response.status !== 0) {
 			throw new ThingtimeNodeBridgeError('node_unavailable', 'Thingtime Node bridge exited unexpectedly.');
@@ -1074,6 +1079,7 @@ module.exports = {
 	buildLaunchAgentPlist,
 	ensureLocalProjectRegistry,
 	nodeRequest,
+	nodeRequestTimeoutMs,
 	normalizeNodeStatus,
 	normalizePermissions,
 	parseCodeSignatureDetails,

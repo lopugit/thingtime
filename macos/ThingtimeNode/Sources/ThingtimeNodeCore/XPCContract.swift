@@ -17,6 +17,10 @@ public enum ThingtimeNodeXPCRequestAccess: Equatable, Sendable {
 }
 
 public enum ThingtimeNodeXPCRequestPolicy {
+	public static let pairingConfirmationTimeoutSeconds: TimeInterval = 9 * 60
+	public static let presenceConfirmationTimeoutSeconds: TimeInterval = 2 * 60
+	private static let bridgeResponseGraceSeconds: TimeInterval = 15
+
     private static let onboardingReads: Set<String> = [
         "node.status",
         "permissions.preflight",
@@ -36,6 +40,23 @@ public enum ThingtimeNodeXPCRequestPolicy {
         if permissionMutations.contains(method) { return .permissionMutation }
         return .forbidden
     }
+
+	public static func confirmationTimeoutSeconds(for method: String) -> TimeInterval {
+		switch method {
+		case "pairing.claim", "pairing.resume":
+			return pairingConfirmationTimeoutSeconds
+		case "pairing.unpair", "permissions.request":
+			return presenceConfirmationTimeoutSeconds
+		default:
+			return 0
+		}
+	}
+
+	public static func bridgeResponseTimeoutSeconds(for method: String) -> TimeInterval {
+		let confirmation = confirmationTimeoutSeconds(for: method)
+		if confirmation > 0 { return confirmation + bridgeResponseGraceSeconds }
+		return access(for: method) == .onboardingRead ? 15 : bridgeResponseGraceSeconds
+	}
 }
 
 public enum NodeWireCodec {
