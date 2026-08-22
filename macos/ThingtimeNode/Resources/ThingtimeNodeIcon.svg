@@ -21,25 +21,25 @@
       <stop offset="0.44" stop-color="#ff3f8f"/>
       <stop offset="1" stop-color="#ef3854"/>
     </linearGradient>
-    <linearGradient id="greenToHub" gradientUnits="userSpaceOnUse" x1="208" y1="512" x2="474" y2="512">
+    <linearGradient id="greenToHub" gradientUnits="userSpaceOnUse" x1="217" y1="512" x2="498" y2="512">
       <stop offset="0" stop-color="#8fd50b"/>
       <stop offset="0.42" stop-color="#a9d31b"/>
       <stop offset="0.7" stop-color="#ee9b63"/>
       <stop offset="1" stop-color="#ff477f"/>
     </linearGradient>
-    <linearGradient id="hubToGreen" gradientUnits="userSpaceOnUse" x1="550" y1="512" x2="816" y2="512">
+    <linearGradient id="hubToGreen" gradientUnits="userSpaceOnUse" x1="526" y1="512" x2="807" y2="512">
       <stop offset="0" stop-color="#ff477f"/>
       <stop offset="0.3" stop-color="#ee9b63"/>
       <stop offset="0.58" stop-color="#a9d31b"/>
       <stop offset="1" stop-color="#8fd50b"/>
     </linearGradient>
-    <linearGradient id="greenToHubVertical" gradientUnits="userSpaceOnUse" x1="512" y1="208" x2="512" y2="474">
+    <linearGradient id="greenToHubVertical" gradientUnits="userSpaceOnUse" x1="512" y1="217" x2="512" y2="498">
       <stop offset="0" stop-color="#8fd50b"/>
       <stop offset="0.42" stop-color="#a9d31b"/>
       <stop offset="0.7" stop-color="#ee9b63"/>
       <stop offset="1" stop-color="#ff477f"/>
     </linearGradient>
-    <linearGradient id="hubToBrown" gradientUnits="userSpaceOnUse" x1="512" y1="550" x2="512" y2="816">
+    <linearGradient id="hubToBrown" gradientUnits="userSpaceOnUse" x1="512" y1="526" x2="512" y2="807">
       <stop offset="0" stop-color="#ff477f"/>
       <stop offset="0.36" stop-color="#ed7664"/>
       <stop offset="0.68" stop-color="#b85e42"/>
@@ -62,13 +62,13 @@
   <path d="M288 95 H736 C834 95 913 174 913 272" fill="none" stroke="#ffffff" stroke-width="8" opacity="0.72"/>
 
   <!-- Connector shadows keep the thin joins legible without turning them into rails. -->
-  <path d="M208 512 H474 M550 512 H816 M512 208 V474 M512 550 V816" stroke="#7f7f7f" stroke-width="10" opacity="0.13" filter="url(#nodeShadow)"/>
+  <path d="M217 512 H498 M526 512 H807 M512 217 V498 M512 526 V807" stroke="#7f7f7f" stroke-width="10" opacity="0.13" filter="url(#nodeShadow)"/>
 
   <!-- Four colour-transition stems, kept behind all primary and relay squares. -->
-  <path d="M208 512 H474" stroke="url(#greenToHub)" stroke-width="7"/>
-  <path d="M550 512 H816" stroke="url(#hubToGreen)" stroke-width="7"/>
-  <path d="M512 208 V474" stroke="url(#greenToHubVertical)" stroke-width="7"/>
-  <path d="M512 550 V816" stroke="url(#hubToBrown)" stroke-width="7"/>
+  <path d="M217 512 H498" stroke="url(#greenToHub)" stroke-width="7"/>
+  <path d="M526 512 H807" stroke="url(#hubToGreen)" stroke-width="7"/>
+  <path d="M512 217 V498" stroke="url(#greenToHubVertical)" stroke-width="7"/>
+  <path d="M512 526 V807" stroke="url(#hubToBrown)" stroke-width="7"/>
 
   <!-- Tiny relay pixels make the mesh relationship visible while preserving the five-node silhouette. -->
   <g stroke="#ffffff" stroke-width="4">
@@ -84,20 +84,20 @@
 
   <!-- Soft shadows and one-pixel highlights give the primary blocks native-app depth. -->
   <g fill="#555555" opacity="0.18" filter="url(#nodeShadow)">
-    <rect x="488" y="157" width="54" height="54"/>
-    <rect x="157" y="488" width="54" height="54"/>
-    <rect x="819" y="488" width="54" height="54"/>
-    <rect x="488" y="819" width="54" height="54"/>
+    <rect x="479" y="148" width="72" height="72"/>
+    <rect x="148" y="479" width="72" height="72"/>
+    <rect x="810" y="479" width="72" height="72"/>
+    <rect x="479" y="810" width="72" height="72"/>
   </g>
-  <rect x="485" y="154" width="54" height="54" fill="url(#greenNode)" stroke="#8ace07" stroke-width="2"/>
-  <rect x="154" y="485" width="54" height="54" fill="url(#greenNode)" stroke="#8ace07" stroke-width="2"/>
-  <rect x="816" y="485" width="54" height="54" fill="url(#greenNode)" stroke="#8ace07" stroke-width="2"/>
-  <rect x="485" y="816" width="54" height="54" fill="url(#brownNode)" stroke="#8d4932" stroke-width="2"/>
-  <path d="M491 160 H533 V165 H491 Z M160 491 H202 V496 H160 Z M822 491 H864 V496 H822 Z M491 822 H533 V827 H491 Z" fill="#ffffff" opacity="0.22"/>
+  <rect x="476" y="145" width="72" height="72" fill="url(#greenNode)" stroke="#8ace07" stroke-width="2"/>
+  <rect x="145" y="476" width="72" height="72" fill="url(#greenNode)" stroke="#8ace07" stroke-width="2"/>
+  <rect x="807" y="476" width="72" height="72" fill="url(#greenNode)" stroke="#8ace07" stroke-width="2"/>
+  <rect x="476" y="807" width="72" height="72" fill="url(#brownNode)" stroke="#8d4932" stroke-width="2"/>
+  <path d="M482 151 H542 V157 H482 Z M151 482 H211 V488 H151 Z M813 482 H873 V488 H813 Z M482 813 H542 V819 H482 Z" fill="#ffffff" opacity="0.22"/>
 
   <!-- Active center node. -->
-  <rect x="474" y="474" width="76" height="76" fill="#ff3f8f" opacity="0.2" filter="url(#hubGlow)"/>
-  <rect x="472" y="472" width="80" height="80" fill="#6d1636" opacity="0.22" filter="url(#nodeShadow)"/>
-  <rect x="474" y="474" width="76" height="76" fill="url(#hub)" stroke="#ffffff" stroke-width="5"/>
-  <path d="M482 482 H542 V489 H482 Z" fill="#ffffff" opacity="0.28"/>
+  <rect x="494" y="494" width="36" height="36" fill="#ff3f8f" opacity="0.16" filter="url(#hubGlow)"/>
+  <rect x="496" y="496" width="32" height="32" fill="#6d1636" opacity="0.2" filter="url(#nodeShadow)"/>
+  <rect x="498" y="498" width="28" height="28" fill="url(#hub)" stroke="#ffffff" stroke-width="3"/>
+  <path d="M502 502 H522 V505 H502 Z" fill="#ffffff" opacity="0.28"/>
 </svg>
