@@ -52,6 +52,20 @@ const emojiExtension: CommanderExtension = {
   ],
 };
 
+const calculatorExtension: CommanderExtension = {
+  id: 'builtin:calculator',
+  name: 'calculator',
+  title: 'Calculator',
+  description: 'Evaluate arithmetic expressions automatically as you type in Commander.',
+  version: '0.1.0',
+  author: 'Thingtime',
+  icon: 'calculator',
+  source: 'builtin',
+  enabled: true,
+  compatibility: 'native',
+  commands: [],
+};
+
 const macosSystemExtension: CommanderExtension = {
   id: 'builtin:macos-system',
   name: 'macos-system',
@@ -173,18 +187,39 @@ describe('Your Raycast extensions', () => {
   });
 
   it('lists Commander-native equivalents under Bundled Commands', () => {
-    renderExtensions([emojiExtension, macosSystemExtension]);
+    renderExtensions([emojiExtension, calculatorExtension, macosSystemExtension]);
 
     fireEvent.click(screen.getByRole('button', { name: 'Bundled' }));
 
     expect(screen.getByText('Bundled Commands')).toBeVisible();
     expect(screen.getByText('Emoji & Symbols')).toBeVisible();
+    expect(screen.getByText('Calculator')).toBeVisible();
     expect(screen.queryByText('macOS System')).not.toBeInTheDocument();
     expect(screen.getByText('1 bundled command · by Thingtime')).toBeVisible();
-    expect(screen.getByText('Built in')).toBeVisible();
+    expect(screen.getByText(/Automatic result provider/)).toBeVisible();
+    expect(screen.getAllByText('Built in')).toHaveLength(2);
 
     fireEvent.change(screen.getByPlaceholderText('Search…'), { target: { value: 'emjoi' } });
     expect(screen.getByText('Emoji & Symbols')).toBeVisible();
+  });
+
+  it('configures the automatic calculator from its own bundled extension card', () => {
+    const { onChange } = renderExtensions([calculatorExtension]);
+    fireEvent.click(screen.getByRole('button', { name: 'Bundled' }));
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show automatic calculator results' }));
+    expect(onChange).toHaveBeenCalledWith({
+      ...DEFAULT_SETTINGS,
+      calculator: { ...DEFAULT_SETTINGS.calculator, enabled: false },
+    });
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Calculator maximum decimal places' }), {
+      target: { value: '6' },
+    });
+    expect(onChange).toHaveBeenCalledWith({
+      ...DEFAULT_SETTINGS,
+      calculator: { ...DEFAULT_SETTINGS.calculator, maxDecimalPlaces: 6 },
+    });
   });
 
   it('click-records and natively validates a per-command shortcut before saving it', async () => {

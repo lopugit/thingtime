@@ -22,6 +22,8 @@ export const INDEXING_MIN_CPU_PERCENT = 5;
 export const INDEXING_MAX_CPU_PERCENT = 100;
 export const INDEXING_MIN_MEMORY_MIB = 32;
 export const INDEXING_MAX_MEMORY_MIB = 131_072;
+export const CALCULATOR_MIN_DECIMAL_PLACES = 0;
+export const CALCULATOR_MAX_DECIMAL_PLACES = 14;
 
 const LEGACY_DEFAULT_INDEXING_GLOBS = [
   'Library/**',
@@ -46,7 +48,15 @@ export type Appearance = 'light' | 'dark' | 'system';
 export type WindowMode = 'default' | 'compact';
 export type TextSize = 'default' | 'large';
 export type SearchItemKind =
-  'builtin' | 'system' | 'application' | 'file' | 'directory' | 'extension' | 'command' | 'quicklink';
+  | 'builtin'
+  | 'calculator'
+  | 'system'
+  | 'application'
+  | 'file'
+  | 'directory'
+  | 'extension'
+  | 'command'
+  | 'quicklink';
 export type SearchCategory = 'applications' | 'commands' | 'files';
 export type EmojiDefaultAction = 'paste' | 'paste-and-copy' | 'copy' | 'copy-unicode';
 export type SettingsTab = 'general' | 'extensions' | 'search' | 'sync' | 'account' | 'advanced' | 'about';
@@ -74,6 +84,11 @@ export const DEFAULT_WINDOW_PINNING_SETTINGS: WindowPinningSettings = {
   defaultPinned: false,
   focusRecentOnCurrentDisplay: true,
   shortcut: 'Command+Shift+P',
+};
+
+export const DEFAULT_CALCULATOR_SETTINGS: CalculatorSettings = {
+  enabled: true,
+  maxDecimalPlaces: 10,
 };
 
 export const DEFAULT_INDEXING_SETTINGS: IndexingSettings = {
@@ -134,6 +149,7 @@ export function normalizeSearchPreferenceQuery(value: string): string {
 
 const SEARCH_ITEM_KINDS = new Set<SearchItemKind>([
   'builtin',
+  'calculator',
   'system',
   'application',
   'file',
@@ -459,6 +475,20 @@ export function normalizeEmojiDefaultAction(value: unknown): EmojiDefaultAction 
     : 'paste';
 }
 
+export function normalizeCalculatorSettings(value: unknown): CalculatorSettings {
+  const candidate =
+    value && typeof value === 'object' && !Array.isArray(value) ? (value as Partial<CalculatorSettings>) : {};
+  return {
+    enabled: typeof candidate.enabled === 'boolean' ? candidate.enabled : DEFAULT_CALCULATOR_SETTINGS.enabled,
+    maxDecimalPlaces: boundedInteger(
+      candidate.maxDecimalPlaces,
+      CALCULATOR_MIN_DECIMAL_PLACES,
+      CALCULATOR_MAX_DECIMAL_PLACES,
+      DEFAULT_CALCULATOR_SETTINGS.maxDecimalPlaces,
+    ),
+  };
+}
+
 export function normalizeIndexingSettings(value: unknown): IndexingSettings {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const candidate = source as Partial<IndexingSettings>;
@@ -585,6 +615,7 @@ export interface CommanderSettings {
   resultCategoryOrder: SearchCategory[];
   searchCache: SearchCacheSettings;
   emojiDefaultAction: EmojiDefaultAction;
+  calculator: CalculatorSettings;
   windowPinning: WindowPinningSettings;
   indexing: IndexingSettings;
   activeAccountId: string | null;
@@ -600,6 +631,11 @@ export interface SearchCacheSettings {
   directory: string | null;
   maxSizeBytes: number;
   ttlMinutes: number;
+}
+
+export interface CalculatorSettings {
+  enabled: boolean;
+  maxDecimalPlaces: number;
 }
 
 export interface SearchCacheStatus extends SearchCacheSettings {
@@ -784,7 +820,15 @@ export interface SearchItem {
   preferenceScore?: number;
   extensionId?: string;
   commandName?: string;
+  calculation?: CalculationResult;
   actions: CommanderAction[];
+}
+
+export interface CalculationResult {
+  expression: string;
+  result: string;
+  label: string;
+  resultWords?: string;
 }
 
 export interface SearchHit extends SearchItem {
@@ -837,6 +881,7 @@ export interface ExecuteResponse {
   nativeRequest?: Omit<NativeRequest, 'id'>;
   view?: CommanderView;
   notice?: string;
+  dismissLauncher?: boolean;
 }
 
 export interface NativePasteResult {
@@ -946,6 +991,7 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   resultCategoryOrder: [...SEARCH_CATEGORIES],
   searchCache: { ...DEFAULT_SEARCH_CACHE_SETTINGS },
   emojiDefaultAction: 'paste',
+  calculator: { ...DEFAULT_CALCULATOR_SETTINGS },
   windowPinning: { ...DEFAULT_WINDOW_PINNING_SETTINGS },
   indexing: {
     ...DEFAULT_INDEXING_SETTINGS,

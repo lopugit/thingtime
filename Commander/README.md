@@ -13,6 +13,8 @@ portable from day one.
   visible until live application, command, file, and folder matches arrive;
 - grouped Apps, Commands, and Files & Folders sections with draggable category priority, a modest default app boost,
   native file icons, compact `.app` badges, and learned/text relevance that can still overcome the preferred order;
+- an automatic, bounded expression evaluator that recognizes complete arithmetic directly in the root search field,
+  leads with a dedicated Calculator result, keeps ordinary results underneath, and copies the answer with Return;
 - automatic application-directory watching with five-minute reconciliation, configurable six-hour file/folder
   refresh, and built-in Index Now, Index Apps, Index Commands, Index Files, and Index Directories commands;
 - inherited `.gitignore`/Git excludes plus user-defined wildcard and regular-expression ignore rules, editable with
@@ -64,10 +66,12 @@ metadata equals working compatibility. The exact matrix and roadmap are in
 [`docs/RAYCAST_COMPATIBILITY.md`](docs/RAYCAST_COMPATIBILITY.md).
 
 Commander-owned equivalents of Raycast commands that have no importable extension package appear separately under
-**Extensions → Bundled**. The first is Search Emoji & Symbols, a Commander-native command inspired by Raycast's
-picker. Its searchable Unicode/CLDR catalog is powered by [Emojibase](https://emojibase.dev/) data under the MIT
-license, while its view, actions, recents, and native paste behavior are implemented by Commander. The complete
-attribution is bundled with every app build and tracked in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+**Extensions → Bundled**. Search Emoji & Symbols is a Commander-native command inspired by Raycast's picker. Its
+searchable Unicode/CLDR catalog is powered by [Emojibase](https://emojibase.dev/) data under the MIT license, while
+its view, actions, recents, and native paste behavior are implemented by Commander. Calculator is a separate bundled
+extension that safely parses arithmetic without JavaScript evaluation or a command prefix; its card controls
+automatic detection and maximum displayed decimal precision. The complete attribution is bundled with every app
+build and tracked in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Architecture
 

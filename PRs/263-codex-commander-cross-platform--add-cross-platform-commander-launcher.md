@@ -154,6 +154,12 @@ environment.
   trust is unavailable; it does not overstate third-party Raycast Grid support.
   The picker and its catalog are lazy-loaded, keeping the normal launcher entry
   chunk at about 242 KB instead of adding the full dataset to Command-Space.
+- A separate built-in Calculator extension now provides automatic root-search evaluation without a command prefix.
+  Its bounded tokenizer and parser never invoke JavaScript evaluation, shell commands, or network services; complete
+  arithmetic, percentages, powers, factorials, constants, and common numeric functions produce a dedicated leading
+  Calculator card while ordinary search continues underneath. Return copies the answer through the native bridge and
+  dismisses the launcher. Bundled settings control automatic detection and maximum decimal precision, with legacy
+  state migrated to safe defaults.
 - Starting a new query now clears the prior result set synchronously, closing a
   debounce race where an immediate Return could execute the previously rendered
   command before fresh search results arrived.
@@ -304,8 +310,8 @@ environment.
 
 ## Verification
 
-- Commander TypeScript: 124 tests passed across protocol (11), filesystem client
-  (3), compatibility (19), UI (56), and daemon (35) packages; typecheck,
+- Commander TypeScript: 134 tests passed across protocol (12), filesystem client
+  (3), compatibility (19), UI (59), and daemon (41) packages; typecheck,
   ESLint, Prettier, and package builds passed.
 - Rust: 55 tests passed across command search (23 unit + 5 JSONL) and filesystem
   indexing (26 unit + 1 JSONL); formatting and strict Clippy with warnings

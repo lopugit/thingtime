@@ -30,6 +30,10 @@
 - [ ] Verify populated search results render as Apps, Commands, and Files & Folders sections. App names omit the
       filename suffix while showing a compact `.app` badge. A very strong text/learned match may place a lower-priority
       section first instead of category preference forcing an irrelevant result above it.
+- [ ] Type `256*2` directly into the root search field. Verify Calculator appears first with `512`, Product, and
+      Five Hundred Twelve while ordinary search matches remain underneath. Return must copy `512`, close the floating
+      launcher, and preserve the calculation in History. Verify incomplete `256*`, bare `256`, and date-like
+      `22/08/2026` queries stay in ordinary search; also check parentheses, `100 + 10%`, `sqrt(81)`, and `5!`.
 
 - [ ] Global shortcut opens the launcher over the active application without moving focus elsewhere first.
 - [ ] The first visible frame contains rendered UI; there is no white, transparent, or stale flash.
@@ -131,6 +135,9 @@
 - [ ] Verify Installed contains the enabled built-in Commander extension with Close Commander, Close Commander Window, and Open Commander native commands.
 - [ ] Verify the macOS System built-in exposes its indexed destinations and per-command shortcut controls on macOS, while Windows/Linux bootstrap catalogs omit it.
 - [ ] Open Bundled and verify Emoji & Symbols appears separately from installed/sideloaded extensions with its built-in badge, Raycast-inspired description, Search Emoji & Symbols command count, and default Return-action control.
+- [ ] In Extensions → Bundled, verify Calculator has its own built-in card. Disable Automatic Results and confirm a
+      valid expression no longer creates a Calculator section; re-enable it, change maximum decimal places, relaunch,
+      and verify both the setting and formatted answer persist.
 - [ ] Import `Commander/extensions/raycast/`, run its no-view Open Commander command from Raycast after Commander has quit, and verify the installed app relaunches with a focused, empty query.
 
 ## Thingtime accounts and sync

@@ -213,6 +213,53 @@ describe('Launcher keyboard navigation', () => {
     expect(screen.getByRole('option', { name: /Notes/ })).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('renders an automatic calculation before ordinary results and copies the answer with Return', async () => {
+    const calculation: SearchHit = {
+      id: 'builtin:calculator:result',
+      title: '512',
+      subtitle: '256*2',
+      kind: 'calculator',
+      keywords: [],
+      icon: 'calculator',
+      favourite: false,
+      calculation: {
+        expression: '256*2',
+        result: '512',
+        label: 'Product',
+        resultWords: 'Five Hundred Twelve',
+      },
+      actions: [
+        { id: 'copy-result', title: 'Copy Answer', shortcut: '↵' },
+        { id: 'copy-expression', title: 'Copy Expression', shortcut: '⇧⌘C' },
+      ],
+      score: 1_000_000,
+      matchedRanges: [],
+    };
+    const commander = state({ query: '256*2', hits: [...hits, calculation], selectedIndex: 0 });
+    render(<Launcher state={commander} />);
+
+    expect(screen.getAllByRole('heading', { level: 3 })[0]).toHaveTextContent('Calculator');
+    const options = screen.getAllByRole('option');
+    expect(options[0]).toHaveClass('calculator-result', 'selected');
+    expect(options[0]).toHaveTextContent('256*2');
+    expect(options[0]).toHaveTextContent('512');
+    expect(options[0]).toHaveTextContent('Five Hundred Twelve');
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await waitFor(() =>
+      expect(commander.executeCommand).toHaveBeenCalledWith(
+        'builtin:calculator:result',
+        'copy-result',
+        '256*2',
+      ),
+    );
+    expect(commander.rememberRecentSearch).toHaveBeenCalledWith(
+      '256*2',
+      expect.objectContaining({ title: '512', kind: 'calculator', actionTitle: 'Copy Answer' }),
+    );
+  });
+
   it.each([
     ['Close Commander', 'close-commander'],
     ['Close Commander Window', 'close-commander-window'],

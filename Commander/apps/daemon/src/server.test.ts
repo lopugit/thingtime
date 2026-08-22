@@ -125,6 +125,14 @@ describe('Commander daemon HTTP trust boundaries', () => {
             ],
           },
           {
+            id: 'builtin:calculator',
+            name: 'calculator',
+            title: 'Calculator',
+            source: 'builtin',
+            compatibility: 'native',
+            commands: [],
+          },
+          {
             id: 'builtin:macos-system',
             name: 'macos-system',
             title: 'macOS System',
@@ -170,6 +178,41 @@ describe('Commander daemon HTTP trust boundaries', () => {
         subtitle: 'Commander Settings',
       });
 
+      const calculationSearch = await fetch(`${server.url}/api/search?q=${encodeURIComponent('256*2')}`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(calculationSearch.status).toBe(200);
+      const calculationResults = (await calculationSearch.json()) as { hits: unknown[] };
+      expect(calculationResults.hits[0]).toMatchObject({
+        id: 'builtin:calculator:result',
+        kind: 'calculator',
+        title: '512',
+        calculation: {
+          expression: '256*2',
+          result: '512',
+          label: 'Product',
+          resultWords: 'Five Hundred Twelve',
+        },
+        actions: [
+          expect.objectContaining({ id: 'copy-result', title: 'Copy Answer' }),
+          expect.objectContaining({ id: 'copy-expression', title: 'Copy Expression' }),
+        ],
+      });
+
+      const streamedCalculation = await fetch(
+        `${server.url}/api/search/stream?q=${encodeURIComponent('6*7')}`,
+        { headers: { 'x-commander-session': server.token } },
+      );
+      const calculationEvents = await streamEvents(streamedCalculation);
+      expect(calculationEvents[0]).toMatchObject({
+        phase: 'catalog',
+        complete: false,
+        hits: [expect.objectContaining({ kind: 'calculator', title: '42' })],
+      });
+      const finalCalculationEvent = calculationEvents.at(-1);
+      expect(finalCalculationEvent).toMatchObject({ complete: true });
+      expect(finalCalculationEvent?.hits[0]).toMatchObject({ kind: 'calculator', title: '42' });
+
       const extensionSettings = await fetch(`${server.url}/api/execute`, {
         method: 'POST',
         headers: {
@@ -197,6 +240,25 @@ describe('Commander daemon HTTP trust boundaries', () => {
           count: 1,
         }),
       ]);
+
+      const copyCalculation = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({
+          itemId: 'builtin:calculator:result',
+          actionId: 'copy-result',
+          query: '256*2',
+        }),
+      });
+      expect(copyCalculation.status).toBe(200);
+      expect(await copyCalculation.json()).toEqual({
+        ok: true,
+        nativeRequest: { method: 'clipboard.write', params: { text: '512' } },
+        dismissLauncher: true,
+      });
 
       const accountSettings = await fetch(`${server.url}/api/execute`, {
         method: 'POST',

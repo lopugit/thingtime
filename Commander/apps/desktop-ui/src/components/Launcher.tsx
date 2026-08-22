@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
   AppWindow,
   ArrowRight,
+  Calculator,
   Command,
   CornerDownLeft,
   Files,
@@ -34,8 +35,10 @@ type HistoryRow =
   | { type: 'query'; search: RecentSearch }
   | { type: 'command'; search: RecentSearch; command: RecentSearchCommand };
 
+type LauncherCategory = 'calculator' | SearchCategory;
+
 type SearchGroup = {
-  category: SearchCategory;
+  category: LauncherCategory;
   title: string;
   hits: SearchHit[];
   startIndex: number;
@@ -47,7 +50,8 @@ interface LauncherWindowState {
   pinningEnabled: boolean;
 }
 
-const categoryTitles: Record<SearchCategory, string> = {
+const categoryTitles: Record<LauncherCategory, string> = {
+  calculator: 'Calculator',
   applications: 'Apps',
   commands: 'Commands',
   files: 'Files & Folders',
@@ -73,7 +77,8 @@ function commandHistoryEntry(hit: SearchHit, actionId: string): RecentSearchComm
   };
 }
 
-function categoryForHit(hit: SearchHit): SearchCategory {
+function categoryForHit(hit: SearchHit): LauncherCategory {
+  if (hit.kind === 'calculator') return 'calculator';
   if (hit.kind === 'application') return 'applications';
   if (hit.kind === 'file' || hit.kind === 'directory') return 'files';
   return 'commands';
@@ -84,7 +89,8 @@ function groupedHits(
   order: readonly SearchCategory[],
   initialIndex: number,
 ): { groups: SearchGroup[]; flattened: SearchHit[] } {
-  const byCategory = new Map<SearchCategory, SearchHit[]>([
+  const byCategory = new Map<LauncherCategory, SearchHit[]>([
+    ['calculator', []],
     ['applications', []],
     ['commands', []],
     ['files', []],
@@ -92,11 +98,13 @@ function groupedHits(
   for (const hit of hits) byCategory.get(categoryForHit(hit))?.push(hit);
   const priority = new Map(order.map((category, index) => [category, index]));
   const populated = [...byCategory.entries()]
-    .filter((entry): entry is [SearchCategory, SearchHit[]] => entry[1].length > 0)
+    .filter((entry): entry is [LauncherCategory, SearchHit[]] => entry[1].length > 0)
     .sort(
       ([leftCategory, left], [rightCategory, right]) =>
+        Number(rightCategory === 'calculator') - Number(leftCategory === 'calculator') ||
         (right[0]?.score ?? 0) - (left[0]?.score ?? 0) ||
-        (priority.get(leftCategory) ?? 99) - (priority.get(rightCategory) ?? 99),
+        (leftCategory === 'calculator' ? -1 : (priority.get(leftCategory) ?? 99)) -
+          (rightCategory === 'calculator' ? -1 : (priority.get(rightCategory) ?? 99)),
     );
   let offset = initialIndex;
   const groups = populated.map(([category, categoryHits]) => {
@@ -226,7 +234,9 @@ export function Launcher({ state }: { state: CommanderState }) {
   }, [pinMenuOpen]);
 
   useEffect(() => {
-    const selectedRow = document.querySelector<HTMLElement>('.result-row.selected');
+    const selectedRow = document.querySelector<HTMLElement>(
+      '.result-row.selected, .calculator-result.selected',
+    );
     if (typeof selectedRow?.scrollIntoView === 'function') selectedRow.scrollIntoView({ block: 'nearest' });
   }, [state.selectedIndex]);
 
@@ -332,6 +342,38 @@ export function Launcher({ state }: { state: CommanderState }) {
 
   const renderHit = (hit: SearchHit, rowIndex: number) => {
     const rowSelected = rowIndex === state.selectedIndex;
+    if (hit.kind === 'calculator' && hit.calculation) {
+      return (
+        <button
+          type="button"
+          role="option"
+          aria-selected={rowSelected}
+          aria-disabled={state.resultsStale}
+          className={rowSelected ? 'calculator-result selected' : 'calculator-result'}
+          key={hit.id}
+          onPointerMove={(event) => selectFromPointer(rowIndex, event)}
+          onDoubleClick={() => void runHitAction(hit, hit.actions[0]?.id ?? 'copy-result')}
+        >
+          <span className="calculator-side calculator-expression">
+            <strong>{hit.calculation.expression}</strong>
+            <small>{hit.calculation.label}</small>
+          </span>
+          <span className="calculator-arrow" aria-hidden="true">
+            <ArrowRight />
+          </span>
+          <span className="calculator-side calculator-answer">
+            <strong>{hit.calculation.result}</strong>
+            {hit.calculation.resultWords ? <small>{hit.calculation.resultWords}</small> : null}
+          </span>
+          {rowSelected ? (
+            <span className="calculator-enter">
+              <span>{hit.actions[0]?.title ?? 'Copy Answer'}</span>
+              <CornerDownLeft />
+            </span>
+          ) : null}
+        </button>
+      );
+    }
     return (
       <button
         type="button"
@@ -532,6 +574,7 @@ export function Launcher({ state }: { state: CommanderState }) {
                 <div className="category-heading">
                   <span>
                     {group.category === 'applications' ? <AppWindow /> : null}
+                    {group.category === 'calculator' ? <Calculator /> : null}
                     {group.category === 'commands' ? <Terminal /> : null}
                     {group.category === 'files' ? <Files /> : null}
                     <span role="heading" aria-level={3}>
@@ -570,7 +613,7 @@ export function Launcher({ state }: { state: CommanderState }) {
           <span className="footer-spacer" />
           <span>Navigate</span>
           <kbd>↑↓</kbd>
-          <span>Open</span>
+          <span>{selected?.kind === 'calculator' ? 'Copy Answer' : 'Open'}</span>
           <kbd>↵</kbd>
           <div className="pin-control" ref={pinControlRef}>
             <button
