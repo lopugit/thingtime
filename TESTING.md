@@ -2100,6 +2100,14 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       **Quit & Reopen** only as the user: launchd must replace the helper with
       exactly one node PID and one menu item; a direct LaunchServices start of
       the embedded helper must exit instead of creating a duplicate.
+- [ ] Before network pairing, verify the exact signed helper can create, read,
+      and delete a disposable `AfterFirstUnlockThisDeviceOnly` item in the
+      traditional macOS login Keychain without `errSecMissingEntitlement`
+      (`-34018`). A forced local Keychain failure must end as
+      `credential_store_unavailable`, make no prepare/complete request, and
+      never surface the remote-ambiguity “response was not confirmed” copy.
+      After a successful pair, confirm the device appears under `/things`,
+      then Quit/relaunch Electron and verify the launchd node and pairing remain.
 - [ ] During pairing, inject one lost/ambiguous prepare or complete response.
       The already-approved native operation must replay the exact same signed
       claim internally, succeed without a second confirmation, and create only

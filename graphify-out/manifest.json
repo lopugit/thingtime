@@ -3317,7 +3317,7 @@
   "electron/README.md": {
     "mtime": 1787383641.4202733,
     "ast_hash": "5285222f257555fa09a10b346cf985fe",
-    "semantic_hash": ""
+    "semantic_hash": "5285222f257555fa09a10b346cf985fe"
   },
   ".githooks/README.md": {
     "mtime": 1786968733.635545,
@@ -6490,9 +6490,9 @@
     "semantic_hash": "0f11a89286f304fdb60bb8a36d811be4"
   },
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/DeviceCredentials.swift": {
-    "mtime": 1787369519.8082812,
-    "ast_hash": "32b2805d7c6060957266556a59b1a8b0",
-    "semantic_hash": "32b2805d7c6060957266556a59b1a8b0"
+    "mtime": 1787386767.413474,
+    "ast_hash": "de21a0ff8d8854e3f370ecb921a0e39e",
+    "semantic_hash": "de21a0ff8d8854e3f370ecb921a0e39e"
   },
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/LiveAISyncCoordinator.swift": {
     "mtime": 1787121814.726286,
@@ -6500,14 +6500,14 @@
     "semantic_hash": "4c77ea30d161b2dffaf83ca035fb8ecf"
   },
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/NodeController.swift": {
-    "mtime": 1787376241.0364096,
-    "ast_hash": "ce42a2b58f03ffa599634f3c572f83fc",
-    "semantic_hash": "ce42a2b58f03ffa599634f3c572f83fc"
+    "mtime": 1787386767.4150734,
+    "ast_hash": "3f05ebd9942baad14d267138af366ab4",
+    "semantic_hash": "3f05ebd9942baad14d267138af366ab4"
   },
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/NodeModels.swift": {
-    "mtime": 1787030198.4998891,
-    "ast_hash": "efbbae6f7761c98b3e90b228426fa933",
-    "semantic_hash": "efbbae6f7761c98b3e90b228426fa933"
+    "mtime": 1787386767.4144187,
+    "ast_hash": "60837259e6499b63be361fc91a14c3bb",
+    "semantic_hash": "60837259e6499b63be361fc91a14c3bb"
   },
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/SafeActions.swift": {
     "mtime": 1787122427.0343053,
@@ -6565,14 +6565,14 @@
     "semantic_hash": "48fb9e8162350e9a451e97aa645f8c89"
   },
   "macos/ThingtimeNode/Tests/ThingtimeNodeCoreTests/NodeControllerTests.swift": {
-    "mtime": 1787376313.4980621,
-    "ast_hash": "1e9ced948d09f0e4056fc68b162c9bea",
-    "semantic_hash": "1e9ced948d09f0e4056fc68b162c9bea"
+    "mtime": 1787386818.165974,
+    "ast_hash": "bc463c3dd8c24bbc2c5f715e2df0e95b",
+    "semantic_hash": "bc463c3dd8c24bbc2c5f715e2df0e95b"
   },
   "macos/ThingtimeNode/Tests/ThingtimeNodeCoreTests/PairingManagerTests.swift": {
-    "mtime": 1787369933.5363011,
-    "ast_hash": "b0885850a589efd112f4eab6c0e9fae4",
-    "semantic_hash": "b0885850a589efd112f4eab6c0e9fae4"
+    "mtime": 1787386767.4158485,
+    "ast_hash": "f76484ed8d2606c8f5cd6ee0a5adc4cf",
+    "semantic_hash": "f76484ed8d2606c8f5cd6ee0a5adc4cf"
   },
   "macos/ThingtimeNode/Tests/ThingtimeNodeCoreTests/SafeActionPolicyTests.swift": {
     "mtime": 1787123269.636723,

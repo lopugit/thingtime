@@ -390,6 +390,16 @@ an offline database or offline conflict resolution layer.
 
 ### Pairing reconciliation and node app icon follow-up (2026-08-22)
 
+- The installed pairing failure was local and deterministic, not a lost server
+  response: `KeychainDeviceCredentialStore` opted into the Data Protection
+  Keychain, but this manually Apple Development/Developer ID signed helper has
+  no provisioning-authorized application identifier/access group. Security
+  returned `errSecMissingEntitlement` (`-34018`) before prepare was sent. The
+  credential vault now uses the encrypted traditional macOS login Keychain with
+  `AfterFirstUnlockThisDeviceOnly`, which a same-identity signed probe proved can
+  create/read/delete successfully. A local Keychain failure is now definitive
+  `credential_store_unavailable`, makes no network request, and cannot be
+  mislabeled as an unconfirmed remote response.
 - The native controller now treats an ambiguous pairing response as the
   replayable protocol state it already is: within the single approved XPC
   operation it makes at most three attempts, reusing the prepared proof and
@@ -403,25 +413,33 @@ an offline database or offline conflict resolution layer.
   to **Resume pairing** and the toast explains that the exact request is saved,
   instead of leaving a stale **Pair this account** control beside the raw IPC
   error.
-- `Thingtime Node.app` now has its own 1024px RGBA source artwork: the original
-  three green canopy squares and brown trunk square are smaller, separated, and
-  each visibly joined to a central pink/red square as one unified mesh-node
-  mark. The bundle build derives the full ICNS size set, declares
+- `Thingtime Node.app` now has its own deterministic SVG design source and
+  1024px RGBA package master: the original three green canopy squares and brown
+  trunk square are smaller and more widely separated, with cardinal stems and
+  relay pixels joining each to a central pink/red hub. The bundle uses only the
+  rendered PNG/ICNS at runtime, avoiding SVG join seams. The bundle build
+  derives the full ICNS size set, declares
   `CFBundleIconFile`, and the native packaging verifier plus Electron contract
   test fail if either the resource or declaration disappears.
-- Follow-up validation is green: Swift `95/95`, Electron `52/52`, device
-  server/UI `42/42`, focused ESLint and Prettier, and the typecheck ratchet at
-  `135` errors versus its `143` baseline with no changed-file diagnostic. The
+- Follow-up source validation is green: Swift `97/97` and its production build,
+  including regressions for the entitlement-free Keychain query and definitive
+  local-failure classification. Electron passed `52/52`; device server/UI
+  passed `42/42`, along with focused ESLint and Prettier and the typecheck
+  ratchet at `135` errors versus its `143` baseline with no changed-file
+  diagnostic. The
   canonical Apple Development package passed native-resource verification and
   deep/strict signing, then installed atomically at
   `~/Applications/Thingtime.app`. Installed hashes are outer executable
-  `53c0f6263f46f1a1dc66fe3eb523d3c1aee7e21c3396c5cc36e2b4d6efda2b15`,
+  `70b958dd1b25aa13fd092447fe15a113530c5c861456d2b8de2b4889682b41ec`,
   node executable
-  `9c827dab212903a665a0a2742d490ef603a86ea455c093b46c9c401851af025d`,
+  `5fc0f17b45117cb36fcf4a33a4ca3bb4cbbbb4f6faa5e5406d21f46cf2b4ff1c`,
   and node ICNS
-  `d914c39ab010ae78a5f7a7a4db9118181f2fbb8c085623d71d78c5c27096c5b6`.
+  `5af230ec606212ba34b613e7b001713e62bec8a94ef747000be118d906d2867e`.
+  Built and installed hashes match exactly. Metadata records source head
+  `dfa5743f5`, build time `2026-08-22T08:25:11.395Z`, and the PR #68 API
+  target while the renderer stays on private loopback.
   The relaunched window rendered from loopback `127.0.0.1`, `/things` reached
-  **Ready to pair**, and launchd ran the exact installed helper as PID `73027`.
+  **Ready to pair**, and launchd ran the exact installed helper as PID `13037`.
   No live pairing was performed automatically because accepting it creates a
   durable account-to-computer relationship.
 

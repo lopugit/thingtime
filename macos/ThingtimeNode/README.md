@@ -22,7 +22,11 @@ XPC surface, and a supervised connector subprocess boundary.
   before network transmission and can be resumed after a lost response or app
   restart without exposing it to the renderer. This proves claim integrity,
   key continuity, and replay identity; it is not hardware/app attestation.
-  Keychain items use `AfterFirstUnlockThisDeviceOnly`.
+  Keychain items use `AfterFirstUnlockThisDeviceOnly` in the traditional macOS
+  login Keychain. The helper is manually Apple Development/Developer ID signed
+  outside Xcode, so it deliberately does not request the Data Protection
+  Keychain access group that requires a provisioning-authorized application
+  identifier and otherwise fails with `errSecMissingEntitlement` (`-34018`).
 - Local IPC: a one-megabyte, sorted-JSON `Data` request/reply protocol over the
   `com.thingtime.desktop.node.xpc` Mach service. Connections must have the same
   effective user and Apple signing team as the node, and match the allowlisted
@@ -116,8 +120,11 @@ and install the verified copy at `~/Applications/Thingtime Node.app`. They do
 not fall back to ad-hoc signing. `build-bundle.sh` also derives a complete ICNS
 set from the tracked 1024px RGBA `Resources/ThingtimeNodeIcon.png` master and
 the bundle declares it as `ThingtimeNode.icns`, giving native prompts a unified
-five-node identity: the four separated green/brown Thingtime squares joined to
-a central pink/red square instead of the generic application icon.
+five-node identity: four smaller, widely separated green/brown Thingtime squares
+joined through pixel relays to a central pink/red square instead of the generic
+application icon. `Resources/ThingtimeNodeIcon.svg` is the deterministic
+editable source; only the rendered PNG/ICNS reaches the app, avoiding
+fractional SVG join seams at runtime.
 
 For direct distribution, use a `Developer ID Application` identity and notarize
 and staple the outer Thingtime bundle. Keep the bundle identifier, signing team,

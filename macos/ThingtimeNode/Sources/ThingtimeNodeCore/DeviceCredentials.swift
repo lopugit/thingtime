@@ -171,7 +171,6 @@ public final class KeychainDeviceCredentialStore: DeviceCredentialStore, @unchec
         var add = baseQuery(account: account)
         add[kSecValueData as String] = data
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        add[kSecUseDataProtectionKeychain as String] = true
         let status = SecItemAdd(add as CFDictionary, nil)
         if status == errSecDuplicateItem {
             let updateStatus = SecItemUpdate(
@@ -191,12 +190,17 @@ public final class KeychainDeviceCredentialStore: DeviceCredentialStore, @unchec
         }
     }
 
-    private func baseQuery(account: String) -> [String: Any] {
+    func baseQuery(account: String) -> [String: Any] {
+        // This is a macOS-only agent signed outside Xcode. The Data Protection
+        // Keychain requires an application-identifier/keychain access-group
+        // entitlement authorized by a provisioning profile; a manually signed
+        // Developer ID or Apple Development bundle otherwise fails every write
+        // with errSecMissingEntitlement (-34018). The traditional macOS login
+        // keychain remains encrypted and binds access to this stable signed app.
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecUseDataProtectionKeychain as String: true
+            kSecAttrAccount as String: account
         ]
     }
 }

@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Security
 import XCTest
 @testable import ThingtimeNodeCore
 
@@ -190,5 +191,21 @@ final class PairingManagerTests: XCTestCase {
         XCTAssertTrue(publicKey.isValidSignature(complete.proof.signature, for: canonical))
         XCTAssertEqual(complete.capabilities, ["apps.read", "system.volume.write"])
         XCTAssertEqual(complete.device.name, "Mac")
+    }
+
+    func testMacCredentialStoreDoesNotRequireAProvisioningOnlyKeychainEntitlement() {
+        let store = KeychainDeviceCredentialStore(
+            service: "com.thingtime.desktop.node.tests",
+            account: "credential-query-test"
+        )
+        let query = store.baseQuery(account: "credential-query-test")
+
+        XCTAssertEqual(query[kSecClass as String] as! CFString, kSecClassGenericPassword)
+        XCTAssertEqual(query[kSecAttrService as String] as? String, "com.thingtime.desktop.node.tests")
+        XCTAssertEqual(query[kSecAttrAccount as String] as? String, "credential-query-test")
+        XCTAssertNil(
+            query[kSecUseDataProtectionKeychain as String],
+            "A manually signed macOS helper has no provisioning-authorized application identifier and must not request the Data Protection Keychain."
+        )
     }
 }

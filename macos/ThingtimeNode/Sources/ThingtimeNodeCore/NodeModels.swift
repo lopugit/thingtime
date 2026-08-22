@@ -141,6 +141,7 @@ public enum ThingtimeNodeError: Error, Equatable, LocalizedError {
     case commandInProgress
     case commandOutcomeUncertain
     case pairingClaimRetryable
+    case credentialStoreUnavailable
     case journalCapacityReached
     case connectorUnavailable(String)
     case connectorProtocol(String)
@@ -155,6 +156,7 @@ public enum ThingtimeNodeError: Error, Equatable, LocalizedError {
         case .commandInProgress: "That command is already running."
         case .commandOutcomeUncertain: "The node restarted while that command was running; its outcome must be reconciled before retrying."
         case .pairingClaimRetryable: "The pairing response was not confirmed. Retry the same command to reconcile it safely."
+        case .credentialStoreUnavailable: "Thingtime could not securely save the pairing credential in this Mac’s keychain."
         case .journalCapacityReached: "The command journal is full of non-evictable entries."
         case let .connectorUnavailable(message): message
         case let .connectorProtocol(message): message
@@ -171,6 +173,7 @@ public enum ThingtimeNodeError: Error, Equatable, LocalizedError {
         case .commandInProgress: "command_in_progress"
         case .commandOutcomeUncertain: "command_outcome_uncertain"
         case .pairingClaimRetryable: "pairing_claim_retryable"
+        case .credentialStoreUnavailable: "credential_store_unavailable"
         case .journalCapacityReached: "command_journal_full"
         case .connectorUnavailable: "connector_unavailable"
         case .connectorProtocol: "connector_protocol_error"

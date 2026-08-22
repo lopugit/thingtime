@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import XCTest
 @testable import ThingtimeNodeCore
 
@@ -50,6 +51,20 @@ private actor ResponseLossControlPlaneClient: ControlPlaneClient {
     func reportCommand(_ report: CommandExecutionReport) async throws {}
 }
 
+private actor FailingKeychainCredentialStore: DeviceCredentialStore {
+    func load() async throws -> DeviceCredential? { nil }
+    func loadAll() async throws -> [DeviceCredential] { [] }
+    func save(_ credential: DeviceCredential) async throws {
+        throw KeychainError(status: errSecMissingEntitlement)
+    }
+    func delete() async throws {}
+    func loadPendingPairingClaim() async throws -> PendingPairingClaim? { nil }
+    func savePendingPairingClaim(_ claim: PendingPairingClaim) async throws {
+        throw KeychainError(status: errSecMissingEntitlement)
+    }
+    func deletePendingPairingClaim() async throws {}
+}
+
 @MainActor
 final class NodeControllerTests: XCTestCase {
     private let serverPairingSecret = "ttpair_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789"
@@ -97,6 +112,39 @@ final class NodeControllerTests: XCTestCase {
             method: "connector.stop"
         ))
         XCTAssertEqual(conflict.error?.code, ThingtimeNodeError.commandConflict.code)
+    }
+
+    func testLocalKeychainFailureIsDefinitiveAndNeverReportedAsAnUnconfirmedServerResponse() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ThingtimeNodeKeychainFailureTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let journal = try CommandJournal(fileURL: directory.appendingPathComponent("journal.json"))
+        let client = ResponseLossControlPlaneClient(claimOutcomes: [.succeeded])
+        let telemetry = DeviceTelemetryCollector()
+        let controller = ThingtimeNodeController(
+            journal: journal,
+            pairing: PairingManager(store: FailingKeychainCredentialStore()),
+            connector: ConnectorRuntime(configuration: nil),
+            telemetry: telemetry,
+            actionExecutor: SafeActionExecutor(telemetry: telemetry),
+            controlPlaneClient: client
+        )
+
+        let response = await controller.handle(NodeRequest(
+            commandId: "pair-command-keychain-failure",
+            method: "pairing.claim",
+            parameters: .object(["pairingSecret": .string(serverPairingSecret)])
+        ))
+
+        XCTAssertFalse(response.ok)
+        XCTAssertEqual(response.error?.code, ThingtimeNodeError.credentialStoreUnavailable.code)
+        XCTAssertNotEqual(response.error?.code, ThingtimeNodeError.pairingClaimRetryable.code)
+        let entry = await journal.entry(commandId: "pair-command-keychain-failure")
+        XCTAssertEqual(entry?.state, .failed, "A definitive local failure must not remain retryable.")
+        let prepareRequests = await client.prepareRequests
+        let claimRequests = await client.claimRequests
+        XCTAssertTrue(prepareRequests.isEmpty)
+        XCTAssertTrue(claimRequests.isEmpty)
     }
 
     func testCommittedPairingWithLostResponseRetriesExactCompleteAndPairsLocally() async throws {

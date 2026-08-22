@@ -351,11 +351,16 @@ public actor ThingtimeNodeController {
             } catch let error as ThingtimeNodeError {
                 try await pairing.cancelClaim(pairingID: pairingSecret)
                 throw error
+            } catch is KeychainError {
+                // A local persistence failure is definitive: retrying the
+                // network cannot fix it, and claiming an unknown server outcome
+                // would incorrectly advertise a resumable pairing that was
+                // never saved on this Mac.
+                throw ThingtimeNodeError.credentialStoreUnavailable
             } catch {
-                if attempt < Self.maximumPairingAttempts {
-                    await Task.yield()
-                    continue
-                }
+                // Only ThingtimeAPIClientError represents an ambiguous remote
+                // response. Preserve every other local failure as-is.
+                throw error
             }
 
             // Prepare is key-bound and complete reuses the durable signed
