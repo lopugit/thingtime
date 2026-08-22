@@ -6,7 +6,7 @@ const net = require('node:net');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
-const { app, BrowserWindow, dialog, ipcMain, shell, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, Menu, nativeImage, session } = require('electron');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const {
 	ThingtimeNodeBridgeError,
@@ -1355,6 +1355,14 @@ if (!singleInstanceLock) {
 	app
 		.whenReady()
 		.then(async () => {
+			// The renderer is packaged locally, but Chromium's HTTP cache is shared
+			// across launches while our loopback port is intentionally ephemeral. A
+			// recycled port must never resurrect an old root-data response (including
+			// its account and endpoint identity) from a previous desktop session.
+			// Clearing only HTTP cache preserves cookies, account storage and all
+			// user preferences while forcing the local bundle + selected API target
+			// to establish the first paint afresh.
+			await session.defaultSession.clearCache();
 			await initializeDesktopSettings();
 			await startNitroServer();
 			createWindow();

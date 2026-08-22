@@ -48,6 +48,11 @@ import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
 const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
   const response = await fetch(url, {
     ...init,
+    // Account/root responses are explicitly current-state reads. Electron's
+    // loopback origin can reuse a prior ephemeral port after relaunch, so a
+    // browser cache entry from a different endpoint must never determine the
+    // active account, branch label, or device pairing surface.
+    cache: init.cache || 'no-store',
     credentials: 'include',
     headers: {
       Accept: 'application/json',

@@ -935,9 +935,9 @@
     "semantic_hash": "ada1b6175a23f23ed76bb7deab8c36ad"
   },
   "remix/app/components/Lopu/useLopu.tsx": {
-    "mtime": 1787367637.8839781,
-    "ast_hash": "a97ba344962b19d1fcc201e4c07e33a9",
-    "semantic_hash": "a97ba344962b19d1fcc201e4c07e33a9"
+    "mtime": 1787392647.8591573,
+    "ast_hash": "88d3a306623b55d0347c38f2beffe477",
+    "semantic_hash": ""
   },
   "remix/app/components/MagicInput/MagicInput.tsx": {
     "mtime": 1786968733.851031,
@@ -1200,9 +1200,9 @@
     "semantic_hash": "1f3b27ef354ba16f00510edb9575f7e2"
   },
   "remix/app/routes.tsx": {
-    "mtime": 1787316142.5757375,
-    "ast_hash": "f79a8ccf1c4fafa27d416d635f213dae",
-    "semantic_hash": "f79a8ccf1c4fafa27d416d635f213dae"
+    "mtime": 1787392647.8594851,
+    "ast_hash": "7969cfa471b6e0b055d6b4a900750733",
+    "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
     "mtime": 1786968733.8726006,
