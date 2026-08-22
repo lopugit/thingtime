@@ -94,7 +94,9 @@ export default function App() {
                   ? `${baseTitle} - Admin`
                   : pathname === '/things'
                     ? `${baseTitle} - Things`
-                    : baseTitle;
+                    : pathname === '/branding'
+                      ? `${baseTitle} - Brand resources`
+                      : baseTitle;
 
       document.title = routeTitle;
     }

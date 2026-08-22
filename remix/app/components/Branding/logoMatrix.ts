@@ -59,23 +59,68 @@ export const resolveLogoColour = (col: string, colourMap: LogoColourMap): string
   return !colour || colour === 'transparent' ? undefined : colour;
 };
 
+// Per-side padding, expressed in cell units (fractional values are fine — the
+// exporter converts px → cells before calling in here).
+export type LogoPadding = { top: number; right: number; bottom: number; left: number };
+
+export const ZERO_LOGO_PADDING: LogoPadding = { top: 0, right: 0, bottom: 0, left: 0 };
+
+// Strip fully-transparent outer rows/columns so every preview and export hugs
+// the artwork exactly (branding-page rule: assets ship with zero whitespace).
+export const trimLogoCells = (cells: string[][], colourMap: LogoColourMap): string[][] => {
+  const filled = (col: string) => Boolean(resolveLogoColour(col, colourMap));
+  let top = 0;
+  let bottom = cells.length;
+  while (top < bottom && !cells[top].some(filled)) top += 1;
+  while (bottom > top && !cells[bottom - 1].some(filled)) bottom -= 1;
+  const sliced = cells.slice(top, bottom);
+  let left = Number.POSITIVE_INFINITY;
+  let right = 0;
+  sliced.forEach((row) => {
+    row.forEach((col, x) => {
+      if (filled(col)) {
+        left = Math.min(left, x);
+        right = Math.max(right, x + 1);
+      }
+    });
+  });
+  if (!sliced.length || right <= left) return [];
+  return sliced.map((row) => row.slice(left, right));
+};
+
+// Compact number formatting so fractional padding doesn't bloat the SVG.
+const fmt = (n: number) => String(Math.round(n * 10000) / 10000);
+
 export const buildLogoSvg = ({
   matrix,
   colourMap,
-  background
+  background,
+  trim = true,
+  padding,
+  pixelWidth
 }: {
   matrix: LogoMatrix;
   colourMap: LogoColourMap;
   // optional solid backdrop (e.g. white) baked into exports; omit = transparent
   background?: string;
-}): { svg: string; columns: number; rows: number } => {
-  const cells = logoMatrixToCells(matrix);
+  // trim transparent outer rows/cols first (on by default — see trimLogoCells)
+  trim?: boolean;
+  // extra breathing room around the artwork, in cell units
+  padding?: Partial<LogoPadding>;
+  // when set, the <svg> gets explicit width/height attrs at this pixel width
+  pixelWidth?: number;
+}): { svg: string; columns: number; rows: number; totalColumns: number; totalRows: number; pixelHeight?: number } => {
+  let cells = logoMatrixToCells(matrix);
+  if (trim) cells = trimLogoCells(cells, colourMap);
   const rows = cells.length;
   const columns = Math.max(0, ...cells.map((row) => row.length));
+  const pad: LogoPadding = { ...ZERO_LOGO_PADDING, ...padding };
+  const totalColumns = columns + pad.left + pad.right;
+  const totalRows = rows + pad.top + pad.bottom;
 
   const rects: string[] = [];
   if (background) {
-    rects.push(`<rect x="0" y="0" width="${columns}" height="${rows}" fill="${background}"/>`);
+    rects.push(`<rect x="${fmt(-pad.left)}" y="${fmt(-pad.top)}" width="${fmt(totalColumns)}" height="${fmt(totalRows)}" fill="${background}"/>`);
   }
   cells.forEach((row, y) => {
     row.forEach((col, x) => {
@@ -86,9 +131,12 @@ export const buildLogoSvg = ({
     });
   });
 
+  const pixelHeight = pixelWidth === undefined ? undefined : Math.max(1, Math.round((pixelWidth / totalColumns) * totalRows));
+  const sizeAttrs = pixelWidth === undefined ? '' : `width="${Math.max(1, Math.round(pixelWidth))}" height="${pixelHeight}" `;
   const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${columns} ${rows}" ` +
+    `<svg xmlns="http://www.w3.org/2000/svg" ${sizeAttrs}` +
+    `viewBox="${fmt(-pad.left)} ${fmt(-pad.top)} ${fmt(totalColumns)} ${fmt(totalRows)}" ` +
     `shape-rendering="crispEdges">${rects.join('')}</svg>`;
 
-  return { svg, columns, rows };
+  return { svg, columns, rows, totalColumns, totalRows, pixelHeight };
 };
