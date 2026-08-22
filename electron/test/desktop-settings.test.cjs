@@ -31,6 +31,7 @@ test('local endpoint profiles persist atomically and preserve multiple custom de
 		const store = new DesktopSettingsStore({ filePath, metadata });
 		let snapshot = await store.initialize();
 		assert.equal(snapshot.selectedEndpointId, 'pr-68');
+		assert.equal(snapshot.selectedMenuBarIconId, 'tree-pink');
 		assert.deepEqual(
 			snapshot.endpointProfiles.map((entry) => entry.id),
 			['pr-68', 'production', 'development']
@@ -108,7 +109,7 @@ test('malformed persisted settings fail closed to bounded defaults', () => {
 	});
 	assert.equal(state.customEndpoints.length, 1);
 	assert.equal(state.customMenuBarIconPath, null);
-	assert.equal(state.menuBarIconId, 'tree-color');
+	assert.equal(state.menuBarIconId, 'tree-pink');
 	assert.equal(state.selectedEndpointId, 'missing');
 });
 

@@ -15,6 +15,9 @@ let package = Package(
     targets: [
         .target(
             name: "ThingtimeNodeCore",
+            resources: [
+                .process("Resources")
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("ApplicationServices"),

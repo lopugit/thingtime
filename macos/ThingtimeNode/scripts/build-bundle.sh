@@ -30,16 +30,20 @@ BIN_PATH="$(swift build \
     --configuration release \
     --show-bin-path)/ThingtimeNode"
 BRIDGE_PATH="$(dirname "${BIN_PATH}")/ThingtimeNodeBridge"
+RESOURCE_BUNDLE_PATH="$(dirname "${BIN_PATH}")/ThingtimeNode_ThingtimeNodeCore.bundle"
 
 test -x "${BIN_PATH}"
 test -x "${BRIDGE_PATH}"
+test -d "${RESOURCE_BUNDLE_PATH}"
 mkdir -p "${STAGE_ROOT}"
 if [[ -e "${APP_PATH}" ]]; then
     rm -rf -- "${APP_PATH}"
 fi
 mkdir -p "${CONTENTS_PATH}/MacOS"
+mkdir -p "${CONTENTS_PATH}/Resources"
 /usr/bin/ditto "${BIN_PATH}" "${CONTENTS_PATH}/MacOS/ThingtimeNode"
 /usr/bin/ditto "${BRIDGE_PATH}" "${CONTENTS_PATH}/MacOS/ThingtimeNodeBridge"
+/usr/bin/ditto "${RESOURCE_BUNDLE_PATH}" "${CONTENTS_PATH}/Resources/ThingtimeNode_ThingtimeNodeCore.bundle"
 /usr/bin/ditto "${PACKAGE_ROOT}/Resources/Info.plist" "${CONTENTS_PATH}/Info.plist"
 if [[ "${THINGTIME_NODE_EMBEDDED:-0}" != "1" ]]; then
     mkdir -p "${CONTENTS_PATH}/Library/LaunchAgents"

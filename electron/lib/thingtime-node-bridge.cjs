@@ -192,7 +192,7 @@ function buildLaunchAgentPlist({
 	childEnvironment,
 	apiBaseUrl,
 	projectRegistryPath = null,
-	menuBarIconId = 'tree-color',
+	menuBarIconId = 'tree-pink',
 	menuBarCustomIconPath = null
 }) {
 	for (const [label, value] of [
@@ -660,13 +660,20 @@ function normalizePermissions(rawPermissions) {
 }
 
 function normalizeNodeStatus(rawStatus, registration, version) {
-	const paired = rawStatus?.pairing?.paired === true;
+	const deviceIds = Array.isArray(rawStatus?.pairing?.deviceIDs)
+		? [...new Set(rawStatus.pairing.deviceIDs.filter((value) => typeof value === 'string' && value && byteLength(value) <= 512))].slice(0, 32)
+		: typeof rawStatus?.pairing?.deviceID === 'string' && rawStatus.pairing.deviceID
+		? [rawStatus.pairing.deviceID]
+		: [];
+	const paired = rawStatus?.pairing?.paired === true && deviceIds.length > 0;
 	const connectorState = rawStatus?.connector?.state || 'disabled';
 	const degraded = connectorState === 'failed' || connectorState === 'degraded';
 	return {
 		capabilities: ['device.telemetry', 'system.volume.set', 'application.activate', 'application.launch', 'connector.codex-app-server'],
 		connector: rawStatus?.connector || { state: 'disabled' },
-		deviceId: rawStatus?.pairing?.deviceID || null,
+		deviceId: deviceIds[0] || null,
+		deviceIds,
+		pairedAccountCount: deviceIds.length,
 		journalEntryCount: Number.isInteger(rawStatus?.journalEntryCount) ? rawStatus.journalEntryCount : 0,
 		lastError: null,
 		lastSeenAt: new Date().toISOString(),
@@ -917,7 +924,7 @@ class ThingtimeNodeIntegration {
 		{
 			projectRegistryPath = null,
 			apiBaseUrl = this.environment.THINGTIME_NODE_API_BASE_URL || null,
-			menuBarIconId = this.environment.THINGTIME_NODE_MENU_BAR_ICON || 'tree-color',
+			menuBarIconId = this.environment.THINGTIME_NODE_MENU_BAR_ICON || 'tree-pink',
 			menuBarCustomIconPath = this.environment.THINGTIME_NODE_MENU_BAR_CUSTOM_ICON_PATH || null
 		} = {}
 	) {

@@ -18,6 +18,7 @@ export const LocalNodeSetupCard = ({
 	if (!state.available) return null;
 	const registered = state.status?.loginItem?.registered === true;
 	const paired = state.status?.pairingStatus === 'paired';
+	const pairedToCurrentAccount = state.pairedToCurrentAccount === true;
 	const recoverablePairing = state.status?.recoverablePairing === true;
 	const permissions = [
 		{
@@ -35,7 +36,8 @@ export const LocalNodeSetupCard = ({
 		}
 	];
 	const missingPermissions = permissions.filter((permission) => permission.status !== 'authorized');
-	const ready = registered && paired && missingPermissions.length === 0;
+	const ready = registered && pairedToCurrentAccount && missingPermissions.length === 0;
+	const pairedLabel = `${state.pairedAccountCount} ${state.pairedAccountCount === 1 ? 'account' : 'accounts'} paired`;
 
 	return (
 		<Box background="var(--tt-card, #fff)" border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-lg, 16px)" padding={[3, 4]}>
@@ -54,17 +56,23 @@ export const LocalNodeSetupCard = ({
 				<Box flex="1" minWidth="210px">
 					<Flex align="center" gap={2} wrap="wrap">
 						<Text fontSize="14px" fontWeight={800}>
-							{ready ? 'Thingtime Node is ready' : registered && paired ? 'Finish privacy access for this Mac' : 'Make this Mac a Thingtime node'}
+							{ready
+								? 'This Mac is connected to your account'
+								: registered && pairedToCurrentAccount
+								? 'Finish privacy access for this Mac'
+								: registered && paired
+								? 'Pair this Thingtime account to this Mac'
+								: 'Make this Mac a Thingtime node'}
 						</Text>
 						<Badge borderRadius="full" colorScheme={state.loading ? 'purple' : registered ? 'orange' : 'gray'}>
 							{state.loading
 								? 'checking'
 								: recoverablePairing
 								? 'resume pairing'
-								: ready
-								? 'ready'
+								: pairedToCurrentAccount
+								? pairedLabel
 								: registered && paired
-								? 'privacy setup'
+								? `${pairedLabel} elsewhere`
 								: registered
 								? 'ready to pair'
 								: 'not running'}
@@ -72,14 +80,16 @@ export const LocalNodeSetupCard = ({
 					</Flex>
 					<Text color="var(--tt-muted, #71717a)" fontSize="12px" lineHeight="1.45" marginTop={1} whiteSpace="normal">
 						{ready
-							? 'The persistent node is paired. Add local Codex folders here whenever you want to create chats in a new project.'
-							: registered && paired
+							? 'The persistent node is paired to this account. Add local Codex folders here whenever you want to create chats in a new project.'
+							: registered && pairedToCurrentAccount
 							? 'macOS privacy grants stay local and must be enabled explicitly for the signed Thingtime Node helper.'
+							: registered && paired
+							? 'This Mac already serves another Thingtime account and can safely add this account as a separate connection.'
 							: 'The signed local node keeps approved device state and desktop AI connectors available when the Thingtime window is closed.'}
 					</Text>
 					<Flex align="center" color="var(--tt-faint, #8a8a94)" fontSize="11px" gap={1.5} marginTop={2}>
 						<ShieldCheck aria-hidden size={13} />
-						Pairing is one-use and confirmed in the native app.
+						Each pairing link works once. A Mac and account can each connect to multiple devices or accounts.
 					</Flex>
 					{state.status?.lastError?.message ? (
 						<Text color="orange.600" fontSize="11px" marginTop={2} whiteSpace="normal">
@@ -98,13 +108,13 @@ export const LocalNodeSetupCard = ({
 							onAction={onAction}
 							size="sm"
 						/>
-					) : !paired ? (
+					) : state.pairedToCurrentAccount === false ? (
 						<DevicePolicyButton
 							action="begin-pairing"
 							controlFor={controlFor}
 							controlKey="onboarding-pairing"
 							deviceId="local-node"
-							label={recoverablePairing ? 'Resume pairing' : 'Pair this Mac'}
+							label={recoverablePairing ? 'Resume pairing' : 'Pair this account'}
 							onAction={onAction}
 							size="sm"
 						/>

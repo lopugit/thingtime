@@ -118,7 +118,9 @@ export const GlobalStyles = () => {
 					paddingRight: '0 !important'
 				},
 				'html.thingtime-electron-desktop .drawerTrigger': {
-					zIndex: '10070 !important',
+					// Above both the fixed titlebar and the drawer's temporary
+					// hover/focus lift, so the trigger cannot disappear beneath either.
+					zIndex: '10140 !important',
 					top: 'calc(var(--thingtime-safe-area-top, 0px) + 8px) !important',
 					left: 'var(--thingtime-electron-titlebar-left-inset, 88px) !important',
 					width: '36px !important',

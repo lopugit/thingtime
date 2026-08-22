@@ -193,7 +193,7 @@ cookies, credentials, and raw paths; imported provider rows remain read-only.
 
 ### Automated and build gates (2026-08-21)
 
-- Swift: `swift test --package-path macos/ThingtimeNode` passed 92/92 tests;
+- Swift: `swift test --package-path macos/ThingtimeNode` passed 94/94 tests;
   the final real long-lived connector-pipe regression slice passed 10/10. Both
   `ThingtimeNode` and `ThingtimeNodeBridge` passed the release build.
 - MCP: typecheck, ordinary build, and `build:desktop` passed; the final suite
@@ -287,11 +287,64 @@ cookies, credentials, and raw paths; imported provider rows remain read-only.
   The temporary local renderer endpoint used for this acceptance was removed
   from desktop settings afterward.
 
+### Multi-account pairing and menu follow-up (2026-08-22)
+
+- Pairing links remain short-lived and single-use, but the native credential
+  store is now a versioned Keychain vault retaining up to 32 independent
+  account/device credentials per canonical endpoint. The legacy single value
+  migrates in place. One account can still own many separately paired computer
+  rows, while one Mac now starts an isolated authenticated scheduler, lease
+  renewer, heartbeat, and device-bound live-sync journal for every retained
+  account. Connector events are copied only into those explicitly paired
+  account scopes; opaque device IDs let `/things` identify whether the current
+  account is already connected without exposing credentials.
+- Pair/resume now fail before claim when the renderer origin differs from the
+  node's configured origin, and the public load-URL path reconciles the selected
+  endpoint instead of silently moving only the renderer. Ordinary native and
+  Electron errors are preserved in the bounded Lopu toast rather than collapsed
+  into “Try again from Thingtime Desktop.” The setup card distinguishes
+  “paired elsewhere” from “paired to this account” and explains that every link
+  is one-use even though both sides support multiple relationships.
+- Fresh desktop settings and native fallbacks now select the pink four-square
+  menu icon; existing choices remain untouched. Full wordmarks use a sealed,
+  tightly cropped PNG at 86x16pt instead of reconstructing fractional SVG
+  rectangles, removing join seams and excess vertical/outer whitespace. The
+  status menu uses Thingtime-only copy, exposes separate Restart and Quit
+  commands, and managed Quit boots out the LaunchAgent so KeepAlive cannot
+  immediately respawn it.
+- Installed-app acceptance used the current local renderer, then restored and
+  removed that temporary endpoint. The signed titlebar showed drawer, Back,
+  Forward, home, search, account, and notifications in that order; Back/Forward
+  traversed `/` and `/things`; the focused/open drawer stayed beneath the
+  controls with even top/side spacing; an animated Lopu toast allowed visible
+  drag-selection of its description and its close control dismissed it. The
+  restored production settings and LaunchAgent report `https://thingtime.com/`
+  plus `tree-pink`.
+- A fresh canonical package after the final status-menu copy contract passed
+  deep/strict signing and `verify-signed-app.mjs --mode local`, then
+  `install:local` atomically replaced and reverified the exact
+  `/Users/lopu/Applications/Thingtime.app`. The installed outer, node, bridge,
+  and ASAR SHA-256 values are respectively
+  `9e12509ace5ba93a608f945bb17355137889e15c1e595b4cebe43a31a8445332`,
+  `457e68c51123dc8427412f99f3b49273b4ec971b151aa3a5cfe65e15a1c0d805`,
+  `6915c2106f4aaf354e513541041043c6dd7800f53539a74463c1fbcd1d3a6a25`,
+  and `cafa07acc0bb841893f44146f41793e4f319b2744c2fdb3b6941580a971df21`.
+  The installed LaunchAgent restarted once at PID 49687 from the exact helper,
+  retained `https://thingtime.com/` and `tree-pink`, and the relaunched outer
+  app rendered that production origin.
+- Automated coverage proves two independent credentials survive pairing on one
+  Mac and that the normalized Electron status retains both device IDs. A real
+  second-account pairing was deliberately not performed during this pass: it
+  creates a durable relationship and remains an explicit user acceptance step.
+
 ### Acceptance boundaries still open
 
-- The installed Electron session and worktree browser session were logged out,
-  and the persistent node remained deliberately unpaired. Authenticated
-  current-branch pairing, device-drawer controls, live remote
+- The installed local-renderer acceptance reused an existing signed-in `Nikk`
+  session only for navigation/UI checks; the restored production renderer and
+  isolated in-app browser were logged out. No new durable pairing relationship
+  was created or removed, and existing Keychain credentials were deliberately
+  left untouched. Authenticated current-branch pairing, multi-account
+  device-drawer controls, live remote
   chat queue/steer/interrupt/approval flows, and their full desktop/390 px
   visual acceptance therefore remain manual QA; automated coverage is not
   represented as that real account-level proof.

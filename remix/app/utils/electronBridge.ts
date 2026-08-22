@@ -112,6 +112,8 @@ export type ThingtimeNodePermissionStatus = 'not-determined' | 'denied' | 'restr
 
 export type ThingtimeNodeStatus = {
 	deviceId?: string | null;
+	deviceIds?: string[];
+	pairedAccountCount?: number;
 	serviceStatus: ThingtimeNodeServiceStatus;
 	pairingStatus: ThingtimeNodePairingStatus;
 	recoverablePairing?: boolean;

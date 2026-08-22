@@ -28,7 +28,7 @@ const MENU_BAR_ICONS = Object.freeze([
 	Object.freeze({ id: 'custom', label: 'Custom image', custom: true })
 ]);
 const MENU_BAR_ICON_IDS = new Set(MENU_BAR_ICONS.map((entry) => entry.id));
-const DEFAULT_MENU_BAR_ICON_ID = 'tree-color';
+const DEFAULT_MENU_BAR_ICON_ID = 'tree-pink';
 
 function byteLength(value) {
 	return Buffer.byteLength(value, 'utf8');

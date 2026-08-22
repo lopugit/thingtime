@@ -267,8 +267,9 @@ public actor ThingtimeNodeController {
                 client: controlPlaneClient
             ))
         case "pairing.unpair":
+            let status = try await pairing.unpair()
             try await pairingScopeChanged(nil)
-            result = try await JSONValue.from(pairing.unpair())
+            result = try JSONValue.from(status)
         case "permissions.request":
             let parameters = try request.parameters.decode(PermissionRequestParameters.self)
             result = try await JSONValue.from(telemetry.requestPermission(parameters.kind))
@@ -364,12 +365,13 @@ public actor ThingtimeNodeController {
                 )
             }
             let claim = try await client.claimPairing(claimRequest)
-            try await pairingScopeChanged(claim.deviceID)
-            return try await pairing.complete(
+            let status = try await pairing.complete(
                 pairingID: challenge.pairingID,
                 deviceID: claim.deviceID,
                 refreshToken: claim.refreshToken
             )
+            try await pairingScopeChanged(claim.deviceID)
+            return status
         } catch let error as ThingtimeAPIClientError {
             if case let .rejected(status) = error,
                (400 ..< 500).contains(status),

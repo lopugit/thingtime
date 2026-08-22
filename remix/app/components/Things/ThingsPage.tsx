@@ -136,7 +136,11 @@ export const ThingsPage = () => {
 		selectedDeviceId: deviceParam,
 		enabled: devicesEnabled
 	});
-	const localNode = useLocalThingtimeNode(deviceParam, deviceStore.refreshList);
+	const currentAccountDeviceIds = useMemo(
+		() => deviceStore.devices.flatMap((device) => (device.summary?.id ? [device.summary.id] : [])),
+		[deviceStore.devices]
+	);
+	const localNode = useLocalThingtimeNode(deviceParam, deviceStore.refreshList, deviceStore.loading ? undefined : currentAccountDeviceIds);
 	const serverDeviceControlFor = deviceStore.controlFor;
 	const executeServerDeviceAction = deviceStore.executeAction;
 	const localDeviceControlFor = localNode.controlFor;

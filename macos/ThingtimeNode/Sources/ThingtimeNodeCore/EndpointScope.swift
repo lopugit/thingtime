@@ -54,6 +54,18 @@ public struct ThingtimeNodeEndpointScope: Equatable, Sendable {
             .appendingPathComponent("live-ai-sync-journal-\(identifier).json", isDirectory: false)
     }
 
+    public func liveAIJournalFileURL(deviceID: String, fileManager: FileManager = .default) throws -> URL {
+        guard !deviceID.isEmpty, deviceID.utf8.count <= 512 else {
+            throw ThingtimeNodeError.invalidRequest("The paired device identifier is invalid.")
+        }
+        let deviceHash = SHA256.hash(data: Data(deviceID.utf8))
+            .prefix(16)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return journalDirectory(fileManager: fileManager)
+            .appendingPathComponent("live-ai-sync-journal-\(identifier)-\(deviceHash).json", isDirectory: false)
+    }
+
     private var isProduction: Bool {
         canonicalBaseURL.absoluteString == "https://thingtime.com/"
     }

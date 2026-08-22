@@ -7,6 +7,7 @@ export function ElectronBridgeHost() {
 	const { thingtime, loading } = useThingtime();
 	const [desktopInfo, setDesktopInfo] = React.useState<ThingtimeDesktopInfo | null>(null);
 	const updateCheckSessionRef = React.useRef<string | null>(null);
+	const bridgeIsMacDesktop = typeof window !== 'undefined' && getElectronBridge()?.platform === 'darwin';
 
 	React.useEffect(() => {
 		const bridge = getElectronBridge();
@@ -33,10 +34,10 @@ export function ElectronBridgeHost() {
 		};
 	}, []);
 
-	React.useEffect(() => {
+	React.useLayoutEffect(() => {
 		const root = document.documentElement;
 		const titlebar = desktopInfo?.titlebar;
-		const enabled = !!titlebar?.enabled;
+		const enabled = bridgeIsMacDesktop || !!titlebar?.enabled;
 
 		root.classList.toggle('thingtime-electron-desktop', enabled);
 
@@ -57,7 +58,7 @@ export function ElectronBridgeHost() {
 			root.style.removeProperty('--thingtime-electron-titlebar-left-inset');
 			root.style.removeProperty('--thingtime-electron-titlebar-nav-start');
 		};
-	}, [desktopInfo?.titlebar]);
+	}, [bridgeIsMacDesktop, desktopInfo?.titlebar]);
 
 	React.useEffect(() => {
 		const bridge = getElectronBridge();

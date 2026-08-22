@@ -19,12 +19,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Multi-account desktop pairing and native menu polish**: one Mac now retains
+  up to 32 independently scoped Thingtime account credentials and runs an
+  isolated command/live-sync loop for each, while an account can continue to
+  pair any number of computers. Pair links remain single-use; endpoint drift is
+  rejected with an actionable origin-specific error instead of a generic toast.
+  Fresh installs default to the pink four-square menu-bar artwork, the full
+  wordmark is a tightly cropped 86x16 raster (eliminating SVG join seams), and
+  the native menu consistently says Thingtime with separate Restart and real
+  Quit commands. The Electron titlebar now restores drawer/history controls on
+  first paint and places notifications immediately after the account control.
+  — Codex (AI), 2026-08-22
+
 - **Electron titlebar, notification, and drawer interaction boundaries**: the
   draggable region now stops at the 52px desktop titlebar instead of extending
   through the inactive Commander over Lopu notifications. Notification text is
   selectable and its close control has a 28px target; Electron places Back and
   Forward between the drawer and home controls and moves the account to the end
-  of the left icon row. Hovered/pinned drawers remain below those controls, use
+  of the left icon row, followed by notifications. Hovered/pinned drawers remain below those controls, use
   an even 10px hover-surface gutter, and no longer add excess top menu padding.
   — Codex (AI), 2026-08-22
 

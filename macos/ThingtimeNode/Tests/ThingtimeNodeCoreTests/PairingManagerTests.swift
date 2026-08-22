@@ -79,6 +79,48 @@ final class PairingManagerTests: XCTestCase {
         }
     }
 
+    func testOneMacCanRetainIndependentPairingsForMultipleAccounts() async throws {
+        let store = InMemoryDeviceCredentialStore()
+        let manager = PairingManager(store: store)
+        let now = Date(timeIntervalSince1970: 3_000)
+
+        for (index, deviceID) in ["account-one-device", "account-two-device"].enumerated() {
+            let challenge = try await manager.begin(now: now.addingTimeInterval(Double(index) * 10))
+            let request = try await manager.bindPreparedClaim(
+                pairingID: challenge.pairingID,
+                serverProof: PairingPrepareResponse(
+                    pairingID: "pairing-\(index)",
+                    serverNonce: Data(repeating: UInt8(index + 1), count: 32),
+                    expiresAt: now.addingTimeInterval(120)
+                ),
+                device: PairingDeviceDescriptor(
+                    name: "Mac", platform: "macos", model: nil, osVersion: "macOS", appVersion: "0.1.0"
+                ),
+                capabilities: ["apps.read"],
+                now: now.addingTimeInterval(Double(index) * 10)
+            )
+            _ = try await manager.complete(
+                pairingID: challenge.pairingID,
+                deviceID: deviceID,
+                refreshToken: request.credential,
+                now: now.addingTimeInterval(Double(index) * 10 + 1)
+            )
+            try await manager.clearCompletedClaim(pairingID: challenge.pairingID)
+        }
+
+        let credentials = try await store.loadAll()
+        let status = try await manager.status()
+        XCTAssertEqual(credentials.map(\.deviceID), ["account-one-device", "account-two-device"])
+        XCTAssertEqual(
+            status,
+            PairingStatus(
+                paired: true,
+                deviceID: "account-one-device",
+                deviceIDs: ["account-one-device", "account-two-device"]
+            )
+        )
+    }
+
     func testServerPairingSecretCanBackTheLocalKeyChallenge() async throws {
         let manager = PairingManager(store: InMemoryDeviceCredentialStore())
         let localChallenge = try await manager.begin()

@@ -62,15 +62,32 @@ export type LocalThingtimeNodeState = {
 	status: ThingtimeNodeStatus | null;
 	permissions: ThingtimeNodePermission[];
 	pairingChallenge: ThingtimeNodePairingChallenge | null;
+	pairedDeviceIds: string[];
+	pairedAccountCount: number;
+	pairedToCurrentAccount: boolean | null;
 };
 
-export const useLocalThingtimeNode = (selectedDeviceId?: string | null, onPaired?: () => void | Promise<void>) => {
+type LocalThingtimeNodeRuntimeState = Omit<LocalThingtimeNodeState, 'pairedDeviceIds' | 'pairedAccountCount' | 'pairedToCurrentAccount'>;
+
+const localActionErrorMessage = (error: unknown, fallback: string): string => {
+	if (error instanceof Error) {
+		const message = error.message.trim();
+		if (message) return message.slice(0, 1_000);
+	}
+	return apiErrorMessage(error, fallback);
+};
+
+export const useLocalThingtimeNode = (
+	selectedDeviceId?: string | null,
+	onPaired?: () => void | Promise<void>,
+	currentAccountDeviceIds?: readonly string[]
+) => {
 	const lopu = useLopu();
 	const lopuRef = useRef(lopu);
 	const permissionPollGenerationRef = useRef(0);
 	lopuRef.current = lopu;
 	const bridge = typeof window === 'undefined' ? undefined : getElectronBridge();
-	const [state, setState] = useState<LocalThingtimeNodeState>({
+	const [state, setState] = useState<LocalThingtimeNodeRuntimeState>({
 		available: Boolean(bridge?.nodeGetStatus),
 		loading: false,
 		status: null,
@@ -138,7 +155,16 @@ export const useLocalThingtimeNode = (selectedDeviceId?: string | null, onPaired
 		})();
 	}, [refresh]);
 
-	const isSelectedLocalNode = Boolean(selectedDeviceId) && Boolean(state.status?.deviceId) && selectedDeviceId === state.status?.deviceId;
+	const pairedDeviceIds = useMemo(() => {
+		const values = state.status?.deviceIds?.length ? state.status.deviceIds : state.status?.deviceId ? [state.status.deviceId] : [];
+		return [...new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0))];
+	}, [state.status?.deviceId, state.status?.deviceIds]);
+	const pairedToCurrentAccount = useMemo(() => {
+		if (currentAccountDeviceIds === undefined) return null;
+		const current = new Set(currentAccountDeviceIds);
+		return pairedDeviceIds.some((deviceId) => current.has(deviceId));
+	}, [currentAccountDeviceIds, pairedDeviceIds]);
+	const isSelectedLocalNode = Boolean(selectedDeviceId) && pairedDeviceIds.includes(selectedDeviceId || '');
 
 	const controlFor = useCallback<DeviceControlResolver>(
 		(action, targetKey) => {
@@ -259,7 +285,7 @@ export const useLocalThingtimeNode = (selectedDeviceId?: string | null, onPaired
 					setState((previous) => ({ ...previous, loading: false }));
 					lopuRef.current({
 						title: 'That local node action didn’t work 😔',
-						description: apiErrorMessage(error, 'Try again from Thingtime Desktop.'),
+						description: localActionErrorMessage(error, 'Try again from Thingtime Desktop.'),
 						status: 'error'
 					});
 				}
@@ -270,7 +296,16 @@ export const useLocalThingtimeNode = (selectedDeviceId?: string | null, onPaired
 	);
 
 	return useMemo(
-		() => ({ ...state, isSelectedLocalNode, refresh, controlFor, executeAction }),
-		[controlFor, executeAction, isSelectedLocalNode, refresh, state]
+		() => ({
+			...state,
+			pairedDeviceIds,
+			pairedAccountCount: pairedDeviceIds.length,
+			pairedToCurrentAccount,
+			isSelectedLocalNode,
+			refresh,
+			controlFor,
+			executeAction
+		}),
+		[controlFor, executeAction, isSelectedLocalNode, pairedDeviceIds, pairedToCurrentAccount, refresh, state]
 	);
 };

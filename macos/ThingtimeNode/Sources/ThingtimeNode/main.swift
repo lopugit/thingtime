@@ -161,6 +161,174 @@ private final class XPCListenerDelegate: NSObject, NSXPCListenerDelegate {
     }
 }
 
+private actor NodeControllerRelay {
+    private var controller: ThingtimeNodeController?
+
+    func install(_ controller: ThingtimeNodeController) {
+        self.controller = controller
+    }
+
+    func dispatch(_ command: LeasedCommand) async -> NodeResponse {
+        guard let controller else {
+            return .failure(
+                id: command.leaseID,
+                code: ThingtimeNodeError.commandOutcomeUncertain.code,
+                message: "Thingtime was still starting, so the command was not run."
+            )
+        }
+        return await controller.handleLeasedCommand(command)
+    }
+}
+
+private actor MultiAccountControlPlaneRuntime {
+    private struct AccountRuntime {
+        let refreshToken: String
+        let scheduler: ControlPlaneScheduler
+        let liveSync: LiveAISyncCoordinator
+        let flushTask: Task<Void, Never>
+    }
+
+    private let baseURL: URL
+    private let endpointScope: ThingtimeNodeEndpointScope
+    private let credentialStore: any DeviceCredentialStore
+    private let telemetry: DeviceTelemetryCollector
+    private let connector: ConnectorRuntime
+    private let desktopChat: DesktopChatRuntime
+    private let controllerRelay: NodeControllerRelay
+    private var accounts: [String: AccountRuntime] = [:]
+
+    init(
+        baseURL: URL,
+        endpointScope: ThingtimeNodeEndpointScope,
+        credentialStore: any DeviceCredentialStore,
+        telemetry: DeviceTelemetryCollector,
+        connector: ConnectorRuntime,
+        desktopChat: DesktopChatRuntime,
+        controllerRelay: NodeControllerRelay
+    ) {
+        self.baseURL = baseURL
+        self.endpointScope = endpointScope
+        self.credentialStore = credentialStore
+        self.telemetry = telemetry
+        self.connector = connector
+        self.desktopChat = desktopChat
+        self.controllerRelay = controllerRelay
+    }
+
+    func reconcile() async throws {
+        let credentials = try await credentialStore.loadAll()
+        let desired = Dictionary(uniqueKeysWithValues: credentials.map { ($0.deviceID, $0) })
+
+        for deviceID in accounts.keys where desired[deviceID] == nil {
+            await stopAccount(deviceID)
+        }
+        for credential in credentials {
+            if let current = accounts[credential.deviceID], current.refreshToken == credential.refreshToken {
+                continue
+            }
+            if accounts[credential.deviceID] != nil { await stopAccount(credential.deviceID) }
+            try await startAccount(credential)
+        }
+    }
+
+    func captureConnectorEvent(_ event: ConnectorEvent) async {
+        for (deviceID, runtime) in accounts.sorted(by: { $0.key < $1.key }) {
+            do {
+                try await runtime.liveSync.bindPairing(deviceID: deviceID)
+                _ = try await runtime.liveSync.captureConnectorEvent(event)
+            } catch {
+                ThingtimeNodeLog.connector.error(
+                    "Live AI event capture failed for a paired account: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+    }
+
+    func stop() async {
+        for deviceID in Array(accounts.keys) { await stopAccount(deviceID) }
+    }
+
+    private func startAccount(_ credential: DeviceCredential) async throws {
+        let deviceID = credential.deviceID
+        let fixedStore = InMemoryDeviceCredentialStore(credential: credential)
+        let client = try ThingtimeAPIClient(baseURL: baseURL, credentialStore: fixedStore)
+        let liveSync = try LiveAISyncCoordinator(
+            fileURL: endpointScope.liveAIJournalFileURL(deviceID: deviceID)
+        ) { body in
+            try await client.syncLiveAI(body)
+        }
+        try await liveSync.bindPairing(deviceID: deviceID)
+
+        let telemetry = telemetry
+        let connector = connector
+        let desktopChat = desktopChat
+        let controllerRelay = controllerRelay
+        let scheduler = ControlPlaneScheduler(
+            client: client,
+            hooks: ControlPlaneSchedulerHooks(
+                makeHeartbeat: {
+                    await DeviceHeartbeat(
+                        deviceID: deviceID,
+                        telemetry: telemetry.snapshot(),
+                        connector: connector.health(),
+                        connectorProjects: connector.cachedProjectReferences(),
+                        additionalConnectors: desktopChat.connectorStates()
+                    )
+                },
+                dispatchCommand: { command in
+                    let response = await controllerRelay.dispatch(command)
+                    do {
+                        _ = try await liveSync.captureSuccessfulLeasedResponse(command: command, response: response)
+                    } catch {
+                        ThingtimeNodeLog.connector.error(
+                            "Live AI command capture failed for a paired account: \(error.localizedDescription, privacy: .public)"
+                        )
+                    }
+                    return response
+                },
+                reportError: { error in
+                    ThingtimeNodeLog.lifecycle.error(
+                        "Control-plane cycle failed for a paired account: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+            )
+        )
+        let flushTask = Task {
+            while !Task.isCancelled {
+                let retryDelay: Duration
+                do {
+                    _ = try await liveSync.flush(maximumRequests: 8)
+                    retryDelay = .seconds(2)
+                } catch {
+                    ThingtimeNodeLog.connector.error(
+                        "Live AI sync failed for a paired account; the durable outbox will retry: \(error.localizedDescription, privacy: .public)"
+                    )
+                    retryDelay = .seconds(10)
+                }
+                do {
+                    try await Task.sleep(for: retryDelay)
+                } catch {
+                    return
+                }
+            }
+        }
+        accounts[deviceID] = AccountRuntime(
+            refreshToken: credential.refreshToken,
+            scheduler: scheduler,
+            liveSync: liveSync,
+            flushTask: flushTask
+        )
+        await scheduler.start()
+    }
+
+    private func stopAccount(_ deviceID: String) async {
+        guard let runtime = accounts.removeValue(forKey: deviceID) else { return }
+        runtime.flushTask.cancel()
+        await runtime.scheduler.stop()
+        await runtime.flushTask.value
+    }
+}
+
 @MainActor
 private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -172,11 +340,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: ThingtimeNodeController?
     private var connectorRuntime: ConnectorRuntime?
     private var desktopChatRuntime: DesktopChatRuntime?
-    private var scheduler: ControlPlaneScheduler?
-    private var liveSync: LiveAISyncCoordinator?
+    private var controlPlaneRuntime: MultiAccountControlPlaneRuntime?
     private var liveSyncEventTask: Task<Void, Never>?
     private var desktopChatEventTask: Task<Void, Never>?
-    private var liveSyncFlushTask: Task<Void, Never>?
     private var listener: NSXPCListener?
     private var listenerDelegate: XPCListenerDelegate?
     private var summaryItem: NSMenuItem?
@@ -208,9 +374,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 baseURL: endpointScope.canonicalBaseURL,
                 credentialStore: credentialStore
             )
-            let liveSync = try LiveAISyncCoordinator(fileURL: endpointScope.liveAIJournalFileURL()) { body in
-                try await apiClient.syncLiveAI(body)
-            }
+            let controllerRelay = NodeControllerRelay()
+            let controlPlaneRuntime = MultiAccountControlPlaneRuntime(
+                baseURL: endpointScope.canonicalBaseURL,
+                endpointScope: endpointScope,
+                credentialStore: credentialStore,
+                telemetry: telemetry,
+                connector: connector,
+                desktopChat: desktopChat,
+                controllerRelay: controllerRelay
+            )
             let controller = ThingtimeNodeController(
                 journal: journal,
                 pairing: pairing,
@@ -219,55 +392,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 actionExecutor: actionExecutor,
                 controlPlaneClient: apiClient,
                 desktopChat: desktopChat,
-                pairingScopeChanged: { deviceID in
-                    try await liveSync.bindPairing(deviceID: deviceID)
-                    if deviceID == nil { await desktopChat.clearActiveSessions() }
+                pairingScopeChanged: { _ in
+                    try await controlPlaneRuntime.reconcile()
+                    if try await pairing.status().paired == false {
+                        await desktopChat.clearActiveSessions()
+                    }
                 }
             )
             self.controller = controller
             connectorRuntime = connector
             desktopChatRuntime = desktopChat
-            self.liveSync = liveSync
-            let scheduler = ControlPlaneScheduler(
-                client: apiClient,
-                hooks: ControlPlaneSchedulerHooks(
-                    makeHeartbeat: {
-                        let status = try await pairing.status()
-                        guard let deviceID = status.deviceID else {
-                            try await liveSync.bindPairing(deviceID: nil)
-                            throw ThingtimeAPIClientError.notPaired
-                        }
-                        try await liveSync.bindPairing(deviceID: deviceID)
-                        return await DeviceHeartbeat(
-                            deviceID: deviceID,
-                            telemetry: telemetry.snapshot(),
-                            connector: connector.health(),
-                            connectorProjects: connector.cachedProjectReferences(),
-                            additionalConnectors: desktopChat.connectorStates()
-                        )
-                    },
-                    dispatchCommand: { command in
-                        let response = await controller.handleLeasedCommand(command)
-                        do {
-                            _ = try await liveSync.captureSuccessfulLeasedResponse(
-                                command: command,
-                                response: response
-                            )
-                        } catch {
-                            ThingtimeNodeLog.connector.error(
-                                "Live AI command capture failed: \(error.localizedDescription, privacy: .public)"
-                            )
-                        }
-                        return response
-                    },
-                    reportError: { error in
-                        if (error as? ThingtimeAPIClientError) != .notPaired {
-                            ThingtimeNodeLog.lifecycle.error("Control-plane cycle failed: \(error.localizedDescription, privacy: .public)")
-                        }
-                    }
-                )
-            )
-            self.scheduler = scheduler
+            self.controlPlaneRuntime = controlPlaneRuntime
             if ProcessInfo.processInfo.environment["THINGTIME_NODE_MACH_SERVICE"] == "1" {
                 let service = XPCService(controller: controller)
                 let delegate = XPCListenerDelegate(service: service)
@@ -279,11 +414,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             liveSyncEventTask = Task {
                 do {
-                    let initialStatus = try await pairing.status()
-                    try await liveSync.bindPairing(deviceID: initialStatus.deviceID)
+                    await controllerRelay.install(controller)
+                    try await controlPlaneRuntime.reconcile()
                 } catch {
                     ThingtimeNodeLog.connector.error(
-                        "Live AI journal pairing failed closed: \(error.localizedDescription, privacy: .public)"
+                        "Paired account runtime setup failed closed: \(error.localizedDescription, privacy: .public)"
                     )
                     return
                 }
@@ -296,19 +431,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                         ThingtimeNodeLog.connector.error("Connector startup failed: \(error.localizedDescription, privacy: .public)")
                     }
                 }
-                await scheduler.start()
                 for await event in events {
                     if Task.isCancelled { return }
-                    do {
-                        let status = try await pairing.status()
-                        try await liveSync.bindPairing(deviceID: status.deviceID)
-                        guard status.paired else { continue }
-                        _ = try await liveSync.captureConnectorEvent(event)
-                    } catch {
-                        ThingtimeNodeLog.connector.error(
-                            "Live AI event capture failed: \(error.localizedDescription, privacy: .public)"
-                        )
-                    }
+                    await controlPlaneRuntime.captureConnectorEvent(event)
                 }
             }
             desktopChatEventTask = Task {
@@ -316,49 +441,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 await desktopChat.startMonitoring()
                 for await event in events {
                     if Task.isCancelled { return }
-                    do {
-                        let status = try await pairing.status()
-                        try await liveSync.bindPairing(deviceID: status.deviceID)
-                        guard status.paired else {
-                            await desktopChat.clearActiveSessions()
-                            continue
-                        }
-                        _ = try await liveSync.captureConnectorEvent(event)
-                    } catch {
-                        ThingtimeNodeLog.connector.error(
-                            "Desktop chat live event capture failed: \(error.localizedDescription, privacy: .public)"
-                        )
-                    }
-                }
-            }
-            liveSyncFlushTask = Task {
-                while !Task.isCancelled {
-                    let retryDelay: Duration
-                    do {
-                        let status = try await pairing.status()
-                        try await liveSync.bindPairing(deviceID: status.deviceID)
-                        guard status.paired else { throw ThingtimeAPIClientError.notPaired }
-                        _ = try await liveSync.flush(maximumRequests: 8)
-                        retryDelay = .seconds(2)
-                    } catch ThingtimeAPIClientError.notPaired {
-                        retryDelay = .seconds(5)
-                    } catch {
-                        ThingtimeNodeLog.connector.error(
-                            "Live AI sync failed; the durable outbox will retry: \(error.localizedDescription, privacy: .public)"
-                        )
-                        retryDelay = .seconds(10)
-                    }
-                    do {
-                        try await Task.sleep(for: retryDelay)
-                    } catch {
-                        return
-                    }
+                    await controlPlaneRuntime.captureConnectorEvent(event)
                 }
             }
             refreshStatus(nil)
             ThingtimeNodeLog.lifecycle.info("Thingtime Node started")
         } catch {
-            summaryItem?.title = "Node unavailable"
+            summaryItem?.title = ThingtimeStatusMenuCopy.unavailable
             ThingtimeNodeLog.lifecycle.error("Thingtime Node setup failed: \(error.localizedDescription, privacy: .public)")
         }
     }
@@ -367,12 +456,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         listener?.invalidate()
         liveSyncEventTask?.cancel()
         desktopChatEventTask?.cancel()
-        liveSyncFlushTask?.cancel()
-        let scheduler = scheduler
+        let controlPlaneRuntime = controlPlaneRuntime
         let connector = connectorRuntime
         let desktopChat = desktopChatRuntime
         Task {
-            await scheduler?.stop()
+            await controlPlaneRuntime?.stop()
             await connector?.stop()
             await desktopChat?.stopMonitoring(clearSessions: true)
         }
@@ -390,21 +478,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.title = ""
         statusItem.button?.image = image
         statusItem.button?.imagePosition = .imageOnly
-        statusItem.button?.setAccessibilityLabel("Thingtime Node")
+        statusItem.button?.setAccessibilityLabel("Thingtime")
         let menu = NSMenu()
-        let summary = NSMenuItem(title: "Starting…", action: nil, keyEquivalent: "")
+        let summary = NSMenuItem(title: ThingtimeStatusMenuCopy.starting, action: nil, keyEquivalent: "")
         summary.isEnabled = false
         menu.addItem(summary)
         summaryItem = summary
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Refresh Status", action: #selector(refreshStatus(_:)), keyEquivalent: "r"))
-        menu.addItem(NSMenuItem(title: "Open Thingtime", action: #selector(openThingtime(_:)), keyEquivalent: "o"))
+        menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.refreshStatus, action: #selector(refreshStatus(_:)), keyEquivalent: "r"))
+        menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.openThingtime, action: #selector(openThingtime(_:)), keyEquivalent: "o"))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(
-            title: launchdManaged ? "Restart Thingtime Node" : "Quit Thingtime Node",
-            action: #selector(quit(_:)),
-            keyEquivalent: "q"
-        ))
+        if launchdManaged {
+            menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.restartThingtime, action: #selector(restart(_:)), keyEquivalent: ""))
+        }
+        menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.quitThingtime, action: #selector(quit(_:)), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
         statusItem.menu = menu
     }
@@ -414,9 +501,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             let response = await controller.handle(NodeRequest(method: "node.status"))
             if response.ok, let status = try? response.result?.decode(NodeStatus.self) {
-                summaryItem?.title = status.pairing.paired ? "Paired · Node healthy" : "Ready to pair"
+                summaryItem?.title = ThingtimeStatusMenuCopy.healthy(accountCount: status.pairing.deviceIDs.count)
             } else {
-                summaryItem?.title = "Node degraded"
+                summaryItem?.title = ThingtimeStatusMenuCopy.degraded
             }
         }
     }
@@ -426,8 +513,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(url)
     }
 
-    @objc private func quit(_ sender: Any?) {
+    @objc private func restart(_ sender: Any?) {
         NSApp.terminate(nil)
+    }
+
+    @objc private func quit(_ sender: Any?) {
+        guard launchdManaged else {
+            NSApp.terminate(nil)
+            return
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        process.arguments = ["bootout", "gui/\(getuid())/com.thingtime.desktop.node"]
+        do {
+            try process.run()
+        } catch {
+            summaryItem?.title = ThingtimeStatusMenuCopy.couldNotQuit
+            ThingtimeNodeLog.lifecycle.error(
+                "Thingtime could not stop its login service: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     private func connectorConfiguration() throws -> ConnectorRuntimeConfiguration? {

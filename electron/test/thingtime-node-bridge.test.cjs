@@ -288,7 +288,7 @@ test('status normalization does not claim a control-plane connection it cannot o
 		{
 			connector: { state: 'running', processIdentifier: 42 },
 			journalEntryCount: 3,
-			pairing: { paired: true, deviceID: 'device-1' },
+			pairing: { paired: true, deviceID: 'device-1', deviceIDs: ['device-1', 'device-2', 'device-2'] },
 			recoverablePairing: true,
 			permissions: { accessibility: 'granted', screenRecording: 'denied' },
 			service: 'running'
@@ -299,6 +299,8 @@ test('status normalization does not claim a control-plane connection it cannot o
 
 	assert.equal(value.serviceStatus, 'running');
 	assert.equal(value.pairingStatus, 'paired');
+	assert.deepEqual(value.deviceIds, ['device-1', 'device-2']);
+	assert.equal(value.pairedAccountCount, 2);
 	assert.equal(value.recoverablePairing, true);
 	assert.equal(value.transportStatus, 'unknown');
 	assert.deepEqual(value.permissions, [

@@ -26,6 +26,7 @@ public struct DeviceCredential: Codable, Equatable, Sendable {
 
 public protocol DeviceCredentialStore: Sendable {
     func load() async throws -> DeviceCredential?
+    func loadAll() async throws -> [DeviceCredential]
     func save(_ credential: DeviceCredential) async throws
     func delete() async throws
     func loadPendingPairingClaim() async throws -> PendingPairingClaim?
@@ -33,7 +34,20 @@ public protocol DeviceCredentialStore: Sendable {
     func deletePendingPairingClaim() async throws
 }
 
+public extension DeviceCredentialStore {
+    func loadAll() async throws -> [DeviceCredential] {
+        if let credential = try await load() { return [credential] }
+        return []
+    }
+}
+
 public final class KeychainDeviceCredentialStore: DeviceCredentialStore, @unchecked Sendable {
+    private struct CredentialVault: Codable {
+        let schemaVersion: Int
+        var credentials: [DeviceCredential]
+    }
+
+    private static let maximumCredentials = 32
     private let service: String
     private let account: String
     private let legacyAccount: String?
@@ -53,16 +67,29 @@ public final class KeychainDeviceCredentialStore: DeviceCredentialStore, @unchec
     }
 
     public func load() async throws -> DeviceCredential? {
-        if let credential = try load(DeviceCredential.self, account: account) { return credential }
+        try await loadAll().first
+    }
+
+    public func loadAll() async throws -> [DeviceCredential] {
+        if let credentials = try loadCredentials(account: account) { return credentials }
         guard let legacyAccount,
-              let credential = try load(DeviceCredential.self, account: legacyAccount) else { return nil }
-        try save(credential, account: account)
+              let credentials = try loadCredentials(account: legacyAccount) else { return [] }
+        try saveCredentials(credentials, account: account)
         try delete(account: legacyAccount)
-        return credential
+        return credentials
     }
 
     public func save(_ credential: DeviceCredential) async throws {
-        try save(credential, account: account)
+        var credentials = try await loadAll()
+        if let index = credentials.firstIndex(where: { $0.deviceID == credential.deviceID }) {
+            credentials[index] = credential
+        } else {
+            guard credentials.count < Self.maximumCredentials else {
+                throw ThingtimeNodeError.invalidRequest("This Mac already has the maximum number of paired Thingtime accounts.")
+            }
+            credentials.append(credential)
+        }
+        try saveCredentials(credentials, account: account)
     }
 
     public func delete() async throws {
@@ -89,6 +116,13 @@ public final class KeychainDeviceCredentialStore: DeviceCredentialStore, @unchec
     }
 
     private func load<Value: Decodable>(_ type: Value.Type, account: String) throws -> Value? {
+        guard let data = try loadData(account: account) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(Value.self, from: data)
+    }
+
+    private func loadData(account: String) throws -> Data? {
         var query = baseQuery(account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -98,9 +132,35 @@ public final class KeychainDeviceCredentialStore: DeviceCredentialStore, @unchec
         guard status == errSecSuccess, let data = item as? Data else {
             throw KeychainError(status: status)
         }
+        return data
+    }
+
+    private func loadCredentials(account: String) throws -> [DeviceCredential]? {
+        guard let data = try loadData(account: account) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(Value.self, from: data)
+        if let vault = try? decoder.decode(CredentialVault.self, from: data), vault.schemaVersion == 1 {
+            return try Self.normalized(vault.credentials)
+        }
+        let legacy = try decoder.decode(DeviceCredential.self, from: data)
+        let credentials = [legacy]
+        try saveCredentials(credentials, account: account)
+        return credentials
+    }
+
+    private func saveCredentials(_ credentials: [DeviceCredential], account: String) throws {
+        let normalized = try Self.normalized(credentials)
+        try save(CredentialVault(schemaVersion: 1, credentials: normalized), account: account)
+    }
+
+    private static func normalized(_ credentials: [DeviceCredential]) throws -> [DeviceCredential] {
+        guard credentials.count <= maximumCredentials else {
+            throw ThingtimeNodeError.invalidRequest("The paired Thingtime account vault is too large.")
+        }
+        var seen = Set<String>()
+        return credentials.filter { credential in
+            !credential.deviceID.isEmpty && seen.insert(credential.deviceID).inserted
+        }
     }
 
     private func save<Value: Encodable>(_ value: Value, account: String) throws {
@@ -150,17 +210,29 @@ public struct KeychainError: Error, LocalizedError, Equatable {
 }
 
 public actor InMemoryDeviceCredentialStore: DeviceCredentialStore {
-    private var credential: DeviceCredential?
+    private var credentials: [DeviceCredential]
     private var pendingPairingClaim: PendingPairingClaim?
 
     public init(credential: DeviceCredential? = nil, pendingPairingClaim: PendingPairingClaim? = nil) {
-        self.credential = credential
+        credentials = credential.map { [$0] } ?? []
         self.pendingPairingClaim = pendingPairingClaim
     }
 
-    public func load() async throws -> DeviceCredential? { credential }
-    public func save(_ credential: DeviceCredential) async throws { self.credential = credential }
-    public func delete() async throws { credential = nil }
+    public init(credentials: [DeviceCredential], pendingPairingClaim: PendingPairingClaim? = nil) {
+        self.credentials = credentials
+        self.pendingPairingClaim = pendingPairingClaim
+    }
+
+    public func load() async throws -> DeviceCredential? { credentials.first }
+    public func loadAll() async throws -> [DeviceCredential] { credentials }
+    public func save(_ credential: DeviceCredential) async throws {
+        if let index = credentials.firstIndex(where: { $0.deviceID == credential.deviceID }) {
+            credentials[index] = credential
+        } else {
+            credentials.append(credential)
+        }
+    }
+    public func delete() async throws { credentials = [] }
     public func loadPendingPairingClaim() async throws -> PendingPairingClaim? { pendingPairingClaim }
     public func savePendingPairingClaim(_ claim: PendingPairingClaim) async throws { pendingPairingClaim = claim }
     public func deletePendingPairingClaim() async throws { pendingPairingClaim = nil }
@@ -214,10 +286,12 @@ public struct PairingChallenge: Codable, Equatable, Sendable {
 public struct PairingStatus: Codable, Equatable, Sendable {
     public let paired: Bool
     public let deviceID: String?
+    public let deviceIDs: [String]
 
-    public init(paired: Bool, deviceID: String?) {
+    public init(paired: Bool, deviceID: String?, deviceIDs: [String]? = nil) {
         self.paired = paired
         self.deviceID = deviceID
+        self.deviceIDs = deviceIDs ?? deviceID.map { [$0] } ?? []
     }
 }
 
@@ -229,8 +303,13 @@ public actor PairingManager {
     }
 
     public func status() async throws -> PairingStatus {
-        let credential = try await store.load()
-        return PairingStatus(paired: credential != nil, deviceID: credential?.deviceID)
+        let credentials = try await store.loadAll()
+        let deviceIDs = credentials.map(\.deviceID)
+        return PairingStatus(paired: !deviceIDs.isEmpty, deviceID: deviceIDs.first, deviceIDs: deviceIDs)
+    }
+
+    public func credentials() async throws -> [DeviceCredential] {
+        try await store.loadAll()
     }
 
     public func begin(
@@ -286,10 +365,6 @@ public actor PairingManager {
                 )
             }
         }
-        guard try await store.load() == nil else {
-            throw ThingtimeNodeError.invalidRequest("This node is already paired.")
-        }
-
         let privateKey = Curve25519.Signing.PrivateKey()
         let credential = try Self.secureToken(prefix: "ttnode_", byteCount: 32)
         let nonce = try Self.secureRandomData(byteCount: 32)
@@ -336,9 +411,10 @@ public actor PairingManager {
     }
 
     func clearCompletedClaimForResume() async throws {
-        guard let credential = try await store.load(),
-              let pending = try await store.loadPendingPairingClaim() else { return }
-        guard pending.completeRequest?.credential == credential.refreshToken,
+        guard let pending = try await store.loadPendingPairingClaim() else { return }
+        let credentials = try await store.loadAll()
+        guard let credential = credentials.first(where: { $0.refreshToken == pending.completeRequest?.credential }),
+              pending.completeRequest?.credential == credential.refreshToken,
               pending.signingPrivateKey == credential.signingPrivateKey,
               pending.signingPublicKey == credential.signingPublicKey else {
             throw ThingtimeNodeError.invalidRequest("The completed credential does not match the pending pairing claim.")
@@ -423,7 +499,7 @@ public actor PairingManager {
             issuedAt: now
         )
         try await store.save(credential)
-        return PairingStatus(paired: true, deviceID: deviceID)
+        return try await status()
     }
 
     public func clearCompletedClaim(pairingID: String) async throws {

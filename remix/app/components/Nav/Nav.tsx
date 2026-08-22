@@ -47,10 +47,9 @@ const useUnicornGallop = () => {
 
 const NavAccountLink = (props: { claimedUser: ReturnType<typeof useCurrentUser> | null; className: string }) => {
 	const { claimedUser, className } = props;
-	const electronOnly = className === 'electron-titlebar-account-button';
 
 	return (
-		<Center className={className} display={electronOnly ? 'none' : 'flex'} cursor="pointer">
+		<Center className={className} display="flex" cursor="pointer">
 			{claimedUser ? (
 				<Link to="/profile">
 					<Flex flexDir="row" gap={2} alignItems="center">
@@ -219,23 +218,21 @@ export const Nav = (props) => {
 				top="var(--thingtime-safe-area-top, 0px)"
 				right={direction === 'right' && desktopOpen ? drawerCssWidth : 0}
 				left={direction === 'left' && desktopOpen ? drawerCssWidth : 0}
-				transform={
-					mobileOpen ? (direction === 'left' ? `translateX(${drawerCssWidth})` : `translateX(calc(-1 * ${drawerCssWidth}))`) : 'none'
+				transform={mobileOpen ? (direction === 'left' ? `translateX(${drawerCssWidth})` : `translateX(calc(-1 * ${drawerCssWidth}))`) : 'none'}
+				transition={loading || resizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out, transform 0.28s ease-out'}
+				background="color-mix(in srgb, var(--tt-card, #ffffff) 78%, transparent)"
+				borderBottom="1px solid var(--tt-border, #ececef)"
+				sx={{
+					backdropFilter: 'blur(14px)',
+					WebkitBackdropFilter: 'blur(14px)',
+					'html.thingtime-native-webview &': {
+						background: 'var(--tt-card, white)',
+						isolation: 'isolate',
+						position: 'fixed',
+						top: 'var(--thingtime-safe-area-top, 0px)'
 					}
-					transition={loading || resizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out, transform 0.28s ease-out'}
-					background="color-mix(in srgb, var(--tt-card, #ffffff) 78%, transparent)"
-					borderBottom="1px solid var(--tt-border, #ececef)"
-					sx={{
-						backdropFilter: 'blur(14px)',
-						WebkitBackdropFilter: 'blur(14px)',
-						'html.thingtime-native-webview &': {
-							background: 'var(--tt-card, white)',
-							isolation: 'isolate',
-							position: 'fixed',
-							top: 'var(--thingtime-safe-area-top, 0px)'
-						}
-					}}
-				>
+				}}
+			>
 				<Flex
 					className="thingtimeTopNavInner"
 					as="nav"
@@ -295,19 +292,17 @@ export const Nav = (props) => {
 							<Search size={16} strokeWidth={1.9} />
 						</Center>
 						<NavAccountLink className="electron-titlebar-account-button" claimedUser={claimedUser} />
+						{claimedUser && !isMobile ? (
+							<Center className="electron-titlebar-notifications-button" height="36px" paddingX="8px">
+								<NotificationsBell />
+							</Center>
+						) : null}
 					</Center>
 					<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
 					{/* relative + above the commander host (zIndex 9999): the centered
 				search pill is absolutely positioned, and long usernames (and now
 				the bell) can extend under it — these controls must stay tappable */}
-				<Center
-					className="nav-right-section"
-					columnGap={[3, 8]}
-					height="100%"
-					marginLeft="auto"
-					position="relative"
-					zIndex={10000}
-				>
+					<Center className="nav-right-section" columnGap={[3, 8]} height="100%" marginLeft="auto" position="relative" zIndex={10000}>
 						{inEditMode && (
 							<Center
 								// transform="scaleX(-100%)"
@@ -334,12 +329,12 @@ export const Nav = (props) => {
 								></Icon>
 							</Center>
 						)}
-						{claimedUser && (
+						{isMobile ? <NavAccountLink className="nav-right-account-button" claimedUser={claimedUser} /> : null}
+						{claimedUser && isMobile ? (
 							<Center>
 								<NotificationsBell />
 							</Center>
-						)}
-						<NavAccountLink className="nav-right-account-button" claimedUser={claimedUser} />
+						) : null}
 						<Center display={['flex', 'none']} cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>

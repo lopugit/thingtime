@@ -2053,7 +2053,11 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       the 52px titlebar background: Commander, nav controls, Lopu notification
       text, and the notification's 28px close target remain selectable,
       hoverable, and clickable. The titlebar order is drawer, Back, Forward,
-      home, search, account; Back/Forward must traverse real renderer history.
+      home, search, account, notifications; Back/Forward must traverse real
+      renderer history. Kill or delay the async desktop-info response once:
+      the preload platform hint must still apply Electron titlebar mode on the
+      first paint, without a missing drawer/history row or right-side account
+      regression.
       Pin, hover, and focus the drawer: its temporary z-index lift must remain
       below the titlebar controls, its hover popup must use the same 10px top
       and side gutter, and the first menu row must not retain extra Electron-only
@@ -2062,8 +2066,15 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 - [ ] Select every built-in menu-bar artwork (colour/template/black/white/pink/
       blue tree and colour/template/black/white wordmark), plus one custom
       image. Verify one image-only status item with a readable accessibility
-      label; no plain `Thingtime Node` title and no private custom path may reach
-      renderer or cloud state.
+      label; a fresh settings file must choose the pink four-square variant,
+      while an existing choice survives upgrade. The full colour wordmark must
+      render from the bundled tightly cropped raster at 86x16pt, sit vertically
+      centred, and show no SVG rectangle-join seams. Open its menu and verify
+      `Refresh Status`, `Open Thingtime`, optional `Restart Thingtime`, and
+      `Quit Thingtime`; no `Thingtime Node` menu copy or private custom path may
+      reach renderer or cloud state. `Quit Thingtime` must boot out the managed
+      LaunchAgent rather than immediately respawning under KeepAlive; opening
+      Thingtime again may explicitly register/start it.
 - [ ] Exercise **Pair this Mac**, resume, unpair, and **Request access** through
       the signed Electron app. Each presence-gated operation gets one native
       confirmation and can remain open for normal human response time without
@@ -2071,6 +2082,17 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       **Quit & Reopen** only as the user: launchd must replace the helper with
       exactly one node PID and one menu item; a direct LaunchServices start of
       the embedded helper must exit instead of creating a duplicate.
+- [ ] Pair two different Macs to one disposable Thingtime account, then pair
+      one disposable Mac to two different Thingtime accounts. Every pairing
+      link must remain one-use, but the Mac must retain both account credentials
+      in its bounded Keychain vault, advertise both opaque device IDs locally,
+      and maintain one isolated heartbeat/command/live-sync loop per account.
+      Each account's `/things` view must match only its own device ID, while
+      prompts/responses never cross accounts. Repeat from a renderer origin
+      different from the configured node origin: completion must fail before
+      claim with the two explicit origins in the error, then succeed after an
+      intentional endpoint switch. Existing single-account credentials must
+      migrate without re-pairing.
 - [ ] Permission preflight must not prompt. Without grants, Accessibility and
       Screen Recording operations fail closed with actionable instructions.
       The explicit **Request access** action must invoke the matching native

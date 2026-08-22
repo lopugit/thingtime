@@ -685,6 +685,23 @@ function requireMacNode(event) {
 	}
 }
 
+function requireRendererMatchesConfiguredNode(event) {
+	const frameUrl = event?.senderFrame?.url || event?.sender?.getURL?.() || '';
+	let pageOrigin;
+	try {
+		pageOrigin = new URL(frameUrl).origin;
+	} catch {
+		throw new ThingtimeNodeBridgeError('endpoint_mismatch', 'Open a configured Thingtime page before pairing this Mac.');
+	}
+	const nodeOrigin = new URL(requireDesktopSettings().snapshot().selectedEndpoint.url).origin;
+	if (pageOrigin !== nodeOrigin) {
+		throw new ThingtimeNodeBridgeError(
+			'endpoint_mismatch',
+			`This page is using ${pageOrigin}, but this Mac is connected to ${nodeOrigin}. Switch the desktop endpoint in Settings, then pair again.`
+		);
+	}
+}
+
 async function confirmNodeChange({ title, message, detail, confirmLabel }) {
 	const result = await dialog.showMessageBox(mainWindow || undefined, {
 		type: 'question',
@@ -796,6 +813,7 @@ async function nodeBeginPairing(event) {
 
 async function nodeCompletePairing(event, request) {
 	requireMacNode(event);
+	requireRendererMatchesConfiguredNode(event);
 	const pairingSecret = typeof request?.pairingSecret === 'string' ? request.pairingSecret : '';
 	const commandId = typeof request?.commandId === 'string' ? request.commandId : '';
 	if (!pairingSecret || !commandId) {
@@ -809,6 +827,7 @@ async function nodeCompletePairing(event, request) {
 
 async function nodeResumePairing(event, request) {
 	requireMacNode(event);
+	requireRendererMatchesConfiguredNode(event);
 	const commandId = typeof request?.commandId === 'string' ? request.commandId : '';
 	if (!commandId) throw new ThingtimeNodeBridgeError('invalid_request', 'Resuming pairing requires a commandId.');
 	await thingtimeNode.request('pairing.resume', {}, commandId);
@@ -1172,6 +1191,15 @@ async function loadDesktopUrl(rawUrl) {
   return getDesktopInfo();
 }
 
+async function selectAndLoadDesktopUrl(rawUrl) {
+	const targetUrl = normalizeDesktopUrl(rawUrl);
+	const snapshot = requireDesktopSettings().snapshot();
+	const target = snapshot.endpointProfiles.find((entry) => entry.url === targetUrl);
+	if (!target) throw new Error('Add this deployment as a Thingtime API endpoint before loading it.');
+	if (target.id !== snapshot.selectedEndpointId) return switchDesktopEndpoint(target.id);
+	return loadDesktopUrl(target.url);
+}
+
 function showLoadUrlError(error) {
   dialog.showErrorBox('Thingtime URL failed', error instanceof Error ? error.message : String(error));
 }
@@ -1283,7 +1311,7 @@ ipcMain.handle('thingtime-desktop:select-menu-bar-icon', (event, request) => des
 ipcMain.handle('thingtime-desktop:upload-menu-bar-icon', (event) => desktopUploadMenuBarIcon(event));
 ipcMain.handle('thingtime-desktop:load-url', (event, url) => {
 	requireTrustedAiBridgeEvent(event);
-	return loadDesktopUrl(url);
+	return selectAndLoadDesktopUrl(url);
 });
 ipcMain.handle('thingtime-desktop:check-for-updates', () => checkForUpdates());
 ipcMain.handle('thingtime-desktop:download-update-bundle', () => downloadUpdateBundle());
