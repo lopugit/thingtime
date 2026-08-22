@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Center, Flex } from '@chakra-ui/react';
-import { Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Search } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
@@ -43,6 +43,64 @@ const useUnicornGallop = () => {
 	}, [lopu]);
 
 	return { onLogoClick, galloping };
+};
+
+const NavAccountLink = (props: { claimedUser: ReturnType<typeof useCurrentUser> | null; className: string }) => {
+	const { claimedUser, className } = props;
+	const electronOnly = className === 'electron-titlebar-account-button';
+
+	return (
+		<Center className={className} display={electronOnly ? 'none' : 'flex'} cursor="pointer">
+			{claimedUser ? (
+				<Link to="/profile">
+					<Flex flexDir="row" gap={2} alignItems="center">
+						<Box fontSize="xs" fontWeight="600">
+							{getUserDisplayName(claimedUser)}
+						</Box>
+						<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
+					</Flex>
+				</Link>
+			) : (
+				<Link to="/login">
+					<Flex flexDir="row" gap={2} alignItems="center">
+						<Box fontSize="xs" opacity={0.5}>
+							Login
+						</Box>
+						<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
+					</Flex>
+				</Link>
+			)}
+		</Center>
+	);
+};
+
+const ElectronHistoryButton = (props: { direction: 'back' | 'forward'; onClick: () => void }) => {
+	const back = props.direction === 'back';
+	const label = back ? 'Back' : 'Forward';
+
+	return (
+		<Center
+			className="electron-titlebar-navigation-button"
+			as="button"
+			type="button"
+			display="none"
+			width="36px"
+			height="36px"
+			borderRadius="8px"
+			opacity={0.74}
+			cursor="pointer"
+			title={label}
+			aria-label={label}
+			_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
+			sx={{
+				WebkitTapHighlightColor: 'transparent',
+				touchAction: 'manipulation'
+			}}
+			onClick={props.onClick}
+		>
+			{back ? <ArrowLeft size={16} strokeWidth={1.9} /> : <ArrowRight size={16} strokeWidth={1.9} />}
+		</Center>
+	);
 };
 
 export const Nav = (props) => {
@@ -144,6 +202,14 @@ export const Nav = (props) => {
 		[openSearch]
 	);
 
+	const navigateBack = React.useCallback(() => {
+		navigate(-1);
+	}, [navigate]);
+
+	const navigateForward = React.useCallback(() => {
+		navigate(1);
+	}, [navigate]);
+
 	return (
 		<>
 			<Box
@@ -197,6 +263,8 @@ export const Nav = (props) => {
 						// on the left (then the nav starts right of the trigger)
 						paddingLeft={direction === 'left' && desktopOpen ? 0 : 'var(--thingtime-electron-titlebar-nav-start, 34px)'}
 					>
+						<ElectronHistoryButton direction="back" onClick={navigateBack} />
+						<ElectronHistoryButton direction="forward" onClick={navigateForward} />
 						<Center className="electron-titlebar-home-button" transform="scaleX(-100%)" cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>
@@ -226,6 +294,7 @@ export const Nav = (props) => {
 						>
 							<Search size={16} strokeWidth={1.9} />
 						</Center>
+						<NavAccountLink className="electron-titlebar-account-button" claimedUser={claimedUser} />
 					</Center>
 					<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
 					{/* relative + above the commander host (zIndex 9999): the centered
@@ -270,27 +339,7 @@ export const Nav = (props) => {
 								<NotificationsBell />
 							</Center>
 						)}
-						<Center cursor="pointer">
-							{claimedUser ? (
-								<Link to="/profile">
-									<Flex flexDir={'row'} gap={2} alignItems="center">
-										<Box fontSize="xs" fontWeight="600">
-											{getUserDisplayName(claimedUser)}
-										</Box>
-										<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
-									</Flex>
-								</Link>
-							) : (
-								<Link to="/login">
-									<Flex flexDir={'row'} gap={2}>
-										<Box fontSize="xs" opacity={0.5}>
-											Login
-										</Box>
-										<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
-									</Flex>
-								</Link>
-							)}
-						</Center>
+						<NavAccountLink className="nav-right-account-button" claimedUser={claimedUser} />
 						<Center display={['flex', 'none']} cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>

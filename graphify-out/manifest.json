@@ -935,9 +935,9 @@
     "semantic_hash": "ada1b6175a23f23ed76bb7deab8c36ad"
   },
   "remix/app/components/Lopu/useLopu.tsx": {
-    "mtime": 1786968733.8509212,
-    "ast_hash": "c816bb37b2cf3d0be4cc9750f5a72cc9",
-    "semantic_hash": "c816bb37b2cf3d0be4cc9750f5a72cc9"
+    "mtime": 1787367637.8839781,
+    "ast_hash": "a97ba344962b19d1fcc201e4c07e33a9",
+    "semantic_hash": "a97ba344962b19d1fcc201e4c07e33a9"
   },
   "remix/app/components/MagicInput/MagicInput.tsx": {
     "mtime": 1786968733.851031,
@@ -970,9 +970,9 @@
     "semantic_hash": "aaef478af808d8ce9ac2e838468014b7"
   },
   "remix/app/components/Nav/Nav.tsx": {
-    "mtime": 1787316142.572071,
-    "ast_hash": "9c03ab9415b173ef05b617aa1a76ff68",
-    "semantic_hash": "9c03ab9415b173ef05b617aa1a76ff68"
+    "mtime": 1787367662.431911,
+    "ast_hash": "a95be9e780e8a6ba7fe381fcd1808ad7",
+    "semantic_hash": "a95be9e780e8a6ba7fe381fcd1808ad7"
   },
   "remix/app/components/Nav/ReactiveNav.tsx": {
     "mtime": 1786968733.857147,
@@ -1100,9 +1100,9 @@
     "semantic_hash": "7f1938dd65767c801825fc721151adbf"
   },
   "remix/app/globals/GlobalStyles.tsx": {
-    "mtime": 1787316142.5748434,
-    "ast_hash": "56bd66cabbbd5fb1e32435ee3c14354c",
-    "semantic_hash": "56bd66cabbbd5fb1e32435ee3c14354c"
+    "mtime": 1787366328.3931785,
+    "ast_hash": "c5490dbe88d309515f97a92daad3095d",
+    "semantic_hash": "c5490dbe88d309515f97a92daad3095d"
   },
   "remix/app/gp/GradientPath.js": {
     "mtime": 1786968733.8704512,
@@ -2640,9 +2640,9 @@
     "semantic_hash": "b63942cd8b7106ed252f386b2c05e566"
   },
   "remix/app/components/Nav/Drawer/DrawerTrigger.tsx": {
-    "mtime": 1786968733.8559155,
-    "ast_hash": "0c4cda614416a229910529e75f1ec04b",
-    "semantic_hash": "0c4cda614416a229910529e75f1ec04b"
+    "mtime": 1787366305.2684119,
+    "ast_hash": "adfef31e0b7b6fdf2cf88f632ee8f246",
+    "semantic_hash": "adfef31e0b7b6fdf2cf88f632ee8f246"
   },
   "remix/app/components/Nav/Drawer/NavDrawer.tsx": {
     "mtime": 1786968733.8561072,
@@ -2665,9 +2665,9 @@
     "semantic_hash": "9dac40df9e1da883f6fdeed4f0a16e5f"
   },
   "remix/app/components/Nav/Drawer/useDrawer.tsx": {
-    "mtime": 1786968733.8565965,
-    "ast_hash": "64c594c6fd08d7bab6bd916abbe48ef4",
-    "semantic_hash": "64c594c6fd08d7bab6bd916abbe48ef4"
+    "mtime": 1787366323.751518,
+    "ast_hash": "2e5177216a863de0b778172e1caf3c44",
+    "semantic_hash": "2e5177216a863de0b778172e1caf3c44"
   },
   "remix/app/routes/docs/DesignWorkspace.tsx": {
     "mtime": 1786968733.8939965,
@@ -3317,7 +3317,7 @@
   "electron/README.md": {
     "mtime": 1787318460.4918835,
     "ast_hash": "fa646108d8224233a5c7dfd3b3051d6b",
-    "semantic_hash": ""
+    "semantic_hash": "fa646108d8224233a5c7dfd3b3051d6b"
   },
   ".githooks/README.md": {
     "mtime": 1786968733.635545,
@@ -6967,6 +6967,6 @@
   "macos/ThingtimeNode/README.md": {
     "mtime": 1787318950.40269,
     "ast_hash": "1906cecae67c81f7795b4159b7920fc1",
-    "semantic_hash": ""
+    "semantic_hash": "1906cecae67c81f7795b4159b7920fc1"
   }
 }

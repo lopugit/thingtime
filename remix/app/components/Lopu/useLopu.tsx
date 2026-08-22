@@ -92,8 +92,10 @@ const LopuToast = ({
   onClose
 }: LopuArgs & { loading?: boolean; countdown?: number | null; onClose: () => void }) => (
   <Box
+		className="lopuToast"
 		role={announceDescription ? 'status' : 'group'}
     pointerEvents="auto"
+    userSelect="text"
     p="2px"
     borderRadius="var(--tt-radius-xl, 20px)"
     background={RAINBOW}
@@ -126,11 +128,14 @@ const LopuToast = ({
           display="flex"
           alignItems="center"
           justifyContent="center"
-          width="20px"
-          height="20px"
+          width="28px"
+          height="28px"
+          margin="-4px"
           borderRadius="full"
           fontSize="xs"
           lineHeight={1}
+          cursor="pointer"
+          userSelect="none"
           color="var(--tt-faint, #b6b6c0)"
           _hover={{ color: 'var(--tt-ink, #16161a)', bg: 'var(--tt-surface-alt, #f5f5f7)' }}
           transition="all 140ms ease"

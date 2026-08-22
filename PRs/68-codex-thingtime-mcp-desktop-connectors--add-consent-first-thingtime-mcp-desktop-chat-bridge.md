@@ -260,6 +260,33 @@ cookies, credentials, and raw paths; imported provider rows remain read-only.
   the helper's live TCC identity rather than hard-coded denied; the denied grant
   was deliberately not changed or reset.
 
+### Desktop titlebar and drawer acceptance (2026-08-22)
+
+- The installed Apple Development-signed app was exercised against the current
+  local renderer. Direct renderer measurements confirmed the draggable region
+  ends at the 52px titlebar background (`z-index: 10130`), while the inactive
+  Commander host at y=60..108 is explicitly `no-drag`; that former overlap was
+  the cause of Lopu notification text and the close control becoming difficult
+  to select or hover. Lopu surfaces now compute to `no-drag`/`user-select: text`,
+  and the close target is 28x28px with a pointer cursor.
+- The installed titlebar rendered drawer, Back, Forward, home, search, then the
+  signed-in account on the left. Both history controls navigated a real
+  `/things/Content` -> `/` -> `/things/Content` sequence. With the drawer under
+  the pointer its panel rose to `z-index: 10120`, remained below the 10130
+  titlebar, and hit-testing still resolved the titlebar controls. The menu's
+  extra Electron top padding is zero and the collapsed hover surface uses the
+  same 10px top and side gutter.
+- Browser acceptance covered the open and closed drawer at exactly 390 CSS px,
+  including a complete scroll through the footer. Document and body widths
+  stayed equal to the viewport with no horizontal overflow. The ordinary web
+  nav retained its existing right-side Login placement; the history controls
+  and left-side account placement remain Electron-only.
+- Focused lint completed with no errors (only the existing Lopu/useDrawer
+  warnings), the Vite client build passed, Electron tests passed 47/47, and the
+  canonical local Electron package/install flow passed strict signing checks.
+  The temporary local renderer endpoint used for this acceptance was removed
+  from desktop settings afterward.
+
 ### Acceptance boundaries still open
 
 - The installed Electron session and worktree browser session were logged out,

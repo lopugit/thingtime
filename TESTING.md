@@ -2049,6 +2049,16 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       minutes. Signed-parent status must remain responsive; relaunch Electron
       and unregister through the same confirmed UI without touching a foreign
       agent/process.
+- [ ] In that exact installed app, verify the draggable desktop region stops at
+      the 52px titlebar background: Commander, nav controls, Lopu notification
+      text, and the notification's 28px close target remain selectable,
+      hoverable, and clickable. The titlebar order is drawer, Back, Forward,
+      home, search, account; Back/Forward must traverse real renderer history.
+      Pin, hover, and focus the drawer: its temporary z-index lift must remain
+      below the titlebar controls, its hover popup must use the same 10px top
+      and side gutter, and the first menu row must not retain extra Electron-only
+      top padding. Recheck the open and closed drawer at 390 CSS px and scroll
+      the page through the footer with no horizontal overflow.
 - [ ] Select every built-in menu-bar artwork (colour/template/black/white/pink/
       blue tree and colour/template/black/white wordmark), plus one custom
       image. Verify one image-only status item with a readable accessibility

@@ -19,6 +19,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Electron titlebar, notification, and drawer interaction boundaries**: the
+  draggable region now stops at the 52px desktop titlebar instead of extending
+  through the inactive Commander over Lopu notifications. Notification text is
+  selectable and its close control has a 28px target; Electron places Back and
+  Forward between the drawer and home controls and moves the account to the end
+  of the left icon row. Hovered/pinned drawers remain below those controls, use
+  an even 10px hover-surface gutter, and no longer add excess top menu padding.
+  — Codex (AI), 2026-08-22
+
 - **Desktop node endpoint, permissions, relaunch, and identity follow-up**:
   Electron now stores a local list of named API origins, seeds the build's PR
   preview, probes `/api/v1/devices` before switching, and moves the renderer,
