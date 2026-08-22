@@ -3315,8 +3315,8 @@
     "semantic_hash": "cef236b2909fd206dd16da39d183a8a6"
   },
   "electron/README.md": {
-    "mtime": 1787376408.9165354,
-    "ast_hash": "da8744773ef1580eed6acc7ca9309e1c",
+    "mtime": 1787383641.4202733,
+    "ast_hash": "5285222f257555fa09a10b346cf985fe",
     "semantic_hash": ""
   },
   ".githooks/README.md": {
@@ -4155,8 +4155,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787376408.9160054,
-    "ast_hash": "0d3aa27ade1dff144126690003d47dc4",
+    "mtime": 1787383641.4195006,
+    "ast_hash": "64268420cfaa776ea8d540a7befbaabc",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -6955,8 +6955,8 @@
     "semantic_hash": "ea1b89dfb8fb4880a49a2bc3d34eefd8"
   },
   "PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md": {
-    "mtime": 1787377123.3380527,
-    "ast_hash": "aa7ecd506e8921f52c79ed062e407995",
+    "mtime": 1787383641.4205272,
+    "ast_hash": "3a79093a32e91f6e2bae596703e4be6b",
     "semantic_hash": ""
   },
   "electron/PRODUCTION_RELEASE.md": {
@@ -6965,8 +6965,8 @@
     "semantic_hash": "d63312f88b73142af78d5d026a6544ee"
   },
   "macos/ThingtimeNode/README.md": {
-    "mtime": 1787376408.9162738,
-    "ast_hash": "bce473318ce5db715dcc1c4b644f5185",
+    "mtime": 1787383641.4200313,
+    "ast_hash": "4b182b439645da77d1ee2d848a0d1c7b",
     "semantic_hash": ""
   },
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/Resources/MenuBar/thingtime-wordmark-color.png": {
@@ -6980,8 +6980,8 @@
     "semantic_hash": "43dc0183302784728eb9f294aca8cb2e"
   },
   "macos/ThingtimeNode/Resources/ThingtimeNodeIcon.png": {
-    "mtime": 1787376687.0984225,
-    "ast_hash": "f540e38c6b4382df8aa00c01c308e22b",
+    "mtime": 1787383609.2806878,
+    "ast_hash": "a58c106823718301d2f1c051c8011562",
     "semantic_hash": ""
   }
 }
