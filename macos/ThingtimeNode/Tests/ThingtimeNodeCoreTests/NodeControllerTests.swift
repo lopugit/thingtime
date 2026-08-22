@@ -106,7 +106,9 @@ final class NodeControllerTests: XCTestCase {
         let journalURL = directory.appendingPathComponent("journal.json")
         let store = InMemoryDeviceCredentialStore()
         let pairing = PairingManager(store: store)
-        let client = ResponseLossControlPlaneClient()
+        let client = ResponseLossControlPlaneClient(claimOutcomes: [
+            .ambiguous, .ambiguous, .ambiguous, .succeeded
+        ])
         let telemetry = DeviceTelemetryCollector()
         let journal = try CommandJournal(fileURL: journalURL)
         let controller = ThingtimeNodeController(
@@ -168,8 +170,11 @@ final class NodeControllerTests: XCTestCase {
         let prepareRequests = await client.prepareRequests
         let claimRequests = await client.claimRequests
         XCTAssertEqual(prepareRequests.count, 1, "A durable complete request skips prepare on retry.")
-        XCTAssertEqual(claimRequests.count, 2)
-        XCTAssertEqual(claimRequests.first, claimRequests.last, "Response-loss recovery must replay the exact signed complete request.")
+        XCTAssertEqual(claimRequests.count, 4)
+        XCTAssertTrue(
+            claimRequests.dropFirst().allSatisfy { $0 == claimRequests.first },
+            "Response-loss recovery must replay the exact signed complete request."
+        )
         let credential = try await store.load()
         let pendingAfterRetry = try await store.loadPendingPairingClaim()
         XCTAssertEqual(credential?.deviceID, "device-committed")
@@ -185,10 +190,47 @@ final class NodeControllerTests: XCTestCase {
         XCTAssertTrue(replayedResume.ok)
         XCTAssertEqual(replayedResume.result, reconciled.result)
         let claimRequestsAfterReplay = await client.claimRequests
-        XCTAssertEqual(claimRequestsAfterReplay.count, 2, "A journal replay must not call the server again.")
+        XCTAssertEqual(claimRequestsAfterReplay.count, 4, "A journal replay must not call the server again.")
 
         let reconciledStatus = await resumedController.handle(NodeRequest(method: "node.status"))
         XCTAssertEqual(reconciledStatus.result?.objectValue?["recoverablePairing"], .bool(false))
+    }
+
+    func testTransientPairingResponseLossReconcilesWithinOneApprovedRequest() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ThingtimeNodePairingInPlaceRetryTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let journal = try CommandJournal(fileURL: directory.appendingPathComponent("journal.json"))
+        let store = InMemoryDeviceCredentialStore()
+        let client = ResponseLossControlPlaneClient()
+        let telemetry = DeviceTelemetryCollector()
+        let controller = ThingtimeNodeController(
+            journal: journal,
+            pairing: PairingManager(store: store),
+            connector: ConnectorRuntime(configuration: nil),
+            telemetry: telemetry,
+            actionExecutor: SafeActionExecutor(telemetry: telemetry),
+            controlPlaneClient: client
+        )
+
+        let response = await controller.handle(NodeRequest(
+            commandId: "pair-command-in-place",
+            method: "pairing.claim",
+            parameters: .object(["pairingSecret": .string(serverPairingSecret)])
+        ))
+
+        XCTAssertTrue(response.ok)
+        let storedCredential = try await store.load()
+        let pendingClaim = try await store.loadPendingPairingClaim()
+        let journalEntry = await journal.entry(commandId: "pair-command-in-place")
+        XCTAssertEqual(storedCredential?.deviceID, "device-committed")
+        XCTAssertNil(pendingClaim)
+        XCTAssertEqual(journalEntry?.state, .succeeded)
+        let prepareRequests = await client.prepareRequests
+        let claimRequests = await client.claimRequests
+        XCTAssertEqual(prepareRequests.count, 1, "A claim retry must reuse the prepared proof.")
+        XCTAssertEqual(claimRequests.count, 2)
+        XCTAssertEqual(claimRequests.first, claimRequests.last, "The replay must be byte-equivalent at the typed contract boundary.")
     }
 
     func testPairingResumeRequiresCommandIDAndFailsSafelyWithoutPendingMaterial() async throws {
@@ -239,7 +281,9 @@ final class NodeControllerTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
         let journalURL = directory.appendingPathComponent("journal.json")
         let store = InMemoryDeviceCredentialStore()
-        let client = ResponseLossControlPlaneClient(claimOutcomes: [.ambiguous, .rejected(410)])
+        let client = ResponseLossControlPlaneClient(claimOutcomes: [
+            .ambiguous, .ambiguous, .ambiguous, .rejected(410)
+        ])
         let telemetry = DeviceTelemetryCollector()
         let firstController = ThingtimeNodeController(
             journal: try CommandJournal(fileURL: journalURL),

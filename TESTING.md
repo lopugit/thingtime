@@ -2028,6 +2028,13 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       the installed app. Inspect Finder/Dock in light and dark appearance: both
       must keep the exact green canopy/brown trunk artwork legible against the
       adaptive background, with no stale generic Electron icon.
+- [ ] Inspect the embedded
+      `Contents/Helpers/Thingtime Node.app/Contents/Resources/ThingtimeNode.icns`
+      and its `CFBundleIconFile` declaration. The prompt/Finder artwork must
+      show the green/brown Thingtime tree plus the small pink/green/blue/yellow/
+      violet mesh-node cluster, retain transparent outer corners, and remain
+      recognizable at 16, 32, and 128 px instead of showing the generic app
+      blueprint.
 - [ ] Build with `THINGTIME_DESKTOP_DEFAULT_ENDPOINT` set to the intended PR
       deployment. In **Thingtime desktop** settings, confirm production,
       development, and that preview are pre-populated; add at least two named
@@ -2093,6 +2100,13 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       **Quit & Reopen** only as the user: launchd must replace the helper with
       exactly one node PID and one menu item; a direct LaunchServices start of
       the embedded helper must exit instead of creating a duplicate.
+- [ ] During pairing, inject one lost/ambiguous prepare or complete response.
+      The already-approved native operation must replay the exact same signed
+      claim internally, succeed without a second confirmation, and create only
+      one device relationship. Then exhaust all three bounded attempts: the
+      Keychain proof must remain durable, `/things` must refresh from **Pair
+      this account** to **Resume pairing**, and that explicit resume must
+      reconcile without generating a replacement pairing secret.
 - [ ] Pair two different Macs to one disposable Thingtime account, then pair
       one disposable Mac to two different Thingtime accounts. Every pairing
       link must remain one-use, but the Mac must retain both account credentials

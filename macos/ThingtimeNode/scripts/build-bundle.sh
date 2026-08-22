@@ -31,10 +31,12 @@ BIN_PATH="$(swift build \
     --show-bin-path)/ThingtimeNode"
 BRIDGE_PATH="$(dirname "${BIN_PATH}")/ThingtimeNodeBridge"
 RESOURCE_BUNDLE_PATH="$(dirname "${BIN_PATH}")/ThingtimeNode_ThingtimeNodeCore.bundle"
+ICON_SOURCE_PATH="${PACKAGE_ROOT}/Resources/ThingtimeNodeIcon.png"
 
 test -x "${BIN_PATH}"
 test -x "${BRIDGE_PATH}"
 test -d "${RESOURCE_BUNDLE_PATH}"
+test -f "${ICON_SOURCE_PATH}"
 mkdir -p "${STAGE_ROOT}"
 if [[ -e "${APP_PATH}" ]]; then
     rm -rf -- "${APP_PATH}"
@@ -45,6 +47,25 @@ mkdir -p "${CONTENTS_PATH}/Resources"
 /usr/bin/ditto "${BRIDGE_PATH}" "${CONTENTS_PATH}/MacOS/ThingtimeNodeBridge"
 /usr/bin/ditto "${RESOURCE_BUNDLE_PATH}" "${CONTENTS_PATH}/Resources/ThingtimeNode_ThingtimeNodeCore.bundle"
 /usr/bin/ditto "${PACKAGE_ROOT}/Resources/Info.plist" "${CONTENTS_PATH}/Info.plist"
+ICON_WORK_ROOT="$(mktemp -d "${CACHE_ROOT}/icon-build.XXXXXX")"
+trap '/bin/rm -rf -- "${ICON_WORK_ROOT}"' EXIT
+ICONSET_PATH="${ICON_WORK_ROOT}/ThingtimeNode.iconset"
+mkdir -p "${ICONSET_PATH}"
+while read -r filename size; do
+    /usr/bin/sips -z "${size}" "${size}" "${ICON_SOURCE_PATH}" --out "${ICONSET_PATH}/${filename}" >/dev/null
+done <<'ICON_SIZES'
+icon_16x16.png 16
+icon_16x16@2x.png 32
+icon_32x32.png 32
+icon_32x32@2x.png 64
+icon_128x128.png 128
+icon_128x128@2x.png 256
+icon_256x256.png 256
+icon_256x256@2x.png 512
+icon_512x512.png 512
+icon_512x512@2x.png 1024
+ICON_SIZES
+/usr/bin/iconutil -c icns "${ICONSET_PATH}" --output "${CONTENTS_PATH}/Resources/ThingtimeNode.icns"
 if [[ "${THINGTIME_NODE_EMBEDDED:-0}" != "1" ]]; then
     mkdir -p "${CONTENTS_PATH}/Library/LaunchAgents"
     /usr/bin/ditto \

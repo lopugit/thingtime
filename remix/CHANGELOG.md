@@ -19,6 +19,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Desktop pairing response reconciliation and Thingtime Node identity**: the
+  signed node now retries an ambiguous prepare/complete response up to three
+  times inside the original locally approved operation, replaying only the
+  exact key-bound signed claim so a committed response loss does not surface as
+  a false failure or require another confirmation. If every bounded attempt is
+  still uncertain, `/things` immediately refreshes into the durable **Resume
+  pairing** state with actionable copy. The embedded node helper now declares a
+  distinct RGBA macOS app icon that keeps the Thingtime pixel tree and adds a
+  compact multicolour mesh-node motif. — Codex (AI), 2026-08-22
+
 - **Electron now always renders its packaged Thingtime build**: API/deployment
   selection no longer replaces the desktop window with `thingtime.com` or a
   preview website. The bundled loopback UI remains authoritative and proxies

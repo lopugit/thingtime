@@ -173,6 +173,10 @@ bounded PNG. Only the chosen public identifier enters the LaunchAgent unless
 the custom option is active. The Electron app icon is an Icon Composer
 `.icon` bundle whose exact Thingtime canopy/trunk artwork has light and dark
 background appearances; electron-builder compiles it during macOS packaging.
+The nested `Thingtime Node.app` carries a separate generated ICNS: the same
+pixel tree with a compact multicolour connected-node cluster. Native bundle
+verification requires both that resource and its `CFBundleIconFile` declaration
+before the helper can be embedded.
 
 The same settings surface includes an **Updates** section. Auto-check is stored
 at `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled` and defaults to

@@ -53,6 +53,7 @@ public actor ThingtimeNodeController {
     }
 
     private static let connectorID = "codex-app-server"
+    private static let maximumPairingAttempts = 3
     private static let basePairingCapabilities = [
         "ai.session.create",
         "ai.session.interrupt",
@@ -331,66 +332,85 @@ public actor ThingtimeNodeController {
         pairingSecret: String,
         client: any ControlPlaneClient
     ) async throws -> PairingStatus {
-        do {
-            let device = await telemetry.snapshot()
-            let challenge = try await pairing.begin(pairingID: pairingSecret)
-            let descriptor = PairingDeviceDescriptor(
-                name: device.deviceName,
-                platform: "macos",
-                model: device.modelIdentifier,
-                osVersion: device.operatingSystemVersion,
-                appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
-            )
-            var pairingCapabilities = Self.basePairingCapabilities
-            if let mainDisplay = device.displays.first(where: { $0.isMain }), mainDisplay.brightness != nil {
-                pairingCapabilities.append("system.brightness.read")
-                if mainDisplay.brightnessControlSupported {
-                    pairingCapabilities.append("system.brightness.write")
+        for attempt in 1 ... Self.maximumPairingAttempts {
+            do {
+                return try await executePairingClaimAttempt(pairingSecret: pairingSecret, client: client)
+            } catch let error as ThingtimeAPIClientError {
+                if case let .rejected(status) = error,
+                   (400 ..< 500).contains(status),
+                   status != 408,
+                   status != 425,
+                   status != 429 {
+                    try await pairing.cancelClaim(pairingID: pairingSecret)
+                    throw error
                 }
-            }
-            let claimRequest: PairingClaimRequest
-            if let prepared = try await pairing.preparedClaim(pairingID: challenge.pairingID) {
-                claimRequest = prepared
-            } else {
-                let serverProof = try await client.preparePairing(PairingPrepareRequest(
-                    pairingSecret: challenge.pairingID,
-                    publicKey: challenge.publicKey,
-                    nonce: challenge.nonce
-                ))
-                claimRequest = try await pairing.bindPreparedClaim(
-                    pairingID: challenge.pairingID,
-                    serverProof: serverProof,
-                    device: descriptor,
-                    capabilities: pairingCapabilities
-                )
-            }
-            let claim = try await client.claimPairing(claimRequest)
-            let status = try await pairing.complete(
-                pairingID: challenge.pairingID,
-                deviceID: claim.deviceID,
-                refreshToken: claim.refreshToken
-            )
-            try await pairingScopeChanged(claim.deviceID)
-            return status
-        } catch let error as ThingtimeAPIClientError {
-            if case let .rejected(status) = error,
-               (400 ..< 500).contains(status),
-               status != 408,
-               status != 425,
-               status != 429 {
+                if attempt < Self.maximumPairingAttempts {
+                    await Task.yield()
+                    continue
+                }
+            } catch let error as ThingtimeNodeError {
                 try await pairing.cancelClaim(pairingID: pairingSecret)
                 throw error
+            } catch {
+                if attempt < Self.maximumPairingAttempts {
+                    await Task.yield()
+                    continue
+                }
             }
-            throw ThingtimeAPIClientError.pairingClaimOutcomeUncertain
-        } catch let error as ThingtimeNodeError {
-            try await pairing.cancelClaim(pairingID: pairingSecret)
-            throw error
-        } catch {
-            // A server commit followed by a local Keychain failure is still
-            // exactly replayable because the signed complete request remains
-            // durable. Never turn that ambiguity into a terminal journal row.
+
+            // Prepare is key-bound and complete reuses the durable signed
+            // request, so a missing response is safe to replay in place. Keep
+            // the pending record only after these bounded attempts are spent.
             throw ThingtimeAPIClientError.pairingClaimOutcomeUncertain
         }
+
+        preconditionFailure("The bounded pairing attempt loop must return or throw.")
+    }
+
+    private func executePairingClaimAttempt(
+        pairingSecret: String,
+        client: any ControlPlaneClient
+    ) async throws -> PairingStatus {
+        let device = await telemetry.snapshot()
+        let challenge = try await pairing.begin(pairingID: pairingSecret)
+        let descriptor = PairingDeviceDescriptor(
+            name: device.deviceName,
+            platform: "macos",
+            model: device.modelIdentifier,
+            osVersion: device.operatingSystemVersion,
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+        )
+        var pairingCapabilities = Self.basePairingCapabilities
+        if let mainDisplay = device.displays.first(where: { $0.isMain }), mainDisplay.brightness != nil {
+            pairingCapabilities.append("system.brightness.read")
+            if mainDisplay.brightnessControlSupported {
+                pairingCapabilities.append("system.brightness.write")
+            }
+        }
+        let claimRequest: PairingClaimRequest
+        if let prepared = try await pairing.preparedClaim(pairingID: challenge.pairingID) {
+            claimRequest = prepared
+        } else {
+            let serverProof = try await client.preparePairing(PairingPrepareRequest(
+                pairingSecret: challenge.pairingID,
+                publicKey: challenge.publicKey,
+                nonce: challenge.nonce
+            ))
+            claimRequest = try await pairing.bindPreparedClaim(
+                pairingID: challenge.pairingID,
+                serverProof: serverProof,
+                device: descriptor,
+                capabilities: pairingCapabilities
+            )
+        }
+        let claim = try await client.claimPairing(claimRequest)
+        let status = try await pairing.complete(
+            pairingID: challenge.pairingID,
+            deviceID: claim.deviceID,
+            refreshToken: claim.refreshToken
+        )
+        try await pairingScopeChanged(claim.deviceID)
+        return status
     }
 
     private func request(for command: LeasedCommand) async throws -> NodeRequest {

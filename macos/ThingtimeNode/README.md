@@ -51,6 +51,10 @@ XPC surface, and a supervised connector subprocess boundary.
   and closed visible events are queued through a durable exact-retry sync
   journal; completed visible chat text is persisted by the server while
   transient deltas/control events expire separately.
+  Ambiguous pairing responses are replayed up to three times inside the one
+  locally approved operation. Each retry reuses the same key-bound prepare and
+  durable signed complete request; only after the bound is exhausted does the
+  node expose `recoverablePairing` for an explicit later resume.
 - Endpoint isolation: every canonical deployment origin gets a separate
   Keychain account, command journal, and live-sync journal. Production alone
   migrates the former unscoped credential and retains the legacy production
@@ -109,7 +113,11 @@ The scripts build into
 select a stable `Apple Development` identity (or the explicit
 `THINGTIME_NODE_SIGNING_IDENTITY`), enable hardened runtime, verify the bundle,
 and install the verified copy at `~/Applications/Thingtime Node.app`. They do
-not fall back to ad-hoc signing.
+not fall back to ad-hoc signing. `build-bundle.sh` also derives a complete ICNS
+set from the tracked 1024px RGBA `Resources/ThingtimeNodeIcon.png` master and
+the bundle declares it as `ThingtimeNode.icns`, giving native prompts a
+Thingtime tree plus multicolour mesh-node identity instead of the generic
+application icon.
 
 For direct distribution, use a `Developer ID Application` identity and notarize
 and staple the outer Thingtime bundle. Keep the bundle identifier, signing team,

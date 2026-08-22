@@ -97,6 +97,22 @@ test('mac packaging uses the adaptive Thingtime Icon Composer artwork', () => {
 	}
 });
 
+test('native node bundle declares and builds its distinct pixel-node app icon', () => {
+	const nodeRoot = path.resolve(__dirname, '..', '..', 'macos', 'ThingtimeNode');
+	const iconPath = path.join(nodeRoot, 'Resources', 'ThingtimeNodeIcon.png');
+	const icon = readFileSync(iconPath);
+	assert.equal(icon.subarray(1, 4).toString('ascii'), 'PNG');
+	assert.equal(icon.readUInt32BE(16), 1024);
+	assert.equal(icon.readUInt32BE(20), 1024);
+	assert.equal(icon[25], 6, 'The icon master must retain RGBA transparency.');
+
+	const infoPlist = readFileSync(path.join(nodeRoot, 'Resources', 'Info.plist'), 'utf8');
+	assert.match(infoPlist, /<key>CFBundleIconFile<\/key>\s*<string>ThingtimeNode\.icns<\/string>/u);
+	const buildScript = readFileSync(path.join(nodeRoot, 'scripts', 'build-bundle.sh'), 'utf8');
+	assert.match(buildScript, /ThingtimeNodeIcon\.png/u);
+	assert.match(buildScript, /iconutil -c icns/u);
+});
+
 test('local and production builders use the exact package-manager pin through Corepack', () => {
 	const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf8'));
 	assert.match(packageJson.packageManager, /^pnpm@\d+\.\d+\.\d+$/u);

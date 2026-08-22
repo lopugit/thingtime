@@ -99,7 +99,7 @@ export const useLocalThingtimeNode = (
 		const currentBridge = getElectronBridge();
 		if (!currentBridge?.nodeGetStatus) {
 			setState((previous) => ({ ...previous, available: false, loading: false }));
-			return;
+			return null;
 		}
 		setState((previous) => ({ ...previous, available: true, loading: true }));
 		try {
@@ -115,6 +115,7 @@ export const useLocalThingtimeNode = (
 						? permissionsResult.value.permissions
 						: previous.permissions
 			}));
+			return statusResult.value;
 		} catch (error) {
 			setState((previous) => ({ ...previous, available: true, loading: false }));
 			lopuRef.current({
@@ -122,6 +123,7 @@ export const useLocalThingtimeNode = (
 				description: apiErrorMessage(error, 'Open Thingtime Desktop and try again.'),
 				status: 'error'
 			});
+			return null;
 		}
 	}, []);
 
@@ -282,10 +284,13 @@ export const useLocalThingtimeNode = (
 					}
 					await refresh();
 				} catch (error) {
-					setState((previous) => ({ ...previous, loading: false }));
+					const refreshedStatus = await refresh();
 					lopuRef.current({
 						title: 'That local node action didn’t work 😔',
-						description: localActionErrorMessage(error, 'Try again from Thingtime Desktop.'),
+						description:
+							refreshedStatus?.recoverablePairing === true
+								? 'The exact pairing request is safely saved on this Mac. Choose Resume pairing to reconcile it.'
+								: localActionErrorMessage(error, 'Try again from Thingtime Desktop.'),
 						status: 'error'
 					});
 				}

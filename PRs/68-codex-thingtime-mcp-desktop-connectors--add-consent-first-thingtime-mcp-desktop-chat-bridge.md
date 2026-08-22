@@ -388,6 +388,42 @@ last locally available shell and assets. Account reads, mutations, pairing, and
 sync still require a reachable selected API target; this change does not claim
 an offline database or offline conflict resolution layer.
 
+### Pairing reconciliation and node app icon follow-up (2026-08-22)
+
+- The native controller now treats an ambiguous pairing response as the
+  replayable protocol state it already is: within the single approved XPC
+  operation it makes at most three attempts, reusing the prepared proof and
+  exact durable signed complete request. A first lost response therefore
+  reconciles without another native dialog or duplicate device row. Three
+  consecutive ambiguous outcomes still reset the journal to retryable and
+  retain the Keychain pending claim for `pairing.resume`; a later definitive
+  4xx clears it as before.
+- The `/things` local-node hook now refreshes status after an action failure.
+  When the native pending record is recoverable, the card immediately changes
+  to **Resume pairing** and the toast explains that the exact request is saved,
+  instead of leaving a stale **Pair this account** control beside the raw IPC
+  error.
+- `Thingtime Node.app` now has its own 1024px RGBA source artwork: the existing
+  Thingtime green pixel tree/brown trunk plus a small connected cluster in
+  pink, green, blue, yellow, and violet. The bundle build derives the full ICNS
+  size set, declares `CFBundleIconFile`, and the native packaging verifier plus
+  Electron contract test fail if either the resource or declaration disappears.
+- Follow-up validation is green: Swift `95/95`, Electron `52/52`, device
+  server/UI `42/42`, focused ESLint and Prettier, and the typecheck ratchet at
+  `135` errors versus its `143` baseline with no changed-file diagnostic. The
+  canonical Apple Development package passed native-resource verification and
+  deep/strict signing, then installed atomically at
+  `~/Applications/Thingtime.app`. Installed hashes are outer executable
+  `53c0f6263f46f1a1dc66fe3eb523d3c1aee7e21c3396c5cc36e2b4d6efda2b15`,
+  node executable
+  `9c827dab212903a665a0a2742d490ef603a86ea455c093b46c9c401851af025d`,
+  and node ICNS
+  `d914c39ab010ae78a5f7a7a4db9118181f2fbb8c085623d71d78c5c27096c5b6`.
+  The relaunched window rendered from loopback `127.0.0.1`, `/things` reached
+  **Ready to pair**, and launchd ran the exact installed helper as PID `73027`.
+  No live pairing was performed automatically because accepting it creates a
+  durable account-to-computer relationship.
+
 ### Acceptance boundaries still open
 
 - The installed local-renderer acceptance reused an existing signed-in `Nikk`

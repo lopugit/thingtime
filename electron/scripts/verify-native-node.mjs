@@ -11,6 +11,8 @@ const nativeRoot = path.join(electronDir, 'dist', 'native');
 const helperApp = path.join(nativeRoot, 'Thingtime Node.app');
 const helperExecutable = path.join(helperApp, 'Contents', 'MacOS', 'ThingtimeNode');
 const bridgeExecutable = path.join(helperApp, 'Contents', 'MacOS', 'ThingtimeNodeBridge');
+const helperIcon = path.join(helperApp, 'Contents', 'Resources', 'ThingtimeNode.icns');
+const helperInfoPlist = path.join(helperApp, 'Contents', 'Info.plist');
 const runtimePath = path.join(electronDir, 'dist', 'ai', 'thingtime-node-runtime.mjs');
 const manifestPath = path.join(nativeRoot, 'manifest.json');
 const nestedLaunchAgentPath = path.join(helperApp, 'Contents', 'Library', 'LaunchAgents', 'com.thingtime.desktop.node.plist');
@@ -26,12 +28,16 @@ async function assertSelfContained(root) {
 	}
 }
 
-for (const required of [helperExecutable, bridgeExecutable, runtimePath, manifestPath]) {
+for (const required of [helperExecutable, bridgeExecutable, helperIcon, helperInfoPlist, runtimePath, manifestPath]) {
 	await access(required);
 }
 await assertSelfContained(nativeRoot);
 
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+const helperInfo = await readFile(helperInfoPlist, 'utf8');
+if (!/<key>CFBundleIconFile<\/key>\s*<string>ThingtimeNode\.icns<\/string>/u.test(helperInfo)) {
+	throw new Error('Thingtime Node must declare its packaged application icon.');
+}
 if (
 	manifest.bundleIdentifier !== 'com.thingtime.desktop.node' ||
 	manifest.bridgeBundleIdentifier !== 'com.thingtime.desktop.node.bridge' ||
@@ -46,12 +52,16 @@ try {
 } catch (error) {
 	if (error?.code !== 'ENOENT') throw error;
 }
-const signature = await verifySignedArtifacts({
-	bridgeExecutable,
-	helperApp,
-	helperExecutable,
-	outerApp: null,
-	runtimePath
-}, undefined, { requireExactLeafCertificate: true });
+const signature = await verifySignedArtifacts(
+	{
+		bridgeExecutable,
+		helperApp,
+		helperExecutable,
+		outerApp: null,
+		runtimePath
+	},
+	undefined,
+	{ requireExactLeafCertificate: true }
+);
 
 console.log(`Thingtime Node resources verified (team ${signature.teamIdentifier}).`);

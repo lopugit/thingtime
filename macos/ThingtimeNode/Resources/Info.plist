@@ -10,6 +10,8 @@
     <string>ThingtimeNode</string>
     <key>CFBundleIdentifier</key>
     <string>com.thingtime.desktop.node</string>
+    <key>CFBundleIconFile</key>
+    <string>ThingtimeNode.icns</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
