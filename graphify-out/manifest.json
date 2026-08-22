@@ -6980,8 +6980,8 @@
     "semantic_hash": "43dc0183302784728eb9f294aca8cb2e"
   },
   "macos/ThingtimeNode/Resources/ThingtimeNodeIcon.png": {
-    "mtime": 1787390434.6034312,
-    "ast_hash": "e10e1a993a83a34b22e735f932cda9ab",
+    "mtime": 1787393578.6261292,
+    "ast_hash": "365e4da7f4ded5e74b3cfefb4782e2b8",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/indexBudget.test.ts": {
@@ -6990,8 +6990,8 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeNode/Resources/ThingtimeNodeIcon.svg": {
-    "mtime": 1787390428.6473284,
-    "ast_hash": "2ee3d529473ec7cec4207774d9f1b9d0",
+    "mtime": 1787393551.6912186,
+    "ast_hash": "c5ae578ea63363dce32373aab9e6412f",
     "semantic_hash": ""
   }
 }
