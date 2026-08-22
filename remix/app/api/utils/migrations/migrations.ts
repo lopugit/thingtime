@@ -1744,21 +1744,18 @@ const migrateLegacyServiceQuotaThings = async (assertLease: () => Promise<void>)
 	return { rebuilt, quarantined };
 };
 
+// Both the pending census and the mutation pass must read the same complete
+// source document. Attachment accounting is intentionally defined by a closed
+// protected root envelope, including optional in-flight/delete fields. A
+// projection of ordinary Thing payload fields makes a valid attachment look
+// corrupt during the final fixed-point check even after it was stamped
+// successfully by the mutation pass.
+export const userStorageAccountingSourceCursor = <T extends { find: (filter: Record<string, unknown>) => any }>(things: T) =>
+	things.find({ ownerId: { $type: 'string' } });
+
 const countUnstampedBillableThings = async (knownUsers: Set<string>): Promise<number> => {
 	const things = await getCollection('things');
-	const cursor = things.find({ ownerId: { $type: 'string' } }).project({
-		schemaVersion: 1,
-		ownerId: 1,
-		shareId: 1,
-		thingtime: 1,
-		crystal: 1,
-		extended: 1,
-		tags: 1,
-		storageClass: 1,
-		sandboxExpiresAt: 1,
-		sizeBytes: 1,
-		storageAccountingVersion: 1
-	});
+	const cursor = userStorageAccountingSourceCursor(things);
 	let pending = 0;
 	for await (const doc of cursor) {
 		// Every data-kind service-quota claim is counted independently above. An
@@ -2043,15 +2040,6 @@ const fenceAllStorageLedgers = async (): Promise<{ accounts: number; apps: numbe
 		appUsers: appUsers.modifiedCount
 	};
 };
-
-// Do not narrow this cursor with a Mongo projection. Attachment accounting is
-// intentionally defined by a closed protected root envelope, including its
-// optional in-flight/delete fields. Projecting only the ordinary Thing payload
-// made every otherwise-valid attachment look corrupt during the account-wide
-// backfill. Reading each source document whole is also future-safe when that
-// protected envelope gains another validated field.
-export const userStorageAccountingSourceCursor = <T extends { find: (filter: Record<string, unknown>) => any }>(things: T) =>
-	things.find({ ownerId: { $type: 'string' } });
 
 const backfillUserStorageAccounting: Migration = {
 	id: 'backfill-user-storage-accounting',
