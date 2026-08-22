@@ -262,6 +262,10 @@ is fixed, and cite the checklist you ran in the PR description.
       `/branding/generated/<slug>/…` (200s, not client blobs); the ready-made
       grid lazy-loads (`loading="lazy"`) one `<img>` per size up to 10000px,
       wordmark sizes keep the 27:5 trimmed aspect (e.g. 1024×190).
+- [ ] Ready-made sizes render as two lines — the SVG line
+      (`SVG · scalable · <size>`) above the PNG line — and every PNG chip is
+      labelled `PNG · <W>×<H> · <KB/MB>`; chips wrap without horizontal
+      scroll at 375px.
 - [ ] Custom export: format PNG/SVG, any width, padding all-sides and
       per-side, background transparent/white/ink — downloads a file named
       `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding, and fires a

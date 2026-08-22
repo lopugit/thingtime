@@ -369,32 +369,13 @@ export const BrandAssetSection = ({
           <Text fontFamily={MONO} fontSize="11px" fontWeight={600} letterSpacing="0.14em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)" mb="12px">
             Ready-made sizes
           </Text>
-          <Flex flexWrap="wrap" columnGap="6px" rowGap="10px">
-            <Flex
-              as="a"
-              href={manifest.svg.url}
-              download
-              flexDir="column"
-              alignItems="center"
-              gap="6px"
-              px="12px"
-              py="10px"
-              borderRadius="12px"
-              _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
-              transition="background 140ms ease"
-            >
-              <Flex height="40px" alignItems="center">
-                <img src={manifest.svg.url} alt={`Thingtime ${title} logo — scalable SVG`} loading="lazy" decoding="async" style={{ maxHeight: '32px', maxWidth: '84px', display: 'block' }} />
-              </Flex>
-              <Text fontFamily={MONO} fontSize="10.5px" color="var(--tt-text, #5a5a66)" whiteSpace="nowrap">
-                SVG · {formatBytes(manifest.svg.bytes)}
-              </Text>
-            </Flex>
-            {manifest.pngs.map((png) => (
+          {/* One line of SVG variations, one line of PNGs — each chip labelled
+              format · dimensions · filesize. */}
+          <Flex flexDir="column" rowGap="6px">
+            <Flex flexWrap="wrap" columnGap="6px" rowGap="10px">
               <Flex
-                key={png.url}
                 as="a"
-                href={png.url}
+                href={manifest.svg.url}
                 download
                 flexDir="column"
                 alignItems="center"
@@ -404,24 +385,50 @@ export const BrandAssetSection = ({
                 borderRadius="12px"
                 _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
                 transition="background 140ms ease"
-                title={`${png.w}×${png.h} PNG · ${formatBytes(png.bytes)}`}
+                title={`Scalable SVG · ${formatBytes(manifest.svg.bytes)}`}
               >
                 <Flex height="40px" alignItems="center">
-                  <img
-                    src={png.url}
-                    alt={`Thingtime ${title} logo — ${png.w}×${png.h} transparent PNG`}
-                    width={png.w}
-                    height={png.h}
-                    loading="lazy"
-                    decoding="async"
-                    style={{ maxHeight: '32px', maxWidth: '84px', width: 'auto', height: 'auto', display: 'block' }}
-                  />
+                  <img src={manifest.svg.url} alt={`Thingtime ${title} logo — scalable SVG`} loading="lazy" decoding="async" style={{ maxHeight: '32px', maxWidth: '84px', display: 'block' }} />
                 </Flex>
                 <Text fontFamily={MONO} fontSize="10.5px" color="var(--tt-text, #5a5a66)" whiteSpace="nowrap">
-                  {png.w}×{png.h}
+                  SVG · scalable · {formatBytes(manifest.svg.bytes)}
                 </Text>
               </Flex>
-            ))}
+            </Flex>
+            <Flex flexWrap="wrap" columnGap="6px" rowGap="10px">
+              {manifest.pngs.map((png) => (
+                <Flex
+                  key={png.url}
+                  as="a"
+                  href={png.url}
+                  download
+                  flexDir="column"
+                  alignItems="center"
+                  gap="6px"
+                  px="12px"
+                  py="10px"
+                  borderRadius="12px"
+                  _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
+                  transition="background 140ms ease"
+                  title={`PNG · ${png.w}×${png.h} · ${formatBytes(png.bytes)}`}
+                >
+                  <Flex height="40px" alignItems="center">
+                    <img
+                      src={png.url}
+                      alt={`Thingtime ${title} logo — ${png.w}×${png.h} transparent PNG`}
+                      width={png.w}
+                      height={png.h}
+                      loading="lazy"
+                      decoding="async"
+                      style={{ maxHeight: '32px', maxWidth: '84px', width: 'auto', height: 'auto', display: 'block' }}
+                    />
+                  </Flex>
+                  <Text fontFamily={MONO} fontSize="10.5px" color="var(--tt-text, #5a5a66)" whiteSpace="nowrap">
+                    PNG · {png.w}×{png.h} · {formatBytes(png.bytes)}
+                  </Text>
+                </Flex>
+              ))}
+            </Flex>
           </Flex>
         </Box>
       ) : null}
