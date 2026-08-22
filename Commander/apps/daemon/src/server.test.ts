@@ -178,6 +178,20 @@ describe('Commander daemon HTTP trust boundaries', () => {
         subtitle: 'Commander Settings',
       });
 
+      const displaysSearch = await fetch(`${server.url}/api/search?q=displays`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(displaysSearch.status).toBe(200);
+      const displaysResults = (await displaysSearch.json()) as { hits: unknown[] };
+      expect(displaysResults.hits[0]).toMatchObject({
+        id: 'extension:builtin:macos-system:open-displays-settings',
+        title: 'Displays Settings',
+        subtitle: 'macOS System',
+        kind: 'system',
+        extensionId: 'builtin:macos-system',
+        commandName: 'open-displays-settings',
+      });
+
       const calculationSearch = await fetch(`${server.url}/api/search?q=${encodeURIComponent('256*2')}`, {
         headers: { 'x-commander-session': server.token },
       });

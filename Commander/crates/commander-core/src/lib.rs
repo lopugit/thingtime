@@ -21,6 +21,9 @@ const SUBTITLE_WEIGHT: u64 = 50;
 const KEYWORD_WEIGHT: u64 = 25;
 const FAVOURITE_BONUS: u64 = 25;
 const MAX_PREFERENCE_SCORE: u64 = 100_000;
+const EXACT_MATCH_SCORE: u64 = 100_000;
+const PREFIX_MATCH_SCORE: u64 = 80_000;
+const CONTAINED_MATCH_SCORE: u64 = 60_000;
 
 /// The kinds currently shared with Commander's TypeScript protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -574,20 +577,20 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
         .filter(|glyph| !glyph.value.is_whitespace())
         .map(|glyph| glyph.value)
         .collect();
-    let exact_bonus = if compact_candidate.as_slice() == query {
-        5_000
-    } else {
-        0
-    };
-    let prefix_bonus = if compact_candidate.starts_with(query) {
-        2_000
-    } else {
-        0
-    };
     let coverage_bonus =
         (((query.len() as u64) * 1_000) / compact_candidate.len().max(1) as u64).min(1_000);
-
-    let score = path_score.max(1) as u64 + exact_bonus + prefix_bonus + coverage_bonus;
+    let contained_at = compact_candidate
+        .windows(query.len())
+        .position(|candidate_window| candidate_window == query);
+    let score = if compact_candidate.as_slice() == query {
+        EXACT_MATCH_SCORE
+    } else if compact_candidate.starts_with(query) {
+        PREFIX_MATCH_SCORE.saturating_sub(compact_candidate.len() as u64)
+    } else if let Some(index) = contained_at {
+        CONTAINED_MATCH_SCORE.saturating_sub(index as u64)
+    } else {
+        path_score.max(1) as u64 + coverage_bonus
+    };
 
     Some(TextMatch {
         score,
@@ -977,6 +980,37 @@ mod tests {
             hits[0].matched_ranges,
             vec![MatchRange { start: 7, end: 15 }]
         );
+    }
+
+    #[test]
+    fn title_prefix_beats_typo_files_and_a_contained_application_match() {
+        let mut displays_settings = item("system", "Displays Settings");
+        displays_settings.kind = SearchItemKind::System;
+        displays_settings.preference_score = 600;
+
+        let mut better_display = item("application", "BetterDisplay");
+        better_display.kind = SearchItemKind::Application;
+        better_display.preference_score = 1_200;
+
+        let mut display_index = item("file", "_displayindex.py");
+        display_index.kind = SearchItemKind::File;
+
+        let mut display_directory = item("directory", "display");
+        display_directory.kind = SearchItemKind::Directory;
+
+        let hits = search(&request(
+            "displays",
+            vec![
+                better_display,
+                display_index,
+                display_directory,
+                displays_settings,
+            ],
+        ));
+
+        assert_eq!(hits[0].item.id, "system");
+        assert_eq!(hits[0].item.title, "Displays Settings");
+        assert!(hits[0].score > hits[1].score);
     }
 
     #[test]
