@@ -1,19 +1,28 @@
 const THINGTIME_PRODUCTION_ORIGIN = 'https://thingtime.com';
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
+const isLoopbackHostname = (hostname: string) => {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return normalized === 'localhost' || normalized.endsWith('.localhost') || normalized === '127.0.0.1' || normalized === '::1';
+};
+
 const normaliseOrigin = (value?: string | null) => {
   const trimmed = value?.trim();
   if (!trimmed) return THINGTIME_PRODUCTION_ORIGIN;
 
   try {
     const url = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+    if (url.username || url.password) return THINGTIME_PRODUCTION_ORIGIN;
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopbackHostname(url.hostname))) {
+      return THINGTIME_PRODUCTION_ORIGIN;
+    }
     return url.origin;
   } catch {
     return THINGTIME_PRODUCTION_ORIGIN;
   }
 };
 
-export const getApiFallbackOrigin = () => normaliseOrigin(THINGTIME_PRODUCTION_ORIGIN);
+export const getApiFallbackOrigin = () => normaliseOrigin(process.env.THINGTIME_API_FALLBACK_ORIGIN);
 
 export const getMissingSelfHostedApiEnv = () => {
   const missing: string[] = [];
@@ -25,11 +34,7 @@ export const getMissingSelfHostedApiEnv = () => {
     missing.push('MONGO_PASS');
   }
 
-  if (
-    process.env.NODE_ENV === 'production' &&
-    !process.env.JWT_PRIVATE_KEY?.trim() &&
-    !process.env.JWT_SECRET?.trim()
-  ) {
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_PRIVATE_KEY?.trim() && !process.env.JWT_SECRET?.trim()) {
     missing.push('JWT_PRIVATE_KEY or JWT_SECRET');
   }
 
@@ -44,7 +49,7 @@ export const shouldProxyApiToFallback = (request: Request) => {
   const requestUrl = new URL(request.url);
   const fallbackUrl = new URL(getApiFallbackOrigin());
 
-  return requestUrl.hostname !== fallbackUrl.hostname;
+  return requestUrl.origin !== fallbackUrl.origin;
 };
 
 const getSetCookieHeaders = (headers: Headers) => {
@@ -93,7 +98,7 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
   }
 
   headers.set('origin', fallbackUrl.origin);
-  headers.set('x-thingtime-api-fallback', 'thingtime.com');
+  headers.set('x-thingtime-api-fallback', fallbackUrl.origin);
 
   return headers;
 };

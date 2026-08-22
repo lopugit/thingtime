@@ -2034,16 +2034,27 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       custom origins, select between them, remove an inactive custom entry, and
       reject credentials/query/fragment/non-loopback HTTP. A selected endpoint
       must serve `/api/v1/devices` (authenticated data or 401/403, never 404),
-      become the renderer origin and LaunchAgent API origin together, and keep
-      its Keychain/journal pairing scope isolated from every other endpoint.
+      become the bundled server's API proxy target and the LaunchAgent API
+      origin together, and keep its Keychain/journal pairing scope isolated
+      from every other endpoint. The BrowserWindow itself must stay on the
+      packaged loopback renderer, never navigate to the selected remote API
+      origin, and still render the packaged interface with the API target
+      unavailable.
+- [ ] Select a build-seeded preview, reload, quit/reopen, reinstall the same
+      signed bundle, then install a build which omits or renames that endpoint
+      profile. `desktop-settings.json` must retain the normalized selected URL
+      and label, migrate schema-v1 IDs when their old metadata is available,
+      and never fall back to production merely because a build-specific ID is
+      missing. Verify the node registration still uses the same selected API
+      origin after every step.
 - [ ] Explicitly register the installed node login service, verify its
       plist passes `plutil -lint`, uses valid `<key>` fields, its executable and
       runtime resolve inside the verified installed app, and its registry
       resolves to the exact private user-data file. Bootstrap must not issue an
       unconditional immediate kickstart. Replace an exact old managed node,
       then confirm launchd owns one new PID with `runs = 1` and no exit.
-- [ ] Open the exact installed Electron app, record its selected deployment
-      origin and bundled loopback fallback, and Quit with Cmd+Q. Electron must
+- [ ] Open the exact installed Electron app, record its bundled loopback
+      renderer origin and separately selected API origin, and Quit with Cmd+Q. Electron must
       stop while the launchd node and
       connector remain alive from the installed bundle for more than two
       minutes. Signed-parent status must remain responsive; relaunch Electron

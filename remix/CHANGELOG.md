@@ -19,6 +19,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Electron now always renders its packaged Thingtime build**: API/deployment
+  selection no longer replaces the desktop window with `thingtime.com` or a
+  preview website. The bundled loopback UI remains authoritative and proxies
+  only account/API traffic to the selected origin; that normalized API URL and
+  label now survive relaunches, reinstalls, and build-profile ID changes. Local
+  Vite and packaged Nitro use the same validated HTTPS/loopback fallback target,
+  while an unavailable API can no longer prevent the offline interface from
+  starting. — Codex (AI), 2026-08-22
+
 - **Multi-account desktop pairing and native menu polish**: one Mac now retains
   up to 32 independently scoped Thingtime account credentials and runs an
   isolated command/live-sync loop for each, while an account can continue to

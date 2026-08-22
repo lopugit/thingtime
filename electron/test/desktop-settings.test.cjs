@@ -52,6 +52,86 @@ test('local endpoint profiles persist atomically and preserve multiple custom de
 	}
 });
 
+test('selected build endpoints remain selected when later builds omit or rename their profile', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'thingtime-desktop-settings-'));
+	const filePath = path.join(root, 'desktop-settings.json');
+	const previewUrl = 'https://pr-68.previews.dev.thingtime.com/';
+	try {
+		const previewBuild = new DesktopSettingsStore({
+			filePath,
+			metadata: {
+				desktopEndpoints: {
+					defaultId: 'pr-68',
+					options: [{ id: 'pr-68', label: 'PR #68 preview', url: previewUrl }]
+				}
+			}
+		});
+		assert.equal((await previewBuild.initialize()).selectedEndpoint.url, previewUrl);
+		const persisted = JSON.parse(await readFile(filePath, 'utf8'));
+		assert.equal(persisted.schemaVersion, 2);
+		assert.equal(persisted.selectedEndpointUrl, previewUrl);
+		assert.equal(persisted.selectedEndpointLabel, 'PR #68 preview');
+		assert.deepEqual(persisted.customEndpoints, []);
+
+		const productionBuild = new DesktopSettingsStore({ filePath });
+		let snapshot = await productionBuild.initialize();
+		assert.equal(snapshot.selectedEndpoint.url, previewUrl);
+		assert.equal(snapshot.selectedEndpointId, customEndpointId(previewUrl));
+
+		const renamedBuild = new DesktopSettingsStore({
+			filePath,
+			metadata: {
+				desktopEndpoints: {
+					defaultId: 'preview-renamed',
+					options: [{ id: 'preview-renamed', label: 'Renamed preview', url: previewUrl }]
+				}
+			}
+		});
+		snapshot = await renamedBuild.initialize();
+		assert.equal(snapshot.selectedEndpoint.url, previewUrl);
+		assert.equal(snapshot.selectedEndpointId, 'preview-renamed');
+	} finally {
+		await rm(root, { force: true, recursive: true });
+	}
+});
+
+test('schema-one endpoint ids migrate to URL-stable selections while their build metadata is available', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'thingtime-desktop-settings-'));
+	const filePath = path.join(root, 'desktop-settings.json');
+	const previewUrl = 'https://preview.example.com/';
+	try {
+		await writeFile(
+			filePath,
+			JSON.stringify({
+				customEndpoints: [],
+				customMenuBarIconPath: null,
+				menuBarIconId: 'tree-pink',
+				schemaVersion: 1,
+				selectedEndpointId: 'legacy-preview'
+			}),
+			{ mode: 0o600 }
+		);
+		const migrated = new DesktopSettingsStore({
+			filePath,
+			metadata: {
+				desktopEndpoints: {
+					defaultId: 'production',
+					options: [{ id: 'legacy-preview', label: 'Legacy preview', url: previewUrl }]
+				}
+			}
+		});
+		assert.equal((await migrated.initialize()).selectedEndpoint.url, previewUrl);
+		const persisted = JSON.parse(await readFile(filePath, 'utf8'));
+		assert.equal(persisted.schemaVersion, 2);
+		assert.equal(persisted.selectedEndpointUrl, previewUrl);
+
+		const reopened = new DesktopSettingsStore({ filePath });
+		assert.equal((await reopened.initialize()).selectedEndpoint.url, previewUrl);
+	} finally {
+		await rm(root, { force: true, recursive: true });
+	}
+});
+
 test('custom endpoint removal is limited to inactive custom entries', async () => {
 	const root = await mkdtemp(path.join(tmpdir(), 'thingtime-desktop-settings-'));
 	const filePath = path.join(root, 'desktop-settings.json');
@@ -111,6 +191,8 @@ test('malformed persisted settings fail closed to bounded defaults', () => {
 	assert.equal(state.customMenuBarIconPath, null);
 	assert.equal(state.menuBarIconId, 'tree-pink');
 	assert.equal(state.selectedEndpointId, 'missing');
+	assert.equal(state.selectedEndpointLabel, null);
+	assert.equal(state.selectedEndpointUrl, null);
 });
 
 test('invalid local JSON is repaired to safe defaults instead of blocking app startup', async () => {

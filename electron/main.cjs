@@ -252,6 +252,12 @@ function normalizeDesktopUrl(rawUrl) {
   return url.href;
 }
 
+function setApiFallbackEndpoint(rawUrl) {
+	const endpointUrl = normalizeDesktopUrl(rawUrl);
+	process.env.THINGTIME_API_FALLBACK_ORIGIN = new URL(endpointUrl).origin;
+	return endpointUrl;
+}
+
 function normalizeVersionString(version) {
   const value = String(version || '').trim();
   const match = value.match(/(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/);
@@ -640,7 +646,7 @@ function isAllowedContentUrl(targetUrl) {
 
   try {
     const origin = new URL(targetUrl).origin;
-    return origin === appOrigin || origin === activeContentOrigin;
+    return origin === appOrigin;
   } catch {
     return false;
   }
@@ -651,18 +657,7 @@ function trustedAiBridgeOrigins() {
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
-	const endpointOrigins = desktopSettings ? desktopSettings.snapshot().endpointProfiles.map((entry) => new URL(entry.url).origin) : [];
-	return new Set(
-		[
-			appOrigin,
-			activeContentOrigin,
-			'https://thingtime.com',
-			'https://www.thingtime.com',
-			'https://dev.thingtime.com',
-			...endpointOrigins,
-			...configured
-		].filter(Boolean)
-	);
+	return new Set([appOrigin, ...configured].filter(Boolean));
 }
 
 function requireTrustedAiBridgeEvent(event) {
@@ -693,11 +688,10 @@ function requireRendererMatchesConfiguredNode(event) {
 	} catch {
 		throw new ThingtimeNodeBridgeError('endpoint_mismatch', 'Open a configured Thingtime page before pairing this Mac.');
 	}
-	const nodeOrigin = new URL(requireDesktopSettings().snapshot().selectedEndpoint.url).origin;
-	if (pageOrigin !== nodeOrigin) {
+	if (!appOrigin || pageOrigin !== new URL(appOrigin).origin) {
 		throw new ThingtimeNodeBridgeError(
 			'endpoint_mismatch',
-			`This page is using ${pageOrigin}, but this Mac is connected to ${nodeOrigin}. Switch the desktop endpoint in Settings, then pair again.`
+			'This request did not come from the bundled Thingtime interface. Reopen the installed Thingtime app, then pair again.'
 		);
 	}
 }
@@ -744,7 +738,8 @@ async function initializeDesktopSettings() {
 		filePath: path.join(app.getPath('userData'), 'desktop-settings.json'),
 		metadata: readWebBuildMetadata()
 	});
-	await desktopSettings.initialize();
+	const settings = await desktopSettings.initialize();
+	setApiFallbackEndpoint(settings.selectedEndpoint.url);
 	try {
 		await reconcileConfiguredNode();
 		desktopSettingsLastError = null;
@@ -1029,30 +1024,36 @@ async function switchDesktopEndpoint(endpointId, { confirm = true } = {}) {
 	const before = settings.snapshot();
 	const target = before.endpointProfiles.find((entry) => entry.id === String(endpointId || ''));
 	if (!target) throw new Error('Choose a known Thingtime API endpoint.');
-	if (target.id === before.selectedEndpointId) return getDesktopInfo();
+	if (target.id === before.selectedEndpointId) {
+		setApiFallbackEndpoint(target.url);
+		if (mainWindow && appOrigin) await loadBundledRenderer();
+		return getDesktopInfo();
+	}
 	await probeThingtimeEndpoint(target.url);
 	if (confirm) {
 		const approved = await confirmNodeChange({
 			title: 'Switch Thingtime API endpoint?',
 			message: `Use ${target.label} for this Thingtime app and Mac node?`,
-			detail: `${target.url}\n\nThe desktop window and Thingtime Node will use the same deployment. Pairing is kept separately for each endpoint.`,
+			detail: `${target.url}\n\nThe bundled Thingtime interface stays on this Mac. Its account data and Thingtime Node will use this API endpoint. Pairing is kept separately for each endpoint.`,
 			confirmLabel: 'Switch Endpoint'
 		});
 		if (!approved) return getDesktopInfo();
 	}
 	try {
 		await settings.selectEndpoint(target.id);
+		setApiFallbackEndpoint(target.url);
 		await reconcileConfiguredNode();
-		await loadDesktopUrl(target.url);
+		await loadBundledRenderer();
 		desktopSettingsLastError = null;
 		createApplicationMenu();
 		return getDesktopInfo();
 	} catch (error) {
 		await settings.selectEndpoint(before.selectedEndpointId);
+		setApiFallbackEndpoint(before.selectedEndpoint.url);
 		let rollbackError = null;
 		try {
 			await reconcileConfiguredNode();
-			await loadDesktopUrl(before.selectedEndpoint.url);
+			await loadBundledRenderer();
 		} catch (caughtRollbackError) {
 			rollbackError = caughtRollbackError;
 		}
@@ -1175,29 +1176,32 @@ function getDesktopInfo() {
   };
 }
 
-async function loadDesktopUrl(rawUrl) {
+async function loadBundledRenderer() {
   if (!mainWindow) {
     throw new Error('Thingtime desktop window is not ready yet.');
   }
-
-  const targetUrl = normalizeDesktopUrl(rawUrl);
-	const known = requireDesktopSettings()
-		.snapshot()
-		.endpointProfiles.some((entry) => entry.url === targetUrl);
-	if (!known) throw new Error('Add this deployment as a Thingtime API endpoint before loading it.');
-  activeContentOrigin = new URL(targetUrl).origin;
-  await mainWindow.loadURL(targetUrl);
+	if (!appOrigin) throw new Error('The bundled Thingtime interface is not ready yet.');
+	activeContentOrigin = new URL(appOrigin).origin;
+	await mainWindow.loadURL(appOrigin);
 
   return getDesktopInfo();
 }
 
 async function selectAndLoadDesktopUrl(rawUrl) {
 	const targetUrl = normalizeDesktopUrl(rawUrl);
-	const snapshot = requireDesktopSettings().snapshot();
-	const target = snapshot.endpointProfiles.find((entry) => entry.url === targetUrl);
-	if (!target) throw new Error('Add this deployment as a Thingtime API endpoint before loading it.');
+	const settings = requireDesktopSettings();
+	let snapshot = settings.snapshot();
+	let target = snapshot.endpointProfiles.find((entry) => entry.url === targetUrl);
+	if (!target) {
+		const parsed = new URL(targetUrl);
+		const label = parsed.protocol === 'http:' ? `Local development · ${parsed.host}` : parsed.host;
+		snapshot = await settings.addEndpoint({ label, url: targetUrl });
+		target = snapshot.endpointProfiles.find((entry) => entry.url === targetUrl);
+	}
+	if (!target) throw new Error('Thingtime could not save that API endpoint.');
 	if (target.id !== snapshot.selectedEndpointId) return switchDesktopEndpoint(target.id);
-	return loadDesktopUrl(target.url);
+	setApiFallbackEndpoint(target.url);
+	return loadBundledRenderer();
 }
 
 function showLoadUrlError(error) {
@@ -1240,8 +1244,9 @@ function createApplicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function createWindow(startUrl) {
-  activeContentOrigin = new URL(startUrl).origin;
+function createWindow() {
+	if (!appOrigin) throw new Error('The bundled Thingtime interface is not ready yet.');
+	activeContentOrigin = new URL(appOrigin).origin;
 
   const macWindowChrome =
     process.platform === 'darwin'
@@ -1291,11 +1296,9 @@ function createWindow(startUrl) {
     shell.openExternal(url);
   });
 
-	mainWindow.loadURL(startUrl).catch((error) => {
+	mainWindow.loadURL(appOrigin).catch((error) => {
 		desktopSettingsLastError = error instanceof Error ? error.message : String(error);
-		if (appOrigin && new URL(startUrl).origin !== new URL(appOrigin).origin) {
-			mainWindow?.loadURL(appOrigin).catch(showLoadUrlError);
-		}
+		showLoadUrlError(error);
 	});
 }
 
@@ -1351,10 +1354,10 @@ if (!singleInstanceLock) {
 
 	app
 		.whenReady()
-    .then(startNitroServer)
 		.then(async () => {
-			const settings = await initializeDesktopSettings();
-			createWindow(settings.selectedEndpoint.url);
+			await initializeDesktopSettings();
+			await startNitroServer();
+			createWindow();
       createApplicationMenu();
     })
     .catch((error) => {
@@ -1365,8 +1368,7 @@ if (!singleInstanceLock) {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0 && appOrigin) {
-		const startUrl = desktopSettings?.snapshot().selectedEndpoint.url || appOrigin;
-		createWindow(startUrl);
+		createWindow();
   }
 });
 

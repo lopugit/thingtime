@@ -337,11 +337,62 @@ cookies, credentials, and raw paths; imported provider rows remain read-only.
   second-account pairing was deliberately not performed during this pass: it
   creates a durable relationship and remains an explicit user acceptance step.
 
+### Bundled-renderer endpoint persistence follow-up (2026-08-22)
+
+- The Electron window now always renders the packaged Thingtime web build from
+  its private loopback server. Production, development, PR-preview, and custom
+  desktop endpoints are API and Thingtime Node targets only; they are no longer
+  eligible renderer origins. Remote links still open in the user's browser.
+  This corrects the earlier behavior where the installed bundle hosted a local
+  fallback but `BrowserWindow.loadURL()` immediately replaced it with the
+  selected remote deployment.
+- Desktop settings schema 2 persists the selected endpoint's canonical URL and
+  label as well as its build-generated ID. Schema 1 migrates while its metadata
+  is available, and the selected URL remains authoritative if a later build
+  omits or renames the profile ID. Malformed or unsafe targets continue to fail
+  closed. The bundled Nitro and local Vite servers read the selected target
+  dynamically and only accept HTTPS or loopback HTTP origins.
+- Real installed-app acceptance selected PR #68 and confirmed the window stayed
+  at `127.0.0.1` while a local `/api/v1/devices?limit=1` response carried
+  `x-thingtime-api-fallback: https://pr-68.previews.dev.thingtime.com`. The
+  preview's separate logged-out session rendered `Login` as expected; no
+  production cookie or account session was copied between deployments.
+- The same saved PR #68 target and local renderer survived a renderer reload,
+  a full Cmd+Q/relaunch, and a second atomic reinstall of the verified app. The
+  private renderer port changed across launches (`62236`, `62957`, `63005`,
+  `64242`),
+  proving the persisted setting is independent of that ephemeral local port.
+  Browser acceptance scrolled the local development page top-to-bottom at
+  1280px with document width equal to the viewport and no horizontal overflow.
+- A canonical Apple Development build with PR #68 embedded as its default
+  passed deep/strict signing and the repository local verifier, then
+  `install:local` reverified the source, temporary destination, and exact
+  `/Users/lopu/Applications/Thingtime.app`. Built and installed SHA-256 values
+  matched: `659fc07569aa644d75a154989c1fba54b37174ad0cdecd0d25338bd3e47b279c`
+  (outer executable),
+  `cd3255f4c688f512b79dde3f57fa35884eeda2341e6535454686e3943714c935`
+  (node), `9f9af3b6353805731f2aab4070b60f48a35308172d6171d66ef9535a4aa932b7`
+  (bridge), `96c21523e17e949d878351716713afa7bde13315d6770a631cef89f1c006667f`
+  (ASAR), and
+  `88ecee30eb896ac803467ce22faab3103970aa7d7b58823c441a6cc38148e93b`
+  (web metadata). Metadata records source head `a644f5182`, build time
+  `2026-08-22T04:57:47.526Z`, and the URL-stable PR #68 profile.
+- Regression coverage is Electron 51/51, root-data/API-fallback 4/4, and device
+  42/42. The architectural Electron test asserts settings and API target setup
+  happen before the bundled server starts, `createWindow()` receives no remote
+  URL, and all renderer loads use the local app origin. API tests additionally
+  prove that same-host/different-loopback-port traffic still proxies correctly.
+
+The packaged interface therefore opens without network access, including its
+last locally available shell and assets. Account reads, mutations, pairing, and
+sync still require a reachable selected API target; this change does not claim
+an offline database or offline conflict resolution layer.
+
 ### Acceptance boundaries still open
 
 - The installed local-renderer acceptance reused an existing signed-in `Nikk`
-  session only for navigation/UI checks; the restored production renderer and
-  isolated in-app browser were logged out. No new durable pairing relationship
+  production session only for the earlier navigation/UI checks. The final PR #68
+  API-target acceptance and isolated in-app browser were logged out. No new durable pairing relationship
   was created or removed, and existing Keychain credentials were deliberately
   left untouched. Authenticated current-branch pairing, multi-account
   device-drawer controls, live remote

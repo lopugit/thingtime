@@ -48,7 +48,7 @@
 		"test:sensitive-reveal": "node --import tsx --test app/api/utils/auth/passwordConfirmation.test.ts app/api/utils/things/sensitiveReveal.test.ts app/routes/api/v1/things/reveal/reveal.test.ts",
 		"test:quota": "node --import tsx --test app/api/utils/things/quotaCore.test.ts",
 		"test:rate-limit": "node --import tsx --test app/api/utils/rateLimit/*.test.ts",
-		"test:root-data": "node --import tsx --test app/root-data.server.test.ts",
+		"test:root-data": "node --import tsx --test app/root-data.server.test.ts server/utils/apiFallback.test.ts",
 		"test:schemas": "node --import tsx --test app/schemas/*.test.ts",
 		"test:settings": "node --import tsx --test app/api/utils/settings/*.test.ts",
 		"test:storage": "node --import tsx --test app/api/utils/storage/*.test.ts",

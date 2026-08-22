@@ -516,7 +516,8 @@ export const UserSettingsModal = () => {
 							{desktopSettings?.selectedEndpoint.url || 'No endpoint selected'}
 						</Text>
 						<Text fontSize="xs" opacity={0.55}>
-							The window and Thingtime Node use this same deployment. Pairing stays separate per endpoint.
+							The packaged interface stays on this computer. Account data and Thingtime Node use this API endpoint; pairing stays
+							separate per endpoint.
 						</Text>
 						{desktopInfo.desktopSettingsLastError && (
 							<Text fontSize="xs" color="red.500" wordBreak="break-word">

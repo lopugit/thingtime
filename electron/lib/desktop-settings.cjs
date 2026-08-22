@@ -6,7 +6,8 @@ const fsPromises = require('node:fs/promises');
 const net = require('node:net');
 const path = require('node:path');
 
-const SETTINGS_SCHEMA_VERSION = 1;
+const SETTINGS_SCHEMA_VERSION = 2;
+const READABLE_SETTINGS_SCHEMA_VERSIONS = new Set([1, SETTINGS_SCHEMA_VERSION]);
 const MAX_CUSTOM_ENDPOINTS = 32;
 const MAX_LABEL_BYTES = 120;
 const MAX_SETTINGS_BYTES = 64 * 1024;
@@ -116,13 +117,15 @@ function emptyPersistedState() {
 		customMenuBarIconPath: null,
 		menuBarIconId: DEFAULT_MENU_BAR_ICON_ID,
 		schemaVersion: SETTINGS_SCHEMA_VERSION,
-		selectedEndpointId: null
+		selectedEndpointId: null,
+		selectedEndpointLabel: null,
+		selectedEndpointUrl: null
 	};
 }
 
 function normalizePersistedState(value) {
 	const state = emptyPersistedState();
-	if (!value || typeof value !== 'object' || Array.isArray(value) || value.schemaVersion !== SETTINGS_SCHEMA_VERSION) return state;
+	if (!value || typeof value !== 'object' || Array.isArray(value) || !READABLE_SETTINGS_SCHEMA_VERSIONS.has(value.schemaVersion)) return state;
 	for (const entry of Array.isArray(value.customEndpoints) ? value.customEndpoints.slice(0, MAX_CUSTOM_ENDPOINTS) : []) {
 		try {
 			const url = normalizeEndpointUrl(entry?.url);
@@ -133,6 +136,20 @@ function normalizePersistedState(value) {
 	}
 	state.customEndpoints = [...new Map(state.customEndpoints.map((entry) => [entry.url, entry])).values()];
 	state.selectedEndpointId = typeof value.selectedEndpointId === 'string' ? value.selectedEndpointId : null;
+	if (typeof value.selectedEndpointLabel === 'string') {
+		try {
+			state.selectedEndpointLabel = normalizedLabel(value.selectedEndpointLabel);
+		} catch {
+			state.selectedEndpointLabel = null;
+		}
+	}
+	if (typeof value.selectedEndpointUrl === 'string') {
+		try {
+			state.selectedEndpointUrl = normalizeEndpointUrl(value.selectedEndpointUrl);
+		} catch {
+			state.selectedEndpointUrl = null;
+		}
+	}
 	state.menuBarIconId = MENU_BAR_ICON_IDS.has(value.menuBarIconId) ? value.menuBarIconId : DEFAULT_MENU_BAR_ICON_ID;
 	if (
 		typeof value.customMenuBarIconPath === 'string' &&
@@ -184,6 +201,7 @@ class DesktopSettingsStore {
 		}
 		this.state = normalizePersistedState(parsed);
 		this.ready = true;
+		this.rememberSelectedEndpoint(this.resolved().selected);
 		await this.persist();
 		return this.snapshot();
 	}
@@ -194,13 +212,29 @@ class DesktopSettingsStore {
 
 	resolved() {
 		this.assertReady();
-		const { build, profiles } = mergeEndpointProfiles(this.metadata, this.state.customEndpoints);
+		const { build, profiles: configuredProfiles } = mergeEndpointProfiles(this.metadata, this.state.customEndpoints);
+		const profiles = [...configuredProfiles];
+		if (this.state.selectedEndpointUrl && !profiles.some((entry) => entry.url === this.state.selectedEndpointUrl)) {
+			profiles.push({
+				id: customEndpointId(this.state.selectedEndpointUrl),
+				label: this.state.selectedEndpointLabel || new URL(this.state.selectedEndpointUrl).host,
+				source: 'custom',
+				url: this.state.selectedEndpointUrl
+			});
+		}
 		const selected =
+			profiles.find((entry) => entry.url === this.state.selectedEndpointUrl) ||
 			profiles.find((entry) => entry.id === this.state.selectedEndpointId) ||
 			profiles.find((entry) => entry.id === build.defaultId) ||
 			profiles[0] ||
 			DEFAULT_ENDPOINTS[0];
 		return { build, profiles, selected };
+	}
+
+	rememberSelectedEndpoint(endpoint) {
+		this.state.selectedEndpointId = endpoint.id;
+		this.state.selectedEndpointLabel = normalizedLabel(endpoint.label);
+		this.state.selectedEndpointUrl = endpoint.url;
 	}
 
 	snapshot() {
@@ -241,8 +275,9 @@ class DesktopSettingsStore {
 		return this.enqueue(async () => {
 			const normalizedId = String(endpointId || '').trim();
 			const { profiles } = this.resolved();
-			if (!profiles.some((entry) => entry.id === normalizedId)) throw new Error('Choose a known Thingtime endpoint.');
-			this.state.selectedEndpointId = normalizedId;
+			const selected = profiles.find((entry) => entry.id === normalizedId);
+			if (!selected) throw new Error('Choose a known Thingtime endpoint.');
+			this.rememberSelectedEndpoint(selected);
 			await this.persist();
 			return this.snapshot();
 		});

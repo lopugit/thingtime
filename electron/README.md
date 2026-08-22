@@ -71,18 +71,27 @@ and open acceptance boundaries for PR #68 are recorded in its
 
 ## Runtime
 
-The Electron main process starts the bundled Nitro server on a free
-`127.0.0.1` port as a fail-safe, then opens the desktop window at the selected
-Thingtime deployment. A build can seed an intended preview with
-`THINGTIME_DESKTOP_DEFAULT_ENDPOINT`; the renderer and node always use that
-same deployment origin for relative `/api` calls. If the remote UI cannot load,
-the app falls back to the bundled loopback UI without silently changing the
-saved endpoint. External links open with the OS browser unless their origin is
-one of the exact local endpoint profiles. The renderer keeps `nodeIntegration`
-disabled and uses a narrow preload bridge for desktop metadata, validated
-endpoint settings, and normalized AI source batches. The bridge never returns
-provider credentials, cookies, archive paths, custom-icon paths, or raw
-app-data roots.
+The Electron main process always starts and renders the packaged Nitro/React
+build from a private `127.0.0.1` port. Remote deployment profiles are API/data
+targets only: the bundled server proxies relative `/api` calls to the selected
+origin, and the persistent node uses that same selected origin. A build can
+seed an intended preview with `THINGTIME_DESKTOP_DEFAULT_ENDPOINT`; subsequent
+selection is persisted by normalized URL (not a build-specific profile ID), so
+relaunches, reinstalls, and renamed/removed build metadata cannot silently move
+the app back to production. If the API target is offline, the packaged
+interface still starts and can present the offline/error state instead of
+navigating to a remote UI. External links open with the OS browser. The
+renderer keeps `nodeIntegration` disabled and uses a narrow preload bridge for
+desktop metadata, validated endpoint settings, and normalized AI source
+batches. The bridge never returns provider credentials, cookies, archive
+paths, custom-icon paths, or raw app-data roots.
+
+For a local Vite checkout without self-hosted Mongo/JWT configuration, place a
+public deployment origin such as
+`THINGTIME_API_FALLBACK_ORIGIN=https://preview.example.com` in the ignored
+`remix/.env.local`. Only HTTPS origins (or HTTP loopback origins for local
+development) are accepted. Packaged Electron sets this value from its validated
+desktop settings automatically; no database secret is bundled into the app.
 
 The same origin check protects the local-node bridge. Renderer code gets fixed
 operations only: node status, login-service register/unregister, pairing,
