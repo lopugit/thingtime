@@ -2031,10 +2031,10 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 - [ ] Inspect the embedded
       `Contents/Helpers/Thingtime Node.app/Contents/Resources/ThingtimeNode.icns`
       and its `CFBundleIconFile` declaration. The prompt/Finder artwork must
-      show the green/brown Thingtime tree plus the small pink/green/blue/yellow/
-      violet mesh-node cluster, retain transparent outer corners, and remain
-      recognizable at 16, 32, and 128 px instead of showing the generic app
-      blueprint.
+      show three separated green canopy nodes and one brown trunk node, each
+      visibly joined to the central pink/red square. It must retain transparent
+      outer corners and remain recognizable at 16, 32, and 128 px instead of
+      showing the generic app blueprint.
 - [ ] Build with `THINGTIME_DESKTOP_DEFAULT_ENDPOINT` set to the intended PR
       deployment. In **Thingtime desktop** settings, confirm production,
       development, and that preview are pre-populated; add at least two named

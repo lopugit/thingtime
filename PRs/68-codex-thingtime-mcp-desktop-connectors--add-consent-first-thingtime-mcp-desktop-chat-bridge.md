@@ -403,11 +403,12 @@ an offline database or offline conflict resolution layer.
   to **Resume pairing** and the toast explains that the exact request is saved,
   instead of leaving a stale **Pair this account** control beside the raw IPC
   error.
-- `Thingtime Node.app` now has its own 1024px RGBA source artwork: the existing
-  Thingtime green pixel tree/brown trunk plus a small connected cluster in
-  pink, green, blue, yellow, and violet. The bundle build derives the full ICNS
-  size set, declares `CFBundleIconFile`, and the native packaging verifier plus
-  Electron contract test fail if either the resource or declaration disappears.
+- `Thingtime Node.app` now has its own 1024px RGBA source artwork: the original
+  three green canopy squares and brown trunk square are smaller, separated, and
+  each visibly joined to a central pink/red square as one unified mesh-node
+  mark. The bundle build derives the full ICNS size set, declares
+  `CFBundleIconFile`, and the native packaging verifier plus Electron contract
+  test fail if either the resource or declaration disappears.
 - Follow-up validation is green: Swift `95/95`, Electron `52/52`, device
   server/UI `42/42`, focused ESLint and Prettier, and the typecheck ratchet at
   `135` errors versus its `143` baseline with no changed-file diagnostic. The

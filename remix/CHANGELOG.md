@@ -26,8 +26,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   a false failure or require another confirmation. If every bounded attempt is
   still uncertain, `/things` immediately refreshes into the durable **Resume
   pairing** state with actionable copy. The embedded node helper now declares a
-  distinct RGBA macOS app icon that keeps the Thingtime pixel tree and adds a
-  compact multicolour mesh-node motif. — Codex (AI), 2026-08-22
+  distinct RGBA macOS app icon that transforms the four Thingtime canopy/trunk
+  squares into separated nodes joined to a central pink mesh square. — Codex
+  (AI), 2026-08-22
 
 - **Electron now always renders its packaged Thingtime build**: API/deployment
   selection no longer replaces the desktop window with `thingtime.com` or a

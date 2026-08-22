@@ -1750,9 +1750,9 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1787376408.9152293,
-    "ast_hash": "f490672f35322610040acba69b9161f4",
-    "semantic_hash": ""
+    "mtime": 1787383641.418817,
+    "ast_hash": "46461a6cce3cb7f8ff6e671aa5f943b4",
+    "semantic_hash": "46461a6cce3cb7f8ff6e671aa5f943b4"
   },
   "remix/README.md": {
     "mtime": 1786968733.8268416,
@@ -6437,7 +6437,7 @@
   "electron/scripts/verify-native-node.mjs": {
     "mtime": 1787377471.337275,
     "ast_hash": "70cdc7b89d4420de42c6b7375dde5987",
-    "semantic_hash": ""
+    "semantic_hash": "70cdc7b89d4420de42c6b7375dde5987"
   },
   "electron/scripts/verify-signed-app.mjs": {
     "mtime": 1787116024.9682302,

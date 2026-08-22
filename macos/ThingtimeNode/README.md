@@ -115,9 +115,9 @@ select a stable `Apple Development` identity (or the explicit
 and install the verified copy at `~/Applications/Thingtime Node.app`. They do
 not fall back to ad-hoc signing. `build-bundle.sh` also derives a complete ICNS
 set from the tracked 1024px RGBA `Resources/ThingtimeNodeIcon.png` master and
-the bundle declares it as `ThingtimeNode.icns`, giving native prompts a
-Thingtime tree plus multicolour mesh-node identity instead of the generic
-application icon.
+the bundle declares it as `ThingtimeNode.icns`, giving native prompts a unified
+five-node identity: the four separated green/brown Thingtime squares joined to
+a central pink/red square instead of the generic application icon.
 
 For direct distribution, use a `Developer ID Application` identity and notarize
 and staple the outer Thingtime bundle. Keep the bundle identifier, signing team,
