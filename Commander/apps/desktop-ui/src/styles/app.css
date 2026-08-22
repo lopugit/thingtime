@@ -152,6 +152,90 @@
 .result-row.selected {
   background: var(--selected);
 }
+.calculator-result {
+  position: relative;
+  width: 100%;
+  min-height: 112px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px minmax(0, 1fr);
+  align-items: stretch;
+  overflow: hidden;
+  padding: 0 12px 25px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--hover);
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+}
+.calculator-result:hover {
+  background: color-mix(in srgb, var(--selected) 72%, var(--surface-solid));
+}
+.calculator-result.selected {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.calculator-side {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  padding: 15px 12px 10px;
+  text-align: center;
+}
+.calculator-side strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 1.45rem;
+  font-weight: 620;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calculator-answer strong {
+  font-size: 1.65rem;
+}
+.calculator-side small {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calculator-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+}
+.calculator-arrow svg {
+  width: 21px;
+  height: 21px;
+}
+.calculator-enter {
+  position: absolute;
+  right: 13px;
+  bottom: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.calculator-enter svg {
+  width: 14px;
+  height: 14px;
+}
 .result-icon {
   display: inline-flex;
   width: 36px;
@@ -1366,6 +1450,58 @@
   color: var(--muted);
   font-size: 0.76rem;
 }
+.bundled-preferences {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.bundled-preferences > small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: normal;
+}
+.bundled-preference-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+.bundled-preference-row > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bundled-preference-row > span strong {
+  font-size: 0.76rem;
+}
+.bundled-preference-row > span small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  white-space: normal;
+}
+.bundled-preference-row select {
+  min-height: 30px;
+  max-width: 230px;
+  padding: 0 28px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-solid);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.72rem;
+}
+.bundled-preference-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
 .bundled-badge {
   min-height: 27px;
   display: inline-flex;
@@ -2152,6 +2288,15 @@
 :root[data-window-mode='compact'] .result-row {
   min-height: 48px;
 }
+:root[data-window-mode='compact'] .calculator-result {
+  min-height: 86px;
+}
+:root[data-window-mode='compact'] .calculator-side {
+  padding-top: 10px;
+}
+:root[data-window-mode='compact'] .calculator-side strong {
+  font-size: 1.2rem;
+}
 :root[data-window-mode='compact'] .result-subtitle {
   display: none;
 }
@@ -2203,6 +2348,19 @@
   }
   .tone-select-wrap {
     display: none;
+  }
+  .calculator-result {
+    grid-template-columns: minmax(0, 1fr) 38px minmax(0, 1fr);
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+  .calculator-side {
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+  .calculator-side strong,
+  .calculator-answer strong {
+    font-size: 1.1rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {

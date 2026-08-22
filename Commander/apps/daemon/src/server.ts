@@ -48,6 +48,7 @@ import { preferenceValuesForCommand, RaycastLocalService } from './services/rayc
 import { SearchService } from './services/search.js';
 import { SearchResultCache } from './services/searchCache.js';
 import { ThingtimeService } from './services/thingtime.js';
+import { CALCULATOR_RESULT_ITEM_ID, calculatorSearchHit } from './services/calculator.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -149,6 +150,12 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     onUpdate?: (event: SearchStreamEvent) => void,
   ): Promise<SearchHit[]> => {
     const snapshot = store.snapshot();
+    const calculation = calculatorSearchHit(query, snapshot.settings.calculator);
+    const present = (hits: SearchHit[]) =>
+      [
+        ...(calculation ? [calculation] : []),
+        ...hits.filter((hit) => hit.id !== CALCULATOR_RESULT_ITEM_ID && hit.kind !== 'calculator'),
+      ].slice(0, 30);
     const normalizedQuery = query.trim().toLowerCase();
     const contextKey = JSON.stringify({
       version: 2,
@@ -169,11 +176,21 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     const cached = await searchCache.lookup({ key, contextKey, query: normalizedQuery });
     const preferenceScores = store.preferenceScores(query);
     let emittedCachedResults = false;
+    if (calculation) {
+      onUpdate?.({
+        type: 'results',
+        phase: 'catalog',
+        hits: [calculation],
+        complete: false,
+        cached: false,
+      });
+    }
     if (cached?.exact && cached.hits.length) {
+      const cachedHits = present(cached.hits);
       onUpdate?.({
         type: 'results',
         phase: 'cache',
-        hits: cached.hits,
+        hits: cachedHits,
         complete: false,
         cached: true,
       });
@@ -187,11 +204,12 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         snapshot.settings.resultCategoryOrder,
       );
       previewHits = compactFavourites(previewHits, query, snapshot.settings);
-      if (previewHits.length) {
+      const presentedPreviewHits = present(previewHits);
+      if (presentedPreviewHits.length) {
         onUpdate?.({
           type: 'results',
           phase: 'cache',
-          hits: previewHits,
+          hits: presentedPreviewHits,
           complete: false,
           cached: true,
         });
@@ -211,7 +229,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       onUpdate?.({
         type: 'results',
         phase: 'catalog',
-        hits: catalogHits,
+        hits: present(catalogHits),
         complete: false,
         cached: false,
       });
@@ -226,17 +244,18 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       snapshot.settings.resultCategoryOrder,
     );
     hits = compactFavourites(hits, query, snapshot.settings);
+    const presentedHits = present(hits);
     onUpdate?.({
       type: 'results',
       phase: indexedItems.length ? 'filesystem' : 'complete',
-      hits,
+      hits: presentedHits,
       complete: true,
       cached: false,
     });
     void searchCache
       .put({ key, contextKey, query: normalizedQuery, hits, indexedItems })
       .catch(() => undefined);
-    return hits;
+    return presentedHits;
   };
 
   async function routeApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
@@ -423,10 +442,30 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         actionId: string;
         query?: string;
       }>(request);
+      const executionQuery = typeof query === 'string' ? query : '';
+      if (itemId === CALCULATOR_RESULT_ITEM_ID) {
+        const calculationHit = calculatorSearchHit(executionQuery, state.settings.calculator);
+        if (!calculationHit?.calculation)
+          return json(response, 400, { error: 'The calculation is no longer valid' });
+        const text =
+          actionId === 'copy-result'
+            ? calculationHit.calculation.result
+            : actionId === 'copy-expression'
+              ? calculationHit.calculation.expression
+              : undefined;
+        if (text === undefined) return json(response, 400, { error: 'Unknown calculator action' });
+        await store.recordSearchSelection(executionQuery, itemId, actionId);
+        searchRevision += 1;
+        return json(response, 200, {
+          ok: true,
+          nativeRequest: { method: 'clipboard.write', params: { text } },
+          dismissLauncher: true,
+        });
+      }
       const item =
         search.items().find((candidate) => candidate.id === itemId) ?? (await indexing.resolveItem(itemId));
       if (!item) return json(response, 404, { error: 'Search item not found' });
-      await store.recordSearchSelection(typeof query === 'string' ? query : '', itemId, actionId);
+      await store.recordSearchSelection(executionQuery, itemId, actionId);
       searchRevision += 1;
       if (actionId === 'open-settings')
         return json(response, 200, {

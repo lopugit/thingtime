@@ -26,7 +26,7 @@ import { CommanderIcon } from './CommanderIcon.js';
 
 type ExtensionMode = 'installed' | 'bundled' | 'store' | 'raycast';
 
-const bundledExtensionIds = new Set(['builtin:emoji-symbols']);
+const bundledExtensionIds = new Set(['builtin:emoji-symbols', 'builtin:calculator']);
 
 export function ExtensionsSettings({
   initial,
@@ -341,7 +341,7 @@ export function ExtensionsSettings({
               <div className="raycast-empty">
                 <CommanderIcon name="emoji" />
                 <strong>No bundled commands found</strong>
-                <span>Try searching for Emoji, Symbols, or Commander.</span>
+                <span>Try searching for Calculator, Emoji, Symbols, or Commander.</span>
               </div>
             ) : null}
             {visibleBundled.map((extension) => (
@@ -353,9 +353,10 @@ export function ExtensionsSettings({
                   <strong>{extension.title}</strong>
                   <span>{extension.description}</span>
                   <small>
-                    {extension.commands.length} bundled{' '}
-                    {extension.commands.length === 1 ? 'command' : 'commands'} · by{' '}
-                    {extension.author ?? 'Thingtime'}
+                    {extension.id === 'builtin:calculator'
+                      ? 'Automatic result provider'
+                      : `${extension.commands.length} bundled ${extension.commands.length === 1 ? 'command' : 'commands'}`}{' '}
+                    · by {extension.author ?? 'Thingtime'}
                   </small>
                   {extension.id === 'builtin:emoji-symbols' ? (
                     <>
@@ -383,6 +384,55 @@ export function ExtensionsSettings({
                         </select>
                       </label>
                     </>
+                  ) : null}
+                  {extension.id === 'builtin:calculator' ? (
+                    <div className="bundled-preferences">
+                      <label className="bundled-preference-row checkbox-preference">
+                        <span>
+                          <strong>Automatic results</strong>
+                          <small>Detect complete expressions directly in the main search field.</small>
+                        </span>
+                        <input
+                          type="checkbox"
+                          aria-label="Show automatic calculator results"
+                          checked={settings.calculator.enabled}
+                          onChange={(event) =>
+                            onChange({
+                              ...settings,
+                              calculator: { ...settings.calculator, enabled: event.currentTarget.checked },
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="bundled-preference-row">
+                        <span>
+                          <strong>Maximum decimal places</strong>
+                          <small>Trailing zeroes are removed from the displayed answer.</small>
+                        </span>
+                        <select
+                          aria-label="Calculator maximum decimal places"
+                          value={settings.calculator.maxDecimalPlaces}
+                          onChange={(event) =>
+                            onChange({
+                              ...settings,
+                              calculator: {
+                                ...settings.calculator,
+                                maxDecimalPlaces: Number(event.currentTarget.value),
+                              },
+                            })
+                          }
+                        >
+                          {[0, 2, 4, 6, 8, 10, 12, 14].map((places) => (
+                            <option value={places} key={places}>
+                              {places}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <small>
+                        Functions use radians. Supported examples include sqrt(81), 5!, and 100 + 10%.
+                      </small>
+                    </div>
                   ) : null}
                   <span className="bundled-shortcut-list">
                     {extension.commands.map((command) => {

@@ -128,9 +128,24 @@ export const emojiSymbolsExtension: CommanderExtension = {
   ],
 };
 
+export const calculatorExtension: CommanderExtension = {
+  id: 'builtin:calculator',
+  name: 'calculator',
+  title: 'Calculator',
+  description: 'Evaluate arithmetic expressions automatically as you type in Commander.',
+  version: '0.1.0',
+  author: 'Thingtime',
+  icon: 'calculator',
+  source: 'builtin',
+  enabled: true,
+  compatibility: 'native',
+  commands: [],
+};
+
 export const builtinExtensions = [
   commanderExtension,
   emojiSymbolsExtension,
+  calculatorExtension,
   macosSystemExtension,
 ] satisfies CommanderExtension[];
 

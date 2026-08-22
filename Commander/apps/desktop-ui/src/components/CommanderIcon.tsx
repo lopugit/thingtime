@@ -1,6 +1,7 @@
 import {
   AppWindow,
   Box,
+  Calculator,
   Cloud,
   Command,
   ExternalLink,
@@ -27,32 +28,34 @@ export function CommanderIcon({
   const Icon =
     key === 'settings'
       ? Settings
-      : key === 'emoji'
-        ? Smile
-        : key === 'extensions'
-          ? Box
-          : key === 'store'
-            ? Cloud
-            : key === 'sideload'
-              ? FolderOpen
-              : key === 'history'
-                ? History
-                : key === 'application'
-                  ? AppWindow
-                  : key === 'directory'
-                    ? FolderOpen
-                    : key === 'quicklink'
-                      ? Link
-                      : key === 'command'
-                        ? TerminalSquare
-                        : key === 'external'
-                          ? ExternalLink
-                          : key === 'file'
-                            ? FileCode2
-                            : key === 'search'
-                              ? Search
-                              : key === 'sparkles'
-                                ? Sparkles
-                                : Command;
+      : key === 'calculator'
+        ? Calculator
+        : key === 'emoji'
+          ? Smile
+          : key === 'extensions'
+            ? Box
+            : key === 'store'
+              ? Cloud
+              : key === 'sideload'
+                ? FolderOpen
+                : key === 'history'
+                  ? History
+                  : key === 'application'
+                    ? AppWindow
+                    : key === 'directory'
+                      ? FolderOpen
+                      : key === 'quicklink'
+                        ? Link
+                        : key === 'command'
+                          ? TerminalSquare
+                          : key === 'external'
+                            ? ExternalLink
+                            : key === 'file'
+                              ? FileCode2
+                              : key === 'search'
+                                ? Search
+                                : key === 'sparkles'
+                                  ? Sparkles
+                                  : Command;
   return <Icon aria-hidden="true" strokeWidth={1.8} />;
 }

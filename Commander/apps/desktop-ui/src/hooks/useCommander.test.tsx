@@ -208,6 +208,21 @@ describe('useCommander launcher sessions', () => {
     expect(hideLauncher).toHaveBeenCalledOnce();
   });
 
+  it('dismisses after an automatic calculator copy action requests launcher dismissal', async () => {
+    vi.mocked(api.execute).mockResolvedValueOnce({
+      ok: true,
+      nativeRequest: { method: 'clipboard.write', params: { text: '512' } },
+      dismissLauncher: true,
+    });
+    const { result } = renderHook(() => useCommander());
+    await waitFor(() => expect(result.current.bootstrap).not.toBeNull());
+
+    await act(() => result.current.executeCommand('builtin:calculator:result', 'copy-result', '256*2'));
+
+    expect(nativeRequest).toHaveBeenCalledWith('clipboard.write', { text: '512' });
+    expect(hideLauncher).toHaveBeenCalledOnce();
+  });
+
   it('executes a registered command hotkey event and opens its Commander view', async () => {
     const itemId = 'extension:builtin:emoji-symbols:search-emoji-symbols';
     vi.mocked(api.execute).mockResolvedValueOnce({

@@ -69,6 +69,13 @@ existing Accessibility grant; without it, Commander copies the selection and kee
 fallback message. The emoji catalog uses [Emojibase](https://emojibase.dev/) data under its MIT license. This
 Commander-owned view does not imply third-party Raycast `Grid` compatibility, which remains planned in the matrix.
 
+**Calculator** is a separate bundled Commander extension and automatic root-search provider. A complete arithmetic
+expression is parsed locally by a bounded whitelist parser and shown before ordinary search results without requiring
+a Calculator command or prefix. Return copies the displayed answer through the native clipboard bridge. The bundled
+card can disable automatic results or change maximum decimal precision. This currently covers arithmetic, powers,
+percentages, factorials, constants, and common numeric functions; currency, date, and unit conversion remain outside
+the compatibility claim.
+
 ## Your Raycast
 
 On macOS, Extensions Settings includes a **Your Raycast** tab. It asks the native `defaults` tool for Raycast's

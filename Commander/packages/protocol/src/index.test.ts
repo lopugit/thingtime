@@ -4,6 +4,7 @@ import {
   DEFAULT_INDEXING_SETTINGS,
   fuzzyTextScore,
   INDEXING_SETTINGS_VERSION,
+  normalizeCalculatorSettings,
   normalizeIndexingSettings,
   normalizeSearchCacheSettings,
   normalizeSearchCategoryOrder,
@@ -47,6 +48,18 @@ describe('Commander presentation settings', () => {
       defaultPinned: true,
       focusRecentOnCurrentDisplay: false,
       shortcut: 'Command+Shift+P',
+    });
+  });
+
+  it('normalizes automatic calculator preferences and bounds displayed precision', () => {
+    expect(normalizeCalculatorSettings(undefined)).toEqual({ enabled: true, maxDecimalPlaces: 10 });
+    expect(normalizeCalculatorSettings({ enabled: false, maxDecimalPlaces: 99 })).toEqual({
+      enabled: false,
+      maxDecimalPlaces: 14,
+    });
+    expect(normalizeCalculatorSettings({ enabled: true, maxDecimalPlaces: -4 })).toEqual({
+      enabled: true,
+      maxDecimalPlaces: 0,
     });
   });
 });

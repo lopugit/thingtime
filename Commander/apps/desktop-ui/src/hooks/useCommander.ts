@@ -220,7 +220,11 @@ export function useCommander(): CommanderState {
         nativeRequestMethod === 'launcher.hide' ||
         nativeRequestMethod === 'launcher.show' ||
         nativeRequestMethod === 'application.quit';
-      if ((actionId === 'open' || actionId === 'run') && !nativeOwnsLauncherLifecycle && !response.view)
+      if (
+        (response.dismissLauncher || actionId === 'open' || actionId === 'run') &&
+        !nativeOwnsLauncherLifecycle &&
+        !response.view
+      )
         await hideLauncher();
       setActionsOpen(false);
       setError(null);
@@ -304,6 +308,10 @@ function sameSearchHits(current: readonly SearchHit[], next: readonly SearchHit[
         hit.preferenceScore === next[index]?.preferenceScore &&
         hit.extensionId === next[index]?.extensionId &&
         hit.commandName === next[index]?.commandName &&
+        hit.calculation?.expression === next[index]?.calculation?.expression &&
+        hit.calculation?.result === next[index]?.calculation?.result &&
+        hit.calculation?.label === next[index]?.calculation?.label &&
+        hit.calculation?.resultWords === next[index]?.calculation?.resultWords &&
         hit.keywords.length === next[index]?.keywords.length &&
         hit.keywords.every((keyword, keywordIndex) => keyword === next[index]?.keywords[keywordIndex]) &&
         hit.actions.length === next[index]?.actions.length &&
