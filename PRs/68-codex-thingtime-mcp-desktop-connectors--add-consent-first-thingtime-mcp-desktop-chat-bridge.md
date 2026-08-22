@@ -443,17 +443,63 @@ an offline database or offline conflict resolution layer.
   No live pairing was performed automatically because accepting it creates a
   durable account-to-computer relationship.
 
+### Paired-node optimistic UI, drawer, reload, and auto-start follow-up (2026-08-22)
+
+- The local node card now separates harmless background status refresh from
+  mutations. A known paired badge and every unrelated control remain rendered
+  while a small green spinner reports the refresh; only the exact action in
+  flight owns a busy state. Pure presentation and hook regressions cover paired
+  refresh, per-action pending keys, overlapping-refresh fencing, and the
+  always-available **Add Codex project** control.
+- Device and Messenger detail drawers now place their complete Chakra portal
+  container above the dim overlay, not only the inner drawer panel. The exact
+  installed `/things?device=c5afb0b6-9e79-497e-807b-aef761ef3a1b` view opened
+  the online `lopu’s MacBook Pro (2)` drawer, exposed its controls above the
+  overlay, accepted a real pointer click on Close, and returned to the live
+  grid. Destructive device controls were deliberately not invoked.
+- Nitro now seals the built React index as a server asset, so its catch-all can
+  serve the packaged client shell without depending on a mutable source-tree
+  file. A staged Nitro proof returned HTTP 200 and the React root for both `/`
+  and `/things?device=reload-proof`. In the signed installed app, Cmd+R on the
+  real paired device deep link stayed at private loopback port `53346`, restored
+  the drawer, and never displayed `Client app has not been built yet.`
+- Desktop settings schema 3 adds **Auto-start node on Thingtime launch**, on by
+  default. It only restarts a service that already has an Electron-managed
+  LaunchAgent plist; it never installs a never-enabled node. The installed
+  Settings modal showed the switch enabled. An exact `launchctl bootout`
+  matching the native menu's **Quit Thingtime** implementation removed the
+  running service while preserving the managed plist hash
+  `359ce0eb4933b6dbcfa8862c3f5a50dbe4f007d8e0ae87584c55556c185ee46a`.
+  After the desktop process fully exited, reopening the exact installed app
+  restored one and only one node process at PID `48869`, from
+  `/Users/lopu/Applications/Thingtime.app/Contents/Helpers/Thingtime Node.app/Contents/MacOS/ThingtimeNode`.
+- Final focused source validation is Electron `56/56`, devices `45/45`, and
+  Messenger `34/34`; focused ESLint, Node syntax, `build:web`, `verify:web`,
+  the staged Nitro deep-link proof, and the typecheck ratchet (`135` versus the
+  `143` baseline, with no changed-file diagnostic) all pass. The isolated
+  canonical build passed deep/strict signing and both local and runtime
+  repository verifiers with Team ID `6DQQ9V7C84`, then `install:local`
+  reverified the temporary and final copies at
+  `/Users/lopu/Applications/Thingtime.app`. Built and installed hashes match:
+  `62e8c1ab56da722049ee0bca2d040b480982cd7b491b7520939e82af81b9e79c`
+  (outer executable),
+  `f3416f5570e0dd95faa67002fb15a7a4d5912f65227c0917c9f2468e80b66bf1`
+  (ASAR),
+  `c534b762d63ebf9f15b0296c555e37616e8ec610f5332e49c0d56dfcff773f22`
+  (node), and
+  `ac9e44ea6ab1662101c7d74881b34d14e2913c99e2555efbeac8c6fe22f4d0c5`
+  (bridge).
+
 ### Acceptance boundaries still open
 
-- The installed local-renderer acceptance reused an existing signed-in `Nikk`
-  production session only for the earlier navigation/UI checks. The final PR #68
-  API-target acceptance and isolated in-app browser were logged out. No new durable pairing relationship
-  was created or removed, and existing Keychain credentials were deliberately
-  left untouched. Authenticated current-branch pairing, multi-account
-  device-drawer controls, live remote
-  chat queue/steer/interrupt/approval flows, and their full desktop/390 px
-  visual acceptance therefore remain manual QA; automated coverage is not
-  represented as that real account-level proof.
+- The user explicitly completed one authenticated current-branch pairing before
+  this follow-up, and the final installed acceptance observed that account and
+  its online device without creating, removing, or rotating any relationship or
+  Keychain credential. Desktop device-drawer open/close and reload are now real
+  account-level proof. A second-account pairing, destructive device commands,
+  live remote chat queue/steer/interrupt/approval flows, and the device drawer
+  at 390 CSS px remain manual acceptance; automated coverage is not represented
+  as proof of those unperformed operations.
 - Accessibility and Screen Recording paths were validated for non-prompting,
   fail-closed preflight and bounded behavior, but no TCC toggle was automated.
   A real protected Accessibility focus/read and ScreenCaptureKit capture still
