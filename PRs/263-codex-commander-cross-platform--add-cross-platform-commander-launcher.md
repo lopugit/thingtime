@@ -204,6 +204,10 @@ environment.
   the macOS-only catalog. Stable third-party app deep links can use the same
   provider shape, while arbitrary app-menu indexing remains an explicit future
   Accessibility provider rather than an unsafe static macro.
+- Corrected the Rust rank bands so true exact, title-prefix, and contained-title
+  matches outrank typo-only filesystem candidates. This keeps destinations such
+  as Displays Settings visible above `_displayindex.py` and similar indexed
+  files even when the 30-result window is otherwise full.
 - Commander now packages a second persistent Rust service for local file,
   folder, and application metadata. It stores paths/names/kinds plus optional
   size and mtime—not contents—in an owner-only SQLite/FTS5 index. The scanner
@@ -313,7 +317,7 @@ environment.
 - Commander TypeScript: 134 tests passed across protocol (12), filesystem client
   (3), compatibility (19), UI (59), and daemon (41) packages; typecheck,
   ESLint, Prettier, and package builds passed.
-- Rust: 55 tests passed across command search (23 unit + 5 JSONL) and filesystem
+- Rust: 56 tests passed across command search (24 unit + 5 JSONL) and filesystem
   indexing (26 unit + 1 JSONL); formatting and strict Clippy with warnings
   denied passed.
 - Swift: thirteen WebKit/panel, resizing, pin-state, settings-deep-link,

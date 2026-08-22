@@ -50,6 +50,11 @@ import { SearchResultCache } from './services/searchCache.js';
 import { ThingtimeService } from './services/thingtime.js';
 import { CALCULATOR_RESULT_ITEM_ID, calculatorSearchHit } from './services/calculator.js';
 
+// Bump these whenever ranking or result-presentation semantics change so an
+// installed Commander never replays results produced by an older search core.
+const SEARCH_CONTEXT_VERSION = 3;
+const SEARCH_CACHE_KEY_VERSION = 2;
+
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -158,14 +163,14 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       ].slice(0, 30);
     const normalizedQuery = query.trim().toLowerCase();
     const contextKey = JSON.stringify({
-      version: 2,
+      version: SEARCH_CONTEXT_VERSION,
       order: snapshot.settings.resultCategoryOrder,
       windowMode: snapshot.settings.windowMode,
       favourites: snapshot.settings.showFavouritesInCompactMode,
       revision: searchRevision,
     });
     const key = JSON.stringify({
-      version: 1,
+      version: SEARCH_CACHE_KEY_VERSION,
       query: normalizedQuery,
       order: snapshot.settings.resultCategoryOrder,
       windowMode: snapshot.settings.windowMode,

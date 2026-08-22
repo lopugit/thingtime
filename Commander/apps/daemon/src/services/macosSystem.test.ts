@@ -18,11 +18,19 @@ describe('macOS System shortcut catalog', () => {
       subtitle: 'macOS System',
       keywords: expect.arrayContaining(['accessibility', 'assistive access', 'system settings']),
     });
+    expect(items.find((item) => item.commandName === 'open-displays-settings')).toMatchObject({
+      title: 'Displays Settings',
+      subtitle: 'macOS System',
+      keywords: expect.arrayContaining(['display', 'monitor', 'resolution', 'system settings']),
+    });
   });
 
   it('resolves only declared x-apple System Settings URLs', () => {
     expect(macosSystemShortcutURL('open-accessibility-settings')).toBe(
       'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility',
+    );
+    expect(macosSystemShortcutURL('open-displays-settings')).toBe(
+      'x-apple.systempreferences:com.apple.Displays-Settings.extension',
     );
     expect(macosSystemShortcutURL('not-a-command')).toBeUndefined();
     expect(
