@@ -42,7 +42,13 @@ import {
 	userSubscriptionLedgerEnvelopeIsTrusted,
 	userSubscriptionLedgerMatch
 } from '../subscriptions/subscriptionIdentity';
-import { USER_STORAGE_ACCOUNTING_VERSION, USER_STORAGE_STATUS, storageSandboxState, thingStorageSizeBytes } from '../storage/storageCore';
+import {
+	InvalidAttachmentStorageEnvelopeError,
+	USER_STORAGE_ACCOUNTING_VERSION,
+	USER_STORAGE_STATUS,
+	storageSandboxState,
+	thingStorageSizeBytes
+} from '../storage/storageCore';
 import { reconcileUserStorage, userStorageAllowanceIsValid } from '../storage/userStorage';
 import {
   ACL_ALL,
@@ -2038,6 +2044,15 @@ const fenceAllStorageLedgers = async (): Promise<{ accounts: number; apps: numbe
 	};
 };
 
+// Do not narrow this cursor with a Mongo projection. Attachment accounting is
+// intentionally defined by a closed protected root envelope, including its
+// optional in-flight/delete fields. Projecting only the ordinary Thing payload
+// made every otherwise-valid attachment look corrupt during the account-wide
+// backfill. Reading each source document whole is also future-safe when that
+// protected envelope gains another validated field.
+export const userStorageAccountingSourceCursor = <T extends { find: (filter: Record<string, unknown>) => any }>(things: T) =>
+	things.find({ ownerId: { $type: 'string' } });
+
 const backfillUserStorageAccounting: Migration = {
 	id: 'backfill-user-storage-accounting',
 	collection: 'things',
@@ -2125,20 +2140,7 @@ const backfillUserStorageAccounting: Migration = {
 			const knownUsers = new Set(ids);
 
 			let stamped = 0;
-			const cursor = things.find({ ownerId: { $type: 'string' } }).project({
-				_id: 1,
-				schemaVersion: 1,
-				ownerId: 1,
-				thingtime: 1,
-				crystal: 1,
-				extended: 1,
-				tags: 1,
-				storageClass: 1,
-				sandboxExpiresAt: 1,
-				sizeBytes: 1,
-				storageAccountingVersion: 1,
-				updatedAt: 1
-			});
+			const cursor = userStorageAccountingSourceCursor(things);
 			for await (const initialDoc of cursor) {
 				const initialSandboxState = storageSandboxState(initialDoc as any);
 				if (initialSandboxState === 'sandbox') continue;
@@ -2164,7 +2166,18 @@ const backfillUserStorageAccounting: Migration = {
 							diagnosticObjectIds: [String(doc._id)]
 						});
 					}
-					const sizeBytes = thingStorageSizeBytes(doc as any);
+					let sizeBytes: number;
+					try {
+						sizeBytes = thingStorageSizeBytes(doc as any);
+					} catch (error) {
+						if (error instanceof InvalidAttachmentStorageEnvelopeError) {
+							throw new MigrationOperatorError('invalid_attachment_envelope', {
+								internalMessage: `Attachment Thing ${String(doc._id)} has an invalid protected storage envelope`,
+								diagnosticObjectIds: [String(doc._id)]
+							});
+						}
+						throw error;
+					}
 					if (
 						doc.storageClass === 'content' &&
 						doc.storageAccountingVersion === USER_STORAGE_ACCOUNTING_VERSION &&
