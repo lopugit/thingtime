@@ -2135,6 +2135,15 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       behind the right drawer, but it must sit below the drawer portal: close,
       scroll, and non-destructive drawer controls remain clickable at desktop
       and 390 CSS px, with no invisible full-page interception.
+- [ ] In the exact installed Electron app, open that device drawer and click
+      its 44px X while it overlaps the native title-bar band. Reopen it, drag
+      the left edge narrower and wider until both bounds engage, then focus the
+      separator and use Left/Right (Home resets). Collapse and reopen Node,
+      observed state, applications, connectors, screen, approvals, and command
+      activity independently; no section toggle may close the drawer or block
+      another control. At 390 CSS px the resize edge is absent, the drawer
+      remains full width, and every section still toggles without horizontal
+      overflow.
 - [ ] Pair two different Macs to one disposable Thingtime account, then pair
       one disposable Mac to two different Thingtime accounts. Every pairing
       link must remain one-use, but the Mac must retain both account credentials
@@ -2303,9 +2312,10 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       devices projection, with cached-first name/presence and current system,
       volume, brightness, lock, open-app, permission, and connector state.
       Open `?device=<id>` at desktop and exactly 390 CSS px, exercise every
-      drawer section and scroll top-to-bottom: no clipping/overflow, stale and
-      offline state is explicit, and desired controls confirm or revert against
-      a newer observed revision.
+      drawer section, collapse/reopen each section, resize the desktop drawer
+      from its left edge, and scroll top-to-bottom: no clipping/overflow, stale
+      and offline state is explicit, and desired controls confirm or revert
+      against a newer observed revision.
 - [ ] Device rows never enter generic selection, copy/move/share/delete,
       context-menu, or preview flows. Capability, permission, lock, connector,
       version, local-only, offline-queue, and approval policy each disable or

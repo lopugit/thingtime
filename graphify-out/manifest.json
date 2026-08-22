@@ -1750,8 +1750,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1787397537.8006139,
-    "ast_hash": "f820d5c422d18734dfa4cafdc9ab219c",
+    "mtime": 1787399983.031126,
+    "ast_hash": "e14d521db912afaf74aaf0ab1a086693",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -4155,8 +4155,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787397537.799807,
-    "ast_hash": "0041fa3e4c988792f3a8b9a8787347f9",
+    "mtime": 1787399983.0320513,
+    "ast_hash": "205883fa54b1937ef0629746fc28f1aa",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -6715,9 +6715,9 @@
     "semantic_hash": "4013432d982d300fedd17f282eacbceb"
   },
   "remix/app/components/Devices/DeviceDetailsDrawer.tsx": {
-    "mtime": 1787397300.4258094,
-    "ast_hash": "ac2fbda7bbad0a167d5b5b69efa1b08f",
-    "semantic_hash": "ac2fbda7bbad0a167d5b5b69efa1b08f"
+    "mtime": 1787400022.5940952,
+    "ast_hash": "20ba8b34c64ba9b1510e7ba281cac248",
+    "semantic_hash": "20ba8b34c64ba9b1510e7ba281cac248"
   },
   "remix/app/components/Devices/DeviceListRow.tsx": {
     "mtime": 1787031671.3095453,
@@ -6955,8 +6955,8 @@
     "semantic_hash": "ea1b89dfb8fb4880a49a2bc3d34eefd8"
   },
   "PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md": {
-    "mtime": 1787398583.2729945,
-    "ast_hash": "8ce69c7658bfe1542f247e9466d1b872",
+    "mtime": 1787400833.644222,
+    "ast_hash": "a525238d21e9e05ef1ecf62929d9fe08",
     "semantic_hash": ""
   },
   "electron/PRODUCTION_RELEASE.md": {
@@ -6982,7 +6982,7 @@
   "macos/ThingtimeNode/Resources/ThingtimeNodeIcon.png": {
     "mtime": 1787393578.6261292,
     "ast_hash": "365e4da7f4ded5e74b3cfefb4782e2b8",
-    "semantic_hash": ""
+    "semantic_hash": "365e4da7f4ded5e74b3cfefb4782e2b8"
   },
   "remix/app/api/utils/mongodb/indexBudget.test.ts": {
     "mtime": 1787389993.4681222,
@@ -6992,12 +6992,12 @@
   "macos/ThingtimeNode/Resources/ThingtimeNodeIcon.svg": {
     "mtime": 1787393551.6912186,
     "ast_hash": "c5ae578ea63363dce32373aab9e6412f",
-    "semantic_hash": ""
+    "semantic_hash": "c5ae578ea63363dce32373aab9e6412f"
   },
   "remix/app/components/Devices/drawerStacking.test.ts": {
-    "mtime": 1787397311.4700575,
-    "ast_hash": "2a5511fb290d8471b7280d8292a5f615",
-    "semantic_hash": "2a5511fb290d8471b7280d8292a5f615"
+    "mtime": 1787399874.4587257,
+    "ast_hash": "065d9ec1eb5e0826a6c3e5f974b1b612",
+    "semantic_hash": "065d9ec1eb5e0826a6c3e5f974b1b612"
   },
   "remix/app/components/Devices/localNodePresentation.test.ts": {
     "mtime": 1787397278.1338224,
@@ -7008,5 +7008,15 @@
     "mtime": 1787397412.5664022,
     "ast_hash": "66602c8d510a75a0062fc96e86896662",
     "semantic_hash": "66602c8d510a75a0062fc96e86896662"
+  },
+  "remix/app/components/Devices/deviceDrawerLayout.test.ts": {
+    "mtime": 1787399874.4581387,
+    "ast_hash": "996d29c0313104beab1ea2c431c0b36c",
+    "semantic_hash": "996d29c0313104beab1ea2c431c0b36c"
+  },
+  "remix/app/components/Devices/deviceDrawerLayout.ts": {
+    "mtime": 1787399874.4569724,
+    "ast_hash": "e516dd50e6c224ba8337546883f0bfc5",
+    "semantic_hash": "e516dd50e6c224ba8337546883f0bfc5"
   }
 }

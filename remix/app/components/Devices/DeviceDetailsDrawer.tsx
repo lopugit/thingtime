@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 
 import { Box, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, Text } from '@chakra-ui/react';
-import { CircleAlert, LockKeyhole, WifiOff } from 'lucide-react';
+import { ChevronDown, CircleAlert, LockKeyhole, WifiOff } from 'lucide-react';
 
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 
@@ -15,19 +15,63 @@ import { DevicePolicyButton, DeviceStateGrid } from './DeviceStateGrid';
 import { ScreenSessionPanel } from './ScreenSessionPanel';
 import type { ScreenVideoContract } from './ScreenSessionPanel';
 import type { ScreenSessionAvailability } from './ScreenSessionPanel';
+import {
+	DEVICE_DRAWER_DEFAULT_WIDTH,
+	DEVICE_DRAWER_KEYBOARD_STEP,
+	DEVICE_DRAWER_MAX_WIDTH,
+	DEVICE_DRAWER_MIN_WIDTH,
+	clampDeviceDrawerWidth
+} from './deviceDrawerLayout';
 import type { DeviceCommandStatus, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
 
-const Section = ({ label, count, children }: { label: string; count?: number; children: React.ReactNode }) => (
-	<Box marginTop={5}>
-		<Flex alignItems="center" gap={1.5} marginBottom={2}>
-			<Text as="h3" color="var(--tt-muted, #71717a)" fontSize="10px" fontWeight={800} letterSpacing="0.055em" textTransform="uppercase">
-				{label}
-			</Text>
-			{typeof count === 'number' ? <DeviceStatusPill label={String(count)} tone="neutral" /> : null}
-		</Flex>
-		{children}
-	</Box>
-);
+const Section = ({ label, count, children }: { label: string; count?: number; children: React.ReactNode }) => {
+	const [expanded, setExpanded] = React.useState(true);
+	const panelId = React.useId();
+
+	return (
+		<Box marginTop={5}>
+			<Flex
+				alignItems="center"
+				aria-controls={panelId}
+				aria-expanded={expanded}
+				aria-label={`${expanded ? 'Collapse' : 'Expand'} ${label}`}
+				as="button"
+				borderRadius="var(--tt-radius-sm, 8px)"
+				gap={1.5}
+				justifyContent="space-between"
+				marginBottom={expanded ? 2 : 0}
+				marginX={-1.5}
+				onClick={() => setExpanded((current) => !current)}
+				paddingX={1.5}
+				paddingY={1}
+				sx={{ WebkitAppRegion: 'no-drag' }}
+				type="button"
+				width="calc(100% + 12px)"
+				_hover={{ background: 'var(--tt-surface-alt, #f7f7f8)' }}
+				_focusVisible={{ boxShadow: '0 0 0 2px var(--tt-accent, #ec4899)' }}
+			>
+				<Flex alignItems="center" gap={1.5} minWidth={0}>
+					<Text as="h3" color="var(--tt-muted, #71717a)" fontSize="10px" fontWeight={800} letterSpacing="0.055em" textTransform="uppercase">
+						{label}
+					</Text>
+					{typeof count === 'number' ? <DeviceStatusPill label={String(count)} tone="neutral" /> : null}
+				</Flex>
+				<Box
+					aria-hidden
+					color="var(--tt-muted, #71717a)"
+					flexShrink={0}
+					transform={expanded ? 'rotate(0deg)' : 'rotate(-90deg)'}
+					transition="transform 140ms ease"
+				>
+					<ChevronDown size={15} strokeWidth={2} />
+				</Box>
+			</Flex>
+			<Box hidden={!expanded} id={panelId}>
+				{children}
+			</Box>
+		</Box>
+	);
+};
 
 const NON_TERMINAL_COMMANDS = new Set<DeviceCommandStatus>(['queued', 'claimed', 'leased', 'running', 'streaming', 'needs-approval']);
 
@@ -89,6 +133,9 @@ export const DeviceDetailsDrawer = memo(
 		screenAvailability,
 		screenStartInput = null
 	}: DeviceDetailsDrawerProps) => {
+		const [drawerWidth, setDrawerWidth] = React.useState(DEVICE_DRAWER_DEFAULT_WIDTH);
+		const [resizing, setResizing] = React.useState(false);
+		const resizeOrigin = React.useRef<{ pointerId: number; x: number; width: number } | null>(null);
 		const summary = state?.summary || null;
 		const snapshot = state?.snapshot || null;
 		const pendingCommands = state?.commands.filter((command) => NON_TERMINAL_COMMANDS.has(command.status)).length || 0;
@@ -115,6 +162,64 @@ export const DeviceDetailsDrawer = memo(
 			(!pairingControl?.policy.allowed && pairingControl?.policy.message) ||
 			null;
 
+		React.useEffect(() => {
+			const clampToViewport = () => {
+				if (window.matchMedia('(max-width: 47.99em)').matches) return;
+				setDrawerWidth((current) => clampDeviceDrawerWidth(current, window.innerWidth));
+			};
+
+			clampToViewport();
+			window.addEventListener('resize', clampToViewport);
+			return () => window.removeEventListener('resize', clampToViewport);
+		}, []);
+
+		React.useEffect(() => {
+			if (!resizing) return;
+			const previousCursor = document.body.style.cursor;
+			const previousUserSelect = document.body.style.userSelect;
+			document.body.style.cursor = 'ew-resize';
+			document.body.style.userSelect = 'none';
+
+			return () => {
+				document.body.style.cursor = previousCursor;
+				document.body.style.userSelect = previousUserSelect;
+			};
+		}, [resizing]);
+
+		const finishResize = React.useCallback((event: React.PointerEvent<HTMLElement>) => {
+			if (resizeOrigin.current?.pointerId !== event.pointerId) return;
+			if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+			resizeOrigin.current = null;
+			setResizing(false);
+		}, []);
+
+		const beginResize = React.useCallback(
+			(event: React.PointerEvent<HTMLElement>) => {
+				if (event.button !== 0 || window.matchMedia('(max-width: 47.99em)').matches) return;
+				event.preventDefault();
+				resizeOrigin.current = { pointerId: event.pointerId, width: drawerWidth, x: event.clientX };
+				event.currentTarget.setPointerCapture(event.pointerId);
+				setResizing(true);
+			},
+			[drawerWidth]
+		);
+
+		const resizeDrawer = React.useCallback((event: React.PointerEvent<HTMLElement>) => {
+			const origin = resizeOrigin.current;
+			if (!origin || origin.pointerId !== event.pointerId) return;
+			setDrawerWidth(clampDeviceDrawerWidth(origin.width + origin.x - event.clientX, window.innerWidth));
+		}, []);
+
+		const resizeWithKeyboard = React.useCallback((event: React.KeyboardEvent<HTMLElement>) => {
+			if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home') return;
+			event.preventDefault();
+			setDrawerWidth((current) => {
+				if (event.key === 'Home') return clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth);
+				const delta = event.key === 'ArrowLeft' ? DEVICE_DRAWER_KEYBOARD_STEP : -DEVICE_DRAWER_KEYBOARD_STEP;
+				return clampDeviceDrawerWidth(current + delta, window.innerWidth);
+			});
+		}, []);
+
 		return (
 			<Drawer isOpen={isOpen} onClose={onClose} placement="right" size="full">
 				<DrawerOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
@@ -122,12 +227,64 @@ export const DeviceDetailsDrawer = memo(
 					background="var(--tt-card, #ffffff)"
 					color="var(--tt-ink, #17171c)"
 					containerProps={{ zIndex: DRAWER_MODAL_Z }}
+					cursor={resizing ? 'ew-resize' : undefined}
 					marginLeft="auto"
-					maxWidth={{ base: '100vw', md: '560px' }}
+					maxWidth={{ base: '100vw', md: 'calc(100vw - 24px)' }}
 					minWidth={0}
-					width="100%"
+					pointerEvents="auto"
+					sx={{ WebkitAppRegion: 'no-drag' }}
+					width={{ base: '100%', md: `${drawerWidth}px` }}
 				>
-					<DrawerCloseButton marginTop={{ base: 'env(safe-area-inset-top)', md: 0 }} right={{ base: 3, md: 4 }} top={{ base: 3, md: 4 }} />
+					<Box
+						aria-label="Resize device details panel"
+						aria-orientation="vertical"
+						aria-valuemax={DEVICE_DRAWER_MAX_WIDTH}
+						aria-valuemin={DEVICE_DRAWER_MIN_WIDTH}
+						aria-valuenow={drawerWidth}
+						bottom={0}
+						cursor="ew-resize"
+						display={{ base: 'none', md: 'block' }}
+						left={-2}
+						onDoubleClick={() => setDrawerWidth(clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth))}
+						onKeyDown={resizeWithKeyboard}
+						onPointerCancel={finishResize}
+						onPointerDown={beginResize}
+						onPointerMove={resizeDrawer}
+						onPointerUp={finishResize}
+						position="absolute"
+						role="separator"
+						tabIndex={0}
+						top={0}
+						touchAction="none"
+						width={4}
+						zIndex={3}
+						sx={{ WebkitAppRegion: 'no-drag' }}
+						_after={{
+							background: resizing ? 'var(--tt-accent, #ec4899)' : 'var(--tt-border-strong, #d4d4d8)',
+							borderRadius: '999px',
+							bottom: 10,
+							content: '""',
+							left: '7px',
+							opacity: resizing ? 1 : 0,
+							position: 'absolute',
+							top: 10,
+							transition: 'opacity 120ms ease',
+							width: '2px'
+						}}
+						_hover={{ _after: { opacity: 1 } }}
+						_focusVisible={{ _after: { opacity: 1 } }}
+					/>
+					<DrawerCloseButton
+						aria-label="Close device details"
+						height={11}
+						marginTop={{ base: 'env(safe-area-inset-top)', md: 0 }}
+						pointerEvents="auto"
+						right={{ base: 2, md: 3 }}
+						sx={{ WebkitAppRegion: 'no-drag' }}
+						top={{ base: 2, md: 2 }}
+						width={11}
+						zIndex={4}
+					/>
 					<DrawerHeader
 						borderBottom="1px solid var(--tt-border, #ececef)"
 						paddingBottom={3}

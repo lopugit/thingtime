@@ -490,16 +490,44 @@ an offline database or offline conflict resolution layer.
   `ac9e44ea6ab1662101c7d74881b34d14e2913c99e2555efbeac8c6fe22f4d0c5`
   (bridge).
 
+### Resizable and collapsible device drawer follow-up (2026-08-22)
+
+- The device drawer surface, its enlarged 44px close control, resize separator,
+  and disclosure buttons are explicit Electron `no-drag` regions. This keeps
+  them interactive even when the portal overlaps the native title-bar drag
+  band. The desktop drawer now has a pointer-captured left resize edge bounded
+  to 420–900px and the available viewport, keyboard resizing, and a
+  double-click reset. Mobile remains full width and does not expose a resize
+  handle.
+- Node, observed state, applications, connectors, screen, approvals, and
+  command activity are independently accessible disclosure sections. Each
+  control exposes its current expanded state and associated panel without
+  closing or blocking the rest of the drawer.
+- The exact signed installed app at `/Users/lopu/Applications/Thingtime.app`
+  reopened the authenticated online `lopu’s MacBook Pro (2)` drawer. A real
+  pointer click on **Close device details** dismissed it. After reopening, all
+  seven sections collapsed and reopened independently. Real left-edge drags
+  changed the accessible drawer width from 560px to 432px and then to 573px;
+  double-click restored 560px. No device mutation was invoked.
+- Final focused validation is devices `48/48`, Electron `56/56`, and the
+  typecheck ratchet at `136` errors versus its `143` baseline. The canonical
+  build and installed copy both pass deep/strict code-signing verification with
+  Team ID `6DQQ9V7C84`. Their outer executable hashes match at
+  `0b48637eb501b8ebdd3ed109a5a987a612098728288dfc116ca613399a188e58`,
+  and their ASAR hashes match at
+  `f3416f5570e0dd95faa67002fb15a7a4d5912f65227c0917c9f2468e80b66bf1`.
+
 ### Acceptance boundaries still open
 
 - The user explicitly completed one authenticated current-branch pairing before
   this follow-up, and the final installed acceptance observed that account and
   its online device without creating, removing, or rotating any relationship or
-  Keychain credential. Desktop device-drawer open/close and reload are now real
-  account-level proof. A second-account pairing, destructive device commands,
-  live remote chat queue/steer/interrupt/approval flows, and the device drawer
-  at 390 CSS px remain manual acceptance; automated coverage is not represented
-  as proof of those unperformed operations.
+  Keychain credential. Desktop device-drawer open/close, reload, edge resizing,
+  and every disclosure section are now real account-level proof. A
+  second-account pairing, destructive device commands, live remote chat
+  queue/steer/interrupt/approval flows, and the device drawer at 390 CSS px
+  remain manual acceptance; automated coverage is not represented as proof of
+  those unperformed operations.
 - Accessibility and Screen Recording paths were validated for non-prompting,
   fail-closed preflight and bounded behavior, but no TCC toggle was automated.
   A real protected Accessibility focus/read and ScreenCaptureKit capture still
