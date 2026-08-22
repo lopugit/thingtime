@@ -32,6 +32,7 @@ test('local endpoint profiles persist atomically and preserve multiple custom de
 		let snapshot = await store.initialize();
 		assert.equal(snapshot.selectedEndpointId, 'pr-68');
 		assert.equal(snapshot.selectedMenuBarIconId, 'tree-pink');
+		assert.equal(snapshot.autoStartNodeOnLaunch, true);
 		assert.deepEqual(
 			snapshot.endpointProfiles.map((entry) => entry.id),
 			['pr-68', 'production', 'development']
@@ -68,7 +69,7 @@ test('selected build endpoints remain selected when later builds omit or rename 
 		});
 		assert.equal((await previewBuild.initialize()).selectedEndpoint.url, previewUrl);
 		const persisted = JSON.parse(await readFile(filePath, 'utf8'));
-		assert.equal(persisted.schemaVersion, 2);
+		assert.equal(persisted.schemaVersion, 3);
 		assert.equal(persisted.selectedEndpointUrl, previewUrl);
 		assert.equal(persisted.selectedEndpointLabel, 'PR #68 preview');
 		assert.deepEqual(persisted.customEndpoints, []);
@@ -122,7 +123,7 @@ test('schema-one endpoint ids migrate to URL-stable selections while their build
 		});
 		assert.equal((await migrated.initialize()).selectedEndpoint.url, previewUrl);
 		const persisted = JSON.parse(await readFile(filePath, 'utf8'));
-		assert.equal(persisted.schemaVersion, 2);
+		assert.equal(persisted.schemaVersion, 3);
 		assert.equal(persisted.selectedEndpointUrl, previewUrl);
 
 		const reopened = new DesktopSettingsStore({ filePath });
@@ -175,6 +176,33 @@ test('menu icon choices persist without exposing the custom local file path', as
 	}
 });
 
+test('managed node launch preference defaults on, persists off, and migrates older settings safely', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'thingtime-desktop-settings-'));
+	const filePath = path.join(root, 'desktop-settings.json');
+	try {
+		const store = new DesktopSettingsStore({ filePath });
+		assert.equal((await store.initialize()).autoStartNodeOnLaunch, true);
+		await assert.rejects(store.setAutoStartNodeOnLaunch('yes'), /Choose whether/u);
+		assert.equal((await store.setAutoStartNodeOnLaunch(false)).autoStartNodeOnLaunch, false);
+		assert.equal((await new DesktopSettingsStore({ filePath }).initialize()).autoStartNodeOnLaunch, false);
+
+		await writeFile(
+			filePath,
+			JSON.stringify({
+				customEndpoints: [],
+				customMenuBarIconPath: null,
+				menuBarIconId: 'tree-pink',
+				schemaVersion: 2,
+				selectedEndpointId: 'production'
+			}),
+			{ mode: 0o600 }
+		);
+		assert.equal((await new DesktopSettingsStore({ filePath }).initialize()).autoStartNodeOnLaunch, true);
+	} finally {
+		await rm(root, { force: true, recursive: true });
+	}
+});
+
 test('malformed persisted settings fail closed to bounded defaults', () => {
 	const state = normalizePersistedState({
 		customEndpoints: [
@@ -188,6 +216,7 @@ test('malformed persisted settings fail closed to bounded defaults', () => {
 		selectedEndpointId: 'missing'
 	});
 	assert.equal(state.customEndpoints.length, 1);
+	assert.equal(state.autoStartNodeOnLaunch, true);
 	assert.equal(state.customMenuBarIconPath, null);
 	assert.equal(state.menuBarIconId, 'tree-pink');
 	assert.equal(state.selectedEndpointId, 'missing');

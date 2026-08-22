@@ -19,6 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Paired-node optimistic status, clickable device drawers, offline deep-link
+  reloads, and launch restart**: background node checks now preserve the last
+  paired badge and all known-good controls, adding only a tiny green activity
+  indicator while each real action owns its own pending state. Chakra drawer
+  portal stacking now keeps device and chat panels above their dimming overlay.
+  Nitro bundles the React index shell as a server asset so Cmd+R on `/things`
+  remains local and returns the app instead of a build-placeholder 503.
+  Electron desktop settings default **Auto-start node on Thingtime launch** on;
+  app launch revives only a previously approved managed LaunchAgent and never
+  silently installs a never-enabled node. — Codex (AI), 2026-08-22
+
 - **Desktop pairing response reconciliation and Thingtime Node identity**: the
   manually signed helper now stores its encrypted pairing vault in the
   traditional macOS login Keychain instead of requesting the provisioning-only

@@ -727,10 +727,11 @@ function configuredNodeRegistration() {
 	};
 }
 
-async function reconcileConfiguredNode() {
+async function reconcileConfiguredNode({ startIfStopped } = {}) {
 	if (process.platform !== 'darwin' || !desktopSettings) return null;
 	await ensureLocalProjectRegistry(nodeProjectRegistryPath());
-	return thingtimeNode.reconcileRegisteredService(configuredNodeRegistration());
+	const shouldStart = typeof startIfStopped === 'boolean' ? startIfStopped : desktopSettings.snapshot().autoStartNodeOnLaunch;
+	return thingtimeNode.reconcileRegisteredService(configuredNodeRegistration(), { startIfStopped: shouldStart });
 }
 
 async function initializeDesktopSettings() {
@@ -1101,6 +1102,23 @@ async function desktopSelectMenuBarIcon(event, request) {
 	return selectMenuBarIcon(request?.iconId);
 }
 
+async function desktopSetNodeAutoStart(event, request) {
+	requireTrustedAiBridgeEvent(event);
+	const settings = requireDesktopSettings();
+	const previous = settings.snapshot().autoStartNodeOnLaunch;
+	const snapshot = await settings.setAutoStartNodeOnLaunch(request?.enabled);
+	if (!snapshot.autoStartNodeOnLaunch) return snapshot;
+	try {
+		await reconcileConfiguredNode({ startIfStopped: true });
+		desktopSettingsLastError = null;
+		return settings.snapshot();
+	} catch (error) {
+		await settings.setAutoStartNodeOnLaunch(previous);
+		desktopSettingsLastError = error instanceof Error ? error.message : String(error);
+		throw error;
+	}
+}
+
 async function desktopUploadMenuBarIcon(event) {
 	requireTrustedAiBridgeEvent(event);
 	const selection = await dialog.showOpenDialog(mainWindow || undefined, {
@@ -1312,6 +1330,7 @@ ipcMain.handle('thingtime-desktop:remove-endpoint', (event, request) => desktopR
 ipcMain.handle('thingtime-desktop:select-endpoint', (event, request) => desktopSelectEndpoint(event, request));
 ipcMain.handle('thingtime-desktop:select-menu-bar-icon', (event, request) => desktopSelectMenuBarIcon(event, request));
 ipcMain.handle('thingtime-desktop:upload-menu-bar-icon', (event) => desktopUploadMenuBarIcon(event));
+ipcMain.handle('thingtime-desktop:set-node-auto-start', (event, request) => desktopSetNodeAutoStart(event, request));
 ipcMain.handle('thingtime-desktop:load-url', (event, url) => {
 	requireTrustedAiBridgeEvent(event);
 	return selectAndLoadDesktopUrl(url);

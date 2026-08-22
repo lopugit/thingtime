@@ -3,6 +3,8 @@ import React, { memo } from 'react';
 import { Box, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, Text } from '@chakra-ui/react';
 import { CircleAlert, LockKeyhole, WifiOff } from 'lucide-react';
 
+import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
+
 import { resolvedDevicePresence, DeviceHealthBadges, DeviceStatusPill, formatDeviceLastSeen } from './DeviceCard';
 import { DeviceApplications } from './DeviceApplications';
 import { DeviceApprovalCard } from './DeviceApprovalCard';
@@ -115,15 +117,15 @@ export const DeviceDetailsDrawer = memo(
 
 		return (
 			<Drawer isOpen={isOpen} onClose={onClose} placement="right" size="full">
-				<DrawerOverlay zIndex={10240} />
+				<DrawerOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
 				<DrawerContent
 					background="var(--tt-card, #ffffff)"
 					color="var(--tt-ink, #17171c)"
+					containerProps={{ zIndex: DRAWER_MODAL_Z }}
 					marginLeft="auto"
 					maxWidth={{ base: '100vw', md: '560px' }}
 					minWidth={0}
 					width="100%"
-					zIndex={10250}
 				>
 					<DrawerCloseButton marginTop={{ base: 'env(safe-area-inset-top)', md: 0 }} right={{ base: 3, md: 4 }} top={{ base: 3, md: 4 }} />
 					<DrawerHeader

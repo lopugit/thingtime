@@ -6,8 +6,8 @@ const fsPromises = require('node:fs/promises');
 const net = require('node:net');
 const path = require('node:path');
 
-const SETTINGS_SCHEMA_VERSION = 2;
-const READABLE_SETTINGS_SCHEMA_VERSIONS = new Set([1, SETTINGS_SCHEMA_VERSION]);
+const SETTINGS_SCHEMA_VERSION = 3;
+const READABLE_SETTINGS_SCHEMA_VERSIONS = new Set([1, 2, SETTINGS_SCHEMA_VERSION]);
 const MAX_CUSTOM_ENDPOINTS = 32;
 const MAX_LABEL_BYTES = 120;
 const MAX_SETTINGS_BYTES = 64 * 1024;
@@ -113,6 +113,7 @@ function mergeEndpointProfiles(metadata, customEndpoints = []) {
 
 function emptyPersistedState() {
 	return {
+		autoStartNodeOnLaunch: true,
 		customEndpoints: [],
 		customMenuBarIconPath: null,
 		menuBarIconId: DEFAULT_MENU_BAR_ICON_ID,
@@ -135,6 +136,7 @@ function normalizePersistedState(value) {
 		}
 	}
 	state.customEndpoints = [...new Map(state.customEndpoints.map((entry) => [entry.url, entry])).values()];
+	state.autoStartNodeOnLaunch = typeof value.autoStartNodeOnLaunch === 'boolean' ? value.autoStartNodeOnLaunch : true;
 	state.selectedEndpointId = typeof value.selectedEndpointId === 'string' ? value.selectedEndpointId : null;
 	if (typeof value.selectedEndpointLabel === 'string') {
 		try {
@@ -240,6 +242,7 @@ class DesktopSettingsStore {
 	snapshot() {
 		const { profiles, selected } = this.resolved();
 		return {
+			autoStartNodeOnLaunch: this.state.autoStartNodeOnLaunch,
 			customMenuBarIconConfigured: Boolean(this.state.customMenuBarIconPath && fs.existsSync(this.state.customMenuBarIconPath)),
 			endpointProfiles: profiles.map(({ id, label, source, url }) => ({ id, label, source, url })),
 			menuBarIcons: MENU_BAR_ICONS,
@@ -327,6 +330,15 @@ class DesktopSettingsStore {
 			}
 			if (normalizedId === 'custom' && !this.state.customMenuBarIconPath) throw new Error('Choose a custom image before selecting the custom icon.');
 			this.state.menuBarIconId = normalizedId;
+			await this.persist();
+			return this.snapshot();
+		});
+	}
+
+	async setAutoStartNodeOnLaunch(enabled) {
+		return this.enqueue(async () => {
+			if (typeof enabled !== 'boolean') throw new Error('Choose whether Thingtime should start its managed node when the app launches.');
+			this.state.autoStartNodeOnLaunch = enabled;
 			await this.persist();
 			return this.snapshot();
 		});

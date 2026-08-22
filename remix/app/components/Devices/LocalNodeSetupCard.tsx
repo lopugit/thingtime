@@ -1,9 +1,10 @@
 import React from 'react';
 
-import { Badge, Box, Flex, Text } from '@chakra-ui/react';
+import { Badge, Box, Flex, Spinner, Text } from '@chakra-ui/react';
 import { FolderPlus, Laptop, Settings, ShieldCheck } from 'lucide-react';
 
 import { DevicePolicyButton, type DeviceActionHandler, type DeviceControlResolver } from './DeviceStateGrid';
+import { localNodeBadgePresentation } from './localNodePresentation';
 import type { LocalThingtimeNodeState } from './useLocalThingtimeNode';
 
 export const LocalNodeSetupCard = ({
@@ -37,7 +38,14 @@ export const LocalNodeSetupCard = ({
 	];
 	const missingPermissions = permissions.filter((permission) => permission.status !== 'authorized');
 	const ready = registered && pairedToCurrentAccount && missingPermissions.length === 0;
-	const pairedLabel = `${state.pairedAccountCount} ${state.pairedAccountCount === 1 ? 'account' : 'accounts'} paired`;
+	const badge = localNodeBadgePresentation({
+		checking: state.checking,
+		paired,
+		pairedAccountCount: state.pairedAccountCount,
+		pairedToCurrentAccount: state.pairedToCurrentAccount,
+		recoverablePairing,
+		registered
+	});
 
 	return (
 		<Box background="var(--tt-card, #fff)" border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-lg, 16px)" padding={[3, 4]}>
@@ -64,19 +72,12 @@ export const LocalNodeSetupCard = ({
 								? 'Pair this Thingtime account to this Mac'
 								: 'Make this Mac a Thingtime node'}
 						</Text>
-						<Badge borderRadius="full" colorScheme={state.loading ? 'purple' : registered ? 'orange' : 'gray'}>
-							{state.loading
-								? 'checking'
-								: recoverablePairing
-								? 'resume pairing'
-								: pairedToCurrentAccount
-								? pairedLabel
-								: registered && paired
-								? `${pairedLabel} elsewhere`
-								: registered
-								? 'ready to pair'
-								: 'not running'}
+						<Badge borderRadius="full" colorScheme={badge.colorScheme}>
+							{badge.label}
 						</Badge>
+						{badge.showChecking ? (
+							<Spinner aria-label="Refreshing local node status" color="green.400" emptyColor="green.100" size="xs" speed="0.7s" thickness="2px" />
+						) : null}
 					</Flex>
 					<Text color="var(--tt-muted, #71717a)" fontSize="12px" lineHeight="1.45" marginTop={1} whiteSpace="normal">
 						{ready

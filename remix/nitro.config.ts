@@ -12,6 +12,13 @@ export default defineNitroConfig({
   modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
   routes: Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
+  serverAssets: [
+    {
+      baseName: 'client',
+      dir: publicDir,
+      pattern: 'index.html'
+    }
+  ],
   publicAssets: [
     {
       baseURL: '/',

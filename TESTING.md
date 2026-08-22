@@ -2054,12 +2054,23 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       and never fall back to production merely because a build-specific ID is
       missing. Verify the node registration still uses the same selected API
       origin after every step.
+- [ ] Navigate the packaged loopback renderer directly to `/things` (including
+      a `?device=` drawer deep link) and press Cmd+R. Both `/` and the deep link
+      must return the bundled React shell with HTTP 200; the window must never
+      show `Client app has not been built yet.` or fetch a remote UI shell.
 - [ ] Explicitly register the installed node login service, verify its
       plist passes `plutil -lint`, uses valid `<key>` fields, its executable and
       runtime resolve inside the verified installed app, and its registry
       resolves to the exact private user-data file. Bootstrap must not issue an
       unconditional immediate kickstart. Replace an exact old managed node,
       then confirm launchd owns one new PID with `runs = 1` and no exit.
+- [ ] With **Auto-start node on Thingtime launch** left at its default-on
+      setting, use the native menu-bar **Quit Thingtime**, confirm launchd is
+      stopped while the managed plist remains, then Cmd+Q/reopen the installed
+      Electron app. It must bootstrap exactly one node from that existing plist.
+      Turn the setting off and repeat: reopening Electron must leave it stopped;
+      turn it back on and confirm it converges immediately. A Mac with no
+      managed plist must still require the explicit **Start node** confirmation.
 - [ ] Open the exact installed Electron app, record its bundled loopback
       renderer origin and separately selected API origin, and Quit with Cmd+Q. Electron must
       stop while the launchd node and
@@ -2115,6 +2126,15 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       Keychain proof must remain durable, `/things` must refresh from **Pair
       this account** to **Resume pairing**, and that explicit resume must
       reconcile without generating a replacement pairing secret.
+- [ ] After a successful pairing, trigger a background local-node refresh. The
+      last-known `1 account paired` (or plural) badge, **Add Codex project**, and
+      every unrelated setup control must remain present and interactive; only a
+      small green checking spinner may be added. A real action may mark only its
+      own button as working.
+- [ ] Open a paired computer from `/things`. The page overlay may dim the page
+      behind the right drawer, but it must sit below the drawer portal: close,
+      scroll, and non-destructive drawer controls remain clickable at desktop
+      and 390 CSS px, with no invisible full-page interception.
 - [ ] Pair two different Macs to one disposable Thingtime account, then pair
       one disposable Mac to two different Thingtime accounts. Every pairing
       link must remain one-use, but the Mac must retain both account credentials

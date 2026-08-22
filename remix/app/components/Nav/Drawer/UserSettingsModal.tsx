@@ -339,6 +339,32 @@ export const UserSettingsModal = () => {
 		}
 	}, [applyDesktopSettings, lopu]);
 
+	const handleNodeAutoStartChange = React.useCallback(
+		async (enabled: boolean) => {
+			const bridge = getElectronBridge();
+			if (!bridge?.setNodeAutoStart) return;
+			setElectronSettingsLoading(true);
+			try {
+				applyDesktopSettings(await bridge.setNodeAutoStart({ enabled }));
+				lopu({
+					title: enabled ? 'Thingtime will start your node on launch ✨' : 'Node auto-start is off',
+					status: 'success',
+					duration: 5000
+				});
+			} catch (error) {
+				lopu({
+					title: 'Could not change node auto-start',
+					description: error instanceof Error ? error.message : 'Thingtime desktop could not save that preference.',
+					status: 'error',
+					duration: 7000
+				});
+			} finally {
+				setElectronSettingsLoading(false);
+			}
+		},
+		[applyDesktopSettings, lopu]
+	);
+
 	const handleElectronAutoUpdateChange = React.useCallback(
 		(enabled: boolean) => {
 			if (!electronSessionHash) {
@@ -516,8 +542,8 @@ export const UserSettingsModal = () => {
 							{desktopSettings?.selectedEndpoint.url || 'No endpoint selected'}
 						</Text>
 						<Text fontSize="xs" opacity={0.55}>
-							The packaged interface stays on this computer. Account data and Thingtime Node use this API endpoint; pairing stays
-							separate per endpoint.
+							The packaged interface stays on this computer. Account data and Thingtime Node use this API endpoint; pairing stays separate per
+							endpoint.
 						</Text>
 						{desktopInfo.desktopSettingsLastError && (
 							<Text fontSize="xs" color="red.500" wordBreak="break-word">
@@ -596,6 +622,21 @@ export const UserSettingsModal = () => {
 								Changing this restarts only the managed node.
 							</Text>
 						</Flex>
+					</Flex>
+					<Flex alignItems="center" columnGap={4} paddingTop={2} borderTop="1px solid" borderColor="blackAlpha.100">
+						<Box minWidth={0}>
+							<Text fontSize="sm">Auto-start node on Thingtime launch</Text>
+							<Text fontSize="xs" opacity={0.55}>
+								Restarts a node you already enabled; it never installs a new node without asking first.
+							</Text>
+						</Box>
+						<Switch
+							aria-label="Auto-start node on Thingtime launch"
+							isChecked={desktopSettings?.autoStartNodeOnLaunch !== false}
+							isDisabled={electronSettingsLoading || !desktopSettings || !getElectronBridge()?.setNodeAutoStart}
+							marginLeft="auto"
+							onChange={(event) => handleNodeAutoStartChange(event.target.checked)}
+						/>
 					</Flex>
 					<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop="1px solid" borderColor="blackAlpha.100">
 						<Flex alignItems="center" columnGap={4}>

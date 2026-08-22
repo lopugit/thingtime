@@ -11,6 +11,7 @@ import {
 
 import type { DeviceActionControl, DeviceActionHandler, DeviceActionIntent, DeviceControlResolver } from './DeviceStateGrid';
 import type { DeviceActionKind, DeviceActionPolicy } from './deviceTypes';
+import { localNodeActionIsBusy, localNodeActionKey } from './localNodePresentation';
 
 const LOCAL_ACTIONS = new Set<DeviceActionKind>([
 	'register-service',
@@ -58,7 +59,8 @@ const methodForAction = (bridge: ReturnType<typeof getElectronBridge>, action: D
 
 export type LocalThingtimeNodeState = {
 	available: boolean;
-	loading: boolean;
+	checking: boolean;
+	pendingActionKeys: string[];
 	status: ThingtimeNodeStatus | null;
 	permissions: ThingtimeNodePermission[];
 	pairingChallenge: ThingtimeNodePairingChallenge | null;
@@ -85,30 +87,34 @@ export const useLocalThingtimeNode = (
 	const lopu = useLopu();
 	const lopuRef = useRef(lopu);
 	const permissionPollGenerationRef = useRef(0);
+	const statusRefreshGenerationRef = useRef(0);
 	lopuRef.current = lopu;
 	const bridge = typeof window === 'undefined' ? undefined : getElectronBridge();
 	const [state, setState] = useState<LocalThingtimeNodeRuntimeState>({
 		available: Boolean(bridge?.nodeGetStatus),
-		loading: false,
+		checking: false,
+		pendingActionKeys: [],
 		status: null,
 		permissions: [],
 		pairingChallenge: null
 	});
 
 	const refresh = useCallback(async () => {
+		const generation = ++statusRefreshGenerationRef.current;
 		const currentBridge = getElectronBridge();
 		if (!currentBridge?.nodeGetStatus) {
-			setState((previous) => ({ ...previous, available: false, loading: false }));
+			setState((previous) => ({ ...previous, available: false, checking: false }));
 			return null;
 		}
-		setState((previous) => ({ ...previous, available: true, loading: true }));
+		setState((previous) => ({ ...previous, available: true, checking: true }));
 		try {
 			const [statusResult, permissionsResult] = await Promise.allSettled([currentBridge.nodeGetStatus(), currentBridge.nodeGetPermissions?.()]);
 			if (statusResult.status === 'rejected') throw statusResult.reason;
+			if (statusRefreshGenerationRef.current !== generation) return statusResult.value;
 			setState((previous) => ({
 				...previous,
 				available: true,
-				loading: false,
+				checking: false,
 				status: statusResult.value,
 				permissions:
 					permissionsResult.status === 'fulfilled' && permissionsResult.value?.permissions
@@ -117,7 +123,8 @@ export const useLocalThingtimeNode = (
 			}));
 			return statusResult.value;
 		} catch (error) {
-			setState((previous) => ({ ...previous, available: true, loading: false }));
+			if (statusRefreshGenerationRef.current !== generation) return null;
+			setState((previous) => ({ ...previous, available: true, checking: false }));
 			lopuRef.current({
 				title: 'Couldn’t read the local Thingtime node 😔',
 				description: apiErrorMessage(error, 'Open Thingtime Desktop and try again.'),
@@ -142,6 +149,7 @@ export const useLocalThingtimeNode = (
 	useEffect(
 		() => () => {
 			permissionPollGenerationRef.current += 1;
+			statusRefreshGenerationRef.current += 1;
 		},
 		[]
 	);
@@ -191,13 +199,13 @@ export const useLocalThingtimeNode = (
 			}
 			const control: DeviceActionControl = {
 				policy,
-				idempotencyKey: `local-${action}-${targetKey || 'node'}`,
-				busy: state.loading,
+				idempotencyKey: localNodeActionKey(action, targetKey),
+				busy: localNodeActionIsBusy(state.pendingActionKeys, action, targetKey),
 				pendingLabel: 'Working'
 			};
 			return control;
 		},
-		[isSelectedLocalNode, selectedDeviceId, state.loading, state.status?.loginItem?.registered]
+		[isSelectedLocalNode, selectedDeviceId, state.pendingActionKeys, state.status?.loginItem?.registered]
 	);
 
 	const executeAction = useCallback<DeviceActionHandler>(
@@ -205,7 +213,12 @@ export const useLocalThingtimeNode = (
 			const run = async () => {
 				const currentBridge = getElectronBridge();
 				if (!methodForAction(currentBridge, intent.action)) return;
-				setState((previous) => ({ ...previous, loading: true }));
+				setState((previous) => ({
+					...previous,
+					pendingActionKeys: previous.pendingActionKeys.includes(intent.idempotencyKey)
+						? previous.pendingActionKeys
+						: [...previous.pendingActionKeys, intent.idempotencyKey]
+				}));
 				try {
 					if (intent.action === 'complete-pairing') {
 						const pairingSecret = typeof intent.input?.pairingSecret === 'string' ? intent.input.pairingSecret.trim() : '';
@@ -213,7 +226,7 @@ export const useLocalThingtimeNode = (
 						if (!pairingSecret || !commandId) throw new Error('Pairing requires the server challenge and command id.');
 						const completed = await currentBridge?.nodeCompletePairing?.({ pairingSecret, commandId });
 						if (completed?.pairingStatus !== 'paired') {
-							setState((previous) => ({ ...previous, loading: false, status: completed ?? previous.status }));
+							setState((previous) => ({ ...previous, status: completed ?? previous.status }));
 							return;
 						}
 						await onPaired?.();
@@ -249,7 +262,7 @@ export const useLocalThingtimeNode = (
 							});
 						}
 						if (completed?.pairingStatus !== 'paired') {
-							setState((previous) => ({ ...previous, loading: false, status: completed ?? latestStatus ?? previous.status }));
+							setState((previous) => ({ ...previous, status: completed ?? latestStatus ?? previous.status }));
 							return;
 						}
 						setState((previous) => ({ ...previous, pairingChallenge: null }));
@@ -293,6 +306,11 @@ export const useLocalThingtimeNode = (
 								: localActionErrorMessage(error, 'Try again from Thingtime Desktop.'),
 						status: 'error'
 					});
+				} finally {
+					setState((previous) => ({
+						...previous,
+						pendingActionKeys: previous.pendingActionKeys.filter((key) => key !== intent.idempotencyKey)
+					}));
 				}
 			};
 			void run();

@@ -393,6 +393,34 @@ test('reconciles endpoint and menu icon changes without restarting an unchanged 
 	}
 });
 
+test('app launch restarts an explicitly enabled managed node after its menu-bar Quit action', async () => {
+	const fixture = await makeSignedNodeFixture();
+	const options = {
+		apiBaseUrl: 'https://pr-68.previews.dev.thingtime.com/',
+		menuBarIconId: 'tree-pink'
+	};
+	try {
+		await fixture.integration.reconcileRegisteredService(options, { startIfStopped: true });
+		assert.equal(fixture.state.bootstrapCalls, 0, 'a never-enabled node must not be installed silently');
+		await fixture.integration.registerService(options);
+		assert.equal(fixture.state.bootstrapCalls, 1);
+
+		// Native Quit performs launchctl bootout but deliberately preserves the
+		// Electron-managed plist as proof that this node was explicitly enabled.
+		fixture.state.serviceRegistered = false;
+		await fixture.integration.reconcileRegisteredService(options, { startIfStopped: false });
+		assert.equal(fixture.state.bootstrapCalls, 1);
+		assert.equal(fixture.state.serviceRegistered, false);
+
+		await fixture.integration.reconcileRegisteredService(options, { startIfStopped: true });
+		assert.equal(fixture.state.bootstrapCalls, 2);
+		assert.equal(fixture.state.serviceRegistered, true);
+		assert.match(fixture.state.bootstrapPlists[1], /Managed by Thingtime Electron/u);
+	} finally {
+		await rm(fixture.root, { recursive: true, force: true });
+	}
+});
+
 test('packaging verification rejects a different native bridge leaf certificate', async () => {
 	const fixture = await makeSignedNodeFixture();
 	try {

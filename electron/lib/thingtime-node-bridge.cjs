@@ -1005,12 +1005,20 @@ class ThingtimeNodeIntegration {
 		return this.status();
 	}
 
-	async reconcileRegisteredService(options = {}) {
+	async reconcileRegisteredService(options = {}, { startIfStopped = false } = {}) {
 		const paths = this.paths();
 		const registration = await this.registrationStatus();
-		if (!registration.registered) return this.status();
-		await this.verify(paths);
 		const existing = await readManagedLaunchAgent(paths.launchAgentPath);
+		if (!registration.registered) {
+			// A missing plist means the user has never enabled the node (or removed it
+			// explicitly), so app launch must not install one silently. The native Quit
+			// item intentionally leaves our managed plist behind; default-on desktop
+			// launch may safely bootstrap that previously approved service again.
+			if (existing === null || startIfStopped !== true) return this.status();
+			await this.verify(paths);
+			return this.registerService(options);
+		}
+		await this.verify(paths);
 		if (existing === null) {
 			throw new ThingtimeNodeBridgeError(
 				'login_item_conflict',

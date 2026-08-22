@@ -36,3 +36,24 @@ test('the bundled Nitro API fallback reads the Electron-selected target at reque
 	assert.match(fallbackSource, /requestUrl\.origin !== fallbackUrl\.origin/u);
 	assert.doesNotMatch(fallbackSource, /getApiFallbackOrigin = \(\) => normaliseOrigin\(THINGTIME_PRODUCTION_ORIGIN\)/u);
 });
+
+test('deep-link reloads serve the packaged React shell from a bundled Nitro server asset', async () => {
+	const nitroConfigSource = await readFile(path.join(repoRoot, 'remix', 'nitro.config.ts'), 'utf8');
+	const fallbackRouteSource = await readFile(path.join(repoRoot, 'remix', 'server', 'routes', '[...].ts'), 'utf8');
+
+	assert.match(nitroConfigSource, /serverAssets:\s*\[/u);
+	assert.match(nitroConfigSource, /baseName:\s*'client'/u);
+	assert.match(nitroConfigSource, /pattern:\s*'index\.html'/u);
+	assert.match(fallbackRouteSource, /useStorage\('assets:client'\)\.getItem<string>\('index\.html'\)/u);
+	assert.doesNotMatch(fallbackRouteSource, /assets:server/u);
+});
+
+test('desktop launch and settings expose the default-on managed node restart contract', async () => {
+	const mainSource = await readFile(path.join(electronDir, 'main.cjs'), 'utf8');
+	const preloadSource = await readFile(path.join(electronDir, 'preload.cjs'), 'utf8');
+
+	assert.match(mainSource, /desktopSettings\.snapshot\(\)\.autoStartNodeOnLaunch/u);
+	assert.match(mainSource, /reconcileRegisteredService\(configuredNodeRegistration\(\), \{ startIfStopped: shouldStart \}\)/u);
+	assert.match(mainSource, /thingtime-desktop:set-node-auto-start/u);
+	assert.match(preloadSource, /setNodeAutoStart:\s*\(request\) => ipcRenderer\.invoke\('thingtime-desktop:set-node-auto-start', request\)/u);
+});

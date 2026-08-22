@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	selectEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:select-endpoint', request),
 	selectMenuBarIcon: (request) => ipcRenderer.invoke('thingtime-desktop:select-menu-bar-icon', request),
 	uploadMenuBarIcon: () => ipcRenderer.invoke('thingtime-desktop:upload-menu-bar-icon'),
+	setNodeAutoStart: (request) => ipcRenderer.invoke('thingtime-desktop:set-node-auto-start', request),
   loadUrl: (url) => ipcRenderer.invoke('thingtime-desktop:load-url', url),
 	nodeGetStatus: () => ipcRenderer.invoke('thingtime-desktop:node-status'),
 	nodeRegisterService: () => ipcRenderer.invoke('thingtime-desktop:node-register-service'),

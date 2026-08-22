@@ -12,6 +12,7 @@ export type ThingtimeDesktopMenuBarIcon = {
 };
 
 export type ThingtimeDesktopSettings = {
+	autoStartNodeOnLaunch: boolean;
 	customMenuBarIconConfigured: boolean;
 	endpointProfiles: ThingtimeDesktopEndpointProfile[];
 	menuBarIcons: ThingtimeDesktopMenuBarIcon[];
@@ -198,6 +199,7 @@ export type ThingtimeDesktopBridge = {
 	selectEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopInfo>;
 	selectMenuBarIcon?: (request: { iconId: string }) => Promise<ThingtimeDesktopSettings>;
 	uploadMenuBarIcon?: () => Promise<{ cancelled: true } | { cancelled: false; settings: ThingtimeDesktopSettings }>;
+	setNodeAutoStart?: (request: { enabled: boolean }) => Promise<ThingtimeDesktopSettings>;
 	loadUrl?: (url: string) => Promise<ThingtimeDesktopInfo>;
 	navigateToUrl?: (url: string) => Promise<ThingtimeDesktopInfo>;
 	// Narrow local-node setup and macOS privacy surface. Ordinary device
