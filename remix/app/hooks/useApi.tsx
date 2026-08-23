@@ -133,6 +133,70 @@ export function useApi() {
           },
           [asyncFetcher]
         )
+      },
+      // Accounts this browser is signed into on OTHER Thingtime deployments
+      // (cross-deployment auto-login suggestions). Read-only.
+      accountHints: useCallback(async () => getJson('/api/v1/auth/account-hints'), []),
+      // Cross-origin session handoff (Login with Thingtime anywhere): mint a
+      // code for a target origin / redeem one minted for THIS origin.
+      ssoHandoff: useCallback(
+        async (args: { origin: string }) => asyncFetcher.submit({ origin: args?.origin }, { action: '/api/v1/auth/sso-handoff' }),
+        [asyncFetcher]
+      ),
+      ssoSession: useCallback(
+        async (args: { code: string }) => {
+          const ret = asyncFetcher.submit({ code: args?.code }, { action: '/api/v1/auth/sso-session' });
+          ret.then(refreshRootData).catch(() => {});
+          return ret;
+        },
+        [asyncFetcher]
+      ),
+      passkeys: {
+        list: useCallback(async () => getJson('/api/v1/auth/passkeys'), []),
+        registerOptions: useCallback(
+          async (args: { password: string }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options' }),
+          [asyncFetcher]
+        ),
+        register: useCallback(
+          async (args: { response: unknown; nickname?: string; description?: string }) =>
+            asyncFetcher.submit(
+              { response: args?.response, nickname: args?.nickname, description: args?.description },
+              { action: '/api/v1/auth/passkeys/register' }
+            ),
+          [asyncFetcher]
+        ),
+        loginOptions: useCallback(async () => asyncFetcher.submit({}, { action: '/api/v1/auth/passkeys/login-options' }), [asyncFetcher]),
+        // Finishing a passkey login changes the active user — refresh root data
+        // exactly like password login does.
+        login: useCallback(
+          async (args: { response: unknown; clientId?: string }) => {
+            const ret = asyncFetcher.submit(
+              { response: args?.response, ...(args?.clientId ? { clientId: args.clientId } : {}) },
+              { action: '/api/v1/auth/passkeys/login' }
+            );
+            ret.then(refreshRootData).catch(() => {});
+            return ret;
+          },
+          [asyncFetcher]
+        ),
+        update: useCallback(
+          async (args: { id: string; nickname?: string; description?: string }) =>
+            asyncFetcher.submit(
+              { id: args?.id, ...(args?.nickname !== undefined ? { nickname: args.nickname } : {}), ...(args?.description !== undefined ? { description: args.description } : {}) },
+              { action: '/api/v1/auth/passkeys/update' }
+            ),
+          [asyncFetcher]
+        ),
+        revoke: useCallback(
+          async (args: { id: string; password: string }) =>
+            asyncFetcher.submit({ id: args?.id, password: args?.password }, { action: '/api/v1/auth/passkeys/revoke' }),
+          [asyncFetcher]
+        ),
+        delete: useCallback(
+          async (args: { id: string; password: string }) =>
+            asyncFetcher.submit({ id: args?.id, password: args?.password }, { action: '/api/v1/auth/passkeys/delete' }),
+          [asyncFetcher]
+        )
       }
     },
     settings: {
