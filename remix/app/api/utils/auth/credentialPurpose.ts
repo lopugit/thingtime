@@ -3,4 +3,4 @@
 // so nullish remains compatible; every named current/future purpose fails
 // closed unless it is explicitly a full-account credential here.
 export const sessionPurposeCanActAsAccount = (purpose: unknown): boolean =>
-  purpose === undefined || purpose === null || purpose === 'browser' || purpose === 'service';
+	purpose === undefined || purpose === null || purpose === 'browser' || purpose === 'service';
