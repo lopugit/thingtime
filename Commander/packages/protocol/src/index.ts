@@ -876,6 +876,11 @@ export interface CommanderAccount {
   scopes: string[];
   expiresAt: string;
   lastSyncedAt?: string;
+  /** Public origin/app metadata; the credential itself remains native-only. */
+  environment?: {
+    baseUrl: string;
+    clientId: string;
+  };
 }
 
 export interface ExtensionCommand {

@@ -95,6 +95,10 @@ export class ThingtimeService {
         ...(typeof user.profileUrl === 'string' ? { profileUrl: user.profileUrl } : {}),
         scopes: profile.scopes ?? session.scopes ?? [],
         expiresAt: session.expiresAt ?? new Date(Date.now() + 30 * 86_400_000).toISOString(),
+        environment: {
+          baseUrl: baseUrl.origin,
+          clientId: settings.thingtimeClientId,
+        },
       },
     };
   }
