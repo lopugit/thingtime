@@ -1546,8 +1546,9 @@ const sessionSchema: ThingtimeSchema = {
       name: 'purpose',
       type: 'enum',
       required: false,
-      values: ['browser', 'service', 'app', 'app-sandbox', 'pat'],
-      description: 'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, or personal access token.'
+      values: ['browser', 'service', 'app', 'app-sandbox', 'pat', 'oauth-code'],
+      description:
+        'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, personal access token, or one-time desktop OAuth code.'
     },
     { name: 'expiresAt', type: 'date', required: false, description: 'Expiry (null = non-expiring service token).' },
     { name: 'revokedAt', type: 'date', required: false, description: 'Set when revoked — token stops working immediately.' },

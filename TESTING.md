@@ -39,6 +39,13 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
 
+- [ ] Commander desktop OAuth: from the signed macOS Commander app, open
+      Thingtime login and complete consent in the system browser. The callback
+      must reach only Commander’s exact `127.0.0.1` loopback origin, exchange
+      a one-time S256 PKCE code, and create the expected Keychain-backed
+      account. Replaying the callback code, changing the callback URI, or
+      changing the verifier must fail without creating another grant.
+
 - [ ] `node scripts/verify-federated-login.mjs` passes (31 checks) against two
       stacks on DIFFERENT databases (recipe in the script header — stack B
       must be a production build; a second dev stack silently shares `.env`'s
