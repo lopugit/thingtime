@@ -87,10 +87,21 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
     private struct StateBody: Encodable {
         struct State: Encodable {
             struct App: Encodable { let id: String; let name: String; let frontmost: Bool }
+            struct AudioDevice: Encodable {
+                let id: String
+                let name: String
+                let hasInput: Bool
+                let hasOutput: Bool
+                let isDefaultInput: Bool
+                let isDefaultOutput: Bool
+                let isDefaultSoundEffectsOutput: Bool
+            }
             let locked: Bool
             let volume: Double?
+            let muted: Bool?
             let brightness: Double?
             let openApps: [App]
+            let audioDevices: [AudioDevice]
         }
         struct Connector: Encodable {
             let id: String
@@ -250,11 +261,23 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             state: .init(
                 locked: telemetry.session.isLocked,
                 volume: telemetry.outputVolume,
+                muted: telemetry.outputMuted,
                 brightness: brightness,
                 openApps: Array(telemetry.runningApplications.compactMap { application in
                     guard let identifier = application.bundleIdentifier, !identifier.isEmpty else { return nil }
                     return .init(id: String(identifier.prefix(255)), name: String((application.name ?? identifier).prefix(120)), frontmost: application.isActive)
-                }.prefix(Self.maximumOpenApplications))
+                }.prefix(Self.maximumOpenApplications)),
+                audioDevices: Array(telemetry.audioDevices.prefix(32)).map {
+                    .init(
+                        id: String($0.id.prefix(512)),
+                        name: String($0.name.prefix(120)),
+                        hasInput: $0.hasInput,
+                        hasOutput: $0.hasOutput,
+                        isDefaultInput: $0.isDefaultInput,
+                        isDefaultOutput: $0.isDefaultOutput,
+                        isDefaultSoundEffectsOutput: $0.isDefaultSoundEffectsOutput
+                    )
+                }
             ),
             connectors: connectors
         )

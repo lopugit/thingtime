@@ -114,6 +114,39 @@ final class NodeControllerTests: XCTestCase {
         XCTAssertEqual(conflict.error?.code, ThingtimeNodeError.commandConflict.code)
     }
 
+	func testUnpairedLeasedMachineControlsFailClosedBeforeSideEffects() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ThingtimeNodeLeasedMachineControlTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let telemetry = DeviceTelemetryCollector()
+        let controller = ThingtimeNodeController(
+            journal: try CommandJournal(fileURL: directory.appendingPathComponent("journal.json")),
+            pairing: PairingManager(store: InMemoryDeviceCredentialStore()),
+            connector: ConnectorRuntime(configuration: nil),
+            telemetry: telemetry,
+            actionExecutor: SafeActionExecutor(telemetry: telemetry)
+        )
+        let commands = [
+            LeasedCommand(commandID: "mute", leaseID: "lease-mute", method: "system.audio.mute.set", parameters: .object(["muted": .bool(true)]), leaseExpiresAt: .distantFuture),
+            LeasedCommand(commandID: "audio-output", leaseID: "lease-output", method: "system.audio.output.set", parameters: .object(["deviceId": .string("BuiltInOutputDevice")]), leaseExpiresAt: .distantFuture),
+            LeasedCommand(commandID: "wifi-connect", leaseID: "lease-wifi-connect", method: "system.wifi.connect", parameters: .object(["ssid": .string("Thingtime Guest")]), leaseExpiresAt: .distantFuture),
+            LeasedCommand(commandID: "wifi-power", leaseID: "lease-wifi-power", method: "system.wifi.power.set", parameters: .object(["enabled": .bool(false)]), leaseExpiresAt: .distantFuture)
+        ]
+		for command in commands {
+			let response = await controller.handleLeasedCommand(command)
+			XCTAssertEqual(response.error?.code, ThingtimeNodeError.policyDenied("ignored").code)
+		}
+
+        let passwordAttempt = await controller.handleLeasedCommand(LeasedCommand(
+            commandID: "wifi-password",
+            leaseID: "lease-wifi-password",
+            method: "system.wifi.connect",
+            parameters: .object(["ssid": .string("Thingtime Guest"), "password": .string("must-not-be-journaled")]),
+            leaseExpiresAt: .distantFuture
+        ))
+        XCTAssertEqual(passwordAttempt.error?.code, ThingtimeNodeError.invalidRequest("ignored").code)
+    }
+
     func testLocalKeychainFailureIsDefinitiveAndNeverReportedAsAnUnconfirmedServerResponse() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ThingtimeNodeKeychainFailureTests-\(UUID().uuidString)", isDirectory: true)

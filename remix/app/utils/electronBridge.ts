@@ -184,7 +184,23 @@ export type ThingtimeNodeDeviceRequest =
 			action: 'evaluate' | 'execute';
 			commandId?: string;
 			request: {
-				kind: 'telemetry.refresh' | 'system.volume.set' | 'application.activate' | 'application.launch';
+			kind:
+				| 'telemetry.refresh'
+				| 'system.volume.set'
+				| 'system.audio.mute.set'
+				| 'system.audio.output.set'
+				| 'system.audio.input.set'
+				| 'system.audio.sound-effects-output.set'
+				| 'system.brightness.set'
+				| 'application.activate'
+				| 'application.launch'
+				| 'application.quit'
+				| 'application.hide'
+				| 'application.unhide'
+				| 'system.lock'
+				| 'system.wifi.connect'
+				| 'system.wifi.disconnect'
+				| 'system.wifi.power.set';
 				parameters?: Record<string, unknown>;
 			};
 	  };

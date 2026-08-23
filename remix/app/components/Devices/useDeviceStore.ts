@@ -56,9 +56,18 @@ const CAPABILITY_ALIASES: Record<string, string[]> = {
 	'app.focus': ['apps.launch'],
 	'app.launch': ['apps.launch'],
 	'app.quit': ['apps.quit'],
+	'app.hide': ['apps.visibility'],
+	'app.unhide': ['apps.visibility'],
 	'system.volume.set': ['system.volume.write'],
+	'system.audio.mute.set': ['system.audio.mute.write'],
+	'system.audio.output.set': ['system.audio.output.write'],
+	'system.audio.input.set': ['system.audio.input.write'],
+	'system.audio.sound-effects-output.set': ['system.audio.sound-effects-output.write'],
 	'system.brightness.set': ['system.brightness.write'],
 	'system.lock': ['system.lock'],
+	'system.wifi.connect': ['system.wifi.connect'],
+	'system.wifi.disconnect': ['system.wifi.disconnect'],
+	'system.wifi.power.set': ['system.wifi.power.write'],
 	'screen.start': ['screen.view'],
 	'screen.stop': ['screen.view'],
 	'screen.control': ['screen.control']
@@ -136,6 +145,8 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 			return 'launch-app';
 		case 'app.quit':
 			return 'quit-app';
+		case 'system.audio.mute.set':
+			return 'set-muted';
 		case 'system.volume.set':
 			return 'set-volume';
 		case 'system.brightness.set':
@@ -153,6 +164,7 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 
 const desiredFromCommand = (command: PublicDeviceCommand): DeviceDesiredState | null => {
 	if (command.kind === 'system.volume.set') return { volume: unit(command.input.level) };
+	if (command.kind === 'system.audio.mute.set') return typeof command.input.muted === 'boolean' ? { muted: command.input.muted } : null;
 	if (command.kind === 'system.brightness.set') return { brightness: unit(command.input.level) };
 	if (command.kind === 'system.lock') return { locked: true };
 	if (command.kind === 'app.focus' || command.kind === 'app.launch') {
@@ -315,7 +327,7 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 		capturedAt: observedAt,
 		observed: {
 			volume: unit(device.state?.volume ?? device.volume),
-			muted: null,
+			muted: device.state?.muted ?? null,
 			brightness: unit(device.state?.brightness ?? device.brightness),
 			locked: device.state?.locked ?? device.locked,
 			sleeping: null,
@@ -477,6 +489,10 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 		case 'set-volume': {
 			const level = unit(intent.desired?.volume ?? input.level);
 			return level === null ? null : { ...base, kind: 'system.volume.set', input: { level } };
+		}
+		case 'set-muted': {
+			const muted = typeof intent.desired?.muted === 'boolean' ? intent.desired.muted : input.muted;
+			return typeof muted === 'boolean' ? { ...base, kind: 'system.audio.mute.set', input: { muted } } : null;
 		}
 		case 'set-brightness': {
 			const level = unit(intent.desired?.brightness ?? input.level);

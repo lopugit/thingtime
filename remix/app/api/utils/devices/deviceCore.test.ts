@@ -39,6 +39,7 @@ import {
 	normalizeDeviceConnectors,
 	normalizeDevicePermissionMode,
 	normalizeDeviceState,
+	MAX_DEVICE_AUDIO_DEVICES,
 	MAX_DEVICE_OPEN_APPS,
 	retainedDeviceControlEventCount
 } from './deviceCore.ts';
@@ -139,9 +140,21 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 		normalizeDeviceState({
 			locked: false,
 			volume: 0.5,
+			muted: true,
 			brightness: 1,
 			battery: null,
-			openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }]
+			openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }],
+			audioDevices: [
+				{
+					id: 'BuiltInOutputDevice',
+					name: 'MacBook Speakers',
+					hasInput: false,
+					hasOutput: true,
+					isDefaultInput: false,
+					isDefaultOutput: true,
+					isDefaultSoundEffectsOutput: true
+				}
+			]
 		})
 	);
 	assert.equal(normalizeDeviceState({ locked: false, openApps: [{ id: 'x', name: 'X', frontmost: false, path: '/Applications/X.app' }] }), null);
@@ -156,6 +169,22 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 		normalizeDeviceState({
 			locked: false,
 			openApps: Array.from({ length: MAX_DEVICE_OPEN_APPS + 1 }, (_, index) => ({ id: `app-${index}`, name: `App ${index}`, frontmost: false }))
+		}),
+		null
+	);
+	assert.equal(
+		normalizeDeviceState({
+			locked: false,
+			openApps: [],
+			audioDevices: Array.from({ length: MAX_DEVICE_AUDIO_DEVICES + 1 }, (_, index) => ({
+				id: `audio-${index}`,
+				name: `Audio ${index}`,
+				hasInput: true,
+				hasOutput: false,
+				isDefaultInput: false,
+				isDefaultOutput: false,
+				isDefaultSoundEffectsOutput: false
+			}))
 		}),
 		null
 	);
@@ -258,9 +287,18 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'app.focus',
 		'app.launch',
 		'app.quit',
+		'app.hide',
+		'app.unhide',
 		'system.volume.set',
+		'system.audio.mute.set',
+		'system.audio.output.set',
+		'system.audio.input.set',
+		'system.audio.sound-effects-output.set',
 		'system.brightness.set',
 		'system.lock',
+		'system.wifi.connect',
+		'system.wifi.disconnect',
+		'system.wifi.power.set',
 		'screen.start',
 		'screen.stop'
 	]);
@@ -286,6 +324,14 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	);
 	assert.equal(normalizeDeviceCommand('session.read', { connectorId: 'chatgpt', sessionId: 'chat-1', cursor: 'older', limit: 101 }).ok, false);
 	assert.equal(normalizeDeviceCommand('app.launch', { appId: '/Applications/Calculator.app' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.audio.mute.set', { muted: true }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.audio.output.set', { deviceId: 'BuiltInOutputDevice' }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'Thingtime Guest' }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'Thingtime Guest', password: 'never' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: ' Thingtime Guest' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'x'.repeat(33) }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.wifi.disconnect', {}).ok, true);
+	assert.equal(normalizeDeviceCommand('system.wifi.power.set', { enabled: false }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.lock', { shell: 'shutdown' }).ok, false);
 	assert.equal(normalizeDeviceCommand('screen.start', { screenSessionId: 'screen-1', viewOnly: true, sdp: 'secret' }).ok, false);
 });
@@ -306,7 +352,7 @@ test('revision and command transitions are replay safe', () => {
 });
 
 test('complete snapshot hashes gate connectors at the device revision', () => {
-	const state = { locked: false, volume: 0.5, brightness: 1, battery: null, openApps: [] };
+	const state = { locked: false, volume: 0.5, muted: false, brightness: 1, battery: null, openApps: [], audioDevices: [] };
 	const connector = {
 		id: 'codex',
 		kind: 'codex',

@@ -14,9 +14,18 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'app.focus',
 	'app.launch',
 	'app.quit',
+	'app.hide',
+	'app.unhide',
 	'system.volume.set',
+	'system.audio.mute.set',
+	'system.audio.output.set',
+	'system.audio.input.set',
+	'system.audio.sound-effects-output.set',
 	'system.brightness.set',
 	'system.lock',
+	'system.wifi.connect',
+	'system.wifi.disconnect',
+	'system.wifi.power.set',
 	'screen.start',
 	'screen.stop'
 ] as const;
@@ -37,9 +46,19 @@ export type PublicDeviceState = {
 	revision: number;
 	locked: boolean;
 	volume: number | null;
+	muted: boolean | null;
 	brightness: number | null;
 	battery: { level: number; charging: boolean } | null;
 	openApps: PublicDeviceOpenApp[];
+	audioDevices: Array<{
+		id: string;
+		name: string;
+		hasInput: boolean;
+		hasOutput: boolean;
+		isDefaultInput: boolean;
+		isDefaultOutput: boolean;
+		isDefaultSoundEffectsOutput: boolean;
+	}>;
 	observedAt: string;
 	updatedAt: string;
 };

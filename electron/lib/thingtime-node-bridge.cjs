@@ -41,10 +41,20 @@ const CONNECTOR_OPERATIONS = new Set([
 const DEVICE_ACTION_KINDS = new Set([
 	'telemetry.refresh',
 	'system.volume.set',
+	'system.audio.mute.set',
+	'system.audio.output.set',
+	'system.audio.input.set',
+	'system.audio.sound-effects-output.set',
 	'system.brightness.set',
 	'application.activate',
 	'application.launch',
-	'application.quit'
+	'application.quit',
+	'application.hide',
+	'application.unhide',
+	'system.lock',
+	'system.wifi.connect',
+	'system.wifi.disconnect',
+	'system.wifi.power.set'
 ]);
 const MENU_BAR_ICON_IDS = new Set([
 	'tree-color',
@@ -676,7 +686,25 @@ function normalizeNodeStatus(rawStatus, registration, version) {
 	const connectorState = rawStatus?.connector?.state || 'disabled';
 	const degraded = connectorState === 'failed' || connectorState === 'degraded';
 	return {
-		capabilities: ['device.telemetry', 'system.volume.set', 'application.activate', 'application.launch', 'connector.codex-app-server'],
+		capabilities: [
+			'device.telemetry',
+			'system.volume.set',
+			'system.audio.mute.set',
+			'system.audio.output.set',
+			'system.audio.input.set',
+			'system.audio.sound-effects-output.set',
+			'system.brightness.set',
+			'application.activate',
+			'application.launch',
+			'application.quit',
+			'application.hide',
+			'application.unhide',
+			'system.lock',
+			'system.wifi.connect',
+			'system.wifi.disconnect',
+			'system.wifi.power.set',
+			'connector.codex-app-server'
+		],
 		connector: rawStatus?.connector || { state: 'disabled' },
 		deviceId: deviceIds[0] || null,
 		deviceIds,

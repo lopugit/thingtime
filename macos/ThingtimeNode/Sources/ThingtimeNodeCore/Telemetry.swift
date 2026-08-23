@@ -3,6 +3,7 @@ import ApplicationServices
 import AudioToolbox
 import CoreAudio
 import CoreGraphics
+import CoreWLAN
 import Darwin
 import Foundation
 import IOKit
@@ -89,6 +90,37 @@ public struct SessionTelemetry: Codable, Equatable, Sendable {
     }
 }
 
+/// A deliberately small, non-secret description of an audio route. Device UIDs
+/// let the node switch a route without accepting a filesystem path, shell
+/// fragment, or opaque driver object from a remote caller.
+public struct AudioDeviceTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let hasInput: Bool
+    public let hasOutput: Bool
+    public let isDefaultInput: Bool
+    public let isDefaultOutput: Bool
+    public let isDefaultSoundEffectsOutput: Bool
+
+    public init(
+        id: String,
+        name: String,
+        hasInput: Bool,
+        hasOutput: Bool,
+        isDefaultInput: Bool,
+        isDefaultOutput: Bool,
+        isDefaultSoundEffectsOutput: Bool
+    ) {
+        self.id = id
+        self.name = name
+        self.hasInput = hasInput
+        self.hasOutput = hasOutput
+        self.isDefaultInput = isDefaultInput
+        self.isDefaultOutput = isDefaultOutput
+        self.isDefaultSoundEffectsOutput = isDefaultSoundEffectsOutput
+    }
+}
+
 public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let deviceName: String
     public let hostName: String
@@ -96,6 +128,8 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let operatingSystemVersion: String
     public let architecture: String
     public let outputVolume: Double?
+    public let outputMuted: Bool?
+    public let audioDevices: [AudioDeviceTelemetry]
     public let session: SessionTelemetry
     public let permissions: PermissionPreflight
     public let runningApplications: [RunningApplicationTelemetry]
@@ -109,6 +143,8 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         operatingSystemVersion: String,
         architecture: String,
         outputVolume: Double?,
+        outputMuted: Bool? = nil,
+        audioDevices: [AudioDeviceTelemetry] = [],
         session: SessionTelemetry,
         permissions: PermissionPreflight,
         runningApplications: [RunningApplicationTelemetry],
@@ -121,6 +157,8 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.operatingSystemVersion = operatingSystemVersion
         self.architecture = architecture
         self.outputVolume = outputVolume
+        self.outputMuted = outputMuted
+        self.audioDevices = audioDevices
         self.session = session
         self.permissions = permissions
         self.runningApplications = runningApplications
@@ -183,6 +221,8 @@ public final class DeviceTelemetryCollector {
             operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             architecture: Self.sysctlString("hw.machine") ?? "unknown",
             outputVolume: SystemAudio.outputVolume(),
+            outputMuted: SystemAudio.outputMuted(),
+            audioDevices: SystemAudio.devices(),
             session: sessionTelemetry(),
             permissions: permissionPreflight(),
             runningApplications: NSWorkspace.shared.runningApplications
@@ -444,9 +484,172 @@ public enum SystemAudio {
         }
     }
 
-    private static func defaultOutputDevice() -> AudioDeviceID? {
+    public static func outputMuted() -> Bool? {
+        guard let device = defaultOutputDevice() else { return nil }
+        return muted(device: device, scope: kAudioDevicePropertyScopeOutput)
+    }
+
+    public static func setOutputMuted(_ muted: Bool) throws {
+        guard let device = defaultOutputDevice() else {
+            throw ThingtimeNodeError.policyDenied("No controllable default output device is available.")
+        }
+        try setMuted(muted, device: device, scope: kAudioDevicePropertyScopeOutput)
+    }
+
+    public static func devices() -> [AudioDeviceTelemetry] {
+        let defaultOutput = defaultOutputDevice()
+        let defaultInput = defaultInputDevice()
+        let defaultSoundEffects = defaultSoundEffectsOutputDevice()
+        return allDevices().compactMap { device in
+            guard let id = stringProperty(device, selector: kAudioDevicePropertyDeviceUID),
+                  let name = stringProperty(device, selector: kAudioObjectPropertyName) else {
+                return nil
+            }
+            let hasInput = hasStreams(device, scope: kAudioDevicePropertyScopeInput)
+            let hasOutput = hasStreams(device, scope: kAudioDevicePropertyScopeOutput)
+            guard hasInput || hasOutput else { return nil }
+            return AudioDeviceTelemetry(
+                id: id,
+                name: name,
+                hasInput: hasInput,
+                hasOutput: hasOutput,
+                isDefaultInput: device == defaultInput,
+                isDefaultOutput: device == defaultOutput,
+                isDefaultSoundEffectsOutput: device == defaultSoundEffects
+            )
+        }
+        .sorted { ($0.name, $0.id) < ($1.name, $1.id) }
+        .prefix(32)
+        .map { $0 }
+    }
+
+    public static func setDefaultOutputDevice(id: String) throws {
+        try setDefaultDevice(id: id, selector: kAudioHardwarePropertyDefaultOutputDevice, requiredScope: kAudioDevicePropertyScopeOutput)
+    }
+
+    public static func setDefaultInputDevice(id: String) throws {
+        try setDefaultDevice(id: id, selector: kAudioHardwarePropertyDefaultInputDevice, requiredScope: kAudioDevicePropertyScopeInput)
+    }
+
+    public static func setDefaultSoundEffectsOutputDevice(id: String) throws {
+        try setDefaultDevice(id: id, selector: kAudioHardwarePropertyDefaultSystemOutputDevice, requiredScope: kAudioDevicePropertyScopeOutput)
+    }
+
+    private static func setDefaultDevice(
+        id: String,
+        selector: AudioObjectPropertySelector,
+        requiredScope: AudioObjectPropertyScope
+    ) throws {
+        guard validDeviceID(id), let device = allDevices().first(where: { stringProperty($0, selector: kAudioDevicePropertyDeviceUID) == id }) else {
+            throw ThingtimeNodeError.invalidRequest("The audio device identifier is invalid or unavailable.")
+        }
+        guard hasStreams(device, scope: requiredScope) else {
+            throw ThingtimeNodeError.policyDenied("The requested audio device does not support that route.")
+        }
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var value = device
+        let size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, size, &value) == noErr else {
+            throw ThingtimeNodeError.policyDenied("macOS could not change the selected audio device.")
+        }
+    }
+
+    private static func muted(device: AudioDeviceID, scope: AudioObjectPropertyScope) -> Bool? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyMute,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(device, &address) else { return nil }
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr else { return nil }
+        return value != 0
+    }
+
+    private static func setMuted(_ muted: Bool, device: AudioDeviceID, scope: AudioObjectPropertyScope) throws {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyMute,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(device, &address) else {
+            throw ThingtimeNodeError.policyDenied("The default output device does not expose mute control.")
+        }
+        var settable = DarwinBoolean(false)
+        guard AudioObjectIsPropertySettable(device, &address, &settable) == noErr, settable.boolValue else {
+            throw ThingtimeNodeError.policyDenied("The default output mute control is read-only.")
+        }
+        var value: UInt32 = muted ? 1 : 0
+        let size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectSetPropertyData(device, &address, 0, nil, size, &value) == noErr else {
+            throw ThingtimeNodeError.policyDenied("macOS could not change the output mute state.")
+        }
+    }
+
+    private static func allDevices() -> [AudioDeviceID] {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr,
+              size > 0 else { return [] }
+        var values = Array(repeating: AudioDeviceID(kAudioObjectUnknown), count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &values) == noErr else {
+            return []
+        }
+        return values.filter { $0 != kAudioObjectUnknown }
+    }
+
+    private static func hasStreams(_ device: AudioDeviceID, scope: AudioObjectPropertyScope) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreams,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        return AudioObjectHasProperty(device, &address)
+    }
+
+    private static func stringProperty(_ device: AudioDeviceID, selector: AudioObjectPropertySelector) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var value: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr,
+              let value else { return nil }
+        let string = value.takeUnretainedValue() as String
+        guard !string.isEmpty, string.utf8.count <= 512, string.rangeOfCharacter(from: .controlCharacters) == nil else { return nil }
+        return string
+    }
+
+    private static func validDeviceID(_ id: String) -> Bool {
+        !id.isEmpty && id == id.trimmingCharacters(in: .whitespacesAndNewlines) && id.utf8.count <= 512 && id.rangeOfCharacter(from: .controlCharacters) == nil
+    }
+
+    private static func defaultOutputDevice() -> AudioDeviceID? {
+        defaultDevice(selector: kAudioHardwarePropertyDefaultOutputDevice)
+    }
+
+    private static func defaultInputDevice() -> AudioDeviceID? {
+        defaultDevice(selector: kAudioHardwarePropertyDefaultInputDevice)
+    }
+
+    private static func defaultSoundEffectsOutputDevice() -> AudioDeviceID? {
+        defaultDevice(selector: kAudioHardwarePropertyDefaultSystemOutputDevice)
+    }
+
+    private static func defaultDevice(selector: AudioObjectPropertySelector) -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
@@ -461,5 +664,63 @@ public enum SystemAudio {
             &identifier
         ) == noErr, identifier != kAudioObjectUnknown else { return nil }
         return identifier
+    }
+}
+
+public enum SystemWiFi {
+    /// Joins an open network or a network whose credential is already in the
+    /// local keychain. Passwords are intentionally never accepted by a remote
+    /// command, journal, API request, or device event.
+    public static func connect(ssid: String) throws {
+        let ssid = try validatedSSID(ssid)
+        guard let interface = CWWiFiClient.shared().interface() else {
+            throw ThingtimeNodeError.policyDenied("No Wi-Fi interface is available on this Mac.")
+        }
+        let matches: Set<CWNetwork>
+        do {
+            matches = try interface.scanForNetworks(withName: ssid, includeHidden: false)
+        } catch {
+            throw ThingtimeNodeError.policyDenied("macOS could not scan for the requested Wi-Fi network.")
+        }
+        guard let network = matches.first(where: { $0.ssid == ssid }) else {
+            throw ThingtimeNodeError.policyDenied("The requested Wi-Fi network is not currently available.")
+        }
+        do {
+            try interface.associate(to: network, password: nil)
+        } catch {
+            throw ThingtimeNodeError.policyDenied("macOS could not join the requested Wi-Fi network using a saved credential.")
+        }
+        guard interface.ssid() == ssid else { throw ThingtimeNodeError.commandOutcomeUncertain }
+    }
+
+    public static func disconnect() throws {
+        guard let interface = CWWiFiClient.shared().interface() else {
+            throw ThingtimeNodeError.policyDenied("No Wi-Fi interface is available on this Mac.")
+        }
+        interface.disassociate()
+        if interface.ssid() != nil { throw ThingtimeNodeError.commandOutcomeUncertain }
+    }
+
+    public static func setPower(_ enabled: Bool) throws {
+        guard let interface = CWWiFiClient.shared().interface() else {
+            throw ThingtimeNodeError.policyDenied("No Wi-Fi interface is available on this Mac.")
+        }
+		do {
+			try interface.setPower(enabled)
+		} catch {
+			throw ThingtimeNodeError.policyDenied("macOS could not change the Wi-Fi power state.")
+		}
+		guard interface.powerOn() == enabled else { throw ThingtimeNodeError.commandOutcomeUncertain }
+	}
+
+    static func validatedSSID(_ value: String) throws -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed == value,
+              trimmed.utf8.count <= 32,
+              trimmed.rangeOfCharacter(from: .controlCharacters) == nil else {
+            throw ThingtimeNodeError.invalidRequest("The Wi-Fi network name is invalid.")
+        }
+        return trimmed
     }
 }

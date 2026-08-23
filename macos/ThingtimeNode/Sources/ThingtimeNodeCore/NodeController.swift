@@ -67,7 +67,15 @@ public actor ThingtimeNodeController {
         "device.lock.read",
         "system.lock",
         "system.volume.read",
-        "system.volume.write"
+        "system.volume.write",
+        "system.audio.mute.write",
+        "system.audio.output.write",
+        "system.audio.input.write",
+        "system.audio.sound-effects-output.write",
+        "system.wifi.connect",
+        "system.wifi.disconnect",
+        "system.wifi.power.write",
+        "apps.visibility"
     ]
     private static let connectorMethods: Set<String> = [
         "session.list",
@@ -494,6 +502,30 @@ public actor ThingtimeNodeController {
                 throw ThingtimeNodeError.invalidRequest("system.volume.set requires level.")
             }
             action = SafeActionRequest(kind: .setOutputVolume, parameters: ["volume": .number(level)])
+        case "system.audio.mute.set":
+            try requireOnlyKeys(input, ["muted"])
+            guard case let .bool(muted)? = input["muted"] else {
+                throw ThingtimeNodeError.invalidRequest("system.audio.mute.set requires muted.")
+            }
+            action = SafeActionRequest(kind: .setOutputMuted, parameters: ["muted": .bool(muted)])
+        case "system.audio.output.set":
+            try requireOnlyKeys(input, ["deviceId"])
+            guard let deviceID = input["deviceId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("system.audio.output.set requires deviceId.")
+            }
+            action = SafeActionRequest(kind: .setDefaultOutputDevice, parameters: ["deviceId": .string(deviceID)])
+        case "system.audio.input.set":
+            try requireOnlyKeys(input, ["deviceId"])
+            guard let deviceID = input["deviceId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("system.audio.input.set requires deviceId.")
+            }
+            action = SafeActionRequest(kind: .setDefaultInputDevice, parameters: ["deviceId": .string(deviceID)])
+        case "system.audio.sound-effects-output.set":
+            try requireOnlyKeys(input, ["deviceId"])
+            guard let deviceID = input["deviceId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("system.audio.sound-effects-output.set requires deviceId.")
+            }
+            action = SafeActionRequest(kind: .setDefaultSoundEffectsOutputDevice, parameters: ["deviceId": .string(deviceID)])
         case "system.brightness.set":
             guard let level = input["level"]?.numberValue else {
                 throw ThingtimeNodeError.invalidRequest("system.brightness.set requires level.")
@@ -514,8 +546,35 @@ public actor ThingtimeNodeController {
                 throw ThingtimeNodeError.invalidRequest("app.quit requires appId.")
             }
             action = SafeActionRequest(kind: .terminateApplication, parameters: ["bundleIdentifier": .string(appID)])
+        case "app.hide":
+            try requireOnlyKeys(input, ["appId"])
+            guard let appID = input["appId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("app.hide requires appId.")
+            }
+            action = SafeActionRequest(kind: .hideApplication, parameters: ["bundleIdentifier": .string(appID)])
+        case "app.unhide":
+            try requireOnlyKeys(input, ["appId"])
+            guard let appID = input["appId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("app.unhide requires appId.")
+            }
+            action = SafeActionRequest(kind: .unhideApplication, parameters: ["bundleIdentifier": .string(appID)])
         case "system.lock":
             action = SafeActionRequest(kind: .lockScreen)
+        case "system.wifi.connect":
+            try requireOnlyKeys(input, ["ssid"])
+            guard let ssid = input["ssid"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("system.wifi.connect requires ssid.")
+            }
+            action = SafeActionRequest(kind: .connectWiFi, parameters: ["ssid": .string(ssid)])
+        case "system.wifi.disconnect":
+            try requireOnlyKeys(input, [])
+            action = SafeActionRequest(kind: .disconnectWiFi)
+        case "system.wifi.power.set":
+            try requireOnlyKeys(input, ["enabled"])
+            guard case let .bool(enabled)? = input["enabled"] else {
+                throw ThingtimeNodeError.invalidRequest("system.wifi.power.set requires enabled.")
+            }
+            action = SafeActionRequest(kind: .setWiFiPower, parameters: ["enabled": .bool(enabled)])
         case "screen.start", "screen.stop":
             throw ThingtimeNodeError.policyDenied("This capability is not installed on this node version.")
         default:
@@ -550,5 +609,11 @@ public actor ThingtimeNodeController {
             throw ThingtimeNodeError.invalidRequest("Request parameters must be an object.")
         }
         return object
+    }
+
+    private func requireOnlyKeys(_ input: [String: JSONValue], _ allowed: Set<String>) throws {
+        guard Set(input.keys) == allowed else {
+            throw ThingtimeNodeError.invalidRequest("The command input contains an unsupported field.")
+        }
     }
 }

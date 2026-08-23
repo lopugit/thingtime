@@ -12,9 +12,18 @@ export const DEVICE_COMMAND_KINDS = [
 	'app.focus',
 	'app.launch',
 	'app.quit',
+	'app.hide',
+	'app.unhide',
 	'system.volume.set',
+	'system.audio.mute.set',
+	'system.audio.output.set',
+	'system.audio.input.set',
+	'system.audio.sound-effects-output.set',
 	'system.brightness.set',
 	'system.lock',
+	'system.wifi.connect',
+	'system.wifi.disconnect',
+	'system.wifi.power.set',
 	'screen.start',
 	'screen.stop'
 ] as const;
@@ -122,12 +131,24 @@ export const normalizeDeviceDescriptor = (value: unknown): DeviceDescriptor | nu
 
 export type DeviceOpenApp = { id: string; name: string; frontmost: boolean };
 export const MAX_DEVICE_OPEN_APPS = 64;
+export type DeviceAudioDevice = {
+	id: string;
+	name: string;
+	hasInput: boolean;
+	hasOutput: boolean;
+	isDefaultInput: boolean;
+	isDefaultOutput: boolean;
+	isDefaultSoundEffectsOutput: boolean;
+};
+export const MAX_DEVICE_AUDIO_DEVICES = 32;
 export type DeviceStateSnapshot = {
 	locked: boolean;
 	volume: number | null;
+	muted: boolean | null;
 	brightness: number | null;
 	battery: { level: number; charging: boolean } | null;
 	openApps: DeviceOpenApp[];
+	audioDevices: DeviceAudioDevice[];
 };
 
 const unitInterval = (value: unknown): number | null => {
@@ -139,7 +160,7 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 	if (!value || typeof value !== 'object') return null;
 	const raw = value as Record<string, unknown>;
 	if (typeof raw.locked !== 'boolean') return null;
-	if (!Object.keys(raw).every((key) => ['locked', 'volume', 'brightness', 'battery', 'openApps'].includes(key))) return null;
+	if (!Object.keys(raw).every((key) => ['locked', 'volume', 'muted', 'brightness', 'battery', 'openApps', 'audioDevices'].includes(key))) return null;
 	const appsRaw = raw.openApps === undefined ? [] : raw.openApps;
 	if (!Array.isArray(appsRaw) || appsRaw.length > MAX_DEVICE_OPEN_APPS) return null;
 	const openApps: DeviceOpenApp[] = [];
@@ -152,6 +173,41 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		if (!id || !name) return null;
 		openApps.push({ id, name, frontmost: app.frontmost === true });
 	}
+	const devicesRaw = raw.audioDevices === undefined ? [] : raw.audioDevices;
+	if (!Array.isArray(devicesRaw) || devicesRaw.length > MAX_DEVICE_AUDIO_DEVICES) return null;
+	const audioDevices: DeviceAudioDevice[] = [];
+	for (const entry of devicesRaw) {
+		if (!entry || typeof entry !== 'object') return null;
+		const device = entry as Record<string, unknown>;
+		if (
+			!Object.keys(device).every((key) =>
+				['id', 'name', 'hasInput', 'hasOutput', 'isDefaultInput', 'isDefaultOutput', 'isDefaultSoundEffectsOutput'].includes(key)
+			)
+		)
+			return null;
+		const id = bounded(device.id, 512);
+		const name = bounded(device.name, 120);
+		if (
+			!id ||
+			!name ||
+			typeof device.hasInput !== 'boolean' ||
+			typeof device.hasOutput !== 'boolean' ||
+			(!device.hasInput && !device.hasOutput) ||
+			typeof device.isDefaultInput !== 'boolean' ||
+			typeof device.isDefaultOutput !== 'boolean' ||
+			typeof device.isDefaultSoundEffectsOutput !== 'boolean'
+		)
+			return null;
+		audioDevices.push({
+			id,
+			name,
+			hasInput: device.hasInput,
+			hasOutput: device.hasOutput,
+			isDefaultInput: device.isDefaultInput,
+			isDefaultOutput: device.isDefaultOutput,
+			isDefaultSoundEffectsOutput: device.isDefaultSoundEffectsOutput
+		});
+	}
 	let battery: DeviceStateSnapshot['battery'] = null;
 	if (raw.battery !== undefined && raw.battery !== null) {
 		if (!raw.battery || typeof raw.battery !== 'object') return null;
@@ -162,15 +218,22 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		battery = { level, charging: candidate.charging };
 	}
 	const volume = raw.volume === undefined || raw.volume === null ? null : unitInterval(raw.volume);
+	let muted: boolean | null = null;
+	if (raw.muted !== undefined && raw.muted !== null) {
+		if (typeof raw.muted !== 'boolean') return null;
+		muted = raw.muted;
+	}
 	const brightness = raw.brightness === undefined || raw.brightness === null ? null : unitInterval(raw.brightness);
 	if (raw.volume !== undefined && raw.volume !== null && volume === null) return null;
 	if (raw.brightness !== undefined && raw.brightness !== null && brightness === null) return null;
 	return {
 		locked: raw.locked,
 		volume,
+		muted,
 		brightness,
 		battery,
-		openApps
+		openApps,
+		audioDevices
 	};
 };
 
@@ -357,9 +420,18 @@ export type DeviceCommandInputByKind = {
 	'app.focus': { appId: string };
 	'app.launch': { appId: string };
 	'app.quit': { appId: string };
+	'app.hide': { appId: string };
+	'app.unhide': { appId: string };
 	'system.volume.set': { level: number };
+	'system.audio.mute.set': { muted: boolean };
+	'system.audio.output.set': { deviceId: string };
+	'system.audio.input.set': { deviceId: string };
+	'system.audio.sound-effects-output.set': { deviceId: string };
 	'system.brightness.set': { level: number };
 	'system.lock': Record<string, never>;
+	'system.wifi.connect': { ssid: string };
+	'system.wifi.disconnect': Record<string, never>;
+	'system.wifi.power.set': { enabled: boolean };
 	'screen.start': { screenSessionId: string; viewOnly: boolean };
 	'screen.stop': { screenSessionId: string };
 };
@@ -411,9 +483,18 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'app.focus': 'apps.launch',
 	'app.launch': 'apps.launch',
 	'app.quit': 'apps.quit',
+	'app.hide': 'apps.visibility',
+	'app.unhide': 'apps.visibility',
 	'system.volume.set': 'system.volume.write',
+	'system.audio.mute.set': 'system.audio.mute.write',
+	'system.audio.output.set': 'system.audio.output.write',
+	'system.audio.input.set': 'system.audio.input.write',
+	'system.audio.sound-effects-output.set': 'system.audio.sound-effects-output.write',
 	'system.brightness.set': 'system.brightness.write',
 	'system.lock': 'system.lock',
+	'system.wifi.connect': 'system.wifi.connect',
+	'system.wifi.disconnect': 'system.wifi.disconnect',
+	'system.wifi.power.set': 'system.wifi.power.write',
 	'screen.start': 'screen.view',
 	'screen.stop': 'screen.view'
 };
@@ -425,9 +506,20 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'application.launch': 'apps.launch',
 	'app.quit': 'apps.quit',
 	'application.quit': 'apps.quit',
+	'app.hide': 'apps.visibility',
+	'application.hide': 'apps.visibility',
+	'app.unhide': 'apps.visibility',
+	'application.unhide': 'apps.visibility',
 	'system.volume.set': 'system.volume.write',
+	'system.audio.mute.set': 'system.audio.mute.write',
+	'system.audio.output.set': 'system.audio.output.write',
+	'system.audio.input.set': 'system.audio.input.write',
+	'system.audio.sound-effects-output.set': 'system.audio.sound-effects-output.write',
 	'system.brightness.set': 'system.brightness.write',
 	'device.lock.write': 'system.lock',
+	'system.wifi.connect': 'system.wifi.connect',
+	'system.wifi.disconnect': 'system.wifi.disconnect',
+	'system.wifi.power.set': 'system.wifi.power.write',
 	'screen.start': 'screen.view',
 	'screen.stop': 'screen.view'
 };
@@ -571,7 +663,9 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 		}
 		case 'app.focus':
 		case 'app.launch':
-		case 'app.quit': {
+		case 'app.quit':
+		case 'app.hide':
+		case 'app.unhide': {
 			const appId = app();
 			return appId && exactKeys(raw, ['appId']) ? ok({ appId }) : deviceFail(400, `${kind} requires only a stable appId`);
 		}
@@ -584,6 +678,35 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 		}
 		case 'system.lock':
 			return exactKeys(raw, []) ? ok({}) : deviceFail(400, 'system.lock accepts no input fields');
+		case 'system.audio.mute.set':
+			return typeof raw.muted === 'boolean' && exactKeys(raw, ['muted'])
+				? ok({ muted: raw.muted })
+				: deviceFail(400, 'system.audio.mute.set requires only a boolean muted value');
+		case 'system.audio.output.set':
+		case 'system.audio.input.set':
+		case 'system.audio.sound-effects-output.set': {
+			const deviceId = bounded(raw.deviceId, 512);
+			return deviceId && exactKeys(raw, ['deviceId'])
+				? ok({ deviceId })
+				: deviceFail(400, `${kind} requires only a valid audio deviceId`);
+		}
+		case 'system.wifi.connect': {
+			const ssid = typeof raw.ssid === 'string' ? raw.ssid : '';
+			const validSSID =
+				ssid.length > 0 &&
+				ssid === ssid.trim() &&
+				Buffer.byteLength(ssid, 'utf8') <= 32 &&
+				!/\p{Cc}/u.test(ssid);
+			return validSSID && exactKeys(raw, ['ssid'])
+				? ok({ ssid })
+				: deviceFail(400, 'system.wifi.connect requires only a visible SSID; passwords are never accepted');
+		}
+		case 'system.wifi.disconnect':
+			return exactKeys(raw, []) ? ok({}) : deviceFail(400, 'system.wifi.disconnect accepts no input fields');
+		case 'system.wifi.power.set':
+			return typeof raw.enabled === 'boolean' && exactKeys(raw, ['enabled'])
+				? ok({ enabled: raw.enabled })
+				: deviceFail(400, 'system.wifi.power.set requires only a boolean enabled value');
 		case 'screen.start': {
 			const screenSessionId = screen();
 			return screenSessionId && typeof raw.viewOnly === 'boolean' && exactKeys(raw, ['screenSessionId', 'viewOnly'])

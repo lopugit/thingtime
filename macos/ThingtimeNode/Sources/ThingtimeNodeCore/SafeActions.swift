@@ -10,11 +10,20 @@ public enum ActionOrigin: String, Codable, Equatable, Sendable {
 public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case refreshTelemetry = "telemetry.refresh"
     case setOutputVolume = "system.volume.set"
+    case setOutputMuted = "system.audio.mute.set"
+    case setDefaultOutputDevice = "system.audio.output.set"
+    case setDefaultInputDevice = "system.audio.input.set"
+    case setDefaultSoundEffectsOutputDevice = "system.audio.sound-effects-output.set"
     case setDisplayBrightness = "system.brightness.set"
     case activateApplication = "application.activate"
     case launchApplication = "application.launch"
     case terminateApplication = "application.quit"
+    case hideApplication = "application.hide"
+    case unhideApplication = "application.unhide"
     case lockScreen = "system.lock"
+    case connectWiFi = "system.wifi.connect"
+    case disconnectWiFi = "system.wifi.disconnect"
+    case setWiFiPower = "system.wifi.power.set"
 }
 
 public struct SafeActionRequest: Codable, Equatable, Sendable {
@@ -75,6 +84,18 @@ public struct SafeActionPolicy: Sendable {
                 return "system.volume.set requires a numeric volume between 0 and 1."
             }
             return nil
+        case .setOutputMuted:
+            guard action.parameters.count == 1, case .bool = action.parameters["muted"] else {
+                return "system.audio.mute.set requires only a boolean muted value."
+            }
+            return nil
+        case .setDefaultOutputDevice, .setDefaultInputDevice, .setDefaultSoundEffectsOutputDevice:
+            guard action.parameters.count == 1,
+                  let id = action.parameters["deviceId"]?.stringValue,
+                  validIdentifier(id) else {
+                return "The audio route action requires only a valid deviceId."
+            }
+            return nil
         case .setDisplayBrightness:
             guard let brightness = action.parameters["brightness"]?.numberValue,
                   brightness.isFinite,
@@ -82,14 +103,34 @@ public struct SafeActionPolicy: Sendable {
                 return "system.brightness.set requires a numeric brightness between 0 and 1."
             }
             return nil
-        case .activateApplication, .launchApplication, .terminateApplication:
+        case .activateApplication, .launchApplication, .terminateApplication, .hideApplication, .unhideApplication:
             guard let bundleID = action.parameters["bundleIdentifier"]?.stringValue,
-                  !bundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  bundleID.utf8.count <= 255 else {
+                  validIdentifier(bundleID) else {
                 return "The action requires a valid bundleIdentifier."
             }
             return nil
+        case .connectWiFi:
+            guard action.parameters.count == 1,
+                  let ssid = action.parameters["ssid"]?.stringValue,
+                  (try? SystemWiFi.validatedSSID(ssid)) != nil else {
+                return "system.wifi.connect requires only a valid visible SSID and never accepts a password."
+            }
+            return nil
+        case .disconnectWiFi:
+            return action.parameters.isEmpty ? nil : "system.wifi.disconnect does not accept parameters."
+        case .setWiFiPower:
+            guard action.parameters.count == 1, case .bool = action.parameters["enabled"] else {
+                return "system.wifi.power.set requires only a boolean enabled value."
+            }
+            return nil
         }
+    }
+
+    private func validIdentifier(_ value: String) -> Bool {
+        !value.isEmpty &&
+            value == value.trimmingCharacters(in: .whitespacesAndNewlines) &&
+            value.utf8.count <= 512 &&
+            value.rangeOfCharacter(from: .controlCharacters) == nil
     }
 }
 
@@ -126,6 +167,30 @@ public final class SafeActionExecutor {
             }
             try SystemAudio.setOutputVolume(volume)
             return .object(["volume": .number(volume)])
+        case .setOutputMuted:
+            guard case let .bool(muted)? = action.parameters["muted"] else {
+                throw ThingtimeNodeError.invalidRequest("Missing mute state.")
+            }
+            try SystemAudio.setOutputMuted(muted)
+            return .object(["muted": .bool(muted)])
+        case .setDefaultOutputDevice:
+            guard let id = action.parameters["deviceId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing audio output device identifier.")
+            }
+            try SystemAudio.setDefaultOutputDevice(id: id)
+            return .object(["deviceId": .string(id), "route": .string("output")])
+        case .setDefaultInputDevice:
+            guard let id = action.parameters["deviceId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing audio input device identifier.")
+            }
+            try SystemAudio.setDefaultInputDevice(id: id)
+            return .object(["deviceId": .string(id), "route": .string("input")])
+        case .setDefaultSoundEffectsOutputDevice:
+            guard let id = action.parameters["deviceId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing sound-effects output device identifier.")
+            }
+            try SystemAudio.setDefaultSoundEffectsOutputDevice(id: id)
+            return .object(["deviceId": .string(id), "route": .string("sound-effects-output")])
         case .setDisplayBrightness:
             guard let brightness = action.parameters["brightness"]?.numberValue else {
                 throw ThingtimeNodeError.invalidRequest("Missing brightness.")
@@ -159,6 +224,19 @@ public final class SafeActionExecutor {
                 throw ThingtimeNodeError.policyDenied("macOS did not allow the requested application to quit.")
             }
             return .object(["bundleIdentifier": .string(bundleID), "quitRequested": .bool(true)])
+        case .hideApplication, .unhideApplication:
+            guard let bundleID = action.parameters["bundleIdentifier"]?.stringValue,
+                  let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
+                throw ThingtimeNodeError.policyDenied("The requested application is not running.")
+            }
+            let changed = action.kind == .hideApplication ? application.hide() : application.unhide()
+            guard changed else {
+                throw ThingtimeNodeError.policyDenied("macOS did not change the requested application visibility.")
+            }
+            return .object([
+                "bundleIdentifier": .string(bundleID),
+                "hidden": .bool(action.kind == .hideApplication)
+            ])
         case .lockScreen:
             try SystemSession.lockScreen()
             for attempt in 0 ..< 20 {
@@ -170,6 +248,21 @@ public final class SafeActionExecutor {
             // The shortcut was posted, but macOS never exposed the resulting
             // lock state. Do not turn an ambiguous device effect into success.
             throw ThingtimeNodeError.commandOutcomeUncertain
+        case .connectWiFi:
+            guard let ssid = action.parameters["ssid"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing Wi-Fi network name.")
+            }
+            try SystemWiFi.connect(ssid: ssid)
+            return .object(["ssid": .string(ssid), "connected": .bool(true)])
+        case .disconnectWiFi:
+            try SystemWiFi.disconnect()
+            return .object(["disconnected": .bool(true)])
+        case .setWiFiPower:
+            guard case let .bool(enabled)? = action.parameters["enabled"] else {
+                throw ThingtimeNodeError.invalidRequest("Missing Wi-Fi power state.")
+            }
+            try SystemWiFi.setPower(enabled)
+            return .object(["enabled": .bool(enabled)])
         }
     }
 }

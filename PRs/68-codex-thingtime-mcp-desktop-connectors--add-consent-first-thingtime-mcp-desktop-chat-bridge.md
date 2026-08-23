@@ -170,6 +170,24 @@ relational shape for later ThingtimeDB storage and platform chat views.
   bridge response window instead of competing confirmations and a 15-second
   timeout.
 
+### 2026-08-23 expanded safe machine controls
+
+- The paired-node command vocabulary now covers mute/unmute; default output,
+  input, and system-sound-effect devices; app hide/unhide; Wi-Fi connect to a
+  visible saved/open network, disconnect, and radio power. The native snapshot
+  reports mute state and a bounded, path-free audio-device list so callers can
+  choose a reported device identifier.
+- Every new mutation remains behind the existing signed pairing capability,
+  device command lease, idempotency key, approval state, unlocked-session gate,
+  and native action policy. The Electron bridge uses the same closed allowlist.
+  Wi-Fi accepts only an SSID—passwords, arbitrary network configuration,
+  AppleScript, shell execution, and private frameworks are intentionally
+  excluded.
+- The device drawer now exposes mute/unmute alongside volume. The authenticated
+  device drawer needs a live paired account/device session for end-to-end UI
+  exercise; no real Wi-Fi, audio-route, or TCC state was changed during local
+  validation.
+
 ## Security and product boundaries
 
 MCP gives a host a standard way to invoke this server; it does not give the

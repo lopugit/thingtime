@@ -241,6 +241,18 @@ export const DeviceStateGrid = memo(({ deviceId, snapshot, commands = [], now, c
 				value={state.muted ? `Muted · ${percent(state.volume)}` : percent(state.volume)}
 			>
 				<Meter action="set-volume" controlFor={controlFor} deviceId={deviceId} field="volume" onAction={onAction} value={state.volume} />
+				{state.muted !== null ? (
+					<DevicePolicyButton
+						action="set-muted"
+						controlFor={controlFor}
+						controlKey="mute"
+						desired={{ muted: !state.muted }}
+						deviceId={deviceId}
+						input={{ muted: !state.muted }}
+						label={state.muted ? 'Unmute' : 'Mute'}
+						onAction={onAction}
+					/>
+				) : null}
 			</StateCell>
 
 			<StateCell icon={<Sun aria-hidden size={15} />} label="Brightness" pending={pending.has('brightness')} value={percent(state.brightness)}>

@@ -166,6 +166,7 @@ export type DeviceActionKind =
 	| 'open-permission-settings'
 	| 'register-project'
 	| 'set-volume'
+	| 'set-muted'
 	| 'set-brightness'
 	| 'launch-app'
 	| 'quit-app'

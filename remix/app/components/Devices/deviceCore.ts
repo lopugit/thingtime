@@ -44,6 +44,7 @@ const LOCAL_ONLY_ACTIONS = new Set<DeviceActionKind>([
 
 const ACTION_CAPABILITY: Partial<Record<DeviceActionKind, string>> = {
 	'set-volume': 'system.volume.write',
+	'set-muted': 'system.audio.mute.write',
 	'set-brightness': 'system.brightness.write',
 	'launch-app': 'apps.launch',
 	'quit-app': 'apps.quit',

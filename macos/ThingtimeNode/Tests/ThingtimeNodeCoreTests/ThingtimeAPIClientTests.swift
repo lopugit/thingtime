@@ -141,6 +141,16 @@ final class ThingtimeAPIClientTests: XCTestCase {
             let state = try XCTUnwrap(body["state"] as? [String: Any])
             XCTAssertEqual((state["openApps"] as? [[String: Any]])?.count, 64)
             XCTAssertEqual(try XCTUnwrap(state["brightness"] as? Double), 0.42, accuracy: 0.001)
+			XCTAssertEqual(state["muted"] as? Bool, true)
+			let audioDevices = try XCTUnwrap(state["audioDevices"] as? [[String: Any]])
+			let audioDevice = try XCTUnwrap(audioDevices.first)
+			XCTAssertEqual(audioDevice["id"] as? String, "BuiltInOutputDevice")
+			XCTAssertEqual(audioDevice["name"] as? String, "MacBook Speakers")
+			XCTAssertEqual(audioDevice["hasInput"] as? Bool, false)
+			XCTAssertEqual(audioDevice["hasOutput"] as? Bool, true)
+			XCTAssertEqual(audioDevice["isDefaultInput"] as? Bool, false)
+			XCTAssertEqual(audioDevice["isDefaultOutput"] as? Bool, true)
+			XCTAssertEqual(audioDevice["isDefaultSoundEffectsOutput"] as? Bool, true)
             let connectors = try XCTUnwrap(body["connectors"] as? [[String: Any]])
             XCTAssertEqual(connectors.count, 2)
             XCTAssertEqual(connectors[0]["projects"] as? [[String: String]], [
@@ -174,7 +184,17 @@ final class ThingtimeAPIClientTests: XCTestCase {
         }
         let telemetry = DeviceTelemetry(
             deviceName: "Mac", hostName: "mac", modelIdentifier: nil, operatingSystemVersion: "macOS",
-            architecture: "arm64", outputVolume: 0.5, session: .init(isLocked: false, isOnConsole: true),
+            architecture: "arm64", outputVolume: 0.5, outputMuted: true, audioDevices: [
+                .init(
+                    id: "BuiltInOutputDevice",
+                    name: "MacBook Speakers",
+                    hasInput: false,
+                    hasOutput: true,
+                    isDefaultInput: false,
+                    isDefaultOutput: true,
+                    isDefaultSoundEffectsOutput: true
+                )
+            ], session: .init(isLocked: false, isOnConsole: true),
             permissions: .init(accessibility: .denied, screenRecording: .denied),
             runningApplications: runningApplications,
             displays: [.init(displayID: 1, width: 1_920, height: 1_080, isMain: true, isBuiltIn: true, brightness: 0.42, brightnessControlSupported: true)],

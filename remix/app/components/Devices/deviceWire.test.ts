@@ -11,7 +11,7 @@ const device = (): PublicDevice => ({
 	model: 'MacBookPro18,3',
 	osVersion: '15.6',
 	appVersion: '1.0.0',
-	capabilities: ['system.volume.set', 'app.focus'],
+	capabilities: ['system.volume.set', 'system.audio.mute.set', 'system.audio.output.set', 'app.focus'],
 	pairedAt: '2026-08-18T00:00:00.000Z',
 	online: false,
 	lastSeenAt: '2026-08-18T00:01:00.000Z',
@@ -25,9 +25,21 @@ const device = (): PublicDevice => ({
 		revision: 7,
 		locked: false,
 		volume: 0.42,
+		muted: false,
 		brightness: 0.7,
 		battery: { level: 0.84, charging: true },
 		openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }],
+		audioDevices: [
+			{
+				id: 'BuiltInOutputDevice',
+				name: 'MacBook Speakers',
+				hasInput: false,
+				hasOutput: true,
+				isDefaultInput: false,
+				isDefaultOutput: true,
+				isDefaultSoundEffectsOutput: true
+			}
+		],
 		observedAt: '2026-08-18T00:01:00.000Z',
 		updatedAt: '2026-08-18T00:01:00.000Z'
 	},
@@ -57,6 +69,7 @@ test('dedicated PublicDevice projections become capability-driven cached runtime
 	assert.equal(runtime.summary?.revision, 7);
 	assert.equal(runtime.summary?.permissionMode, 'always-allow');
 	assert.ok(runtime.summary?.capabilities.some((capability) => capability.id === 'system.volume.write'));
+	assert.ok(runtime.summary?.capabilities.some((capability) => capability.id === 'system.audio.mute.write'));
 	assert.ok(runtime.summary?.capabilities.some((capability) => capability.id === 'apps.launch'));
 	assert.equal(runtime.snapshot?.observed.activeAppBundleId, 'com.openai.chat');
 	assert.equal(runtime.snapshot?.connectors[0]?.status, 'ready');

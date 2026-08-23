@@ -250,6 +250,22 @@ test('device mutations require a command id and reject unsupported action kinds'
 			request: { kind: 'system.volume.set', parameters: { volume: 0.5 } }
 		}
 	);
+	for (const [kind, parameters] of [
+		['system.audio.mute.set', { muted: true }],
+		['system.audio.output.set', { deviceId: 'BuiltInOutputDevice' }],
+		['system.audio.input.set', { deviceId: 'BuiltInInputDevice' }],
+		['system.audio.sound-effects-output.set', { deviceId: 'BuiltInOutputDevice' }],
+		['application.hide', { bundleIdentifier: 'com.example.App' }],
+		['application.unhide', { bundleIdentifier: 'com.example.App' }],
+		['system.wifi.connect', { ssid: 'Thingtime Guest' }],
+		['system.wifi.disconnect', {}],
+		['system.wifi.power.set', { enabled: false }]
+	]) {
+		assert.deepEqual(
+			validateDeviceRequest({ action: 'execute', commandId: `command-${kind}`, request: { kind, parameters } }),
+			{ action: 'execute', commandId: `command-${kind}`, request: { kind, parameters } }
+		);
+	}
 	assert.throws(
 		() => validateDeviceRequest({ action: 'execute', commandId: 'command-3', request: { kind: 'screen.capture', parameters: {} } }),
 		/not allowed/u

@@ -900,6 +900,22 @@ function describeDeviceAction(request) {
 			const label = typeof volume === 'number' && Number.isFinite(volume) ? `${Math.round(volume * 100)}%` : 'the requested level';
 			return { message: `Set this Mac's output volume to ${label}?`, confirmLabel: 'Set Volume' };
 		}
+		case 'system.audio.mute.set':
+			return { message: 'Change this Mac\'s audio mute state?', confirmLabel: 'Change Mute' };
+		case 'system.audio.output.set':
+			return { message: 'Switch this Mac\'s default audio output device?', confirmLabel: 'Switch Output' };
+		case 'system.audio.input.set':
+			return { message: 'Switch this Mac\'s default audio input device?', confirmLabel: 'Switch Input' };
+		case 'system.audio.sound-effects-output.set':
+			return { message: 'Switch this Mac\'s sound-effects output device?', confirmLabel: 'Switch Sound Effects' };
+		case 'system.wifi.connect':
+			return { message: 'Connect this Mac to the requested available Wi-Fi network using only an existing local credential?', confirmLabel: 'Connect Wi-Fi' };
+		case 'system.wifi.disconnect':
+			return { message: 'Disconnect this Mac from Wi-Fi? This may end the current remote session.', confirmLabel: 'Disconnect Wi-Fi' };
+		case 'system.wifi.power.set':
+			return { message: 'Change this Mac\'s Wi-Fi power state? This may end the current remote session.', confirmLabel: 'Change Wi-Fi Power' };
+		case 'system.lock':
+			return { message: 'Lock this Mac now?', confirmLabel: 'Lock Mac' };
 		case 'application.activate':
 			return { message: 'Bring the requested application to the front?', confirmLabel: 'Activate App' };
 		case 'application.launch':

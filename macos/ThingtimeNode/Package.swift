@@ -23,6 +23,7 @@ let package = Package(
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("AudioToolbox"),
                 .linkedFramework("CoreAudio"),
+                .linkedFramework("CoreWLAN"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreImage"),
                 .linkedFramework("CoreMedia"),

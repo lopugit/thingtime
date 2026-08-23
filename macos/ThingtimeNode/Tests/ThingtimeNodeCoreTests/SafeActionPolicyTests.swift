@@ -88,6 +88,46 @@ final class SafeActionPolicyTests: XCTestCase {
         ) else { return XCTFail("Expected invalid brightness to be denied") }
     }
 
+    func testAudioRouteAndMuteActionsStayClosedAndRequireApproval() {
+        let output = SafeActionRequest(kind: .setDefaultOutputDevice, parameters: ["deviceId": .string("BuiltInOutputDevice")])
+        guard case .requireApproval = policy.evaluate(
+            action: output,
+            context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+        ) else { return XCTFail("Expected approval requirement for output selection") }
+
+        let muted = SafeActionRequest(kind: .setOutputMuted, parameters: ["muted": .bool(true)])
+        guard case .requireApproval = policy.evaluate(
+            action: muted,
+            context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+        ) else { return XCTFail("Expected approval requirement for mute") }
+
+        let invalid = SafeActionRequest(kind: .setDefaultInputDevice, parameters: ["deviceId": .string("\n")])
+        guard case .deny = policy.evaluate(
+            action: invalid,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected invalid audio device identifier to be denied") }
+    }
+
+    func testWiFiActionsNeverAcceptPasswordsOrUnexpectedInput() {
+        let connect = SafeActionRequest(kind: .connectWiFi, parameters: ["ssid": .string("Thingtime Guest")])
+        guard case .requireApproval = policy.evaluate(
+            action: connect,
+            context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+        ) else { return XCTFail("Expected approval requirement for Wi-Fi connection") }
+
+        let passwordAttempt = SafeActionRequest(kind: .connectWiFi, parameters: [
+            "ssid": .string("Thingtime Guest"),
+            "password": .string("must-not-be-accepted")
+        ])
+        guard case .deny = policy.evaluate(
+            action: passwordAttempt,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Wi-Fi passwords must be rejected before execution") }
+
+        XCTAssertThrowsError(try SystemWiFi.validatedSSID(" leading-space"))
+        XCTAssertThrowsError(try SystemWiFi.validatedSSID(String(repeating: "x", count: 33)))
+    }
+
     func testMainDisplayBrightnessSnapshotIsBoundedWhenAvailable() {
         guard let snapshot = SystemDisplayBrightness.snapshot(for: CGMainDisplayID()) else { return }
         XCTAssertTrue((0 ... 1).contains(snapshot.level))
