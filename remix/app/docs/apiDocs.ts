@@ -5997,6 +5997,83 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'oauth-desktop-authorize',
+    group: 'embed',
+    title: 'Desktop authorize (issue PKCE code)',
+    endpoint: '/api/v1/oauth/desktop/authorize',
+    summary: 'Turn installed-app consent into a short-lived one-time code for an exact loopback callback.',
+    detail:
+      'POST from the first-party consent page with clientId, redirectUri, S256 codeChallenge, state, and approved scopes. The callback must be plain HTTP on 127.0.0.1 or [::1] with an explicit unprivileged port and an allowlisted exact origin. The response contains a five-minute code and echoed state; it cannot authenticate a normal Thingtime endpoint and is consumed once at /api/v1/oauth/token.',
+    auth: { mode: 'session', description: "The end user's Thingtime browser session after explicit consent." },
+    methods: ['POST'],
+    steps: [
+      'Bind the loopback listener before opening the system browser.',
+      'Open /authorize with client_id, redirect_uri, code_challenge, code_challenge_method=S256, and state.',
+      'Verify the callback state before exchanging its code.'
+    ],
+    requestExamples: [
+      {
+        name: 'Issue one-time code',
+        description: 'Commander consent with private cloud settings storage.',
+        method: 'POST',
+        body: {
+          clientId: 'ttapp_example',
+          redirectUri: 'http://127.0.0.1:45432/oauth/callback',
+          codeChallenge: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          codeChallengeMethod: 'S256',
+          state: 'opaque-request-state',
+          scope: 'profile.username app-data',
+          scopes: ['profile.username', 'app-data']
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Code issued; the consent page navigates to the local callback.',
+        body: { ok: true, redirectTo: 'http://127.0.0.1:45432/oauth/callback?code=<one-time-code>&state=opaque-request-state' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'oauth-token',
+    group: 'embed',
+    title: 'Desktop token exchange',
+    endpoint: '/api/v1/oauth/token',
+    summary: 'Exchange a one-time desktop authorization code with its S256 verifier.',
+    detail:
+      'POST { grantType: "authorization_code", clientId, redirectUri, code, codeVerifier }. Native apps are public clients: an exact callback, five-minute one-time code, and PKCE verifier replace a client secret. Success returns the existing revocable, origin-bound app token.',
+    auth: { mode: 'none', description: 'The one-time code plus S256 verifier are the public client proof.' },
+    methods: ['POST'],
+    steps: [
+      'Verify callback state.',
+      'Exchange the code with the original verifier and exact callback URI.',
+      'Store accessToken in the OS credential vault.'
+    ],
+    requestExamples: [
+      {
+        name: 'Exchange',
+        description: 'Consume the loopback code once.',
+        method: 'POST',
+        body: {
+          grantType: 'authorization_code',
+          clientId: 'ttapp_example',
+          redirectUri: 'http://127.0.0.1:45432/oauth/callback',
+          code: '<one-time-code>',
+          codeVerifier: '<43-to-128-character-pkce-verifier>'
+        }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'App token minted.', body: { ok: true, accessToken: '<app-scoped-jwt>', tokenType: 'Bearer' } },
+      {
+        status: 400,
+        description: 'Wrong verifier, mismatch, expiry, or replay.',
+        body: { ok: false, error: 'Authorization code is invalid, expired, already used, or does not match this request' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'oauth-sandbox',
     group: 'embed',
     title: 'Sandbox token (build before registering)',

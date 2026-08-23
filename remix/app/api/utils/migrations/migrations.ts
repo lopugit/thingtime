@@ -79,6 +79,40 @@ import {
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
 
+// Both the pending census and the real backfill must pass the complete stored
+// attachment envelope to thingStorageSizeBytes(). Projecting only the ordinary
+// Thing payload makes a legitimate attachment indistinguishable from a forged
+// attachment claim and correctly trips the fail-closed envelope validator.
+export const USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION = {
+	_id: 1,
+	schemaVersion: 1,
+	ownerId: 1,
+	shareId: 1,
+	thingtime: 1,
+	crystal: 1,
+	extended: 1,
+	tags: 1,
+	storageClass: 1,
+	sandboxExpiresAt: 1,
+	sizeBytes: 1,
+	storageAccountingVersion: 1,
+	updatedAt: 1,
+	attachmentEnvelopeVersion: 1,
+	attachmentState: 1,
+	objectSizeBytes: 1,
+	objectKey: 1,
+	objectVersionId: 1,
+	attachmentRequestFingerprint: 1,
+	attachmentPurpose: 1,
+	attachmentProfileSlot: 1,
+	attachmentFinalizationLeaseId: 1,
+	attachmentPartsIssuedAt: 1,
+	attachmentObjectlessDelete: 1,
+	attachmentMpuEmptyVerifiedAt: 1,
+	uploadId: 1,
+	attachmentExpiresAt: 1
+} as const;
+
 export type MigrationReport = {
   dryRun: boolean;
   matched: number;
@@ -1755,6 +1789,9 @@ export const userStorageAccountingSourceCursor = <T extends { find: (filter: Rec
 
 const countUnstampedBillableThings = async (knownUsers: Set<string>): Promise<number> => {
 	const things = await getCollection('things');
+	// USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION enumerates the fields this
+	// pass needs; reading the whole document is the stronger form of the same
+	// guarantee, because no future protected root field can be dropped here.
 	const cursor = userStorageAccountingSourceCursor(things);
 	let pending = 0;
 	for await (const doc of cursor) {
@@ -2128,6 +2165,9 @@ const backfillUserStorageAccounting: Migration = {
 			const knownUsers = new Set(ids);
 
 			let stamped = 0;
+			// Same rule as the census pass: the mutation pass reads whole documents
+			// rather than USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION's field list,
+			// so a protected attachment root field can never be projected away.
 			const cursor = userStorageAccountingSourceCursor(things);
 			for await (const initialDoc of cursor) {
 				const initialSandboxState = storageSandboxState(initialDoc as any);
