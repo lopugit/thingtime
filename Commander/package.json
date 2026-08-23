@@ -21,6 +21,8 @@
     "lint": "corepack pnpm@10.12.1 build:protocol && corepack pnpm@10.12.1 build:indexer-client && corepack pnpm@10.12.1 build:compat && corepack pnpm@10.12.1 -r lint",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
+    "version:check": "node ./script/release-version.mjs check",
+    "version:bump": "node ./script/release-version.mjs bump",
     "build:macos": "./script/build_and_run.sh --build-only",
     "run:macos": "./script/build_and_run.sh",
     "verify:macos": "./script/build_and_run.sh --verify"

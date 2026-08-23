@@ -103,6 +103,31 @@ occupied by an orphaned service.
 
 The Codex Run button is wired through `.codex/environments/environment.toml` to the same script.
 
+## GitHub Releases
+
+`.github/workflows/commander-release.yml` follows the native Electron release
+pattern. A qualifying `main` push, or an explicit dispatch, builds Commander on
+macOS and publishes a GitHub Release with a ZIP of `Commander.app` plus a
+SHA-256 checksum. Each release gets a monotonic SemVer build suffix and tag,
+such as `commander-v0.1.0+build.10423`; the app stores `0.1.0` as its marketing
+version and `10423` as its macOS build number.
+
+The base version is deliberately human-controlled and shared by every
+Commander workspace. Check it with `corepack pnpm version:check`; intentionally
+bump it in a normal reviewed change with one of:
+
+```bash
+corepack pnpm version:bump -- patch
+corepack pnpm version:bump -- minor
+corepack pnpm version:bump -- major
+corepack pnpm version:bump -- 1.2.3
+```
+
+The workflow's build metadata never writes back to source, so repeat builds are
+uniquely versioned without noisy release-only commits. GitHub-hosted builds are
+ad-hoc signed until an Apple Developer certificate and notarization credentials
+are deliberately configured; the release notes make that trust boundary clear.
+
 ## Thingtime setup
 
 Commander uses the real Thingtime API; it never reads the database directly.

@@ -17,6 +17,17 @@ CONTENTS="$APP_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
 RESOURCES_DIR="$CONTENTS/Resources"
 SWIFT_PACKAGE="$ROOT_DIR/hosts/macos"
+PACKAGE_VERSION="$(node -p "require(process.argv[1]).version" "$ROOT_DIR/package.json")"
+BUILD_NUMBER="${COMMANDER_BUILD_NUMBER:-1}"
+
+if [[ ! "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Commander package version must be X.Y.Z: $PACKAGE_VERSION" >&2
+  exit 1
+fi
+if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || [[ "$BUILD_NUMBER" == "0" ]]; then
+  echo "COMMANDER_BUILD_NUMBER must be a positive integer: $BUILD_NUMBER" >&2
+  exit 1
+fi
 
 build_all() {
   corepack pnpm --dir "$ROOT_DIR" install --frozen-lockfile
@@ -65,8 +76,8 @@ build_all() {
   /usr/bin/plutil -insert CFBundleDisplayName -string "$APP_NAME" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert CFBundleIconFile -string "$APP_NAME.icns" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert CFBundlePackageType -string APPL "$staged_bundle/Contents/Info.plist"
-  /usr/bin/plutil -insert CFBundleShortVersionString -string 0.1.0 "$staged_bundle/Contents/Info.plist"
-  /usr/bin/plutil -insert CFBundleVersion -string 1 "$staged_bundle/Contents/Info.plist"
+  /usr/bin/plutil -insert CFBundleShortVersionString -string "$PACKAGE_VERSION" "$staged_bundle/Contents/Info.plist"
+  /usr/bin/plutil -insert CFBundleVersion -string "$BUILD_NUMBER" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert LSMinimumSystemVersion -string "$MIN_SYSTEM_VERSION" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert LSUIElement -bool true "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert NSHighResolutionCapable -bool true "$staged_bundle/Contents/Info.plist"
