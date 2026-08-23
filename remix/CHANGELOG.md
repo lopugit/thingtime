@@ -33,6 +33,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Storage-accounting migrations retain protected attachment fields**: the
+  pending census and real whole-account backfill now project the complete
+  attachment object envelope before calculating canonical bytes, preventing
+  legitimate preview uploads from stopping migration with
+  `InvalidAttachmentStorageEnvelopeError`. — Codex (AI), 2026-08-23
+
 - **Third-party connections: a viral external post could grow without bound,
   and leaked who else was reading it** (PR #295). A synced `external-post`
   carried its source membership as an embedded root `sourceIds` array plus, for
