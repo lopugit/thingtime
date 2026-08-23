@@ -2166,8 +2166,10 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       fallback origin. Repeat with a proxy fallback mismatch: it must remain
       incompatible even when the remote route itself exists.
 - [ ] Fetch `/api/v1/capabilities` from production, development, and a PR
-      preview. It must return schema version 1 and exactly one semver contract
-      for every entry in the API-doc registry. Verify the desktop accepts a
+      preview. It must return schema version 1, exactly one semver `api.*`
+      contract for every entry in the API-doc registry, and a `route.*` entry
+      for every executable API route (including intentionally undocumented
+      diagnostics). Verify the desktop accepts a
       compatible `api.devices` minor/patch update, rejects a missing or new
       major, and uses the legacy `/api/v1/devices` probe only when an older
       deployment returns a manifest 404.

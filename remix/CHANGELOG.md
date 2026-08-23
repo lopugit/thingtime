@@ -52,10 +52,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
-- **Every documented API operation now advertises a compatibility contract**:
+- **Every API operation now advertises a compatibility contract**:
   `/api/v1/capabilities` is generated from the canonical API-doc registry and
-  publishes a `1.0.0` contract for each `api.<endpoint-id>` feature. Desktop
-  clients negotiate their required range before using a selected deployment,
+  active runtime route map. It publishes a semantic `api.<endpoint-id>`
+  contract for each documented operation plus discoverable `route.*` entries
+  for every executable route. Desktop clients negotiate their required range
+  before using a selected deployment,
   while older deployments retain the narrow devices-route fallback during the
   rollout. — Codex (AI), 2026-08-23
 

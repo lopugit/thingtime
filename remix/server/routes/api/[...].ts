@@ -9,7 +9,7 @@ type RouteModule = {
   action?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
 };
 
-const routeModules: Record<string, () => Promise<RouteModule>> = {
+export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/apps': () => import('../../../app/routes/api/v1/admin/apps/_apps'),
   'v1/admin/apps/revoke': () => import('../../../app/routes/api/v1/admin/apps/revoke/_revoke'),
   'v1/admin/ci': () => import('../../../app/routes/api/v1/admin/ci/_ci'),
@@ -285,7 +285,7 @@ export default defineHandler(async (event) => {
 
   if (path === 'v1/capabilities') {
     const { createApiCapabilitiesManifest } = await import('../../../app/docs/apiDocs');
-    return jsonResponse(createApiCapabilitiesManifest(), {
+    return jsonResponse(createApiCapabilitiesManifest([...Object.keys(routeModules), 'v1/capabilities']), {
       headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' }
     });
   }

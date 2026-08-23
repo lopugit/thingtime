@@ -1430,9 +1430,9 @@
     "semantic_hash": "9d9c7d535e869b76cb650869ee4f954b"
   },
   "remix/package.json": {
-    "mtime": 1787484949.8395524,
-    "ast_hash": "87b0895fe85dd7a48939d586cf3c1238",
-    "semantic_hash": "87b0895fe85dd7a48939d586cf3c1238"
+    "mtime": 1787485258.3564315,
+    "ast_hash": "36ce0b075a42018a1e28d39042dd508d",
+    "semantic_hash": ""
   },
   "remix/public/manifest.json": {
     "mtime": 1787484949.9050624,
@@ -1475,8 +1475,8 @@
     "semantic_hash": "d8e54ac3eb56ffe2541ba0ef0eadba0e"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1787485006.4611294,
-    "ast_hash": "5bc52cca4e49711343e004648eadfad4",
+    "mtime": 1787485248.0897174,
+    "ast_hash": "165950703142cfb4064080a987cdd297",
     "semantic_hash": ""
   },
   "remix/server/routes/api/root-data.get.ts": {
@@ -1745,8 +1745,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1787484953.3694232,
-    "ast_hash": "e77c94cd308d03e933881ddcb13e78b5",
+    "mtime": 1787485361.0185945,
+    "ast_hash": "8f8297733bff3f25e2eb0c3b6b63c033",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -3205,8 +3205,8 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1787485001.6766117,
-    "ast_hash": "2e74e2b7e4e1fbe46fb9279e6649a17f",
+    "mtime": 1787485361.017287,
+    "ast_hash": "508f3e1ab1c8f8f87d8d8e317fdb036e",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -4150,8 +4150,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787484953.2934728,
-    "ast_hash": "3ecfb8817f65e6a4969e1e4e4b1c2100",
+    "mtime": 1787485361.0180247,
+    "ast_hash": "3281a95c5d31d31b8efa26eaa88c4937",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -7710,8 +7710,8 @@
     "semantic_hash": ""
   },
   "PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md": {
-    "mtime": 1787484948.9897654,
-    "ast_hash": "7af663d1b6d5cf48dac9b8197b03edba",
+    "mtime": 1787485361.0189066,
+    "ast_hash": "a1da7dfb1a5c2f197989155e26602076",
     "semantic_hash": ""
   },
   "electron/PRODUCTION_RELEASE.md": {
@@ -7737,6 +7737,11 @@
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/Resources/MenuBar/thingtime-wordmark-color.png": {
     "mtime": 1787484949.2821136,
     "ast_hash": "7185bcd991be7a2b162f92f9127b4067",
+    "semantic_hash": ""
+  },
+  "remix/app/docs/apiCapabilities.test.ts": {
+    "mtime": 1787485381.0668788,
+    "ast_hash": "1a82beb01b10e4b55d39ec419628ca4d",
     "semantic_hash": ""
   }
 }

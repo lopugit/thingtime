@@ -539,12 +539,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		group: 'platform',
 		title: 'API capabilities',
 		endpoint: '/api/v1/capabilities',
-		summary: 'Returns the origin-scoped compatibility manifest for every documented Thingtime API operation.',
+		summary: 'Returns the origin-scoped compatibility manifest for every documented and executable Thingtime API operation.',
 		detail:
-			'Clients use this public manifest to negotiate supported API contracts before enabling optional features. Each operation is independently versioned; additions are minor or patch changes and breaking changes receive a new major version.',
+			'Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. Additions are minor or patch changes and breaking changes receive a new major version.',
 		auth: { mode: 'none', description: 'Public deployment metadata; it contains no account, permission or environment data.' },
 		methods: ['GET'],
-		steps: ['Fetch once per origin, respecting the ETag.', 'Compare only the feature contracts a client requires.'],
+		steps: ['Fetch once per origin and honour the short cache window.', 'Compare only the feature contracts a client requires.'],
 		requestExamples: [{ name: 'Discover capabilities', description: 'Read the active API contract manifest.', method: 'GET' }],
 		responseExamples: [{ status: 200, description: 'Versioned capability manifest.', body: { ok: true, schemaVersion: 1, features: { 'api.devices': '1.0.0' } } }]
 	}),
@@ -8874,12 +8874,26 @@ export type ApiCapabilitiesManifest = {
   features: Record<string, `${number}.${number}.${number}`>;
 };
 
-/** Generated from the one canonical API registry; every documented operation advertises one contract. */
-export const createApiCapabilitiesManifest = (): ApiCapabilitiesManifest => ({
-  ok: true,
-  schemaVersion: 1,
-  features: Object.fromEntries(apiEndpointDocs.map((doc) => [`api.${doc.id}`, doc.contractVersion]))
-});
+/** A stable machine-readable name for a concrete API route, including internal routes without public docs. */
+export const apiRouteCapabilityId = (routeKey: string) => `route.${routeKey.replaceAll('/', '.')}`;
+
+/**
+ * Generated from the canonical public API registry plus the active route map.
+ * `api.*` names are semantic, versioned client contracts; `route.*` names make
+ * every executable endpoint discoverable, including intentionally undocumented
+ * diagnostics and future routes while they are being documented.
+ */
+export const createApiCapabilitiesManifest = (routeKeys: Iterable<string> = []): ApiCapabilitiesManifest => {
+  const features: ApiCapabilitiesManifest['features'] = Object.fromEntries(
+    apiEndpointDocs.map((doc) => [`api.${doc.id}`, doc.contractVersion])
+  );
+
+  for (const routeKey of routeKeys) {
+    features[apiRouteCapabilityId(routeKey)] ||= '1.0.0';
+  }
+
+  return { ok: true, schemaVersion: 1, features };
+};
 
 const shellQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
 

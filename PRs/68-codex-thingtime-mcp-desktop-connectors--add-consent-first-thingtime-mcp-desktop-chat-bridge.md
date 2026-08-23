@@ -582,6 +582,15 @@ an offline database or offline conflict resolution layer.
 
 ### Endpoint compatibility follow-up (2026-08-23)
 
+- `/api/v1/capabilities` is a public, origin-scoped generated contract
+  manifest. It emits independently versioned `api.*` semantic features from
+  the API-doc registry and `route.*` entries from the live route map, so every
+  executable endpoint—including intentionally undocumented diagnostics—is
+  discoverable without exposing account or environment data. Electron ships a
+  small requirement map for only the capabilities it uses; it accepts
+  compatible minor/patch changes, rejects a missing or breaking feature, and
+  retains the previous `/api/v1/devices` probe only for older deployments that
+  return a manifest 404.
 - The Electron main process now treats the selected remote deployment and its
   bundled loopback proxy as a single compatibility contract. It accepts a
   signed-out `401` or `403` from `/api/v1/devices` as proof that the protected
