@@ -153,6 +153,58 @@ export const verifyJwt = async (token: string): Promise<JwtClaims | null> => {
   }
 };
 
+// Short-lived single-purpose tokens (e.g. WebAuthn challenge cookies). The
+// `purpose` claim fences them off from session JWTs in BOTH directions: these
+// carry no sub/jti so verifyJwt rejects them, and session JWTs carry no
+// purpose so verifyPurposeToken rejects those. Same key material as signJwt.
+export const signPurposeToken = async (
+  purpose: string,
+  claims: Record<string, unknown>,
+  expiresIn: string
+): Promise<string> => {
+  const build = (jwt: SignJWT) => jwt.setIssuer(getJwtIssuer()).setIssuedAt().setExpirationTime(expiresIn);
+
+  const es256Key = getEs256SigningKey();
+  if (es256Key) {
+    return build(
+      new SignJWT({ ...claims, purpose }).setProtectedHeader({ alg: 'ES256', kid: getJwtKeyId(), typ: 'JWT' })
+    ).sign(await es256Key);
+  }
+
+  const legacySecret = getLegacySecret({ allowDevFallback: true });
+  if (!legacySecret) {
+    throw new Error('[auth] JWT_PRIVATE_KEY or JWT_SECRET must be set before auth can run.');
+  }
+  return build(new SignJWT({ ...claims, purpose }).setProtectedHeader({ alg: 'HS256', typ: 'JWT' })).sign(legacySecret);
+};
+
+export const verifyPurposeToken = async (
+  token: string,
+  purpose: string
+): Promise<Record<string, unknown> | null> => {
+  const es256Key = getEs256VerifyKey();
+  if (es256Key) {
+    try {
+      const { payload } = await jwtVerify(token, await es256Key, { algorithms: ['ES256'] });
+      if (payload.purpose !== purpose) return null;
+      return payload as Record<string, unknown>;
+    } catch {
+      // fall through to the legacy HS256 verifier
+    }
+  }
+
+  const legacySecret = getLegacySecret({ allowDevFallback: process.env.NODE_ENV !== 'production' });
+  if (!legacySecret) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, legacySecret, { algorithms: ['HS256'] });
+    if (payload.purpose !== purpose) return null;
+    return payload as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
 export const getPublicJwks = async (): Promise<PublicJwks> => {
   publicJwkPromise ??= getPublicJwk();
   const jwk = await publicJwkPromise;
