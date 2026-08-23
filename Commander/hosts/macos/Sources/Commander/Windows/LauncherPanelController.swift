@@ -10,7 +10,10 @@ private final class CommanderPanel: NSPanel {
   )?
 
   override var canBecomeKey: Bool { true }
-  override var canBecomeMain: Bool { false }
+  // WKWebView only renders an active insertion caret when its window may be
+  // main. This still behaves as a floating panel; it simply gives focused text
+  // fields the normal macOS editing presentation.
+  override var canBecomeMain: Bool { true }
 
   override func sendEvent(_ event: NSEvent) {
     switch event.type {

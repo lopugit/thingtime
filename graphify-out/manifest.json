@@ -5960,9 +5960,9 @@
     "semantic_hash": "b510c02784cbefc4a42453e2fca0839f"
   },
   "Commander/hosts/macos/Sources/Commander/Windows/LauncherPanelController.swift": {
-    "mtime": 1787323610.2297761,
-    "ast_hash": "25f8f8a2e72e723b24f86f1e86dac048",
-    "semantic_hash": "25f8f8a2e72e723b24f86f1e86dac048"
+    "mtime": 1787464052.1795902,
+    "ast_hash": "9579d5b8edc0b036cafec4ecee2433c6",
+    "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Windows/SettingsWindowController.swift": {
     "mtime": 1787130864.2152293,
@@ -5970,9 +5970,9 @@
     "semantic_hash": "9e644e026362291ef6b7aae125d6fd3f"
   },
   "Commander/hosts/macos/Tests/CommanderTests/CommanderWebViewTests.swift": {
-    "mtime": 1787323596.6842933,
-    "ast_hash": "66fa64ed3d4699c825c8555827227807",
-    "semantic_hash": "66fa64ed3d4699c825c8555827227807"
+    "mtime": 1787464052.1802435,
+    "ast_hash": "c0c1c7e726406c1cedef960c48ee126b",
+    "semantic_hash": ""
   },
   "Commander/hosts/macos/Tests/CommanderTests/GlobalHotKeyTests.swift": {
     "mtime": 1787130859.6033564,

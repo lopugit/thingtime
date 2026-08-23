@@ -76,6 +76,8 @@ final class CommanderWebViewTests: XCTestCase {
     XCTAssertTrue(panel.hasShadow)
     XCTAssertTrue(panel.isMovableByWindowBackground)
     XCTAssertTrue(panel.styleMask.contains(.resizable))
+    XCTAssertTrue(panel.canBecomeKey)
+    XCTAssertTrue(panel.canBecomeMain)
     XCTAssertEqual(panel.minSize, LauncherWindowMode.standard.minimumSize)
     XCTAssertTrue(panel.contentView is CommanderWebView)
     XCTAssertEqual(panel.contentView?.layer?.backgroundColor?.alpha, 0)
