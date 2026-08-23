@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **Commander GitHub release control plane**: main-branch Commander changes
+  now route to a native macOS release workflow that publishes a versioned app
+  archive and checksum; its base version is intentionally bumped in a reviewed
+  Commander change while GitHub run metadata supplies each unique build number.
+  — Codex (AI), 2026-08-23
+
 ### Fixed
 
 - **Media layout selections now reach the Things API**: the shared client API

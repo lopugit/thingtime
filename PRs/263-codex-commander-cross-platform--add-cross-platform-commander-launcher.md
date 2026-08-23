@@ -422,6 +422,22 @@ environment.
 - A final security and release audit found no release blockers, tracked build
   caches, environment files, private keys, credentials, or token patterns.
 
+## Release delivery
+
+- Commander now follows the established Electron release architecture: the
+  main-branch listener delegates to a protected GitHub Actions control-plane
+  workflow, which builds the native macOS bundle, publishes a ZIP plus SHA-256,
+  and creates an idempotent `commander-v<base>+build.<run-number>` release tag.
+- `Commander/script/release-version.mjs` keeps the six shipping workspace
+  package versions synchronized for reviewed patch/minor/major or explicit
+  base-version changes. CI contributes only build metadata; it never commits
+  a release-only source change. The bundle now records the base version and
+  GitHub build number in `CFBundleShortVersionString` and `CFBundleVersion`.
+- Local end-to-end packaging with `COMMANDER_BUILD_NUMBER=42` completed with
+  the app reporting `0.1.0 (42)` and passing strict deep code-signature
+  verification. The GitHub build intentionally uses ad-hoc signing until
+  notarization credentials are configured, and its release notes say so.
+
 ## Follow-up coverage
 
 - Add database-backed OAuth exchange integration tests for concurrent replay,
