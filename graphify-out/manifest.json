@@ -5540,9 +5540,9 @@
     "semantic_hash": "101d97e69529fe67dd4229a127e41ab3"
   },
   "Commander/apps/desktop-ui/src/components/Launcher.tsx": {
-    "mtime": 1787372661.0733173,
-    "ast_hash": "a693a61ed974083f81d6da7d0f1e4307",
-    "semantic_hash": "a693a61ed974083f81d6da7d0f1e4307"
+    "mtime": 1787462652.7391934,
+    "ast_hash": "ba02dfdb93b3f2b38c061bae4b8525fb",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/ResultIcon.tsx": {
     "mtime": 1787115631.1148171,
@@ -5915,9 +5915,9 @@
     "semantic_hash": "1d85f8170552f613ed5edafc0bf1f53d"
   },
   "Commander/hosts/macos/Sources/Commander/App/CommanderAppDelegate.swift": {
-    "mtime": 1787321933.450652,
-    "ast_hash": "463eea09fb0953afda83519c3c6b472e",
-    "semantic_hash": "463eea09fb0953afda83519c3c6b472e"
+    "mtime": 1787462652.7421412,
+    "ast_hash": "524999fd28f089238bbe6c8c994aec6d",
+    "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/App/CommanderMain.swift": {
     "mtime": 1787130859.619045,
@@ -6948,5 +6948,15 @@
     "mtime": 1787372666.3803332,
     "ast_hash": "bc67fc702d8001a94e9f83a95a4a2fb4",
     "semantic_hash": "bc67fc702d8001a94e9f83a95a4a2fb4"
+  },
+  "Commander/hosts/macos/Sources/Commander/App/CommanderApplicationMenu.swift": {
+    "mtime": 1787462768.073855,
+    "ast_hash": "28815e9b27644b6f2643615867cdf2bd",
+    "semantic_hash": ""
+  },
+  "Commander/hosts/macos/Tests/CommanderTests/CommanderApplicationMenuTests.swift": {
+    "mtime": 1787462768.0744708,
+    "ast_hash": "f669622711f983aa237c0d23a215e9e5",
+    "semantic_hash": ""
   }
 }

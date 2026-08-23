@@ -62,7 +62,9 @@
   font-size: 2rem;
   font-weight: 450;
   letter-spacing: -0.04em;
-  caret-color: var(--accent);
+  /* Keep the insertion point visible in WebKit's transparent launcher surface. */
+  caret-color: currentColor;
+  -webkit-text-fill-color: var(--text);
   user-select: text;
   -webkit-app-region: no-drag;
 }

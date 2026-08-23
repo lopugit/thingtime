@@ -24,6 +24,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.setActivationPolicy(.accessory)
+    NSApp.mainMenu = CommanderApplicationMenu.make()
     startDaemon()
   }
 
