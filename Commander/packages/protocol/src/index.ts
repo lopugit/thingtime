@@ -7,6 +7,22 @@ export const COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID = 'ttapp_7a68dafc-23c0-451
 export const COMMANDER_THINGTIME_DEVELOPMENT_CLIENT_ID = 'ttapp_5aec98d2-b17b-4396-b450-528ccc730d0e';
 /** Compatibility alias for the production client. */
 export const COMMANDER_THINGTIME_CLIENT_ID = COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID;
+export const COMMANDER_THINGTIME_CUSTOM_ENVIRONMENT_LIMIT = 16;
+
+export const COMMANDER_THINGTIME_ENVIRONMENTS = [
+  {
+    id: 'production',
+    name: 'Production',
+    baseUrl: COMMANDER_THINGTIME_PRODUCTION_URL,
+    clientId: COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID,
+  },
+  {
+    id: 'development',
+    name: 'Develop',
+    baseUrl: COMMANDER_THINGTIME_DEVELOPMENT_URL,
+    clientId: COMMANDER_THINGTIME_DEVELOPMENT_CLIENT_ID,
+  },
+] as const;
 
 /**
  * Built-in IDs that Commander shipped before their registration was corrected.
@@ -219,6 +235,46 @@ function normalizedText(value: unknown, maximumLength: number): string | undefin
   if (typeof value !== 'string') return undefined;
   const text = value.trim().slice(0, maximumLength);
   return text || undefined;
+}
+
+export interface CommanderThingtimeCustomEnvironment {
+  id: string;
+  name: string;
+  baseUrl: string;
+  clientId: string;
+}
+
+function normalizedEnvironmentUrl(value: unknown): string | undefined {
+  const text = normalizedText(value, 512);
+  if (!text) return undefined;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+    return text.replace(/\/+$/, '');
+  } catch {
+    return undefined;
+  }
+}
+
+export function normalizeCommanderThingtimeCustomEnvironments(
+  value: unknown,
+): CommanderThingtimeCustomEnvironment[] {
+  if (!Array.isArray(value)) return [];
+  const environments: CommanderThingtimeCustomEnvironment[] = [];
+  const ids = new Set<string>();
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const item = candidate as Partial<CommanderThingtimeCustomEnvironment>;
+    const id = normalizedText(item.id, 96);
+    const name = normalizedText(item.name, 96);
+    const baseUrl = normalizedEnvironmentUrl(item.baseUrl);
+    const clientId = normalizedText(item.clientId, 256);
+    if (!id || !name || !baseUrl || !clientId || ids.has(id)) continue;
+    ids.add(id);
+    environments.push({ id, name, baseUrl, clientId });
+    if (environments.length === COMMANDER_THINGTIME_CUSTOM_ENVIRONMENT_LIMIT) break;
+  }
+  return environments;
 }
 
 function boundedInteger(value: unknown, minimum: number, maximum: number, fallback: number): number {
@@ -695,6 +751,7 @@ export interface CommanderSettings {
   activeAccountId: string | null;
   thingtimeBaseUrl: string;
   thingtimeClientId: string;
+  thingtimeCustomEnvironments: CommanderThingtimeCustomEnvironment[];
   syncRevision: number;
   syncUpdatedAt: string | null;
   syncDirty: boolean;
@@ -1155,6 +1212,7 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   activeAccountId: null,
   thingtimeBaseUrl: COMMANDER_THINGTIME_PRODUCTION_URL,
   thingtimeClientId: COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID,
+  thingtimeCustomEnvironments: [],
   syncRevision: 0,
   syncUpdatedAt: null,
   syncDirty: false,

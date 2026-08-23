@@ -78,6 +78,7 @@
 ## Settings
 
 - [ ] Run the launcher results for Extensions and Accounts. Each opens the matching Settings tab rather than General; direct `?tab=extensions` and native tab events do the same.
+- [ ] In Advanced, select Production and Develop and verify each immediately fills its built-in Thingtime URL and public client ID. Add a named custom environment, select it after reopening Settings, edit it, then remove it; existing custom URL/client overrides must remain available as “Custom configuration” rather than being replaced.
 - [ ] Search `commander cpu` and open Commander Activity. Verify the native Activity tab refreshes every two seconds
       with Commander host/daemon CPU, memory, storage, and process count plus local Mac CPU, best-effort GPU,
       memory, thermal state, and filesystem values. Disconnect the native bridge only in a test shell and verify the

@@ -1,5 +1,10 @@
-import { useEffect, useState } from 'react';
-import { isSettingsTab, type CommanderSettings, type SettingsTab } from '@commander/protocol';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  COMMANDER_THINGTIME_ENVIRONMENTS,
+  isSettingsTab,
+  type CommanderSettings,
+  type SettingsTab,
+} from '@commander/protocol';
 import {
   Activity,
   Box,
@@ -141,14 +146,85 @@ function AdvancedSettings({
 }) {
   const [baseUrl, setBaseUrl] = useState(settings.thingtimeBaseUrl);
   const [clientId, setClientId] = useState(settings.thingtimeClientId);
+  const [customName, setCustomName] = useState('');
   useEffect(() => setBaseUrl(settings.thingtimeBaseUrl), [settings.thingtimeBaseUrl]);
   useEffect(() => setClientId(settings.thingtimeClientId), [settings.thingtimeClientId]);
 
-  const commit = () => {
-    const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '') || 'https://thingtime.com';
-    onChange({ ...settings, thingtimeBaseUrl: normalizedBaseUrl, thingtimeClientId: clientId.trim() });
+  const selectedEnvironment = useMemo(() => {
+    const builtIn = COMMANDER_THINGTIME_ENVIRONMENTS.find(
+      (environment) =>
+        environment.baseUrl === settings.thingtimeBaseUrl &&
+        environment.clientId === settings.thingtimeClientId,
+    );
+    if (builtIn) return builtIn.id;
+    const custom = settings.thingtimeCustomEnvironments.find(
+      (environment) =>
+        environment.baseUrl === settings.thingtimeBaseUrl &&
+        environment.clientId === settings.thingtimeClientId,
+    );
+    return custom ? `custom:${custom.id}` : 'custom-current';
+  }, [settings.thingtimeBaseUrl, settings.thingtimeClientId, settings.thingtimeCustomEnvironments]);
+
+  const activeCustomEnvironment = selectedEnvironment.startsWith('custom:')
+    ? settings.thingtimeCustomEnvironments.find(
+        (environment) => environment.id === selectedEnvironment.slice(7),
+      )
+    : undefined;
+
+  useEffect(
+    () => setCustomName(activeCustomEnvironment?.name ?? ''),
+    [activeCustomEnvironment?.id, activeCustomEnvironment?.name],
+  );
+
+  const commit = (nextBaseUrl = baseUrl, nextClientId = clientId) => {
+    const normalizedBaseUrl = nextBaseUrl.trim().replace(/\/+$/, '') || 'https://thingtime.com';
+    const normalizedClientId = nextClientId.trim();
+    onChange({ ...settings, thingtimeBaseUrl: normalizedBaseUrl, thingtimeClientId: normalizedClientId });
     setBaseUrl(normalizedBaseUrl);
-    setClientId(clientId.trim());
+    setClientId(normalizedClientId);
+  };
+
+  const chooseEnvironment = (value: string) => {
+    if (value === 'custom-current') return;
+    const selected = value.startsWith('custom:')
+      ? settings.thingtimeCustomEnvironments.find((environment) => environment.id === value.slice(7))
+      : COMMANDER_THINGTIME_ENVIRONMENTS.find((environment) => environment.id === value);
+    if (!selected) return;
+    commit(selected.baseUrl, selected.clientId);
+  };
+
+  const saveCustomEnvironment = () => {
+    const name = customName.trim();
+    const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '');
+    const normalizedClientId = clientId.trim();
+    if (!name || !normalizedBaseUrl || !normalizedClientId) return;
+    const id = activeCustomEnvironment?.id ?? `custom-${crypto.randomUUID()}`;
+    const custom = { id, name, baseUrl: normalizedBaseUrl, clientId: normalizedClientId };
+    const environments = activeCustomEnvironment
+      ? settings.thingtimeCustomEnvironments.map((environment) =>
+          environment.id === id ? custom : environment,
+        )
+      : [...settings.thingtimeCustomEnvironments, custom];
+    onChange({
+      ...settings,
+      thingtimeBaseUrl: normalizedBaseUrl,
+      thingtimeClientId: normalizedClientId,
+      thingtimeCustomEnvironments: environments,
+    });
+  };
+
+  const removeCustomEnvironment = () => {
+    if (!activeCustomEnvironment) return;
+    const production = COMMANDER_THINGTIME_ENVIRONMENTS[0];
+    onChange({
+      ...settings,
+      thingtimeBaseUrl: production.baseUrl,
+      thingtimeClientId: production.clientId,
+      thingtimeCustomEnvironments: settings.thingtimeCustomEnvironments.filter(
+        (environment) => environment.id !== activeCustomEnvironment.id,
+      ),
+    });
+    setCustomName('');
   };
 
   return (
@@ -162,11 +238,33 @@ function AdvancedSettings({
       </div>
       <section className="advanced-card">
         <label>
+          <span>Thingtime environment</span>
+          <select
+            aria-label="Thingtime environment"
+            value={selectedEnvironment}
+            onChange={(event) => chooseEnvironment(event.target.value)}
+          >
+            {COMMANDER_THINGTIME_ENVIRONMENTS.map((environment) => (
+              <option key={environment.id} value={environment.id}>
+                {environment.name}
+              </option>
+            ))}
+            {settings.thingtimeCustomEnvironments.map((environment) => (
+              <option key={environment.id} value={`custom:${environment.id}`}>
+                {environment.name}
+              </option>
+            ))}
+            {selectedEnvironment === 'custom-current' ? (
+              <option value="custom-current">Custom configuration</option>
+            ) : null}
+          </select>
+        </label>
+        <label>
           <span>Thingtime URL</span>
           <input
             value={baseUrl}
             onChange={(event) => setBaseUrl(event.target.value)}
-            onBlur={commit}
+            onBlur={() => commit()}
             onKeyDown={(event) => event.key === 'Enter' && commit()}
             placeholder="https://thingtime.com"
             spellCheck={false}
@@ -177,12 +275,49 @@ function AdvancedSettings({
           <input
             value={clientId}
             onChange={(event) => setClientId(event.target.value)}
-            onBlur={commit}
+            onBlur={() => commit()}
             onKeyDown={(event) => event.key === 'Enter' && commit()}
             placeholder="Commander app client ID"
             spellCheck={false}
           />
         </label>
+      </section>
+      <section className="custom-environment-card" aria-labelledby="custom-environments-heading">
+        <div>
+          <strong id="custom-environments-heading">Custom environments</strong>
+          <span>
+            Enter the Thingtime URL and public client ID above, then give that deployment a reusable name.
+          </span>
+        </div>
+        <label>
+          <span>Environment name</span>
+          <input
+            aria-label="Custom environment name"
+            value={customName}
+            onChange={(event) => setCustomName(event.target.value)}
+            placeholder="Staging"
+            maxLength={96}
+          />
+        </label>
+        <div className="custom-environment-actions">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={saveCustomEnvironment}
+            disabled={!customName.trim()}
+          >
+            {activeCustomEnvironment ? 'Save custom environment' : 'Add custom environment'}
+          </button>
+          {activeCustomEnvironment ? (
+            <button
+              type="button"
+              className="secondary-button danger-button"
+              onClick={removeCustomEnvironment}
+            >
+              Remove
+            </button>
+          ) : null}
+        </div>
       </section>
       <div className="callback-card">
         <KeyRound />

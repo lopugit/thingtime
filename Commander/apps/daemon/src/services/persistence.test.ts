@@ -114,6 +114,39 @@ describe('PersistentStore Thingtime defaults', () => {
     }
   });
 
+  it('persists valid custom Thingtime environment profiles', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
+    vi.stubEnv('COMMANDER_DATA_DIR', path.join(temporary, 'data'));
+
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      await store.setSettings({
+        ...store.snapshot().settings,
+        thingtimeBaseUrl: 'https://staging.thingtime.com',
+        thingtimeClientId: 'ttapp_staging',
+        thingtimeCustomEnvironments: [
+          {
+            id: 'staging',
+            name: 'Staging',
+            baseUrl: 'https://staging.thingtime.com/',
+            clientId: 'ttapp_staging',
+          },
+        ],
+      });
+      expect(store.snapshot().settings.thingtimeCustomEnvironments).toEqual([
+        {
+          id: 'staging',
+          name: 'Staging',
+          baseUrl: 'https://staging.thingtime.com',
+          clientId: 'ttapp_staging',
+        },
+      ]);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('migrates legacy state to local filesystem indexing defaults', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
     const dataDirectory = path.join(temporary, 'data');

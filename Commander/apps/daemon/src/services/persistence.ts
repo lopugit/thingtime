@@ -15,6 +15,7 @@ import {
   normalizeCalculatorSettings,
   normalizeCommandShortcuts,
   normalizeCommanderThingtimeClientId,
+  normalizeCommanderThingtimeCustomEnvironments,
   normalizeEmojiDefaultAction,
   normalizeIndexingSettings,
   normalizeRecentSearches,
@@ -54,6 +55,9 @@ function normalizedSettings(settings: Partial<CommanderSettings> | undefined): C
     activity: normalizeActivitySettings(settings?.activity),
     windowPinning: normalizeWindowPinningSettings(settings?.windowPinning),
     indexing: normalizeIndexingSettings(settings?.indexing),
+    thingtimeCustomEnvironments: normalizeCommanderThingtimeCustomEnvironments(
+      settings?.thingtimeCustomEnvironments,
+    ),
     thingtimeClientId: normalizeCommanderThingtimeClientId(merged.thingtimeClientId, merged.thingtimeBaseUrl),
   };
 }
@@ -92,6 +96,9 @@ export class PersistentStore {
         JSON.stringify(parsed.settings?.calculator) !== JSON.stringify(settings.calculator) ||
         JSON.stringify(parsed.settings?.activity) !== JSON.stringify(settings.activity) ||
         JSON.stringify(parsed.settings?.windowPinning) !== JSON.stringify(settings.windowPinning);
+      const environmentsNeedMigration =
+        JSON.stringify(parsed.settings?.thingtimeCustomEnvironments ?? []) !==
+        JSON.stringify(settings.thingtimeCustomEnvironments);
       this.#indexingMigrationPending = indexingNeedsMigration;
       const recentSearches = normalizeRecentSearches(parsed.recentSearches);
       const historyNeedsMigration =
@@ -115,6 +122,7 @@ export class PersistentStore {
         shortcutsNeedMigration ||
         indexingNeedsMigration ||
         searchPresentationNeedsMigration ||
+        environmentsNeedMigration ||
         historyNeedsMigration ||
         preferencesNeedMigration
       )
