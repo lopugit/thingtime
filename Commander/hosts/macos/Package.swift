@@ -13,6 +13,7 @@ let package = Package(
         .linkedFramework("AppKit"),
         .linkedFramework("ApplicationServices"),
         .linkedFramework("Carbon"),
+        .linkedFramework("Metal"),
         .linkedFramework("Security"),
         .linkedFramework("ServiceManagement"),
         .linkedFramework("WebKit"),

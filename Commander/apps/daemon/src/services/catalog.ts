@@ -212,6 +212,16 @@ export const builtins: SearchItem[] = [
     actions: [{ id: 'open-settings', title: 'Open Search Settings', shortcut: '↵' }],
   },
   {
+    id: 'builtin:activity',
+    title: 'Commander Activity',
+    subtitle: 'Monitor Commander and current Mac resource usage',
+    kind: 'builtin',
+    keywords: ['activity', 'monitor', 'cpu', 'gpu', 'memory', 'ram', 'disk', 'filesystem', 'usage'],
+    icon: 'activity',
+    favourite: false,
+    actions: [{ id: 'open-settings', title: 'Open Activity Settings', shortcut: '↵' }],
+  },
+  {
     id: 'builtin:accounts',
     title: 'Thingtime Accounts',
     subtitle: 'Sign in, switch account, and sync settings',

@@ -29,6 +29,8 @@ portable from day one.
 - type-aware right-click menus, including Finder reveal, file copy, path/name copy, recoverable Trash, and confirmed
   permanent delete actions for filesystem-backed results;
 - searchable Commander Settings results with tab-aware deep links into the separate native settings window;
+- a dedicated Activity settings tab that samples Commander host/daemon CPU, memory, storage, process count, plus
+  local Mac CPU, best-effort system GPU, memory, thermal state, and filesystem capacity without uploading metrics;
 - a Raycast-shaped built-in Commander extension with separate quit, hide-window, and open-window commands;
 - a Bundled Commands catalog led by a Commander-native Search Emoji & Symbols picker inspired by Raycast, with
   semantic search, categories, skin tones, recents, keyboard navigation, configurable Return actions, and

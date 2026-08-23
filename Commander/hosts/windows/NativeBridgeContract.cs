@@ -16,6 +16,25 @@ public sealed record NativeSettingsSnapshot(
     string WindowMode,
     WindowPinningSettings WindowPinning);
 public sealed record CredentialKey(string Issuer, string ClientId, string AccountId);
+public sealed record SystemMetricsSnapshot(
+    long SampledAtMs,
+    double CommanderCpuPercent,
+    long CommanderResidentMemoryBytes,
+    long CommanderVirtualMemoryBytes,
+    long CommanderStorageBytes,
+    int CommanderProcessCount,
+    double MachineCpuPercent,
+    int LogicalCpuCount,
+    long MachineMemoryUsedBytes,
+    long MachineMemoryTotalBytes,
+    string ThermalState,
+    long FilesystemUsedBytes,
+    long FilesystemTotalBytes,
+    long FilesystemAvailableBytes,
+    string GpuName,
+    bool GpuAvailable,
+    double? GpuUtilizationPercent,
+    string GpuSource);
 
 public interface INativeBridge
 {
@@ -47,4 +66,5 @@ public interface INativeBridge
     Task ClaimCredentialAsync(CredentialKey key);
     Task UnlockCredentialAsync(CredentialKey key);
     Task DeleteCredentialAsync(CredentialKey key);
+    Task<SystemMetricsSnapshot> GetSystemMetricsAsync();
 }

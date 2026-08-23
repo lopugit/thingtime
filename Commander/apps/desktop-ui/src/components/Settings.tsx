@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react';
 import { isSettingsTab, type CommanderSettings, type SettingsTab } from '@commander/protocol';
-import { Box, Cloud, Info, KeyRound, Search, Settings2, SlidersHorizontal, UserRound } from 'lucide-react';
+import {
+  Activity,
+  Box,
+  Cloud,
+  Info,
+  KeyRound,
+  Search,
+  Settings2,
+  SlidersHorizontal,
+  UserRound,
+} from 'lucide-react';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { AccountSettings } from './AccountSettings.js';
+import { ActivitySettings } from './ActivitySettings.js';
 import { CloudSyncSettings } from './CloudSyncSettings.js';
 import { ExtensionsSettings } from './ExtensionsSettings.js';
 import { GeneralSettings } from './GeneralSettings.js';
@@ -14,6 +25,7 @@ const tabs: Array<{ id: SettingsTab; title: string; Icon: typeof Settings2 }> = 
   { id: 'general', title: 'General', Icon: Settings2 },
   { id: 'extensions', title: 'Extensions', Icon: Box },
   { id: 'search', title: 'Search', Icon: Search },
+  { id: 'activity', title: 'Activity', Icon: Activity },
   { id: 'sync', title: 'Cloud Sync', Icon: Cloud },
   { id: 'account', title: 'Account', Icon: UserRound },
   { id: 'advanced', title: 'Advanced', Icon: SlidersHorizontal },
@@ -81,6 +93,7 @@ export function Settings({ state }: { state: CommanderState }) {
             onError={state.reportError}
           />
         ) : null}
+        {tab === 'activity' ? <ActivitySettings onError={state.reportError} /> : null}
         {tab === 'sync' ? (
           <CloudSyncSettings
             accounts={bootstrap.accounts}
