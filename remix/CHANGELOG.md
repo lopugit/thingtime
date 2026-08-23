@@ -23,9 +23,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   volume, mute, brightness, and application focus controls remain immediately
   available; advanced Audio & routing, Network & connectivity, Power,
   permissions, and diagnostics begin collapsed per computer. Audio routes use
-  menus, each running app has a contextual More menu, Wi-Fi permits only a
-  saved/open SSID (never a password), and Sleep uses the existing approval
-  policy. — Codex (AI), 2026-08-23
+  menus, each running app has a contextual More menu, and the Applications
+  heading provides a separate global-actions menu. Wi-Fi permits only a
+  saved/open SSID (never a password); Force quit always creates an explicit
+  approval because it can discard unsaved work; and Sleep uses the existing
+  approval policy. — Codex (AI), 2026-08-23
 
 - **/branding redesigned as a full brand-resources page**: full-width
   Meta-style sections per logo variant with whitespace-trimmed previews and a
@@ -369,19 +371,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
   Three layers, all powered by the browser's own sessions — never a central
-  session store. (1) *Federated hint resolution*: `/api/v1/auth/account-hints`
+  session store. (1) _Federated hint resolution_: `/api/v1/auth/account-hints`
   now reports foreign-database origins as `unresolved`, and the client fans
   out to each origin's new `/account-hints/resolve` (CORS restricted to the
   Thingtime family, credentialed, read-only) so every environment vouches
-  only for its own sessions. (2) *Cross-origin session handoff*: a signed-in
+  only for its own sessions. (2) _Cross-origin session handoff_: a signed-in
   surface mints a 2-minute, aud-bound, single-use code
   (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
   cookie family (immutable `*.vercel.app` previews) redeems at its own
   `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
   the session (theft signal), different-environment redemption fails closed;
   the `/authorize?self=1` popup ("Continue to <host>?") and a
-  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) *FedCM
-  identity provider*: `/.well-known/web-identity` + config/accounts/
+  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) _FedCM
+  identity provider_: `/.well-known/web-identity` + config/accounts/
   client-metadata/assertion endpoints let Chromium render its native
   "Continue as…" sheet on any domain from the switcher roster
   (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,

@@ -137,25 +137,25 @@ test('device credentials can never resolve as full account sessions', () => {
 
 test('state and connector snapshots reject local paths and unknown sensitive fields', () => {
 	const normalized = normalizeDeviceState({
-			locked: false,
-			volume: 0.5,
-			muted: true,
-			brightness: 1,
-			battery: null,
-			openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true, hidden: false }],
-			audioDevices: [
-				{
-					id: 'BuiltInOutputDevice',
-					name: 'MacBook Speakers',
-					hasInput: false,
-					hasOutput: true,
-					isDefaultInput: false,
-					isDefaultOutput: true,
-					isDefaultSoundEffectsOutput: true
-				}
-			],
-			wifi: { powerOn: true, ssid: 'Thingtime Guest' }
-		});
+		locked: false,
+		volume: 0.5,
+		muted: true,
+		brightness: 1,
+		battery: null,
+		openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true, hidden: false }],
+		audioDevices: [
+			{
+				id: 'BuiltInOutputDevice',
+				name: 'MacBook Speakers',
+				hasInput: false,
+				hasOutput: true,
+				isDefaultInput: false,
+				isDefaultOutput: true,
+				isDefaultSoundEffectsOutput: true
+			}
+		],
+		wifi: { powerOn: true, ssid: 'Thingtime Guest' }
+	});
 	assert.ok(normalized);
 	assert.deepEqual(normalized?.wifi, { powerOn: true, ssid: 'Thingtime Guest' });
 	assert.equal(normalizeDeviceState({ locked: false, openApps: [{ id: 'x', name: 'X', frontmost: false, path: '/Applications/X.app' }] }), null);
@@ -290,8 +290,10 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'app.focus',
 		'app.launch',
 		'app.quit',
+		'app.force-quit',
 		'app.hide',
 		'app.unhide',
+		'app.hide-others',
 		'system.volume.set',
 		'system.audio.mute.set',
 		'system.audio.output.set',
@@ -328,6 +330,10 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	);
 	assert.equal(normalizeDeviceCommand('session.read', { connectorId: 'chatgpt', sessionId: 'chat-1', cursor: 'older', limit: 101 }).ok, false);
 	assert.equal(normalizeDeviceCommand('app.launch', { appId: '/Applications/Calculator.app' }).ok, false);
+	assert.equal(normalizeDeviceCommand('app.force-quit', { appId: 'com.example.App' }).ok, true);
+	assert.equal(normalizeDeviceCommand('app.force-quit', { appId: 'com.example.App', force: true }).ok, false);
+	assert.equal(normalizeDeviceCommand('app.hide-others', {}).ok, true);
+	assert.equal(normalizeDeviceCommand('app.hide-others', { scope: 'all' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.audio.mute.set', { muted: true }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.audio.output.set', { deviceId: 'BuiltInOutputDevice' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.sleep', {}).ok, true);
@@ -380,7 +386,7 @@ test('paired account execution preferences default to always allow, with reversi
 	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
 	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
 	for (const kind of DEVICE_COMMAND_KINDS) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), false, kind);
+		assert.equal(deviceCommandRequiresApproval(kind, false), kind === 'app.force-quit', kind);
 		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
 	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };

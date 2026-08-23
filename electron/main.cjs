@@ -922,6 +922,10 @@ function describeDeviceAction(request) {
 			return { message: 'Bring the requested application to the front?', confirmLabel: 'Activate App' };
 		case 'application.launch':
 			return { message: 'Launch the requested application on this Mac?', confirmLabel: 'Launch App' };
+		case 'application.force-quit':
+			return { message: 'Force quit the requested application? Unsaved work in that app may be lost.', confirmLabel: 'Force Quit App' };
+		case 'application.hide-others':
+			return { message: 'Hide every other running application on this Mac?', confirmLabel: 'Hide Other Apps' };
 		default:
 			return { message: 'Run this approved device action?', confirmLabel: 'Run Action' };
 	}

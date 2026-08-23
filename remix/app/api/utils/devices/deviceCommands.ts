@@ -5,6 +5,7 @@ import {
 	DEVICE_APPROVAL_STATUSES,
 	DEVICE_COMMAND_STATUSES,
 	canTransitionDeviceCommand,
+	deviceCommandRequiresApproval,
 	decideDeviceLease,
 	deviceConnectorSupportsCommand,
 	deviceSupportsCommand,
@@ -163,7 +164,7 @@ const prepareCommand = (
 	if (input?.requiresApproval !== undefined && typeof input.requiresApproval !== 'boolean') {
 		return deviceFail(400, 'requiresApproval must be a boolean');
 	}
-	const requiresApproval = options.requiresApproval ?? input?.requiresApproval === true;
+	const requiresApproval = deviceCommandRequiresApproval(kind, options.requiresApproval ?? input?.requiresApproval === true);
 	const payload = { kind, input: normalizedInput.input, requiresApproval };
 	const payloadHash = devicePayloadHash(payload);
 	const controlBytes = deviceControlEventLogicalBytes(payload);
@@ -218,7 +219,7 @@ export const createDeviceCommand = async (
 	if (permissionMode === 'deny') return deviceFail(403, 'This account has denied remote actions for this device');
 	prepared = prepareCommand(ownerId, input, {
 		shareId: String(prepared.doc.shareId),
-		requiresApproval: permissionMode === 'ask-every-time' || input.requiresApproval === true
+		requiresApproval: deviceCommandRequiresApproval(prepared.doc.crystal.kind, permissionMode === 'ask-every-time' || input.requiresApproval === true)
 	});
 	if (prepared.ok === false) return prepared;
 	const things = await getHomeThingsCollection();
@@ -293,7 +294,10 @@ export const createDeviceCommand = async (
 			}
 			const currentPermissionMode = normalizeDevicePermissionMode(currentDevice.crystal?.permissionMode);
 			if (currentPermissionMode === 'deny') throw Object.assign(new Error('device_permission_policy_denied'), { status: 403 });
-			const currentRequiresApproval = currentPermissionMode === 'ask-every-time' || input.requiresApproval === true;
+			const currentRequiresApproval = deviceCommandRequiresApproval(
+				prepared.doc.crystal.kind,
+				currentPermissionMode === 'ask-every-time' || input.requiresApproval === true
+			);
 			if (currentRequiresApproval !== (prepared.doc.crystal.requiresApproval === true)) {
 				throw Object.assign(new Error('device_permission_policy_changed'), { status: 409 });
 			}

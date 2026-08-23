@@ -508,6 +508,10 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 			const appId = inputString(input.appId || input.bundleId || intent.targetId);
 			return appId ? { ...base, kind: 'app.quit', input: { appId } } : null;
 		}
+		case 'force-quit-app': {
+			const appId = inputString(input.appId || input.bundleId || intent.targetId);
+			return appId ? { ...base, kind: 'app.force-quit', input: { appId } } : null;
+		}
 		case 'set-volume': {
 			const level = unit(intent.desired?.volume ?? input.level);
 			return level === null ? null : { ...base, kind: 'system.volume.set', input: { level } };
@@ -552,6 +556,8 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 			const appId = inputString(input.appId || input.bundleId || intent.targetId);
 			return appId ? { ...base, kind: 'app.unhide', input: { appId } } : null;
 		}
+		case 'hide-other-apps':
+			return { ...base, kind: 'app.hide-others', input: {} };
 		case 'sleep':
 			return { ...base, kind: 'system.sleep', input: {} };
 		default:

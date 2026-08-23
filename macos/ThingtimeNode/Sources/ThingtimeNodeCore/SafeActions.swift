@@ -19,8 +19,10 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case activateApplication = "application.activate"
     case launchApplication = "application.launch"
     case terminateApplication = "application.quit"
+    case forceTerminateApplication = "application.force-quit"
     case hideApplication = "application.hide"
     case unhideApplication = "application.unhide"
+    case hideOtherApplications = "application.hide-others"
     case lockScreen = "system.lock"
     case sleepSystem = "system.sleep"
     case connectWiFi = "system.wifi.connect"
@@ -79,7 +81,7 @@ public struct SafeActionPolicy: Sendable {
         switch action.kind {
         case .refreshTelemetry:
             return action.parameters.isEmpty ? nil : "telemetry.refresh does not accept parameters."
-        case .lockScreen, .sleepSystem:
+        case .lockScreen, .sleepSystem, .hideOtherApplications:
             return action.parameters.isEmpty ? nil : "The requested system power action does not accept parameters."
         case .setOutputVolume:
             guard let volume = action.parameters["volume"]?.numberValue, (0 ... 1).contains(volume) else {
@@ -105,8 +107,9 @@ public struct SafeActionPolicy: Sendable {
                 return "system.brightness.set requires a numeric brightness between 0 and 1."
             }
             return nil
-        case .activateApplication, .launchApplication, .terminateApplication, .hideApplication, .unhideApplication:
-            guard let bundleID = action.parameters["bundleIdentifier"]?.stringValue,
+        case .activateApplication, .launchApplication, .terminateApplication, .forceTerminateApplication, .hideApplication, .unhideApplication:
+            guard action.parameters.count == 1,
+                  let bundleID = action.parameters["bundleIdentifier"]?.stringValue,
                   validIdentifier(bundleID) else {
                 return "The action requires a valid bundleIdentifier."
             }
@@ -226,6 +229,15 @@ public final class SafeActionExecutor {
                 throw ThingtimeNodeError.policyDenied("macOS did not allow the requested application to quit.")
             }
             return .object(["bundleIdentifier": .string(bundleID), "quitRequested": .bool(true)])
+        case .forceTerminateApplication:
+            guard let bundleID = action.parameters["bundleIdentifier"]?.stringValue,
+                  let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
+                throw ThingtimeNodeError.policyDenied("The requested application is not running.")
+            }
+            guard application.forceTerminate() else {
+                throw ThingtimeNodeError.policyDenied("macOS did not allow the requested application to force quit.")
+            }
+            return .object(["bundleIdentifier": .string(bundleID), "forceQuitRequested": .bool(true)])
         case .hideApplication, .unhideApplication:
             guard let bundleID = action.parameters["bundleIdentifier"]?.stringValue,
                   let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
@@ -239,6 +251,9 @@ public final class SafeActionExecutor {
                 "bundleIdentifier": .string(bundleID),
                 "hidden": .bool(action.kind == .hideApplication)
             ])
+        case .hideOtherApplications:
+            NSWorkspace.shared.hideOtherApplications()
+            return .object(["otherApplicationsHidden": .bool(true)])
         case .lockScreen:
             try SystemSession.lockScreen()
             for attempt in 0 ..< 20 {

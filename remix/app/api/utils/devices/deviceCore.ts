@@ -12,8 +12,10 @@ export const DEVICE_COMMAND_KINDS = [
 	'app.focus',
 	'app.launch',
 	'app.quit',
+	'app.force-quit',
 	'app.hide',
 	'app.unhide',
+	'app.hide-others',
 	'system.volume.set',
 	'system.audio.mute.set',
 	'system.audio.output.set',
@@ -41,7 +43,12 @@ export type DevicePermissionMode = (typeof DEVICE_PERMISSION_MODES)[number];
 export const normalizeDevicePermissionMode = (value: unknown): DevicePermissionMode =>
 	value === 'ask-every-time' || value === 'deny' || value === 'always-allow' ? value : 'always-allow';
 
-export const deviceCommandRequiresApproval = (_kind: DeviceCommandKind, callerRequiresApproval: boolean): boolean => callerRequiresApproval;
+// Force quitting can discard unsaved work. It must always create a fresh
+// approval, even when the paired device otherwise allows routine controls.
+const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>(['app.force-quit']);
+
+export const deviceCommandRequiresApproval = (kind: DeviceCommandKind, callerRequiresApproval: boolean): boolean =>
+	callerRequiresApproval || ALWAYS_APPROVAL_DEVICE_COMMANDS.has(kind);
 
 export const deviceConnectorCommandRequiresApproval = (
 	_kind: DeviceCommandKind,
@@ -435,8 +442,10 @@ export type DeviceCommandInputByKind = {
 	'app.focus': { appId: string };
 	'app.launch': { appId: string };
 	'app.quit': { appId: string };
+	'app.force-quit': { appId: string };
 	'app.hide': { appId: string };
 	'app.unhide': { appId: string };
+	'app.hide-others': Record<string, never>;
 	'system.volume.set': { level: number };
 	'system.audio.mute.set': { muted: boolean };
 	'system.audio.output.set': { deviceId: string };
@@ -499,8 +508,10 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'app.focus': 'apps.launch',
 	'app.launch': 'apps.launch',
 	'app.quit': 'apps.quit',
+	'app.force-quit': 'apps.force-quit',
 	'app.hide': 'apps.visibility',
 	'app.unhide': 'apps.visibility',
+	'app.hide-others': 'apps.visibility',
 	'system.volume.set': 'system.volume.write',
 	'system.audio.mute.set': 'system.audio.mute.write',
 	'system.audio.output.set': 'system.audio.output.write',
@@ -523,10 +534,14 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'application.launch': 'apps.launch',
 	'app.quit': 'apps.quit',
 	'application.quit': 'apps.quit',
+	'app.force-quit': 'apps.force-quit',
+	'application.force-quit': 'apps.force-quit',
 	'app.hide': 'apps.visibility',
 	'application.hide': 'apps.visibility',
 	'app.unhide': 'apps.visibility',
 	'application.unhide': 'apps.visibility',
+	'app.hide-others': 'apps.visibility',
+	'application.hide-others': 'apps.visibility',
 	'system.volume.set': 'system.volume.write',
 	'system.audio.mute.set': 'system.audio.mute.write',
 	'system.audio.output.set': 'system.audio.output.write',
@@ -682,6 +697,7 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 		case 'app.focus':
 		case 'app.launch':
 		case 'app.quit':
+		case 'app.force-quit':
 		case 'app.hide':
 		case 'app.unhide': {
 			const appId = app();
@@ -696,6 +712,7 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 		}
 		case 'system.lock':
 		case 'system.sleep':
+		case 'app.hide-others':
 			return exactKeys(raw, []) ? ok({}) : deviceFail(400, `${kind} accepts no input fields`);
 		case 'system.audio.mute.set':
 			return typeof raw.muted === 'boolean' && exactKeys(raw, ['muted'])

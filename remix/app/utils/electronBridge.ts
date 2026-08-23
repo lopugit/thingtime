@@ -184,24 +184,26 @@ export type ThingtimeNodeDeviceRequest =
 			action: 'evaluate' | 'execute';
 			commandId?: string;
 			request: {
-			kind:
-				| 'telemetry.refresh'
-				| 'system.volume.set'
-				| 'system.audio.mute.set'
-				| 'system.audio.output.set'
-				| 'system.audio.input.set'
-				| 'system.audio.sound-effects-output.set'
-				| 'system.brightness.set'
-				| 'application.activate'
-				| 'application.launch'
-				| 'application.quit'
-				| 'application.hide'
-				| 'application.unhide'
-				| 'system.lock'
-				| 'system.sleep'
-				| 'system.wifi.connect'
-				| 'system.wifi.disconnect'
-				| 'system.wifi.power.set';
+				kind:
+					| 'telemetry.refresh'
+					| 'system.volume.set'
+					| 'system.audio.mute.set'
+					| 'system.audio.output.set'
+					| 'system.audio.input.set'
+					| 'system.audio.sound-effects-output.set'
+					| 'system.brightness.set'
+					| 'application.activate'
+					| 'application.launch'
+					| 'application.quit'
+					| 'application.force-quit'
+					| 'application.hide'
+					| 'application.unhide'
+					| 'application.hide-others'
+					| 'system.lock'
+					| 'system.sleep'
+					| 'system.wifi.connect'
+					| 'system.wifi.disconnect'
+					| 'system.wifi.power.set';
 				parameters?: Record<string, unknown>;
 			};
 	  };

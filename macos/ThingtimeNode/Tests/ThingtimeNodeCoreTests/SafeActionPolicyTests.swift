@@ -40,6 +40,37 @@ final class SafeActionPolicyTests: XCTestCase {
             action: invalid,
             context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: true)
         ) else { return XCTFail("Expected invalid bundle identifier to be denied") }
+
+        let extraParameter = SafeActionRequest(kind: .terminateApplication, parameters: [
+            "bundleIdentifier": .string("com.example.App"),
+            "force": .bool(true)
+        ])
+        guard case .deny = policy.evaluate(
+            action: extraParameter,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected extra application parameters to be denied") }
+    }
+
+    func testForceQuitRequiresApprovalAndHideOthersAcceptsNoParameters() {
+        let forceQuit = SafeActionRequest(kind: .forceTerminateApplication, parameters: [
+            "bundleIdentifier": .string("com.example.App")
+        ])
+        guard case .requireApproval = policy.evaluate(
+            action: forceQuit,
+            context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+        ) else { return XCTFail("Expected approval requirement for force quit") }
+
+        XCTAssertEqual(
+            policy.evaluate(
+                action: SafeActionRequest(kind: .hideOtherApplications),
+                context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+            ),
+            .allow
+        )
+        guard case .deny = policy.evaluate(
+            action: SafeActionRequest(kind: .hideOtherApplications, parameters: ["scope": .string("all")]),
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected extra hide-other-apps parameters to be denied") }
     }
 
     func testReadOnlyRefreshIsAllowedWhileLocked() {

@@ -343,7 +343,7 @@ scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
       `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding, and fires a
       Lopu success toast (errors also route through Lopu, never `alert`).
 - [ ] Exports and previews are whitespace-trimmed: `npm --prefix remix run
-      test:branding` passes (trim + padding + pixel-size unit tests).
+    test:branding` passes (trim + padding + pixel-size unit tests).
 - [ ] Press kit grid renders all generated marketing images; the portrait
       phone wallpaper previews as a centre crop and must not stretch its grid
       row (no giant empty gap beside it).
@@ -2276,9 +2276,11 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       must start collapsed and retain that layout per computer. Open the three
       audio-route menus and choose a reported device, use the Wi-Fi controls
       only with a saved/open SSID (never a password), open an application's
-      **More** context menu for Focus/Open, Hide/Show, and Quit, and expose
-      **Sleep** from Power. Menus must stay above the drawer overlay and remain
-      usable without clipping or horizontal overflow at desktop and 390 CSS px.
+      **More** context menu for Focus/Open, Hide/Show, Quit, and the
+      approval-required **Force quit**. Use the Applications heading menu for
+      **Hide other apps**, and expose **Sleep** from Power. Menus must stay
+      above the drawer overlay and remain usable without clipping or horizontal
+      overflow at desktop and 390 CSS px.
 - [ ] In the exact installed Electron app, open that device drawer and click
       its 44px X while it overlaps the native title-bar band. Reopen it and
       confirm the left edge has an always-visible centred grip with a forgiving

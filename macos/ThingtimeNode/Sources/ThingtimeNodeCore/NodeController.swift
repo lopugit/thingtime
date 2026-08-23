@@ -62,6 +62,7 @@ public actor ThingtimeNodeController {
         "ai.session.read",
         "apps.launch",
         "apps.quit",
+        "apps.force-quit",
         "apps.read",
         "approvals.respond",
         "device.lock.read",
@@ -533,20 +534,29 @@ public actor ThingtimeNodeController {
             }
             action = SafeActionRequest(kind: .setDisplayBrightness, parameters: ["brightness": .number(level)])
         case "app.launch":
+            try requireOnlyKeys(input, ["appId"])
             guard let appID = input["appId"]?.stringValue else {
                 throw ThingtimeNodeError.invalidRequest("app.launch requires appId.")
             }
             action = SafeActionRequest(kind: .launchApplication, parameters: ["bundleIdentifier": .string(appID)])
         case "app.focus":
+            try requireOnlyKeys(input, ["appId"])
             guard let appID = input["appId"]?.stringValue else {
                 throw ThingtimeNodeError.invalidRequest("app.focus requires appId.")
             }
             action = SafeActionRequest(kind: .activateApplication, parameters: ["bundleIdentifier": .string(appID)])
         case "app.quit":
+            try requireOnlyKeys(input, ["appId"])
             guard let appID = input["appId"]?.stringValue else {
                 throw ThingtimeNodeError.invalidRequest("app.quit requires appId.")
             }
             action = SafeActionRequest(kind: .terminateApplication, parameters: ["bundleIdentifier": .string(appID)])
+        case "app.force-quit":
+            try requireOnlyKeys(input, ["appId"])
+            guard let appID = input["appId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("app.force-quit requires appId.")
+            }
+            action = SafeActionRequest(kind: .forceTerminateApplication, parameters: ["bundleIdentifier": .string(appID)])
         case "app.hide":
             try requireOnlyKeys(input, ["appId"])
             guard let appID = input["appId"]?.stringValue else {
@@ -559,6 +569,9 @@ public actor ThingtimeNodeController {
                 throw ThingtimeNodeError.invalidRequest("app.unhide requires appId.")
             }
             action = SafeActionRequest(kind: .unhideApplication, parameters: ["bundleIdentifier": .string(appID)])
+        case "app.hide-others":
+            try requireOnlyKeys(input, [])
+            action = SafeActionRequest(kind: .hideOtherApplications)
         case "system.lock":
             try requireOnlyKeys(input, [])
             action = SafeActionRequest(kind: .lockScreen)

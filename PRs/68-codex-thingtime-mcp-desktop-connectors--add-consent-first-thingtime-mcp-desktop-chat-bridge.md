@@ -177,6 +177,11 @@ relational shape for later ThingtimeDB storage and platform chat views.
   visible saved/open network, disconnect, and radio power. The native snapshot
   reports mute state and a bounded, path-free audio-device list so callers can
   choose a reported device identifier.
+- App control now also includes **Hide other apps** in the Applications
+  heading menu and **Force quit** in each app's contextual menu. Force quit is
+  separately capability-gated and always enters the approval flow, including
+  for a paired device configured for routine always-allow controls, because it
+  can discard unsaved work.
 - Every new mutation remains behind the existing signed pairing capability,
   device command lease, idempotency key, approval state, unlocked-session gate,
   and native action policy. The Electron bridge uses the same closed allowlist.

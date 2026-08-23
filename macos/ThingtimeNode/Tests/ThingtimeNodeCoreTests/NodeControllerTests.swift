@@ -129,6 +129,8 @@ final class NodeControllerTests: XCTestCase {
         let commands = [
             LeasedCommand(commandID: "mute", leaseID: "lease-mute", method: "system.audio.mute.set", parameters: .object(["muted": .bool(true)]), leaseExpiresAt: .distantFuture),
             LeasedCommand(commandID: "audio-output", leaseID: "lease-output", method: "system.audio.output.set", parameters: .object(["deviceId": .string("BuiltInOutputDevice")]), leaseExpiresAt: .distantFuture),
+            LeasedCommand(commandID: "force-quit", leaseID: "lease-force-quit", method: "app.force-quit", parameters: .object(["appId": .string("com.example.App")]), leaseExpiresAt: .distantFuture),
+            LeasedCommand(commandID: "hide-others", leaseID: "lease-hide-others", method: "app.hide-others", parameters: .object([:]), leaseExpiresAt: .distantFuture),
             LeasedCommand(commandID: "wifi-connect", leaseID: "lease-wifi-connect", method: "system.wifi.connect", parameters: .object(["ssid": .string("Thingtime Guest")]), leaseExpiresAt: .distantFuture),
             LeasedCommand(commandID: "wifi-power", leaseID: "lease-wifi-power", method: "system.wifi.power.set", parameters: .object(["enabled": .bool(false)]), leaseExpiresAt: .distantFuture)
         ]
