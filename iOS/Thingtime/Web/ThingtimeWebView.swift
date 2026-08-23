@@ -17,14 +17,25 @@ struct ThingtimeWebView: View {
 
     @AppStorage(StorageKey.selectedDestinationID) private var selectedDestinationID = ThingtimeWebDestination.defaultDestinationID
 
-    @State private var vercelDeployments: [ThingtimeWebDestination.DeploymentSummary] = []
+    @State private var deploymentGroups: [ThingtimeWebDestination.DeploymentGroup] = []
     @State private var isDestinationPickerOpen = false
     @State private var deploymentsLoadState = DeploymentsLoadState.idle
 
-    private var destinations: [ThingtimeWebDestination.Destination] {
-        ThingtimeWebDestination.availableDestinations(
-            vercelDeployments: vercelDeployments
+    private var staticDestinations: [ThingtimeWebDestination.Destination] {
+        ThingtimeWebDestination.availableDestinations()
+    }
+
+    private var deploymentSections: [ThingtimeWebDestination.DeploymentSection] {
+        ThingtimeWebDestination.deploymentSections(
+            from: deploymentGroups,
+            excludingDestinationIDs: Set(staticDestinations.map(\.id))
         )
+    }
+
+    private var destinations: [ThingtimeWebDestination.Destination] {
+        staticDestinations + deploymentSections.flatMap { section in
+            section.deployments.map(\.destination)
+        }
     }
 
     private var selectedDestination: ThingtimeWebDestination.Destination {
@@ -50,7 +61,8 @@ struct ThingtimeWebView: View {
                 }
 
                 DestinationPickerDrawer(
-                    destinations: destinations,
+                    deploymentSections: deploymentSections,
+                    staticDestinations: staticDestinations,
                     selectedDestinationID: selectedDestination.id,
                     deploymentsLoadState: deploymentsLoadState,
                     safeAreaInsets: proxy.safeAreaInsets,
@@ -74,7 +86,7 @@ struct ThingtimeWebView: View {
             .onChange(of: selectedDestinationID) { _, _ in
                 ensureSelectedDestinationIsAvailable()
             }
-            .onChange(of: vercelDeployments) { _, _ in
+            .onChange(of: deploymentGroups) { _, _ in
                 ensureSelectedDestinationIsAvailable()
             }
         }
@@ -148,182 +160,11 @@ struct ThingtimeWebView: View {
         deploymentsLoadState = .loading
 
         do {
-            vercelDeployments = try await deploymentsClient.fetchDeployments()
+            let overview = try await deploymentsClient.fetchDeployments()
+            deploymentGroups = overview.resolvedDeploymentGroups
             deploymentsLoadState = .loaded
         } catch {
             deploymentsLoadState = .failed("Could not load Vercel deployments.")
-        }
-    }
-}
-
-private struct DestinationPickerDrawer: View {
-    @Environment(\.openURL) private var openURL
-
-    let destinations: [ThingtimeWebDestination.Destination]
-    let selectedDestinationID: String
-    let deploymentsLoadState: ThingtimeWebView.DeploymentsLoadState
-
-    let safeAreaInsets: EdgeInsets
-    let onSelect: (ThingtimeWebDestination.Destination) -> Void
-    let onRefreshDeployments: () async -> Void
-    let onClose: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                Text("Web destination")
-                    .font(.headline)
-
-                Spacer()
-
-                Button {
-                    Task {
-                        await onRefreshDeployments()
-                    }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(width: 34, height: 34)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(deploymentsLoadState == .loading)
-                .accessibilityLabel("Refresh Vercel deployments")
-
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(width: 34, height: 34)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close destination picker")
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 18)
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(destinations) { destination in
-                        destinationRow(destination)
-                    }
-                }
-                .padding(.horizontal, 16)
-
-                Divider()
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 18)
-
-                deploymentStatusView
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 20)
-            }
-            .scrollIndicators(.visible)
-            .scrollBounceBehavior(.basedOnSize)
-            .accessibilityIdentifier("destination-picker-scroll-view")
-        }
-        .padding(.top, safeAreaInsets.top + 18)
-        .padding(.bottom, safeAreaInsets.bottom + 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.regularMaterial)
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(.primary.opacity(0.08))
-                .frame(width: 1)
-        }
-    }
-
-    private func destinationRow(_ destination: ThingtimeWebDestination.Destination) -> some View {
-        Button {
-            onSelect(destination)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: iconName(for: destination))
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(width: 28, height: 28)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(destination.title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-
-                    Text(destination.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 8)
-
-                if destination.id == selectedDestinationID {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .accessibilityLabel("Selected")
-                }
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(rowBackground(for: destination))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(destination.title), \(destination.subtitle)")
-        .accessibilityHint("Touch and hold for URL actions")
-        .contextMenu {
-            Button {
-                UIPasteboard.general.string = destination.url.absoluteString
-            } label: {
-                Label("Copy URL", systemImage: "doc.on.doc")
-            }
-
-            Button {
-                openURL(destination.url)
-            } label: {
-                Label("Open in Browser", systemImage: "safari")
-            }
-
-            ShareLink(item: destination.url) {
-                Label("Share", systemImage: "square.and.arrow.up")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var deploymentStatusView: some View {
-        switch deploymentsLoadState {
-        case .idle:
-            EmptyView()
-        case .loading:
-            Label("Loading deployments", systemImage: "arrow.triangle.2.circlepath")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .loaded:
-            if !destinations.contains(where: { $0.source == .vercelDeployment }) {
-                Label("No Vercel deployments", systemImage: "tray")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle")
-                .font(.caption)
-                .foregroundStyle(.red)
-        }
-    }
-
-    private func rowBackground(for destination: ThingtimeWebDestination.Destination) -> Color {
-        destination.id == selectedDestinationID ? Color.primary.opacity(0.1) : Color.primary.opacity(0.04)
-    }
-
-    private func iconName(for destination: ThingtimeWebDestination.Destination) -> String {
-        switch destination.source {
-        case .production:
-            return "globe"
-        case .configured:
-            return "shippingbox"
-        case .vercelDeployment:
-            return "paperplane"
         }
     }
 }
