@@ -71,6 +71,7 @@ export const UserSettingsModal = () => {
 	const [endpointLabelDraft, setEndpointLabelDraft] = React.useState('');
 	const [endpointUrlDraft, setEndpointUrlDraft] = React.useState('');
 	const [electronSettingsLoading, setElectronSettingsLoading] = React.useState(false);
+	const [endpointCompatibilityChecking, setEndpointCompatibilityChecking] = React.useState(false);
 	const [electronUpdateInfo, setElectronUpdateInfo] = React.useState<ThingtimeDesktopUpdateInfo | null>(null);
 	const [electronUpdateLoading, setElectronUpdateLoading] = React.useState(false);
 	const [electronUpdateDownloadLoading, setElectronUpdateDownloadLoading] = React.useState(false);
@@ -194,10 +195,12 @@ export const UserSettingsModal = () => {
 
 		bridge
 			.getInfo()
+			.then(async (info) => {
+				if (!cancelled) setDesktopInfo(info);
+				return bridge.checkEndpointCompatibility ? bridge.checkEndpointCompatibility() : info;
+			})
 			.then((info) => {
-				if (!cancelled) {
-					setDesktopInfo(info);
-				}
+				if (!cancelled) setDesktopInfo(info);
 			})
 			.catch((error) => {
 				console.warn('Unable to read Thingtime desktop info', error);
@@ -252,6 +255,24 @@ export const UserSettingsModal = () => {
 		},
 		[desktopSettings?.selectedEndpointId, lopu]
 	);
+
+	const handleEndpointCompatibilityCheck = React.useCallback(async () => {
+		const bridge = getElectronBridge();
+		if (!bridge?.checkEndpointCompatibility) return;
+		setEndpointCompatibilityChecking(true);
+		try {
+			setDesktopInfo(await bridge.checkEndpointCompatibility());
+		} catch (error) {
+			lopu({
+				title: 'Could not check API compatibility',
+				description: error instanceof Error ? error.message : 'Thingtime desktop could not check this endpoint.',
+				status: 'error',
+				duration: 7000
+			});
+		} finally {
+			setEndpointCompatibilityChecking(false);
+		}
+	}, [lopu]);
 
 	const handleEndpointAdd = React.useCallback(async () => {
 		const bridge = getElectronBridge();
@@ -545,6 +566,29 @@ export const UserSettingsModal = () => {
 							The packaged interface stays on this computer. Account data and Thingtime Node use this API endpoint; pairing stays separate per
 							endpoint.
 						</Text>
+						{desktopInfo.endpointCompatibility && (
+							<Flex alignItems="center" columnGap={2} flexWrap="wrap">
+								<Text
+									fontSize="xs"
+									color={
+										desktopInfo.endpointCompatibility.status === 'compatible'
+											? 'green.600'
+											: desktopInfo.endpointCompatibility.status === 'checking'
+											? 'blue.600'
+											: 'red.500'
+									}
+								>
+									{desktopInfo.endpointCompatibility.status === 'compatible'
+										? '✓ Computers API and packaged proxy are compatible'
+										: desktopInfo.endpointCompatibility.status === 'checking'
+										? 'Checking computers API compatibility…'
+										: desktopInfo.endpointCompatibility.message}
+								</Text>
+								<Button size="xs" variant="ghost" isLoading={endpointCompatibilityChecking} onClick={handleEndpointCompatibilityCheck}>
+									Check now
+								</Button>
+							</Flex>
+						)}
 						{desktopInfo.desktopSettingsLastError && (
 							<Text fontSize="xs" color="red.500" wordBreak="break-word">
 								{desktopInfo.desktopSettingsLastError}

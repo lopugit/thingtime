@@ -21,12 +21,19 @@ export type ThingtimeDesktopSettings = {
 	selectedMenuBarIconId: string;
 };
 
+export type ThingtimeDesktopEndpointCompatibility = {
+	checkedAt?: string;
+	message?: string;
+	status: 'checking' | 'compatible' | 'incompatible' | 'unreachable';
+};
+
 export type ThingtimeDesktopInfo = {
 	appVersion?: string;
 	contentOrigin?: string | null;
 	currentUrl?: string | null;
 	desktopSettings?: ThingtimeDesktopSettings | null;
 	desktopSettingsLastError?: string | null;
+	endpointCompatibility?: ThingtimeDesktopEndpointCompatibility | null;
 	isPackaged?: boolean;
 	origin?: string | null;
 	platform?: string;
@@ -197,6 +204,7 @@ export type ThingtimeDesktopBridge = {
 	addEndpoint?: (request: { label: string; url: string }) => Promise<ThingtimeDesktopSettings>;
 	removeEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopSettings>;
 	selectEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopInfo>;
+	checkEndpointCompatibility?: () => Promise<ThingtimeDesktopInfo>;
 	selectMenuBarIcon?: (request: { iconId: string }) => Promise<ThingtimeDesktopSettings>;
 	uploadMenuBarIcon?: () => Promise<{ cancelled: true } | { cancelled: false; settings: ThingtimeDesktopSettings }>;
 	setNodeAutoStart?: (request: { enabled: boolean }) => Promise<ThingtimeDesktopSettings>;

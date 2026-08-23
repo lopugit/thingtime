@@ -7,6 +7,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
 const { app, BrowserWindow, dialog, ipcMain, shell, Menu, nativeImage, session } = require('electron');
+const { checkEndpointCompatibility, compatibilityError, probeEndpointDevices } = require('./lib/endpoint-compatibility.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const {
 	ThingtimeNodeBridgeError,
@@ -36,6 +37,7 @@ let sessionHash = null;
 let aiConnectorsPromise = null;
 let desktopSettings = null;
 let desktopSettingsLastError = null;
+let endpointCompatibility = null;
 const aiSyncSessions = new Map();
 const thingtimeNode = new ThingtimeNodeIntegration({ app, electronDir: __dirname });
 
@@ -729,6 +731,7 @@ function configuredNodeRegistration() {
 
 async function reconcileConfiguredNode({ startIfStopped } = {}) {
 	if (process.platform !== 'darwin' || !desktopSettings) return null;
+	if (endpointCompatibility && endpointCompatibility.status !== 'compatible') return thingtimeNode.status();
 	await ensureLocalProjectRegistry(nodeProjectRegistryPath());
 	const shouldStart = typeof startIfStopped === 'boolean' ? startIfStopped : desktopSettings.snapshot().autoStartNodeOnLaunch;
 	return thingtimeNode.reconcileRegisteredService(configuredNodeRegistration(), { startIfStopped: shouldStart });
@@ -741,6 +744,20 @@ async function initializeDesktopSettings() {
 	});
 	const settings = await desktopSettings.initialize();
 	setApiFallbackEndpoint(settings.selectedEndpoint.url);
+	endpointCompatibility = { checkedAt: new Date().toISOString(), message: 'Checking computers API compatibility…', status: 'checking' };
+	return desktopSettings.snapshot();
+}
+
+async function checkSelectedEndpointCompatibility({ syncNode = false } = {}) {
+	const selected = requireDesktopSettings().snapshot().selectedEndpoint;
+	endpointCompatibility = { checkedAt: new Date().toISOString(), message: 'Checking computers API compatibility…', status: 'checking' };
+	const compatibility = await checkEndpointCompatibility({
+		endpointUrl: selected.url,
+		origin: appOrigin,
+		userAgent: `Thingtime/${getCurrentAppVersion()}`
+	});
+	endpointCompatibility = compatibility;
+	if (compatibility.status !== 'compatible' || !syncNode) return compatibility;
 	try {
 		await reconcileConfiguredNode();
 		desktopSettingsLastError = null;
@@ -748,11 +765,13 @@ async function initializeDesktopSettings() {
 		desktopSettingsLastError = error instanceof Error ? error.message : String(error);
 		console.warn('Unable to reconcile Thingtime Node configuration', error);
 	}
-	return desktopSettings.snapshot();
+	return compatibility;
 }
 
 async function nodeRegisterService(event) {
 	requireMacNode(event);
+	const compatibility = await checkSelectedEndpointCompatibility();
+	if (compatibility.status !== 'compatible') throw compatibilityError(compatibility);
 	const confirmed = await confirmNodeChange({
 		title: 'Start Thingtime Node at login?',
 		message: 'Allow Thingtime to run its local node while you are signed in?',
@@ -984,42 +1003,6 @@ function requireDesktopSettings() {
 	return desktopSettings;
 }
 
-function probeThingtimeEndpoint(rawUrl, redirectCount = 0) {
-	const target = new URL('/api/v1/devices?limit=1', rawUrl);
-	const client = target.protocol === 'http:' ? http : https;
-	return new Promise((resolve, reject) => {
-		const request = client.get(
-			target,
-			{ headers: { Accept: 'application/json', 'User-Agent': `Thingtime/${getCurrentAppVersion()}` } },
-			(response) => {
-				const status = response.statusCode || 0;
-				const location = response.headers.location;
-				if ([301, 302, 303, 307, 308].includes(status) && location && redirectCount < 3) {
-					response.resume();
-					const redirected = new URL(location, target);
-					if (redirected.origin !== target.origin) {
-						reject(new Error('That Thingtime endpoint redirects its API to another origin.'));
-						return;
-					}
-					resolve(probeThingtimeEndpoint(redirected.origin, redirectCount + 1));
-					return;
-				}
-				const contentType = String(response.headers['content-type'] || '').toLowerCase();
-				response.resume();
-				if (status === 401 || status === 403 || (status >= 200 && status < 300 && contentType.includes('json'))) {
-					resolve({ ok: true, status });
-					return;
-				}
-				const detail =
-					status === 404 ? 'This deployment does not expose the computers API yet.' : `The computers API returned HTTP ${status || 'unknown'}.`;
-				reject(new Error(detail));
-			}
-		);
-		request.setTimeout(10_000, () => request.destroy(new Error('The Thingtime endpoint check timed out.')));
-		request.on('error', reject);
-	});
-}
-
 async function switchDesktopEndpoint(endpointId, { confirm = true } = {}) {
 	const settings = requireDesktopSettings();
 	const before = settings.snapshot();
@@ -1027,10 +1010,13 @@ async function switchDesktopEndpoint(endpointId, { confirm = true } = {}) {
 	if (!target) throw new Error('Choose a known Thingtime API endpoint.');
 	if (target.id === before.selectedEndpointId) {
 		setApiFallbackEndpoint(target.url);
+		const compatibility = await checkSelectedEndpointCompatibility({ syncNode: true });
+		if (compatibility.status !== 'compatible') throw compatibilityError(compatibility);
 		if (mainWindow && appOrigin) await loadBundledRenderer();
 		return getDesktopInfo();
 	}
-	await probeThingtimeEndpoint(target.url);
+	const directCompatibility = await probeEndpointDevices(target.url, { userAgent: `Thingtime/${getCurrentAppVersion()}` });
+	if (directCompatibility.status !== 'compatible') throw compatibilityError(directCompatibility);
 	if (confirm) {
 		const approved = await confirmNodeChange({
 			title: 'Switch Thingtime API endpoint?',
@@ -1043,7 +1029,8 @@ async function switchDesktopEndpoint(endpointId, { confirm = true } = {}) {
 	try {
 		await settings.selectEndpoint(target.id);
 		setApiFallbackEndpoint(target.url);
-		await reconcileConfiguredNode();
+		const compatibility = await checkSelectedEndpointCompatibility({ syncNode: true });
+		if (compatibility.status !== 'compatible') throw compatibilityError(compatibility);
 		await loadBundledRenderer();
 		desktopSettingsLastError = null;
 		createApplicationMenu();
@@ -1053,7 +1040,7 @@ async function switchDesktopEndpoint(endpointId, { confirm = true } = {}) {
 		setApiFallbackEndpoint(before.selectedEndpoint.url);
 		let rollbackError = null;
 		try {
-			await reconcileConfiguredNode();
+			await checkSelectedEndpointCompatibility({ syncNode: true });
 			await loadBundledRenderer();
 		} catch (caughtRollbackError) {
 			rollbackError = caughtRollbackError;
@@ -1067,6 +1054,12 @@ async function switchDesktopEndpoint(endpointId, { confirm = true } = {}) {
 async function desktopSelectEndpoint(event, request) {
 	requireTrustedAiBridgeEvent(event);
 	return switchDesktopEndpoint(request?.endpointId);
+}
+
+async function desktopCheckEndpointCompatibility(event) {
+	requireTrustedAiBridgeEvent(event);
+	await checkSelectedEndpointCompatibility({ syncNode: true });
+	return getDesktopInfo();
 }
 
 async function desktopAddEndpoint(event, request) {
@@ -1171,6 +1164,7 @@ function getDesktopInfo() {
     currentUrl: mainWindow?.webContents.getURL() || appOrigin,
 		desktopSettings: desktopSettings?.snapshot() || null,
 		desktopSettingsLastError,
+		endpointCompatibility,
     isPackaged: app.isPackaged,
     origin: appOrigin,
     platform: process.platform,
@@ -1328,6 +1322,7 @@ ipcMain.handle('thingtime-desktop:get-settings', (event) => {
 ipcMain.handle('thingtime-desktop:add-endpoint', (event, request) => desktopAddEndpoint(event, request));
 ipcMain.handle('thingtime-desktop:remove-endpoint', (event, request) => desktopRemoveEndpoint(event, request));
 ipcMain.handle('thingtime-desktop:select-endpoint', (event, request) => desktopSelectEndpoint(event, request));
+ipcMain.handle('thingtime-desktop:check-endpoint-compatibility', (event) => desktopCheckEndpointCompatibility(event));
 ipcMain.handle('thingtime-desktop:select-menu-bar-icon', (event, request) => desktopSelectMenuBarIcon(event, request));
 ipcMain.handle('thingtime-desktop:upload-menu-bar-icon', (event) => desktopUploadMenuBarIcon(event));
 ipcMain.handle('thingtime-desktop:set-node-auto-start', (event, request) => desktopSetNodeAutoStart(event, request));
@@ -1386,6 +1381,10 @@ if (!singleInstanceLock) {
 			await startNitroServer();
 			createWindow();
       createApplicationMenu();
+      void checkSelectedEndpointCompatibility({ syncNode: true }).catch((error) => {
+        desktopSettingsLastError = error instanceof Error ? error.message : String(error);
+        console.warn('Unable to check Thingtime API endpoint compatibility', error);
+      });
     })
     .catch((error) => {
       dialog.showErrorBox('Thingtime failed to start', error instanceof Error ? error.message : String(error));

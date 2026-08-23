@@ -580,6 +580,23 @@ an offline database or offline conflict resolution layer.
   `index-CMT9dIqL.js` matches at
   `afe6e5365b08736a720dbfa6a3c717a2a49d3bc67ca507bcce5833c93cd57d7a`.
 
+### Endpoint compatibility follow-up (2026-08-23)
+
+- The Electron main process now treats the selected remote deployment and its
+  bundled loopback proxy as a single compatibility contract. It accepts a
+  signed-out `401` or `403` from `/api/v1/devices` as proof that the protected
+  route exists, requires JSON for successful responses, and rejects missing,
+  redirected, unreachable, or cross-origin endpoints.
+- Startup, endpoint selection, manual retry, and node registration all run the
+  check. A direct route must be compatible _and_ the packaged proxy must
+  identify the exact selected fallback origin before Electron can reconcile or
+  register the managed node. A delayed preview remains visibly selected and
+  reports its incompatible state instead of silently appearing as production.
+- Settings now shows a non-blocking compatibility line with **Check now**;
+  unrelated settings stay interactive during the check. Focused probe tests
+  cover authenticated route acceptance, an arbitrary-success rejection, stale
+  proxy mismatch, bad URL rejection, and a real local `401` test endpoint.
+
 ### Acceptance boundaries still open
 
 - The user explicitly completed one authenticated current-branch pairing before

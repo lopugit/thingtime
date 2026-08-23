@@ -1,21 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('thingtimeDesktop', {
-  discoverAiSources: () => ipcRenderer.invoke('thingtime-desktop:ai-discover'),
-  beginAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-begin-sync', request),
-  readAiSyncBatch: (request) => ipcRenderer.invoke('thingtime-desktop:ai-read-batch', request),
-  cancelAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-cancel-sync', request),
-  checkForUpdates: () => ipcRenderer.invoke('thingtime-desktop:check-for-updates'),
-  downloadUpdateBundle: () => ipcRenderer.invoke('thingtime-desktop:download-update-bundle'),
-  getInfo: () => ipcRenderer.invoke('thingtime-desktop:get-info'),
+	discoverAiSources: () => ipcRenderer.invoke('thingtime-desktop:ai-discover'),
+	beginAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-begin-sync', request),
+	readAiSyncBatch: (request) => ipcRenderer.invoke('thingtime-desktop:ai-read-batch', request),
+	cancelAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-cancel-sync', request),
+	checkForUpdates: () => ipcRenderer.invoke('thingtime-desktop:check-for-updates'),
+	downloadUpdateBundle: () => ipcRenderer.invoke('thingtime-desktop:download-update-bundle'),
+	getInfo: () => ipcRenderer.invoke('thingtime-desktop:get-info'),
 	getDesktopSettings: () => ipcRenderer.invoke('thingtime-desktop:get-settings'),
 	addEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:add-endpoint', request),
 	removeEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:remove-endpoint', request),
 	selectEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:select-endpoint', request),
+	checkEndpointCompatibility: () => ipcRenderer.invoke('thingtime-desktop:check-endpoint-compatibility'),
 	selectMenuBarIcon: (request) => ipcRenderer.invoke('thingtime-desktop:select-menu-bar-icon', request),
 	uploadMenuBarIcon: () => ipcRenderer.invoke('thingtime-desktop:upload-menu-bar-icon'),
 	setNodeAutoStart: (request) => ipcRenderer.invoke('thingtime-desktop:set-node-auto-start', request),
-  loadUrl: (url) => ipcRenderer.invoke('thingtime-desktop:load-url', url),
+	loadUrl: (url) => ipcRenderer.invoke('thingtime-desktop:load-url', url),
 	nodeGetStatus: () => ipcRenderer.invoke('thingtime-desktop:node-status'),
 	nodeRegisterService: () => ipcRenderer.invoke('thingtime-desktop:node-register-service'),
 	nodeUnregisterService: () => ipcRenderer.invoke('thingtime-desktop:node-unregister-service'),
@@ -28,9 +29,9 @@ contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	nodeAddProject: () => ipcRenderer.invoke('thingtime-desktop:node-add-project'),
 	nodeConnector: (request) => ipcRenderer.invoke('thingtime-desktop:node-connector', request),
 	nodeDevice: (request) => ipcRenderer.invoke('thingtime-desktop:node-device', request),
-  platform: process.platform,
-  versions: {
-    chrome: process.versions.chrome,
-    electron: process.versions.electron
-  }
+	platform: process.platform,
+	versions: {
+		chrome: process.versions.chrome,
+		electron: process.versions.electron
+	}
 });

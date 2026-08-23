@@ -19,6 +19,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Desktop API endpoint compatibility is now explicit and fail-safe**: the
+  packaged app validates both the selected deployment's computers route and
+  its own bundled loopback proxy target on startup, endpoint changes, and a
+  non-blocking Settings retry. A preview that is still deploying now stays
+  visibly selected but is marked incompatible rather than looking like a
+  production fallback; Thingtime desktop will not reconfigure or restart its
+  managed node against that endpoint until both checks pass. — Codex (AI),
+  2026-08-23
+
 - **Per-computer device-drawer layout and browser navigation alignment**: each
   paired machine now remembers its own collapsed/expanded details sections and
   last chosen panel width locally, without storing device state or content. The
@@ -192,19 +201,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
   Three layers, all powered by the browser's own sessions — never a central
-  session store. (1) *Federated hint resolution*: `/api/v1/auth/account-hints`
+  session store. (1) _Federated hint resolution_: `/api/v1/auth/account-hints`
   now reports foreign-database origins as `unresolved`, and the client fans
   out to each origin's new `/account-hints/resolve` (CORS restricted to the
   Thingtime family, credentialed, read-only) so every environment vouches
-  only for its own sessions. (2) *Cross-origin session handoff*: a signed-in
+  only for its own sessions. (2) _Cross-origin session handoff_: a signed-in
   surface mints a 2-minute, aud-bound, single-use code
   (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
   cookie family (immutable `*.vercel.app` previews) redeems at its own
   `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
   the session (theft signal), different-environment redemption fails closed;
   the `/authorize?self=1` popup ("Continue to <host>?") and a
-  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) *FedCM
-  identity provider*: `/.well-known/web-identity` + config/accounts/
+  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) _FedCM
+  identity provider_: `/.well-known/web-identity` + config/accounts/
   client-metadata/assertion endpoints let Chromium render its native
   "Continue as…" sheet on any domain from the switcher roster
   (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,

@@ -2112,6 +2112,16 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       packaged loopback renderer, never navigate to the selected remote API
       origin, and still render the packaged interface with the API target
       unavailable.
+- [ ] With a previously selected preview that returns a real API 404, open
+      desktop Settings and confirm the saved preview remains selected while its
+      compatibility line says it does not expose the computers API. No managed
+      node restart, registration, or endpoint rewrite may occur; all unrelated
+      settings remain interactive while the small **Check now** indicator is
+      active. Once the deployment returns authenticated `/api/v1/devices`
+      data (or 401/403), use **Check now** and confirm the app additionally
+      accepts it only when the bundled loopback proxy reports that exact
+      fallback origin. Repeat with a proxy fallback mismatch: it must remain
+      incompatible even when the remote route itself exists.
 - [ ] Select a build-seeded preview, reload, quit/reopen, reinstall the same
       signed bundle, then install a build which omits or renames that endpoint
       profile. `desktop-settings.json` must retain the normalized selected URL
