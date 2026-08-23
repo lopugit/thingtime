@@ -20,6 +20,8 @@ export type ApiResponseExample = {
 
 export type ApiEndpointDoc = {
   id: string;
+  /** Stable per-operation compatibility contract. Major changes are breaking. */
+  contractVersion: `${number}.${number}.${number}`;
   group: string;
   title: string;
   endpoint: string;
@@ -49,8 +51,9 @@ export type SerializedApiEndpointDoc = ApiEndpointDoc & {
   platformExamples: ApiPlatformExamples;
 };
 
-const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint'>): ApiEndpointDoc => ({
+const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> & Partial<Pick<ApiEndpointDoc, 'contractVersion'>>): ApiEndpointDoc => ({
   ...doc,
+  contractVersion: doc.contractVersion || '1.0.0',
   docsEndpoint: `${doc.endpoint}-docs`
 });
 
@@ -531,6 +534,20 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 ];
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
+	endpoint({
+		id: 'capabilities',
+		group: 'platform',
+		title: 'API capabilities',
+		endpoint: '/api/v1/capabilities',
+		summary: 'Returns the origin-scoped compatibility manifest for every documented Thingtime API operation.',
+		detail:
+			'Clients use this public manifest to negotiate supported API contracts before enabling optional features. Each operation is independently versioned; additions are minor or patch changes and breaking changes receive a new major version.',
+		auth: { mode: 'none', description: 'Public deployment metadata; it contains no account, permission or environment data.' },
+		methods: ['GET'],
+		steps: ['Fetch once per origin, respecting the ETag.', 'Compare only the feature contracts a client requires.'],
+		requestExamples: [{ name: 'Discover capabilities', description: 'Read the active API contract manifest.', method: 'GET' }],
+		responseExamples: [{ status: 200, description: 'Versioned capability manifest.', body: { ok: true, schemaVersion: 1, features: { 'api.devices': '1.0.0' } } }]
+	}),
 	...deviceEndpointDocs,
   endpoint({
     id: 'docs',
@@ -8850,6 +8867,19 @@ export const getApiDocByPath = (path: string) => apiDocMap.get(normaliseApiPath(
 export const apiV1RouteKeys = apiEndpointDocs.filter((doc) => doc.endpoint.startsWith('/api/v1/')).map((doc) => doc.endpoint.replace(/^\/api\//, ''));
 
 export const apiV1DocsRouteKeys = apiV1RouteKeys.map((route) => `${route}-docs`);
+
+export type ApiCapabilitiesManifest = {
+  ok: true;
+  schemaVersion: 1;
+  features: Record<string, `${number}.${number}.${number}`>;
+};
+
+/** Generated from the one canonical API registry; every documented operation advertises one contract. */
+export const createApiCapabilitiesManifest = (): ApiCapabilitiesManifest => ({
+  ok: true,
+  schemaVersion: 1,
+  features: Object.fromEntries(apiEndpointDocs.map((doc) => [`api.${doc.id}`, doc.contractVersion]))
+});
 
 const shellQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
 

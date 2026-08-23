@@ -283,6 +283,13 @@ export default defineHandler(async (event) => {
     return proxyApiRequestToFallback(event.req);
   }
 
+  if (path === 'v1/capabilities') {
+    const { createApiCapabilitiesManifest } = await import('../../../app/docs/apiDocs');
+    return jsonResponse(createApiCapabilitiesManifest(), {
+      headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' }
+    });
+  }
+
   const loadModule = routeModules[path];
 
   if (!loadModule) {
