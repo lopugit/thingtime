@@ -1,4 +1,4 @@
-# Graph Report - stable-develop-domain-binding  (2026-08-21)
+# Graph Report - commander-release-control-plane  (2026-08-23)
 
 ## Corpus Check
 - 20 files · ~117,568 words
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a8be000f`
+- Built from commit: `0e6b0d70`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -35,7 +35,7 @@
 - [[_COMMUNITY_start.sh|start.sh]]
 - [[_COMMUNITY_verify-promotion-source-authority.sh|verify-promotion-source-authority.sh]]
 - [[_COMMUNITY_vercel.json|vercel.json]]
-- [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
+- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
 - [[_COMMUNITY_rebase-ownership-routing-contract.sh|rebase-ownership-routing-contract.sh]]
 - [[_COMMUNITY_Graphify Rules|Graphify Rules]]
 - [[_COMMUNITY_Electron App Release Workflow|Electron App Release Workflow]]
@@ -92,19 +92,19 @@ Nodes (35): associatedPr(), bodyFile(), buildComment(), buildSection(), CFG, com
 
 ### Community 2 - "selfTest"
 Cohesion: 0.09
-Nodes (42): botCommentsByLatestEvent(), buildPromotionDispatchRequest(), CFG, clearSourceStandAside(), computePicks(), dependentMembersAfter(), dispatchPromotionResolution(), env() (+34 more)
+Nodes (34): botCommentsByLatestEvent(), buildPromotionDispatchRequest(), clearSourceStandAside(), computePicks(), dependentMembersAfter(), dispatchPromotionResolution(), exactReservationDeleteArgs(), exactReservationPushArgs() (+26 more)
 
 ### Community 3 - "build-all-branch.mjs"
 Cohesion: 0.19
 Nodes (31): assertAllBranchWorkflowContract(), BASE_BRANCHES, buildMode(), checkMode(), countLeadingFailureMarkers(), doctorCommitMode(), doctorRecordMode(), git() (+23 more)
 
 ### Community 4 - "failureDetail"
-Cohesion: 0.15
-Nodes (27): applyPicks(), buildPromotionPlanContext(), checkoutRemoteBranch(), createPromotionReservation(), createPromotionReviewCheckpoint(), ensureCommitAvailable(), ensureRemoteBranchAvailable(), expectedReservationTrailers() (+19 more)
+Cohesion: 0.13
+Nodes (32): applyPicks(), buildPromotionPlanContext(), checkoutRemoteBranch(), createPromotionReservation(), createPromotionReviewCheckpoint(), ensureCommitAvailable(), ensureRemoteBranchAvailable(), expectedReservationTrailers() (+24 more)
 
 ### Community 5 - "promote-features-to-main.mjs"
-Cohesion: 0.16
-Nodes (17): gh(), ghJson(), git(), isExactPausedPromotionSnapshot(), listMergedSourcePrs(), listPromotionPrs(), listRemotePromotionBranches(), listSourceIssueComments() (+9 more)
+Cohesion: 0.12
+Nodes (23): CFG, cleanReplayQuarantinePolicy(), env(), EXEC_OPTS, flag(), gh(), ghJson(), git() (+15 more)
 
 ### Community 6 - "promotion-worker-routing-contract.mjs"
 Cohesion: 0.08
@@ -127,8 +127,8 @@ Cohesion: 0.12
 Nodes (16): BASE_REF, BASE_SHA, GITHUB_OUTPUT, PLAN_HASH, PROMOTION_BRANCH, reject_lineage_mismatch(), require_review_replay(), RESERVATION_SHA (+8 more)
 
 ### Community 11 - "runPromotion"
-Cohesion: 0.17
-Nodes (17): cancelPromotionRetirement(), cleanReplayQuarantinePolicy(), encodePromotionAttestation(), exactBranchDeleteWithActionsToken(), finalizeAiPromotionMetadata(), finalizeSourceLineageMetadata(), findOpenPromotionNumber(), promotionAttestationBody() (+9 more)
+Cohesion: 0.21
+Nodes (17): cancelPromotionRetirement(), exactBranchDeleteWithActionsToken(), finalizeAiPromotionMetadata(), finalizeSourceLineageMetadata(), findOpenPromotionNumber(), listRemotePromotionBranches(), processGroupsIndependently(), promotionBody() (+9 more)
 
 ### Community 12 - "promotion-worker.sh"
 Cohesion: 0.35
@@ -143,8 +143,8 @@ Cohesion: 0.24
 Nodes (13): aiRuntimeSourceFiles(), assertAdminLoader(), assertAdminModelRouting(), assertRoute(), assertWorkflowSource(), positiveDecimal(), REBASE_ACTION_URL, REBASE_WORKFLOW_URL (+5 more)
 
 ### Community 15 - "recoverPromotionReviewCheckpoint"
-Cohesion: 0.22
-Nodes (13): attestationMatches(), checkpointRecoveryDisposition(), exactCheckpointPush(), inspectPromotionReviewCheckpoint(), isObjectId(), latestBotPromotionAttestationEvents(), liveRefShaWithActionsToken(), parsePromotionResolutionAttestations() (+5 more)
+Cohesion: 0.27
+Nodes (10): attestationMatches(), checkpointRecoveryDisposition(), encodePromotionAttestation(), exactCheckpointPush(), isObjectId(), liveRefShaWithActionsToken(), promotionAttestationBody(), promotionResolverRunDisposition() (+2 more)
 
 ### Community 16 - "repoFlag"
 Cohesion: 0.44
@@ -162,7 +162,7 @@ Nodes (6): fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM, GI
 Cohesion: 0.33
 Nodes (5): framework, git, deploymentEnabled, ignoreCommand, $schema
 
-### Community 20 - "Thingtime AI Instructions"
+### Community 20 - "Thingtime AI instructions"
 Cohesion: 0.17
 Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
@@ -184,7 +184,7 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `selfTest()` connect `selfTest` to `runPromotion`, `failureDetail`, `promote-features-to-main.mjs`, `recoverPromotionReviewCheckpoint`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
-- **Why does `runPromotion()` connect `promote-features-to-main.mjs` to `selfTest`, `failureDetail`, `runPromotion`, `recoverPromotionReviewCheckpoint`, `repoFlag`?**
+- **Why does `runPromotion()` connect `runPromotion` to `selfTest`, `failureDetail`, `promote-features-to-main.mjs`, `recoverPromotionReviewCheckpoint`, `repoFlag`?**
   _High betweenness centrality (0.002) - this node is a cross-community bridge._
 - **Why does `failureDetail()` connect `failureDetail` to `selfTest`, `promote-features-to-main.mjs`, `runPromotion`, `recoverPromotionReviewCheckpoint`, `repoFlag`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
@@ -195,4 +195,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `promotion-pr-changelog.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.14126984126984127 - nodes in this community are weakly interconnected._
 - **Should `selfTest` be split into smaller, more focused modules?**
-  _Cohesion score 0.09371980676328502 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.09090909090909091 - nodes in this community are weakly interconnected._
