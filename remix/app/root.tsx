@@ -19,6 +19,7 @@ import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
 import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
 import { QuickSwitcher } from './components/QuickSwitcher/QuickSwitcher';
+import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
 import { rememberAuthReturnTo } from './utils/authReturn';
 
 const setThingtime = (glob: any) => {
@@ -137,6 +138,9 @@ export default function App() {
         {mounted && !isAuthorizePopup ? <QuickSwitcher /> : null}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
+        {/* Signed out here but signed in on another Thingtime deployment →
+            "continue as" suggestions (cross-deployment auto-login). */}
+        {mounted && !isAuthorizePopup ? <AutoLoginPopup /> : null}
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
         <ConfettiCanvas />
         {mounted ? <EasterEggs /> : null}

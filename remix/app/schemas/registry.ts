@@ -2081,6 +2081,73 @@ const followSchema: ThingtimeSchema = {
   example: { followKey: '5eed…:c0ffee…' }
 };
 
+// A registered WebAuthn credential (passkey). Accumulating per user →
+// relational (FUNDAMENTALS §3): one thing per credential, ownerId = the
+// account it signs into. Credential material (credentialId, COSE public key,
+// signature counter) lives in the root `secure` blob — never crystal, never
+// projected, invisible to the $** text index — while owner-facing metadata
+// (nickname, provider, dates, revocation) is crystal on an always-private doc.
+// Global credential-id uniqueness + the login-time lookup ride uniqueKeys
+// ('passkeyCredential:<id>', BinData). Server-minted only (PROTECTED).
+const passkeyThingSchema: ThingtimeSchema = {
+	id: 'passkey',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Passkey',
+	summary: 'A WebAuthn credential (passkey) that can sign into its owner\'s account.',
+	detail:
+		'Registered via POST /api/v1/auth/passkeys/register-options + /register (password confirmation ' +
+		'required), authenticates via /api/v1/auth/passkeys/login-options + /login (discoverable ' +
+		'credentials — no username needed). ownerId is the account it signs into. Credential material ' +
+		'(credentialId, public key, sign counter) lives in the root secure blob; uniqueness and the ' +
+		'login lookup ride uniqueKeys. Revocation (crystal.revokedAt) immediately blocks logins while ' +
+		'keeping the record; revoked passkeys can then be deleted. The generic things CRUD refuses ' +
+		'this kind end to end.',
+	createdVia: 'POST /api/v1/auth/passkeys/register',
+	fields: [
+		{ name: 'nickname', type: 'string', required: false, description: 'Owner-chosen label, defaults to the provider name.' },
+		{ name: 'description', type: 'string', required: false, description: 'Free-form owner note.' },
+		{ name: 'providerName', type: 'string', required: false, description: 'Authenticator provider derived from its AAGUID (e.g. iCloud Keychain, 1Password).' },
+		{ name: 'aaguid', type: 'string', required: false, description: 'Authenticator AAGUID as reported at registration.' },
+		{ name: 'deviceType', type: 'enum', required: false, values: ['singleDevice', 'multiDevice'], description: 'Whether the credential is synced (multiDevice) or bound to one authenticator.' },
+		{ name: 'backedUp', type: 'boolean', required: false, description: 'True when the authenticator reports the credential as backed up/synced.' },
+		{ name: 'transports', type: 'string[]', required: false, description: 'Browser-reported transports (internal, hybrid, usb, nfc, ble).' },
+		{ name: 'lastUsedAt', type: 'string', required: false, description: 'ISO timestamp of the most recent successful login.' },
+		{ name: 'lastUsedOrigin', type: 'string', required: false, description: 'Origin of the most recent successful login.' },
+		{ name: 'revokedAt', type: 'string', required: false, description: 'ISO timestamp — set once revoked; a revoked passkey can never log in.' }
+	],
+	example: { nickname: 'MacBook Touch ID', providerName: 'iCloud Keychain', deviceType: 'multiDevice', backedUp: true }
+};
+
+// Where a passkey has been used: one thing per (passkey, app/origin) pair,
+// upserted on each login (usageCount/lastUsedAt update in place — the doc set
+// is bounded by distinct apps, never per-use growth). targetId = the passkey
+// thing; uniqueKeys 'passkeyAppLink:<passkeyId>:<appKey>' dedups the pair.
+const passkeyAppLinkThingSchema: ThingtimeSchema = {
+	id: 'passkey-app-link',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Passkey app link',
+	summary: 'A record that a passkey has authenticated a particular app or origin.',
+	detail:
+		'Minted/updated server-side whenever POST /api/v1/auth/passkeys/login succeeds: the deployment ' +
+		'origin always links, and an SSO/app context (clientId) links additionally. Aggregated onto ' +
+		'GET /api/v1/auth/passkeys as each passkey\'s linkedApps. ownerId = the passkey\'s owner, ' +
+		'targetId = the passkey thing. The generic things CRUD refuses this kind.',
+	requiresTarget: true,
+	createdVia: 'POST /api/v1/auth/passkeys/login',
+	fields: [
+		{ name: 'appKey', type: 'string', required: true, description: 'Stable link key — `origin:<origin>` or `app:<clientId>`.' },
+		{ name: 'appName', type: 'string', required: false, description: 'Display name for the app/origin.' },
+		{ name: 'firstUsedAt', type: 'string', required: true, description: 'ISO timestamp of the first login through this link.' },
+		{ name: 'lastUsedAt', type: 'string', required: true, description: 'ISO timestamp of the most recent login through this link.' },
+		{ name: 'usageCount', type: 'number', required: true, description: 'Total successful logins through this link.' }
+	],
+	example: { appKey: 'origin:https://thingtime.com', appName: 'thingtime.com', usageCount: 4 }
+};
+
 // ---------------------------------------------------------------------------
 // System kinds — the satellite collections collapsing into things (see
 // claude-todo/12-everything-is-a-thing-collections.md). These kinds are
@@ -2122,7 +2189,11 @@ export const PROTECTED_THINGTIME = [
   ...CI_CONTROL_THINGTIME,
   'follow',
   'friend',
-  'notification'
+  'notification',
+  // auth-plane credentials: a forged passkey doc would BE a working login
+  // credential, so these are server-minted end to end (auth/passkeys.ts)
+  'passkey',
+  'passkey-app-link'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -2267,6 +2338,9 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   // supersedes the earlier followThingSchema (crystal.follow marker) draft.
   friendThingSchema,
   notificationThingSchema,
+  // auth-plane credentials (protected, server-minted by auth/passkeys.ts)
+  passkeyThingSchema,
+  passkeyAppLinkThingSchema,
   // messenger kinds (dedicated endpoints only — no generic sanitizers)
   communitySchema,
   communityMemberSchema,

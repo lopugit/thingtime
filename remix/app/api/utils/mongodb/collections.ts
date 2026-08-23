@@ -701,13 +701,17 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
       ['things_vote_key_unique']
     ),
-    // One poll vote per (poll, user): crystal.voteKey is '<pollId>~<userId>',
-    // written only by the vote endpoint (things/vote.ts). Same single-key
-    // partial-unique pattern as the follow/member keys — re-votes update the
-    // doc in place, insert races 11000 and reconcile onto the winner.
+    // Poll voting DOES ship on this branch (things/vote.ts), but it does not
+    // get its old kind-blind things_vote_key_unique back — that index is the
+    // squat class this family just retired. 'vote' is already in
+    // RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, so one-vote-per-(poll, user) belongs
+    // in the protected root uniqueKeys stamp above, not on a crystal path.
+
+    // One passkey app link per (passkey, app/origin) — the per-login upsert's
+    // update→insert race resolves through this index (auth/passkeys.ts).
     col.createIndex(
-      { 'crystal.voteKey': 1 },
-      { name: 'things_vote_key_unique', unique: true, partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } }
+      { 'crystal.linkKey': 1 },
+      { name: 'things_passkey_link_key_unique', unique: true, partialFilterExpression: { 'crystal.linkKey': { $type: 'string' } } }
     ),
     // Thread replies list under their root message (main chat pages ride the
     // shared { targetId, thingtime, createdAt, shareId } index above).
