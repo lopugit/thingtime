@@ -57,7 +57,31 @@ vi.mock('../lib/api.js', () => ({
     })),
   },
 }));
-vi.mock('../lib/nativeBridge.js', () => ({ beginWindowDrag: vi.fn(), nativeRequest: vi.fn() }));
+vi.mock('../lib/nativeBridge.js', () => ({
+  beginWindowDrag: vi.fn(),
+  nativeBridgeAvailable: vi.fn(() => true),
+  nativeRequest: vi.fn(async () => ({
+    sampledAtMs: 1,
+    commander: {
+      cpuPercent: 12,
+      residentMemoryBytes: 256 * 1024 * 1024,
+      virtualMemoryBytes: 1024 * 1024 * 1024,
+      storageBytes: 64 * 1024 * 1024,
+      processCount: 2,
+    },
+    machine: {
+      cpuPercent: 42,
+      logicalCpuCount: 8,
+      memoryUsedBytes: 8 * 1024 * 1024 * 1024,
+      memoryTotalBytes: 16 * 1024 * 1024 * 1024,
+      thermalState: 'nominal',
+      filesystemUsedBytes: 200 * 1024 * 1024 * 1024,
+      filesystemTotalBytes: 500 * 1024 * 1024 * 1024,
+      filesystemAvailableBytes: 300 * 1024 * 1024 * 1024,
+      gpu: { name: 'Apple GPU', available: true, utilizationPercent: 16, source: 'io-registry' },
+    },
+  })),
+}));
 
 const bootstrap: BootstrapResponse = {
   protocolVersion: 1,
@@ -119,6 +143,18 @@ describe('Commander settings deep links', () => {
     fireEvent(window, new CustomEvent('commander:settings-tab', { detail: 'account' }));
     expect(screen.getByRole('button', { name: 'Account' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('Thingtime Account')).toBeVisible();
+  });
+
+  it('opens the native Activity tab with Commander and machine metrics', async () => {
+    window.history.replaceState({}, '', '/settings.html?tab=activity');
+    render(<Settings state={state()} />);
+
+    expect(screen.getByRole('button', { name: 'Activity' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('heading', { name: 'Commander usage' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Machine usage' })).toBeVisible();
+    await waitFor(() => expect(screen.getByText('256 MB')).toBeVisible());
+    expect(screen.getByText('Apple GPU')).toBeVisible();
+    expect(screen.getByText(/nothing here leaves this device/i)).toBeVisible();
   });
 
   it('shows indexing roots and ignore rules and can request a scoped refresh', async () => {

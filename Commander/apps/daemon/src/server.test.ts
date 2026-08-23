@@ -302,6 +302,33 @@ describe('Commander daemon HTTP trust boundaries', () => {
         nativeRequest: { method: 'settings.open', params: { tab: 'search' } },
       });
 
+      const activitySearch = await fetch(`${server.url}/api/search?q=commander%20cpu`, {
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(activitySearch.status).toBe(200);
+      expect((await activitySearch.json()) as { hits: unknown[] }).toMatchObject({
+        hits: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'builtin:activity',
+            title: 'Commander Activity',
+          }),
+        ]),
+      });
+
+      const activitySettings = await fetch(`${server.url}/api/execute`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-session': server.token,
+        },
+        body: JSON.stringify({ itemId: 'builtin:activity', actionId: 'open-settings' }),
+      });
+      expect(activitySettings.status).toBe(200);
+      expect(await activitySettings.json()).toEqual({
+        ok: true,
+        nativeRequest: { method: 'settings.open', params: { tab: 'activity' } },
+      });
+
       const indexSearch = await fetch(`${server.url}/api/search?q=index%20now`, {
         headers: { 'x-commander-session': server.token },
       });

@@ -104,7 +104,8 @@ export type SearchItemKind =
   | 'quicklink';
 export type SearchCategory = 'applications' | 'commands' | 'files';
 export type EmojiDefaultAction = 'paste' | 'paste-and-copy' | 'copy' | 'copy-unicode';
-export type SettingsTab = 'general' | 'extensions' | 'search' | 'sync' | 'account' | 'advanced' | 'about';
+export type SettingsTab =
+  'general' | 'extensions' | 'search' | 'activity' | 'sync' | 'account' | 'advanced' | 'about';
 export type CommanderViewId = 'emoji-symbols';
 export type CommandShortcutMap = Record<string, string>;
 export type IndexKind = 'application' | 'file' | 'directory';
@@ -155,6 +156,7 @@ export const SETTINGS_TABS = [
   'general',
   'extensions',
   'search',
+  'activity',
   'sync',
   'account',
   'advanced',
@@ -969,6 +971,7 @@ export interface NativeRequest<T = unknown> {
     | 'filesystem.copy'
     | 'filesystem.trash'
     | 'filesystem.delete'
+    | 'system.metrics'
     | 'settings.open'
     | 'application.open'
     | 'application.pasteTarget'
@@ -985,6 +988,33 @@ export interface NativeRequest<T = unknown> {
     | 'credential.unlock'
     | 'credential.delete';
   params?: T;
+}
+
+export interface SystemMetrics {
+  sampledAtMs: number;
+  commander: {
+    cpuPercent: number;
+    residentMemoryBytes: number;
+    virtualMemoryBytes: number;
+    storageBytes: number;
+    processCount: number;
+  };
+  machine: {
+    cpuPercent: number;
+    logicalCpuCount: number;
+    memoryUsedBytes: number;
+    memoryTotalBytes: number;
+    thermalState: 'nominal' | 'fair' | 'serious' | 'critical';
+    filesystemUsedBytes: number;
+    filesystemTotalBytes: number;
+    filesystemAvailableBytes: number;
+    gpu: {
+      name: string;
+      available: boolean;
+      utilizationPercent?: number;
+      source: 'io-registry' | 'unavailable';
+    };
+  };
 }
 
 export interface NativeResponse<T = unknown> {

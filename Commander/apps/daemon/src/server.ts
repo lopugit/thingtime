@@ -485,7 +485,9 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
                     ? 'account'
                     : item.id === 'builtin:indexing'
                       ? 'search'
-                      : 'general',
+                      : item.id === 'builtin:activity'
+                        ? 'activity'
+                        : 'general',
             },
           } satisfies Omit<NativeRequest, 'id'>,
         });

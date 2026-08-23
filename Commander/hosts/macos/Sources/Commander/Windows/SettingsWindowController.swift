@@ -1,7 +1,7 @@
 import AppKit
 
 enum CommanderSettingsTab: String, Sendable {
-  case general, extensions, search, sync, account, advanced, about
+  case general, extensions, search, activity, sync, account, advanced, about
 }
 
 @MainActor

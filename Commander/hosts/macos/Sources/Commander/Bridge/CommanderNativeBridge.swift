@@ -46,6 +46,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
   private let updateMenuBar: (Bool) -> Void
   private let updateWindowMode: (String) throws -> Void
   private let updateWindowPinning: (Bool, Bool, Bool) -> Void
+  private let metrics: SystemMetricsService
   weak var webView: WKWebView?
 
   init(
@@ -91,6 +92,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     self.updateMenuBar = updateMenuBar
     self.updateWindowMode = updateWindowMode
     self.updateWindowPinning = updateWindowPinning
+    self.metrics = SystemMetricsService(daemonPID: ready.pid)
   }
 
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -227,6 +229,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
         }
         try FileManager.default.removeItem(at: url)
         result = ["deleted": true]
+      case "system.metrics": result = metrics.snapshot()
       case "clipboard.write":
         guard let text = request.params?["text"]?.string else { throw BridgeError.missing("text") }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); result = nil

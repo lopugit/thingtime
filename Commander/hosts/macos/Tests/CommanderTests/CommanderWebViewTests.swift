@@ -193,6 +193,7 @@ final class CommanderWebViewTests: XCTestCase {
     let script = SettingsWindowController.settingsTabScriptForTesting(.search)
     XCTAssertTrue(script.contains("commander:settings-tab"))
     XCTAssertTrue(script.contains("detail:'search'"))
+    XCTAssertEqual(CommanderSettingsTab(rawValue: "activity"), .activity)
     XCTAssertNil(CommanderSettingsTab(rawValue: "not-a-tab"))
   }
 

@@ -4,6 +4,7 @@ import {
   DEFAULT_INDEXING_SETTINGS,
   fuzzyTextScore,
   INDEXING_SETTINGS_VERSION,
+  isSettingsTab,
   normalizeCalculatorSettings,
   normalizeIndexingSettings,
   normalizeSearchCacheSettings,
@@ -14,6 +15,11 @@ import {
 } from './index.js';
 
 describe('Commander presentation settings', () => {
+  it('recognizes the locally sampled Activity settings tab', () => {
+    expect(isSettingsTab('activity')).toBe(true);
+    expect(isSettingsTab('metrics')).toBe(false);
+  });
+
   it('normalizes category ordering without duplicates and restores missing categories', () => {
     expect(normalizeSearchCategoryOrder(['files', 'files', 'commands'])).toEqual([
       'files',
