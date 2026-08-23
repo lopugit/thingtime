@@ -267,6 +267,10 @@ test('device-wide commands require the capability from the signed pairing claim'
 	assert.equal(deviceSupportsCommand('system.lock', ['device.lock.write']), true);
 	assert.equal(deviceSupportsCommand('system.volume.set', ['system.volume.read']), false);
 	assert.equal(deviceSupportsCommand('system.volume.set', ['system.volume.set']), true);
+	assert.equal(deviceSupportsCommand('system.audio.input.volume.set', ['system.audio.input.volume.write']), true);
+	assert.equal(deviceSupportsCommand('system.audio.input.mute.set', ['system.audio.input.mute.write']), true);
+	assert.equal(deviceSupportsCommand('system.audio.sound-effects.volume.set', ['system.audio.sound-effects.volume.write']), true);
+	assert.equal(deviceSupportsCommand('system.audio.sound-effects.mute.set', ['system.audio.sound-effects.mute.write']), true);
 	assert.equal(deviceSupportsCommand('system.brightness.set', ['system.brightness.write']), true);
 	assert.equal(deviceSupportsCommand('system.sleep', ['system.power.sleep']), true);
 	assert.equal(deviceSupportsCommand('system.sleep', ['system.lock']), false);
@@ -296,8 +300,12 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'app.hide-others',
 		'system.volume.set',
 		'system.audio.mute.set',
+		'system.audio.input.volume.set',
+		'system.audio.input.mute.set',
 		'system.audio.output.set',
 		'system.audio.input.set',
+		'system.audio.sound-effects.volume.set',
+		'system.audio.sound-effects.mute.set',
 		'system.audio.sound-effects-output.set',
 		'system.brightness.set',
 		'system.lock',
@@ -335,6 +343,12 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	assert.equal(normalizeDeviceCommand('app.hide-others', {}).ok, true);
 	assert.equal(normalizeDeviceCommand('app.hide-others', { scope: 'all' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.audio.mute.set', { muted: true }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.audio.input.volume.set', { level: 0.4 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.audio.input.mute.set', { muted: true }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.audio.sound-effects.volume.set', { level: 0.4 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.audio.sound-effects.mute.set', { muted: true }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.audio.input.volume.set', { level: 1.2 }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.audio.sound-effects.mute.set', { muted: true, level: 0.4 }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.audio.output.set', { deviceId: 'BuiltInOutputDevice' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.sleep', {}).ok, true);
 	assert.equal(normalizeDeviceCommand('system.sleep', { now: true }).ok, false);

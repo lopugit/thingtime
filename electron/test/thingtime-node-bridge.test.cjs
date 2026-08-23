@@ -252,8 +252,12 @@ test('device mutations require a command id and reject unsupported action kinds'
 	);
 	for (const [kind, parameters] of [
 		['system.audio.mute.set', { muted: true }],
+		['system.audio.input.volume.set', { level: 0.4 }],
+		['system.audio.input.mute.set', { muted: true }],
 		['system.audio.output.set', { deviceId: 'BuiltInOutputDevice' }],
 		['system.audio.input.set', { deviceId: 'BuiltInInputDevice' }],
+		['system.audio.sound-effects.volume.set', { level: 0.4 }],
+		['system.audio.sound-effects.mute.set', { muted: true }],
 		['system.audio.sound-effects-output.set', { deviceId: 'BuiltInOutputDevice' }],
 		['application.hide', { bundleIdentifier: 'com.example.App' }],
 		['application.unhide', { bundleIdentifier: 'com.example.App' }],

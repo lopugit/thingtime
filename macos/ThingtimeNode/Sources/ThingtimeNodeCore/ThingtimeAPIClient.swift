@@ -103,6 +103,10 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             let locked: Bool
             let volume: Double?
             let muted: Bool?
+            let inputVolume: Double?
+            let inputMuted: Bool?
+            let soundEffectsVolume: Double?
+            let soundEffectsMuted: Bool?
             let brightness: Double?
             let openApps: [App]
             let audioDevices: [AudioDevice]
@@ -267,6 +271,10 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 locked: telemetry.session.isLocked,
                 volume: telemetry.outputVolume,
                 muted: telemetry.outputMuted,
+                inputVolume: telemetry.inputVolume,
+                inputMuted: telemetry.inputMuted,
+                soundEffectsVolume: telemetry.soundEffectsOutputVolume,
+                soundEffectsMuted: telemetry.soundEffectsOutputMuted,
                 brightness: brightness,
                 openApps: Array(telemetry.runningApplications.compactMap { application in
                     guard let identifier = application.bundleIdentifier, !identifier.isEmpty else { return nil }

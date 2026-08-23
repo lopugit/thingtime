@@ -2274,7 +2274,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       Audio & routing, Network & connectivity, Node & pairing, Action
       permissions, Power, Connectors, Screen, Approvals, and Command activity
       must start collapsed and retain that layout per computer. Open the three
-      audio-route menus and choose a reported device, use the Wi-Fi controls
+      audio-route menus and choose a reported device, then verify microphone and
+      alerts/effects level and mute controls are shown only when that exact route
+      reports support. Use the Wi-Fi controls
       only with a saved/open SSID (never a password), open an application's
       **More** context menu for Focus/Open, Hide/Show, Quit, and the
       approval-required **Force quit**. Use the Applications heading menu for

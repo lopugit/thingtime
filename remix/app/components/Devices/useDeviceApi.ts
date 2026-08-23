@@ -20,8 +20,12 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'app.hide-others',
 	'system.volume.set',
 	'system.audio.mute.set',
+	'system.audio.input.volume.set',
+	'system.audio.input.mute.set',
 	'system.audio.output.set',
 	'system.audio.input.set',
+	'system.audio.sound-effects.volume.set',
+	'system.audio.sound-effects.mute.set',
 	'system.audio.sound-effects-output.set',
 	'system.brightness.set',
 	'system.lock',
@@ -51,6 +55,10 @@ export type PublicDeviceState = {
 	locked: boolean;
 	volume: number | null;
 	muted: boolean | null;
+	inputVolume?: number | null;
+	inputMuted?: boolean | null;
+	soundEffectsVolume?: number | null;
+	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
 	battery: { level: number; charging: boolean } | null;
 	openApps: PublicDeviceOpenApp[];

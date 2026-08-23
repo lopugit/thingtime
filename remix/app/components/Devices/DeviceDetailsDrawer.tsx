@@ -464,7 +464,11 @@ export const DeviceDetailsDrawer = memo(
 										controlFor={controlFor}
 										deviceId={state.deviceId}
 										devices={snapshot?.observed.audioDevices || []}
+										inputMuted={snapshot?.observed.inputMuted ?? null}
+										inputVolume={snapshot?.observed.inputVolume ?? null}
 										onAction={onAction}
+										soundEffectsMuted={snapshot?.observed.soundEffectsMuted ?? null}
+										soundEffectsVolume={snapshot?.observed.soundEffectsVolume ?? null}
 									/>
 								</Section>
 

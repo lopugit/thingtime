@@ -12,6 +12,10 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case refreshTelemetry = "telemetry.refresh"
     case setOutputVolume = "system.volume.set"
     case setOutputMuted = "system.audio.mute.set"
+    case setInputVolume = "system.audio.input.volume.set"
+    case setInputMuted = "system.audio.input.mute.set"
+    case setSoundEffectsOutputVolume = "system.audio.sound-effects.volume.set"
+    case setSoundEffectsOutputMuted = "system.audio.sound-effects.mute.set"
     case setDefaultOutputDevice = "system.audio.output.set"
     case setDefaultInputDevice = "system.audio.input.set"
     case setDefaultSoundEffectsOutputDevice = "system.audio.sound-effects-output.set"
@@ -83,14 +87,14 @@ public struct SafeActionPolicy: Sendable {
             return action.parameters.isEmpty ? nil : "telemetry.refresh does not accept parameters."
         case .lockScreen, .sleepSystem, .hideOtherApplications:
             return action.parameters.isEmpty ? nil : "The requested system power action does not accept parameters."
-        case .setOutputVolume:
+        case .setOutputVolume, .setInputVolume, .setSoundEffectsOutputVolume:
             guard let volume = action.parameters["volume"]?.numberValue, (0 ... 1).contains(volume) else {
-                return "system.volume.set requires a numeric volume between 0 and 1."
+                return "The requested audio level must be a number between 0 and 1."
             }
             return nil
-        case .setOutputMuted:
+        case .setOutputMuted, .setInputMuted, .setSoundEffectsOutputMuted:
             guard action.parameters.count == 1, case .bool = action.parameters["muted"] else {
-                return "system.audio.mute.set requires only a boolean muted value."
+                return "The requested audio mute action requires only a boolean muted value."
             }
             return nil
         case .setDefaultOutputDevice, .setDefaultInputDevice, .setDefaultSoundEffectsOutputDevice:
@@ -178,6 +182,30 @@ public final class SafeActionExecutor {
             }
             try SystemAudio.setOutputMuted(muted)
             return .object(["muted": .bool(muted)])
+        case .setInputVolume:
+            guard let volume = action.parameters["volume"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing input volume.")
+            }
+            try SystemAudio.setInputVolume(volume)
+            return .object(["volume": .number(volume), "route": .string("input")])
+        case .setInputMuted:
+            guard case let .bool(muted)? = action.parameters["muted"] else {
+                throw ThingtimeNodeError.invalidRequest("Missing input mute state.")
+            }
+            try SystemAudio.setInputMuted(muted)
+            return .object(["muted": .bool(muted), "route": .string("input")])
+        case .setSoundEffectsOutputVolume:
+            guard let volume = action.parameters["volume"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing sound-effects volume.")
+            }
+            try SystemAudio.setSoundEffectsOutputVolume(volume)
+            return .object(["volume": .number(volume), "route": .string("sound-effects-output")])
+        case .setSoundEffectsOutputMuted:
+            guard case let .bool(muted)? = action.parameters["muted"] else {
+                throw ThingtimeNodeError.invalidRequest("Missing sound-effects mute state.")
+            }
+            try SystemAudio.setSoundEffectsOutputMuted(muted)
+            return .object(["muted": .bool(muted), "route": .string("sound-effects-output")])
         case .setDefaultOutputDevice:
             guard let id = action.parameters["deviceId"]?.stringValue else {
                 throw ThingtimeNodeError.invalidRequest("Missing audio output device identifier.")

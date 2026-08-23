@@ -141,6 +141,10 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let architecture: String
     public let outputVolume: Double?
     public let outputMuted: Bool?
+    public let inputVolume: Double?
+    public let inputMuted: Bool?
+    public let soundEffectsOutputVolume: Double?
+    public let soundEffectsOutputMuted: Bool?
     public let audioDevices: [AudioDeviceTelemetry]
     public let wifi: WiFiTelemetry
     public let session: SessionTelemetry
@@ -157,6 +161,10 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         architecture: String,
         outputVolume: Double?,
         outputMuted: Bool? = nil,
+        inputVolume: Double? = nil,
+        inputMuted: Bool? = nil,
+        soundEffectsOutputVolume: Double? = nil,
+        soundEffectsOutputMuted: Bool? = nil,
         audioDevices: [AudioDeviceTelemetry] = [],
         wifi: WiFiTelemetry = WiFiTelemetry(powerOn: nil, ssid: nil),
         session: SessionTelemetry,
@@ -172,6 +180,10 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.architecture = architecture
         self.outputVolume = outputVolume
         self.outputMuted = outputMuted
+        self.inputVolume = inputVolume
+        self.inputMuted = inputMuted
+        self.soundEffectsOutputVolume = soundEffectsOutputVolume
+        self.soundEffectsOutputMuted = soundEffectsOutputMuted
         self.audioDevices = audioDevices
         self.wifi = wifi
         self.session = session
@@ -237,6 +249,10 @@ public final class DeviceTelemetryCollector {
             architecture: Self.sysctlString("hw.machine") ?? "unknown",
             outputVolume: SystemAudio.outputVolume(),
             outputMuted: SystemAudio.outputMuted(),
+            inputVolume: SystemAudio.inputVolume(),
+            inputMuted: SystemAudio.inputMuted(),
+            soundEffectsOutputVolume: SystemAudio.soundEffectsOutputVolume(),
+            soundEffectsOutputMuted: SystemAudio.soundEffectsOutputMuted(),
             audioDevices: SystemAudio.devices(),
             wifi: SystemWiFi.snapshot(),
             session: sessionTelemetry(),
@@ -512,6 +528,54 @@ public enum SystemAudio {
         try setMuted(muted, device: device, scope: kAudioDevicePropertyScopeOutput)
     }
 
+    public static func inputVolume() -> Double? {
+        guard let device = defaultInputDevice() else { return nil }
+        return volume(device: device, scope: kAudioDevicePropertyScopeInput)
+    }
+
+    public static func setInputVolume(_ volume: Double) throws {
+        guard let device = defaultInputDevice() else {
+            throw ThingtimeNodeError.policyDenied("No controllable default input device is available.")
+        }
+        try setVolume(volume, device: device, scope: kAudioDevicePropertyScopeInput, route: "input")
+    }
+
+    public static func inputMuted() -> Bool? {
+        guard let device = defaultInputDevice() else { return nil }
+        return muted(device: device, scope: kAudioDevicePropertyScopeInput)
+    }
+
+    public static func setInputMuted(_ muted: Bool) throws {
+        guard let device = defaultInputDevice() else {
+            throw ThingtimeNodeError.policyDenied("No controllable default input device is available.")
+        }
+        try setMuted(muted, device: device, scope: kAudioDevicePropertyScopeInput, route: "input")
+    }
+
+    public static func soundEffectsOutputVolume() -> Double? {
+        guard let device = defaultSoundEffectsOutputDevice() else { return nil }
+        return volume(device: device, scope: kAudioDevicePropertyScopeOutput)
+    }
+
+    public static func setSoundEffectsOutputVolume(_ volume: Double) throws {
+        guard let device = defaultSoundEffectsOutputDevice() else {
+            throw ThingtimeNodeError.policyDenied("No controllable sound-effects output device is available.")
+        }
+        try setVolume(volume, device: device, scope: kAudioDevicePropertyScopeOutput, route: "sound-effects output")
+    }
+
+    public static func soundEffectsOutputMuted() -> Bool? {
+        guard let device = defaultSoundEffectsOutputDevice() else { return nil }
+        return muted(device: device, scope: kAudioDevicePropertyScopeOutput)
+    }
+
+    public static func setSoundEffectsOutputMuted(_ muted: Bool) throws {
+        guard let device = defaultSoundEffectsOutputDevice() else {
+            throw ThingtimeNodeError.policyDenied("No controllable sound-effects output device is available.")
+        }
+        try setMuted(muted, device: device, scope: kAudioDevicePropertyScopeOutput, route: "sound-effects output")
+    }
+
     public static func devices() -> [AudioDeviceTelemetry] {
         let defaultOutput = defaultOutputDevice()
         let defaultInput = defaultInputDevice()
@@ -587,23 +651,59 @@ public enum SystemAudio {
         return value != 0
     }
 
-    private static func setMuted(_ muted: Bool, device: AudioDeviceID, scope: AudioObjectPropertyScope) throws {
+    private static func volume(device: AudioDeviceID, scope: AudioObjectPropertyScope) -> Double? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(device, &address) else { return nil }
+        var volume = Float32.zero
+        var size = UInt32(MemoryLayout<Float32>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &volume) == noErr else { return nil }
+        return Double(volume)
+    }
+
+    private static func setVolume(_ volume: Double, device: AudioDeviceID, scope: AudioObjectPropertyScope, route: String) throws {
+        guard (0 ... 1).contains(volume) else {
+            throw ThingtimeNodeError.invalidRequest("Volume must be between 0 and 1.")
+        }
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(device, &address) else {
+            throw ThingtimeNodeError.policyDenied("The default \(route) device does not expose a main-volume control.")
+        }
+        var settable = DarwinBoolean(false)
+        guard AudioObjectIsPropertySettable(device, &address, &settable) == noErr, settable.boolValue else {
+            throw ThingtimeNodeError.policyDenied("The default \(route) volume is read-only.")
+        }
+        var scalar = Float32(volume)
+        let size = UInt32(MemoryLayout<Float32>.size)
+        guard AudioObjectSetPropertyData(device, &address, 0, nil, size, &scalar) == noErr else {
+            throw ThingtimeNodeError.policyDenied("macOS could not change the \(route) volume.")
+        }
+    }
+
+    private static func setMuted(_ muted: Bool, device: AudioDeviceID, scope: AudioObjectPropertyScope, route: String = "output") throws {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyMute,
             mScope: scope,
             mElement: kAudioObjectPropertyElementMain
         )
         guard AudioObjectHasProperty(device, &address) else {
-            throw ThingtimeNodeError.policyDenied("The default output device does not expose mute control.")
+            throw ThingtimeNodeError.policyDenied("The default \(route) device does not expose mute control.")
         }
         var settable = DarwinBoolean(false)
         guard AudioObjectIsPropertySettable(device, &address, &settable) == noErr, settable.boolValue else {
-            throw ThingtimeNodeError.policyDenied("The default output mute control is read-only.")
+            throw ThingtimeNodeError.policyDenied("The default \(route) mute control is read-only.")
         }
         var value: UInt32 = muted ? 1 : 0
         let size = UInt32(MemoryLayout<UInt32>.size)
         guard AudioObjectSetPropertyData(device, &address, 0, nil, size, &value) == noErr else {
-            throw ThingtimeNodeError.policyDenied("macOS could not change the output mute state.")
+            throw ThingtimeNodeError.policyDenied("macOS could not change the \(route) mute state.")
         }
     }
 

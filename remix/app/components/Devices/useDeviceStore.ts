@@ -56,12 +56,18 @@ const CAPABILITY_ALIASES: Record<string, string[]> = {
 	'app.focus': ['apps.launch'],
 	'app.launch': ['apps.launch'],
 	'app.quit': ['apps.quit'],
+	'app.force-quit': ['apps.force-quit'],
 	'app.hide': ['apps.visibility'],
 	'app.unhide': ['apps.visibility'],
+	'app.hide-others': ['apps.visibility'],
 	'system.volume.set': ['system.volume.write'],
 	'system.audio.mute.set': ['system.audio.mute.write'],
+	'system.audio.input.volume.set': ['system.audio.input.volume.write'],
+	'system.audio.input.mute.set': ['system.audio.input.mute.write'],
 	'system.audio.output.set': ['system.audio.output.write'],
 	'system.audio.input.set': ['system.audio.input.write'],
+	'system.audio.sound-effects.volume.set': ['system.audio.sound-effects.volume.write'],
+	'system.audio.sound-effects.mute.set': ['system.audio.sound-effects.mute.write'],
 	'system.audio.sound-effects-output.set': ['system.audio.sound-effects-output.write'],
 	'system.brightness.set': ['system.brightness.write'],
 	'system.lock': ['system.lock'],
@@ -146,14 +152,26 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 			return 'launch-app';
 		case 'app.quit':
 			return 'quit-app';
+		case 'app.force-quit':
+			return 'force-quit-app';
+		case 'app.hide-others':
+			return 'hide-other-apps';
 		case 'system.audio.mute.set':
 			return 'set-muted';
+		case 'system.audio.input.volume.set':
+			return 'set-input-volume';
+		case 'system.audio.input.mute.set':
+			return 'set-input-muted';
 		case 'system.audio.output.set':
 			return 'set-audio-output';
 		case 'system.audio.input.set':
 			return 'set-audio-input';
 		case 'system.audio.sound-effects-output.set':
 			return 'set-sound-effects-output';
+		case 'system.audio.sound-effects.volume.set':
+			return 'set-sound-effects-volume';
+		case 'system.audio.sound-effects.mute.set':
+			return 'set-sound-effects-muted';
 		case 'system.volume.set':
 			return 'set-volume';
 		case 'system.brightness.set':
@@ -347,6 +365,10 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 		observed: {
 			volume: unit(device.state?.volume ?? device.volume),
 			muted: device.state?.muted ?? null,
+			inputVolume: unit(device.state?.inputVolume),
+			inputMuted: device.state?.inputMuted ?? null,
+			soundEffectsVolume: unit(device.state?.soundEffectsVolume),
+			soundEffectsMuted: device.state?.soundEffectsMuted ?? null,
 			brightness: unit(device.state?.brightness ?? device.brightness),
 			locked: device.state?.locked ?? device.locked,
 			sleeping: null,
@@ -520,6 +542,14 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 			const muted = typeof intent.desired?.muted === 'boolean' ? intent.desired.muted : input.muted;
 			return typeof muted === 'boolean' ? { ...base, kind: 'system.audio.mute.set', input: { muted } } : null;
 		}
+		case 'set-input-volume': {
+			const level = unit(input.level);
+			return level === null ? null : { ...base, kind: 'system.audio.input.volume.set', input: { level } };
+		}
+		case 'set-input-muted': {
+			const muted = input.muted;
+			return typeof muted === 'boolean' ? { ...base, kind: 'system.audio.input.mute.set', input: { muted } } : null;
+		}
 		case 'set-audio-output': {
 			const deviceId = inputString(input.deviceId || intent.targetId);
 			return deviceId ? { ...base, kind: 'system.audio.output.set', input: { deviceId } } : null;
@@ -531,6 +561,14 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 		case 'set-sound-effects-output': {
 			const deviceId = inputString(input.deviceId || intent.targetId);
 			return deviceId ? { ...base, kind: 'system.audio.sound-effects-output.set', input: { deviceId } } : null;
+		}
+		case 'set-sound-effects-volume': {
+			const level = unit(input.level);
+			return level === null ? null : { ...base, kind: 'system.audio.sound-effects.volume.set', input: { level } };
+		}
+		case 'set-sound-effects-muted': {
+			const muted = input.muted;
+			return typeof muted === 'boolean' ? { ...base, kind: 'system.audio.sound-effects.mute.set', input: { muted } } : null;
 		}
 		case 'set-brightness': {
 			const level = unit(intent.desired?.brightness ?? input.level);

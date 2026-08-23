@@ -902,12 +902,20 @@ function describeDeviceAction(request) {
 		}
 		case 'system.audio.mute.set':
 			return { message: 'Change this Mac\'s audio mute state?', confirmLabel: 'Change Mute' };
+		case 'system.audio.input.volume.set':
+			return { message: 'Change this Mac\'s microphone input level?', confirmLabel: 'Set Microphone Level' };
+		case 'system.audio.input.mute.set':
+			return { message: 'Change this Mac\'s microphone mute state?', confirmLabel: 'Change Microphone Mute' };
 		case 'system.audio.output.set':
 			return { message: 'Switch this Mac\'s default audio output device?', confirmLabel: 'Switch Output' };
 		case 'system.audio.input.set':
 			return { message: 'Switch this Mac\'s default audio input device?', confirmLabel: 'Switch Input' };
 		case 'system.audio.sound-effects-output.set':
 			return { message: 'Switch this Mac\'s sound-effects output device?', confirmLabel: 'Switch Sound Effects' };
+		case 'system.audio.sound-effects.volume.set':
+			return { message: 'Change this Mac\'s alerts and sound-effects level?', confirmLabel: 'Set Alerts Level' };
+		case 'system.audio.sound-effects.mute.set':
+			return { message: 'Change this Mac\'s alerts and sound-effects mute state?', confirmLabel: 'Change Alerts Mute' };
 		case 'system.wifi.connect':
 			return { message: 'Connect this Mac to the requested available Wi-Fi network using only an existing local credential?', confirmLabel: 'Connect Wi-Fi' };
 		case 'system.wifi.disconnect':

@@ -120,6 +120,10 @@ export type DeviceSystemProperties = {
 export type DeviceObservedState = {
 	volume: number | null;
 	muted: boolean | null;
+	inputVolume?: number | null;
+	inputMuted?: boolean | null;
+	soundEffectsVolume?: number | null;
+	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
 	locked: boolean | null;
 	sleeping: boolean | null;
@@ -185,6 +189,10 @@ export type DeviceActionKind =
 	| 'register-project'
 	| 'set-volume'
 	| 'set-muted'
+	| 'set-input-volume'
+	| 'set-input-muted'
+	| 'set-sound-effects-volume'
+	| 'set-sound-effects-muted'
 	| 'set-brightness'
 	| 'set-audio-output'
 	| 'set-audio-input'

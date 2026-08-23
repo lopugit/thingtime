@@ -18,8 +18,12 @@ export const DEVICE_COMMAND_KINDS = [
 	'app.hide-others',
 	'system.volume.set',
 	'system.audio.mute.set',
+	'system.audio.input.volume.set',
+	'system.audio.input.mute.set',
 	'system.audio.output.set',
 	'system.audio.input.set',
+	'system.audio.sound-effects.volume.set',
+	'system.audio.sound-effects.mute.set',
 	'system.audio.sound-effects-output.set',
 	'system.brightness.set',
 	'system.lock',
@@ -154,6 +158,10 @@ export type DeviceStateSnapshot = {
 	locked: boolean;
 	volume: number | null;
 	muted: boolean | null;
+	inputVolume?: number | null;
+	inputMuted?: boolean | null;
+	soundEffectsVolume?: number | null;
+	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
 	battery: { level: number; charging: boolean } | null;
 	openApps: DeviceOpenApp[];
@@ -170,7 +178,12 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 	if (!value || typeof value !== 'object') return null;
 	const raw = value as Record<string, unknown>;
 	if (typeof raw.locked !== 'boolean') return null;
-	if (!Object.keys(raw).every((key) => ['locked', 'volume', 'muted', 'brightness', 'battery', 'openApps', 'audioDevices', 'wifi'].includes(key))) return null;
+	if (
+		!Object.keys(raw).every((key) =>
+			['locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'openApps', 'audioDevices', 'wifi'].includes(key)
+		)
+	)
+		return null;
 	const appsRaw = raw.openApps === undefined ? [] : raw.openApps;
 	if (!Array.isArray(appsRaw) || appsRaw.length > MAX_DEVICE_OPEN_APPS) return null;
 	const openApps: DeviceOpenApp[] = [];
@@ -233,6 +246,18 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		if (typeof raw.muted !== 'boolean') return null;
 		muted = raw.muted;
 	}
+	const inputVolume = raw.inputVolume === undefined || raw.inputVolume === null ? null : unitInterval(raw.inputVolume);
+	let inputMuted: boolean | null = null;
+	if (raw.inputMuted !== undefined && raw.inputMuted !== null) {
+		if (typeof raw.inputMuted !== 'boolean') return null;
+		inputMuted = raw.inputMuted;
+	}
+	const soundEffectsVolume = raw.soundEffectsVolume === undefined || raw.soundEffectsVolume === null ? null : unitInterval(raw.soundEffectsVolume);
+	let soundEffectsMuted: boolean | null = null;
+	if (raw.soundEffectsMuted !== undefined && raw.soundEffectsMuted !== null) {
+		if (typeof raw.soundEffectsMuted !== 'boolean') return null;
+		soundEffectsMuted = raw.soundEffectsMuted;
+	}
 	const brightness = raw.brightness === undefined || raw.brightness === null ? null : unitInterval(raw.brightness);
 	let wifi: DeviceWiFiState | null = null;
 	if (raw.wifi !== undefined && raw.wifi !== null) {
@@ -246,11 +271,17 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		wifi = { powerOn, ssid };
 	}
 	if (raw.volume !== undefined && raw.volume !== null && volume === null) return null;
+	if (raw.inputVolume !== undefined && raw.inputVolume !== null && inputVolume === null) return null;
+	if (raw.soundEffectsVolume !== undefined && raw.soundEffectsVolume !== null && soundEffectsVolume === null) return null;
 	if (raw.brightness !== undefined && raw.brightness !== null && brightness === null) return null;
 	return {
 		locked: raw.locked,
 		volume,
 		muted,
+		inputVolume,
+		inputMuted,
+		soundEffectsVolume,
+		soundEffectsMuted,
 		brightness,
 		battery,
 		openApps,
@@ -448,8 +479,12 @@ export type DeviceCommandInputByKind = {
 	'app.hide-others': Record<string, never>;
 	'system.volume.set': { level: number };
 	'system.audio.mute.set': { muted: boolean };
+	'system.audio.input.volume.set': { level: number };
+	'system.audio.input.mute.set': { muted: boolean };
 	'system.audio.output.set': { deviceId: string };
 	'system.audio.input.set': { deviceId: string };
+	'system.audio.sound-effects.volume.set': { level: number };
+	'system.audio.sound-effects.mute.set': { muted: boolean };
 	'system.audio.sound-effects-output.set': { deviceId: string };
 	'system.brightness.set': { level: number };
 	'system.lock': Record<string, never>;
@@ -514,8 +549,12 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'app.hide-others': 'apps.visibility',
 	'system.volume.set': 'system.volume.write',
 	'system.audio.mute.set': 'system.audio.mute.write',
+	'system.audio.input.volume.set': 'system.audio.input.volume.write',
+	'system.audio.input.mute.set': 'system.audio.input.mute.write',
 	'system.audio.output.set': 'system.audio.output.write',
 	'system.audio.input.set': 'system.audio.input.write',
+	'system.audio.sound-effects.volume.set': 'system.audio.sound-effects.volume.write',
+	'system.audio.sound-effects.mute.set': 'system.audio.sound-effects.mute.write',
 	'system.audio.sound-effects-output.set': 'system.audio.sound-effects-output.write',
 	'system.brightness.set': 'system.brightness.write',
 	'system.lock': 'system.lock',
@@ -544,8 +583,12 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'application.hide-others': 'apps.visibility',
 	'system.volume.set': 'system.volume.write',
 	'system.audio.mute.set': 'system.audio.mute.write',
+	'system.audio.input.volume.set': 'system.audio.input.volume.write',
+	'system.audio.input.mute.set': 'system.audio.input.mute.write',
 	'system.audio.output.set': 'system.audio.output.write',
 	'system.audio.input.set': 'system.audio.input.write',
+	'system.audio.sound-effects.volume.set': 'system.audio.sound-effects.volume.write',
+	'system.audio.sound-effects.mute.set': 'system.audio.sound-effects.mute.write',
 	'system.audio.sound-effects-output.set': 'system.audio.sound-effects-output.write',
 	'system.brightness.set': 'system.brightness.write',
 	'device.lock.write': 'system.lock',
@@ -704,6 +747,8 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 			return appId && exactKeys(raw, ['appId']) ? ok({ appId }) : deviceFail(400, `${kind} requires only a stable appId`);
 		}
 		case 'system.volume.set':
+		case 'system.audio.input.volume.set':
+		case 'system.audio.sound-effects.volume.set':
 		case 'system.brightness.set': {
 			const level = Number(raw.level);
 			return Number.isFinite(level) && level >= 0 && level <= 1 && exactKeys(raw, ['level'])
@@ -715,6 +760,8 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 		case 'app.hide-others':
 			return exactKeys(raw, []) ? ok({}) : deviceFail(400, `${kind} accepts no input fields`);
 		case 'system.audio.mute.set':
+		case 'system.audio.input.mute.set':
+		case 'system.audio.sound-effects.mute.set':
 			return typeof raw.muted === 'boolean' && exactKeys(raw, ['muted'])
 				? ok({ muted: raw.muted })
 				: deviceFail(400, 'system.audio.mute.set requires only a boolean muted value');

@@ -71,8 +71,12 @@ public actor ThingtimeNodeController {
         "system.volume.read",
         "system.volume.write",
         "system.audio.mute.write",
+        "system.audio.input.volume.write",
+        "system.audio.input.mute.write",
         "system.audio.output.write",
         "system.audio.input.write",
+        "system.audio.sound-effects.volume.write",
+        "system.audio.sound-effects.mute.write",
         "system.audio.sound-effects-output.write",
         "system.wifi.connect",
         "system.wifi.disconnect",
@@ -510,6 +514,30 @@ public actor ThingtimeNodeController {
                 throw ThingtimeNodeError.invalidRequest("system.audio.mute.set requires muted.")
             }
             action = SafeActionRequest(kind: .setOutputMuted, parameters: ["muted": .bool(muted)])
+        case "system.audio.input.volume.set":
+            try requireOnlyKeys(input, ["level"])
+            guard let level = input["level"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("system.audio.input.volume.set requires level.")
+            }
+            action = SafeActionRequest(kind: .setInputVolume, parameters: ["volume": .number(level)])
+        case "system.audio.input.mute.set":
+            try requireOnlyKeys(input, ["muted"])
+            guard case let .bool(muted)? = input["muted"] else {
+                throw ThingtimeNodeError.invalidRequest("system.audio.input.mute.set requires muted.")
+            }
+            action = SafeActionRequest(kind: .setInputMuted, parameters: ["muted": .bool(muted)])
+        case "system.audio.sound-effects.volume.set":
+            try requireOnlyKeys(input, ["level"])
+            guard let level = input["level"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("system.audio.sound-effects.volume.set requires level.")
+            }
+            action = SafeActionRequest(kind: .setSoundEffectsOutputVolume, parameters: ["volume": .number(level)])
+        case "system.audio.sound-effects.mute.set":
+            try requireOnlyKeys(input, ["muted"])
+            guard case let .bool(muted)? = input["muted"] else {
+                throw ThingtimeNodeError.invalidRequest("system.audio.sound-effects.mute.set requires muted.")
+            }
+            action = SafeActionRequest(kind: .setSoundEffectsOutputMuted, parameters: ["muted": .bool(muted)])
         case "system.audio.output.set":
             try requireOnlyKeys(input, ["deviceId"])
             guard let deviceID = input["deviceId"]?.stringValue else {

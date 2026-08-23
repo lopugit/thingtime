@@ -146,6 +146,21 @@ final class SafeActionPolicyTests: XCTestCase {
             context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
         ) else { return XCTFail("Expected approval requirement for mute") }
 
+        let inputVolume = SafeActionRequest(kind: .setInputVolume, parameters: ["volume": .number(0.4)])
+        guard case .requireApproval = policy.evaluate(
+            action: inputVolume,
+            context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+        ) else { return XCTFail("Expected approval requirement for input volume") }
+
+        let invalidSoundEffectsMute = SafeActionRequest(
+            kind: .setSoundEffectsOutputMuted,
+            parameters: ["muted": .bool(true), "unexpected": .bool(false)]
+        )
+        guard case .deny = policy.evaluate(
+            action: invalidSoundEffectsMute,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected strict parameter denial for sound-effects mute") }
+
         let invalid = SafeActionRequest(kind: .setDefaultInputDevice, parameters: ["deviceId": .string("\n")])
         guard case .deny = policy.evaluate(
             action: invalid,

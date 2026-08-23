@@ -1,13 +1,13 @@
 import React, { memo } from 'react';
 
-import { Box, Button, Flex, Menu, MenuButton, MenuList, Portal, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Menu, MenuButton, MenuList, Portal, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
 import { ChevronDown, Mic2, Speaker, Volume2 } from 'lucide-react';
 
 import { DRAWER_POPUP_Z } from '~/components/Nav/Drawer/useDrawer';
 
-import type { DeviceAudioDevice } from './deviceTypes';
+import type { DeviceActionKind, DeviceAudioDevice } from './deviceTypes';
 import type { DeviceActionHandler, DeviceControlResolver } from './DeviceStateGrid';
-import { DevicePolicyMenuItem } from './DeviceStateGrid';
+import { DevicePolicyButton, DevicePolicyMenuItem } from './DeviceStateGrid';
 
 type RouteKind = 'output' | 'input' | 'sound-effects-output';
 
@@ -85,14 +85,95 @@ const RouteMenu = ({
 	);
 };
 
+const percent = (value: number | null): string => (value === null ? 'Unavailable' : `${Math.round(value * 100)}%`);
+
+const AudioLevelControl = ({
+	deviceId,
+	label,
+	level,
+	muted,
+	volumeAction,
+	muteAction,
+	controlFor,
+	onAction
+}: {
+	deviceId: string;
+	label: string;
+	level: number | null;
+	muted: boolean | null;
+	volumeAction: DeviceActionKind;
+	muteAction: DeviceActionKind;
+	controlFor?: DeviceControlResolver;
+	onAction?: DeviceActionHandler;
+}) => {
+	const control = controlFor?.(volumeAction, `${volumeAction}:level`);
+	const actionable = Boolean(control?.policy.allowed && control.idempotencyKey && onAction && !control.busy);
+	return (
+		<Box border="1px solid var(--tt-border, #ececef)" borderRadius="10px" minWidth={0} padding={2.5}>
+			<Flex alignItems="baseline" justifyContent="space-between" gap={2}>
+				<Text color="var(--tt-muted, #71717a)" fontSize="10px" fontWeight={700} letterSpacing="0.04em" textTransform="uppercase">
+					{label}
+				</Text>
+				<Text fontSize="12px" fontWeight={700}>{muted ? `Muted · ${percent(level)}` : percent(level)}</Text>
+			</Flex>
+			{level === null ? (
+				<Text color="var(--tt-muted, #71717a)" fontSize="10px" marginTop={2}>Not reported by this device.</Text>
+			) : (
+				<Slider
+					aria-label={`Set ${label.toLowerCase()}`}
+					defaultValue={Math.round(level * 100)}
+					isDisabled={!actionable}
+					key={`${volumeAction}:${Math.round(level * 100)}`}
+					marginTop={2}
+					max={100}
+					min={0}
+					onChangeEnd={(nextPercent) => {
+						if (!actionable || !control || !onAction) return;
+						onAction({
+							deviceId,
+							action: volumeAction,
+							idempotencyKey: control.idempotencyKey,
+							commandId: control.commandId,
+							targetId: `${volumeAction}:level`,
+							input: { level: nextPercent / 100 }
+						});
+					}}
+					step={1}
+				>
+					<SliderTrack background="var(--tt-surface-alt, #eeeeef)"><SliderFilledTrack background="var(--tt-accent, #f472b6)" /></SliderTrack>
+					<SliderThumb boxShadow="0 1px 3px rgba(0, 0, 0, 0.24)" />
+				</Slider>
+			)}
+			{muted !== null ? (
+				<Box marginTop={2}>
+					<DevicePolicyButton
+						action={muteAction}
+						controlFor={controlFor}
+						controlKey={`${muteAction}:toggle`}
+						deviceId={deviceId}
+						input={{ muted: !muted }}
+						label={muted ? 'Unmute' : 'Mute'}
+						onAction={onAction}
+					/>
+				</Box>
+			) : null}
+			{control && !control.policy.allowed ? <Text color="var(--tt-muted, #71717a)" fontSize="10px" lineHeight="1.35" marginTop={1}>{control.policy.message || 'This control is unavailable.'}</Text> : null}
+		</Box>
+	);
+};
+
 export type DeviceAudioControlsProps = {
 	deviceId: string;
 	devices: DeviceAudioDevice[];
+	inputVolume: number | null;
+	inputMuted: boolean | null;
+	soundEffectsVolume: number | null;
+	soundEffectsMuted: boolean | null;
 	controlFor?: DeviceControlResolver;
 	onAction?: DeviceActionHandler;
 };
 
-export const DeviceAudioControls = memo(({ deviceId, devices, controlFor, onAction }: DeviceAudioControlsProps) => (
+export const DeviceAudioControls = memo(({ deviceId, devices, inputVolume, inputMuted, soundEffectsVolume, soundEffectsMuted, controlFor, onAction }: DeviceAudioControlsProps) => (
 	<Box>
 		<Flex alignItems="center" color="var(--tt-muted, #71717a)" gap={2} marginBottom={2}>
 			<Speaker aria-hidden size={15} />
@@ -108,6 +189,32 @@ export const DeviceAudioControls = memo(({ deviceId, devices, controlFor, onActi
 				</Box>
 				<Box flex="1 1 180px" minWidth={0}>
 					<RouteMenu controlFor={controlFor} deviceId={deviceId} devices={devices} onAction={onAction} route="sound-effects-output" />
+				</Box>
+			</Flex>
+			<Flex gap={2} minWidth={0} wrap={{ base: 'wrap', sm: 'nowrap' }}>
+				<Box flex="1 1 180px" minWidth={0}>
+					<AudioLevelControl
+						controlFor={controlFor}
+						deviceId={deviceId}
+						label="Microphone level"
+						level={inputVolume}
+						muteAction="set-input-muted"
+						muted={inputMuted}
+						onAction={onAction}
+						volumeAction="set-input-volume"
+					/>
+				</Box>
+				<Box flex="1 1 180px" minWidth={0}>
+					<AudioLevelControl
+						controlFor={controlFor}
+						deviceId={deviceId}
+						label="Alerts & effects"
+						level={soundEffectsVolume}
+						muteAction="set-sound-effects-muted"
+						muted={soundEffectsMuted}
+						onAction={onAction}
+						volumeAction="set-sound-effects-volume"
+					/>
 				</Box>
 			</Flex>
 		</Flex>

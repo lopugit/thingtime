@@ -45,8 +45,12 @@ const LOCAL_ONLY_ACTIONS = new Set<DeviceActionKind>([
 const ACTION_CAPABILITY: Partial<Record<DeviceActionKind, string>> = {
 	'set-volume': 'system.volume.write',
 	'set-muted': 'system.audio.mute.write',
+	'set-input-volume': 'system.audio.input.volume.write',
+	'set-input-muted': 'system.audio.input.mute.write',
 	'set-audio-output': 'system.audio.output.write',
 	'set-audio-input': 'system.audio.input.write',
+	'set-sound-effects-volume': 'system.audio.sound-effects.volume.write',
+	'set-sound-effects-muted': 'system.audio.sound-effects.mute.write',
 	'set-sound-effects-output': 'system.audio.sound-effects-output.write',
 	'set-brightness': 'system.brightness.write',
 	'launch-app': 'apps.launch',
@@ -495,6 +499,10 @@ const cacheSnapshot = (snapshot: DeviceSnapshot | null): DeviceSnapshot | null =
 		observed: {
 			volume: unitValue(snapshot.observed.volume),
 			muted: typeof snapshot.observed.muted === 'boolean' ? snapshot.observed.muted : null,
+			inputVolume: unitValue(snapshot.observed.inputVolume),
+			inputMuted: typeof snapshot.observed.inputMuted === 'boolean' ? snapshot.observed.inputMuted : null,
+			soundEffectsVolume: unitValue(snapshot.observed.soundEffectsVolume),
+			soundEffectsMuted: typeof snapshot.observed.soundEffectsMuted === 'boolean' ? snapshot.observed.soundEffectsMuted : null,
 			brightness: unitValue(snapshot.observed.brightness),
 			locked: typeof snapshot.observed.locked === 'boolean' ? snapshot.observed.locked : null,
 			sleeping: typeof snapshot.observed.sleeping === 'boolean' ? snapshot.observed.sleeping : null,

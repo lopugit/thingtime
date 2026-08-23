@@ -142,6 +142,10 @@ final class ThingtimeAPIClientTests: XCTestCase {
             XCTAssertEqual((state["openApps"] as? [[String: Any]])?.count, 64)
             XCTAssertEqual(try XCTUnwrap(state["brightness"] as? Double), 0.42, accuracy: 0.001)
 			XCTAssertEqual(state["muted"] as? Bool, true)
+			XCTAssertEqual(try XCTUnwrap(state["inputVolume"] as? Double), 0.35, accuracy: 0.001)
+			XCTAssertEqual(state["inputMuted"] as? Bool, false)
+			XCTAssertEqual(try XCTUnwrap(state["soundEffectsVolume"] as? Double), 0.25, accuracy: 0.001)
+			XCTAssertEqual(state["soundEffectsMuted"] as? Bool, true)
 			let audioDevices = try XCTUnwrap(state["audioDevices"] as? [[String: Any]])
 			let audioDevice = try XCTUnwrap(audioDevices.first)
 			XCTAssertEqual(audioDevice["id"] as? String, "BuiltInOutputDevice")
@@ -184,7 +188,8 @@ final class ThingtimeAPIClientTests: XCTestCase {
         }
         let telemetry = DeviceTelemetry(
             deviceName: "Mac", hostName: "mac", modelIdentifier: nil, operatingSystemVersion: "macOS",
-            architecture: "arm64", outputVolume: 0.5, outputMuted: true, audioDevices: [
+            architecture: "arm64", outputVolume: 0.5, outputMuted: true,
+            inputVolume: 0.35, inputMuted: false, soundEffectsOutputVolume: 0.25, soundEffectsOutputMuted: true, audioDevices: [
                 .init(
                     id: "BuiltInOutputDevice",
                     name: "MacBook Speakers",
