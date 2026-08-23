@@ -1,5 +1,50 @@
 export const PROTOCOL_VERSION = 1 as const;
-export const COMMANDER_THINGTIME_CLIENT_ID = 'ttapp_fb2f7fc9-32c8-47ea-bd08-863728de69f1';
+export const COMMANDER_THINGTIME_PRODUCTION_URL = 'https://thingtime.com';
+export const COMMANDER_THINGTIME_DEVELOPMENT_URL = 'https://dev.thingtime.com';
+/** Public OAuth client registered for the released Commander desktop application. */
+export const COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID = 'ttapp_7a68dafc-23c0-4516-871d-62ea3cbc92de';
+/** Public OAuth client registered for Commander builds pointed at Thingtime development. */
+export const COMMANDER_THINGTIME_DEVELOPMENT_CLIENT_ID = 'ttapp_5aec98d2-b17b-4396-b450-528ccc730d0e';
+/** Compatibility alias for the production client. */
+export const COMMANDER_THINGTIME_CLIENT_ID = COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID;
+
+/**
+ * Built-in IDs that Commander shipped before their registration was corrected.
+ * They are migrated to the current public ID, while genuine user overrides stay
+ * untouched.
+ */
+export const LEGACY_COMMANDER_THINGTIME_CLIENT_IDS = ['ttapp_fb2f7fc9-32c8-47ea-bd08-863728de69f1'] as const;
+
+const BUILT_IN_COMMANDER_THINGTIME_CLIENT_IDS = new Set([
+  COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID,
+  COMMANDER_THINGTIME_DEVELOPMENT_CLIENT_ID,
+]);
+
+export function defaultCommanderThingtimeClientId(baseUrl: unknown): string {
+  try {
+    const url = new URL(typeof baseUrl === 'string' ? baseUrl : COMMANDER_THINGTIME_PRODUCTION_URL);
+    const hostname = url.hostname.toLowerCase();
+    if (
+      url.protocol === 'https:' &&
+      (url.origin === COMMANDER_THINGTIME_DEVELOPMENT_URL || hostname.endsWith('.previews.dev.thingtime.com'))
+    )
+      return COMMANDER_THINGTIME_DEVELOPMENT_CLIENT_ID;
+  } catch {
+    // The daemon gives malformed custom URLs a user-facing validation error at login time.
+  }
+  return COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID;
+}
+
+export function normalizeCommanderThingtimeClientId(value: unknown, baseUrl?: unknown): string {
+  const clientId = typeof value === 'string' ? value.trim() : '';
+  if (
+    !clientId ||
+    LEGACY_COMMANDER_THINGTIME_CLIENT_IDS.some((legacyId) => legacyId === clientId) ||
+    BUILT_IN_COMMANDER_THINGTIME_CLIENT_IDS.has(clientId)
+  )
+    return defaultCommanderThingtimeClientId(baseUrl);
+  return clientId;
+}
 export const RECENT_SEARCH_PREVIEW_LIMIT = 8;
 export const RECENT_SEARCH_STORAGE_LIMIT = 50;
 export const RECENT_SEARCH_COMMAND_LIMIT = 8;
@@ -1000,8 +1045,8 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
     resourceLimits: { ...DEFAULT_INDEXING_SETTINGS.resourceLimits },
   },
   activeAccountId: null,
-  thingtimeBaseUrl: 'https://thingtime.com',
-  thingtimeClientId: COMMANDER_THINGTIME_CLIENT_ID,
+  thingtimeBaseUrl: COMMANDER_THINGTIME_PRODUCTION_URL,
+  thingtimeClientId: COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID,
   syncRevision: 0,
   syncUpdatedAt: null,
   syncDirty: false,
