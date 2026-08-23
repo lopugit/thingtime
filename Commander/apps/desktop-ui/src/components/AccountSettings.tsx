@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   COMMANDER_THINGTIME_ENVIRONMENTS,
   type CommanderAccount,
@@ -9,14 +9,7 @@ import { api } from '../lib/api.js';
 import { nativeRequest } from '../lib/nativeBridge.js';
 
 function environmentLabel(account: CommanderAccount, settings: CommanderSettings): string {
-  // Older local records predate this metadata. Only the active account can be
-  // safely associated with the currently selected environment; never guess for
-  // another legacy account with the same username.
-  const environment =
-    account.environment ??
-    (account.id === settings.activeAccountId
-      ? { baseUrl: settings.thingtimeBaseUrl, clientId: settings.thingtimeClientId }
-      : undefined);
+  const environment = account.environment;
   if (!environment) return 'Environment unavailable';
 
   const known = [
@@ -48,8 +41,29 @@ export function AccountSettings({
 }) {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [message, setMessage] = useState<string | null>(null);
+  const reconciledAccountSignature = useRef<string | null>(null);
   const active = accounts.find((account) => account.id === settings.activeAccountId);
   useEffect(() => setAccounts(initialAccounts), [initialAccounts]);
+
+  useEffect(() => {
+    const accountIds = [...new Set(initialAccounts.map((account) => account.id))].sort();
+    const signature = accountIds.join('\u0000');
+    if (!signature || reconciledAccountSignature.current === signature) return;
+    reconciledAccountSignature.current = signature;
+    void (async () => {
+      try {
+        const native = await nativeRequest<{
+          environments?: Array<{ accountId: string; baseUrl: string; clientId: string }>;
+        }>('credential.environments', { accountIds });
+        if (!native?.environments?.length) return;
+        const reconciled = await api.reconcileAccountEnvironments(native.environments);
+        setAccounts(reconciled.accounts);
+        await onRefresh();
+      } catch {
+        // A missing/locked Keychain must not block account settings.
+      }
+    })();
+  }, [initialAccounts, onRefresh]);
 
   const login = async () => {
     try {
@@ -84,18 +98,28 @@ export function AccountSettings({
 
   const switchTo = async (account: CommanderAccount) => {
     await api.switchAccount(account.id);
-    onSettings({ ...settings, activeAccountId: account.id });
+    onSettings({
+      ...settings,
+      activeAccountId: account.id,
+      ...(account.environment
+        ? {
+            thingtimeBaseUrl: account.environment.baseUrl,
+            thingtimeClientId: account.environment.clientId,
+          }
+        : {}),
+    });
     await onRefresh();
     setMessage(`Switched to @${account.username}`);
   };
 
   const remove = async (account: CommanderAccount) => {
     await api.removeAccount(account.id);
-    await nativeRequest('credential.delete', {
-      accountId: account.id,
-      issuer: settings.thingtimeBaseUrl,
-      clientId: settings.thingtimeClientId,
-    });
+    if (account.environment)
+      await nativeRequest('credential.delete', {
+        accountId: account.id,
+        issuer: account.environment.baseUrl,
+        clientId: account.environment.clientId,
+      });
     const next = accounts.filter((item) => item.id !== account.id);
     setAccounts(next);
     if (settings.activeAccountId === account.id)

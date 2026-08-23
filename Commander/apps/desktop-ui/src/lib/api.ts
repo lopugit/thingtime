@@ -156,6 +156,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ id }),
     }),
+  reconcileAccountEnvironments: (
+    environments: Array<{ accountId: string; baseUrl: string; clientId: string }>,
+  ) =>
+    request<{ accounts: CommanderAccount[] }>('/api/accounts/environments', {
+      method: 'PUT',
+      body: JSON.stringify({ environments }),
+    }),
   removeAccount: (id: string) =>
     request<{ ok: true }>(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   pendingCredential: () =>

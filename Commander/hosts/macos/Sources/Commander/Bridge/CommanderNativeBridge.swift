@@ -24,6 +24,7 @@ private enum JSONValue: Decodable {
   var string: String? { if case .string(let value) = self { value } else { nil } }
   var bool: Bool? { if case .bool(let value) = self { value } else { nil } }
   var object: [String: JSONValue]? { if case .object(let value) = self { value } else { nil } }
+  var array: [JSONValue]? { if case .array(let value) = self { value } else { nil } }
 }
 
 @MainActor
@@ -282,6 +283,24 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
       case "credential.delete":
         let key = try credentialKey(request)
         try keychain.delete(issuer: key.issuer, clientID: key.clientID, accountID: key.accountID); result = nil
+      case "credential.environments":
+        guard let values = request.params?["accountIds"]?.array,
+              !values.isEmpty,
+              values.count <= 64 else { throw BridgeError.missing("accountIds") }
+        let accountIDs = try Set(values.map { value -> String in
+          guard let accountID = value.string,
+                !accountID.isEmpty,
+                accountID.count <= 256 else { throw BridgeError.missing("accountIds") }
+          return accountID
+        })
+        let environments = try keychain.environments(for: accountIDs)
+        result = ["environments": environments.map { environment in
+          [
+            "accountId": environment.accountID,
+            "baseUrl": environment.issuer,
+            "clientId": environment.clientID,
+          ]
+        }]
       default: throw BridgeError.unknownMethod(request.method)
       }
       reply(id: request.id, ok: true, result: result, error: nil)

@@ -5,6 +5,19 @@ import XCTest
 
 @MainActor
 final class CommanderWebViewTests: XCTestCase {
+  func testKeychainEnvironmentParserRejectsAmbiguousKeys() {
+    XCTAssertEqual(
+      KeychainStore.environment(from: "https://dev.thingtime.com|ttapp_development|user-1"),
+      KeychainCredentialEnvironment(
+        issuer: "https://dev.thingtime.com",
+        clientID: "ttapp_development",
+        accountID: "user-1"
+      )
+    )
+    XCTAssertNil(KeychainStore.environment(from: "https://thingtime.com|ttapp|user|extra"))
+    XCTAssertNil(KeychainStore.environment(from: "https://thingtime.com||user"))
+  }
+
   func testTransparentCanvasDoesNotPaintAnOuterRectangle() {
     let ready = DaemonReady(
       type: "ready",

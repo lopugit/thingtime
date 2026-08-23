@@ -13,6 +13,12 @@ enum KeychainError: LocalizedError {
   }
 }
 
+struct KeychainCredentialEnvironment: Equatable {
+  let issuer: String
+  let clientID: String
+  let accountID: String
+}
+
 final class KeychainStore {
   private let service = "com.thingtime.Commander"
 
@@ -49,6 +55,42 @@ final class KeychainStore {
     let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: key(issuer: issuer, clientID: clientID, accountID: accountID)]
     let status = SecItemDelete(query as CFDictionary)
     guard status == errSecSuccess || status == errSecItemNotFound else { throw KeychainError.status(status) }
+  }
+
+  /// Returns only non-secret metadata for explicitly requested Commander accounts.
+  /// Tokens never leave the Keychain through this path.
+  func environments(for accountIDs: Set<String>) throws -> [KeychainCredentialEnvironment] {
+    guard !accountIDs.isEmpty else { return [] }
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecReturnAttributes as String: true,
+      kSecMatchLimit as String: kSecMatchLimitAll,
+    ]
+    var result: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &result)
+    if status == errSecItemNotFound { return [] }
+    guard status == errSecSuccess else { throw KeychainError.status(status) }
+    guard let entries = result as? [[String: Any]] else { return [] }
+    return entries.compactMap { entry in
+      guard let value = entry[kSecAttrAccount as String] as? String,
+            let environment = Self.environment(from: value),
+            accountIDs.contains(environment.accountID) else { return nil }
+      return environment
+    }
+  }
+
+  static func environment(from key: String) -> KeychainCredentialEnvironment? {
+    let components = key.split(separator: "|", omittingEmptySubsequences: false)
+    guard components.count == 3,
+          !components[0].isEmpty,
+          !components[1].isEmpty,
+          !components[2].isEmpty else { return nil }
+    return KeychainCredentialEnvironment(
+      issuer: String(components[0]),
+      clientID: String(components[1]),
+      accountID: String(components[2])
+    )
   }
 
   private func key(issuer: String, clientID: String, accountID: String) -> String {
