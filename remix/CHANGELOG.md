@@ -203,6 +203,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
   (PR #308 note has details).
 
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
+
 ### Added
 
 - **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
