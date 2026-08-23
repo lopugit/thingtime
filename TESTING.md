@@ -2139,12 +2139,14 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       its 44px X while it overlaps the native title-bar band. Reopen it and
       confirm the left edge has an always-visible centred grip with a forgiving
       in-panel hover target; drag that grip narrower and wider until both bounds
-      engage, then focus the separator and use Left/Right (Home resets). Collapse and reopen Node,
-      observed state, applications, connectors, screen, approvals, and command
-      activity independently; no section toggle may close the drawer or block
-      another control. At 390 CSS px the resize edge is absent, the drawer
-      remains full width, and every section still toggles without horizontal
-      overflow.
+      engage. Confirm both the accessible splitter value **and the visible
+      panel boundary** move together; a changing value behind an unchanged
+      full-width panel is a failure. Then focus the separator and use Left/Right
+      (Home resets). Collapse and reopen Node, observed state, applications,
+      connectors, screen, approvals, and command activity independently; no
+      section toggle may close the drawer or block another control. At 390 CSS
+      px the resize edge is absent, the drawer remains full width, and every
+      section still toggles without horizontal overflow.
 - [ ] Pair two different Macs to one disposable Thingtime account, then pair
       one disposable Mac to two different Thingtime accounts. Every pairing
       link must remain one-use, but the Mac must retain both account credentials

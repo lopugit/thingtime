@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Device drawer drag now changes its visible width**: resize handling now uses
+  one window-level pointer stream, preventing Chromium's compatibility
+  `mousedown` from replacing the active pointer id. The desktop drawer width
+  also explicitly outranks Chakra's inline `width: 100%`, so the rendered panel
+  edge moves with the accessible splitter value while mobile remains full
+  width. — Codex (AI), 2026-08-23
+
 - **Interactive, resizable device details drawer**: the close control and panel
   surface are now explicit Electron `no-drag` regions, so the 44px X remains
   clickable even where the native title-bar drag band crosses the drawer.

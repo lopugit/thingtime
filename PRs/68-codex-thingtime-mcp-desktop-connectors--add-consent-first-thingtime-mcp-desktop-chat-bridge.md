@@ -514,6 +514,16 @@ an offline database or offline conflict resolution layer.
   rebuilt installed app exposed the persistent grip and 24px in-panel target;
   real drags changed its splitter from 560px to 435px and then to 703px, and a
   double-click again restored 560px. No device mutation was invoked.
+- **2026-08-23 correction:** the earlier splitter-only proof did not establish
+  visible resizing. Chromium emitted `pointerdown` followed by compatibility
+  `mousedown`, and the second handler replaced the active pointer id; once that
+  was removed, Chakra's inline full-width drawer style still visually masked
+  valid state changes. The final implementation uses one window-level pointer
+  stream and a desktop-only authoritative width. In the exact rebuilt and
+  installed app, the drawer opened at a visibly measured 560px and a real drag
+  moved both its splitter and left panel boundary to the 420px minimum. The
+  before/after boundary moved by 140px while mobile's full-width rule remained
+  unchanged.
 - Final focused validation is devices `48/48`, Electron `56/56`, and the
   typecheck ratchet at `136` errors versus its `143` baseline. The canonical
   build and installed copy both pass deep/strict code-signing verification with

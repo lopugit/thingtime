@@ -19,6 +19,12 @@ test('device drawer controls remain interactive inside the Electron drag band', 
 	assert.match(source, /title="Drag this edge to resize device details"/u);
 	assert.match(source, /<GripVertical size=\{13\}/u);
 	assert.doesNotMatch(source, /left=\{-2\}/u);
+	assert.match(source, /window\.addEventListener\('pointermove', onPointerMove/u);
+	assert.match(source, /window\.addEventListener\('pointerup', onPointerEnd/u);
+	assert.doesNotMatch(source, /onMouseDown=/u);
+	assert.doesNotMatch(source, /addEventListener\('mousemove'/u);
+	assert.match(source, /@media screen and \(min-width: 48em\)/u);
+	assert.match(source, /width: `\$\{drawerWidth\}px !important`/u);
 	assert.match(source, /sx=\{\{ WebkitAppRegion: 'no-drag' \}\}/u);
 	assert.match(source, /aria-expanded=\{expanded\}/u);
 	assert.match(source, /setExpanded\(\(current\) => !current\)/u);
