@@ -136,6 +136,7 @@ export const DeviceDetailsDrawer = memo(
 		const [drawerWidth, setDrawerWidth] = React.useState(DEVICE_DRAWER_DEFAULT_WIDTH);
 		const [resizing, setResizing] = React.useState(false);
 		const resizeOrigin = React.useRef<{ pointerId: number; x: number; width: number } | null>(null);
+		const isMouseResize = React.useRef(false);
 		const summary = state?.summary || null;
 		const snapshot = state?.snapshot || null;
 		const pendingCommands = state?.commands.filter((command) => NON_TERMINAL_COMMANDS.has(command.status)).length || 0;
@@ -186,9 +187,17 @@ export const DeviceDetailsDrawer = memo(
 			};
 		}, [resizing]);
 
-		const finishResize = React.useCallback((event: React.PointerEvent<HTMLElement>) => {
-			if (resizeOrigin.current?.pointerId !== event.pointerId) return;
-			if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+		const applyResize = React.useCallback((clientX: number) => {
+			const origin = resizeOrigin.current;
+			if (!origin) return;
+			setDrawerWidth(clampDeviceDrawerWidth(origin.width + origin.x - clientX, window.innerWidth));
+		}, []);
+
+		const finishResize = React.useCallback((event?: { pointerId?: number }) => {
+			if (event?.pointerId != null) {
+				if (resizeOrigin.current?.pointerId !== event.pointerId) return;
+			}
+			isMouseResize.current = false;
 			resizeOrigin.current = null;
 			setResizing(false);
 		}, []);
@@ -197,6 +206,7 @@ export const DeviceDetailsDrawer = memo(
 			(event: React.PointerEvent<HTMLElement>) => {
 				if (event.button !== 0 || window.matchMedia('(max-width: 47.99em)').matches) return;
 				event.preventDefault();
+				isMouseResize.current = false;
 				resizeOrigin.current = { pointerId: event.pointerId, width: drawerWidth, x: event.clientX };
 				event.currentTarget.setPointerCapture(event.pointerId);
 				setResizing(true);
@@ -204,11 +214,40 @@ export const DeviceDetailsDrawer = memo(
 			[drawerWidth]
 		);
 
+		const beginResizeWithMouse = React.useCallback(
+			(event: React.MouseEvent<HTMLElement>) => {
+				if (event.button !== 0 || window.matchMedia('(max-width: 47.99em)').matches) return;
+				event.preventDefault();
+				isMouseResize.current = true;
+				resizeOrigin.current = { pointerId: -1, width: drawerWidth, x: event.clientX };
+				setResizing(true);
+			},
+			[drawerWidth]
+		);
+
 		const resizeDrawer = React.useCallback((event: React.PointerEvent<HTMLElement>) => {
-			const origin = resizeOrigin.current;
-			if (!origin || origin.pointerId !== event.pointerId) return;
-			setDrawerWidth(clampDeviceDrawerWidth(origin.width + origin.x - event.clientX, window.innerWidth));
-		}, []);
+			if (!resizing) return;
+			if (resizeOrigin.current?.pointerId !== event.pointerId) return;
+			applyResize(event.clientX);
+		}, [applyResize, resizing]);
+
+		React.useEffect(() => {
+			if (!resizing) return;
+			const onMouseMove = (event: MouseEvent) => {
+				if (!isMouseResize.current) return;
+				applyResize(event.clientX);
+			};
+			const onMouseUp = () => {
+				if (!isMouseResize.current) return;
+				finishResize();
+			};
+			window.addEventListener('mousemove', onMouseMove);
+			window.addEventListener('mouseup', onMouseUp);
+			return () => {
+				window.removeEventListener('mousemove', onMouseMove);
+				window.removeEventListener('mouseup', onMouseUp);
+			};
+		}, [applyResize, finishResize, resizing]);
 
 		const resizeWithKeyboard = React.useCallback((event: React.KeyboardEvent<HTMLElement>) => {
 			if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home') return;
@@ -245,12 +284,13 @@ export const DeviceDetailsDrawer = memo(
 						cursor="ew-resize"
 						display={{ base: 'none', md: 'block' }}
 						left={0}
-						onDoubleClick={() => setDrawerWidth(clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth))}
-						onKeyDown={resizeWithKeyboard}
-						onPointerCancel={finishResize}
-						onPointerDown={beginResize}
-						onPointerMove={resizeDrawer}
-						onPointerUp={finishResize}
+					onDoubleClick={() => setDrawerWidth(clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth))}
+					onKeyDown={resizeWithKeyboard}
+					onMouseDown={beginResizeWithMouse}
+					onPointerCancel={finishResize}
+					onPointerDown={beginResize}
+					onPointerMove={resizeDrawer}
+					onPointerUp={finishResize}
 						position="absolute"
 						role="separator"
 						tabIndex={0}

@@ -6715,9 +6715,9 @@
     "semantic_hash": "4013432d982d300fedd17f282eacbceb"
   },
   "remix/app/components/Devices/DeviceDetailsDrawer.tsx": {
-    "mtime": 1787403558.6214993,
-    "ast_hash": "ac6a1c164cef9f006b7e9c12df3e209d",
-    "semantic_hash": "ac6a1c164cef9f006b7e9c12df3e209d"
+    "mtime": 1787456057.9064486,
+    "ast_hash": "12cb2ca6e95dcf3573d43327dd633af6",
+    "semantic_hash": ""
   },
   "remix/app/components/Devices/DeviceListRow.tsx": {
     "mtime": 1787031671.3095453,
