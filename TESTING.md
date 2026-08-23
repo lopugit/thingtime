@@ -1306,6 +1306,11 @@ is fixed, and cite the checklist you ran in the PR description.
       restores `storageClass: "control"`; running
       `backfill-user-storage-accounting` directly invokes that repair first.
       A community/user-owned `thingtime: ["schema"]` Thing remains billable.
+- [ ] Seed a canonical attachment with every protected object-accounting root
+      field, then dry-run and run `backfill-user-storage-accounting`. Both
+      passes retain the complete attachment envelope while calculating exact
+      bytes, converge to zero pending, and never misclassify the attachment as
+      `InvalidAttachmentStorageEnvelopeError` because of a Mongo projection.
 - [ ] Force a migration runner exception once: the public error field remains
       a safe exception class/code (never a raw Mongo message, query, document
       id, host, or credential), and Lopu renders contextual text beneath the
