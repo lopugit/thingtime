@@ -4,7 +4,9 @@ const http = require('node:http');
 const https = require('node:https');
 
 const DEVICE_PROBE_PATH = '/api/v1/devices?limit=1';
+const CAPABILITIES_PROBE_PATH = '/api/v1/capabilities';
 const PROBE_TIMEOUT_MS = 10_000;
+const DESKTOP_REQUIRED_CAPABILITIES = Object.freeze({ 'api.devices': '^1.0.0' });
 
 const checkedAt = () => new Date().toISOString();
 const probeResult = (status, message, extra = {}) => ({ checkedAt: checkedAt(), message, status, ...extra });
@@ -18,6 +20,33 @@ const responseSupportsDevices = (status, contentType) =>
 			.includes('json'));
 const responseFailure = (status) =>
 	status === 404 ? 'This deployment does not expose the computers API yet.' : `The computers API returned HTTP ${status || 'unknown'}.`;
+const parseVersion = (value) => {
+	const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(value || ''));
+	return match ? match.slice(1).map(Number) : null;
+};
+const supportsVersion = (version, range) => {
+	const actual = parseVersion(version);
+	const minimum = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(String(range || ''));
+	if (!actual || !minimum) return false;
+	const expected = minimum.slice(1).map(Number);
+	return actual[0] === expected[0] && (actual[1] > expected[1] || (actual[1] === expected[1] && actual[2] >= expected[2]));
+};
+
+function requestJson(target, userAgent) {
+	const client = target.protocol === 'http:' ? http : https;
+	return new Promise((resolve) => {
+		const request = client.get(target, { headers: { Accept: 'application/json', 'User-Agent': userAgent } }, (response) => {
+			let body = '';
+			response.setEncoding('utf8');
+			response.on('data', (chunk) => {
+				if (body.length <= 64 * 1024) body += chunk;
+			});
+			response.on('end', () => resolve({ body, contentType: response.headers['content-type'], status: response.statusCode || 0 }));
+		});
+		request.setTimeout(PROBE_TIMEOUT_MS, () => request.destroy(new Error('timeout')));
+		request.on('error', () => resolve(null));
+	});
+}
 
 function requestDeviceProbe(target, userAgent, redirectCount = 0) {
 	const client = target.protocol === 'http:' ? http : https;
@@ -56,6 +85,38 @@ async function probeEndpointDevices(rawUrl, { userAgent = 'Thingtime desktop' } 
 	return requestDeviceProbe(new URL(DEVICE_PROBE_PATH, endpoint), userAgent);
 }
 
+async function probeEndpointCapabilities(rawUrl, { userAgent = 'Thingtime desktop', required = DESKTOP_REQUIRED_CAPABILITIES } = {}) {
+	let endpoint;
+	try {
+		endpoint = new URL(rawUrl);
+	} catch {
+		return probeResult('incompatible', 'Choose a valid Thingtime API endpoint.');
+	}
+	const response = await requestJson(new URL(CAPABILITIES_PROBE_PATH, endpoint), userAgent);
+	if (!response) return probeResult('unreachable', 'Thingtime could not reach this API endpoint.');
+	if (response.status === 404) return probeResult('legacy', 'This deployment has not published the capability manifest yet.');
+	if (
+		response.status < 200 ||
+		response.status >= 300 ||
+		!String(response.contentType || '')
+			.toLowerCase()
+			.includes('json')
+	) {
+		return probeResult('incompatible', `The capability manifest returned HTTP ${response.status || 'unknown'}.`);
+	}
+	try {
+		const manifest = JSON.parse(response.body);
+		if (manifest?.ok !== true || manifest?.schemaVersion !== 1 || !manifest.features || typeof manifest.features !== 'object') {
+			return probeResult('incompatible', 'This deployment returned an invalid capability manifest.');
+		}
+		const missing = Object.entries(required).find(([feature, range]) => !supportsVersion(manifest.features[feature], range));
+		if (missing) return probeResult('incompatible', `This deployment does not support ${missing[0]} ${missing[1]}.`, { manifest });
+		return probeResult('compatible', 'This deployment supports the desktop API contract.', { manifest });
+	} catch {
+		return probeResult('incompatible', 'This deployment returned an invalid capability manifest.');
+	}
+}
+
 async function probeBundledProxy({ endpointUrl, origin, fetchImpl = globalThis.fetch }) {
 	if (!origin || typeof fetchImpl !== 'function') return probeResult('unreachable', 'The packaged API proxy is not ready yet.');
 	const expectedOrigin = new URL(endpointUrl).origin;
@@ -73,7 +134,8 @@ async function probeBundledProxy({ endpointUrl, origin, fetchImpl = globalThis.f
 }
 
 async function checkEndpointCompatibility({ endpointUrl, origin, userAgent }) {
-	const direct = await probeEndpointDevices(endpointUrl, { userAgent });
+	const manifest = await probeEndpointCapabilities(endpointUrl, { userAgent });
+	const direct = manifest.status === 'legacy' ? await probeEndpointDevices(endpointUrl, { userAgent }) : manifest;
 	if (direct.status !== 'compatible') return { ...direct, direct, proxy: null };
 	const proxy = await probeBundledProxy({ endpointUrl, origin });
 	if (proxy.status !== 'compatible') return { ...proxy, direct, proxy };
@@ -84,9 +146,13 @@ const compatibilityError = (compatibility) => new Error(compatibility?.message |
 
 module.exports = {
 	DEVICE_PROBE_PATH,
+	CAPABILITIES_PROBE_PATH,
+	DESKTOP_REQUIRED_CAPABILITIES,
 	checkEndpointCompatibility,
 	compatibilityError,
 	probeBundledProxy,
+	probeEndpointCapabilities,
 	probeEndpointDevices,
-	responseSupportsDevices
+	responseSupportsDevices,
+	supportsVersion
 };

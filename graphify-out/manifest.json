@@ -1480,9 +1480,9 @@
     "semantic_hash": "d8e54ac3eb56ffe2541ba0ef0eadba0e"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1787477123.5648024,
-    "ast_hash": "d60d4d33e294191baa466bf811c3b0f3",
-    "semantic_hash": "d60d4d33e294191baa466bf811c3b0f3"
+    "mtime": 1787484796.765339,
+    "ast_hash": "07beff86743fb10271c9134fbb051599",
+    "semantic_hash": ""
   },
   "remix/server/routes/api/root-data.get.ts": {
     "mtime": 1787477123.5652523,
@@ -1750,8 +1750,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1787477679.5483463,
-    "ast_hash": "98ec829f4d37dcaf9b6d70e01183ac62",
+    "mtime": 1787484785.6300855,
+    "ast_hash": "76cbfa855b16745c06226178c3457522",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -3210,9 +3210,9 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1787477123.0829618,
-    "ast_hash": "5440ad5cf6abae4b477e3f007f58a876",
-    "semantic_hash": "5440ad5cf6abae4b477e3f007f58a876"
+    "mtime": 1787484796.7339268,
+    "ast_hash": "64069a829d501fbc17e958b90fc47426",
+    "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
     "mtime": 1787477123.1429496,
@@ -4155,8 +4155,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787477671.5199335,
-    "ast_hash": "f732083b372f44ba8c244b92ead52929",
+    "mtime": 1787484790.9105723,
+    "ast_hash": "9fa1686ab47053189d393fd0a68d85e5",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {

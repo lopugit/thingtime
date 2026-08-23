@@ -4,7 +4,14 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const test = require('node:test');
 
-const { checkEndpointCompatibility, probeBundledProxy, probeEndpointDevices, responseSupportsDevices } = require('../lib/endpoint-compatibility.cjs');
+const {
+	checkEndpointCompatibility,
+	probeBundledProxy,
+	probeEndpointCapabilities,
+	probeEndpointDevices,
+	responseSupportsDevices,
+	supportsVersion
+} = require('../lib/endpoint-compatibility.cjs');
 
 test('device capability accepts authenticated and successful JSON routes, but not an arbitrary success response', () => {
 	assert.equal(responseSupportsDevices(401, ''), true);
@@ -40,6 +47,27 @@ test('a direct incompatibility prevents the proxy leg from being treated as heal
 	const result = await checkEndpointCompatibility({ endpointUrl: 'not a URL', origin: 'http://127.0.0.1:40123' });
 	assert.equal(result.status, 'incompatible');
 	assert.equal(result.proxy, null);
+});
+
+test('capability contracts use compatible major versions and reject a missing or breaking feature', async () => {
+	assert.equal(supportsVersion('1.2.0', '^1.0.0'), true);
+	assert.equal(supportsVersion('2.0.0', '^1.0.0'), false);
+	assert.equal(supportsVersion('invalid', '^1.0.0'), false);
+
+	const server = http.createServer((request, response) => {
+		response.setHeader('content-type', 'application/json');
+		response.end(JSON.stringify({ ok: true, schemaVersion: 1, features: { 'api.devices': '1.2.0', 'api.posts': '1.0.0' } }));
+	});
+	await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+	const { port } = server.address();
+	try {
+		const supported = await probeEndpointCapabilities(`http://127.0.0.1:${port}/`);
+		assert.equal(supported.status, 'compatible');
+		const breaking = await probeEndpointCapabilities(`http://127.0.0.1:${port}/`, { required: { 'api.devices': '^2.0.0' } });
+		assert.equal(breaking.status, 'incompatible');
+	} finally {
+		await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+	}
 });
 
 test('the direct endpoint probe distinguishes an authenticated computers route from a missing one', async () => {
