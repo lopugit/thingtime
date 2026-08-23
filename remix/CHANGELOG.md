@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Paired-computer actions now default to Always allow**: the paired-account
+  badge uses a soft green success treatment, and each account/computer drawer
+  now offers a durable **Always allow / Ask every time / Deny** preference.
+  Existing pairs read as Always allow without a migration. The server enforces
+  the selected mode before creating a command, while pairing, capability,
+  freshness, locked-session, and macOS privacy checks remain fail-closed in
+  every mode. — Codex (AI), 2026-08-23
+
 - **Device drawer drag now changes its visible width**: resize handling now uses
   one window-level pointer stream, preventing Chromium's compatibility
   `mousedown` from replacing the active pointer id. The desktop drawer width

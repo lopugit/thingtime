@@ -76,6 +76,27 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
+		id: 'devices-permissions',
+		group: 'devices',
+		title: 'Device permission mode',
+		endpoint: '/api/v1/devices/permissions',
+		summary: 'Sets the current account’s execution preference for one paired computer.',
+		detail:
+			'Each account/device connection defaults to always-allow, so supported actions run without a repeated Thingtime approval prompt. ask-every-time retains the existing one-command approval flow; deny rejects new remote actions. Pairing, freshness, capability, locked-session and macOS privacy checks remain enforced in every mode.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['POST'],
+		steps: ['Choose a paired device.', 'Set its per-account execution mode.', 'Future commands follow the new preference.'],
+		requestExamples: [
+			{
+				name: 'Ask every time',
+				description: 'Require a prompt before each future command.',
+				method: 'POST',
+				body: { deviceId: 'device-id', mode: 'ask-every-time' }
+			}
+		],
+		responseExamples: [{ status: 200, description: 'Preference saved.', body: { ok: true, deviceId: 'device-id', mode: 'ask-every-time' } }]
+	}),
+	endpoint({
 		id: 'devices-pairing',
 		group: 'devices',
 		title: 'Create device pairing challenge',
@@ -177,7 +198,7 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 		endpoint: '/api/v1/devices/commands',
 		summary: 'Lists or creates idempotent, typed commands for one device.',
 		detail:
-			'Unknown kinds and unknown input fields are rejected. The initial vocabulary is connector.start/stop, session.list/read/create/send/interrupt, approval.respond, app.focus/launch/quit, system.volume.set, system.brightness.set, system.lock, and screen.start/stop. Steer requires expectedTurnId; interrupt requires turnId; list/read are cursor paged with limit 1..100. No arbitrary executable input exists. app.focus/launch/quit, system volume/brightness/lock, and screen start/stop force requiresApproval=true server-side regardless of caller input. Any required-approval command starts in needs-approval/pending and cannot receive a node lease until the linked approval transactionally changes it to queued/approved.',
+			'Unknown kinds and unknown input fields are rejected. The initial vocabulary is connector.start/stop, session.list/read/create/send/interrupt, approval.respond, app.focus/launch/quit, system.volume.set, system.brightness.set, system.lock, and screen.start/stop. Steer requires expectedTurnId; interrupt requires turnId; list/read are cursor paged with limit 1..100. No arbitrary executable input exists. The per-account/device permission mode controls whether commands queue immediately, request one approval, or are denied. Pairing, capability, freshness, locked-session and macOS privacy checks remain required in every mode.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET', 'POST'],
 		steps: ['Use a stable requestId.', 'POST one closed kind-specific envelope.', 'Retry it unchanged; changed reuse returns 409.'],

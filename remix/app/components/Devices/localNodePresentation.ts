@@ -1,7 +1,7 @@
 import type { DeviceActionKind } from './deviceTypes';
 
 export type LocalNodeBadgePresentation = {
-	colorScheme: 'gray' | 'orange';
+	colorScheme: 'gray' | 'green';
 	label: string;
 	showChecking: boolean;
 };
@@ -38,7 +38,7 @@ export const localNodeBadgePresentation = ({
 		: 'not running';
 
 	return {
-		colorScheme: registered ? 'orange' : 'gray',
+		colorScheme: registered ? 'green' : 'gray',
 		label,
 		showChecking: checking
 	};

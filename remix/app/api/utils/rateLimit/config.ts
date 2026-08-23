@@ -163,6 +163,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
 	'devices.node.commands': { limit: 600, windowMs: 60_000, enabled: true },
 	'devices.liveSync': { limit: 120, windowMs: 60_000, enabled: true },
 	'devices.approvals': { limit: 120, windowMs: 60_000, enabled: true },
+	'devices.permissions': { limit: 60, windowMs: 60_000, enabled: true },
 	'devices.events': { limit: 240, windowMs: 60_000, enabled: true },
 	'devices.screen': { limit: 60, windowMs: 60_000, enabled: true },
 	'devices.sync': { limit: 600, windowMs: 3_600_000, enabled: true },

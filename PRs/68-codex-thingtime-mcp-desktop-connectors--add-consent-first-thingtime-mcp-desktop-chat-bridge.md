@@ -533,6 +533,21 @@ an offline database or offline conflict resolution layer.
   420px; deterministic 390px layout coverage confirms 390px → 330px → 280px
   clamping without overflow. Exact installed 390px pointer acceptance remains
   a manual check because the active Electron window could not be narrowed by
+
+### Per-account/device action preference follow-up (2026-08-23)
+
+- Every account/computer pairing now defaults to **Always allow**, including
+  older stored pairs that do not yet carry a preference field. The softly green
+  paired-account badge reflects that healthy connection without implying a
+  repeated approval requirement.
+- The device drawer exposes **Always allow**, **Ask every time**, and **Deny**.
+  The preference is durably scoped to the owning account and selected computer;
+  it is optimistically reflected in the cached device projection and enforced
+  transactionally before a device command is queued. Ask every time preserves
+  the existing command-approval lifecycle, while Deny rejects future remote
+  commands. Pairing integrity, connector freshness/capability, an active
+  unlocked desktop session, and macOS privacy permission checks remain
+  independent fail-closed gates in every preference.
   the available UI automation surface.
 - Final focused validation is devices `49/49`, Electron `56/56`, and the
   typecheck ratchet at `136` errors versus its `143` baseline. The canonical

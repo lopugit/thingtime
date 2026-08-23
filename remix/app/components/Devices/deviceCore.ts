@@ -332,6 +332,9 @@ export const deviceActionPolicy = (
 		return blockedPolicy('service-unavailable', 'The Thingtime node is not running.');
 	}
 	if (summary.pairingStatus !== 'paired') return blockedPolicy('not-paired', 'Pair this device before controlling it.');
+	if (summary.permissionMode === 'deny') {
+		return blockedPolicy('capability-disabled', 'Remote actions are denied for this account and computer.');
+	}
 
 	const capabilityId = context.capabilityId || ACTION_CAPABILITY[action] || String(action);
 	const connector = CONNECTOR_ACTIONS.has(action) ? state.snapshot?.connectors.find((entry) => entry.id === context.connectorId) : null;
@@ -378,7 +381,7 @@ export const deviceActionPolicy = (
 			message: 'This action will run when the device reconnects.',
 			capabilityId,
 			requiredPermissions,
-			approvalRequired: capability.approval === 'once' || capability.approval === 'always'
+			approvalRequired: summary.permissionMode === 'ask-every-time'
 		};
 	}
 
@@ -389,7 +392,7 @@ export const deviceActionPolicy = (
 		message: null,
 		capabilityId,
 		requiredPermissions,
-		approvalRequired: capability.approval === 'once' || capability.approval === 'always'
+		approvalRequired: summary.permissionMode === 'ask-every-time'
 	};
 };
 
@@ -442,6 +445,7 @@ const cacheSummary = (summary: DeviceSummary | null): DeviceSummary | null => {
 		serviceStatus: summary.serviceStatus,
 		pairingStatus: summary.pairingStatus,
 		transportStatus: summary.transportStatus,
+		permissionMode: summary.permissionMode === 'ask-every-time' || summary.permissionMode === 'deny' ? summary.permissionMode : 'always-allow',
 		revision: boundedInteger(summary.revision),
 		lastSeenAt: text(summary.lastSeenAt, 40) || null,
 		appVersion: text(summary.appVersion, 80) || null,

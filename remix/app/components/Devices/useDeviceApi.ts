@@ -22,6 +22,7 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 ] as const;
 
 export type PublicDeviceCommandKind = (typeof PUBLIC_DEVICE_COMMAND_KINDS)[number];
+export type PublicDevicePermissionMode = 'always-allow' | 'ask-every-time' | 'deny';
 export type PublicDeviceCommandStatus = 'queued' | 'claimed' | 'running' | 'needs-approval' | 'succeeded' | 'failed' | 'cancelled' | 'needs-review';
 export type PublicDeviceScreenStatus = 'requested' | 'awaiting-local-approval' | 'connecting' | 'active' | 'ended' | 'failed';
 
@@ -80,6 +81,7 @@ export type PublicDevice = {
 	connectors: PublicDeviceConnector[];
 	pendingCommandCount: number;
 	pendingApprovalCount: number;
+	permissionMode: PublicDevicePermissionMode;
 };
 
 export type PublicDeviceCommand = {
@@ -308,6 +310,16 @@ export const useDeviceApi = () => {
 			}),
 		[]
 	);
+	const setPermissionMode = useCallback(
+		(body: { deviceId: string; mode: PublicDevicePermissionMode }, signal?: AbortSignal) =>
+			request<{ ok: true; deviceId: string; mode: PublicDevicePermissionMode }>('/api/v1/devices/permissions', {
+				method: 'POST',
+				body,
+				signal,
+				action: 'save device permission preference'
+			}),
+		[]
+	);
 	const listScreenSessions = useCallback(
 		(deviceId: string, signal?: AbortSignal) =>
 			request<{ ok: true; sessions: PublicDeviceScreenSession[] }>(`/api/v1/devices/screen${toQuery({ deviceId })}`, {
@@ -358,11 +370,23 @@ export const useDeviceApi = () => {
 			createCommand,
 			listApprovals,
 			decideApproval,
+			setPermissionMode,
 			listScreenSessions,
 			startScreenSession,
 			stopScreenSession,
 			pollEvents
 		}),
-		[createCommand, decideApproval, listApprovals, listCommands, listDevices, listScreenSessions, pollEvents, startScreenSession, stopScreenSession]
+		[
+			createCommand,
+			decideApproval,
+			listApprovals,
+			listCommands,
+			listDevices,
+			listScreenSessions,
+			pollEvents,
+			setPermissionMode,
+			startScreenSession,
+			stopScreenSession
+		]
 	);
 };

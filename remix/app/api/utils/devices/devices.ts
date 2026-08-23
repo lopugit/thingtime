@@ -20,6 +20,7 @@ import {
 import {
 	decodeDeviceEventCursor,
 	decideDeviceRevision,
+	DEVICE_PERMISSION_MODES,
 	deviceControlEventLogicalBytes,
 	deviceFail,
 	deviceHash,
@@ -28,11 +29,13 @@ import {
 	encodeDeviceEventCursor,
 	normalizeDeviceConnectors,
 	normalizeDeviceDescriptor,
+	normalizeDevicePermissionMode,
 	normalizeDeviceState,
 	retainedDeviceControlEventCount,
 	type DeviceConnectorSnapshot,
 	type DeviceDescriptor,
 	type DeviceFail,
+	type DevicePermissionMode,
 	type DeviceStateSnapshot
 } from './deviceCore';
 
@@ -78,7 +81,11 @@ export const newDeviceThing = (
 	}
 ) => {
 	const now = new Date();
-	const deviceUniqueKeys = [...new Set(DEVICE_UNIQUE_KEY_FIELDS.map((field) => fields.crystal[field]).filter((value): value is string => typeof value === 'string' && value.length > 0))];
+	const deviceUniqueKeys = [
+		...new Set(
+			DEVICE_UNIQUE_KEY_FIELDS.map((field) => fields.crystal[field]).filter((value): value is string => typeof value === 'string' && value.length > 0)
+		)
+	];
 	const crystal: Record<string, unknown> = {
 		...fields.crystal,
 		...(deviceUniqueKeys.length ? { deviceUniqueKeys } : {})
@@ -154,6 +161,7 @@ export type PublicDevice = {
 	connectors: PublicDeviceConnector[];
 	pendingCommandCount: number;
 	pendingApprovalCount: number;
+	permissionMode: DevicePermissionMode;
 };
 
 export const publicDeviceState = (doc: any): PublicDeviceState | null => {
@@ -336,7 +344,8 @@ const minimalPublicDevice = (doc: any): PublicDevice => ({
 	state: null,
 	connectors: [],
 	pendingCommandCount: 0,
-	pendingApprovalCount: 0
+	pendingApprovalCount: 0,
+	permissionMode: normalizeDevicePermissionMode(doc.crystal?.permissionMode)
 });
 
 const exactObjectKeys = (value: Record<string, unknown>, allowed: readonly string[]): boolean =>
@@ -507,6 +516,7 @@ const completeDevicePairingClaim = async (input: CompleteDevicePairingInput): Pr
 			deviceKey: deviceHash('device', ownerId, deviceId),
 			...descriptor,
 			capabilities,
+			permissionMode: 'always-allow',
 			pairedAt: now
 		}
 	});
@@ -569,6 +579,28 @@ const completeDevicePairingClaim = async (input: CompleteDevicePairingInput): Pr
 	}
 
 	return { ok: true, device: minimalPublicDevice(device), credentialStored: true };
+};
+
+export const setDevicePermissionMode = async (
+	ownerId: string,
+	input: { deviceId?: unknown; mode?: unknown }
+): Promise<DeviceFail | { ok: true; deviceId: string; mode: DevicePermissionMode }> => {
+	const deviceId = typeof input?.deviceId === 'string' ? input.deviceId.trim().slice(0, 160) : '';
+	if (!deviceId) return deviceFail(400, 'deviceId is required');
+	if (!(DEVICE_PERMISSION_MODES as readonly unknown[]).includes(input?.mode)) {
+		return deviceFail(400, 'mode must be always-allow, ask-every-time or deny');
+	}
+	const mode = input.mode as DevicePermissionMode;
+	const things = await getHomeThingsCollection();
+	const now = new Date();
+	const result = await updateAccountedThing(
+		things,
+		{ shareId: deviceId, thingtime: 'device', ownerId } as any,
+		{ $set: { 'crystal.permissionMode': mode, updatedAt: now } },
+		HOME_ACCOUNTING
+	);
+	if (!result.modifiedCount) return deviceFail(404, 'Device not found');
+	return { ok: true, deviceId, mode };
 };
 
 export const claimDevicePairing = async (input: ClaimDeviceInput): Promise<ClaimDeviceResult> => {

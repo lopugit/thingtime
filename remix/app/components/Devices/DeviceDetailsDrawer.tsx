@@ -22,7 +22,7 @@ import {
 	DEVICE_DRAWER_MOBILE_MIN_WIDTH,
 	clampDeviceDrawerWidth
 } from './deviceDrawerLayout';
-import type { DeviceCommandStatus, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
+import type { DeviceCommandStatus, DeviceExecutionPermissionMode, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
 
 const Section = ({ label, count, children }: { label: string; count?: number; children: React.ReactNode }) => {
 	const [expanded, setExpanded] = React.useState(true);
@@ -109,6 +109,12 @@ const Notice = ({ icon, children, danger = false }: { icon: React.ReactNode; chi
 	</Flex>
 );
 
+const permissionOptions: Array<{ mode: DeviceExecutionPermissionMode; label: string; detail: string }> = [
+	{ mode: 'always-allow', label: 'Always allow', detail: 'Run supported actions without a repeated prompt.' },
+	{ mode: 'ask-every-time', label: 'Ask every time', detail: 'Show an approval card before each action.' },
+	{ mode: 'deny', label: 'Deny', detail: 'Reject future remote actions for this account.' }
+];
+
 export type DeviceDetailsDrawerProps = {
 	isOpen: boolean;
 	onClose: () => void;
@@ -119,6 +125,7 @@ export type DeviceDetailsDrawerProps = {
 	screenVideo?: ScreenVideoContract;
 	screenAvailability?: ScreenSessionAvailability;
 	screenStartInput?: Record<string, unknown> | null;
+	onPermissionModeChange?: (deviceId: string, mode: DeviceExecutionPermissionMode) => void | Promise<void>;
 };
 
 export const DeviceDetailsDrawer = memo(
@@ -131,7 +138,8 @@ export const DeviceDetailsDrawer = memo(
 		onAction,
 		screenVideo,
 		screenAvailability,
-		screenStartInput = null
+		screenStartInput = null,
+		onPermissionModeChange
 	}: DeviceDetailsDrawerProps) => {
 		const [drawerWidth, setDrawerWidth] = React.useState(DEVICE_DRAWER_DEFAULT_WIDTH);
 		const [resizing, setResizing] = React.useState(false);
@@ -155,6 +163,7 @@ export const DeviceDetailsDrawer = memo(
 		const localServiceAction =
 			summary?.serviceStatus === 'running' || summary?.serviceStatus === 'degraded' ? 'unregister-service' : 'register-service';
 		const battery = batteryLabel(summary?.system?.batteryPercent);
+		const permissionMode = summary?.permissionMode || 'always-allow';
 		const serviceControl = controlFor?.(localServiceAction, 'service');
 		const pairingControl = summary?.pairingStatus !== 'paired' ? controlFor?.('begin-pairing', 'pairing') : null;
 		const nodeBlockedMessage =
@@ -279,11 +288,10 @@ export const DeviceDetailsDrawer = memo(
 						role="separator"
 						tabIndex={0}
 						top={0}
-						touchAction="none"
 						title="Drag this edge to resize device details"
 						width={6}
 						zIndex={3}
-						sx={{ WebkitAppRegion: 'no-drag' }}
+						sx={{ WebkitAppRegion: 'no-drag', touchAction: 'none' }}
 						_before={{
 							background: resizing ? 'var(--tt-accent, #ec4899)' : 'var(--tt-border-strong, #d4d4d8)',
 							borderRadius: '999px',
@@ -426,6 +434,81 @@ export const DeviceDetailsDrawer = memo(
 												{nodeBlockedMessage}
 											</Text>
 										) : null}
+									</Box>
+								</Section>
+
+								<Section label="Action permissions">
+									<Box
+										background="var(--tt-surface-alt, #f7f7f8)"
+										border="1px solid var(--tt-border, #ececef)"
+										borderRadius="var(--tt-radius-md, 12px)"
+										padding={3}
+									>
+										<Flex alignItems="center" gap={1.5} wrap="wrap">
+											<Text fontSize="12px" fontWeight={700}>
+												This account on this computer
+											</Text>
+											<DeviceStatusPill
+												label={permissionOptions.find((option) => option.mode === permissionMode)?.label || 'Always allow'}
+												tone={permissionMode === 'deny' ? 'negative' : permissionMode === 'ask-every-time' ? 'warning' : 'positive'}
+											/>
+										</Flex>
+										<Text color="var(--tt-muted, #71717a)" fontSize="11px" lineHeight="1.45" marginTop={1}>
+											Always allow is the default. Pairing, device capability, locked-session and macOS privacy checks still apply.
+										</Text>
+										<Flex gap={1.5} marginTop={3} wrap="wrap">
+											{permissionOptions.map((option) => {
+												const selected = option.mode === permissionMode;
+												return (
+													<Box
+														aria-pressed={selected}
+														as="button"
+														background={
+															selected
+																? option.mode === 'always-allow'
+																	? 'rgba(22, 163, 74, 0.13)'
+																	: option.mode === 'deny'
+																	? 'rgba(220, 38, 38, 0.1)'
+																	: 'rgba(217, 119, 6, 0.12)'
+																: 'var(--tt-card, #fff)'
+														}
+														border="1px solid"
+														borderColor={
+															selected
+																? option.mode === 'always-allow'
+																	? 'rgba(22, 163, 74, 0.38)'
+																	: option.mode === 'deny'
+																	? 'rgba(220, 38, 38, 0.3)'
+																	: 'rgba(217, 119, 6, 0.34)'
+																: 'var(--tt-border, #ececef)'
+														}
+														borderRadius="10px"
+														color={
+															selected
+																? option.mode === 'always-allow'
+																	? 'var(--tt-success, #15803d)'
+																	: option.mode === 'deny'
+																	? 'var(--tt-danger, #dc2626)'
+																	: 'var(--tt-warning, #b45309)'
+																: 'var(--tt-ink, #17171c)'
+														}
+														disabled={!onPermissionModeChange}
+														fontSize="11px"
+														key={option.mode}
+														onClick={() => void onPermissionModeChange?.(state.deviceId, option.mode)}
+														paddingX={2.5}
+														paddingY={2}
+														sx={{ WebkitAppRegion: 'no-drag' }}
+														title={option.detail}
+														type="button"
+														_hover={{ borderColor: selected ? undefined : 'var(--tt-border-strong, #d4d4d8)' }}
+														_focusVisible={{ boxShadow: '0 0 0 2px var(--tt-accent, #ec4899)' }}
+													>
+														{option.label}
+													</Box>
+												);
+											})}
+										</Flex>
 									</Box>
 								</Section>
 

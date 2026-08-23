@@ -98,6 +98,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/devices/node/sync': () => import('../../../app/routes/api/v1/devices/node/sync/_sync'),
 	'v1/devices/pairing': () => import('../../../app/routes/api/v1/devices/pairing/_pairing'),
 	'v1/devices/pairing/claim': () => import('../../../app/routes/api/v1/devices/pairing/claim/_claim'),
+	'v1/devices/permissions': () => import('../../../app/routes/api/v1/devices/permissions/_permissions'),
 	'v1/devices/screen': () => import('../../../app/routes/api/v1/devices/screen/_screen'),
   'v1/communities': () => import('../../../app/routes/api/v1/communities/_communities'),
   'v1/communities/get': () => import('../../../app/routes/api/v1/communities/get/_get'),

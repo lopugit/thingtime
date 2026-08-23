@@ -62,6 +62,7 @@ const makeSummary = (overrides: Partial<DeviceSummary> = {}): DeviceSummary => (
 	revision: 1,
 	lastSeenAt: iso(-1_000),
 	capabilities: [makeCapability()],
+	permissionMode: 'always-allow',
 	...overrides
 });
 
@@ -283,7 +284,13 @@ test('capability policy accounts for locality, permissions, lock, presence, and 
 	const ready = deviceActionPolicy(base, 'set-volume', { now: NOW });
 	assert.equal(ready.allowed, true);
 	assert.equal(ready.delivery, 'immediate');
-	assert.equal(ready.approvalRequired, true);
+	assert.equal(ready.approvalRequired, false);
+	const askEveryTime = deviceActionPolicy(
+		makeState({ summary: makeSummary({ capabilities: [volumeCapability], permissionMode: 'ask-every-time' }), snapshot: base.snapshot }),
+		'set-volume',
+		{ now: NOW }
+	);
+	assert.equal(askEveryTime.approvalRequired, true);
 
 	const missingPermission = deviceActionPolicy(makeState({ summary: base.summary, snapshot: makeSnapshot({ permissions: [] }) }), 'set-volume', {
 		now: NOW

@@ -6,13 +6,12 @@ import {
 	DEVICE_COMMAND_STATUSES,
 	canTransitionDeviceCommand,
 	decideDeviceLease,
-	deviceConnectorCommandRequiresApproval,
 	deviceConnectorSupportsCommand,
 	deviceSupportsCommand,
 	deviceControlEventLogicalBytes,
 	deviceFail,
 	deviceHash,
-	deviceCommandRequiresApproval,
+	normalizeDevicePermissionMode,
 	devicePayloadHash,
 	normalizeDeviceCommand,
 	normalizeCommandKind,
@@ -150,7 +149,7 @@ type PreparedCommand = {
 const prepareCommand = (
 	ownerId: string,
 	input: CreateCommandInput,
-	options: { shareId?: string; serverRequiresApproval?: boolean } = {}
+	options: { shareId?: string; requiresApproval?: boolean } = {}
 ): DeviceFail | PreparedCommand => {
 	const deviceId = bounded(input?.deviceId, 160);
 	const requestId = normalizeRequestId(input?.requestId);
@@ -164,7 +163,7 @@ const prepareCommand = (
 	if (input?.requiresApproval !== undefined && typeof input.requiresApproval !== 'boolean') {
 		return deviceFail(400, 'requiresApproval must be a boolean');
 	}
-	const requiresApproval = deviceCommandRequiresApproval(kind, input?.requiresApproval === true || options.serverRequiresApproval === true);
+	const requiresApproval = options.requiresApproval ?? input?.requiresApproval === true;
 	const payload = { kind, input: normalizedInput.input, requiresApproval };
 	const payloadHash = devicePayloadHash(payload);
 	const controlBytes = deviceControlEventLogicalBytes(payload);
@@ -215,6 +214,13 @@ export const createDeviceCommand = async (
 	const deviceId = String(prepared.doc.targetId);
 	const device = await deviceExistsForOwner(ownerId, deviceId);
 	if (!device) return deviceFail(404, 'Device not found');
+	const permissionMode = normalizeDevicePermissionMode(device.crystal?.permissionMode);
+	if (permissionMode === 'deny') return deviceFail(403, 'This account has denied remote actions for this device');
+	prepared = prepareCommand(ownerId, input, {
+		shareId: String(prepared.doc.shareId),
+		requiresApproval: permissionMode === 'ask-every-time' || input.requiresApproval === true
+	});
+	if (prepared.ok === false) return prepared;
 	const things = await getHomeThingsCollection();
 	const connectorId = typeof prepared.doc.crystal?.input?.connectorId === 'string' ? prepared.doc.crystal.input.connectorId : null;
 	if (!connectorId && !deviceSupportsCommand(prepared.doc.crystal.kind, device.crystal?.capabilities)) {
@@ -243,16 +249,6 @@ export const createDeviceCommand = async (
 		if (!deviceConnectorSupportsCommand(kind, prepared.doc.crystal.input, connectorDoc.crystal?.connector ?? { capabilities: [] })) {
 			return deviceFail(409, 'The target connector does not advertise support for this command');
 		}
-		const serverRequiresApproval = deviceConnectorCommandRequiresApproval(
-			kind,
-			input.requiresApproval === true,
-			connectorDoc.crystal?.connector ?? null
-		);
-		prepared = prepareCommand(ownerId, input, {
-			shareId: String(prepared.doc.shareId),
-			serverRequiresApproval
-		});
-		if (prepared.ok === false) return prepared;
 	}
 	const existing = await things.findOne({ 'crystal.deviceUniqueKeys': prepared.commandKey } as any);
 	if (existing) return reconcileCommand(existing, prepared.payloadHash);
@@ -288,12 +284,18 @@ export const createDeviceCommand = async (
 	}
 	try {
 		await withHomeMongoTransaction(async (session) => {
-			const currentDevice = await things.findOne(
-				{ thingtime: 'device', ownerId, shareId: deviceId } as any,
-				{ projection: { 'crystal.capabilities': 1 }, session }
-			);
+			const currentDevice = await things.findOne({ thingtime: 'device', ownerId, shareId: deviceId } as any, {
+				projection: { 'crystal.capabilities': 1, 'crystal.permissionMode': 1 },
+				session
+			});
 			if (!currentDevice || (!connectorId && !deviceSupportsCommand(prepared.doc.crystal.kind, currentDevice.crystal?.capabilities))) {
 				throw Object.assign(new Error('device_capability_policy_changed'), { status: 409 });
+			}
+			const currentPermissionMode = normalizeDevicePermissionMode(currentDevice.crystal?.permissionMode);
+			if (currentPermissionMode === 'deny') throw Object.assign(new Error('device_permission_policy_denied'), { status: 403 });
+			const currentRequiresApproval = currentPermissionMode === 'ask-every-time' || input.requiresApproval === true;
+			if (currentRequiresApproval !== (prepared.doc.crystal.requiresApproval === true)) {
+				throw Object.assign(new Error('device_permission_policy_changed'), { status: 409 });
 			}
 			if (connectorId) {
 				const [currentConnector, currentState] = await Promise.all([
@@ -309,13 +311,6 @@ export const createDeviceCommand = async (
 					),
 					things.findOne({ thingtime: 'device-state', ownerId, targetId: deviceId } as any, { projection: { 'crystal.revision': 1 }, session })
 				]);
-				const policyRequiresApproval = currentConnector
-					? deviceConnectorCommandRequiresApproval(
-							prepared.doc.crystal.kind,
-							input.requiresApproval === true,
-							currentConnector.crystal?.connector ?? null
-					  )
-					: true;
 				const connectorSupportsCommand = currentConnector
 					? deviceConnectorSupportsCommand(
 							prepared.doc.crystal.kind,
@@ -328,8 +323,7 @@ export const createDeviceCommand = async (
 					!deviceConnectorIsFresh(currentConnector) ||
 					!Number.isSafeInteger(currentState?.crystal?.revision) ||
 					currentState.crystal.revision !== currentConnector.crystal?.revision ||
-					!connectorSupportsCommand ||
-					(policyRequiresApproval && prepared.doc.crystal.requiresApproval !== true)
+					!connectorSupportsCommand
 				) {
 					throw Object.assign(new Error('device_connector_policy_changed'), { status: 409 });
 				}
@@ -398,12 +392,11 @@ export const createDeviceCommand = async (
 			}
 		});
 	} catch (error: any) {
-		if (
-			error?.status === 409 ||
-			error?.message === 'device_connector_policy_changed' ||
-			error?.message === 'device_capability_policy_changed'
-		) {
-			return deviceFail(409, 'The device capability, connector snapshot, or approval policy changed; retry command creation');
+		if (error?.status === 409 || error?.message === 'device_connector_policy_changed' || error?.message === 'device_capability_policy_changed') {
+			return deviceFail(409, 'The device capability, connector snapshot, or permission setting changed; retry command creation');
+		}
+		if (error?.status === 403 || error?.message === 'device_permission_policy_denied') {
+			return deviceFail(403, 'This account has denied remote actions for this device');
 		}
 		if (error?.message === 'device_approval_budget') {
 			return deviceFail(429, 'This device already has the maximum number of pending approvals');

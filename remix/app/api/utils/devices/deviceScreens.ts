@@ -129,7 +129,7 @@ export const startDeviceScreenSession = async (
 		requestId: `screen-start:${requestId}`,
 		kind: 'screen.start',
 		input: { screenSessionId: String(doc.shareId), viewOnly },
-		requiresApproval: true
+		requiresApproval: false
 	});
 	if (command.ok === false) return command;
 	return { ok: true, session: publicScreen(doc), command: command.command, idempotent: idempotent && command.idempotent };

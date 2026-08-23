@@ -49,7 +49,10 @@ const isRuntimeStateLike = (value: unknown): value is DeviceRuntimeState =>
 
 const projectSummary = (summary: DeviceSummary): DeviceSummary | null => {
 	try {
-		return projectDeviceStateForCache({ ...createDeviceRuntimeState(summary.id), summary }).summary;
+		return projectDeviceStateForCache({
+			...createDeviceRuntimeState(summary.id),
+			summary: { ...summary, permissionMode: summary.permissionMode || 'always-allow' }
+		}).summary;
 	} catch {
 		return null;
 	}

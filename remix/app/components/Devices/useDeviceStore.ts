@@ -15,6 +15,7 @@ import type {
 	DeviceCommand,
 	DeviceConnector,
 	DeviceDesiredState,
+	DeviceExecutionPermissionMode,
 	DeviceRuntimeState,
 	DeviceScreenSession,
 	DeviceSnapshot,
@@ -298,7 +299,8 @@ export const publicDeviceToSummary = (device: PublicDevice): DeviceSummary => {
 			charging: device.battery?.charging ?? null
 		},
 		capabilities: runtimeCapabilities(allCapabilities),
-		connectorCount: device.connectors.length
+		connectorCount: device.connectors.length,
+		permissionMode: device.permissionMode
 	};
 };
 
@@ -988,6 +990,53 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 		[active, api, notifyError, ownerId, refreshDevice, rotateToken]
 	);
 
+	const setPermissionMode = useCallback(
+		async (deviceId: string, mode: DeviceExecutionPermissionMode): Promise<void> => {
+			if (!active || !ownerId) return;
+			const priorMode = storeRef.current.states[deviceId]?.summary?.permissionMode || 'always-allow';
+			if (priorMode === mode) return;
+			setStore((previous) => {
+				const current = previous.states[deviceId];
+				if (previous.ownerId !== ownerId || !current?.summary) return previous;
+				return {
+					...previous,
+					states: {
+						...previous.states,
+						[deviceId]: { ...current, summary: { ...current.summary, permissionMode: mode } }
+					}
+				};
+			});
+			try {
+				const result = await api.setPermissionMode({ deviceId, mode });
+				setStore((previous) => {
+					const current = previous.states[deviceId];
+					if (previous.ownerId !== ownerId || !current?.summary) return previous;
+					return {
+						...previous,
+						states: {
+							...previous.states,
+							[deviceId]: { ...current, summary: { ...current.summary, permissionMode: result.mode } }
+						}
+					};
+				});
+			} catch (error) {
+				setStore((previous) => {
+					const current = previous.states[deviceId];
+					if (previous.ownerId !== ownerId || !current?.summary || current.summary.permissionMode !== mode) return previous;
+					return {
+						...previous,
+						states: {
+							...previous.states,
+							[deviceId]: { ...current, summary: { ...current.summary, permissionMode: priorMode } }
+						}
+					};
+				});
+				notifyError(`permission-mode:${deviceId}`, 'Couldn’t save that device permission preference', error);
+			}
+		},
+		[active, api, notifyError, ownerId]
+	);
+
 	return {
 		devices,
 		statesById: visibleStore.states,
@@ -999,6 +1048,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 		refreshList,
 		refreshDevice,
 		controlFor,
-		executeAction
+		executeAction,
+		setPermissionMode
 	};
 };

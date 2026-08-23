@@ -38,14 +38,15 @@ const device = (): PublicDevice => ({
 			id: 'chatgpt',
 			kind: 'chatgpt-desktop',
 			label: 'ChatGPT Desktop',
-				status: 'connected',
-				capabilities: ['session.create', 'session.send'],
-				projects: [],
-				updatedAt: '2026-08-18T00:01:00.000Z'
+			status: 'connected',
+			capabilities: ['session.create', 'session.send'],
+			projects: [],
+			updatedAt: '2026-08-18T00:01:00.000Z'
 		}
 	],
 	pendingCommandCount: 2,
-	pendingApprovalCount: 1
+	pendingApprovalCount: 1,
+	permissionMode: 'always-allow'
 });
 
 test('dedicated PublicDevice projections become capability-driven cached runtime state', () => {
@@ -54,6 +55,7 @@ test('dedicated PublicDevice projections become capability-driven cached runtime
 	assert.equal(runtime.summary?.transportStatus, 'offline');
 	assert.equal(runtime.summary?.pairingStatus, 'paired');
 	assert.equal(runtime.summary?.revision, 7);
+	assert.equal(runtime.summary?.permissionMode, 'always-allow');
 	assert.ok(runtime.summary?.capabilities.some((capability) => capability.id === 'system.volume.write'));
 	assert.ok(runtime.summary?.capabilities.some((capability) => capability.id === 'apps.launch'));
 	assert.equal(runtime.snapshot?.observed.activeAppBundleId, 'com.openai.chat');

@@ -15,6 +15,9 @@ export type DeviceTransportStatus = (typeof DEVICE_TRANSPORT_STATUSES)[number];
 export const DEVICE_PERMISSION_STATUSES = ['not-determined', 'denied', 'restricted', 'authorized'] as const;
 export type DevicePermissionStatus = (typeof DEVICE_PERMISSION_STATUSES)[number];
 
+export const DEVICE_EXECUTION_PERMISSION_MODES = ['always-allow', 'ask-every-time', 'deny'] as const;
+export type DeviceExecutionPermissionMode = (typeof DEVICE_EXECUTION_PERMISSION_MODES)[number];
+
 export const DEVICE_CONNECTOR_STATUSES = ['unavailable', 'disabled', 'connecting', 'ready', 'degraded', 'error', 'update-required'] as const;
 export type DeviceConnectorStatus = (typeof DEVICE_CONNECTOR_STATUSES)[number];
 
@@ -140,6 +143,7 @@ export type DeviceSummary = {
 	system?: DeviceSystemProperties;
 	capabilities: DeviceCapability[];
 	connectorCount?: number;
+	permissionMode: DeviceExecutionPermissionMode;
 	lastError?: DeviceHealthError | null;
 };
 

@@ -18,11 +18,9 @@ import {
 	verifyDevicePairingClaim
 } from './deviceAuth.ts';
 import {
-	DEVICE_CONNECTOR_MUTATING_COMMANDS,
 	DEVICE_CONNECTOR_CAPABILITIES,
 	DEVICE_COMMAND_KINDS,
-	DEVICE_COMMANDS_REQUIRING_APPROVAL,
-	DEVICE_SEMANTIC_AX_CONNECTOR_KINDS,
+	DEVICE_PERMISSION_MODES,
 	canLeaseDeviceCommand,
 	canTransitionDeviceCommand,
 	decideDeviceLease,
@@ -39,6 +37,7 @@ import {
 	normalizeDeviceCommand,
 	normalizeDeviceConnectorCapability,
 	normalizeDeviceConnectors,
+	normalizeDevicePermissionMode,
 	normalizeDeviceState,
 	MAX_DEVICE_OPEN_APPS,
 	retainedDeviceControlEventCount
@@ -147,18 +146,28 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 	);
 	assert.equal(normalizeDeviceState({ locked: false, openApps: [{ id: 'x', name: 'X', frontmost: false, path: '/Applications/X.app' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, volume: 'not-a-level', openApps: [] }), null);
-	assert.ok(normalizeDeviceState({ locked: false, openApps: Array.from({ length: MAX_DEVICE_OPEN_APPS }, (_, index) => ({ id: `app-${index}`, name: `App ${index}`, frontmost: false })) }));
+	assert.ok(
+		normalizeDeviceState({
+			locked: false,
+			openApps: Array.from({ length: MAX_DEVICE_OPEN_APPS }, (_, index) => ({ id: `app-${index}`, name: `App ${index}`, frontmost: false }))
+		})
+	);
 	assert.equal(
-		normalizeDeviceState({ locked: false, openApps: Array.from({ length: MAX_DEVICE_OPEN_APPS + 1 }, (_, index) => ({ id: `app-${index}`, name: `App ${index}`, frontmost: false })) }),
+		normalizeDeviceState({
+			locked: false,
+			openApps: Array.from({ length: MAX_DEVICE_OPEN_APPS + 1 }, (_, index) => ({ id: `app-${index}`, name: `App ${index}`, frontmost: false }))
+		}),
 		null
 	);
-	const connector = normalizeDeviceConnectors([{
-		id: 'chatgpt',
-		kind: 'chatgpt',
-		label: 'ChatGPT',
-		status: 'connected',
-		capabilities: [' session.send ', 'AI.Session.Read', 'explicit-approval', 'session.read']
-	}]);
+	const connector = normalizeDeviceConnectors([
+		{
+			id: 'chatgpt',
+			kind: 'chatgpt',
+			label: 'ChatGPT',
+			status: 'connected',
+			capabilities: [' session.send ', 'AI.Session.Read', 'explicit-approval', 'session.read']
+		}
+	]);
 	assert.deepEqual(connector?.[0]?.capabilities, ['explicit-approval', 'read-history', 'send-message']);
 	assert.equal(normalizeDeviceConnectorCapability('session.create'), 'create-session');
 	assert.equal(normalizeDeviceConnectorCapability('shell.execute'), null);
@@ -187,20 +196,12 @@ test('connector commands require the matching canonical capability', () => {
 	assert.equal(deviceConnectorSupportsCommand('session.list', { connectorId: 'chatgpt' }, connector), true);
 	assert.equal(deviceConnectorSupportsCommand('session.read', { connectorId: 'chatgpt', sessionId: 'chat-1' }, connector), true);
 	assert.equal(
-		deviceConnectorSupportsCommand(
-			'session.read',
-			{ connectorId: 'chatgpt', sessionId: 'chat-1' },
-			{ capabilities: ['AI.Session.Read'] }
-		),
+		deviceConnectorSupportsCommand('session.read', { connectorId: 'chatgpt', sessionId: 'chat-1' }, { capabilities: ['AI.Session.Read'] }),
 		true
 	);
 	assert.equal(deviceConnectorSupportsCommand('session.create', { connectorId: 'chatgpt' }, connector), false);
 	assert.equal(
-		deviceConnectorSupportsCommand(
-			'session.send',
-			{ connectorId: 'chatgpt', sessionId: 'chat-1', text: 'hello', delivery: 'queue' },
-			connector
-		),
+		deviceConnectorSupportsCommand('session.send', { connectorId: 'chatgpt', sessionId: 'chat-1', text: 'hello', delivery: 'queue' }, connector),
 		true
 	);
 	assert.equal(
@@ -211,7 +212,10 @@ test('connector commands require the matching canonical capability', () => {
 		),
 		false
 	);
-	assert.equal(deviceConnectorSupportsCommand('session.interrupt', { connectorId: 'chatgpt', sessionId: 'chat-1', turnId: 'turn-1' }, connector), false);
+	assert.equal(
+		deviceConnectorSupportsCommand('session.interrupt', { connectorId: 'chatgpt', sessionId: 'chat-1', turnId: 'turn-1' }, connector),
+		false
+	);
 	assert.equal(
 		deviceConnectorSupportsCommand('approval.respond', { connectorId: 'chatgpt', approvalId: 'approval-1', decision: 'approved' }, connector),
 		false
@@ -318,46 +322,18 @@ test('complete snapshot hashes gate connectors at the device revision', () => {
 	assert.equal(decideDeviceRevision(4, withConnector, 4, deviceSnapshotHash(state, [])), 'conflict');
 });
 
-test('safety-sensitive desktop commands force approval regardless of caller input', () => {
-	assert.deepEqual(DEVICE_COMMANDS_REQUIRING_APPROVAL, [
-		'app.focus',
-		'app.launch',
-		'app.quit',
-		'system.volume.set',
-		'system.brightness.set',
-		'system.lock',
-		'screen.start',
-		'screen.stop'
-	]);
-	for (const kind of DEVICE_COMMANDS_REQUIRING_APPROVAL) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), true, kind);
+test('paired account execution preferences default to always allow, with reversible ask and deny modes', () => {
+	assert.deepEqual(DEVICE_PERMISSION_MODES, ['always-allow', 'ask-every-time', 'deny']);
+	assert.equal(normalizeDevicePermissionMode(undefined), 'always-allow');
+	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
+	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
+	for (const kind of DEVICE_COMMAND_KINDS) {
+		assert.equal(deviceCommandRequiresApproval(kind, false), false, kind);
+		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
-	assert.equal(deviceCommandRequiresApproval('session.send', false), false);
-	assert.equal(deviceCommandRequiresApproval('session.send', true), true);
-});
-
-test('persisted explicit-approval and semantic AX connectors force every connector mutator', () => {
-	assert.deepEqual(DEVICE_CONNECTOR_MUTATING_COMMANDS, [
-		'connector.start',
-		'connector.stop',
-		'session.read',
-		'session.create',
-		'session.send',
-		'session.interrupt',
-		'approval.respond'
-	]);
-	assert.deepEqual(DEVICE_SEMANTIC_AX_CONNECTOR_KINDS, ['chatgpt-desktop', 'claude-desktop', 'claude-thingtime']);
-	const explicit = { kind: 'custom-semantic', capabilities: ['session.send', 'explicit-approval'] };
-	const axWithoutCapability = { kind: 'claude-thingtime', capabilities: ['session.send'] };
-	const codex = { kind: 'codex', capabilities: ['session.send'] };
-	for (const kind of DEVICE_CONNECTOR_MUTATING_COMMANDS) {
-		assert.equal(deviceConnectorCommandRequiresApproval(kind, false, explicit), true, `explicit ${kind}`);
-		assert.equal(deviceConnectorCommandRequiresApproval(kind, false, axWithoutCapability), true, `AX ${kind}`);
-	}
-	assert.equal(deviceConnectorCommandRequiresApproval('session.send', false, codex), false);
-	assert.equal(deviceConnectorCommandRequiresApproval('session.send', true, codex), true);
-	assert.equal(deviceConnectorCommandRequiresApproval('session.read', false, explicit), true);
-	assert.equal(deviceConnectorCommandRequiresApproval('session.read', false, codex), false);
+	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };
+	assert.equal(deviceConnectorCommandRequiresApproval('session.send', false, semantic), false);
+	assert.equal(deviceConnectorCommandRequiresApproval('session.send', true, semantic), true);
 });
 
 test('lease authorization rejects mismatches and equality-at-expiry while retention is strictly bounded', () => {
@@ -383,7 +359,10 @@ test('lease authorization rejects mismatches and equality-at-expiry while retent
 test('approval deadlines default safely and pending slots enforce a strict device cap', () => {
 	const now = new Date('2026-08-18T00:00:00.000Z');
 	assert.equal(deviceApprovalExpiry(undefined, now)?.getTime(), now.getTime() + DEVICE_APPROVAL_DEFAULT_TTL_MS);
-	assert.equal(deviceApprovalExpiry(new Date(now.getTime() + DEVICE_APPROVAL_MAX_TTL_MS).toISOString(), now)?.getTime(), now.getTime() + DEVICE_APPROVAL_MAX_TTL_MS);
+	assert.equal(
+		deviceApprovalExpiry(new Date(now.getTime() + DEVICE_APPROVAL_MAX_TTL_MS).toISOString(), now)?.getTime(),
+		now.getTime() + DEVICE_APPROVAL_MAX_TTL_MS
+	);
 	assert.equal(deviceApprovalExpiry(now.toISOString(), now), null);
 	assert.equal(deviceApprovalExpiry(new Date(now.getTime() + DEVICE_APPROVAL_MAX_TTL_MS + 1).toISOString(), now), null);
 	assert.equal(availableDeviceApprovalSlot([0, 1, 3]), 2);

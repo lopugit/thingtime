@@ -143,6 +143,7 @@ export const ThingsPage = () => {
 	const localNode = useLocalThingtimeNode(deviceParam, deviceStore.refreshList, deviceStore.loading ? undefined : currentAccountDeviceIds);
 	const serverDeviceControlFor = deviceStore.controlFor;
 	const executeServerDeviceAction = deviceStore.executeAction;
+	const setDevicePermissionMode = deviceStore.setPermissionMode;
 	const localDeviceControlFor = localNode.controlFor;
 	const executeLocalDeviceAction = localNode.executeAction;
 
@@ -1561,6 +1562,7 @@ export const ThingsPage = () => {
 				isOpen={Boolean(deviceParam)}
 				onAction={onDeviceAction}
 				onClose={closeDevice}
+				onPermissionModeChange={setDevicePermissionMode}
 				screenAvailability="not-installed"
 				state={deviceStore.selectedState}
 			/>

@@ -21,49 +21,23 @@ export const DEVICE_COMMAND_KINDS = [
 
 export type DeviceCommandKind = (typeof DEVICE_COMMAND_KINDS)[number];
 
-export const DEVICE_COMMANDS_REQUIRING_APPROVAL = [
-	'app.focus',
-	'app.launch',
-	'app.quit',
-	'system.volume.set',
-	'system.brightness.set',
-	'system.lock',
-	'screen.start',
-	'screen.stop'
-] as const satisfies readonly DeviceCommandKind[];
+export const DEVICE_PERMISSION_MODES = ['always-allow', 'ask-every-time', 'deny'] as const;
+export type DevicePermissionMode = (typeof DEVICE_PERMISSION_MODES)[number];
 
-const COMMANDS_REQUIRING_APPROVAL = new Set<DeviceCommandKind>(DEVICE_COMMANDS_REQUIRING_APPROVAL);
+// Permission mode is an account/device setting. It defaults to always-allow so
+// an explicitly paired computer does not interrupt each typed, supported action.
+// Commands may still opt in to an approval, while pairing, capability, lock and
+// OS privacy checks remain independently fail-closed.
+export const normalizeDevicePermissionMode = (value: unknown): DevicePermissionMode =>
+	value === 'ask-every-time' || value === 'deny' || value === 'always-allow' ? value : 'always-allow';
 
-export const DEVICE_CONNECTOR_MUTATING_COMMANDS = [
-	'connector.start',
-	'connector.stop',
-	// Semantic Accessibility may have to select a visible chat before reading.
-	// Treat that read as an approval-gated UI action while native Codex reads
-	// remain approval-free through connector-specific policy below.
-	'session.read',
-	'session.create',
-	'session.send',
-	'session.interrupt',
-	'approval.respond'
-] as const satisfies readonly DeviceCommandKind[];
-
-export const DEVICE_SEMANTIC_AX_CONNECTOR_KINDS = ['chatgpt-desktop', 'claude-desktop', 'claude-thingtime'] as const;
-
-const CONNECTOR_MUTATING_COMMANDS = new Set<DeviceCommandKind>(DEVICE_CONNECTOR_MUTATING_COMMANDS);
-const SEMANTIC_AX_CONNECTOR_KINDS = new Set<string>(DEVICE_SEMANTIC_AX_CONNECTOR_KINDS);
-
-export const deviceCommandRequiresApproval = (kind: DeviceCommandKind, callerRequiresApproval: boolean): boolean =>
-	callerRequiresApproval || COMMANDS_REQUIRING_APPROVAL.has(kind);
+export const deviceCommandRequiresApproval = (_kind: DeviceCommandKind, callerRequiresApproval: boolean): boolean => callerRequiresApproval;
 
 export const deviceConnectorCommandRequiresApproval = (
-	kind: DeviceCommandKind,
+	_kind: DeviceCommandKind,
 	callerRequiresApproval: boolean,
-	connector: Pick<DeviceConnectorSnapshot, 'kind' | 'capabilities'> | null
-): boolean => {
-	if (deviceCommandRequiresApproval(kind, callerRequiresApproval)) return true;
-	if (!connector || !CONNECTOR_MUTATING_COMMANDS.has(kind)) return false;
-	return hasConnectorCapability(connector, 'explicit-approval') || SEMANTIC_AX_CONNECTOR_KINDS.has(connector.kind.trim().toLowerCase());
-};
+	_connector: Pick<DeviceConnectorSnapshot, 'kind' | 'capabilities'> | null
+): boolean => callerRequiresApproval;
 
 export const DEVICE_COMMAND_STATUSES = [
 	'queued',
@@ -394,10 +368,7 @@ export type DeviceCommandEnvelope = {
 	[K in DeviceCommandKind]: { kind: K; input: DeviceCommandInputByKind[K] };
 }[DeviceCommandKind];
 
-const hasConnectorCapability = (
-	connector: Pick<DeviceConnectorSnapshot, 'capabilities'>,
-	...ids: readonly DeviceConnectorCapability[]
-): boolean =>
+const hasConnectorCapability = (connector: Pick<DeviceConnectorSnapshot, 'capabilities'>, ...ids: readonly DeviceConnectorCapability[]): boolean =>
 	connector.capabilities.some((capability) => {
 		const normalized = normalizeDeviceConnectorCapability(capability);
 		return normalized !== null && ids.includes(normalized);

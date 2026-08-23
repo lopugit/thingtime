@@ -2058,6 +2058,15 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       a `?device=` drawer deep link) and press Cmd+R. Both `/` and the deep link
       must return the bundled React shell with HTTP 200; the window must never
       show `Client app has not been built yet.` or fetch a remote UI shell.
+- [ ] On an existing paired computer, confirm the account badge is softly green
+      and **Action permissions** starts on **Always allow** without hiding any
+      other device controls. In a disposable account/device pairing, change to
+      **Ask every time** and confirm the next supported command enters the
+      existing approval flow; change to **Deny** and confirm a new command is
+      rejected before leasing. Return to **Always allow** and confirm supported
+      commands no longer create repeated Thingtime approval cards. Pairing,
+      capability, locked-session, and macOS privacy/TCC gates must still block
+      unsafe work in every mode.
 - [ ] Explicitly register the installed node login service, verify its
       plist passes `plutil -lint`, uses valid `<key>` fields, its executable and
       runtime resolve inside the verified installed app, and its registry

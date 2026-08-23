@@ -14,7 +14,7 @@ test('background node checking preserves the last-known paired badge', () => {
 			registered: true
 		}),
 		{
-			colorScheme: 'orange',
+			colorScheme: 'green',
 			label: '2 accounts paired',
 			showChecking: true
 		}
