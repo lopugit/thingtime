@@ -225,7 +225,10 @@ permissions:
 
 # Shared topology and ownership expressions are evaluated at detection and at
 # every worker race boundary. Automatic rebase ownership requires a real stack
-# edge. The manual exception preserves deliberate exact-PR retries without
+# edge between non-default branches. A reverse synchronization/promotion PR
+# whose head is the default branch (for example `main` -> `develop`) must never
+# make ordinary PRs targeting that default branch look like a synthetic stack.
+# The manual exception preserves deliberate exact-PR retries without
 # letting scheduled, push, pull-request, or blank-manual scans rewrite
 # standalone histories.
 env:
@@ -240,7 +243,8 @@ env:
       and .head.repo.full_name == $repo
       and .base.repo.full_name == $repo
       and ([.labels[].name] | index("no-ai-rebase") == null)
-      and (.head.ref == $base or .base.ref == $head))
+      and ((.head.ref == $base and $base != $default_ref)
+           or (.base.ref == $head and $head != $default_ref)))
   REBASE_OWNER_JQ: >-
     ($no_ai_rebase != true)
     and (
@@ -357,6 +361,7 @@ jobs:
             gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --slurp \
               | jq -c 'add // []'
           )"
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
 
           # A stack member either targets another open PR's head branch or is
           # itself the base of another open PR. Compare only same-repo PRs;
@@ -399,8 +404,8 @@ jobs:
               if [ "$(jq 'length' <<<"$candidates")" -eq 1 ]; then
                 cursor="$(jq -r '.[0].base.ref' <<<"$candidates")"
                 for ((ancestor_depth = 0; ancestor_depth < 64; ancestor_depth++)); do
-                  parents="$(jq -c --arg base "$cursor" \
-                    '[.[] | select(.head.ref == $base)]' <<<"$same_repo")"
+                  parents="$(jq -c --arg base "$cursor" --arg default_ref "$default_ref" \
+                    '[.[] | select(.head.ref == $base and .head.ref != $default_ref)]' <<<"$same_repo")"
                   count="$(jq 'length' <<<"$parents")"
                   [ "$count" -gt 0 ] || break
                   if [ "$count" -ne 1 ]; then
@@ -441,8 +446,8 @@ jobs:
               seed="$(base64 --decode <<<"$encoded")"
               cursor="$(jq -r '.base.ref' <<<"$seed")"
               for ((ancestor_depth = 0; ancestor_depth < 64; ancestor_depth++)); do
-                parents="$(jq -c --arg base "$cursor" \
-                  '[.[] | select(.head.ref == $base)]' <<<"$same_repo")"
+                parents="$(jq -c --arg base "$cursor" --arg default_ref "$default_ref" \
+                  '[.[] | select(.head.ref == $base and .head.ref != $default_ref)]' <<<"$same_repo")"
                 count="$(jq 'length' <<<"$parents")"
                 [ "$count" -gt 0 ] || break
                 if [ "$count" -ne 1 ]; then
@@ -658,6 +663,7 @@ jobs:
               --argjson number "$number" \
               --arg head "$head" \
               --arg base "$base" \
+              --arg default_ref "$default_ref" \
               "$STACK_MEMBER_JQ" <<<"$all")"
             labels="$(jq -c '[.labels[].name]' <<<"$pr")"
             stale_lock=false
@@ -862,6 +868,7 @@ jobs:
             printf '%s\n' "$barriers" > "$RUNNER_TEMP/rebase-barriers.json"
             printf '%s\n' "$candidates" > "$RUNNER_TEMP/rebase-candidates.json"
             roots="$(jq -cn \
+              --arg default_ref "$default_ref" \
               --slurpfile blocked_file "$RUNNER_TEMP/rebase-blocked.json" \
               --slurpfile barriers_file "$RUNNER_TEMP/rebase-barriers.json" \
               --slurpfile candidates_file "$RUNNER_TEMP/rebase-candidates.json" '
@@ -872,10 +879,12 @@ jobs:
               def has_ordering_ancestor($pr; $all; $ordered; $depth):
                 if any($ordered[];
                     .number != $pr.number
+                    and head_ref != $default_ref
                     and (head_ref == ($pr | base_ref))) then
                   true
                 else
-                  [$all[] | select(head_ref == ($pr | base_ref))] as $parents
+                  [$all[] | select(head_ref != $default_ref
+                                    and head_ref == ($pr | base_ref))] as $parents
                   | if ($parents | length) == 0 then
                       false
                     elif ($parents | length) > 1 or $depth >= 64 then
@@ -1131,6 +1140,7 @@ jobs:
               --argjson number "$PR_NUMBER" \
               --arg head "$head_ref" \
               --arg base "$base_ref" \
+              --arg default_ref "$default_ref" \
               "$STACK_MEMBER_JQ" <<<"$all_open")"
             [ "$stack_member" != true ] || topology=stack
 
@@ -2202,6 +2212,7 @@ jobs:
             || { echo "::error::Base moved while resolving ($EXPECTED_BASE_SHA -> $live_base)."; exit 1; }
 
           if [ "$MODE" = root ]; then
+            default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
             all_open="$(gh api --paginate \
               "repos/$REPO/pulls?state=open&per_page=100" --slurp \
               | jq -c 'add // []')"
@@ -2210,6 +2221,7 @@ jobs:
               --argjson number "$PR_NUMBER" \
               --arg head "$HEAD_REF" \
               --arg base "$BASE_REF" \
+              --arg default_ref "$default_ref" \
               "$STACK_MEMBER_JQ" <<<"$all_open")"
             mergeable="$(jq -r '.mergeable' <<<"$pr")"
             rebaseable="$(jq -r '.rebaseable' <<<"$pr")"
@@ -2407,6 +2419,7 @@ jobs:
               --argjson number "$PR_NUMBER" \
               --arg head "$HEAD_REF" \
               --arg base "$BASE_REF" \
+              --arg default_ref "$default_ref" \
               "$STACK_MEMBER_JQ" <<<"$all_open")"
             mergeable="$(jq -r '.mergeable' <<<"$pr")"
             rebaseable="$(jq -r '.rebaseable' <<<"$pr")"
@@ -2720,6 +2733,7 @@ jobs:
                     --argjson number "$PR_NUMBER" \
                     --arg head "$HEAD_REF" \
                     --arg base "$BASE_REF" \
+                    --arg default_ref "$default_ref" \
                     "$STACK_MEMBER_JQ" <<<"$all_open")"
                   [ "$stack_member" != true ] || topology=stack
                   mergeable="$(jq -r '.mergeable' <<<"$pr")"

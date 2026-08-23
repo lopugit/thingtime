@@ -26,7 +26,8 @@ and any(.[];
   and .head.repo.full_name == $repo
   and .base.repo.full_name == $repo
   and ([.labels[].name] | index("no-ai-rebase") == null)
-  and (.head.ref == $base or .base.ref == $head))'
+  and ((.head.ref == $base and $base != $default_ref)
+       or (.base.ref == $head and $head != $default_ref)))'
 
 assert_owner() {
   local expected="$1" stack_member="$2" no_ai_rebase="$3"
@@ -57,6 +58,8 @@ assert_owner false false false false false true "manual standalone merge conflic
 
 fixture='[
   {"number":188,"head":{"ref":"develop","repo":{"full_name":"lopugit/thingtime"}},"base":{"ref":"main","repo":{"full_name":"lopugit/thingtime"}},"labels":[{"name":"no-ai-rebase"}]},
+  {"number":358,"head":{"ref":"main","repo":{"full_name":"lopugit/thingtime"}},"base":{"ref":"develop","repo":{"full_name":"lopugit/thingtime"}},"labels":[]},
+  {"number":359,"head":{"ref":"feature/default-base","repo":{"full_name":"lopugit/thingtime"}},"base":{"ref":"main","repo":{"full_name":"lopugit/thingtime"}},"labels":[]},
   {"number":200,"head":{"ref":"feature/standalone","repo":{"full_name":"lopugit/thingtime"}},"base":{"ref":"develop","repo":{"full_name":"lopugit/thingtime"}},"labels":[]},
   {"number":201,"head":{"ref":"feature/root","repo":{"full_name":"lopugit/thingtime"}},"base":{"ref":"develop","repo":{"full_name":"lopugit/thingtime"}},"labels":[]},
   {"number":202,"head":{"ref":"feature/child","repo":{"full_name":"lopugit/thingtime"}},"base":{"ref":"feature/root","repo":{"full_name":"lopugit/thingtime"}},"labels":[]}
@@ -70,6 +73,7 @@ assert_stack() {
     --argjson number "$number" \
     --arg head "$(jq -r '.head.ref' <<<"$pr")" \
     --arg base "$(jq -r '.base.ref' <<<"$pr")" \
+    --arg default_ref "main" \
     "$STACK_MEMBER_JQ" <<<"$fixture")"
   [ "$actual" = "$expected" ] || {
     printf 'Stack membership example failed for %s: expected %s, got %s.\n' \
@@ -79,6 +83,7 @@ assert_stack() {
 }
 
 assert_stack false 188 "no-ai-rebase promotion"
+assert_stack false 359 "ordinary PR based on the default branch beside reverse sync"
 assert_stack false 200 "standalone beside opted-out promotion"
 assert_stack true 201 "stack root"
 assert_stack true 202 "stack child"
