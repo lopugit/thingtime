@@ -8,6 +8,7 @@ const repositoryRoot = resolve(remixRoot, '..');
 const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
+  'all-branch.yml',
   'develop-pr-preview.yml',
   'electron-release.yml',
   'web-ci.yml',
