@@ -782,6 +782,9 @@ jobs:
           # PR, and must not make every feature PR targeting the integration
           # branch look like one enormous stack.
           all_open="$(all_open_prs)"
+          # A reverse synchronization/promotion PR headed by the default branch
+          # is not a stack parent for ordinary PRs based on that branch.
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
 
           # A pause belongs to one exact failed snapshot, recorded in a strict
           # hidden marker in the github-actions bot's failure comment. Ref or
@@ -800,12 +803,13 @@ jobs:
               continue
             fi
 
-            stack_member="$(jq -r --argjson n "$number" --arg head "$head" --arg base "$base" '
+            stack_member="$(jq -r --argjson n "$number" --arg head "$head" --arg base "$base" --arg default_ref "$default_ref" '
               any(.[];
                 .number != $n
                 and (.isCrossRepository | not)
                 and ([.labels[].name] | index("no-ai-rebase") == null)
-                and (.headRefName == $base or .baseRefName == $head))
+                and ((.headRefName == $base and $base != $default_ref)
+                     or (.baseRefName == $head and $head != $default_ref)))
             ' <<<"$all_open")"
             no_ai="$(jq -r '[.labels[].name] | index("no-ai-rebase") != null' <<<"$paused_pr")"
             if [ "$stack_member" = true ] && [ "$no_ai" != true ]; then
@@ -895,7 +899,7 @@ jobs:
           if [ -n "$merge_paused" ] && [ "$MANUAL_RETRY" != true ]; then
             echo "::notice::Skipping PR(s) #$merge_paused — automatic merge resolution is paused; use an explicit PR/base/head manual run to retry."
           fi
-          stacked_owned="$(jq -r --argjson all "$all_open" '
+          stacked_owned="$(jq -r --argjson all "$all_open" --arg default_ref "$default_ref" '
             [.[] as $pr
               | $pr
               | select(.isCrossRepository | not)
@@ -905,8 +909,10 @@ jobs:
                   .number != $pr.number
                   and (.isCrossRepository | not)
                   and ([.labels[].name] | index("no-ai-rebase") == null)
-                  and (.headRefName == $pr.baseRefName
-                       or .baseRefName == $pr.headRefName)))
+                  and ((.headRefName == $pr.baseRefName
+                        and $pr.baseRefName != $default_ref)
+                       or (.baseRefName == $pr.headRefName
+                           and $pr.headRefName != $default_ref))))
               | .number]
             | join(", ")
           ' <<<"$prs")"
@@ -935,7 +941,8 @@ jobs:
             --arg only "${ONLY_PR:-}" \
             --argjson manual_retry "$MANUAL_RETRY" \
             --argjson recover "$recover_merge_paused" \
-            --argjson all "$all_open" '
+            --argjson all "$all_open" \
+            --arg default_ref "$default_ref" '
             [.[] as $pr
               | $pr
               | select(.isCrossRepository | not)
@@ -950,8 +957,10 @@ jobs:
                       .number != $pr.number
                       and (.isCrossRepository | not)
                       and ([.labels[].name] | index("no-ai-rebase") == null)
-                      and (.headRefName == $pr.baseRefName
-                           or .baseRefName == $pr.headRefName)) | not))
+                      and ((.headRefName == $pr.baseRefName
+                            and $pr.baseRefName != $default_ref)
+                           or (.baseRefName == $pr.headRefName
+                               and $pr.headRefName != $default_ref))) | not))
               | select($only == "" or (.number | tostring) == $only)
               | {number: .number, head: .headRefName, base: .baseRefName,
                   manual_retry: $manual_retry,
@@ -3397,13 +3406,15 @@ jobs:
             --arg repo "$REPO" \
             --argjson number "$PR_NUMBER" \
             --arg head "$HEAD_REF" \
-            --arg base "$BASE_REF" '
+            --arg base "$BASE_REF" \
+            --arg default_ref "$default_ref" '
               any(.[];
                 .number != $number
                 and .head.repo.full_name == $repo
                 and .base.repo.full_name == $repo
                 and ([.labels[].name] | index("no-ai-rebase") == null)
-                and (.head.ref == $base or .base.ref == $head))
+                and ((.head.ref == $base and $base != $default_ref)
+                     or (.base.ref == $head and $head != $default_ref)))
             ' <<<"$all_open")"
           merge_owned=false
           topology=standalone
@@ -4399,6 +4410,7 @@ jobs:
           # opened parent/child makes this merge run abstain unless the PR is
           # explicitly labelled no-ai-rebase.
           if ! jq -e 'index("no-ai-rebase") != null' >/dev/null <<<"$labels"; then
+            default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
             all_open="$(
               gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --slurp \
                 | jq -c 'add // []'
@@ -4407,14 +4419,16 @@ jobs:
               --arg repo "$REPO" \
               --argjson number "$PR_NUMBER" \
               --arg head "$HEAD_REF" \
-              --arg base "$BASE_REF" '
-                any(.[];
-                  .number != $number
-                  and .head.repo.full_name == $repo
-                  and .base.repo.full_name == $repo
-                  and ([.labels[].name] | index("no-ai-rebase") == null)
-                  and (.head.ref == $base or .base.ref == $head))
-              ' <<<"$all_open")"
+              --arg base "$BASE_REF" \
+              --arg default_ref "$default_ref" '
+              any(.[];
+                .number != $number
+                and .head.repo.full_name == $repo
+                and .base.repo.full_name == $repo
+                and ([.labels[].name] | index("no-ai-rebase") == null)
+                and ((.head.ref == $base and $base != $default_ref)
+                     or (.base.ref == $head and $head != $default_ref)))
+            ' <<<"$all_open")"
             [ "$stack_member" != true ] \
               || { echo "::error::PR became a stack member; rebase workflow now owns it."; exit 1; }
           fi
@@ -4425,7 +4439,6 @@ jobs:
             || { echo "::error::Base moved immediately before push; rerun against the new base."; exit 1; }
           [ "$(gh api "repos/$REPO/branches/$(encode_ref "$HEAD_REF")" --jq '.protected')" != true ] \
             || { echo "::error::Head branch became protected while resolving."; exit 1; }
-          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
           [ "$HEAD_REF" != "$default_ref" ] \
             || { echo "::error::The repository default branch is never a resolver push target."; exit 1; }
 
@@ -4736,13 +4749,15 @@ jobs:
                 --arg repo "$REPO" \
                 --argjson number "$PR_NUMBER" \
                 --arg head "$HEAD_REF" \
-                --arg base "$BASE_REF" '
+                --arg base "$BASE_REF" \
+                --arg default_ref "$default_ref" '
                   any(.[];
                     .number != $number
                     and .head.repo.full_name == $repo
                     and .base.repo.full_name == $repo
                     and ([.labels[].name] | index("no-ai-rebase") == null)
-                    and (.head.ref == $base or .base.ref == $head))
+                    and ((.head.ref == $base and $base != $default_ref)
+                         or (.base.ref == $head and $head != $default_ref)))
                 ' >/dev/null <<<"$all_open"; then
                 stack_member=true
               fi
