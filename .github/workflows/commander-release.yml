@@ -1,0 +1,156 @@
+name: Commander App Release
+
+on:
+  workflow_call:
+  push:
+    branches:
+      - main
+    paths:
+      - Commander/**
+      - .github/workflows/commander-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: commander-release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish Commander release
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      COMMANDER_SIGNING_IDENTITY: "-"
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.12.1 --activate
+
+      - name: Resolve release metadata version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base_version="$(node Commander/script/release-version.mjs check)"
+          build_number="${GITHUB_RUN_NUMBER}"
+          release_version="${base_version}+build.${build_number}"
+          release_tag="commander-v${release_version}"
+
+          {
+            echo "THINGTIME_COMMANDER_BASE_VERSION=${base_version}"
+            echo "THINGTIME_COMMANDER_BUILD_NUMBER=${build_number}"
+            echo "THINGTIME_COMMANDER_RELEASE_VERSION=${release_version}"
+            echo "THINGTIME_COMMANDER_RELEASE_TAG=${release_tag}"
+          } >> "${GITHUB_ENV}"
+
+          {
+            echo "base_version=${base_version}"
+            echo "build_number=${build_number}"
+            echo "release_version=${release_version}"
+            echo "release_tag=${release_tag}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Stop if this release already exists
+        id: existing_release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "${THINGTIME_COMMANDER_RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+            echo "::notice::${THINGTIME_COMMANDER_RELEASE_TAG} already exists; skipping duplicate publish."
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Build Commander bundle
+        if: steps.existing_release.outputs.exists != 'true'
+        working-directory: Commander
+        env:
+          COMMANDER_BUILD_NUMBER: ${{ env.THINGTIME_COMMANDER_BUILD_NUMBER }}
+        run: ./script/build_and_run.sh --build-only
+
+      - name: Collect release assets
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_bundle="Commander/dist/Commander.app"
+          if [[ ! -d "${app_bundle}" ]]; then
+            echo "::error::Commander.app was not produced."
+            exit 1
+          fi
+
+          asset_dir="Commander/release-upload"
+          safe_version="${THINGTIME_COMMANDER_RELEASE_VERSION//+/-}"
+          arch="$(uname -m)"
+          archive="${asset_dir}/Commander-${safe_version}-macos-${arch}.zip"
+
+          rm -rf "${asset_dir}"
+          mkdir -p "${asset_dir}"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${app_bundle}" "${archive}"
+          /usr/bin/shasum -a 256 "${archive}" > "${archive}.sha256"
+          ls -lah "${asset_dir}"
+
+      - name: Generate release notes
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          generated_notes="$(
+            gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+              -f tag_name="${THINGTIME_COMMANDER_RELEASE_TAG}" \
+              -f target_commitish="${GITHUB_SHA}" \
+              --jq ".body" 2>/dev/null || true
+          )"
+
+          {
+            echo "## Commander App Release"
+            echo
+            echo "- Version: \`${THINGTIME_COMMANDER_RELEASE_VERSION}\`"
+            echo "- Base version: \`${THINGTIME_COMMANDER_BASE_VERSION}\`"
+            echo "- Build metadata: \`build.${THINGTIME_COMMANDER_BUILD_NUMBER}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo
+            echo "> This macOS bundle is ad-hoc signed and is not notarized."
+            echo
+            if [ -n "${generated_notes}" ]; then
+              echo "${generated_notes}"
+            else
+              echo "## Changes"
+              git log -1 --pretty="format:- %s (%h)"
+              echo
+            fi
+          } > commander-release-notes.md
+
+      - name: Publish GitHub release
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gh release create "${THINGTIME_COMMANDER_RELEASE_TAG}" \
+            Commander/release-upload/* \
+            --target "${GITHUB_SHA}" \
+            --title "Commander App Release ${THINGTIME_COMMANDER_RELEASE_VERSION}" \
+            --notes-file commander-release-notes.md

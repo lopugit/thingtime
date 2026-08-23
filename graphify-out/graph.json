@@ -1276,7 +1276,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main",
-      "community": 2,
+      "community": 5,
       "norm_label": "promote-features-to-main.mjs"
     },
     {
@@ -1286,7 +1286,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_env",
-      "community": 2,
+      "community": 5,
       "norm_label": "env()"
     },
     {
@@ -1296,7 +1296,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_flag",
-      "community": 2,
+      "community": 5,
       "norm_label": "flag()"
     },
     {
@@ -1306,7 +1306,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_cfg",
-      "community": 2,
+      "community": 5,
       "norm_label": "cfg"
     },
     {
@@ -1316,7 +1316,7 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_exec_opts",
-      "community": 2,
+      "community": 5,
       "norm_label": "exec_opts"
     },
     {
@@ -1486,7 +1486,7 @@
       "source_location": "L520",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_strip_prefixes",
-      "community": 2,
+      "community": 5,
       "norm_label": "strip_prefixes"
     },
     {
@@ -1646,7 +1646,7 @@
       "source_location": "L658",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_source_lineage_statuses",
-      "community": 2,
+      "community": 5,
       "norm_label": "source_lineage_statuses"
     },
     {
@@ -1676,7 +1676,7 @@
       "source_location": "L679",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_cleanreplayquarantinepolicy",
-      "community": 11,
+      "community": 5,
       "norm_label": "cleanreplayquarantinepolicy()"
     },
     {
@@ -1696,7 +1696,7 @@
       "source_location": "L707",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_promotion_checkpoint_trailers",
-      "community": 2,
+      "community": 5,
       "norm_label": "promotion_checkpoint_trailers"
     },
     {
@@ -1706,7 +1706,7 @@
       "source_location": "L712",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_reservation_trailer_keys",
-      "community": 2,
+      "community": 5,
       "norm_label": "reservation_trailer_keys"
     },
     {
@@ -1806,7 +1806,7 @@
       "source_location": "L991",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_parsepromotionresolutionattestations",
-      "community": 15,
+      "community": 4,
       "norm_label": "parsepromotionresolutionattestations()"
     },
     {
@@ -1836,7 +1836,7 @@
       "source_location": "L1048",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_latestbotpromotionattestationevents",
-      "community": 15,
+      "community": 4,
       "norm_label": "latestbotpromotionattestationevents()"
     },
     {
@@ -1846,7 +1846,7 @@
       "source_location": "L1067",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_promotionretirementmarker",
-      "community": 5,
+      "community": 11,
       "norm_label": "promotionretirementmarker()"
     },
     {
@@ -1866,7 +1866,7 @@
       "source_location": "L1100",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_retiredbranchcleanupdisposition",
-      "community": 5,
+      "community": 11,
       "norm_label": "retiredbranchcleanupdisposition()"
     },
     {
@@ -1886,7 +1886,7 @@
       "source_location": "L1119",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_isbotauthoredcomment",
-      "community": 2,
+      "community": 5,
       "norm_label": "isbotauthoredcomment()"
     },
     {
@@ -1926,7 +1926,7 @@
       "source_location": "L1158",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_inspectpromotionreviewcheckpoint",
-      "community": 15,
+      "community": 4,
       "norm_label": "inspectpromotionreviewcheckpoint()"
     },
     {
@@ -1936,7 +1936,7 @@
       "source_location": "L1206",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_validateairesolvedpromotionbranch",
-      "community": 15,
+      "community": 4,
       "norm_label": "validateairesolvedpromotionbranch()"
     },
     {
@@ -1946,7 +1946,7 @@
       "source_location": "L1312",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_validatestalependingaipromotionbranch",
-      "community": 15,
+      "community": 4,
       "norm_label": "validatestalependingaipromotionbranch()"
     },
     {
@@ -2066,7 +2066,7 @@
       "source_location": "L1698",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_encodepromotionattestation",
-      "community": 11,
+      "community": 15,
       "norm_label": "encodepromotionattestation()"
     },
     {
@@ -2086,7 +2086,7 @@
       "source_location": "L1714",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_promotionattestationbody",
-      "community": 11,
+      "community": 15,
       "norm_label": "promotionattestationbody()"
     },
     {
@@ -2186,7 +2186,7 @@
       "source_location": "L2144",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_promotionnumberfromurl",
-      "community": 2,
+      "community": 5,
       "norm_label": "promotionnumberfromurl()"
     },
     {
@@ -2316,7 +2316,7 @@
       "source_location": "L3977",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_listremotepromotionbranches",
-      "community": 5,
+      "community": 11,
       "norm_label": "listremotepromotionbranches()"
     },
     {
@@ -2426,7 +2426,7 @@
       "source_location": "L4657",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_processgroupsindependently",
-      "community": 5,
+      "community": 11,
       "norm_label": "processgroupsindependently()"
     },
     {
@@ -2436,7 +2436,7 @@
       "source_location": "L4667",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_sortpromotioncandidates",
-      "community": 5,
+      "community": 11,
       "norm_label": "sortpromotioncandidates()"
     },
     {
@@ -2496,7 +2496,7 @@
       "source_location": "L4853",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_promotionconflictreviewbody",
-      "community": 11,
+      "community": 5,
       "norm_label": "promotionconflictreviewbody()"
     },
     {
@@ -2506,7 +2506,7 @@
       "source_location": "L4875",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_promotionquarantinereviewbody",
-      "community": 11,
+      "community": 5,
       "norm_label": "promotionquarantinereviewbody()"
     },
     {
@@ -2516,7 +2516,7 @@
       "source_location": "L4908",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_promotionworkerreviewbody",
-      "community": 11,
+      "community": 5,
       "norm_label": "promotionworkerreviewbody()"
     },
     {
@@ -2536,7 +2536,7 @@
       "source_location": "L4945",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_summarize",
-      "community": 2,
+      "community": 5,
       "norm_label": "summarize()"
     },
     {
@@ -2546,7 +2546,7 @@
       "source_location": "L4974",
       "_origin": "ast",
       "id": "github_scripts_promote_features_to_main_runpromotion",
-      "community": 5,
+      "community": 11,
       "norm_label": "runpromotion()"
     },
     {
@@ -4890,122 +4890,122 @@
       "norm_label": "deploymentenabled"
     },
     {
-      "label": "CLAUDE.md",
+      "label": "AGENTS.md",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "claude",
+      "id": "agents",
       "community": 20,
-      "norm_label": "claude.md"
+      "norm_label": "agents.md"
     },
     {
       "label": "Thingtime AI instructions",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "claude_thingtime_ai_instructions",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
       "community": 20,
       "norm_label": "thingtime ai instructions"
     },
     {
       "label": "Canonical instruction file",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L3",
       "_origin": "ast",
-      "id": "claude_canonical_instruction_file",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_canonical_instruction_file",
       "community": 20,
       "norm_label": "canonical instruction file"
     },
     {
       "label": "Fundamentals (read first)",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L19",
       "_origin": "ast",
-      "id": "claude_fundamentals_read_first",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_fundamentals_read_first",
       "community": 20,
       "norm_label": "fundamentals (read first)"
     },
     {
       "label": "Local development and worktrees",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L60",
       "_origin": "ast",
-      "id": "claude_local_development_and_worktrees",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_local_development_and_worktrees",
       "community": 20,
       "norm_label": "local development and worktrees"
     },
     {
       "label": "Browser and UI validation",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L123",
       "_origin": "ast",
-      "id": "claude_browser_and_ui_validation",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_browser_and_ui_validation",
       "community": 20,
       "norm_label": "browser and ui validation"
     },
     {
       "label": "Data and API conventions",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L145",
       "_origin": "ast",
-      "id": "claude_data_and_api_conventions",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_data_and_api_conventions",
       "community": 20,
       "norm_label": "data and api conventions"
     },
     {
       "label": "GitHub push and PR publishing",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L180",
       "_origin": "ast",
-      "id": "claude_github_push_and_pr_publishing",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_github_push_and_pr_publishing",
       "community": 20,
       "norm_label": "github push and pr publishing"
     },
     {
       "label": "Linting, type checks, and package managers",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L220",
       "_origin": "ast",
-      "id": "claude_linting_type_checks_and_package_managers",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_linting_type_checks_and_package_managers",
       "community": 20,
       "norm_label": "linting, type checks, and package managers"
     },
     {
       "label": "iOS development and releases",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L244",
       "_origin": "ast",
-      "id": "claude_ios_development_and_releases",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_ios_development_and_releases",
       "community": 20,
       "norm_label": "ios development and releases"
     },
     {
       "label": "graphify",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L276",
       "_origin": "ast",
-      "id": "claude_graphify",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_graphify",
       "community": 20,
       "norm_label": "graphify"
     },
     {
       "label": "Delivery messaging",
       "file_type": "document",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L298",
       "_origin": "ast",
-      "id": "claude_delivery_messaging",
+      "id": "users_lopu_codex_worktrees_commander_release_control_plane_agents_delivery_messaging",
       "community": 20,
       "norm_label": "delivery messaging"
     },
@@ -17187,111 +17187,111 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L1",
       "weight": 1.0,
-      "source": "claude",
-      "target": "claude_thingtime_ai_instructions",
+      "source": "agents",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L123",
       "weight": 1.0,
-      "source": "claude_thingtime_ai_instructions",
-      "target": "claude_browser_and_ui_validation",
+      "source": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_browser_and_ui_validation",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L3",
       "weight": 1.0,
-      "source": "claude_thingtime_ai_instructions",
-      "target": "claude_canonical_instruction_file",
+      "source": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_canonical_instruction_file",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L145",
       "weight": 1.0,
-      "source": "claude_thingtime_ai_instructions",
-      "target": "claude_data_and_api_conventions",
+      "source": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_data_and_api_conventions",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L298",
       "weight": 1.0,
-      "source": "claude_thingtime_ai_instructions",
-      "target": "claude_delivery_messaging",
+      "source": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_delivery_messaging",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L19",
       "weight": 1.0,
-      "source": "claude_thingtime_ai_instructions",
-      "target": "claude_fundamentals_read_first",
+      "source": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_fundamentals_read_first",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L180",
       "weight": 1.0,
-      "source": "claude_thingtime_ai_instructions",
-      "target": "claude_github_push_and_pr_publishing",
+      "source": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_github_push_and_pr_publishing",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L276",
       "weight": 1.0,
-      "source": "claude_thingtime_ai_instructions",
-      "target": "claude_graphify",
+      "source": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_graphify",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L244",
       "weight": 1.0,
-      "source": "claude_thingtime_ai_instructions",
-      "target": "claude_ios_development_and_releases",
+      "source": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_ios_development_and_releases",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L220",
       "weight": 1.0,
-      "source": "claude_thingtime_ai_instructions",
-      "target": "claude_linting_type_checks_and_package_managers",
+      "source": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_linting_type_checks_and_package_managers",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "CLAUDE.md",
+      "source_file": "AGENTS.md",
       "source_location": "L60",
       "weight": 1.0,
-      "source": "claude_thingtime_ai_instructions",
-      "target": "claude_local_development_and_worktrees",
+      "source": "users_lopu_codex_worktrees_commander_release_control_plane_agents_thingtime_ai_instructions",
+      "target": "users_lopu_codex_worktrees_commander_release_control_plane_agents_local_development_and_worktrees",
       "confidence_score": 1.0
     },
     {
@@ -17630,5 +17630,5 @@
       "source_file": "README.md"
     }
   ],
-  "built_at_commit": "a8be000fc14049e1f536ae8d64b73cd5763cef0e"
+  "built_at_commit": "0e6b0d701a1240b385881fa5ba52e1f9d72b872b"
 }
