@@ -1495,9 +1495,9 @@
     "semantic_hash": "b5607222aa41aa41799c6c348c2e6930"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1787319283.6723523,
-    "ast_hash": "c032aca85a40cc4d0f015d9253bfeb08",
-    "semantic_hash": "c032aca85a40cc4d0f015d9253bfeb08"
+    "mtime": 1787468038.577356,
+    "ast_hash": "5228592f6b8c8bd971f89ea589232f2b",
+    "semantic_hash": ""
   },
   "remix/README.md": {
     "mtime": 1786536620.8707204,
@@ -5990,9 +5990,9 @@
     "semantic_hash": "51df15975a0f8a0c946315cb405b6252"
   },
   "Commander/package.json": {
-    "mtime": 1787120210.680744,
-    "ast_hash": "1281676295469faa314f9061480f7b23",
-    "semantic_hash": "1281676295469faa314f9061480f7b23"
+    "mtime": 1787468038.573307,
+    "ast_hash": "e69dc1b3af479ccc2193c7b7040d7d52",
+    "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/package.json": {
     "mtime": 1787120199.093284,
@@ -6100,9 +6100,9 @@
     "semantic_hash": "c22ab7d26d7e1eb3818cef99711f7a45"
   },
   "Commander/script/build_and_run.sh": {
-    "mtime": 1787131091.7582998,
-    "ast_hash": "8914bbae6a84dd9311516d1564342215",
-    "semantic_hash": "8914bbae6a84dd9311516d1564342215"
+    "mtime": 1787468038.5741196,
+    "ast_hash": "d9257c792f31a5eb677e284ff2935776",
+    "semantic_hash": ""
   },
   "Commander/tsconfig.base.json": {
     "mtime": 1786537288.0695753,
@@ -6200,9 +6200,9 @@
     "semantic_hash": "5a3628c64c892a09c8e3b9d67de906a1"
   },
   "Commander/README.md": {
-    "mtime": 1787372698.3821669,
-    "ast_hash": "bcece218507d40a4e3fe296df172da1f",
-    "semantic_hash": "bcece218507d40a4e3fe296df172da1f"
+    "mtime": 1787468038.5754015,
+    "ast_hash": "602f90039443ca39423577b33d5fd7ab",
+    "semantic_hash": ""
   },
   "Commander/THIRD_PARTY_NOTICES.md": {
     "mtime": 1787121007.0253167,
@@ -6305,8 +6305,8 @@
     "semantic_hash": "2147477c215b8b3975078ace39bca6e2"
   },
   "PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md": {
-    "mtime": 1787373953.7444546,
-    "ast_hash": "b16af3ec0e6d5f22a08b56cad38f2910",
+    "mtime": 1787468198.1977973,
+    "ast_hash": "f77ebf76fe4490897b197f675d5c3f31",
     "semantic_hash": ""
   },
   "Commander/design/commander-app-icon.png": {
@@ -6962,6 +6962,16 @@
   "TODO/commander-app-registration-manager.md": {
     "mtime": 1787466842.45522,
     "ast_hash": "9b10931260f48992b3239095cdd4f710",
+    "semantic_hash": ""
+  },
+  "Commander/script/release-version.mjs": {
+    "mtime": 1787468053.6593475,
+    "ast_hash": "954e80c3625434cff4fd0e77c1d494a5",
+    "semantic_hash": ""
+  },
+  ".github/workflows/commander-release.yml": {
+    "mtime": 1787468288.3389647,
+    "ast_hash": "41a47b613fa6090f88eaf652744343a9",
     "semantic_hash": ""
   }
 }
