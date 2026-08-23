@@ -2134,7 +2134,9 @@
   font-size: 0.79rem;
   text-align: right;
 }
-.advanced-card input {
+.advanced-card input,
+.advanced-card select,
+.custom-environment-card input {
   width: 100%;
   height: 34px;
   padding: 0 10px;
@@ -2144,9 +2146,56 @@
   background: var(--surface-raised);
   color: var(--text);
 }
-.advanced-card input:focus {
+.advanced-card input:focus,
+.advanced-card select:focus,
+.custom-environment-card input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.custom-environment-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.9fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin-top: 17px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--hover);
+}
+.custom-environment-card > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.custom-environment-card strong {
+  color: var(--text);
+  font-size: 0.92rem;
+}
+.custom-environment-card span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.custom-environment-card label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+.custom-environment-card label > span {
+  color: var(--muted);
+  font-size: 0.73rem;
+}
+.custom-environment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.custom-environment-actions button {
+  min-height: 34px;
+  white-space: nowrap;
 }
 .callback-card {
   display: grid;
@@ -2534,6 +2583,11 @@
   color: var(--muted);
   font-size: 0.76rem;
   line-height: 1.4;
+}
+@media (max-width: 720px) {
+  .custom-environment-card {
+    grid-template-columns: 1fr;
+  }
 }
 .cloud-hero > span {
   width: 50px;

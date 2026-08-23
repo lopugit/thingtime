@@ -193,6 +193,45 @@ describe('Commander settings deep links', () => {
     expect(screen.getByText('Thingtime Account')).toBeVisible();
   });
 
+  it('switches built-in Thingtime environments and saves a reusable custom environment', () => {
+    window.history.replaceState({}, '', '/settings.html?tab=advanced');
+    const commander = state();
+    render(<Settings state={commander} />);
+
+    const environment = screen.getByRole('combobox', { name: 'Thingtime environment' });
+    expect(environment).toHaveValue('production');
+    fireEvent.change(environment, { target: { value: 'development' } });
+    expect(commander.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thingtimeBaseUrl: 'https://dev.thingtime.com',
+        thingtimeClientId: 'ttapp_5aec98d2-b17b-4396-b450-528ccc730d0e',
+      }),
+    );
+
+    fireEvent.change(screen.getByLabelText('Thingtime URL'), {
+      target: { value: 'https://staging.thingtime.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Public client ID override'), {
+      target: { value: 'ttapp_staging' },
+    });
+    fireEvent.change(screen.getByLabelText('Custom environment name'), { target: { value: 'Staging' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom environment' }));
+
+    expect(commander.saveSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        thingtimeBaseUrl: 'https://staging.thingtime.com',
+        thingtimeClientId: 'ttapp_staging',
+        thingtimeCustomEnvironments: [
+          expect.objectContaining({
+            name: 'Staging',
+            baseUrl: 'https://staging.thingtime.com',
+            clientId: 'ttapp_staging',
+          }),
+        ],
+      }),
+    );
+  });
+
   it('opens the native Activity tab with Commander and machine metrics', async () => {
     window.history.replaceState({}, '', '/settings.html?tab=activity');
     render(<Settings state={state()} />);

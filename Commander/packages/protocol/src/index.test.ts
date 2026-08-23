@@ -7,6 +7,7 @@ import {
   isSettingsTab,
   normalizeActivitySettings,
   normalizeCalculatorSettings,
+  normalizeCommanderThingtimeCustomEnvironments,
   normalizeIndexingSettings,
   normalizeSearchCacheSettings,
   normalizeSearchCategoryOrder,
@@ -81,6 +82,33 @@ describe('Commander presentation settings', () => {
     expect(
       normalizeActivitySettings({ periodicSpeedTestEnabled: true, periodicSpeedTestIntervalMinutes: 99_999 }),
     ).toEqual({ periodicSpeedTestEnabled: true, periodicSpeedTestIntervalMinutes: 1440 });
+  });
+
+  it('keeps valid custom Thingtime environments while rejecting malformed and duplicate entries', () => {
+    expect(
+      normalizeCommanderThingtimeCustomEnvironments([
+        {
+          id: 'staging',
+          name: ' Staging ',
+          baseUrl: 'https://staging.thingtime.com/',
+          clientId: ' ttapp_staging ',
+        },
+        {
+          id: 'staging',
+          name: 'Duplicate',
+          baseUrl: 'https://duplicate.example',
+          clientId: 'ttapp_duplicate',
+        },
+        { id: 'bad', name: 'Bad', baseUrl: 'javascript:alert(1)', clientId: 'ttapp_bad' },
+      ]),
+    ).toEqual([
+      {
+        id: 'staging',
+        name: 'Staging',
+        baseUrl: 'https://staging.thingtime.com',
+        clientId: 'ttapp_staging',
+      },
+    ]);
   });
 });
 
