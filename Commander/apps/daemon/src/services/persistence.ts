@@ -13,6 +13,7 @@ import {
   DEFAULT_SETTINGS,
   normalizeCalculatorSettings,
   normalizeCommandShortcuts,
+  normalizeCommanderThingtimeClientId,
   normalizeEmojiDefaultAction,
   normalizeIndexingSettings,
   normalizeRecentSearches,
@@ -42,7 +43,6 @@ const statePath = () => path.join(commanderDataDirectory(), 'state.json');
 
 function normalizedSettings(settings: Partial<CommanderSettings> | undefined): CommanderSettings {
   const merged = { ...DEFAULT_SETTINGS, ...settings, version: 1 } as CommanderSettings;
-  const clientId = typeof merged.thingtimeClientId === 'string' ? merged.thingtimeClientId.trim() : '';
   return {
     ...merged,
     commandShortcuts: normalizeCommandShortcuts(settings?.commandShortcuts),
@@ -52,7 +52,7 @@ function normalizedSettings(settings: Partial<CommanderSettings> | undefined): C
     calculator: normalizeCalculatorSettings(settings?.calculator),
     windowPinning: normalizeWindowPinningSettings(settings?.windowPinning),
     indexing: normalizeIndexingSettings(settings?.indexing),
-    thingtimeClientId: clientId || DEFAULT_SETTINGS.thingtimeClientId,
+    thingtimeClientId: normalizeCommanderThingtimeClientId(merged.thingtimeClientId, merged.thingtimeBaseUrl),
   };
 }
 
