@@ -271,7 +271,7 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
 
   // App-scoped tokens only work through their dedicated path (apps/appTokens)
   // — same rejection as resolveSessionUser.
-  if (session.purpose === 'app' || session.purpose === 'app-sandbox') return anonymous;
+  if (session.purpose === 'app' || session.purpose === 'app-sandbox' || session.purpose === 'oauth-code') return anonymous;
 
   if (session.purpose === 'pat') {
     // Bearer-only: PATs live in agent/script configs and never ride a cookie,
