@@ -8875,7 +8875,7 @@ export type ApiCapabilitiesManifest = {
 };
 
 /** A stable machine-readable name for a concrete API route, including internal routes without public docs. */
-export const apiRouteCapabilityId = (routeKey: string) => `route.${routeKey.replaceAll('/', '.')}`;
+export const apiRouteCapabilityId = (routeKey: string) => `route.${routeKey.replace(/\//g, '.')}`;
 
 /**
  * Generated from the canonical public API registry plus the active route map.
