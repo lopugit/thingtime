@@ -1245,9 +1245,9 @@
     "semantic_hash": "3e068c437e00eacf7136b9836e06d3a0"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1787315114.5813787,
-    "ast_hash": "a33a8b8985d1b65c0ecb275f66cff764",
-    "semantic_hash": "a33a8b8985d1b65c0ecb275f66cff764"
+    "mtime": 1787474966.0271423,
+    "ast_hash": "7c59531d28f32ead8519c22751567219",
+    "semantic_hash": ""
   },
   "remix/server/routes/api/root-data.get.ts": {
     "mtime": 1786536621.0500572,
@@ -2335,9 +2335,9 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1787315114.5726707,
-    "ast_hash": "fae89724583c5053adc674b2916132bb",
-    "semantic_hash": "fae89724583c5053adc674b2916132bb"
+    "mtime": 1787474965.9901361,
+    "ast_hash": "4bb3959baf80b8321460dd7f0cf6b15a",
+    "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
     "mtime": 1786536620.9309306,
@@ -2705,9 +2705,9 @@
     "semantic_hash": "72315d91a917dab861c5a059d418c3f2"
   },
   "remix/app/api/utils/rateLimit/config.ts": {
-    "mtime": 1787315114.5621185,
-    "ast_hash": "9db44db9c0a23ac67ea0ce7de100cc4c",
-    "semantic_hash": "9db44db9c0a23ac67ea0ce7de100cc4c"
+    "mtime": 1787475414.5742538,
+    "ast_hash": "d8212345488f3e3e04c6450b5a55452b",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/rateLimit/enforce.ts": {
     "mtime": 1787115393.5635858,
@@ -5385,8 +5385,8 @@
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/server.ts": {
-    "mtime": 1787470303.3895454,
-    "ast_hash": "a879c5af57a1fc98c85b08a076447574",
+    "mtime": 1787474372.0415509,
+    "ast_hash": "3ae605e2e1b76dcf840cf4c0d73931e4",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/applications.ts": {
@@ -5430,8 +5430,8 @@
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/persistence.ts": {
-    "mtime": 1787467127.6193662,
-    "ast_hash": "bf4c9e4564d58fab3d7bf90142910a57",
+    "mtime": 1787474100.3853242,
+    "ast_hash": "63a6c1facda97a33e203dc21e416489e",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/raycastLocal.test.ts": {
@@ -5455,14 +5455,14 @@
     "semantic_hash": "b4aa81ba11fba96fdfb52643f63bef73"
   },
   "Commander/apps/daemon/src/services/thingtime.test.ts": {
-    "mtime": 1786540479.8322864,
-    "ast_hash": "4b56d41b0044228ba9c37f7ee3df2d54",
-    "semantic_hash": "4b56d41b0044228ba9c37f7ee3df2d54"
+    "mtime": 1787474644.5576873,
+    "ast_hash": "db7ee642fec8bb1c162ab5cbb8c1dd40",
+    "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/thingtime.ts": {
-    "mtime": 1786540479.8440526,
-    "ast_hash": "2935e64944a4ab85c67cd06c1af41d10",
-    "semantic_hash": "2935e64944a4ab85c67cd06c1af41d10"
+    "mtime": 1787475414.5746415,
+    "ast_hash": "795248da38ff2e9825ab0bff0e8d67f5",
+    "semantic_hash": ""
   },
   "Commander/apps/daemon/tsconfig.json": {
     "mtime": 1786537617.0327082,
@@ -5550,13 +5550,13 @@
     "semantic_hash": "8a18141a33e9d13bdb91c3dd4ac5cee2"
   },
   "Commander/apps/desktop-ui/src/components/Settings.test.tsx": {
-    "mtime": 1787470258.1326945,
-    "ast_hash": "ca3c83a3b35e5f7fc9fa1809db96851a",
+    "mtime": 1787474987.0439298,
+    "ast_hash": "65a77bad39b78cd6d22ab959fba5233c",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Settings.tsx": {
-    "mtime": 1787470303.4550936,
-    "ast_hash": "ad52fdd5073aca9d2d4d7f6026747ee2",
+    "mtime": 1787474523.4470377,
+    "ast_hash": "697faeac2ccd60ed19a8bc81ec58e8a4",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/UiErrorBoundary.test.tsx": {
@@ -5600,9 +5600,9 @@
     "semantic_hash": "fe15bf03232d62b46291af68c03a23bd"
   },
   "Commander/apps/desktop-ui/src/lib/api.ts": {
-    "mtime": 1787315924.13673,
-    "ast_hash": "0c234b8553c93c80c268a7a12d76d415",
-    "semantic_hash": "0c234b8553c93c80c268a7a12d76d415"
+    "mtime": 1787474644.5688043,
+    "ast_hash": "a59590ac6c08db621bab2194d8954fed",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/lib/nativeBridge.test.ts": {
     "mtime": 1786947480.1945305,
@@ -5985,8 +5985,8 @@
     "semantic_hash": "b96287f4582ebd532a2ae02d4cb34a4b"
   },
   "Commander/hosts/windows/NativeBridgeContract.cs": {
-    "mtime": 1787470002.3979282,
-    "ast_hash": "40ad5c0fe1f6775a472a06a61eff8154",
+    "mtime": 1787474587.1732526,
+    "ast_hash": "b3d2e7107cb7eb75424b3c015d2e87a1",
     "semantic_hash": ""
   },
   "Commander/package.json": {
@@ -6025,13 +6025,13 @@
     "semantic_hash": "0ce06d40e2d7a57e255d7ef9279abd74"
   },
   "Commander/packages/protocol/src/index.test.ts": {
-    "mtime": 1787470258.131763,
-    "ast_hash": "b6abf21073847bc287dc7fb80ad7e6cb",
+    "mtime": 1787474644.462067,
+    "ast_hash": "689be6a396c5de35d5e068ba9a30c76a",
     "semantic_hash": ""
   },
   "Commander/packages/protocol/src/index.ts": {
-    "mtime": 1787470303.7162044,
-    "ast_hash": "f6c522e323659dc9df7297e550e5fd85",
+    "mtime": 1787474644.4466927,
+    "ast_hash": "0a4a1e83466abea12613d91d65ba2a2e",
     "semantic_hash": ""
   },
   "Commander/packages/protocol/tsconfig.json": {
@@ -6245,8 +6245,8 @@
     "semantic_hash": "acb578d05997728808c9a6c795cbad62"
   },
   "Commander/docs/TESTING.md": {
-    "mtime": 1787470270.1730623,
-    "ast_hash": "c39e39aac962001266802213198f8725",
+    "mtime": 1787475138.108552,
+    "ast_hash": "ebd4ec4c4344202911ddf495bb2e147e",
     "semantic_hash": ""
   },
   "Commander/extensions/README.md": {
@@ -6975,18 +6975,43 @@
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/ActivitySettings.tsx": {
-    "mtime": 1787470317.672871,
-    "ast_hash": "1a2e8acfc75a759927d81b5c66c98f7a",
+    "mtime": 1787475208.303489,
+    "ast_hash": "1195cb934814ca22ca8c37a97f2d06b2",
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Services/SystemMetricsService.swift": {
-    "mtime": 1787470657.4314134,
-    "ast_hash": "939d3bd2354332b79212fca966a208c3",
+    "mtime": 1787475117.2358477,
+    "ast_hash": "3575def5acb682981096184e95d469e9",
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Tests/CommanderTests/SystemMetricsServiceTests.swift": {
-    "mtime": 1787470677.1031952,
-    "ast_hash": "9f01b20ec9cf53625e0e77ed6772e5f7",
+    "mtime": 1787474587.1735284,
+    "ast_hash": "9d22a057b06311e955272344aeaa79c0",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/networkProbe.test.ts": {
+    "mtime": 1787474965.5102465,
+    "ast_hash": "1f774a4db38740c065aaf5e8f746048d",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/networkProbe.ts": {
+    "mtime": 1787474965.4824796,
+    "ast_hash": "12c2557c68fbec443769b26cbe881c3b",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/network-probe/download/_download.tsx": {
+    "mtime": 1787474965.6436446,
+    "ast_hash": "9eeb7c210cb2d7be36f35032fedc0085",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/network-probe/ping/_ping.tsx": {
+    "mtime": 1787474965.6257246,
+    "ast_hash": "93e3a684755e7eacb387898956930641",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/network-probe/upload/_upload.tsx": {
+    "mtime": 1787474965.6596658,
+    "ast_hash": "1f9ee865ec90d828c72b9d3302723b0a",
     "semantic_hash": ""
   }
 }
