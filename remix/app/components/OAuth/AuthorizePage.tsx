@@ -3,6 +3,12 @@ import { Box, Button, Flex } from '@chakra-ui/react';
 
 import { Login } from '~/components/Login/Login';
 import { Register } from '~/components/Login/Register';
+import {
+  appendDesktopAuthorizationResult,
+  normalizeDesktopRedirectUri,
+  normalizeDesktopState,
+  normalizePkceChallenge
+} from '~/api/utils/apps/desktopOAuthRedirect';
 
 // The "Login with Thingtime" popup (route /authorize, opened by the embed SDK
 // from a third-party site). Flow: validate clientId + origin against
@@ -12,7 +18,9 @@ import { Register } from '~/components/Login/Register';
 // more" section where the user can volunteer extra profile fields and
 // hand-pick specific things to share → POST /api/v1/oauth/authorize → hand
 // the app-scoped token to the opener via postMessage (targetOrigin = the
-// validated origin, never '*') → close.
+// validated origin, never '*') → close. Installed apps use the same consent
+// screen with redirect_uri + S256 PKCE: approval yields a one-time code at the
+// loopback callback and the native host exchanges it for an app token.
 //
 // SANDBOX MODE (?sandbox=1, used by /sdk/demo.html): the full consent UI runs
 // against a pretend app — no server validation, no real token, nothing
@@ -191,8 +199,15 @@ export const AuthorizePage = () => {
 
   const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const clientId = (params.get('client_id') || params.get('clientId') || '').trim();
-  const origin = (params.get('origin') || '').trim();
+  const redirectUri = (params.get('redirect_uri') || '').trim();
+  const codeChallenge = (params.get('code_challenge') || '').trim();
+  const codeChallengeMethod = (params.get('code_challenge_method') || '').trim();
+  const desktopFlow = !!(redirectUri || codeChallenge || codeChallengeMethod);
+  const desktopRedirect = React.useMemo(() => normalizeDesktopRedirectUri(redirectUri), [redirectUri]);
+  const desktopChallenge = React.useMemo(() => normalizePkceChallenge(codeChallenge, codeChallengeMethod), [codeChallenge, codeChallengeMethod]);
+  const origin = desktopFlow ? desktopRedirect?.origin ?? '' : (params.get('origin') || '').trim();
   const state = (params.get('state') || '').slice(0, MAX_STATE_CHARS);
+  const desktopState = desktopFlow ? normalizeDesktopState(state) : null;
   const scopeParam = (params.get('scope') || '').slice(0, 1024);
   const optionalScopeParam = (params.get('optional_scope') || '').slice(0, 1024);
   const extrasAllowed = params.get('extra') !== '0';
@@ -203,7 +218,7 @@ export const AuthorizePage = () => {
   // approve step mints an aud-bound single-use handoff code the opener
   // redeems at its own /api/v1/auth/sso-session. Origins stay default-open;
   // the per-code binding is the security.
-  const selfMode = !sandbox && params.get('self') === '1';
+  const selfMode = !sandbox && !desktopFlow && params.get('self') === '1';
   // opt-in sandbox pooling (see /api/v1/oauth/sandbox): passed through to the
   // mint verbatim — the server validates
   const sandboxSpace = (params.get('sandbox_space') || '').slice(0, 64);
@@ -271,8 +286,17 @@ export const AuthorizePage = () => {
       return;
     }
 
+    if (desktopFlow && (!desktopRedirect || !desktopChallenge || !desktopState)) {
+      setInvalidReason('This desktop login link is missing its loopback callback, random state, or S256 PKCE challenge.');
+      return;
+    }
+
     if (!clientId || !origin) {
-      setInvalidReason('This link is missing its app details (client_id and origin).');
+      setInvalidReason(
+        desktopFlow
+          ? 'This desktop login link is missing its app details (client_id and redirect_uri).'
+          : 'This link is missing its app details (client_id and origin).'
+      );
       return;
     }
 
@@ -485,6 +509,39 @@ export const AuthorizePage = () => {
       return;
     }
 
+    if (desktopFlow) {
+      if (!desktopRedirect || !desktopChallenge || !desktopState) {
+        setIssueError('This window could not verify the app’s loopback callback. Close it and start the sign-in again.');
+        setIssuing(false);
+        return;
+      }
+
+      const resp = await fetchJson('/api/v1/oauth/desktop/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: app.clientId,
+          redirectUri: desktopRedirect.uri,
+          codeChallenge: desktopChallenge,
+          codeChallengeMethod: 'S256',
+          state: desktopState,
+          scope: scopeParam,
+          optionalScope: optionalScopeParam,
+          extra: extrasAllowed ? '1' : '0',
+          scopes: selection,
+          sharedThings: thingsActive ? pickedIds : []
+        })
+      });
+
+      if (resp?.ok && typeof resp.redirectTo === 'string') {
+        window.location.assign(resp.redirectTo);
+        return;
+      }
+      setIssueError(resp?.error || 'Could not authorize — please try again.');
+      setIssuing(false);
+      return;
+    }
+
     // Don't mint a grant we can't deliver: if the opener is gone (popup opened
     // directly, or the embedding page closed), the token would be issued into
     // the void while the user sees a false "signed in".
@@ -570,6 +627,16 @@ export const AuthorizePage = () => {
   };
 
   const cancel = () => {
+    if (desktopFlow && desktopRedirect && desktopState) {
+      window.location.assign(
+        appendDesktopAuthorizationResult(desktopRedirect.uri, {
+          error: 'access_denied',
+          errorDescription: 'The user cancelled',
+          state: desktopState
+        })
+      );
+      return;
+    }
     postToOpener(
       selfMode
         ? { type: 'thingtime:sso', ok: false, error: 'cancelled' }
