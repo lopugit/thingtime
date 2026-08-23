@@ -201,3 +201,24 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     Full spec: `claude-todo/10-delight-and-growth-ideas.md`.
     (Several eggs from this list are **already shipped** in this branch — see the
     spec's "Shipped" markers.)
+
+17. **🔗 Unique account invite links with optional profile prefill.**
+
+    Let a signed-in user generate a unique, revocable URL for another person to
+    create a Thingtime account. The inviter may optionally suggest a username,
+    profile name, description, profile image, and banner image; the recipient
+    reviews and can change every suggestion before registering through the one
+    canonical account-creation path. Keep the URL opaque, single-use, expiring,
+    non-enumerable, and unable to grant privileges.
+    Full spec: `claude-todo/18-account-invite-links.md`.
+
+18. **🕶️ Anonymous participants in group chats.**
+
+    Extend the existing Messenger group flow so the creator can add friends or
+    any eligible users and toggle anonymity per participant, including
+    themselves. Invitees still see the real username of the person who invited
+    them, but anonymous members' messages and all in-chat identity surfaces use
+    privacy-safe, chat-local representations with no global account ids or
+    profile links. Preserve server-side moderation and state the honest limits
+    of anonymity.
+    Full spec: `claude-todo/19-anonymous-group-chats.md`.
