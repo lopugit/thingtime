@@ -111,6 +111,26 @@ export function recordEmojiChoice(
   return { version: LEARNING_VERSION, queries };
 }
 
+/** Removes one emoji's learned score for one normalized search phrase. */
+export function resetEmojiChoice(
+  state: EmojiLearningState,
+  rawQuery: string,
+  rawEmojiID: string,
+): EmojiLearningState {
+  const query = boundedQuery(rawQuery);
+  const emojiId = boundedEmojiID(rawEmojiID);
+  if (!query || !emojiId) return state;
+
+  const current = state.queries.find((candidate) => candidate.query === query);
+  if (!current?.choices.some((choice) => choice.emojiId === emojiId)) return state;
+
+  const choices = current.choices.filter((choice) => choice.emojiId !== emojiId);
+  const queries = choices.length
+    ? state.queries.map((candidate) => (candidate.query === query ? { query, choices } : candidate))
+    : state.queries.filter((candidate) => candidate.query !== query);
+  return { version: LEARNING_VERSION, queries };
+}
+
 export function learnedEmojiCounts(state: EmojiLearningState, rawQuery: string): ReadonlyMap<string, number> {
   const query = boundedQuery(rawQuery);
   if (!query) return new Map();

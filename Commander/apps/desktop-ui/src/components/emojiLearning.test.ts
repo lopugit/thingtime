@@ -4,6 +4,7 @@ import {
   emptyEmojiLearning,
   learnedEmojiCounts,
   recordEmojiChoice,
+  resetEmojiChoice,
 } from './emojiLearning.js';
 
 describe('emoji query learning', () => {
@@ -54,5 +55,16 @@ describe('emoji query learning', () => {
     expect(heart?.choices).toHaveLength(16);
     expect(heart?.choices[0]).toEqual({ emojiId: 'emoji:heart-17', count: 1 });
     expect(heart?.choices.some((choice) => choice.emojiId === 'emoji:heart-0')).toBe(false);
+  });
+
+  it('resets only one emoji score for the requested normalized query', () => {
+    let state = emptyEmojiLearning();
+    state = recordEmojiChoice(state, 'heart', 'emoji:red');
+    state = recordEmojiChoice(state, 'heart', 'emoji:blue');
+    state = recordEmojiChoice(state, 'sparkle', 'emoji:blue');
+
+    const reset = resetEmojiChoice(state, ' HEART ', 'emoji:blue');
+    expect(learnedEmojiCounts(reset, 'heart')).toEqual(new Map([['emoji:red', 1]]));
+    expect(learnedEmojiCounts(reset, 'sparkle')).toEqual(new Map([['emoji:blue', 1]]));
   });
 });
