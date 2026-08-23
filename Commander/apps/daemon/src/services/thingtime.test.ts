@@ -119,6 +119,44 @@ describe('ThingtimeService OAuth', () => {
   });
 });
 
+describe('ThingtimeService network probe', () => {
+  it('measures the fixed packet ladder without accepting arbitrary remote URLs or sizes', async () => {
+    const fetchMock = vi.fn(async (input: URL, init?: RequestInit) => {
+      const url = new URL(input);
+      if (url.pathname.endsWith('/ping')) return new Response(new Uint8Array(256));
+      const bytes = Number(url.searchParams.get('bytes'));
+      if (url.pathname.endsWith('/download')) return new Response(new Uint8Array(bytes));
+      expect(init?.method).toBe('POST');
+      expect(init?.headers).toMatchObject({
+        'content-type': 'application/octet-stream',
+        'content-length': String(bytes),
+      });
+      return jsonResponse({ ok: true, bytes });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await new ThingtimeService().networkProbe(configuredSettings(), true);
+
+    expect(result.ping.roundTripMs).toBeGreaterThanOrEqual(0);
+    expect(result.speed?.packetBytes).toEqual([
+      56 * 1024,
+      500 * 1024,
+      2 * 1024 * 1024,
+      5 * 1024 * 1024,
+      10 * 1024 * 1024,
+    ]);
+    expect(result.speed?.downloads).toHaveLength(5);
+    expect(result.speed?.uploads).toHaveLength(5);
+    expect(fetchMock).toHaveBeenCalledTimes(11);
+    expect((fetchMock.mock.calls[0]?.[0] as URL).toString()).toBe(
+      'https://thingtime.test/api/v1/network-probe/ping',
+    );
+    expect((fetchMock.mock.calls[1]?.[0] as URL).toString()).toBe(
+      'https://thingtime.test/api/v1/network-probe/download?bytes=57344',
+    );
+  });
+});
+
 describe('ThingtimeService settings sync', () => {
   it('applies a newer clean cloud revision while preserving device-local and account settings', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(

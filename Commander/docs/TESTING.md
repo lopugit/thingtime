@@ -82,6 +82,14 @@
       with Commander host/daemon CPU, memory, storage, and process count plus local Mac CPU, best-effort GPU,
       memory, thermal state, and filesystem values. Disconnect the native bridge only in a test shell and verify the
       unavailable state appears without sending machine metrics to the daemon or Thingtime.
+- [ ] In Activity, verify System memory shows used/total plus Active, Wired, Cached, Compressed, and Purgeable values;
+      verify Filesystem includes the macOS purgeable-capacity estimate. Sort the full-width process table by every
+      available header, enable Group by parent, and confirm CPU, memory, and disk rows update without crashing the
+      native host. GPU and network process columns must remain unavailable rather than showing fabricated values.
+- [ ] In Activity → Thingtime network, verify a 15-second uncached latency refresh splits request/send, response/receive,
+      and round-trip times. Run the explicit test and confirm its five fixed packet sizes (56 KiB, 500 KiB, 2 MiB, 5 MiB,
+      and 10 MiB) produce download/upload rates. Turn on periodic testing, verify the saved cadence survives relaunch,
+      and confirm it defaults off and cannot be configured below 15 minutes in the UI.
 - [ ] Toggle launch at login and verify `SMAppService.mainApp.status` changes after relaunch.
 - [ ] Record a non-conflicting shortcut containing Option (for example Command-Option-J), verify the physical key is retained instead of its generated symbol, close Settings, and verify the new shortcut opens Commander.
 - [ ] Drag Settings by its centered title-bar chrome and verify buttons and fields remain independently clickable.

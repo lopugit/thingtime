@@ -1,5 +1,14 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { CommanderAccount, CommanderSettings } from '@commander/protocol';
+import type { CommanderAccount, CommanderSettings, ThingtimeNetworkProbe } from '@commander/protocol';
+
+const NETWORK_PROBE_PACKET_BYTES = [
+  56 * 1024,
+  500 * 1024,
+  2 * 1024 * 1024,
+  5 * 1024 * 1024,
+  10 * 1024 * 1024,
+] as const;
+const NETWORK_PROBE_TIMEOUT_MS = 90_000;
 
 interface LoginStart {
   authorizeUrl: string;
@@ -150,6 +159,96 @@ export class ThingtimeService {
     if (!write.ok) throw new Error(`Thingtime settings write failed (${write.status})`);
     return { ...settings, syncRevision: nextRevision, syncUpdatedAt: updatedAt, syncDirty: false };
   }
+
+  async networkProbe(settings: CommanderSettings, includeSpeed = false): Promise<ThingtimeNetworkProbe> {
+    const baseUrl = validatedThingtimeBaseUrl(settings.thingtimeBaseUrl);
+    const ping = await this.#ping(baseUrl);
+    if (!includeSpeed) return { sampledAtMs: Date.now(), ping };
+
+    const downloads: NonNullable<ThingtimeNetworkProbe['speed']>['downloads'] = [];
+    const uploads: NonNullable<ThingtimeNetworkProbe['speed']>['uploads'] = [];
+    // Keep each transfer serial and bounded: one full run is exactly the
+    // documented five-packet ladder in each direction (17.6 MiB each way).
+    for (const bytes of NETWORK_PROBE_PACKET_BYTES) downloads.push(await this.#download(baseUrl, bytes));
+    for (const bytes of NETWORK_PROBE_PACKET_BYTES) uploads.push(await this.#upload(baseUrl, bytes));
+    return {
+      sampledAtMs: Date.now(),
+      ping,
+      speed: { packetBytes: [...NETWORK_PROBE_PACKET_BYTES], downloads, uploads },
+    };
+  }
+
+  async #ping(baseUrl: URL): Promise<ThingtimeNetworkProbe['ping']> {
+    const startedAt = performance.now();
+    const response = await fetch(new URL('/api/v1/network-probe/ping', baseUrl), {
+      headers: { 'accept-encoding': 'identity' },
+      signal: AbortSignal.timeout(NETWORK_PROBE_TIMEOUT_MS),
+    });
+    const headersAt = performance.now();
+    if (!response.ok) throw await networkProbeError(response, 'Thingtime ping failed');
+    await response.arrayBuffer();
+    const completedAt = performance.now();
+    return {
+      requestMs: headersAt - startedAt,
+      responseMs: completedAt - headersAt,
+      roundTripMs: completedAt - startedAt,
+    };
+  }
+
+  async #download(
+    baseUrl: URL,
+    bytes: number,
+  ): Promise<{ bytes: number; durationMs: number; megabitsPerSecond: number }> {
+    const startedAt = performance.now();
+    const response = await fetch(new URL(`/api/v1/network-probe/download?bytes=${bytes}`, baseUrl), {
+      headers: { 'accept-encoding': 'identity' },
+      signal: AbortSignal.timeout(NETWORK_PROBE_TIMEOUT_MS),
+    });
+    if (!response.ok)
+      throw await networkProbeError(response, `Thingtime download probe failed for ${bytes} bytes`);
+    const body = await response.arrayBuffer();
+    const durationMs = Math.max(1, performance.now() - startedAt);
+    if (body.byteLength !== bytes)
+      throw new Error(`Thingtime download probe returned ${body.byteLength} bytes, expected ${bytes}`);
+    return { bytes, durationMs, megabitsPerSecond: megabitsPerSecond(bytes, durationMs) };
+  }
+
+  async #upload(
+    baseUrl: URL,
+    bytes: number,
+  ): Promise<{ bytes: number; durationMs: number; megabitsPerSecond: number }> {
+    const payload = new Uint8Array(bytes);
+    const startedAt = performance.now();
+    const response = await fetch(new URL(`/api/v1/network-probe/upload?bytes=${bytes}`, baseUrl), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/octet-stream',
+        'content-length': String(bytes),
+        'accept-encoding': 'identity',
+      },
+      body: payload,
+      signal: AbortSignal.timeout(NETWORK_PROBE_TIMEOUT_MS),
+    });
+    const durationMs = Math.max(1, performance.now() - startedAt);
+    if (!response.ok)
+      throw await networkProbeError(response, `Thingtime upload probe failed for ${bytes} bytes`);
+    const result = (await response.json()) as { ok?: boolean; bytes?: unknown };
+    if (result.ok !== true || result.bytes !== bytes)
+      throw new Error(`Thingtime upload probe did not acknowledge ${bytes} bytes`);
+    return { bytes, durationMs, megabitsPerSecond: megabitsPerSecond(bytes, durationMs) };
+  }
+}
+
+function megabitsPerSecond(bytes: number, durationMs: number): number {
+  return (bytes * 8) / (durationMs * 1_000);
+}
+
+async function networkProbeError(response: Response, fallback: string): Promise<Error> {
+  const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+  if (response.status === 404)
+    return new Error('This Thingtime deployment has not enabled Commander network probes yet (404)');
+  const detail = typeof body?.error === 'string' ? body.error : fallback;
+  return new Error(`${detail} (${response.status})`);
 }
 
 interface CloudSettings {

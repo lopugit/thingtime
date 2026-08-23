@@ -285,6 +285,12 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       };
       return json(response, 200, body);
     }
+    if (request.method === 'GET' && url.pathname === '/api/activity/network') {
+      return json(response, 200, await thingtime.networkProbe(state.settings));
+    }
+    if (request.method === 'POST' && url.pathname === '/api/activity/network/speed') {
+      return json(response, 200, await thingtime.networkProbe(state.settings, true));
+    }
     if (request.method === 'GET' && url.pathname === '/api/search') {
       const query = url.searchParams.get('q') ?? '';
       return json(response, 200, { hits: await searchNow(query) });

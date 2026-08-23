@@ -41,6 +41,19 @@ vi.mock('../lib/api.js', () => ({
         memoryChecks: 4,
       },
     })),
+    activityNetwork: vi.fn(async () => ({
+      sampledAtMs: 1,
+      ping: { roundTripMs: 18, requestMs: 7, responseMs: 11 },
+    })),
+    activityNetworkSpeed: vi.fn(async () => ({
+      sampledAtMs: 2,
+      ping: { roundTripMs: 18, requestMs: 7, responseMs: 11 },
+      speed: {
+        packetBytes: [57344],
+        downloads: [{ bytes: 57344, durationMs: 100, megabitsPerSecond: 4.6 }],
+        uploads: [{ bytes: 57344, durationMs: 200, megabitsPerSecond: 2.3 }],
+      },
+    })),
     indexNow: vi.fn(async (scope: string) => ({
       ok: true,
       scope,
@@ -78,6 +91,41 @@ vi.mock('../lib/nativeBridge.js', () => ({
       filesystemUsedBytes: 200 * 1024 * 1024 * 1024,
       filesystemTotalBytes: 500 * 1024 * 1024 * 1024,
       filesystemAvailableBytes: 300 * 1024 * 1024 * 1024,
+      memory: {
+        usedBytes: 8 * 1024 * 1024 * 1024,
+        totalBytes: 16 * 1024 * 1024 * 1024,
+        activeBytes: 4 * 1024 * 1024 * 1024,
+        wiredBytes: 2 * 1024 * 1024 * 1024,
+        cachedBytes: 1024 * 1024 * 1024,
+        compressedBytes: 512 * 1024 * 1024,
+        purgeableBytes: 256 * 1024 * 1024,
+      },
+      filesystem: {
+        usedBytes: 200 * 1024 * 1024 * 1024,
+        totalBytes: 500 * 1024 * 1024 * 1024,
+        availableBytes: 300 * 1024 * 1024 * 1024,
+        purgeableBytes: 12 * 1024 * 1024 * 1024,
+      },
+      processes: [
+        {
+          pid: 99,
+          parentPid: 1,
+          name: 'Commander',
+          cpuPercent: 12,
+          residentMemoryBytes: 256 * 1024 * 1024,
+          diskReadBytesPerSecond: 1024,
+          diskWriteBytesPerSecond: 2048,
+        },
+        {
+          pid: 100,
+          parentPid: 99,
+          name: 'Commander Daemon',
+          cpuPercent: 3,
+          residentMemoryBytes: 128 * 1024 * 1024,
+          diskReadBytesPerSecond: 0,
+          diskWriteBytesPerSecond: 0,
+        },
+      ],
       gpu: { name: 'Apple GPU', available: true, utilizationPercent: 16, source: 'io-registry' },
     },
   })),
@@ -152,8 +200,13 @@ describe('Commander settings deep links', () => {
     expect(screen.getByRole('button', { name: 'Activity' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('heading', { name: 'Commander usage' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Machine usage' })).toBeVisible();
-    await waitFor(() => expect(screen.getByText('256 MB')).toBeVisible());
+    await waitFor(() => expect(screen.getAllByText('256 MB').length).toBeGreaterThan(0));
     expect(screen.getByText('Apple GPU')).toBeVisible();
+    expect(screen.getByText('Active memory')).toBeVisible();
+    expect(screen.getByText('Purgeable filesystem')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Processes' })).toBeVisible();
+    expect(screen.getByText('Commander Daemon')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Thingtime network' })).toBeVisible();
     expect(screen.getByText(/nothing here leaves this device/i)).toBeVisible();
   });
 

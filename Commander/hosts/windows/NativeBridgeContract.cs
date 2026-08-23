@@ -16,6 +16,29 @@ public sealed record NativeSettingsSnapshot(
     string WindowMode,
     WindowPinningSettings WindowPinning);
 public sealed record CredentialKey(string Issuer, string ClientId, string AccountId);
+public sealed record SystemMemoryBreakdown(
+    long UsedBytes,
+    long TotalBytes,
+    long ActiveBytes,
+    long WiredBytes,
+    long CachedBytes,
+    long CompressedBytes,
+    long PurgeableBytes);
+public sealed record FilesystemBreakdown(
+    long UsedBytes,
+    long TotalBytes,
+    long AvailableBytes,
+    long PurgeableBytes);
+public sealed record SystemProcessMetric(
+    int Pid,
+    int ParentPid,
+    string Name,
+    double CpuPercent,
+    long ResidentMemoryBytes,
+    double DiskReadBytesPerSecond,
+    double DiskWriteBytesPerSecond,
+    double? NetworkBytesPerSecond,
+    double? GpuPercent);
 public sealed record SystemMetricsSnapshot(
     long SampledAtMs,
     double CommanderCpuPercent,
@@ -34,7 +57,10 @@ public sealed record SystemMetricsSnapshot(
     string GpuName,
     bool GpuAvailable,
     double? GpuUtilizationPercent,
-    string GpuSource);
+    string GpuSource,
+    SystemMemoryBreakdown? Memory = null,
+    FilesystemBreakdown? Filesystem = null,
+    IReadOnlyList<SystemProcessMetric>? Processes = null);
 
 public interface INativeBridge
 {
