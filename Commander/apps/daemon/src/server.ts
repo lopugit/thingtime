@@ -42,7 +42,7 @@ import {
   searchEmojiSymbolsCommandName,
 } from './services/catalog.js';
 import { IndexingService } from './services/indexing.js';
-import { PersistentStore } from './services/persistence.js';
+import { PersistentStore, type AccountEnvironmentUpdate } from './services/persistence.js';
 import { macosSystemExtension, macosSystemShortcutURL } from './services/macosSystem.js';
 import { preferenceValuesForCommand, RaycastLocalService } from './services/raycastLocal.js';
 import { SearchService } from './services/search.js';
@@ -605,6 +605,14 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     if (request.method === 'PUT' && url.pathname === '/api/accounts/active') {
       const { id } = await readBody<{ id: string }>(request);
       return json(response, 200, { account: await store.setActiveAccount(id) });
+    }
+    if (request.method === 'PUT' && url.pathname === '/api/accounts/environments') {
+      const { environments } = await readBody<{ environments?: AccountEnvironmentUpdate[] }>(request);
+      if (!Array.isArray(environments) || environments.length > 64)
+        return json(response, 400, { error: 'A bounded list of account environments is required' });
+      return json(response, 200, {
+        accounts: await store.reconcileAccountEnvironments(environments),
+      });
     }
     if (request.method === 'DELETE' && url.pathname.startsWith('/api/accounts/')) {
       const id = decodeURIComponent(url.pathname.slice('/api/accounts/'.length));

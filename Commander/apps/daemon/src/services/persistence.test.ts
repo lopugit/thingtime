@@ -147,6 +147,52 @@ describe('PersistentStore Thingtime defaults', () => {
     }
   });
 
+  it('reconciles a legacy account to its one exact Keychain environment without guessing ambiguity', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
+    vi.stubEnv('COMMANDER_DATA_DIR', path.join(temporary, 'data'));
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      await store.upsertAccount({
+        id: 'production-user',
+        username: 'lopu',
+        scopes: [],
+        expiresAt: '2030-01-01T00:00:00.000Z',
+      });
+      await store.upsertAccount({
+        id: 'ambiguous-user',
+        username: 'lopu-dev',
+        scopes: [],
+        expiresAt: '2030-01-01T00:00:00.000Z',
+      });
+
+      const accounts = await store.reconcileAccountEnvironments([
+        {
+          accountId: 'production-user',
+          baseUrl: 'https://thingtime.com/',
+          clientId: 'ttapp_production',
+        },
+        {
+          accountId: 'ambiguous-user',
+          baseUrl: 'https://thingtime.com',
+          clientId: 'ttapp_production',
+        },
+        {
+          accountId: 'ambiguous-user',
+          baseUrl: 'https://dev.thingtime.com',
+          clientId: 'ttapp_development',
+        },
+      ]);
+      expect(accounts.find((account) => account.id === 'production-user')?.environment).toEqual({
+        baseUrl: 'https://thingtime.com',
+        clientId: 'ttapp_production',
+      });
+      expect(accounts.find((account) => account.id === 'ambiguous-user')?.environment).toBeUndefined();
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('migrates legacy state to local filesystem indexing defaults', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
     const dataDirectory = path.join(temporary, 'data');

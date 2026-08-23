@@ -1080,7 +1080,8 @@ export interface NativeRequest<T = unknown> {
     | 'settings.applyNative'
     | 'credential.claim'
     | 'credential.unlock'
-    | 'credential.delete';
+    | 'credential.delete'
+    | 'credential.environments';
   params?: T;
 }
 
