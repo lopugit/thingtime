@@ -5425,13 +5425,13 @@
     "semantic_hash": "2819e803e8f12d24e9d95898573d80a4"
   },
   "Commander/apps/daemon/src/services/persistence.test.ts": {
-    "mtime": 1787467127.6282651,
-    "ast_hash": "50a994e56a0eede31653c1e5f19c5706",
+    "mtime": 1787476971.7870445,
+    "ast_hash": "9860c3ff4607bc23cf149393496db0c2",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/persistence.ts": {
-    "mtime": 1787474100.3853242,
-    "ast_hash": "63a6c1facda97a33e203dc21e416489e",
+    "mtime": 1787476880.7214565,
+    "ast_hash": "5f3f66bfee4a8fbb992c97b082b28cf1",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/raycastLocal.test.ts": {
@@ -5550,13 +5550,13 @@
     "semantic_hash": "8a18141a33e9d13bdb91c3dd4ac5cee2"
   },
   "Commander/apps/desktop-ui/src/components/Settings.test.tsx": {
-    "mtime": 1787474987.0439298,
-    "ast_hash": "65a77bad39b78cd6d22ab959fba5233c",
+    "mtime": 1787476971.8423517,
+    "ast_hash": "e7905498299a33e3bc448281745b7ba8",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Settings.tsx": {
-    "mtime": 1787474523.4470377,
-    "ast_hash": "697faeac2ccd60ed19a8bc81ec58e8a4",
+    "mtime": 1787477129.3279023,
+    "ast_hash": "4c66d7f79d3ec87126fa90c613215651",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/UiErrorBoundary.test.tsx": {
@@ -6025,13 +6025,13 @@
     "semantic_hash": "0ce06d40e2d7a57e255d7ef9279abd74"
   },
   "Commander/packages/protocol/src/index.test.ts": {
-    "mtime": 1787474644.462067,
-    "ast_hash": "689be6a396c5de35d5e068ba9a30c76a",
+    "mtime": 1787476971.7376816,
+    "ast_hash": "44b6d7fba23322ae0539a77e547fdf78",
     "semantic_hash": ""
   },
   "Commander/packages/protocol/src/index.ts": {
-    "mtime": 1787474644.4466927,
-    "ast_hash": "0a4a1e83466abea12613d91d65ba2a2e",
+    "mtime": 1787476971.7176414,
+    "ast_hash": "8e737557097ef7f63fdc03653cc41b7e",
     "semantic_hash": ""
   },
   "Commander/packages/protocol/tsconfig.json": {
@@ -6245,8 +6245,8 @@
     "semantic_hash": "acb578d05997728808c9a6c795cbad62"
   },
   "Commander/docs/TESTING.md": {
-    "mtime": 1787475138.108552,
-    "ast_hash": "ebd4ec4c4344202911ddf495bb2e147e",
+    "mtime": 1787476963.5189874,
+    "ast_hash": "395f9271097cac15308290a9e5f9330e",
     "semantic_hash": ""
   },
   "Commander/extensions/README.md": {
