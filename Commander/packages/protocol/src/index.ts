@@ -137,6 +137,15 @@ export const DEFAULT_CALCULATOR_SETTINGS: CalculatorSettings = {
   maxDecimalPlaces: 10,
 };
 
+export const DEFAULT_ACTIVITY_SETTINGS: ActivitySettings = {
+  // Ping is cheap enough to keep current while the Activity page is open. A
+  // complete speed test transfers 35.6 MiB in both directions, so it remains
+  // explicitly opt-in instead of silently consuming a connection in the
+  // background.
+  periodicSpeedTestEnabled: false,
+  periodicSpeedTestIntervalMinutes: 15,
+};
+
 export const DEFAULT_INDEXING_SETTINGS: IndexingSettings = {
   version: INDEXING_SETTINGS_VERSION,
   enabled: true,
@@ -536,6 +545,23 @@ export function normalizeCalculatorSettings(value: unknown): CalculatorSettings 
   };
 }
 
+export function normalizeActivitySettings(value: unknown): ActivitySettings {
+  const candidate =
+    value && typeof value === 'object' && !Array.isArray(value) ? (value as Partial<ActivitySettings>) : {};
+  return {
+    periodicSpeedTestEnabled:
+      typeof candidate.periodicSpeedTestEnabled === 'boolean'
+        ? candidate.periodicSpeedTestEnabled
+        : DEFAULT_ACTIVITY_SETTINGS.periodicSpeedTestEnabled,
+    periodicSpeedTestIntervalMinutes: boundedInteger(
+      candidate.periodicSpeedTestIntervalMinutes,
+      5,
+      24 * 60,
+      DEFAULT_ACTIVITY_SETTINGS.periodicSpeedTestIntervalMinutes,
+    ),
+  };
+}
+
 export function normalizeIndexingSettings(value: unknown): IndexingSettings {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const candidate = source as Partial<IndexingSettings>;
@@ -663,6 +689,7 @@ export interface CommanderSettings {
   searchCache: SearchCacheSettings;
   emojiDefaultAction: EmojiDefaultAction;
   calculator: CalculatorSettings;
+  activity: ActivitySettings;
   windowPinning: WindowPinningSettings;
   indexing: IndexingSettings;
   activeAccountId: string | null;
@@ -683,6 +710,11 @@ export interface SearchCacheSettings {
 export interface CalculatorSettings {
   enabled: boolean;
   maxDecimalPlaces: number;
+}
+
+export interface ActivitySettings {
+  periodicSpeedTestEnabled: boolean;
+  periodicSpeedTestIntervalMinutes: number;
 }
 
 export interface SearchCacheStatus extends SearchCacheSettings {
@@ -1008,12 +1040,57 @@ export interface SystemMetrics {
     filesystemUsedBytes: number;
     filesystemTotalBytes: number;
     filesystemAvailableBytes: number;
+    memory: {
+      usedBytes: number;
+      totalBytes: number;
+      activeBytes: number;
+      wiredBytes: number;
+      cachedBytes: number;
+      compressedBytes: number;
+      purgeableBytes: number;
+    };
+    filesystem: {
+      usedBytes: number;
+      totalBytes: number;
+      availableBytes: number;
+      purgeableBytes: number;
+    };
+    processes: SystemProcessMetric[];
     gpu: {
       name: string;
       available: boolean;
       utilizationPercent?: number;
       source: 'io-registry' | 'unavailable';
     };
+  };
+}
+
+export interface SystemProcessMetric {
+  pid: number;
+  parentPid: number;
+  name: string;
+  cpuPercent: number;
+  residentMemoryBytes: number;
+  diskReadBytesPerSecond: number;
+  diskWriteBytesPerSecond: number;
+  // macOS does not provide public, per-process network or GPU counters. These
+  // remain optional rather than presenting system-wide values as if they were
+  // attributable to one process.
+  networkBytesPerSecond?: number;
+  gpuPercent?: number;
+}
+
+export interface ThingtimeNetworkProbe {
+  sampledAtMs: number;
+  ping: {
+    roundTripMs: number;
+    requestMs: number;
+    responseMs: number;
+  };
+  speed?: {
+    packetBytes: number[];
+    downloads: Array<{ bytes: number; durationMs: number; megabitsPerSecond: number }>;
+    uploads: Array<{ bytes: number; durationMs: number; megabitsPerSecond: number }>;
   };
 }
 
@@ -1067,6 +1144,7 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   searchCache: { ...DEFAULT_SEARCH_CACHE_SETTINGS },
   emojiDefaultAction: 'paste',
   calculator: { ...DEFAULT_CALCULATOR_SETTINGS },
+  activity: { ...DEFAULT_ACTIVITY_SETTINGS },
   windowPinning: { ...DEFAULT_WINDOW_PINNING_SETTINGS },
   indexing: {
     ...DEFAULT_INDEXING_SETTINGS,

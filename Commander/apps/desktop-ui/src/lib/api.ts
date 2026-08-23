@@ -14,6 +14,7 @@ import type {
   SearchCacheStatus,
   SearchStreamEvent,
   StoreExtension,
+  ThingtimeNetworkProbe,
 } from '@commander/protocol';
 
 const query = new URLSearchParams(window.location.search);
@@ -96,6 +97,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ scope }),
     }),
+  activityNetwork: () => request<ThingtimeNetworkProbe>('/api/activity/network'),
+  activityNetworkSpeed: () =>
+    request<ThingtimeNetworkProbe>('/api/activity/network/speed', { method: 'POST' }),
   listExtensions: () => request<{ extensions: CommanderExtension[] }>('/api/extensions'),
   listRaycastExtensions: () => request<LocalRaycastExtensionsResponse>('/api/extensions/raycast'),
   addRaycastExtension: (name: string, installationId: string) =>

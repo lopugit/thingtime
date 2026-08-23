@@ -93,7 +93,13 @@ export function Settings({ state }: { state: CommanderState }) {
             onError={state.reportError}
           />
         ) : null}
-        {tab === 'activity' ? <ActivitySettings onError={state.reportError} /> : null}
+        {tab === 'activity' ? (
+          <ActivitySettings
+            settings={bootstrap.settings}
+            onChange={(next) => void state.saveSettings(next)}
+            onError={state.reportError}
+          />
+        ) : null}
         {tab === 'sync' ? (
           <CloudSyncSettings
             accounts={bootstrap.accounts}

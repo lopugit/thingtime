@@ -1,13 +1,47 @@
-import { useEffect, useState } from 'react';
-import type { SystemMetrics } from '@commander/protocol';
-import { Activity, Cpu, HardDrive, MemoryStick, MonitorCog, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  CommanderSettings,
+  SystemMetrics,
+  SystemProcessMetric,
+  ThingtimeNetworkProbe,
+} from '@commander/protocol';
+import {
+  Activity,
+  Cpu,
+  HardDrive,
+  MemoryStick,
+  MonitorCog,
+  Network,
+  Play,
+  RefreshCw,
+  Rows3,
+} from 'lucide-react';
+import { api } from '../lib/api.js';
 import { nativeBridgeAvailable, nativeRequest } from '../lib/nativeBridge.js';
 
 const REFRESH_INTERVAL_MS = 2_000;
+const NETWORK_PING_INTERVAL_MS = 15_000;
+type ProcessSortKey = 'name' | 'parent' | 'cpu' | 'gpu' | 'memory' | 'network' | 'disk';
+type SortDirection = 'ascending' | 'descending';
 
-export function ActivitySettings({ onError }: { onError(value: string | null): void }) {
+export function ActivitySettings({
+  settings,
+  onChange,
+  onError,
+}: {
+  settings: CommanderSettings;
+  onChange(next: CommanderSettings): void;
+  onError(value: string | null): void;
+}) {
   const [metrics, setMetrics] = useState<SystemMetrics>();
+  const [network, setNetwork] = useState<ThingtimeNetworkProbe>();
+  const [networkError, setNetworkError] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [speedTesting, setSpeedTesting] = useState(false);
+  const [sortKey, setSortKey] = useState<ProcessSortKey>('cpu');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('descending');
+  const [groupByParent, setGroupByParent] = useState(false);
+  const speedTestInFlight = useRef(false);
 
   useEffect(() => {
     if (!nativeBridgeAvailable()) {
@@ -38,6 +72,61 @@ export function ActivitySettings({ onError }: { onError(value: string | null): v
     };
   }, [onError]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const next = await api.activityNetwork();
+        if (!cancelled) {
+          setNetwork(next);
+          setNetworkError(undefined);
+        }
+      } catch (error) {
+        if (!cancelled)
+          setNetworkError(error instanceof Error ? error.message : 'Thingtime latency check failed');
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), NETWORK_PING_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const runSpeedTest = useCallback(async () => {
+    if (speedTestInFlight.current) return;
+    speedTestInFlight.current = true;
+    setSpeedTesting(true);
+    try {
+      const next = await api.activityNetworkSpeed();
+      setNetwork(next);
+      setNetworkError(undefined);
+    } catch (error) {
+      setNetworkError(error instanceof Error ? error.message : 'Thingtime speed test failed');
+    } finally {
+      speedTestInFlight.current = false;
+      setSpeedTesting(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!settings.activity.periodicSpeedTestEnabled) return;
+    const timer = window.setInterval(
+      () => void runSpeedTest(),
+      settings.activity.periodicSpeedTestIntervalMinutes * 60_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [
+    runSpeedTest,
+    settings.activity.periodicSpeedTestEnabled,
+    settings.activity.periodicSpeedTestIntervalMinutes,
+  ]);
+
+  const setActivitySettings = (patch: Partial<CommanderSettings['activity']>) => {
+    onChange({ ...settings, activity: { ...settings.activity, ...patch } });
+  };
+
   if (!nativeBridgeAvailable()) {
     return (
       <div className="settings-page activity-settings activity-unavailable">
@@ -50,6 +139,8 @@ export function ActivitySettings({ onError }: { onError(value: string | null): v
 
   const machine = metrics?.machine;
   const commander = metrics?.commander;
+  const memory = machine?.memory;
+  const filesystem = machine?.filesystem;
   return (
     <div className="settings-page activity-settings">
       <div className="activity-heading">
@@ -129,22 +220,66 @@ export function ActivitySettings({ onError }: { onError(value: string | null): v
           <MetricCard
             Icon={MemoryStick}
             title="System memory"
-            value={`${formatBytes(machine?.memoryUsedBytes)} / ${formatBytes(machine?.memoryTotalBytes)}`}
-            detail="Active, wired, cached, and compressed memory"
-            percent={ratio(machine?.memoryUsedBytes, machine?.memoryTotalBytes)}
+            value={`${formatBytes(memory?.usedBytes ?? machine?.memoryUsedBytes)} / ${formatBytes(memory?.totalBytes ?? machine?.memoryTotalBytes)}`}
+            detail="Active, wired, cached, and compressed below"
+            percent={ratio(
+              memory?.usedBytes ?? machine?.memoryUsedBytes,
+              memory?.totalBytes ?? machine?.memoryTotalBytes,
+            )}
           />
           <MetricCard
             Icon={HardDrive}
             title="Filesystem"
-            value={`${formatBytes(machine?.filesystemAvailableBytes)} free`}
-            detail={`${formatBytes(machine?.filesystemUsedBytes)} used of ${formatBytes(machine?.filesystemTotalBytes)}`}
-            percent={ratio(machine?.filesystemUsedBytes, machine?.filesystemTotalBytes)}
+            value={`${formatBytes(filesystem?.availableBytes ?? machine?.filesystemAvailableBytes)} free`}
+            detail={`${formatBytes(filesystem?.usedBytes ?? machine?.filesystemUsedBytes)} used · ${formatBytes(filesystem?.purgeableBytes)} purgeable`}
+            percent={ratio(
+              filesystem?.usedBytes ?? machine?.filesystemUsedBytes,
+              filesystem?.totalBytes ?? machine?.filesystemTotalBytes,
+            )}
           />
         </div>
+        <div className="activity-breakdown-grid" aria-label="Memory and filesystem breakdown">
+          <Breakdown label="Active memory" value={formatBytes(memory?.activeBytes)} />
+          <Breakdown label="Wired memory" value={formatBytes(memory?.wiredBytes)} />
+          <Breakdown label="Cached memory" value={formatBytes(memory?.cachedBytes)} />
+          <Breakdown label="Compressed memory" value={formatBytes(memory?.compressedBytes)} />
+          <Breakdown label="Purgeable memory" value={formatBytes(memory?.purgeableBytes)} />
+          <Breakdown label="Purgeable filesystem" value={formatBytes(filesystem?.purgeableBytes)} />
+        </div>
       </section>
+
+      <NetworkCard
+        network={network}
+        error={networkError}
+        speedTesting={speedTesting}
+        periodicEnabled={settings.activity.periodicSpeedTestEnabled}
+        periodicIntervalMinutes={settings.activity.periodicSpeedTestIntervalMinutes}
+        onPeriodicChange={(periodicSpeedTestEnabled) => setActivitySettings({ periodicSpeedTestEnabled })}
+        onIntervalChange={(periodicSpeedTestIntervalMinutes) =>
+          setActivitySettings({ periodicSpeedTestIntervalMinutes })
+        }
+        onRunSpeedTest={() => void runSpeedTest()}
+      />
+      <ProcessTable
+        processes={machine?.processes ?? []}
+        sortKey={sortKey}
+        sortDirection={sortDirection}
+        groupByParent={groupByParent}
+        onSort={(next) => {
+          if (next === sortKey)
+            setSortDirection((direction) => (direction === 'ascending' ? 'descending' : 'ascending'));
+          else {
+            setSortKey(next);
+            setSortDirection(next === 'name' || next === 'parent' ? 'ascending' : 'descending');
+          }
+        }}
+        onGroupChange={setGroupByParent}
+      />
       <p className="activity-footnote">
-        GPU utilisation is a best-effort system-wide value exposed by the active macOS graphics driver;
-        Commander does not attribute GPU work to individual apps.
+        GPU utilisation is a best-effort system-wide value exposed by the active macOS graphics driver. macOS
+        does not expose stable public per-process GPU or network counters, so those process columns remain
+        unavailable rather than being guessed. Filesystem purgeable capacity is macOS’s reclaimable-space
+        estimate, not a promise that every byte can be reclaimed immediately.
       </p>
     </div>
   );
@@ -163,7 +298,7 @@ function MetricCard({
   value: string;
   detail: string;
   percent?: number | undefined;
-  muted?: boolean;
+  muted?: boolean | undefined;
 }) {
   const bounded = percent === undefined ? undefined : Math.max(0, Math.min(100, percent));
   return (
@@ -181,8 +316,322 @@ function MetricCard({
   );
 }
 
+function Breakdown({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="activity-breakdown">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function NetworkCard({
+  network,
+  error,
+  speedTesting,
+  periodicEnabled,
+  periodicIntervalMinutes,
+  onPeriodicChange,
+  onIntervalChange,
+  onRunSpeedTest,
+}: {
+  network?: ThingtimeNetworkProbe | undefined;
+  error?: string | undefined;
+  speedTesting: boolean;
+  periodicEnabled: boolean;
+  periodicIntervalMinutes: number;
+  onPeriodicChange(value: boolean): void;
+  onIntervalChange(value: number): void;
+  onRunSpeedTest(): void;
+}) {
+  const downloads = averageSpeed(network?.speed?.downloads);
+  const uploads = averageSpeed(network?.speed?.uploads);
+  return (
+    <section className="activity-section activity-network-card" aria-labelledby="network-usage-title">
+      <div className="activity-section-heading">
+        <div>
+          <h3 id="network-usage-title">
+            <Network /> Thingtime network
+          </h3>
+          <p>Direct, uncached latency to thingtime.com. Speed tests are explicit and bounded.</p>
+        </div>
+        <span>
+          {network
+            ? `Updated ${new Date(network.sampledAtMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+            : 'Checking…'}
+        </span>
+      </div>
+      <div className="network-stat-grid">
+        <Breakdown label="Round trip" value={formatDuration(network?.ping.roundTripMs)} />
+        <Breakdown label="Request / send" value={formatDuration(network?.ping.requestMs)} />
+        <Breakdown label="Response / receive" value={formatDuration(network?.ping.responseMs)} />
+        <Breakdown
+          label="Download"
+          value={downloads === undefined ? 'Run test' : `${downloads.toFixed(1)} Mbps`}
+        />
+        <Breakdown label="Upload" value={uploads === undefined ? 'Run test' : `${uploads.toFixed(1)} Mbps`} />
+      </div>
+      {error ? (
+        <p className="activity-network-error" role="status">
+          {error}
+        </p>
+      ) : null}
+      <div className="activity-network-controls">
+        <button type="button" className="button-primary" disabled={speedTesting} onClick={onRunSpeedTest}>
+          <Play /> {speedTesting ? 'Measuring…' : 'Run 17.6 MiB each-way test'}
+        </button>
+        <label className="activity-network-toggle">
+          <input
+            type="checkbox"
+            checked={periodicEnabled}
+            onChange={(event) => onPeriodicChange(event.target.checked)}
+          />{' '}
+          Run periodically
+        </label>
+        <label className="activity-network-interval">
+          Every{' '}
+          <select
+            disabled={!periodicEnabled}
+            value={periodicIntervalMinutes}
+            onChange={(event) => onIntervalChange(Number(event.target.value))}
+          >
+            {[15, 30, 60, 120, 360, 720, 1440].map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutes < 60 ? `${minutes} min` : `${minutes / 60} hr`}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <small className="activity-network-note">
+        Each complete test transfers 17.6 MiB down and 17.6 MiB up across 56 KiB, 500 KiB, 2 MiB, 5 MiB, and
+        10 MiB packets. Automatic testing is off by default.
+      </small>
+    </section>
+  );
+}
+
+function ProcessTable({
+  processes,
+  sortKey,
+  sortDirection,
+  groupByParent,
+  onSort,
+  onGroupChange,
+}: {
+  processes: SystemProcessMetric[];
+  sortKey: ProcessSortKey;
+  sortDirection: SortDirection;
+  groupByParent: boolean;
+  onSort(key: ProcessSortKey): void;
+  onGroupChange(value: boolean): void;
+}) {
+  const sorted = useMemo(
+    () => sortProcesses(processes, sortKey, sortDirection),
+    [processes, sortKey, sortDirection],
+  );
+  const groups = useMemo(() => groupProcesses(sorted), [sorted]);
+  return (
+    <section className="activity-section activity-processes" aria-labelledby="process-usage-title">
+      <div className="activity-section-heading">
+        <div>
+          <h3 id="process-usage-title">
+            <Rows3 /> Processes
+          </h3>
+          <p>Live per-process CPU, memory, and disk throughput from macOS.</p>
+        </div>
+        <label className="activity-group-toggle">
+          <input
+            type="checkbox"
+            checked={groupByParent}
+            onChange={(event) => onGroupChange(event.target.checked)}
+          />{' '}
+          Group by parent
+        </label>
+      </div>
+      <div className="activity-process-table-wrap">
+        <table className="activity-process-table">
+          <thead>
+            <tr>
+              <ProcessHeader
+                label="Name"
+                column="name"
+                active={sortKey}
+                direction={sortDirection}
+                onSort={onSort}
+              />
+              <ProcessHeader
+                label="Parent"
+                column="parent"
+                active={sortKey}
+                direction={sortDirection}
+                onSort={onSort}
+              />
+              <ProcessHeader
+                label="CPU"
+                column="cpu"
+                active={sortKey}
+                direction={sortDirection}
+                onSort={onSort}
+              />
+              <ProcessHeader
+                label="GPU"
+                column="gpu"
+                active={sortKey}
+                direction={sortDirection}
+                onSort={onSort}
+                unavailable
+              />
+              <ProcessHeader
+                label="Memory"
+                column="memory"
+                active={sortKey}
+                direction={sortDirection}
+                onSort={onSort}
+              />
+              <ProcessHeader
+                label="Network"
+                column="network"
+                active={sortKey}
+                direction={sortDirection}
+                onSort={onSort}
+                unavailable
+              />
+              <ProcessHeader
+                label="Disk"
+                column="disk"
+                active={sortKey}
+                direction={sortDirection}
+                onSort={onSort}
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {groupByParent
+              ? groups.map((group) => <ProcessGroupRows key={group.parentPid} group={group} />)
+              : sorted.map((process) => <ProcessRow key={process.pid} process={process} />)}
+          </tbody>
+        </table>
+      </div>
+      {!processes.length ? (
+        <p className="activity-process-empty">Waiting for the next macOS process sample…</p>
+      ) : null}
+    </section>
+  );
+}
+
+function ProcessHeader({
+  label,
+  column,
+  active,
+  direction,
+  onSort,
+  unavailable = false,
+}: {
+  label: string;
+  column: ProcessSortKey;
+  active: ProcessSortKey;
+  direction: SortDirection;
+  onSort(key: ProcessSortKey): void;
+  unavailable?: boolean;
+}) {
+  return (
+    <th>
+      <button
+        type="button"
+        title={unavailable ? `${label} is not exposed per process by public macOS APIs` : `Sort by ${label}`}
+        onClick={() => onSort(column)}
+      >
+        {label}
+        {unavailable ? ' —' : null}
+        {active === column ? (direction === 'ascending' ? ' ↑' : ' ↓') : null}
+      </button>
+    </th>
+  );
+}
+function ProcessGroupRows({ group }: { group: ProcessGroup }) {
+  return (
+    <>
+      <tr className="activity-process-group">
+        <td colSpan={7}>
+          {group.parentName
+            ? `${group.parentName} (${group.parentPid})`
+            : `Parent process ${group.parentPid}`}{' '}
+          <span>{group.processes.length} children</span>
+        </td>
+      </tr>
+      {group.processes.map((process) => (
+        <ProcessRow key={process.pid} process={process} />
+      ))}
+    </>
+  );
+}
+function ProcessRow({ process }: { process: SystemProcessMetric }) {
+  const disk = process.diskReadBytesPerSecond + process.diskWriteBytesPerSecond;
+  return (
+    <tr>
+      <td>
+        <strong>{process.name}</strong>
+        <small>PID {process.pid}</small>
+      </td>
+      <td>{process.parentPid}</td>
+      <td>{formatPercent(process.cpuPercent)}</td>
+      <td>{formatOptionalPercent(process.gpuPercent)}</td>
+      <td>{formatBytes(process.residentMemoryBytes)}</td>
+      <td>{formatRate(process.networkBytesPerSecond)}</td>
+      <td>{formatRate(disk)}</td>
+    </tr>
+  );
+}
+type ProcessGroup = {
+  parentPid: number;
+  parentName?: string | undefined;
+  processes: SystemProcessMetric[];
+};
+function groupProcesses(processes: SystemProcessMetric[]): ProcessGroup[] {
+  const names = new Map(processes.map((process) => [process.pid, process.name]));
+  const groups = new Map<number, SystemProcessMetric[]>();
+  for (const process of processes)
+    groups.set(process.parentPid, [...(groups.get(process.parentPid) ?? []), process]);
+  return [...groups.entries()].map(([parentPid, children]) => ({
+    parentPid,
+    parentName: names.get(parentPid),
+    processes: children,
+  }));
+}
+function sortProcesses(
+  processes: SystemProcessMetric[],
+  key: ProcessSortKey,
+  direction: SortDirection,
+): SystemProcessMetric[] {
+  const factor = direction === 'ascending' ? 1 : -1;
+  return [...processes].sort((left, right) => {
+    if (key === 'name') return factor * left.name.localeCompare(right.name);
+    const leftValue = processSortValue(left, key);
+    const rightValue = processSortValue(right, key);
+    if (leftValue === undefined && rightValue === undefined) return left.name.localeCompare(right.name);
+    if (leftValue === undefined) return 1;
+    if (rightValue === undefined) return -1;
+    return factor * (leftValue - rightValue) || left.name.localeCompare(right.name);
+  });
+}
+function processSortValue(
+  process: SystemProcessMetric,
+  key: Exclude<ProcessSortKey, 'name'>,
+): number | undefined {
+  if (key === 'parent') return process.parentPid;
+  if (key === 'cpu') return process.cpuPercent;
+  if (key === 'gpu') return process.gpuPercent;
+  if (key === 'memory') return process.residentMemoryBytes;
+  if (key === 'network') return process.networkBytesPerSecond;
+  return process.diskReadBytesPerSecond + process.diskWriteBytesPerSecond;
+}
+function averageSpeed(values: Array<{ megabitsPerSecond: number }> | undefined): number | undefined {
+  if (!values?.length) return undefined;
+  return values.reduce((total, value) => total + value.megabitsPerSecond, 0) / values.length;
+}
 function formatBytes(value: number | undefined): string {
-  if (value === undefined || value <= 0) return '—';
+  if (value === undefined || value < 0) return '—';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let index = 0;
   let next = value;
@@ -192,12 +641,19 @@ function formatBytes(value: number | undefined): string {
   }
   return `${next >= 100 || index === 0 ? Math.round(next) : next.toFixed(1)} ${units[index]}`;
 }
-
 function formatPercent(value: number | undefined): string {
   return value === undefined ? '—' : `${value.toFixed(value >= 10 ? 0 : 1)}%`;
 }
-
+function formatOptionalPercent(value: number | undefined): string {
+  return value === undefined ? '—' : formatPercent(value);
+}
+function formatRate(value: number | undefined): string {
+  return value === undefined ? '—' : `${formatBytes(value)}/s`;
+}
+function formatDuration(value: number | undefined): string {
+  return value === undefined ? '—' : `${Math.round(value)} ms`;
+}
 function ratio(value: number | undefined, total: number | undefined): number | undefined {
-  if (!value || !total) return undefined;
+  if (value === undefined || !total) return undefined;
   return (value / total) * 100;
 }

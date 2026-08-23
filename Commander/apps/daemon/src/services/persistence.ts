@@ -11,6 +11,7 @@ import type {
 import {
   addRecentSearch as prependRecentSearch,
   DEFAULT_SETTINGS,
+  normalizeActivitySettings,
   normalizeCalculatorSettings,
   normalizeCommandShortcuts,
   normalizeCommanderThingtimeClientId,
@@ -50,6 +51,7 @@ function normalizedSettings(settings: Partial<CommanderSettings> | undefined): C
     searchCache: normalizeSearchCacheSettings(settings?.searchCache),
     emojiDefaultAction: normalizeEmojiDefaultAction(settings?.emojiDefaultAction),
     calculator: normalizeCalculatorSettings(settings?.calculator),
+    activity: normalizeActivitySettings(settings?.activity),
     windowPinning: normalizeWindowPinningSettings(settings?.windowPinning),
     indexing: normalizeIndexingSettings(settings?.indexing),
     thingtimeClientId: normalizeCommanderThingtimeClientId(merged.thingtimeClientId, merged.thingtimeBaseUrl),
@@ -88,6 +90,7 @@ export class PersistentStore {
         JSON.stringify(parsed.settings?.searchCache) !== JSON.stringify(settings.searchCache) ||
         parsed.settings?.emojiDefaultAction !== settings.emojiDefaultAction ||
         JSON.stringify(parsed.settings?.calculator) !== JSON.stringify(settings.calculator) ||
+        JSON.stringify(parsed.settings?.activity) !== JSON.stringify(settings.activity) ||
         JSON.stringify(parsed.settings?.windowPinning) !== JSON.stringify(settings.windowPinning);
       this.#indexingMigrationPending = indexingNeedsMigration;
       const recentSearches = normalizeRecentSearches(parsed.recentSearches);

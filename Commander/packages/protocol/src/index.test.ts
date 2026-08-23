@@ -5,6 +5,7 @@ import {
   fuzzyTextScore,
   INDEXING_SETTINGS_VERSION,
   isSettingsTab,
+  normalizeActivitySettings,
   normalizeCalculatorSettings,
   normalizeIndexingSettings,
   normalizeSearchCacheSettings,
@@ -67,6 +68,19 @@ describe('Commander presentation settings', () => {
       enabled: true,
       maxDecimalPlaces: 0,
     });
+  });
+
+  it('keeps costly automatic network speed testing opt-in and bounds its interval', () => {
+    expect(normalizeActivitySettings(undefined)).toEqual({
+      periodicSpeedTestEnabled: false,
+      periodicSpeedTestIntervalMinutes: 15,
+    });
+    expect(
+      normalizeActivitySettings({ periodicSpeedTestEnabled: true, periodicSpeedTestIntervalMinutes: 1 }),
+    ).toEqual({ periodicSpeedTestEnabled: true, periodicSpeedTestIntervalMinutes: 5 });
+    expect(
+      normalizeActivitySettings({ periodicSpeedTestEnabled: true, periodicSpeedTestIntervalMinutes: 99_999 }),
+    ).toEqual({ periodicSpeedTestEnabled: true, periodicSpeedTestIntervalMinutes: 1440 });
   });
 });
 
