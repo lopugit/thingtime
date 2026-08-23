@@ -76,6 +76,10 @@ describe('ThingtimeService OAuth', () => {
         profileUrl: 'https://thingtime.test/@commander-tester',
         scopes: ['profile.username', 'app-data'],
         expiresAt: '2030-01-02T03:04:05.000Z',
+        environment: {
+          baseUrl: 'https://thingtime.test',
+          clientId: 'commander-test-client',
+        },
       },
     });
 

@@ -1,8 +1,39 @@
 import { useEffect, useState } from 'react';
-import type { CommanderAccount, CommanderSettings } from '@commander/protocol';
+import {
+  COMMANDER_THINGTIME_ENVIRONMENTS,
+  type CommanderAccount,
+  type CommanderSettings,
+} from '@commander/protocol';
 import { Check, Cloud, LogIn, RefreshCw, Trash2, UserRound } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { nativeRequest } from '../lib/nativeBridge.js';
+
+function environmentLabel(account: CommanderAccount, settings: CommanderSettings): string {
+  // Older local records predate this metadata. Only the active account can be
+  // safely associated with the currently selected environment; never guess for
+  // another legacy account with the same username.
+  const environment =
+    account.environment ??
+    (account.id === settings.activeAccountId
+      ? { baseUrl: settings.thingtimeBaseUrl, clientId: settings.thingtimeClientId }
+      : undefined);
+  if (!environment) return 'Environment unavailable';
+
+  const known = [
+    ...COMMANDER_THINGTIME_ENVIRONMENTS,
+    ...settings.thingtimeCustomEnvironments,
+  ].find(
+    (candidate) =>
+      candidate.baseUrl === environment.baseUrl && candidate.clientId === environment.clientId,
+  );
+  if (known) return known.name;
+
+  try {
+    return `Custom · ${new URL(environment.baseUrl).hostname}`;
+  } catch {
+    return 'Custom environment';
+  }
+}
 
 export function AccountSettings({
   accounts: initialAccounts,
@@ -90,7 +121,11 @@ export function AccountSettings({
         </span>
         <div>
           <h2>{active?.displayName ?? 'Thingtime Account'}</h2>
-          <p>{active ? `@${active.username}` : 'Sign in to sync Commander everywhere.'}</p>
+          <p>
+            {active
+              ? `@${active.username} · ${environmentLabel(active, settings)}`
+              : 'Sign in to sync Commander everywhere.'}
+          </p>
         </div>
         <button className="primary-button" type="button" onClick={() => void login()}>
           <LogIn /> Add account
@@ -121,6 +156,7 @@ export function AccountSettings({
               <span className="account-copy">
                 <strong>{account.displayName ?? account.username}</strong>
                 <small>@{account.username}</small>
+                <span className="account-environment">{environmentLabel(account, settings)}</span>
               </span>
               {account.id === settings.activeAccountId ? (
                 <span className="active-account">

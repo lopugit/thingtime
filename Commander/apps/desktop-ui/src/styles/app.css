@@ -1636,6 +1636,16 @@
 .account-copy small {
   color: var(--muted);
 }
+.account-environment {
+  width: fit-content;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.66rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
 .active-account {
   display: inline-flex;
   align-items: center;
