@@ -5425,14 +5425,14 @@
     "semantic_hash": "2819e803e8f12d24e9d95898573d80a4"
   },
   "Commander/apps/daemon/src/services/persistence.test.ts": {
-    "mtime": 1787372323.7529664,
-    "ast_hash": "afb2b938ca15f7c06532f2acef842561",
-    "semantic_hash": "afb2b938ca15f7c06532f2acef842561"
+    "mtime": 1787467127.6282651,
+    "ast_hash": "50a994e56a0eede31653c1e5f19c5706",
+    "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/persistence.ts": {
-    "mtime": 1787372316.717107,
-    "ast_hash": "0f80519cb1ec03f893fac6ee06aaf9bc",
-    "semantic_hash": "0f80519cb1ec03f893fac6ee06aaf9bc"
+    "mtime": 1787467127.6193662,
+    "ast_hash": "bf4c9e4564d58fab3d7bf90142910a57",
+    "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/raycastLocal.test.ts": {
     "mtime": 1786935439.9253495,
@@ -6030,9 +6030,9 @@
     "semantic_hash": "f260a5c3f7707b4cacac16816e77f6d5"
   },
   "Commander/packages/protocol/src/index.ts": {
-    "mtime": 1787372626.8199608,
-    "ast_hash": "ae7c061ee3870ec546be655ce48d0139",
-    "semantic_hash": "ae7c061ee3870ec546be655ce48d0139"
+    "mtime": 1787467141.7796962,
+    "ast_hash": "bc5effdab603b3fc52ea2da36425a8b1",
+    "semantic_hash": ""
   },
   "Commander/packages/protocol/tsconfig.json": {
     "mtime": 1786537288.0705836,
@@ -6957,6 +6957,11 @@
   "Commander/hosts/macos/Tests/CommanderTests/CommanderApplicationMenuTests.swift": {
     "mtime": 1787462768.0744708,
     "ast_hash": "f669622711f983aa237c0d23a215e9e5",
+    "semantic_hash": ""
+  },
+  "TODO/commander-app-registration-manager.md": {
+    "mtime": 1787466842.45522,
+    "ast_hash": "9b10931260f48992b3239095cdd4f710",
     "semantic_hash": ""
   }
 }
