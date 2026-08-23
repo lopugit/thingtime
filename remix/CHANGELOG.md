@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Storage-accounting migrations retain protected attachment fields**: the
+  pending census and real whole-account backfill now project the complete
+  attachment object envelope before calculating canonical bytes, preventing
+  legitimate preview uploads from stopping migration with
+  `InvalidAttachmentStorageEnvelopeError`. — Codex (AI), 2026-08-23
+
 - **Media layout selections now reach the Things API**: the shared client API
   transport preserves `mediaLayout` for post creation and rich comments, so a
   Rows/Grid preview no longer silently reopens as Auto after save. — Codex
