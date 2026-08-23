@@ -23,6 +23,7 @@ import {
   learnedEmojiCounts,
   loadEmojiLearning,
   recordEmojiChoice,
+  resetEmojiChoice,
   saveEmojiLearning,
 } from './emojiLearning.js';
 
@@ -118,6 +119,16 @@ export function EmojiPicker({
     async (actionID: string, target: EmojiEntry | undefined = selected) => {
       if (!target) return;
       const value = emojiValue(target, tone);
+      if (actionID === 'reset-learning') {
+        setLearning((current) => resetEmojiChoice(current, query, target.id));
+        setActionsOpen(false);
+        setStatus(
+          query.trim()
+            ? `Reset ${value} learning for “${query.trim()}”`
+            : 'Search for a phrase before resetting emoji learning',
+        );
+        return;
+      }
       remember(target);
       learn(target);
       setActionsOpen(false);
@@ -157,7 +168,7 @@ export function EmojiPicker({
         setStatus(error instanceof Error ? error.message : 'Could not use that emoji');
       }
     },
-    [learn, remember, selected, tone],
+    [learn, query, remember, selected, tone],
   );
 
   useEffect(() => {
@@ -217,11 +228,19 @@ export function EmojiPicker({
         { id: 'paste-and-copy', title: 'Paste and Keep on Clipboard' },
         { id: 'copy', title: 'Copy to Clipboard', shortcut: '⌘↵' },
         { id: 'copy-unicode', title: 'Copy Unicode Code Points', shortcut: '⇧⌘C' },
+        ...(deferredQuery.trim()
+          ? [
+              {
+                id: 'reset-learning',
+                title: `Reset learned score for “${deferredQuery.trim()}”`,
+              },
+            ]
+          : []),
       ],
       score: 0,
       matchedRanges: [],
     };
-  }, [selected, selectedValue]);
+  }, [deferredQuery, selected, selectedValue]);
 
   const selectFromPointer = useCallback((index: number, event: ReactPointerEvent<HTMLElement>) => {
     const previous = lastPointerPosition.current;
@@ -322,6 +341,11 @@ export function EmojiPicker({
                     title={entry.label}
                     onPointerMove={(event) => selectFromPointer(index, event)}
                     onClick={() => setSelectedIndex(index)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setSelectedIndex(index);
+                      setActionsOpen(true);
+                    }}
                     onDoubleClick={() => void runAction(defaultAction, entry)}
                   >
                     <span>{value}</span>

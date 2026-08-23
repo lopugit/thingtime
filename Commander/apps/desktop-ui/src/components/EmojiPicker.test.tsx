@@ -73,7 +73,46 @@ describe('EmojiPicker', () => {
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     expect(screen.getByRole('menu')).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: /Paste .*Keep Clipboard/ })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: /Copy to Clipboard/ })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: /Reset learned score for “heart”/ })).toBeVisible();
+  });
+
+  it('opens an emoji context menu on right click and resets only its learned score for the current phrase', async () => {
+    window.localStorage.setItem(
+      'commander-emoji-learning-v1',
+      JSON.stringify({
+        version: 1,
+        queries: [
+          {
+            query: 'heart',
+            choices: [
+              { emojiId: 'emoji:1F499', count: 3 },
+              { emojiId: 'emoji:2764', count: 1 },
+            ],
+          },
+        ],
+      }),
+    );
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search emoji and symbols' }), {
+      target: { value: 'heart' },
+    });
+    const blueHeart = await screen.findByRole('option', { name: /^blue heart,/i });
+
+    fireEvent.contextMenu(blueHeart);
+    fireEvent.click(screen.getByRole('menuitem', { name: /Reset learned score for “heart”/ }));
+
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem('commander-emoji-learning-v1') ?? '{}') as {
+        queries?: Array<{ query: string; choices: Array<{ emojiId: string; count: number }> }>;
+      };
+      expect(stored.queries?.[0]).toEqual({
+        query: 'heart',
+        choices: [{ emojiId: 'emoji:2764', count: 1 }],
+      });
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Reset 💙 learning for “heart”');
   });
 
   it('learns a selected emoji for a query and restores that ranking after remount', async () => {

@@ -5500,14 +5500,14 @@
     "semantic_hash": "e0f3ddd43a47ccda29658f5c95900ef0"
   },
   "Commander/apps/desktop-ui/src/components/EmojiPicker.test.tsx": {
-    "mtime": 1787316882.8360484,
-    "ast_hash": "adb2cfc388efa5f91a15011e8801b3b8",
-    "semantic_hash": "adb2cfc388efa5f91a15011e8801b3b8"
+    "mtime": 1787484593.9249058,
+    "ast_hash": "c5771397caf4370004087aa2dcf17909",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/EmojiPicker.tsx": {
-    "mtime": 1787316390.4742663,
-    "ast_hash": "ddf0ff5da9b20753e3c161371e881f8e",
-    "semantic_hash": "ddf0ff5da9b20753e3c161371e881f8e"
+    "mtime": 1787484593.9206166,
+    "ast_hash": "5a4926aa94a5872550e0b0ea19e1a59e",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/ExtensionsSettings.test.tsx": {
     "mtime": 1787372555.2934067,
@@ -5580,14 +5580,14 @@
     "semantic_hash": "4ab2337e09fdf6d8ca3b49ba20ac84f3"
   },
   "Commander/apps/desktop-ui/src/components/emojiLearning.test.ts": {
-    "mtime": 1786967059.1418662,
-    "ast_hash": "f0dd4c87aa5d6964692af88f88ee018d",
-    "semantic_hash": "f0dd4c87aa5d6964692af88f88ee018d"
+    "mtime": 1787484593.9209583,
+    "ast_hash": "25bffa1a3eaee29354d34339fb858bf3",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/emojiLearning.ts": {
-    "mtime": 1786967042.8362904,
-    "ast_hash": "a250c3bac9fd23236a014ed7c8e55c3f",
-    "semantic_hash": "a250c3bac9fd23236a014ed7c8e55c3f"
+    "mtime": 1787484593.920194,
+    "ast_hash": "95dc8300abce52396c8131401360265c",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/hooks/useCommander.test.tsx": {
     "mtime": 1787372477.350369,
