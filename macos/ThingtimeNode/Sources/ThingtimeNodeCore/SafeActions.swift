@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import IOKit.pwr_mgt
 
 public enum ActionOrigin: String, Codable, Equatable, Sendable {
     case localUser
@@ -21,6 +22,7 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case hideApplication = "application.hide"
     case unhideApplication = "application.unhide"
     case lockScreen = "system.lock"
+    case sleepSystem = "system.sleep"
     case connectWiFi = "system.wifi.connect"
     case disconnectWiFi = "system.wifi.disconnect"
     case setWiFiPower = "system.wifi.power.set"
@@ -77,8 +79,8 @@ public struct SafeActionPolicy: Sendable {
         switch action.kind {
         case .refreshTelemetry:
             return action.parameters.isEmpty ? nil : "telemetry.refresh does not accept parameters."
-        case .lockScreen:
-            return action.parameters.isEmpty ? nil : "system.lock does not accept parameters."
+        case .lockScreen, .sleepSystem:
+            return action.parameters.isEmpty ? nil : "The requested system power action does not accept parameters."
         case .setOutputVolume:
             guard let volume = action.parameters["volume"]?.numberValue, (0 ... 1).contains(volume) else {
                 return "system.volume.set requires a numeric volume between 0 and 1."
@@ -248,6 +250,9 @@ public final class SafeActionExecutor {
             // The shortcut was posted, but macOS never exposed the resulting
             // lock state. Do not turn an ambiguous device effect into success.
             throw ThingtimeNodeError.commandOutcomeUncertain
+        case .sleepSystem:
+            try SystemPower.sleep()
+            return .object(["sleepRequested": .bool(true)])
         case .connectWiFi:
             guard let ssid = action.parameters["ssid"]?.stringValue else {
                 throw ThingtimeNodeError.invalidRequest("Missing Wi-Fi network name.")
@@ -285,5 +290,18 @@ public enum SystemSession {
         keyUp.flags = modifiers
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
+    }
+}
+
+public enum SystemPower {
+    public static func sleep() throws {
+        let connection = IOPMFindPowerManagement(kIOMainPortDefault)
+        guard connection != 0 else {
+            throw ThingtimeNodeError.policyDenied("macOS power management is unavailable.")
+        }
+        defer { IOServiceClose(connection) }
+        guard IOPMSleepSystem(connection) == kIOReturnSuccess else {
+            throw ThingtimeNodeError.policyDenied("macOS did not accept the sleep request.")
+        }
     }
 }

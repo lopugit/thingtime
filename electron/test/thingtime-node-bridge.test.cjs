@@ -257,6 +257,7 @@ test('device mutations require a command id and reject unsupported action kinds'
 		['system.audio.sound-effects-output.set', { deviceId: 'BuiltInOutputDevice' }],
 		['application.hide', { bundleIdentifier: 'com.example.App' }],
 		['application.unhide', { bundleIdentifier: 'com.example.App' }],
+		['system.sleep', {}],
 		['system.wifi.connect', { ssid: 'Thingtime Guest' }],
 		['system.wifi.disconnect', {}],
 		['system.wifi.power.set', { enabled: false }]

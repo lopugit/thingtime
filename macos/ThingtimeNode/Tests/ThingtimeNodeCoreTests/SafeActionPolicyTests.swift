@@ -66,6 +66,20 @@ final class SafeActionPolicyTests: XCTestCase {
         ) else { return XCTFail("Expected unexpected parameters to be denied") }
     }
 
+    func testSleepRequiresApprovalAndAcceptsNoParameters() {
+        let valid = SafeActionRequest(kind: .sleepSystem)
+        guard case .requireApproval = policy.evaluate(
+            action: valid,
+            context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+        ) else { return XCTFail("Expected sleep to require approval") }
+
+        let invalid = SafeActionRequest(kind: .sleepSystem, parameters: ["now": .bool(true)])
+        guard case .deny = policy.evaluate(
+            action: invalid,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected unexpected sleep parameters to be denied") }
+    }
+
     func testInvalidParametersAreDenied() {
         let decision = policy.evaluate(
             action: SafeActionRequest(kind: .setOutputVolume, parameters: ["volume": .number(2)]),

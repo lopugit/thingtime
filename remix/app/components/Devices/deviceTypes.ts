@@ -83,11 +83,27 @@ export type DeviceRunningApp = {
 	bundleId: string;
 	name: string;
 	isActive: boolean;
+	isHidden?: boolean;
 	pid?: number | null;
 	iconDataUrl?: string | null;
 	windowCount?: number | null;
 	windowTitles?: string[];
 	metadata?: Record<string, unknown> | null;
+};
+
+export type DeviceAudioDevice = {
+	id: string;
+	name: string;
+	hasInput: boolean;
+	hasOutput: boolean;
+	isDefaultInput: boolean;
+	isDefaultOutput: boolean;
+	isDefaultSoundEffectsOutput: boolean;
+};
+
+export type DeviceWiFiState = {
+	powerOn: boolean | null;
+	ssid: string | null;
 };
 
 export type DeviceSystemProperties = {
@@ -109,6 +125,8 @@ export type DeviceObservedState = {
 	sleeping: boolean | null;
 	activeAppBundleId: string | null;
 	runningApps: DeviceRunningApp[];
+	audioDevices?: DeviceAudioDevice[];
+	wifi?: DeviceWiFiState | null;
 	observedAt: string;
 };
 
@@ -168,9 +186,18 @@ export type DeviceActionKind =
 	| 'set-volume'
 	| 'set-muted'
 	| 'set-brightness'
+	| 'set-audio-output'
+	| 'set-audio-input'
+	| 'set-sound-effects-output'
+	| 'connect-wifi'
+	| 'disconnect-wifi'
+	| 'set-wifi-power'
 	| 'launch-app'
 	| 'quit-app'
+	| 'hide-app'
+	| 'unhide-app'
 	| 'lock'
+	| 'sleep'
 	| 'start-screen-session'
 	| 'control-screen-session'
 	| 'stop-screen-session'

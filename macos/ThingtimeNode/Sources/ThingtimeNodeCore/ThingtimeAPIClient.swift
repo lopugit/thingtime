@@ -86,7 +86,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
 
     private struct StateBody: Encodable {
         struct State: Encodable {
-            struct App: Encodable { let id: String; let name: String; let frontmost: Bool }
+            struct App: Encodable { let id: String; let name: String; let frontmost: Bool; let hidden: Bool }
             struct AudioDevice: Encodable {
                 let id: String
                 let name: String
@@ -96,12 +96,17 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 let isDefaultOutput: Bool
                 let isDefaultSoundEffectsOutput: Bool
             }
+            struct WiFi: Encodable {
+                let powerOn: Bool?
+                let ssid: String?
+            }
             let locked: Bool
             let volume: Double?
             let muted: Bool?
             let brightness: Double?
             let openApps: [App]
             let audioDevices: [AudioDevice]
+            let wifi: WiFi
         }
         struct Connector: Encodable {
             let id: String
@@ -265,7 +270,12 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 brightness: brightness,
                 openApps: Array(telemetry.runningApplications.compactMap { application in
                     guard let identifier = application.bundleIdentifier, !identifier.isEmpty else { return nil }
-                    return .init(id: String(identifier.prefix(255)), name: String((application.name ?? identifier).prefix(120)), frontmost: application.isActive)
+                    return .init(
+                        id: String(identifier.prefix(255)),
+                        name: String((application.name ?? identifier).prefix(120)),
+                        frontmost: application.isActive,
+                        hidden: application.isHidden
+                    )
                 }.prefix(Self.maximumOpenApplications)),
                 audioDevices: Array(telemetry.audioDevices.prefix(32)).map {
                     .init(
@@ -277,7 +287,8 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                         isDefaultOutput: $0.isDefaultOutput,
                         isDefaultSoundEffectsOutput: $0.isDefaultSoundEffectsOutput
                     )
-                }
+                },
+                wifi: .init(powerOn: telemetry.wifi.powerOn, ssid: telemetry.wifi.ssid)
             ),
             connectors: connectors
         )

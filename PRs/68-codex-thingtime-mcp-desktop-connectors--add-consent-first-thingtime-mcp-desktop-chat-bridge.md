@@ -187,6 +187,13 @@ relational shape for later ThingtimeDB storage and platform chat views.
   device drawer needs a live paired account/device session for end-to-end UI
   exercise; no real Wi-Fi, audio-route, or TCC state was changed during local
   validation.
+- The controls now have a deliberately quiet default layout: everyday quick
+  controls and applications open first, while Audio & routing, Network &
+  connectivity, Power, permissions, and diagnostic sections start collapsed.
+  Audio routes use compact menus, per-application actions live in a **More**
+  context menu, Wi-Fi accepts only a saved/open SSID, and the only public
+  system-power action offered is approval-gated Sleep. Restart and shutdown
+  remain intentionally unavailable without shell or AppleScript execution.
 
 ## Security and product boundaries
 

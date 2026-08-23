@@ -4,6 +4,9 @@ export const DEVICE_DRAWER_SECTION_IDS = [
 	'node',
 	'permissions',
 	'observed-state',
+	'audio',
+	'network',
+	'power',
 	'applications',
 	'connectors',
 	'screen',
@@ -26,7 +29,11 @@ const preferenceKeyFor = (deviceId: string): string | null => {
 
 export const defaultDeviceDrawerPreferences = (): DeviceDrawerPreferences => ({
 	version: 1,
-	sections: Object.fromEntries(DEVICE_DRAWER_SECTION_IDS.map((section) => [section, true])) as Record<DeviceDrawerSectionId, boolean>,
+	// Keep the device's everyday controls immediately useful, while detail-heavy
+	// and disruptive controls stay tucked away until someone asks for them.
+	sections: Object.fromEntries(
+		DEVICE_DRAWER_SECTION_IDS.map((section) => [section, section === 'observed-state' || section === 'applications'])
+	) as Record<DeviceDrawerSectionId, boolean>,
 	drawerWidth: null
 });
 

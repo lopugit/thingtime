@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 
-import { Box, Button, Flex, Grid, Progress, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Grid, MenuItem, Progress, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
 import { AppWindow, LockKeyhole, Moon, Sun, Volume2, VolumeX } from 'lucide-react';
 
 import { reconcileDesiredState } from './deviceCore';
@@ -93,6 +93,33 @@ export const DevicePolicyButton = memo(
 	}
 );
 DevicePolicyButton.displayName = 'DevicePolicyButton';
+
+export type DevicePolicyMenuItemProps = Omit<DevicePolicyButtonProps, 'size' | 'variant' | 'color'> & {
+	color?: string;
+};
+
+export const DevicePolicyMenuItem = memo(
+	({ deviceId, action, label, targetId = null, controlKey, desired = null, input = null, controlFor, onAction, color, disabledReason = null }: DevicePolicyMenuItemProps) => {
+		const control = controlFor?.(action, controlKey === undefined ? targetId : controlKey);
+		if (!control) return null;
+		const actionable = !disabledReason && control.policy.allowed && Boolean(control.idempotencyKey) && Boolean(onAction) && !control.busy;
+		const itemLabel = control.busy ? control.pendingLabel || `${label}…` : label;
+		return (
+			<MenuItem
+				color={color}
+				isDisabled={!actionable}
+				onClick={() => {
+					if (!actionable || !onAction) return;
+					onAction({ deviceId, action, idempotencyKey: control.idempotencyKey, commandId: control.commandId, targetId, desired, input });
+				}}
+				title={disabledReason || control.policy.message || undefined}
+			>
+				{itemLabel}
+			</MenuItem>
+		);
+	}
+);
+DevicePolicyMenuItem.displayName = 'DevicePolicyMenuItem';
 
 const percent = (value: number | null): string => (value === null ? 'Unavailable' : `${Math.round(value * 100)}%`);
 

@@ -19,7 +19,7 @@ const device = (): PublicDevice => ({
 	volume: 0.42,
 	brightness: 0.7,
 	battery: { level: 0.84, charging: true },
-	openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }],
+	openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true, hidden: false }],
 	state: {
 		id: 'state-1',
 		revision: 7,
@@ -28,7 +28,8 @@ const device = (): PublicDevice => ({
 		muted: false,
 		brightness: 0.7,
 		battery: { level: 0.84, charging: true },
-		openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }],
+		openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true, hidden: false }],
+		wifi: { powerOn: true, ssid: 'Example network' },
 		audioDevices: [
 			{
 				id: 'BuiltInOutputDevice',

@@ -52,6 +52,7 @@ const DEVICE_ACTION_KINDS = new Set([
 	'application.hide',
 	'application.unhide',
 	'system.lock',
+	'system.sleep',
 	'system.wifi.connect',
 	'system.wifi.disconnect',
 	'system.wifi.power.set'
@@ -700,6 +701,7 @@ function normalizeNodeStatus(rawStatus, registration, version) {
 			'application.hide',
 			'application.unhide',
 			'system.lock',
+			'system.sleep',
 			'system.wifi.connect',
 			'system.wifi.disconnect',
 			'system.wifi.power.set',

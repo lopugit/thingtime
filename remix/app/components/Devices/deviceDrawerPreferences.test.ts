@@ -8,20 +8,23 @@ import {
 	setDeviceDrawerWidthPreference
 } from './deviceDrawerPreferences';
 
-test('device drawer preferences default every section to expanded', () => {
+test('device drawer preferences foreground everyday controls and collapse advanced sections', () => {
 	const preferences = defaultDeviceDrawerPreferences();
 
 	assert.equal(preferences.version, 1);
 	assert.equal(preferences.drawerWidth, null);
 	assert.deepEqual(preferences.sections, {
-		node: true,
-		permissions: true,
+		node: false,
+		permissions: false,
 		'observed-state': true,
+		audio: false,
+		network: false,
+		power: false,
 		applications: true,
-		connectors: true,
-		screen: true,
-		approvals: true,
-		'command-activity': true
+		connectors: false,
+		screen: false,
+		approvals: false,
+		'command-activity': false
 	});
 });
 
@@ -34,7 +37,7 @@ test('device drawer preferences retain only known local layout values', () => {
 
 	assert.equal(preferences.sections.node, false);
 	assert.equal(preferences.sections.connectors, false);
-	assert.equal(preferences.sections.screen, true);
+	assert.equal(preferences.sections.screen, false);
 	assert.equal(preferences.drawerWidth, 683);
 	assert.deepEqual(normalizeDeviceDrawerPreferences({ sections: { node: 'no' }, drawerWidth: -1 }), defaultDeviceDrawerPreferences());
 });

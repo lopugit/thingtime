@@ -66,6 +66,7 @@ public actor ThingtimeNodeController {
         "approvals.respond",
         "device.lock.read",
         "system.lock",
+        "system.power.sleep",
         "system.volume.read",
         "system.volume.write",
         "system.audio.mute.write",
@@ -559,7 +560,11 @@ public actor ThingtimeNodeController {
             }
             action = SafeActionRequest(kind: .unhideApplication, parameters: ["bundleIdentifier": .string(appID)])
         case "system.lock":
+            try requireOnlyKeys(input, [])
             action = SafeActionRequest(kind: .lockScreen)
+        case "system.sleep":
+            try requireOnlyKeys(input, [])
+            action = SafeActionRequest(kind: .sleepSystem)
         case "system.wifi.connect":
             try requireOnlyKeys(input, ["ssid"])
             guard let ssid = input["ssid"]?.stringValue else {

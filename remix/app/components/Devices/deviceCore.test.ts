@@ -440,11 +440,23 @@ test('cache projection is bounded, redacted, sanitized, and does not mutate live
 			lastError: { code: 'node-error', message: '/Users/private/node.log', at: iso() }
 		}),
 		snapshot: makeSnapshot({
-			observed: {
-				...makeSnapshot().observed,
-				volume: 2,
-				brightness: -1,
-				runningApps
+		observed: {
+			...makeSnapshot().observed,
+			volume: 2,
+			brightness: -1,
+			runningApps,
+			audioDevices: [
+				{
+					id: 'BuiltInOutputDevice',
+					name: 'MacBook Speakers',
+					hasInput: false,
+					hasOutput: true,
+					isDefaultInput: false,
+					isDefaultOutput: true,
+					isDefaultSoundEffectsOutput: true
+				}
+			],
+			wifi: { powerOn: true, ssid: 'Secret office network' }
 			},
 			connectors
 		}),
@@ -487,6 +499,9 @@ test('cache projection is bounded, redacted, sanitized, and does not mutate live
 	assert.equal(projected.snapshot?.observed.volume, 1);
 	assert.equal(projected.snapshot?.observed.brightness, 0);
 	assert.equal(projected.snapshot?.observed.runningApps.length, MAX_CACHED_RUNNING_APPS);
+	assert.equal(projected.snapshot?.observed.audioDevices?.[0]?.name, 'MacBook Speakers');
+	assert.equal(projected.snapshot?.observed.wifi?.powerOn, true);
+	assert.equal(projected.snapshot?.observed.wifi?.ssid, null);
 	assert.equal(projected.snapshot?.connectors.length, MAX_CACHED_CONNECTORS);
 	assert.equal(projected.snapshot?.connectors[0].capabilities.length, MAX_CACHED_CAPABILITIES);
 	assert.equal('pid' in (projected.snapshot?.observed.runningApps[0] || {}), false);
@@ -512,4 +527,5 @@ test('cache projection is bounded, redacted, sanitized, and does not mutate live
 	assert.equal(serialized.includes('/Users/private'), false);
 	assert.equal(serialized.includes('Secret customer document'), false);
 	assert.equal(serialized.includes('private-window'), false);
+	assert.equal(serialized.includes('Secret office network'), false);
 });

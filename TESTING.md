@@ -2270,6 +2270,15 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       behind the right drawer, but it must sit below the drawer portal: close,
       scroll, and non-destructive drawer controls remain clickable at desktop
       and 390 CSS px, with no invisible full-page interception.
+- [ ] On a paired online Mac, quick controls and Applications must open first;
+      Audio & routing, Network & connectivity, Node & pairing, Action
+      permissions, Power, Connectors, Screen, Approvals, and Command activity
+      must start collapsed and retain that layout per computer. Open the three
+      audio-route menus and choose a reported device, use the Wi-Fi controls
+      only with a saved/open SSID (never a password), open an application's
+      **More** context menu for Focus/Open, Hide/Show, and Quit, and expose
+      **Sleep** from Power. Menus must stay above the drawer overlay and remain
+      usable without clipping or horizontal overflow at desktop and 390 CSS px.
 - [ ] In the exact installed Electron app, open that device drawer and click
       its 44px X while it overlaps the native title-bar band. Reopen it and
       confirm the left edge has an always-visible centred grip with a forgiving

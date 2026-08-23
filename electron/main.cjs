@@ -916,6 +916,8 @@ function describeDeviceAction(request) {
 			return { message: 'Change this Mac\'s Wi-Fi power state? This may end the current remote session.', confirmLabel: 'Change Wi-Fi Power' };
 		case 'system.lock':
 			return { message: 'Lock this Mac now?', confirmLabel: 'Lock Mac' };
+		case 'system.sleep':
+			return { message: 'Put this Mac to sleep now? It will need to wake locally before it can reconnect.', confirmLabel: 'Sleep Mac' };
 		case 'application.activate':
 			return { message: 'Bring the requested application to the front?', confirmLabel: 'Activate App' };
 		case 'application.launch':

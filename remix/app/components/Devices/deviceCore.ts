@@ -45,10 +45,19 @@ const LOCAL_ONLY_ACTIONS = new Set<DeviceActionKind>([
 const ACTION_CAPABILITY: Partial<Record<DeviceActionKind, string>> = {
 	'set-volume': 'system.volume.write',
 	'set-muted': 'system.audio.mute.write',
+	'set-audio-output': 'system.audio.output.write',
+	'set-audio-input': 'system.audio.input.write',
+	'set-sound-effects-output': 'system.audio.sound-effects-output.write',
 	'set-brightness': 'system.brightness.write',
 	'launch-app': 'apps.launch',
 	'quit-app': 'apps.quit',
+	'hide-app': 'apps.visibility',
+	'unhide-app': 'apps.visibility',
 	lock: 'system.lock',
+	'sleep': 'system.power.sleep',
+	'connect-wifi': 'system.wifi.connect',
+	'disconnect-wifi': 'system.wifi.disconnect',
+	'set-wifi-power': 'system.wifi.power.write',
 	'start-screen-session': 'screen.view',
 	'control-screen-session': 'screen.control',
 	'stop-screen-session': 'screen.view',
@@ -478,6 +487,7 @@ const cacheSummary = (summary: DeviceSummary | null): DeviceSummary | null => {
 
 const cacheSnapshot = (snapshot: DeviceSnapshot | null): DeviceSnapshot | null => {
 	if (!snapshot) return null;
+	const audioDevices = Array.isArray(snapshot.observed.audioDevices) ? snapshot.observed.audioDevices : [];
 	return {
 		deviceId: text(snapshot.deviceId, 160),
 		revision: boundedInteger(snapshot.revision),
@@ -494,10 +504,28 @@ const cacheSnapshot = (snapshot: DeviceSnapshot | null): DeviceSnapshot | null =
 				bundleId: text(app.bundleId, 180),
 				name: text(app.name, 120),
 				isActive: app.isActive === true,
+				isHidden: app.isHidden === true,
 				windowCount: typeof app.windowCount === 'number' && Number.isSafeInteger(app.windowCount) ? Math.max(0, app.windowCount) : null
 				// pid, icon data, window titles and arbitrary metadata are intentionally
 				// not persisted in localStorage.
-			}))
+			})),
+			audioDevices: audioDevices.slice(0, 32).map((device) => ({
+				id: text(device.id, 512),
+				name: text(device.name, 120),
+				hasInput: device.hasInput === true,
+				hasOutput: device.hasOutput === true,
+				isDefaultInput: device.isDefaultInput === true,
+				isDefaultOutput: device.isDefaultOutput === true,
+				isDefaultSoundEffectsOutput: device.isDefaultSoundEffectsOutput === true
+			})),
+			wifi: snapshot.observed.wifi
+				? {
+					powerOn: typeof snapshot.observed.wifi.powerOn === 'boolean' ? snapshot.observed.wifi.powerOn : null,
+					// Network names can be location-sensitive; render live data but do not
+					// persist them in the browser's cache.
+					ssid: null
+				  }
+				: null
 		},
 		permissions: snapshot.permissions.slice(0, 24).map((permission) => ({
 			kind: text(permission.kind, 80) as DevicePermissionKind,

@@ -121,6 +121,18 @@ public struct AudioDeviceTelemetry: Codable, Equatable, Sendable {
     }
 }
 
+/// A bounded, credential-free Wi-Fi status projection. The node never sends
+/// saved passwords, BSSIDs, or scan history to the control plane.
+public struct WiFiTelemetry: Codable, Equatable, Sendable {
+    public let powerOn: Bool?
+    public let ssid: String?
+
+    public init(powerOn: Bool?, ssid: String?) {
+        self.powerOn = powerOn
+        self.ssid = ssid
+    }
+}
+
 public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let deviceName: String
     public let hostName: String
@@ -130,6 +142,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let outputVolume: Double?
     public let outputMuted: Bool?
     public let audioDevices: [AudioDeviceTelemetry]
+    public let wifi: WiFiTelemetry
     public let session: SessionTelemetry
     public let permissions: PermissionPreflight
     public let runningApplications: [RunningApplicationTelemetry]
@@ -145,6 +158,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         outputVolume: Double?,
         outputMuted: Bool? = nil,
         audioDevices: [AudioDeviceTelemetry] = [],
+        wifi: WiFiTelemetry = WiFiTelemetry(powerOn: nil, ssid: nil),
         session: SessionTelemetry,
         permissions: PermissionPreflight,
         runningApplications: [RunningApplicationTelemetry],
@@ -159,6 +173,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.outputVolume = outputVolume
         self.outputMuted = outputMuted
         self.audioDevices = audioDevices
+        self.wifi = wifi
         self.session = session
         self.permissions = permissions
         self.runningApplications = runningApplications
@@ -223,6 +238,7 @@ public final class DeviceTelemetryCollector {
             outputVolume: SystemAudio.outputVolume(),
             outputMuted: SystemAudio.outputMuted(),
             audioDevices: SystemAudio.devices(),
+            wifi: SystemWiFi.snapshot(),
             session: sessionTelemetry(),
             permissions: permissionPreflight(),
             runningApplications: NSWorkspace.shared.runningApplications
@@ -668,6 +684,14 @@ public enum SystemAudio {
 }
 
 public enum SystemWiFi {
+    public static func snapshot() -> WiFiTelemetry {
+        guard let interface = CWWiFiClient.shared().interface() else {
+            return WiFiTelemetry(powerOn: nil, ssid: nil)
+        }
+        let ssid = interface.ssid().flatMap { try? validatedSSID($0) }
+        return WiFiTelemetry(powerOn: interface.powerOn(), ssid: ssid)
+    }
+
     /// Joins an open network or a network whose credential is already in the
     /// local keychain. Passwords are intentionally never accepted by a remote
     /// command, journal, API request, or device event.

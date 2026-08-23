@@ -136,14 +136,13 @@ test('device credentials can never resolve as full account sessions', () => {
 });
 
 test('state and connector snapshots reject local paths and unknown sensitive fields', () => {
-	assert.ok(
-		normalizeDeviceState({
+	const normalized = normalizeDeviceState({
 			locked: false,
 			volume: 0.5,
 			muted: true,
 			brightness: 1,
 			battery: null,
-			openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }],
+			openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true, hidden: false }],
 			audioDevices: [
 				{
 					id: 'BuiltInOutputDevice',
@@ -154,9 +153,11 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 					isDefaultOutput: true,
 					isDefaultSoundEffectsOutput: true
 				}
-			]
-		})
-	);
+			],
+			wifi: { powerOn: true, ssid: 'Thingtime Guest' }
+		});
+	assert.ok(normalized);
+	assert.deepEqual(normalized?.wifi, { powerOn: true, ssid: 'Thingtime Guest' });
 	assert.equal(normalizeDeviceState({ locked: false, openApps: [{ id: 'x', name: 'X', frontmost: false, path: '/Applications/X.app' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, volume: 'not-a-level', openApps: [] }), null);
 	assert.ok(
@@ -267,6 +268,8 @@ test('device-wide commands require the capability from the signed pairing claim'
 	assert.equal(deviceSupportsCommand('system.volume.set', ['system.volume.read']), false);
 	assert.equal(deviceSupportsCommand('system.volume.set', ['system.volume.set']), true);
 	assert.equal(deviceSupportsCommand('system.brightness.set', ['system.brightness.write']), true);
+	assert.equal(deviceSupportsCommand('system.sleep', ['system.power.sleep']), true);
+	assert.equal(deviceSupportsCommand('system.sleep', ['system.lock']), false);
 	assert.equal(deviceSupportsCommand('screen.start', ['screen.view']), true);
 	assert.equal(deviceSupportsCommand('screen.start', ['screen.control']), false);
 	// Connector-scoped commands are authorized against their fresh connector
@@ -296,6 +299,7 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'system.audio.sound-effects-output.set',
 		'system.brightness.set',
 		'system.lock',
+		'system.sleep',
 		'system.wifi.connect',
 		'system.wifi.disconnect',
 		'system.wifi.power.set',
@@ -326,6 +330,8 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	assert.equal(normalizeDeviceCommand('app.launch', { appId: '/Applications/Calculator.app' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.audio.mute.set', { muted: true }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.audio.output.set', { deviceId: 'BuiltInOutputDevice' }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.sleep', {}).ok, true);
+	assert.equal(normalizeDeviceCommand('system.sleep', { now: true }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'Thingtime Guest' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'Thingtime Guest', password: 'never' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: ' Thingtime Guest' }).ok, false);

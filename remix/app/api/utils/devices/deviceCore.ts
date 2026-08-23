@@ -21,6 +21,7 @@ export const DEVICE_COMMAND_KINDS = [
 	'system.audio.sound-effects-output.set',
 	'system.brightness.set',
 	'system.lock',
+	'system.sleep',
 	'system.wifi.connect',
 	'system.wifi.disconnect',
 	'system.wifi.power.set',
@@ -129,7 +130,7 @@ export const normalizeDeviceDescriptor = (value: unknown): DeviceDescriptor | nu
 	};
 };
 
-export type DeviceOpenApp = { id: string; name: string; frontmost: boolean };
+export type DeviceOpenApp = { id: string; name: string; frontmost: boolean; hidden: boolean };
 export const MAX_DEVICE_OPEN_APPS = 64;
 export type DeviceAudioDevice = {
 	id: string;
@@ -141,6 +142,7 @@ export type DeviceAudioDevice = {
 	isDefaultSoundEffectsOutput: boolean;
 };
 export const MAX_DEVICE_AUDIO_DEVICES = 32;
+export type DeviceWiFiState = { powerOn: boolean | null; ssid: string | null };
 export type DeviceStateSnapshot = {
 	locked: boolean;
 	volume: number | null;
@@ -149,6 +151,7 @@ export type DeviceStateSnapshot = {
 	battery: { level: number; charging: boolean } | null;
 	openApps: DeviceOpenApp[];
 	audioDevices: DeviceAudioDevice[];
+	wifi?: DeviceWiFiState | null;
 };
 
 const unitInterval = (value: unknown): number | null => {
@@ -160,18 +163,18 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 	if (!value || typeof value !== 'object') return null;
 	const raw = value as Record<string, unknown>;
 	if (typeof raw.locked !== 'boolean') return null;
-	if (!Object.keys(raw).every((key) => ['locked', 'volume', 'muted', 'brightness', 'battery', 'openApps', 'audioDevices'].includes(key))) return null;
+	if (!Object.keys(raw).every((key) => ['locked', 'volume', 'muted', 'brightness', 'battery', 'openApps', 'audioDevices', 'wifi'].includes(key))) return null;
 	const appsRaw = raw.openApps === undefined ? [] : raw.openApps;
 	if (!Array.isArray(appsRaw) || appsRaw.length > MAX_DEVICE_OPEN_APPS) return null;
 	const openApps: DeviceOpenApp[] = [];
 	for (const entry of appsRaw) {
 		if (!entry || typeof entry !== 'object') return null;
 		const app = entry as Record<string, unknown>;
-		if (!Object.keys(app).every((key) => ['id', 'name', 'frontmost'].includes(key))) return null;
+		if (!Object.keys(app).every((key) => ['id', 'name', 'frontmost', 'hidden'].includes(key))) return null;
 		const id = bounded(app.id, 160);
 		const name = bounded(app.name, 120);
 		if (!id || !name) return null;
-		openApps.push({ id, name, frontmost: app.frontmost === true });
+		openApps.push({ id, name, frontmost: app.frontmost === true, hidden: app.hidden === true });
 	}
 	const devicesRaw = raw.audioDevices === undefined ? [] : raw.audioDevices;
 	if (!Array.isArray(devicesRaw) || devicesRaw.length > MAX_DEVICE_AUDIO_DEVICES) return null;
@@ -224,6 +227,17 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		muted = raw.muted;
 	}
 	const brightness = raw.brightness === undefined || raw.brightness === null ? null : unitInterval(raw.brightness);
+	let wifi: DeviceWiFiState | null = null;
+	if (raw.wifi !== undefined && raw.wifi !== null) {
+		if (!raw.wifi || typeof raw.wifi !== 'object' || Array.isArray(raw.wifi)) return null;
+		const candidate = raw.wifi as Record<string, unknown>;
+		if (!Object.keys(candidate).every((key) => ['powerOn', 'ssid'].includes(key))) return null;
+		const rawPowerOn = candidate.powerOn;
+		const powerOn: boolean | null = rawPowerOn === undefined || rawPowerOn === null ? null : typeof rawPowerOn === 'boolean' ? rawPowerOn : null;
+		const ssid = candidate.ssid === undefined || candidate.ssid === null ? null : bounded(candidate.ssid, 32);
+		if ((rawPowerOn !== undefined && rawPowerOn !== null && powerOn === null) || (ssid !== null && !ssid)) return null;
+		wifi = { powerOn, ssid };
+	}
 	if (raw.volume !== undefined && raw.volume !== null && volume === null) return null;
 	if (raw.brightness !== undefined && raw.brightness !== null && brightness === null) return null;
 	return {
@@ -233,7 +247,8 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		brightness,
 		battery,
 		openApps,
-		audioDevices
+		audioDevices,
+		wifi
 	};
 };
 
@@ -429,6 +444,7 @@ export type DeviceCommandInputByKind = {
 	'system.audio.sound-effects-output.set': { deviceId: string };
 	'system.brightness.set': { level: number };
 	'system.lock': Record<string, never>;
+	'system.sleep': Record<string, never>;
 	'system.wifi.connect': { ssid: string };
 	'system.wifi.disconnect': Record<string, never>;
 	'system.wifi.power.set': { enabled: boolean };
@@ -492,6 +508,7 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'system.audio.sound-effects-output.set': 'system.audio.sound-effects-output.write',
 	'system.brightness.set': 'system.brightness.write',
 	'system.lock': 'system.lock',
+	'system.sleep': 'system.power.sleep',
 	'system.wifi.connect': 'system.wifi.connect',
 	'system.wifi.disconnect': 'system.wifi.disconnect',
 	'system.wifi.power.set': 'system.wifi.power.write',
@@ -517,6 +534,7 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'system.audio.sound-effects-output.set': 'system.audio.sound-effects-output.write',
 	'system.brightness.set': 'system.brightness.write',
 	'device.lock.write': 'system.lock',
+	'system.sleep': 'system.power.sleep',
 	'system.wifi.connect': 'system.wifi.connect',
 	'system.wifi.disconnect': 'system.wifi.disconnect',
 	'system.wifi.power.set': 'system.wifi.power.write',
@@ -677,7 +695,8 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 				: deviceFail(400, `${kind} requires only level from 0 to 1`);
 		}
 		case 'system.lock':
-			return exactKeys(raw, []) ? ok({}) : deviceFail(400, 'system.lock accepts no input fields');
+		case 'system.sleep':
+			return exactKeys(raw, []) ? ok({}) : deviceFail(400, `${kind} accepts no input fields`);
 		case 'system.audio.mute.set':
 			return typeof raw.muted === 'boolean' && exactKeys(raw, ['muted'])
 				? ok({ muted: raw.muted })

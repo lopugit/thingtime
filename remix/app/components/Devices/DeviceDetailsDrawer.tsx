@@ -7,9 +7,12 @@ import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/
 
 import { resolvedDevicePresence, DeviceHealthBadges, DeviceStatusPill, formatDeviceLastSeen } from './DeviceCard';
 import { DeviceApplications } from './DeviceApplications';
+import { DeviceAudioControls } from './DeviceAudioControls';
 import { DeviceApprovalCard } from './DeviceApprovalCard';
 import { DeviceCommandTimeline } from './DeviceCommandTimeline';
 import { DeviceConnectors } from './DeviceConnectors';
+import { DeviceNetworkControls } from './DeviceNetworkControls';
+import { DevicePowerControls } from './DevicePowerControls';
 import type { DeviceActionHandler, DeviceControlResolver } from './DeviceStateGrid';
 import { DevicePolicyButton, DeviceStateGrid } from './DeviceStateGrid';
 import { ScreenSessionPanel } from './ScreenSessionPanel';
@@ -31,12 +34,14 @@ const Section = ({
 	section,
 	label,
 	count,
+	advanced = false,
 	children
 }: {
 	deviceId: string;
 	section: DeviceDrawerSectionId;
 	label: string;
 	count?: number;
+	advanced?: boolean;
 	children: React.ReactNode;
 }) => {
 	const [expanded, setExpanded] = React.useState(() => readDeviceDrawerPreferences(deviceId).sections[section]);
@@ -76,6 +81,7 @@ const Section = ({
 						{label}
 					</Text>
 					{typeof count === 'number' ? <DeviceStatusPill label={String(count)} tone="neutral" /> : null}
+					{advanced ? <DeviceStatusPill label="advanced" tone="neutral" /> : null}
 				</Flex>
 				<Box
 					aria-hidden
@@ -442,7 +448,48 @@ export const DeviceDetailsDrawer = memo(
 									</Notice>
 								) : null}
 
-								<Section deviceId={state.deviceId} key={`node:${state.deviceId}`} label="Node" section="node">
+								<Section deviceId={state.deviceId} key={`observed-state:${state.deviceId}`} label="Quick controls" section="observed-state">
+									<DeviceStateGrid
+										commands={state.commands}
+										controlFor={controlFor}
+										deviceId={state.deviceId}
+										now={now}
+										onAction={onAction}
+										snapshot={snapshot}
+									/>
+								</Section>
+
+								<Section advanced deviceId={state.deviceId} key={`audio:${state.deviceId}`} label="Audio & routing" section="audio">
+									<DeviceAudioControls
+										controlFor={controlFor}
+										deviceId={state.deviceId}
+										devices={snapshot?.observed.audioDevices || []}
+										onAction={onAction}
+									/>
+								</Section>
+
+								<Section advanced deviceId={state.deviceId} key={`network:${state.deviceId}`} label="Network & connectivity" section="network">
+									<DeviceNetworkControls controlFor={controlFor} deviceId={state.deviceId} onAction={onAction} wifi={snapshot?.observed.wifi || null} />
+								</Section>
+
+								<Section
+									deviceId={state.deviceId}
+									key={`applications:${state.deviceId}`}
+									count={snapshot?.observed.runningApps.length || 0}
+									label="Applications"
+									section="applications"
+								>
+									<DeviceApplications
+										activeAppBundleId={snapshot?.observed.activeAppBundleId}
+										applications={snapshot?.observed.runningApps || []}
+										controlFor={controlFor}
+										deviceId={state.deviceId}
+										locked={snapshot?.observed.locked}
+										onAction={onAction}
+									/>
+								</Section>
+
+								<Section advanced deviceId={state.deviceId} key={`node:${state.deviceId}`} label="Node & pairing" section="node">
 									<Box
 										background="var(--tt-surface-alt, #f7f7f8)"
 										border="1px solid var(--tt-border, #ececef)"
@@ -492,7 +539,7 @@ export const DeviceDetailsDrawer = memo(
 									</Box>
 								</Section>
 
-								<Section deviceId={state.deviceId} key={`permissions:${state.deviceId}`} label="Action permissions" section="permissions">
+								<Section advanced deviceId={state.deviceId} key={`permissions:${state.deviceId}`} label="Action permissions" section="permissions">
 									<Box
 										background="var(--tt-surface-alt, #f7f7f8)"
 										border="1px solid var(--tt-border, #ececef)"
@@ -567,38 +614,15 @@ export const DeviceDetailsDrawer = memo(
 									</Box>
 								</Section>
 
-								<Section deviceId={state.deviceId} key={`observed-state:${state.deviceId}`} label="Observed state" section="observed-state">
-									<DeviceStateGrid
-										commands={state.commands}
-										controlFor={controlFor}
-										deviceId={state.deviceId}
-										now={now}
-										onAction={onAction}
-										snapshot={snapshot}
-									/>
-								</Section>
-
-								<Section
-									deviceId={state.deviceId}
-									key={`applications:${state.deviceId}`}
-									count={snapshot?.observed.runningApps.length || 0}
-									label="Applications"
-									section="applications"
-								>
-									<DeviceApplications
-										activeAppBundleId={snapshot?.observed.activeAppBundleId}
-										applications={snapshot?.observed.runningApps || []}
-										controlFor={controlFor}
-										deviceId={state.deviceId}
-										locked={snapshot?.observed.locked}
-										onAction={onAction}
-									/>
+								<Section advanced deviceId={state.deviceId} key={`power:${state.deviceId}`} label="Power" section="power">
+									<DevicePowerControls controlFor={controlFor} deviceId={state.deviceId} onAction={onAction} />
 								</Section>
 
 								<Section
 									deviceId={state.deviceId}
 									key={`connectors:${state.deviceId}`}
 									count={snapshot?.connectors.length || 0}
+									advanced
 									label="Connectors"
 									section="connectors"
 								>
@@ -611,7 +635,7 @@ export const DeviceDetailsDrawer = memo(
 									/>
 								</Section>
 
-								<Section deviceId={state.deviceId} key={`screen:${state.deviceId}`} label="Screen" section="screen">
+								<Section advanced deviceId={state.deviceId} key={`screen:${state.deviceId}`} label="Screen" section="screen">
 									<ScreenSessionPanel
 										availability={screenAvailability}
 										controlFor={controlFor}
@@ -623,7 +647,7 @@ export const DeviceDetailsDrawer = memo(
 									/>
 								</Section>
 
-								<Section deviceId={state.deviceId} key={`approvals:${state.deviceId}`} count={pendingApprovals} label="Approvals" section="approvals">
+								<Section advanced deviceId={state.deviceId} key={`approvals:${state.deviceId}`} count={pendingApprovals} label="Approvals" section="approvals">
 									{visibleApprovals.length ? (
 										<Flex direction="column" gap={2.5}>
 											{visibleApprovals.map((approval) => (
@@ -638,6 +662,7 @@ export const DeviceDetailsDrawer = memo(
 								</Section>
 
 								<Section
+									advanced
 									deviceId={state.deviceId}
 									key={`command-activity:${state.deviceId}`}
 									count={pendingCommands}

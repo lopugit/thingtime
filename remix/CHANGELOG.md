@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Categorized safe machine controls in the paired-computer drawer**: everyday
+  volume, mute, brightness, and application focus controls remain immediately
+  available; advanced Audio & routing, Network & connectivity, Power,
+  permissions, and diagnostics begin collapsed per computer. Audio routes use
+  menus, each running app has a contextual More menu, Wi-Fi permits only a
+  saved/open SSID (never a password), and Sleep uses the existing approval
+  policy. — Codex (AI), 2026-08-23
+
 - **/branding redesigned as a full brand-resources page**: full-width
   Meta-style sections per logo variant with whitespace-trimmed previews and a
   minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,

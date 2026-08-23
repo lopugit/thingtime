@@ -23,6 +23,7 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'system.audio.sound-effects-output.set',
 	'system.brightness.set',
 	'system.lock',
+	'system.sleep',
 	'system.wifi.connect',
 	'system.wifi.disconnect',
 	'system.wifi.power.set',
@@ -39,6 +40,7 @@ export type PublicDeviceOpenApp = {
 	id: string;
 	name: string;
 	frontmost: boolean;
+	hidden: boolean;
 };
 
 export type PublicDeviceState = {
@@ -59,6 +61,7 @@ export type PublicDeviceState = {
 		isDefaultOutput: boolean;
 		isDefaultSoundEffectsOutput: boolean;
 	}>;
+	wifi: { powerOn: boolean | null; ssid: string | null } | null;
 	observedAt: string;
 	updatedAt: string;
 };

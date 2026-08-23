@@ -65,6 +65,7 @@ const CAPABILITY_ALIASES: Record<string, string[]> = {
 	'system.audio.sound-effects-output.set': ['system.audio.sound-effects-output.write'],
 	'system.brightness.set': ['system.brightness.write'],
 	'system.lock': ['system.lock'],
+	'system.sleep': ['system.power.sleep'],
 	'system.wifi.connect': ['system.wifi.connect'],
 	'system.wifi.disconnect': ['system.wifi.disconnect'],
 	'system.wifi.power.set': ['system.wifi.power.write'],
@@ -147,12 +148,30 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 			return 'quit-app';
 		case 'system.audio.mute.set':
 			return 'set-muted';
+		case 'system.audio.output.set':
+			return 'set-audio-output';
+		case 'system.audio.input.set':
+			return 'set-audio-input';
+		case 'system.audio.sound-effects-output.set':
+			return 'set-sound-effects-output';
 		case 'system.volume.set':
 			return 'set-volume';
 		case 'system.brightness.set':
 			return 'set-brightness';
 		case 'system.lock':
 			return 'lock';
+		case 'system.sleep':
+			return 'sleep';
+		case 'system.wifi.connect':
+			return 'connect-wifi';
+		case 'system.wifi.disconnect':
+			return 'disconnect-wifi';
+		case 'system.wifi.power.set':
+			return 'set-wifi-power';
+		case 'app.hide':
+			return 'hide-app';
+		case 'app.unhide':
+			return 'unhide-app';
 		case 'screen.start':
 			return 'start-screen-session';
 		case 'screen.stop':
@@ -335,8 +354,11 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 			runningApps: openApps.map((app) => ({
 				bundleId: app.id,
 				name: app.name,
-				isActive: app.frontmost
+				isActive: app.frontmost,
+				isHidden: app.hidden
 			})),
+			audioDevices: device.state?.audioDevices || [],
+			wifi: device.state?.wifi || null,
 			observedAt
 		},
 		permissions: [],
@@ -494,12 +516,44 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 			const muted = typeof intent.desired?.muted === 'boolean' ? intent.desired.muted : input.muted;
 			return typeof muted === 'boolean' ? { ...base, kind: 'system.audio.mute.set', input: { muted } } : null;
 		}
+		case 'set-audio-output': {
+			const deviceId = inputString(input.deviceId || intent.targetId);
+			return deviceId ? { ...base, kind: 'system.audio.output.set', input: { deviceId } } : null;
+		}
+		case 'set-audio-input': {
+			const deviceId = inputString(input.deviceId || intent.targetId);
+			return deviceId ? { ...base, kind: 'system.audio.input.set', input: { deviceId } } : null;
+		}
+		case 'set-sound-effects-output': {
+			const deviceId = inputString(input.deviceId || intent.targetId);
+			return deviceId ? { ...base, kind: 'system.audio.sound-effects-output.set', input: { deviceId } } : null;
+		}
 		case 'set-brightness': {
 			const level = unit(intent.desired?.brightness ?? input.level);
 			return level === null ? null : { ...base, kind: 'system.brightness.set', input: { level } };
 		}
 		case 'lock':
 			return { ...base, kind: 'system.lock', input: {} };
+		case 'connect-wifi': {
+			const ssid = inputString(input.ssid || intent.targetId);
+			return ssid ? { ...base, kind: 'system.wifi.connect', input: { ssid } } : null;
+		}
+		case 'disconnect-wifi':
+			return { ...base, kind: 'system.wifi.disconnect', input: {} };
+		case 'set-wifi-power': {
+			const enabled = input.enabled;
+			return typeof enabled === 'boolean' ? { ...base, kind: 'system.wifi.power.set', input: { enabled } } : null;
+		}
+		case 'hide-app': {
+			const appId = inputString(input.appId || input.bundleId || intent.targetId);
+			return appId ? { ...base, kind: 'app.hide', input: { appId } } : null;
+		}
+		case 'unhide-app': {
+			const appId = inputString(input.appId || input.bundleId || intent.targetId);
+			return appId ? { ...base, kind: 'app.unhide', input: { appId } } : null;
+		}
+		case 'sleep':
+			return { ...base, kind: 'system.sleep', input: {} };
 		default:
 			return null;
 	}
