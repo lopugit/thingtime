@@ -90,6 +90,8 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
   friend: ['status', 'friendKey'],
   notification: ['type', 'actorId', 'actorName', 'postId', 'preview'],
+  passkey: ['nickname', 'description', 'providerName', 'aaguid', 'deviceType', 'backedUp', 'transports', 'lastUsedAt', 'lastUsedOrigin', 'revokedAt'],
+  'passkey-app-link': ['appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
 	'ai-connection': [
 		'sourceType',
