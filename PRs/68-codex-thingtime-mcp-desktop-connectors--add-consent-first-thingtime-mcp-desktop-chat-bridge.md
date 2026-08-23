@@ -519,18 +519,31 @@ an offline database or offline conflict resolution layer.
   `mousedown`, and the second handler replaced the active pointer id; once that
   was removed, Chakra's inline full-width drawer style still visually masked
   valid state changes. The final implementation uses one window-level pointer
-  stream and a desktop-only authoritative width. In the exact rebuilt and
+  stream and an authoritative responsive width. In the exact rebuilt and
   installed app, the drawer opened at a visibly measured 560px and a real drag
   moved both its splitter and left panel boundary to the 420px minimum. The
-  before/after boundary moved by 140px while mobile's full-width rule remained
-  unchanged.
-- Final focused validation is devices `48/48`, Electron `56/56`, and the
+  before/after boundary moved by 140px.
+- **2026-08-23 mobile follow-up:** the mobile-only early return, hidden handle,
+  and forced `width: 100%` have been removed. Narrow viewports now open at the
+  available width and retain the same pointer/keyboard resize behavior down to
+  a 280px mobile-safe minimum (or the viewport itself below that). The 24px
+  in-panel hit target remains, but it renders only the slim edge line—no dotted
+  grip pill. The rebuilt signed installed app visually confirmed the pill is
+  gone and a real edge drag still moved the visible desktop panel from 560px to
+  420px; deterministic 390px layout coverage confirms 390px → 330px → 280px
+  clamping without overflow. Exact installed 390px pointer acceptance remains
+  a manual check because the active Electron window could not be narrowed by
+  the available UI automation surface.
+- Final focused validation is devices `49/49`, Electron `56/56`, and the
   typecheck ratchet at `136` errors versus its `143` baseline. The canonical
   build and installed copy both pass deep/strict code-signing verification with
   Team ID `6DQQ9V7C84`. Their outer executable hashes match at
-  `0b48637eb501b8ebdd3ed109a5a987a612098728288dfc116ca613399a188e58`,
+  `7d2374ee9b29000b321e5b8338dfeada87614e10de29736da2f0df9b8aedcd58`,
   and their ASAR hashes match at
   `f3416f5570e0dd95faa67002fb15a7a4d5912f65227c0917c9f2468e80b66bf1`.
+  The final packaged and installed responsive renderer asset
+  `index-CMT9dIqL.js` matches at
+  `afe6e5365b08736a720dbfa6a3c717a2a49d3bc67ca507bcce5833c93cd57d7a`.
 
 ### Acceptance boundaries still open
 

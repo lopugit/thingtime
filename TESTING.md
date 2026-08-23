@@ -2315,10 +2315,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       devices projection, with cached-first name/presence and current system,
       volume, brightness, lock, open-app, permission, and connector state.
       Open `?device=<id>` at desktop and exactly 390 CSS px, exercise every
-      drawer section, collapse/reopen each section, resize the desktop drawer
-      from its left edge, and scroll top-to-bottom: no clipping/overflow, stale
-      and offline state is explicit, and desired controls confirm or revert
-      against a newer observed revision.
+      drawer section, collapse/reopen each section, and resize the drawer from
+      its left edge at both widths. Confirm the generous edge target draws only
+      the slim hover/focus line (no grip pill), the visible boundary follows the
+      splitter value, and the 390px panel can shrink to 280px without clipping
+      or horizontal overflow. Scroll top-to-bottom: stale and offline state is
+      explicit, and desired controls confirm or revert against a newer observed
+      revision.
 - [ ] Device rows never enter generic selection, copy/move/share/delete,
       context-menu, or preview flows. Capability, permission, lock, connector,
       version, local-only, offline-queue, and approval policy each disable or

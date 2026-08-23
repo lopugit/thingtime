@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 
 import { Box, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, Text } from '@chakra-ui/react';
-import { ChevronDown, CircleAlert, GripVertical, LockKeyhole, WifiOff } from 'lucide-react';
+import { ChevronDown, CircleAlert, LockKeyhole, WifiOff } from 'lucide-react';
 
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 
@@ -19,7 +19,7 @@ import {
 	DEVICE_DRAWER_DEFAULT_WIDTH,
 	DEVICE_DRAWER_KEYBOARD_STEP,
 	DEVICE_DRAWER_MAX_WIDTH,
-	DEVICE_DRAWER_MIN_WIDTH,
+	DEVICE_DRAWER_MOBILE_MIN_WIDTH,
 	clampDeviceDrawerWidth
 } from './deviceDrawerLayout';
 import type { DeviceCommandStatus, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
@@ -164,7 +164,6 @@ export const DeviceDetailsDrawer = memo(
 
 		React.useEffect(() => {
 			const clampToViewport = () => {
-				if (window.matchMedia('(max-width: 47.99em)').matches) return;
 				setDrawerWidth((current) => clampDeviceDrawerWidth(current, window.innerWidth));
 			};
 
@@ -202,7 +201,7 @@ export const DeviceDetailsDrawer = memo(
 
 		const beginResize = React.useCallback(
 			(event: React.PointerEvent<HTMLElement>) => {
-				if (event.button !== 0 || window.matchMedia('(max-width: 47.99em)').matches) return;
+				if (event.button !== 0) return;
 				event.preventDefault();
 				event.stopPropagation();
 				resizeOrigin.current = { pointerId: event.pointerId, width: drawerWidth, x: event.clientX };
@@ -254,26 +253,24 @@ export const DeviceDetailsDrawer = memo(
 					containerProps={{ zIndex: DRAWER_MODAL_Z }}
 					cursor={resizing ? 'ew-resize' : undefined}
 					marginLeft="auto"
-					maxWidth={{ base: '100vw', md: 'calc(100vw - 24px)' }}
+					maxWidth="100vw"
 					minWidth={0}
 					pointerEvents="auto"
 					sx={{
 						WebkitAppRegion: 'no-drag',
-						'@media screen and (min-width: 48em)': {
-							width: `${drawerWidth}px !important`
-						}
+						width: `${drawerWidth}px !important`
 					}}
-					width={{ base: '100%', md: `${drawerWidth}px` }}
+					width={`${drawerWidth}px`}
 				>
 					<Box
 						aria-label="Resize device details panel"
 						aria-orientation="vertical"
 						aria-valuemax={DEVICE_DRAWER_MAX_WIDTH}
-						aria-valuemin={DEVICE_DRAWER_MIN_WIDTH}
+						aria-valuemin={DEVICE_DRAWER_MOBILE_MIN_WIDTH}
 						aria-valuenow={drawerWidth}
 						bottom={0}
 						cursor="ew-resize"
-						display={{ base: 'none', md: 'block' }}
+						display="block"
 						left={0}
 						onDoubleClick={() => setDrawerWidth(clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth))}
 						onKeyDown={resizeWithKeyboard}
@@ -293,7 +290,7 @@ export const DeviceDetailsDrawer = memo(
 							bottom: 0,
 							content: '""',
 							left: 0,
-							opacity: resizing ? 1 : 0.5,
+							opacity: resizing ? 1 : 0,
 							position: 'absolute',
 							top: 0,
 							transition: 'background 120ms ease, opacity 120ms ease',
@@ -301,28 +298,7 @@ export const DeviceDetailsDrawer = memo(
 						}}
 						_hover={{ _before: { opacity: 1 } }}
 						_focusVisible={{ boxShadow: 'inset 0 0 0 2px var(--tt-accent, #ec4899)', _before: { opacity: 1 } }}
-					>
-						<Flex
-							alignItems="center"
-							aria-hidden
-							background="var(--tt-card, #ffffff)"
-							border="1px solid var(--tt-border-strong, #d4d4d8)"
-							borderRadius="999px"
-							boxShadow="0 2px 10px rgba(23, 23, 28, 0.14)"
-							color={resizing ? 'var(--tt-accent, #ec4899)' : 'var(--tt-muted, #71717a)'}
-							height="64px"
-							justifyContent="center"
-							left="3px"
-							pointerEvents="none"
-							position="absolute"
-							top="50%"
-							transform="translateY(-50%)"
-							transition="border-color 120ms ease, color 120ms ease, box-shadow 120ms ease"
-							width="16px"
-						>
-							<GripVertical size={13} strokeWidth={2.25} />
-						</Flex>
-					</Box>
+					/>
 					<DrawerCloseButton
 						aria-label="Close device details"
 						height={11}
