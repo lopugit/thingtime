@@ -2156,6 +2156,14 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       section toggle may close the drawer or block another control. At 390 CSS
       px the resize edge is absent, the drawer remains full width, and every
       section still toggles without horizontal overflow.
+- [ ] On `/things`, collapse a different selection of sections and choose a
+      different width for two paired computers. Close/reopen each drawer and
+      refresh the page: only that computer's locally stored section layout and
+      width may return; device state, messages, approvals, and commands must
+      never be written into this layout preference. In a regular desktop web
+      browser, the drawer, home, Commander search, account, and notification
+      controls must all share the 52px nav bar's 36px centerline. The Commander
+      button must open the global Commander on web as well as Electron.
 - [ ] Pair two different Macs to one disposable Thingtime account, then pair
       one disposable Mac to two different Thingtime accounts. Every pairing
       link must remain one-use, but the Mac must retain both account credentials

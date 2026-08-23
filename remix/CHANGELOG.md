@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Per-computer device-drawer layout and browser navigation alignment**: each
+  paired machine now remembers its own collapsed/expanded details sections and
+  last chosen panel width locally, without storing device state or content. The
+  browser nav now shares the drawer trigger's 52px/36px control grid, and the
+  Commander search button remains available in ordinary web browsers as well
+  as Electron. — Codex (AI), 2026-08-23
+
 - **Paired-computer actions now default to Always allow**: the paired-account
   badge uses a soft green success treatment, and each account/computer drawer
   now offers a durable **Always allow / Ask every time / Deny** preference.

@@ -49,7 +49,7 @@ const NavAccountLink = (props: { claimedUser: ReturnType<typeof useCurrentUser> 
 	const { claimedUser, className } = props;
 
 	return (
-		<Center className={className} display="flex" cursor="pointer">
+		<Center className={className} borderRadius="8px" cursor="pointer" display="flex" height="36px" paddingX={2} whiteSpace="nowrap">
 			{claimedUser ? (
 				<Link to="/profile">
 					<Flex flexDir="row" gap={2} alignItems="center">
@@ -242,17 +242,19 @@ export const Nav = (props) => {
 					flexDirection="row"
 					width="100%"
 					maxWidth="100%"
-					marginY={1}
+					height="52px"
+					minHeight="52px"
+					marginY={0}
 					paddingLeft="18px"
 					paddingRight="18px"
-					paddingY="14px"
+					paddingY={0}
 					// bg='white'
 					// boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
 				>
 					<Center
 						className="nav-left-section"
 						display={['none', 'flex']}
-						height="100%"
+						height="36px"
 						marginRight="auto"
 						columnGap={2}
 						// leave room for the fixed drawer trigger button at the top
@@ -262,7 +264,16 @@ export const Nav = (props) => {
 					>
 						<ElectronHistoryButton direction="back" onClick={navigateBack} />
 						<ElectronHistoryButton direction="forward" onClick={navigateForward} />
-						<Center className="electron-titlebar-home-button" transform="scaleX(-100%)" cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
+						<Center
+							className="electron-titlebar-home-button"
+							borderRadius="8px"
+							cursor="pointer"
+							height="36px"
+							onClick={onLogoClick}
+							sx={gallopSx}
+							transform="scaleX(-100%)"
+							width="36px"
+						>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>
 							</Link>
@@ -271,21 +282,19 @@ export const Nav = (props) => {
 							className="electron-titlebar-search-button"
 							as="button"
 							type="button"
-							display="none"
-							width="34px"
-							height="34px"
+							display={['none', 'flex']}
+							width="36px"
+							height="36px"
 							borderRadius="8px"
 							opacity={0.74}
 							cursor="pointer"
-							title="Search"
-							aria-label="Search"
+							title="Open Commander search"
+							aria-label="Open Commander search"
 							_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
 							sx={{
 								WebkitTapHighlightColor: 'transparent',
 								touchAction: 'manipulation',
-								'html.thingtime-electron-desktop &': {
-									display: 'flex'
-								}
+								'html.thingtime-electron-desktop &': { display: 'flex' }
 							}}
 							onClick={onElectronSearchClick}
 						>
@@ -302,7 +311,7 @@ export const Nav = (props) => {
 					{/* relative + above the commander host (zIndex 9999): the centered
 				search pill is absolutely positioned, and long usernames (and now
 				the bell) can extend under it — these controls must stay tappable */}
-					<Center className="nav-right-section" columnGap={[3, 8]} height="100%" marginLeft="auto" position="relative" zIndex={10000}>
+					<Center className="nav-right-section" columnGap={[3, 8]} height="36px" marginLeft="auto" position="relative" zIndex={10000}>
 						{inEditMode && (
 							<Center
 								// transform="scaleX(-100%)"

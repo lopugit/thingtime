@@ -549,6 +549,26 @@ an offline database or offline conflict resolution layer.
   unlocked desktop session, and macOS privacy permission checks remain
   independent fail-closed gates in every preference.
   the available UI automation surface.
+
+### Per-machine drawer layout and web Commander follow-up (2026-08-23)
+
+- The device-details drawer now keeps a deliberately small, local-only
+  preference keyed by the paired device ID: its eight disclosure states and
+  chosen width. Closing/reopening the drawer, switching computers, and a
+  browser refresh recover that computer's own layout without persisting any
+  device telemetry, approvals, command input/output, messages, or paths.
+- Browser chrome now uses the same 52px bar and 36px control grid as the
+  drawer trigger, removing the previous content-height offset between the
+  drawer and home/account/notification controls. The global Commander trigger
+  is no longer Electron-only; it remains a desktop-width web control and uses
+  the existing `openSearch` Commander state transition.
+- Focused validation: device tests `51/51`, nav chrome test `1/1`, targeted
+  ESLint clean, client build, typecheck ratchet (`135`, below its `143`
+  baseline), and a fresh signed local Electron bundle at
+  `electron/release/mac-arm64/Thingtime.app`. The in-app Browser reached local
+  `/things` with the correct `[LC] Thingtime` title but returned an empty
+  accessibility snapshot, so authenticated visual click/geometry acceptance
+  remains a manual pre-merge check rather than claimed automated proof.
 - Final focused validation is devices `49/49`, Electron `56/56`, and the
   typecheck ratchet at `136` errors versus its `143` baseline. The canonical
   build and installed copy both pass deep/strict code-signing verification with

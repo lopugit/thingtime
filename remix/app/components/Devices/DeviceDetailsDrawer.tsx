@@ -22,11 +22,32 @@ import {
 	DEVICE_DRAWER_MOBILE_MIN_WIDTH,
 	clampDeviceDrawerWidth
 } from './deviceDrawerLayout';
+import { readDeviceDrawerPreferences, setDeviceDrawerSectionExpanded, setDeviceDrawerWidthPreference } from './deviceDrawerPreferences';
+import type { DeviceDrawerSectionId } from './deviceDrawerPreferences';
 import type { DeviceCommandStatus, DeviceExecutionPermissionMode, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
 
-const Section = ({ label, count, children }: { label: string; count?: number; children: React.ReactNode }) => {
-	const [expanded, setExpanded] = React.useState(true);
+const Section = ({
+	deviceId,
+	section,
+	label,
+	count,
+	children
+}: {
+	deviceId: string;
+	section: DeviceDrawerSectionId;
+	label: string;
+	count?: number;
+	children: React.ReactNode;
+}) => {
+	const [expanded, setExpanded] = React.useState(() => readDeviceDrawerPreferences(deviceId).sections[section]);
 	const panelId = React.useId();
+	const toggleExpanded = React.useCallback(() => {
+		setExpanded((current) => {
+			const next = !current;
+			setDeviceDrawerSectionExpanded(deviceId, section, next);
+			return next;
+		});
+	}, [deviceId, section]);
 
 	return (
 		<Box marginTop={5}>
@@ -41,7 +62,7 @@ const Section = ({ label, count, children }: { label: string; count?: number; ch
 				justifyContent="space-between"
 				marginBottom={expanded ? 2 : 0}
 				marginX={-1.5}
-				onClick={() => setExpanded((current) => !current)}
+				onClick={toggleExpanded}
 				paddingX={1.5}
 				paddingY={1}
 				sx={{ WebkitAppRegion: 'no-drag' }}
@@ -164,6 +185,7 @@ export const DeviceDetailsDrawer = memo(
 			summary?.serviceStatus === 'running' || summary?.serviceStatus === 'degraded' ? 'unregister-service' : 'register-service';
 		const battery = batteryLabel(summary?.system?.batteryPercent);
 		const permissionMode = summary?.permissionMode || 'always-allow';
+		const deviceId = state?.deviceId || null;
 		const serviceControl = controlFor?.(localServiceAction, 'service');
 		const pairingControl = summary?.pairingStatus !== 'paired' ? controlFor?.('begin-pairing', 'pairing') : null;
 		const nodeBlockedMessage =
@@ -182,6 +204,12 @@ export const DeviceDetailsDrawer = memo(
 		}, []);
 
 		React.useEffect(() => {
+			if (!deviceId) return;
+			const savedWidth = readDeviceDrawerPreferences(deviceId).drawerWidth;
+			setDrawerWidth(clampDeviceDrawerWidth(savedWidth ?? DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth));
+		}, [deviceId]);
+
+		React.useEffect(() => {
 			if (!resizing) return;
 			const previousCursor = document.body.style.cursor;
 			const previousUserSelect = document.body.style.userSelect;
@@ -194,11 +222,25 @@ export const DeviceDetailsDrawer = memo(
 			};
 		}, [resizing]);
 
-		const applyResize = React.useCallback((clientX: number) => {
-			const origin = resizeOrigin.current;
-			if (!origin) return;
-			setDrawerWidth(clampDeviceDrawerWidth(origin.width + origin.x - clientX, window.innerWidth));
-		}, []);
+		const persistDrawerWidth = React.useCallback(
+			(nextWidth: number) => {
+				if (deviceId) setDeviceDrawerWidthPreference(deviceId, nextWidth);
+			},
+			[deviceId]
+		);
+
+		const applyResize = React.useCallback(
+			(clientX: number) => {
+				const origin = resizeOrigin.current;
+				if (!origin) return;
+				setDrawerWidth(() => {
+					const nextWidth = clampDeviceDrawerWidth(origin.width + origin.x - clientX, window.innerWidth);
+					persistDrawerWidth(nextWidth);
+					return nextWidth;
+				});
+			},
+			[persistDrawerWidth]
+		);
 
 		const finishResize = React.useCallback((event?: { pointerId?: number }) => {
 			if (event?.pointerId != null) {
@@ -243,15 +285,24 @@ export const DeviceDetailsDrawer = memo(
 			};
 		}, [applyResize, finishResize]);
 
-		const resizeWithKeyboard = React.useCallback((event: React.KeyboardEvent<HTMLElement>) => {
-			if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home') return;
-			event.preventDefault();
-			setDrawerWidth((current) => {
-				if (event.key === 'Home') return clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth);
-				const delta = event.key === 'ArrowLeft' ? DEVICE_DRAWER_KEYBOARD_STEP : -DEVICE_DRAWER_KEYBOARD_STEP;
-				return clampDeviceDrawerWidth(current + delta, window.innerWidth);
-			});
-		}, []);
+		const resizeWithKeyboard = React.useCallback(
+			(event: React.KeyboardEvent<HTMLElement>) => {
+				if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home') return;
+				event.preventDefault();
+				setDrawerWidth((current) => {
+					if (event.key === 'Home') {
+						const nextWidth = clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth);
+						persistDrawerWidth(nextWidth);
+						return nextWidth;
+					}
+					const delta = event.key === 'ArrowLeft' ? DEVICE_DRAWER_KEYBOARD_STEP : -DEVICE_DRAWER_KEYBOARD_STEP;
+					const nextWidth = clampDeviceDrawerWidth(current + delta, window.innerWidth);
+					persistDrawerWidth(nextWidth);
+					return nextWidth;
+				});
+			},
+			[persistDrawerWidth]
+		);
 
 		return (
 			<Drawer isOpen={isOpen} onClose={onClose} placement="right" size="full">
@@ -281,7 +332,11 @@ export const DeviceDetailsDrawer = memo(
 						cursor="ew-resize"
 						display="block"
 						left={0}
-						onDoubleClick={() => setDrawerWidth(clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth))}
+						onDoubleClick={() => {
+							const nextWidth = clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth);
+							setDrawerWidth(nextWidth);
+							persistDrawerWidth(nextWidth);
+						}}
 						onKeyDown={resizeWithKeyboard}
 						onPointerDown={beginResize}
 						position="absolute"
@@ -387,7 +442,7 @@ export const DeviceDetailsDrawer = memo(
 									</Notice>
 								) : null}
 
-								<Section label="Node">
+								<Section deviceId={state.deviceId} key={`node:${state.deviceId}`} label="Node" section="node">
 									<Box
 										background="var(--tt-surface-alt, #f7f7f8)"
 										border="1px solid var(--tt-border, #ececef)"
@@ -437,7 +492,7 @@ export const DeviceDetailsDrawer = memo(
 									</Box>
 								</Section>
 
-								<Section label="Action permissions">
+								<Section deviceId={state.deviceId} key={`permissions:${state.deviceId}`} label="Action permissions" section="permissions">
 									<Box
 										background="var(--tt-surface-alt, #f7f7f8)"
 										border="1px solid var(--tt-border, #ececef)"
@@ -512,7 +567,7 @@ export const DeviceDetailsDrawer = memo(
 									</Box>
 								</Section>
 
-								<Section label="Observed state">
+								<Section deviceId={state.deviceId} key={`observed-state:${state.deviceId}`} label="Observed state" section="observed-state">
 									<DeviceStateGrid
 										commands={state.commands}
 										controlFor={controlFor}
@@ -523,7 +578,13 @@ export const DeviceDetailsDrawer = memo(
 									/>
 								</Section>
 
-								<Section count={snapshot?.observed.runningApps.length || 0} label="Applications">
+								<Section
+									deviceId={state.deviceId}
+									key={`applications:${state.deviceId}`}
+									count={snapshot?.observed.runningApps.length || 0}
+									label="Applications"
+									section="applications"
+								>
 									<DeviceApplications
 										activeAppBundleId={snapshot?.observed.activeAppBundleId}
 										applications={snapshot?.observed.runningApps || []}
@@ -534,7 +595,13 @@ export const DeviceDetailsDrawer = memo(
 									/>
 								</Section>
 
-								<Section count={snapshot?.connectors.length || 0} label="Connectors">
+								<Section
+									deviceId={state.deviceId}
+									key={`connectors:${state.deviceId}`}
+									count={snapshot?.connectors.length || 0}
+									label="Connectors"
+									section="connectors"
+								>
 									<DeviceConnectors
 										connectors={snapshot?.connectors || []}
 										controlFor={controlFor}
@@ -544,7 +611,7 @@ export const DeviceDetailsDrawer = memo(
 									/>
 								</Section>
 
-								<Section label="Screen">
+								<Section deviceId={state.deviceId} key={`screen:${state.deviceId}`} label="Screen" section="screen">
 									<ScreenSessionPanel
 										availability={screenAvailability}
 										controlFor={controlFor}
@@ -556,7 +623,7 @@ export const DeviceDetailsDrawer = memo(
 									/>
 								</Section>
 
-								<Section count={pendingApprovals} label="Approvals">
+								<Section deviceId={state.deviceId} key={`approvals:${state.deviceId}`} count={pendingApprovals} label="Approvals" section="approvals">
 									{visibleApprovals.length ? (
 										<Flex direction="column" gap={2.5}>
 											{visibleApprovals.map((approval) => (
@@ -570,7 +637,13 @@ export const DeviceDetailsDrawer = memo(
 									)}
 								</Section>
 
-								<Section count={pendingCommands} label="Command activity">
+								<Section
+									deviceId={state.deviceId}
+									key={`command-activity:${state.deviceId}`}
+									count={pendingCommands}
+									label="Command activity"
+									section="command-activity"
+								>
 									<DeviceCommandTimeline commands={state.commands} controlFor={controlFor} deviceId={state.deviceId} now={now} onAction={onAction} />
 								</Section>
 							</>

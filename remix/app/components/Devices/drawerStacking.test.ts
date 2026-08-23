@@ -29,5 +29,6 @@ test('device drawer controls remain interactive inside the Electron drag band', 
 	assert.match(source, /opacity: resizing \? 1 : 0/u);
 	assert.match(source, /sx=\{\{ WebkitAppRegion: 'no-drag' \}\}/u);
 	assert.match(source, /aria-expanded=\{expanded\}/u);
-	assert.match(source, /setExpanded\(\(current\) => !current\)/u);
+	assert.match(source, /setDeviceDrawerSectionExpanded\(deviceId, section, next\)/u);
+	assert.match(source, /setDeviceDrawerWidthPreference\(deviceId, nextWidth\)/u);
 });
