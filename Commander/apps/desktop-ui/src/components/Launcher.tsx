@@ -445,6 +445,7 @@ export function Launcher({ state }: { state: CommanderState }) {
               if (event.key.toLowerCase() === 'a' && selectsAll) {
                 event.preventDefault();
                 event.currentTarget.select();
+                return;
               }
             }}
           />
