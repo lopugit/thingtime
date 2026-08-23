@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 
 import { AlgorithmManager } from './AlgorithmManager';
 import { NotificationSettingsSection } from './NotificationSettings';
+import { PasskeysManager } from './PasskeysManager';
 import { TokenMinter } from './TokenMinter';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
@@ -481,6 +482,9 @@ export const SettingsPage = () => {
                   Reset 🔑
                 </Button>
               </SettingRow>
+              <Box paddingY={2}>
+                <PasskeysManager />
+              </Box>
             </Flex>
           </SettingsSection>
         )}
