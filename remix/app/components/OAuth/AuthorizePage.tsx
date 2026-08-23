@@ -197,6 +197,13 @@ export const AuthorizePage = () => {
   const optionalScopeParam = (params.get('optional_scope') || '').slice(0, 1024);
   const extrasAllowed = params.get('extra') !== '0';
   const sandbox = params.get('sandbox') === '1';
+  // Self mode (?self=1): the "app" is another Thingtime deployment (an
+  // immutable *.vercel.app preview, a custom domain) asking for a FULL
+  // session, not an app-scoped grant. No clientId, no scope consent — the
+  // approve step mints an aud-bound single-use handoff code the opener
+  // redeems at its own /api/v1/auth/sso-session. Origins stay default-open;
+  // the per-code binding is the security.
+  const selfMode = !sandbox && params.get('self') === '1';
   // opt-in sandbox pooling (see /api/v1/oauth/sandbox): passed through to the
   // mint verbatim — the server validates
   const sandboxSpace = (params.get('sandbox_space') || '').slice(0, 64);
@@ -243,6 +250,24 @@ export const AuthorizePage = () => {
       // user's id + username to an arbitrary opener — the exact thing the
       // "nothing is really shared" promise forbids.
       setCheckedAuth(true);
+      return;
+    }
+
+    if (selfMode) {
+      // No app to validate — just a well-formed target origin. The auth probe
+      // still runs so a signed-in visitor goes straight to the confirm card.
+      try {
+        const normalized = new URL(origin).origin;
+        if (normalized !== origin) throw new Error('origin must be a bare web origin');
+        setVerifiedOrigin(normalized);
+      } catch {
+        setInvalidReason('This link is missing a valid target origin.');
+        return;
+      }
+      fetchJson('/api/v1/auth/me').then((resp) => {
+        if (resp?.user && !resp.user.temporary) setUser(resp.user);
+        setCheckedAuth(true);
+      });
       return;
     }
 
@@ -511,8 +536,45 @@ export const AuthorizePage = () => {
     setIssuing(false);
   };
 
+  // Self mode's approve: mint the handoff code and hand it to the opener —
+  // the opener's own deployment turns it into a first-class session.
+  const approveSelf = async () => {
+    if (issuing) return;
+    setIssuing(true);
+    setIssueError(null);
+
+    if (!verifiedOrigin || typeof window === 'undefined' || !window.opener) {
+      setIssueError('This window lost its connection to the site that opened it. Close it and start the sign-in again.');
+      setIssuing(false);
+      return;
+    }
+
+    const resp = await fetchJson('/api/v1/auth/sso-handoff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin: verifiedOrigin })
+    });
+
+    if (resp?.ok && resp.code) {
+      const delivered = postToOpener({ type: 'thingtime:sso', ok: true, code: resp.code });
+      if (delivered) {
+        setDone('approved');
+        setTimeout(() => window.close(), 400);
+      } else {
+        setIssueError('The window that opened this sign-in closed before it could finish. Close this and try again.');
+      }
+    } else {
+      setIssueError(resp?.error || 'Could not sign you in — please try again.');
+    }
+    setIssuing(false);
+  };
+
   const cancel = () => {
-    postToOpener({ type: 'thingtime:login', ok: false, error: 'cancelled', ...(sandbox ? { sandbox: true } : {}) });
+    postToOpener(
+      selfMode
+        ? { type: 'thingtime:sso', ok: false, error: 'cancelled' }
+        : { type: 'thingtime:login', ok: false, error: 'cancelled', ...(sandbox ? { sandbox: true } : {}) }
+    );
     setDone('cancelled');
     setTimeout(() => window.close(), 400);
   };
@@ -581,13 +643,13 @@ export const AuthorizePage = () => {
         </Box>
       </Flex>
     );
-  } else if (!app || (!sandbox && !checkedAuth)) {
+  } else if ((!selfMode && !app) || (!sandbox && !checkedAuth)) {
     // True cold start (fresh popup): a minimal frame, no spinner flash.
     body = (
       <Flex sx={cardSx}>
         <Kicker>Thingtime · Login with Thingtime</Kicker>
         <Box color="var(--tt-muted, #9a9aa6)" fontSize="14px">
-          Checking this app…
+          {selfMode ? 'Checking your account…' : 'Checking this app…'}
         </Box>
       </Flex>
     );
@@ -598,9 +660,9 @@ export const AuthorizePage = () => {
           <Kicker>Login with Thingtime</Kicker>
           <Box fontSize="14px" color="var(--tt-muted, #9a9aa6)">
             <Box as="strong" color="var(--tt-text, #1c1c22)">
-              {app.name}
+              {selfMode ? 'The Thingtime at' : app?.name}
             </Box>{' '}
-            ({originHost}) wants to sign you in with your Thingtime account.
+            {selfMode ? `${originHost} wants to sign you in with your Thingtime account.` : `(${originHost}) wants to sign you in with your Thingtime account.`}
           </Box>
         </Flex>
         {mode === 'login' ? (
@@ -610,13 +672,58 @@ export const AuthorizePage = () => {
         )}
       </Flex>
     );
+  } else if (selfMode) {
+    // Another Thingtime deployment wants a FULL session — no scopes to pick,
+    // just an explicit "continue as" confirmation.
+    body = (
+      <Flex sx={cardSx}>
+        <Kicker>Thingtime · Sign in</Kicker>
+        <Box as="h1" fontSize="20px" fontWeight="700" lineHeight="1.3">
+          Continue to {originHost}?
+        </Box>
+        <Box fontSize="14px" color="var(--tt-muted, #9a9aa6)">
+          This signs you into the Thingtime at{' '}
+          <Box as="strong" color="var(--tt-text, #1c1c22)">
+            {originHost}
+          </Box>{' '}
+          as{' '}
+          <Box as="strong" color="var(--tt-text, #1c1c22)">
+            @{activeUser.username}
+          </Box>{' '}
+          — your full account, same as signing in there directly. To use a different account, switch
+          accounts on Thingtime first and start again.
+        </Box>
+
+        {issueError ? (
+          <Box fontSize="13px" color="var(--tt-danger, #d3455b)">
+            {issueError}
+          </Box>
+        ) : null}
+
+        <Flex gap={2}>
+          <Button
+            onClick={approveSelf}
+            isLoading={issuing}
+            flex="1"
+            background="var(--tt-text, #1c1c22)"
+            color="var(--tt-card, #ffffff)"
+            _hover={{ opacity: 0.9 }}
+          >
+            Continue as @{activeUser.username}
+          </Button>
+          <Button onClick={cancel} variant="ghost">
+            Cancel
+          </Button>
+        </Flex>
+      </Flex>
+    );
   } else {
     body = (
       <Flex sx={cardSx}>
         <Kicker>Login with Thingtime</Kicker>
         {sandbox ? <SandboxChip /> : null}
         <Box as="h1" fontSize="20px" fontWeight="700" lineHeight="1.3">
-          {app.name}
+          {app?.name}
         </Box>
         <Box fontSize="14px" color="var(--tt-muted, #9a9aa6)">
           {originHost || 'This site'} wants to sign you in as{' '}

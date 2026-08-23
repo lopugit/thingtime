@@ -121,6 +121,27 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
   'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
+  // passkey ceremonies: options endpoints only mint signed challenge cookies
+  // (cheap, but unauthenticated), verify endpoints do signature checks + at
+  // most one session mint — bound both like login. Management (register/
+  // rename/revoke/delete) is session-authed and keyed by user.
+  'auth.passkeyOptions': { limit: 60, windowMs: 60_000, enabled: true },
+  'auth.passkeyLogin': { limit: 30, windowMs: 60_000, enabled: true },
+  'auth.passkeyManage': { limit: 30, windowMs: 60_000, enabled: true },
+  // cross-deployment auto-login suggestions: resolves at most a handful of
+  // roster/session docs per call, unauthenticated, so bound per IP
+  'auth.accountHints': { limit: 60, windowMs: 60_000, enabled: true },
+  // federated flavor of the above: other Thingtime deployments' pages read it
+  // cross-origin (same-site credentials), so it gets its own IP bucket
+  'auth.hintsResolve': { limit: 60, windowMs: 60_000, enabled: true },
+  // cross-origin session handoff: minting is session-authed (user-keyed) and
+  // each code is single-use + 2-minute TTL; redemption is anonymous (IP)
+  'auth.ssoHandoff': { limit: 20, windowMs: 60_000, enabled: true },
+  'auth.ssoSession': { limit: 20, windowMs: 60_000, enabled: true },
+  // FedCM: browser-mediated fetches (Sec-Fetch-Dest: webidentity). Accounts
+  // reads are roster lookups; assertions mint at most one code/token each.
+  'fedcm.accounts': { limit: 120, windowMs: 60_000, enabled: true },
+  'fedcm.assertion': { limit: 20, windowMs: 60_000, enabled: true },
   // public sign-up: anonymous bcrypt + user-doc writes, every success emails
   // the supplied address (mail-bomb + enumeration surface like the other auth
   // mailers), and it's an awaited ensureIndexes bootstrap caller — throttling
