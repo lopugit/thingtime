@@ -21,6 +21,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Signed Desktop PR releases now run from the protected control plane**:
+  the reusable builder/releaser validates current owner-labelled PR state and
+  pins its exact source SHA before checkout; the eventual product listener is
+  trigger-only. GitHub write access is scoped to GitHub API/publish steps, PR
+  checkout persists no credential, and Developer ID/notarization secrets enter
+  only after unsigned source tests pass. The workflow publishes both the
+  Desktop updater asset and its separately signed Thingtime Recovery companion.
+  — Codex (AI), 2026-08-24
 - **Lopu now performs whole-PR repository reviews in the same control plane**:
   a push or selector creates one serialized Lopu batch for the affected clean
   same-repository PRs, each checked out against its target branch. Lopu reviews

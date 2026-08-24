@@ -82,6 +82,43 @@ and the routing contracts here assert this branch's.
 CI changes are recorded in [`CHANGELOG.md`](CHANGELOG.md) on this branch, not in
 the app changelog — nothing carries an entry from here to a product branch.
 
+## Signed desktop PR releases
+
+`.github/workflows/electron-pr-release.yml` is the reusable, privileged builder
+for approved Desktop prereleases. Product branches carry only its trigger
+listener; the listener calls `@github-actions`, and this workflow then resolves
+the live PR record, revalidates its immutable head SHA, checks out that SHA with
+no persisted GitHub credential, and runs unsigned checks before it imports any
+signing material.
+
+Automatic publication is deliberately narrow: the PR must be from this
+repository, authored by the repository owner, and currently carry the
+`desktop-release` label. An owner may also run the thin listener manually with
+a numeric PR number. Forks and ordinary contributors never reach a macOS
+runner with signing secrets.
+
+Direct manual dispatch of the worker itself is accepted only while it executes
+on the protected `github-actions` ref. Reusable calls are accepted only from a
+`develop` or `main` listener, so a feature branch cannot turn a modified copy
+of this workflow into a signing authority.
+
+The canonical repository must configure these GitHub Actions secrets (use your
+own values; never commit them):
+
+```text
+MAC_CSC_LINK=<base64-developer-id-p12>
+MAC_CSC_KEY_PASSWORD=<p12-password>
+APPLE_API_KEY_BASE64=<base64-app-store-connect-p8>
+APPLE_API_KEY_ID=<app-store-connect-key-id>
+APPLE_API_ISSUER=<app-store-connect-issuer-id>
+APPLE_TEAM_ID=<apple-developer-team-id>
+```
+
+The worker publishes a SemVer PR prerelease tagged with the PR number, branch,
+and source SHA. Its macOS ZIP and separately notarized Thingtime Recovery ZIP
+are verified by the Desktop/Recovery updater before either can be cached or
+installed.
+
 ## Fork setup: Vercel develop previews
 
 `.github/scripts/deploy-develop-pr-preview.mjs` runs from this branch and needs
