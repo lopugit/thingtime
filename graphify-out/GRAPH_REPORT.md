@@ -9,7 +9,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9b4bb323`
+- Built from commit: `d2b80465`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -198,7 +198,7 @@ Nodes (4): assertPrReleaseContract(), count(), here, workflow
   .github/workflows/commander-release.yml · relation: semantically_similar_to
 
 ## Knowledge Gaps
-- **121 isolated node(s):** `here`, `workflow`, `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS` (+116 more)
+- **121 isolated node(s):** `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS` (+116 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **12 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -209,7 +209,7 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: semantically_similar_to) - confidence is low._
 - **Why does `selfTest()` connect `selfTest` to `failureDetail`, `promote-features-to-main.mjs`, `runPromotion`, `recoverPromotionReviewCheckpoint`, `repoFlag`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
-- **What connects `here`, `workflow`, `BASE_BRANCHES` to the rest of the system?**
+- **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS` to the rest of the system?**
   _121 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
