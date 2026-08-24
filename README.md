@@ -98,21 +98,33 @@ VERCEL_GITHUB_REPO_ID="<vercel-git-repository-id>"
 VERCEL_CUSTOM_ENVIRONMENT_ID="env_<custom-environment-id>"
 STABLE_DEVELOP_DOMAIN="dev.example.com"
 PREVIEW_ALIAS_SUFFIX="preview.example.com"
+PRODUCTION_PREVIEW_ALIAS_SUFFIX="production-preview.example.com"
 DEVELOP_PREVIEW_TRUSTED_ACTORS="<comma-separated-github-logins>"
 ```
 
 ### Stable develop domain
 
 For a hosted `develop` URL, create a Vercel Custom Environment with an exact
-`develop` branch matcher and attach the stable domain to that Custom
-Environment. Do not also bind the domain through `gitBranch`; the domain should
-have the Custom Environment id and a null Git branch. This lets Vercel move the
-stable hostname whenever a Git-connected `develop` build becomes ready.
+`develop` branch matcher, but leave its domain list empty. Bind the stable
+domain itself to the `develop` Git branch. This gives Vercel a deterministic
+fallback for the hostname, while the controller separately promotes only an
+exact, verified native `develop` deployment.
 
 If trusted PR automation creates deployments in that same Custom Environment,
 its deployment payload must set `autoAssignCustomDomains: false` and assign
 only a separate PR alias after validating the exact repository, branch, commit,
-and READY state. Keep the PR wildcard detached from both branches and Custom
-Environments. Use domains and environment ids from your own Vercel project;
-never copy another project's account-specific identifiers or verification
-records.
+and READY state. Bind the development PR wildcard to the `develop` Git branch.
+Vercel does not permit binding a project domain to the production branch as a
+Preview domain, so the production preview wildcard must remain detached (the
+documented Vercel production fallback) and may not attach to a Custom
+Environment. Exact controller-owned aliases override the wildcard fallback.
+The controller checks both Vercel bindings, DNS, and a live `/api/root-data`
+fallback probe before it can publish, so a detached production wildcard is only
+accepted when it actually resolves to `main`.
+
+Stacked PRs are supported only when each parent is an open same-repository PR
+from an allowlisted author and the bounded chain terminates at `develop`.
+The chain is resolved from the protected controller; a missing, ambiguous,
+untrusted, cyclic, draft, or overlong parent chain receives no credentialed
+preview. Use domains and environment ids from your own Vercel project; never
+copy another project's account-specific identifiers or verification records.
