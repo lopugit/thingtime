@@ -3270,8 +3270,8 @@
     "semantic_hash": "3682a002c99ff959c04ffa06157937d4"
   },
   "electron/package.json": {
-    "mtime": 1787577450.3160377,
-    "ast_hash": "336bcea2c21fc73913c8605453ea9e9c",
+    "mtime": 1787579469.5908756,
+    "ast_hash": "436dfb5011a3d0100f70806e935c91dc",
     "semantic_hash": ""
   },
   "electron/scripts/build-web.mjs": {
@@ -4150,8 +4150,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787577731.0113745,
-    "ast_hash": "0546c041d6a75c1301eae6284123a0fb",
+    "mtime": 1787579292.08581,
+    "ast_hash": "31d1ea0faa5abd664678248631ecec43",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -7710,8 +7710,8 @@
     "semantic_hash": "ea1b89dfb8fb4880a49a2bc3d34eefd8"
   },
   "PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md": {
-    "mtime": 1787577731.0116851,
-    "ast_hash": "b1304f3919030c8d9286f680d2e6c259",
+    "mtime": 1787579589.1723063,
+    "ast_hash": "1c485bbf2423ec10abe01588c0641bcc",
     "semantic_hash": ""
   },
   "electron/PRODUCTION_RELEASE.md": {
@@ -7800,8 +7800,8 @@
     "semantic_hash": ""
   },
   "electron/scripts/install-cached-release.mjs": {
-    "mtime": 1787576947.0866377,
-    "ast_hash": "f38d9d05e55ae330bc572a5328e80b30",
+    "mtime": 1787579236.9741561,
+    "ast_hash": "834c54678f9b11f0fd1ea3b6a1c74175",
     "semantic_hash": ""
   },
   "macos/ThingtimeNode/Sources/ThingtimeNodeCore/RemoteInput.swift": {
@@ -7820,13 +7820,13 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/App/ThingtimeRecoveryInstallerMain.swift": {
-    "mtime": 1787576947.1906633,
-    "ast_hash": "6be82205c7aa09bbc0dff9de379fc384",
+    "mtime": 1787579044.5405557,
+    "ast_hash": "897af844886835ca3ff3e50ba56af736",
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Models/RecoveryModels.swift": {
-    "mtime": 1787577313.8368163,
-    "ast_hash": "eb4101267a9bb24534664abdbdb3d1d6",
+    "mtime": 1787578994.8161776,
+    "ast_hash": "f1535184aaca28a7e394dfd4774116c5",
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Package.swift": {
@@ -7835,8 +7835,8 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Services/BundleVerifier.swift": {
-    "mtime": 1787577313.8384542,
-    "ast_hash": "21dfc5f6ae11953648f7c7b3061c010e",
+    "mtime": 1787579025.3027496,
+    "ast_hash": "7fb8252abdd54aed9f3e993d0ecc8155",
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Services/GitHubReleaseCatalog.swift": {
@@ -7850,13 +7850,13 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Services/RecoveryCache.swift": {
-    "mtime": 1787577313.8378384,
-    "ast_hash": "d93c3bf9f1dcbddf44c166d759bd1624",
+    "mtime": 1787578994.8165138,
+    "ast_hash": "bc71cbe5c9dc4e2a85ae95648791c98c",
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Services/RecoveryInstaller.swift": {
-    "mtime": 1787576947.1918638,
-    "ast_hash": "aca212ec61fde7a63e6a9f3f029e5be2",
+    "mtime": 1787578994.8170571,
+    "ast_hash": "1c33197b72d5c587effed5cfe148ebc4",
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Services/RecoveryPaths.swift": {
@@ -7870,13 +7870,13 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Tests/ThingtimeRecoveryCoreTests/RecoveryCoreTests.swift": {
-    "mtime": 1787577313.839703,
-    "ast_hash": "780b85da1301bf9703a57163d61d76e0",
+    "mtime": 1787579110.343809,
+    "ast_hash": "f28e07788e753a03bd5fcaaacc70f5eb",
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Views/RecoveryContentView.swift": {
-    "mtime": 1787577313.8391438,
-    "ast_hash": "39c9c676e6d49b1ad3db8f8d51ee5798",
+    "mtime": 1787578994.817864,
+    "ast_hash": "59da4f7bc30c71970b4c36c668bd1985",
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/script/build-bundle.sh": {
