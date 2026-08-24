@@ -200,6 +200,18 @@ public struct AppleMusicTelemetry: Codable, Equatable, Sendable {
     }
 }
 
+/// A deliberately minimal, privacy-preserving Spotify presence signal.
+/// Playback title, library, queue, and listening history are never collected.
+public struct SpotifyTelemetry: Codable, Equatable, Sendable {
+    public let isInstalled: Bool
+    public let isRunning: Bool
+
+    public init(isInstalled: Bool, isRunning: Bool) {
+        self.isInstalled = isInstalled
+        self.isRunning = isRunning
+    }
+}
+
 public struct SessionTelemetry: Codable, Equatable, Sendable {
     public let isLocked: Bool
     public let isOnConsole: Bool
@@ -277,6 +289,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let vpnServices: [VPNServiceTelemetry]
     public let battery: BatteryTelemetry
     public let appleMusic: AppleMusicTelemetry
+    public let spotify: SpotifyTelemetry
     public let collectedAt: Date
 
     public init(
@@ -303,7 +316,8 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         bluetoothDevices: [BluetoothDeviceTelemetry] = [],
         vpnServices: [VPNServiceTelemetry] = [],
         battery: BatteryTelemetry = BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: false),
-        appleMusic: AppleMusicTelemetry = AppleMusicTelemetry(isInstalled: false, isRunning: false)
+        appleMusic: AppleMusicTelemetry = AppleMusicTelemetry(isInstalled: false, isRunning: false),
+        spotify: SpotifyTelemetry = SpotifyTelemetry(isInstalled: false, isRunning: false)
     ) {
         self.deviceName = deviceName
         self.hostName = hostName
@@ -329,6 +343,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.vpnServices = vpnServices
         self.battery = battery
         self.appleMusic = appleMusic
+        self.spotify = spotify
     }
 }
 
@@ -422,7 +437,8 @@ public final class DeviceTelemetryCollector {
             bluetoothDevices: SystemBluetooth.pairedDevices(),
             vpnServices: SystemVPN.services(),
             battery: SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep),
-            appleMusic: SystemAppleMusic.telemetry()
+            appleMusic: SystemAppleMusic.telemetry(),
+            spotify: SystemSpotify.telemetry()
         )
     }
 

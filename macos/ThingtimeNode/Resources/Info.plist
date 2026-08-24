@@ -29,7 +29,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Thingtime Node requests specifically approved fixed actions through macOS System Events and Apple Music. It never accepts arbitrary AppleScript.</string>
+	<string>Thingtime Node requests specifically approved fixed actions through macOS System Events, Apple Music, and Spotify. It never accepts arbitrary AppleScript.</string>
 	<key>ThingtimeNodeElectronManaged</key>
     <false/>
 </dict>

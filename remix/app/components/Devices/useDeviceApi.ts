@@ -38,6 +38,7 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'system.vpn.connection.set',
 	'system.power.idle-sleep-prevention.set',
 	'system.media.apple-music.playback.set',
+	'system.media.spotify.playback.set',
 	'system.lock',
 	'system.sleep',
 	'system.restart',
@@ -91,6 +92,7 @@ export type PublicDeviceState = {
 	bluetoothDevices?: Array<{ id: string; name: string; isConnected: boolean }>;
 	vpnServices?: Array<{ id: string; name: string; isConnected: boolean }>;
 	appleMusic?: { isInstalled: boolean; isRunning: boolean };
+	spotify?: { isInstalled: boolean; isRunning: boolean };
 	observedAt: string;
 	updatedAt: string;
 };

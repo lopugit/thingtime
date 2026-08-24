@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Scoped Spotify playback controls for paired Macs**: the node now reports
+  only whether Spotify is installed/running and accepts only fixed play,
+  pause, previous, and next actions. Each command requires a fresh approval
+  and macOS Automation consent, accepts no script, app, queue, track, library,
+  or history input, and remains `needs-review` until the next observation.
+  Paired-device API contracts are now `1.3.0`. — Codex (AI), 2026-08-24
+
 - **Advanced paired-computer display, hardware, and lifecycle controls**:
   paired Macs now advertise capability-gated per-display
   mode/resolution/refresh, brightness, layout, mirroring and read-only HDR;

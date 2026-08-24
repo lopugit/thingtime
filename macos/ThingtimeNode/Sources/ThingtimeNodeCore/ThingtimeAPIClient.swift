@@ -122,6 +122,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             struct VPNService: Encodable { let id: String; let name: String; let isConnected: Bool }
             struct Battery: Encodable { let level: Double?; let charging: Bool?; let isExternalPower: Bool?; let isPreventingIdleSleep: Bool; let isLowPowerModeEnabled: Bool }
             struct AppleMusic: Encodable { let isInstalled: Bool; let isRunning: Bool }
+            struct Spotify: Encodable { let isInstalled: Bool; let isRunning: Bool }
             let locked: Bool
             let volume: Double?
             let muted: Bool?
@@ -140,6 +141,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             let vpnServices: [VPNService]
             let battery: Battery
             let appleMusic: AppleMusic
+            let spotify: Spotify
         }
         struct Connector: Encodable {
             let id: String
@@ -348,7 +350,8 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 bluetoothDevices: Array(telemetry.bluetoothDevices.prefix(64)).map { .init(id: String($0.id.prefix(120)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
                 vpnServices: Array(telemetry.vpnServices.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
                 battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep, isLowPowerModeEnabled: telemetry.battery.isLowPowerModeEnabled),
-                appleMusic: .init(isInstalled: telemetry.appleMusic.isInstalled, isRunning: telemetry.appleMusic.isRunning)
+                appleMusic: .init(isInstalled: telemetry.appleMusic.isInstalled, isRunning: telemetry.appleMusic.isRunning),
+                spotify: .init(isInstalled: telemetry.spotify.isInstalled, isRunning: telemetry.spotify.isRunning)
             ),
             connectors: connectors
         )

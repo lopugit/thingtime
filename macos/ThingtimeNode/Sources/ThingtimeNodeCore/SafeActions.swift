@@ -30,6 +30,7 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case setVPNConnected = "system.vpn.connection.set"
     case setPreventIdleSleep = "system.power.idle-sleep-prevention.set"
     case setAppleMusicPlayback = "system.media.apple-music.playback.set"
+    case setSpotifyPlayback = "system.media.spotify.playback.set"
     case activateApplication = "application.activate"
     case launchApplication = "application.launch"
     case terminateApplication = "application.quit"
@@ -181,6 +182,12 @@ public struct SafeActionPolicy: Sendable {
             guard action.parameters.count == 1,
                   SystemAppleMusic.isValidOperation(action.parameters["operation"]?.stringValue) else {
                 return "system.media.apple-music.playback.set requires only play, pause, next, or previous."
+            }
+            return nil
+        case .setSpotifyPlayback:
+            guard action.parameters.count == 1,
+                  SystemSpotify.isValidOperation(action.parameters["operation"]?.stringValue) else {
+                return "system.media.spotify.playback.set requires only play, pause, next, or previous."
             }
             return nil
         case .activateApplication, .launchApplication, .terminateApplication, .forceTerminateApplication, .hideApplication, .unhideApplication:
@@ -386,6 +393,14 @@ public final class SafeActionExecutor {
             try SystemAppleMusic.perform(operation: operation)
             // Apple Events returning normally does not prove the player reached
             // the requested state, so retain a journalled recovery boundary.
+            throw ThingtimeNodeError.commandOutcomeUncertain
+        case .setSpotifyPlayback:
+            guard let operation = action.parameters["operation"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing Spotify operation.")
+            }
+            try SystemSpotify.perform(operation: operation)
+            // A normally returned Apple Event cannot prove the external player
+            // reached its state; resolve through the journalled recovery path.
             throw ThingtimeNodeError.commandOutcomeUncertain
         case .activateApplication:
             guard let bundleID = action.parameters["bundleIdentifier"]?.stringValue,

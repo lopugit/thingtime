@@ -321,6 +321,49 @@ public enum SystemAppleMusic {
     }
 }
 
+/// A fixed, consent-gated Apple Events surface for the user's Spotify app.
+/// This remains intentionally app-specific: it does not expose generic media
+/// routing, arbitrary script source, track URIs, queues, library data, or
+/// listening history.
+public enum SystemSpotify {
+    private static let bundleIdentifier = "com.spotify.client"
+    private static let commands: [String: String] = [
+        "play": "tell application id \"com.spotify.client\" to play",
+        "pause": "tell application id \"com.spotify.client\" to pause",
+        "next": "tell application id \"com.spotify.client\" to next track",
+        "previous": "tell application id \"com.spotify.client\" to previous track"
+    ]
+
+    public static func telemetry() -> SpotifyTelemetry {
+        SpotifyTelemetry(
+            isInstalled: NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil,
+            isRunning: !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
+        )
+    }
+
+    public static func perform(operation: String) throws {
+        guard let source = commands[operation] else {
+            throw ThingtimeNodeError.invalidRequest("The requested Spotify operation is invalid.")
+        }
+        guard telemetry().isInstalled else {
+            throw ThingtimeNodeError.policyDenied("Spotify is not installed on this Mac.")
+        }
+        guard let script = NSAppleScript(source: source) else {
+            throw ThingtimeNodeError.policyDenied("macOS could not prepare the fixed Spotify automation event.")
+        }
+        var error: NSDictionary?
+        _ = script.executeAndReturnError(&error)
+        if let error, let message = error[NSAppleScript.errorMessage] as? String {
+            throw ThingtimeNodeError.policyDenied("Spotify did not accept the approved operation: \(message)")
+        }
+    }
+
+    public static func isValidOperation(_ value: String?) -> Bool {
+        guard let value else { return false }
+        return commands[value] != nil
+    }
+}
+
 @MainActor
 public final class PowerAssertionController {
     private var assertionID: IOPMAssertionID = 0

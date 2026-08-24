@@ -198,6 +198,7 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 		case 'system.vpn.connection.set': return 'set-vpn-connected';
 		case 'system.power.idle-sleep-prevention.set': return 'set-prevent-idle-sleep';
 		case 'system.media.apple-music.playback.set': return 'set-apple-music-playback';
+		case 'system.media.spotify.playback.set': return 'set-spotify-playback';
 		case 'system.lock':
 			return 'lock';
 		case 'system.sleep':
@@ -412,6 +413,7 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 			bluetoothDevices: device.state?.bluetoothDevices || [],
 			vpnServices: device.state?.vpnServices || [],
 			appleMusic: device.state?.appleMusic,
+			spotify: device.state?.spotify,
 			battery: device.state?.battery
 				? {
 					...device.state.battery,
@@ -647,6 +649,12 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 			const operation = input.operation;
 			return operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous'
 				? { ...base, kind: 'system.media.apple-music.playback.set', input: { operation } }
+				: null;
+		}
+		case 'set-spotify-playback': {
+			const operation = input.operation;
+			return operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous'
+				? { ...base, kind: 'system.media.spotify.playback.set', input: { operation } }
 				: null;
 		}
 		case 'lock':

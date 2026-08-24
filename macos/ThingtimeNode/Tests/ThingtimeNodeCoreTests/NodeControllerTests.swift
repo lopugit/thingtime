@@ -137,6 +137,7 @@ final class NodeControllerTests: XCTestCase {
             LeasedCommand(commandID: "printer", leaseID: "lease-printer", method: "system.printer.default.set", parameters: .object(["id": .string("printer-1")]), leaseExpiresAt: .distantFuture),
             LeasedCommand(commandID: "keep-awake", leaseID: "lease-keep-awake", method: "system.power.idle-sleep-prevention.set", parameters: .object(["enabled": .bool(true)]), leaseExpiresAt: .distantFuture),
             LeasedCommand(commandID: "apple-music", leaseID: "lease-apple-music", method: "system.media.apple-music.playback.set", parameters: .object(["operation": .string("next")]), leaseExpiresAt: .distantFuture),
+            LeasedCommand(commandID: "spotify", leaseID: "lease-spotify", method: "system.media.spotify.playback.set", parameters: .object(["operation": .string("next")]), leaseExpiresAt: .distantFuture),
             LeasedCommand(commandID: "restart", leaseID: "lease-restart", method: "system.restart", parameters: .object([:]), leaseExpiresAt: .distantFuture)
         ]
 		for command in commands {

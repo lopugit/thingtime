@@ -251,6 +251,22 @@ relational shape for later ThingtimeDB storage and platform chat views.
   closed input envelopes, mandatory approval, unpaired fail-closed behavior,
   telemetry projection, and Apple Music's no-arbitrary-script boundary.
 
+### 2026-08-24 fixed Spotify playback follow-up
+
+- Spotify is now an equally narrow, app-specific media surface: paired-node
+  state reports only installed/running, and the node accepts only fixed play,
+  pause, previous, and next events from Spotify's published Mac scripting
+  dictionary. It accepts no generic media target, application id, script,
+  queue, library, track, title, or history input.
+- Each Spotify command has its own capability, always opens a fresh approval,
+  requires macOS Automation consent, and resolves as `needs-review` after the
+  Apple Event; acceptance cannot prove external playback reached the requested
+  state. State normalization, API command validation, UI command construction,
+  and native policy tests independently enforce the closed four-operation
+  boundary.
+- The four paired-device capability-manifest endpoint contracts are bumped to
+  `1.3.0`.
+
 ## Security and product boundaries
 
 MCP gives a host a standard way to invoke this server; it does not give the

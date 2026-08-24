@@ -36,6 +36,7 @@ export const DEVICE_COMMAND_KINDS = [
 	'system.vpn.connection.set',
 	'system.power.idle-sleep-prevention.set',
 	'system.media.apple-music.playback.set',
+	'system.media.spotify.playback.set',
 	'system.lock',
 	'system.sleep',
 	'system.restart',
@@ -62,7 +63,14 @@ export const normalizeDevicePermissionMode = (value: unknown): DevicePermissionM
 
 // Force quitting can discard unsaved work. It must always create a fresh
 // approval, even when the paired device otherwise allows routine controls.
-const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>(['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.media.apple-music.playback.set']);
+const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>([
+	'app.force-quit',
+	'system.restart',
+	'system.shutdown',
+	'system.logout',
+	'system.media.apple-music.playback.set',
+	'system.media.spotify.playback.set'
+]);
 
 export const deviceCommandRequiresApproval = (kind: DeviceCommandKind, callerRequiresApproval: boolean): boolean =>
 	callerRequiresApproval || ALWAYS_APPROVAL_DEVICE_COMMANDS.has(kind);
@@ -189,6 +197,7 @@ export type DeviceBluetoothDevice = { id: string; name: string; isConnected: boo
 export type DeviceVPNService = { id: string; name: string; isConnected: boolean };
 export type DeviceBatteryState = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean; isLowPowerModeEnabled: boolean };
 export type DeviceAppleMusicState = { isInstalled: boolean; isRunning: boolean };
+export type DeviceSpotifyState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceStateSnapshot = {
 	locked: boolean;
 	volume: number | null;
@@ -208,6 +217,7 @@ export type DeviceStateSnapshot = {
 	bluetoothDevices?: DeviceBluetoothDevice[];
 	vpnServices?: DeviceVPNService[];
 	appleMusic?: DeviceAppleMusicState;
+	spotify?: DeviceSpotifyState;
 };
 
 const unitInterval = (value: unknown): number | null => {
@@ -260,7 +270,7 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		!Object.keys(raw).every((key) =>
 			[
 				'locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'openApps', 'audioDevices', 'wifi',
-				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic'
+				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic', 'spotify'
 			].includes(key)
 		)
 	)
@@ -396,6 +406,13 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		if (!exactKeys(candidate, ['isInstalled', 'isRunning']) || typeof candidate.isInstalled !== 'boolean' || typeof candidate.isRunning !== 'boolean') return null;
 		appleMusic = { isInstalled: candidate.isInstalled, isRunning: candidate.isRunning };
 	}
+	let spotify: DeviceSpotifyState | undefined;
+	if (raw.spotify !== undefined) {
+		if (!raw.spotify || typeof raw.spotify !== 'object' || Array.isArray(raw.spotify)) return null;
+		const candidate = raw.spotify as Record<string, unknown>;
+		if (!exactKeys(candidate, ['isInstalled', 'isRunning']) || typeof candidate.isInstalled !== 'boolean' || typeof candidate.isRunning !== 'boolean') return null;
+		spotify = { isInstalled: candidate.isInstalled, isRunning: candidate.isRunning };
+	}
 	if (!displays || !printers || !cameras || !bluetoothDevices || !vpnServices) return null;
 	return {
 		locked: raw.locked,
@@ -415,7 +432,8 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		cameras,
 		bluetoothDevices,
 		vpnServices,
-		appleMusic
+		appleMusic,
+		spotify
 	};
 };
 
@@ -626,6 +644,7 @@ export type DeviceCommandInputByKind = {
 	'system.vpn.connection.set': { id: string; connected: boolean };
 	'system.power.idle-sleep-prevention.set': { enabled: boolean };
 	'system.media.apple-music.playback.set': { operation: 'play' | 'pause' | 'next' | 'previous' };
+	'system.media.spotify.playback.set': { operation: 'play' | 'pause' | 'next' | 'previous' };
 	'system.lock': Record<string, never>;
 	'system.sleep': Record<string, never>;
 	'system.restart': Record<string, never>;
@@ -709,6 +728,7 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'system.vpn.connection.set': 'system.vpn.connection.write',
 	'system.power.idle-sleep-prevention.set': 'system.power.idle-sleep-prevention.write',
 	'system.media.apple-music.playback.set': 'system.media.apple-music.playback.write',
+	'system.media.spotify.playback.set': 'system.media.spotify.playback.write',
 	'system.lock': 'system.lock',
 	'system.sleep': 'system.power.sleep',
 	'system.restart': 'system.power.restart',
@@ -756,6 +776,7 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'system.vpn.connection.set': 'system.vpn.connection.write',
 	'system.power.idle-sleep-prevention.set': 'system.power.idle-sleep-prevention.write',
 	'system.media.apple-music.playback.set': 'system.media.apple-music.playback.write',
+	'system.media.spotify.playback.set': 'system.media.spotify.playback.write',
 	'device.lock.write': 'system.lock',
 	'system.sleep': 'system.power.sleep',
 	'system.restart': 'system.power.restart',
@@ -975,6 +996,12 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 			return (operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous') && exactKeys(raw, ['operation'])
 				? ok({ operation })
 				: deviceFail(400, 'system.media.apple-music.playback.set requires only play, pause, next, or previous');
+		}
+		case 'system.media.spotify.playback.set': {
+			const operation = raw.operation;
+			return (operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous') && exactKeys(raw, ['operation'])
+				? ok({ operation })
+				: deviceFail(400, 'system.media.spotify.playback.set requires only play, pause, next, or previous');
 		}
 		case 'system.lock':
 		case 'system.sleep':

@@ -165,6 +165,7 @@ final class ThingtimeAPIClientTests: XCTestCase {
 			XCTAssertEqual((state["battery"] as? [String: Any])?["isPreventingIdleSleep"] as? Bool, true)
 			XCTAssertEqual((state["battery"] as? [String: Any])?["isLowPowerModeEnabled"] as? Bool, false)
 			XCTAssertEqual((state["appleMusic"] as? [String: Any])?["isInstalled"] as? Bool, true)
+			XCTAssertEqual((state["spotify"] as? [String: Any])?["isInstalled"] as? Bool, true)
             let connectors = try XCTUnwrap(body["connectors"] as? [[String: Any]])
             XCTAssertEqual(connectors.count, 2)
             XCTAssertEqual(connectors[0]["projects"] as? [[String: String]], [
@@ -224,7 +225,8 @@ final class ThingtimeAPIClientTests: XCTestCase {
             bluetoothDevices: [.init(id: "bt-opaque", name: "Headphones", isConnected: true)],
             vpnServices: [.init(id: "vpn-1", name: "Work VPN", isConnected: false)],
             battery: .init(level: 0.84, isCharging: true, isExternalPower: true, isPreventingIdleSleep: true, isLowPowerModeEnabled: false),
-            appleMusic: .init(isInstalled: true, isRunning: false)
+            appleMusic: .init(isInstalled: true, isRunning: false),
+            spotify: .init(isInstalled: true, isRunning: false)
         )
         try await client.sendHeartbeat(.init(
             deviceID: "device-1",
