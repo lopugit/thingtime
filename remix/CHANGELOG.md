@@ -39,6 +39,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   switch. The cache is bounded to twelve explicit recovery bundles, never
   silently installs, and remains revealable in Finder if a later UI is broken.
   — Codex (AI), 2026-08-24
+- **Desktop recovery updater hardening**: GitHub release discovery now follows
+  every API Link page instead of stopping at a fixed history cap, rejects
+  redirect hops outside GitHub release storage, repairs stale cache metadata
+  before applying its twelve-bundle limit, and removes a partial cache copy on
+  failed verification. Recovery launches now hand off after the current app
+  exits, preventing two cached/installed versions from sharing one local
+  profile at once; cached recovery choices remain visible and usable if GitHub
+  is offline. — Codex (AI), 2026-08-24
 
 - **Approval-gated remote pointer and keyboard controls for paired Macs**:
   the desktop node now accepts a closed, capability-gated set of screen-relative

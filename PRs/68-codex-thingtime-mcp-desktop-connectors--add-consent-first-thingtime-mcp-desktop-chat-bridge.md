@@ -869,8 +869,26 @@ an offline database or offline conflict resolution layer.
   branch, and commit. It treats a release as installable only after extracting
   a GitHub-hosted macOS ZIP to the user-local recovery cache and re-verifying
   the production nested signature, hardened runtime, and notarization.
-- A cached release can launch directly. Installing it first caches the current
-  installed production bundle, then delegates to the existing transactional
-  installer after the Electron process exits. The cache is intentionally
-  bounded to twelve explicit recovery apps and can be revealed in Finder, so a
-  broken future updater UI does not strand a person on that version.
+- A cached release launches through a detached handoff only after the current
+  Thingtime process exits, so two versions cannot share one local profile at
+  once. Installing first caches the current installed production bundle, then
+  delegates to the existing transactional installer after the Electron process
+  exits. The cache is intentionally bounded to twelve explicit recovery apps
+  and can be revealed in Finder, so a broken future updater UI does not strand
+  a person on that version.
+
+### Recovery updater verification follow-up (2026-08-24)
+
+- Release browsing now follows every GitHub API Link page rather than stopping
+  at 2,000 records. A loop is reported visibly instead of silently omitting
+  history. Download redirects stay on GitHub-controlled release hosts, and a
+  stale/tampered manifest entry cannot exhaust the twelve recovery slots or
+  leave a partial verified-app directory behind. GitHub outage state preserves
+  the local cache catalog so launch/install recovery actions remain usable
+  offline.
+- Live GitHub inspection established that executable Electron release behavior
+  remains on `github-actions`; that ref is still the former unsigned runner.
+  GitHub has not registered the PR-local release workflow as a runnable signed
+  publisher for #68. The signed runner must be promoted to that trusted ref
+  (with its Developer ID/notarization secrets) before a real signed PR
+  prerelease can be created and cached end-to-end.

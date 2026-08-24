@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { mkdtemp, mkdir, rm, writeFile } = require('node:fs/promises');
+const { mkdtemp, mkdir, readdir, readFile, rm, writeFile } = require('node:fs/promises');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const os = require('node:os');
@@ -79,6 +79,51 @@ test('verified release and installed bundles are cached as recoverable regular a
 		assert.equal(getCachedBundles(path.join(root, 'cache')).length, 2);
 		removeCachedBundle({ cacheRoot: path.join(root, 'cache'), key: cached.key });
 		assert.equal(getCachedBundles(path.join(root, 'cache')).length, 1);
+	} finally {
+		await rm(root, { force: true, recursive: true });
+	}
+});
+
+test('stale cache metadata does not consume recovery slots and a failed cache write leaves no bundle behind', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'thingtime-release-cache-'));
+	try {
+		const sourceApp = path.join(root, 'source', 'Thingtime.app');
+		await mkdir(path.join(sourceApp, 'Contents', 'MacOS'), { recursive: true });
+		await writeFile(path.join(sourceApp, 'Contents', 'MacOS', 'Thingtime'), 'fixture');
+		const cacheRoot = path.join(root, 'cache');
+		await mkdir(path.join(cacheRoot, 'bundles'), { recursive: true });
+		await writeFile(path.join(cacheRoot, 'manifest.json'), `${JSON.stringify({
+			format: 1,
+			entries: Array.from({ length: 12 }, (_, index) => ({ key: `missing-${index}` }))
+		})}\n`);
+
+		const cached = await cacheInstalledBundle({
+			cacheRoot,
+			release: { tag: 'installed-0.1.1', version: '0.1.1' },
+			sourceApp,
+			verifyApp: verified
+		});
+		assert.equal(cached.cacheState, 'ready');
+		const repairedManifest = JSON.parse(await readFile(path.join(cacheRoot, 'manifest.json'), 'utf8'));
+		assert.equal(repairedManifest.entries.length, 1);
+
+		const archive = path.join(root, 'Thingtime.zip');
+		const result = spawnSync('/usr/bin/ditto', ['-c', '-k', '--keepParent', sourceApp, archive], { encoding: 'utf8' });
+		assert.equal(result.status, 0, result.stderr);
+		let verificationCount = 0;
+		await assert.rejects(
+			cacheReleaseArchive({
+				archivePath: archive,
+				cacheRoot,
+				release: { asset: { name: 'Thingtime.zip' }, id: 'broken-release', tag: 'electron-v0.1.2', version: '0.1.2' },
+				verifyApp: async () => {
+					verificationCount += 1;
+					if (verificationCount === 2) throw new Error('injected verification failure');
+				}
+			}),
+			/injected verification failure/u
+		);
+		assert.deepEqual(await readdir(path.join(cacheRoot, 'bundles')), [cached.key]);
 	} finally {
 		await rm(root, { force: true, recursive: true });
 	}

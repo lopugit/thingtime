@@ -36,7 +36,11 @@ export const ElectronUpdateManager = () => {
 		try {
 			const next = await bridge.listUpdateCatalog();
 			setCatalog(next);
-			if (!quiet) lopu({ title: 'Release catalog refreshed', description: `${next.releases.length} GitHub releases available.`, status: 'success', duration: 4000 });
+			if (!quiet) {
+				lopu(next.catalogError
+					? { title: 'Cached recovery is available', description: next.catalogError, status: 'info', duration: 6000 }
+					: { title: 'Release catalog refreshed', description: `${next.releases.length} GitHub releases available.`, status: 'success', duration: 4000 });
+			}
 		} catch (error) {
 			lopu({ title: 'Could not fetch GitHub releases', description: error instanceof Error ? error.message : 'Thingtime could not reach the release catalog.', status: 'error', duration: 7000 });
 		} finally {
@@ -80,7 +84,7 @@ export const ElectronUpdateManager = () => {
 		void runAction(`launch:${bundle.key}`, async () => {
 			const result = await getElectronBridge()?.launchCachedRelease?.({ key: bundle.key });
 			if (!result) throw new Error('This Thingtime build cannot launch cached releases.');
-			lopu({ title: 'Recovery bundle launched', description: cacheLabel(bundle), status: 'success', duration: 5000 });
+			lopu({ title: 'Launching recovery bundle', description: result.message, status: 'info', duration: 7000 });
 		});
 	}, [lopu, runAction]);
 
@@ -119,11 +123,16 @@ export const ElectronUpdateManager = () => {
 				</Button>
 			</Flex>
 			<Input size="sm" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search version, PR, branch, or commit" aria-label="Search Thingtime releases" />
-			{catalog?.truncated && (
-				<Text fontSize="xs" color="orange.600">
-					Showing the first 2,000 releases returned by GitHub. Narrow the repository history before relying on older entries.
+				{catalog?.truncated && (
+					<Text fontSize="xs" color="orange.600">
+						Release pagination stopped safely because GitHub returned a looping next-page link. Refresh before relying on this catalog.
 				</Text>
-			)}
+				)}
+				{catalog?.catalogError && (
+					<Text fontSize="xs" color="orange.600">
+						{catalog.catalogError}
+					</Text>
+				)}
 			{catalog && (
 				<Text fontSize="xs" opacity={0.55}>
 					Current: {catalog.currentVersion || 'unknown'} · {catalog.releases.length} release{catalog.releases.length === 1 ? '' : 's'} · {catalog.cachedBundles.length} verified recovery bundle{catalog.cachedBundles.length === 1 ? '' : 's'} cached
