@@ -48,6 +48,25 @@ describe('FileSystemIndexerClient', () => {
     }
   });
 
+  it('coalesces overlapping index requests into one worker operation', async () => {
+    const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/fake-indexer.mjs');
+    const client = new FileSystemIndexerClient({
+      binaryPath: process.execPath,
+      databasePath: '/tmp/test-index-single-flight.sqlite3',
+      prefixArguments: [fixture],
+      indexTimeoutMs: 1_000,
+    });
+    try {
+      const configuration = { sources: [{ id: 'hang', root: '/tmp', kinds: ['file' as const] }] };
+      const first = client.index(configuration, 20);
+      const second = client.index(configuration, 20);
+      expect(second).toBe(first);
+      await expect(first).rejects.toThrow('timed out after 20ms');
+    } finally {
+      await client.close();
+    }
+  });
+
   it('passes standalone machine resource limits through the JSON-lines protocol', async () => {
     const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/fake-indexer.mjs');
     const client = new FileSystemIndexerClient({
