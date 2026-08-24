@@ -5,6 +5,7 @@ import type { BootstrapResponse, SearchHit } from '@commander/protocol';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
+import { resetNativeFileIconSchedulerForTests } from '../lib/nativeFileIcons.js';
 import { beginWindowDrag, nativeRequest } from '../lib/nativeBridge.js';
 import { Launcher } from './Launcher.js';
 
@@ -87,8 +88,14 @@ function state(overrides: Partial<CommanderState> = {}): CommanderState {
 }
 
 describe('Launcher keyboard navigation', () => {
-  beforeEach(() => vi.clearAllMocks());
-  afterEach(cleanup);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetNativeFileIconSchedulerForTests();
+  });
+  afterEach(() => {
+    cleanup();
+    resetNativeFileIconSchedulerForTests();
+  });
 
   it('moves selection down and opens the actions panel with Command-K', () => {
     const commander = state();
@@ -177,8 +184,12 @@ describe('Launcher keyboard navigation', () => {
       subtitle: '/Applications/Preview.app',
       path: '/Applications/Preview.app',
     };
-    vi.mocked(nativeRequest).mockResolvedValueOnce({
-      dataUrl: 'data:image/png;base64,aWNvbg==',
+    vi.mocked(nativeRequest).mockImplementation(async (method) => {
+      if (method === 'filesystem.icon') {
+        return { dataUrl: 'data:image/png;base64,aWNvbg==' };
+      }
+
+      return undefined;
     });
     render(<Launcher state={state({ hits: [application], selectedIndex: 0 })} />);
 
@@ -194,7 +205,7 @@ describe('Launcher keyboard navigation', () => {
     });
   });
 
-  it('loads native Finder icons only for the focused result so broad searches cannot flood the host bridge', async () => {
+  it('loads every result icon through a bounded, selected-first bridge queue', async () => {
     const pathBackedHits: SearchHit[] = Array.from({ length: 30 }, (_, index) => ({
       ...hits[1]!,
       id: `file:batch-${index}`,
@@ -204,19 +215,59 @@ describe('Launcher keyboard navigation', () => {
       path: `/tmp/commander-batch-${index}.txt`,
       score: 1_000 - index,
     }));
-    vi.mocked(nativeRequest).mockResolvedValue({ dataUrl: 'data:image/png;base64,aWNvbg==' });
-    const commander = state({ hits: pathBackedHits, selectedIndex: 0 });
-    const view = render(<Launcher state={commander} />);
+    const requestedPaths: string[] = [];
+    const pendingReplies: Array<{
+      path: string;
+      resolve: (result: { dataUrl: string }) => void;
+    }> = [];
+    vi.mocked(nativeRequest).mockImplementation(((method: string, params?: unknown) => {
+      if (method !== 'filesystem.icon') return Promise.resolve(undefined);
+      const path = (params as { path: string }).path;
+      requestedPaths.push(path);
+      return new Promise((resolve: (result: { dataUrl: string }) => void) => {
+        pendingReplies.push({ path, resolve });
+      });
+    }) as typeof nativeRequest);
+    const selectedIndex = 17;
+    render(<Launcher state={state({ hits: pathBackedHits, selectedIndex })} />);
+
+    await waitFor(() => expect(requestedPaths).toHaveLength(2));
+    expect(requestedPaths[0]).toBe(pathBackedHits[selectedIndex]!.path);
+    expect(requestedPaths).toHaveLength(2);
+
+    let resolvedReplies = 0;
+    while (resolvedReplies < pathBackedHits.length) {
+      await waitFor(() => expect(pendingReplies.length).toBeGreaterThan(resolvedReplies));
+      const batch = pendingReplies.slice(resolvedReplies);
+      batch.forEach(({ path, resolve }) => resolve({ dataUrl: `data:image/png;base64,${btoa(path)}` }));
+      resolvedReplies += batch.length;
+    }
+
+    await waitFor(() => expect(requestedPaths).toHaveLength(pathBackedHits.length));
+    expect(new Set(requestedPaths)).toEqual(new Set(pathBackedHits.map((hit) => hit.path)));
+    await waitFor(() =>
+      expect(document.querySelectorAll('.result-native-icon')).toHaveLength(pathBackedHits.length),
+    );
+  });
+
+  it('reuses cached native Finder icons when a result is remounted', async () => {
+    const application = {
+      ...hits[1]!,
+      id: 'app:cached-preview',
+      path: '/Applications/Cached Preview.app',
+    };
+    vi.mocked(nativeRequest).mockResolvedValue({ dataUrl: 'data:image/png;base64,Y2FjaGVk' });
     const nativeIconCalls = () =>
       vi.mocked(nativeRequest).mock.calls.filter(([method]) => method === 'filesystem.icon');
 
+    const first = render(<Launcher state={state({ hits: [application], selectedIndex: 0 })} />);
     await waitFor(() => expect(nativeIconCalls()).toHaveLength(1));
-    expect(nativeIconCalls()[0]).toEqual(['filesystem.icon', { path: pathBackedHits[0]!.path }]);
+    await waitFor(() => expect(document.querySelector('.result-native-icon')).toBeTruthy());
+    first.unmount();
 
-    view.rerender(<Launcher state={{ ...commander, selectedIndex: 1 }} />);
-
-    await waitFor(() => expect(nativeIconCalls()).toHaveLength(2));
-    expect(nativeIconCalls()[1]).toEqual(['filesystem.icon', { path: pathBackedHits[1]!.path }]);
+    render(<Launcher state={state({ hits: [application], selectedIndex: 0 })} />);
+    await waitFor(() => expect(document.querySelector('.result-native-icon')).toBeTruthy());
+    expect(nativeIconCalls()).toHaveLength(1);
   });
 
   it('runs the selected primary action with Return', async () => {

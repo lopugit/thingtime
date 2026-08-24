@@ -1,84 +1,24 @@
 import { useEffect, useState } from 'react';
 import type { SearchItemKind } from '@commander/protocol';
-import { nativeRequest } from '../lib/nativeBridge.js';
+import { cachedNativeFileIcon, requestNativeFileIcon } from '../lib/nativeFileIcons.js';
 import { CommanderIcon } from './CommanderIcon.js';
-
-const maximumCachedIcons = 256;
-const iconCache = new Map<string, string | null>();
-const pendingIcons = new Map<string, Promise<string | null>>();
-const nativeIconQueue: Array<{
-  path: string;
-  resolve: (dataUrl: string | null) => void;
-}> = [];
-let nativeIconRequestInFlight = false;
-
-interface NativeFileIconResult {
-  dataUrl?: string;
-}
-
-function rememberIcon(path: string, dataUrl: string | null): string | null {
-  iconCache.delete(path);
-  iconCache.set(path, dataUrl);
-  while (iconCache.size > maximumCachedIcons) {
-    const oldest = iconCache.keys().next().value;
-    if (typeof oldest !== 'string') break;
-    iconCache.delete(oldest);
-  }
-  return dataUrl;
-}
-
-function drainNativeIconQueue(): void {
-  if (nativeIconRequestInFlight) return;
-  const next = nativeIconQueue.shift();
-  if (!next) return;
-
-  nativeIconRequestInFlight = true;
-  void nativeRequest<NativeFileIconResult>('filesystem.icon', { path: next.path })
-    .then((result) =>
-      rememberIcon(
-        next.path,
-        typeof result?.dataUrl === 'string' && result.dataUrl.startsWith('data:image/png;base64,')
-          ? result.dataUrl
-          : null,
-      ),
-    )
-    .catch(() => rememberIcon(next.path, null))
-    .then((dataUrl) => next.resolve(dataUrl))
-    .finally(() => {
-      pendingIcons.delete(next.path);
-      nativeIconRequestInFlight = false;
-      // Let WebKit process input and paint before admitting another AppKit icon request.
-      if (nativeIconQueue.length) window.setTimeout(drainNativeIconQueue, 0);
-    });
-}
-
-function loadIcon(path: string): Promise<string | null> {
-  const cached = iconCache.get(path);
-  if (cached !== undefined || iconCache.has(path)) return Promise.resolve(cached ?? null);
-
-  const pending = pendingIcons.get(path);
-  if (pending) return pending;
-
-  const request = new Promise<string | null>((resolve) => {
-    nativeIconQueue.push({ path, resolve });
-  });
-  pendingIcons.set(path, request);
-  drainNativeIconQueue();
-  return request;
-}
 
 export function ResultIcon({
   icon,
   kind,
   path,
   shouldLoadNativeIcon = false,
+  nativeIconPriority = 100,
 }: {
   icon?: string | undefined;
   kind: SearchItemKind;
   path?: string | undefined;
   shouldLoadNativeIcon?: boolean | undefined;
+  nativeIconPriority?: number | undefined;
 }) {
-  const [dataUrl, setDataUrl] = useState<string | null>(() => (path ? (iconCache.get(path) ?? null) : null));
+  const [dataUrl, setDataUrl] = useState<string | null>(() =>
+    path ? (cachedNativeFileIcon(path) ?? null) : null,
+  );
 
   useEffect(() => {
     let active = true;
@@ -88,19 +28,22 @@ export function ResultIcon({
         active = false;
       };
     }
-    setDataUrl(iconCache.get(path) ?? null);
-    if (!shouldLoadNativeIcon) {
+    const cached = cachedNativeFileIcon(path);
+    setDataUrl(cached ?? null);
+    if (!shouldLoadNativeIcon || cached !== undefined) {
       return () => {
         active = false;
       };
     }
-    void loadIcon(path).then((next) => {
+    const request = requestNativeFileIcon(path, nativeIconPriority);
+    void request.promise.then((next) => {
       if (active) setDataUrl(next);
     });
     return () => {
       active = false;
+      request.cancel();
     };
-  }, [path, shouldLoadNativeIcon]);
+  }, [nativeIconPriority, path, shouldLoadNativeIcon]);
 
   return (
     <span

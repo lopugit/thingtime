@@ -446,22 +446,41 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
 }
 
 /// Finder icon lookup and PNG encoding use AppKit, so they must remain on the
-/// main actor. A broad search can otherwise deliver dozens of bridge messages
-/// in one renderer turn and starve AppKit long enough for macOS to show a
-/// spinning cursor. Admit one request per run-loop turn instead.
+/// main actor. Cache and coalesce by canonical path, then admit just one
+/// AppKit render per run-loop turn. This keeps every result row eligible for a
+/// real Finder icon without turning a broad search into a main-thread burst.
 @MainActor
-private final class CommanderFileIconRequestQueue {
-  private struct Job {
-    let path: String
-    let continuation: CheckedContinuation<String, Error>
-  }
+final class CommanderFileIconRequestQueue {
+  private static let maximumCachedIcons = 512
+  private static let maximumCachedIconBytes = 24 * 1024 * 1024
 
-  private var jobs: [Job] = []
+  private let renderer: (String) throws -> String
+  private let cache = NSCache<NSString, NSString>()
+  private var jobs: [String] = []
+  private var waiters: [String: [CheckedContinuation<String, Error>]] = [:]
   private var scheduled = false
 
+  init(renderer: ((String) throws -> String)? = nil) {
+    self.renderer = renderer ?? { path in
+      try CommanderWebView.fileIconDataURL(for: path)
+    }
+    cache.countLimit = Self.maximumCachedIcons
+    cache.totalCostLimit = Self.maximumCachedIconBytes
+  }
+
   func dataURL(for path: String) async throws -> String {
-    try await withCheckedThrowingContinuation { continuation in
-      jobs.append(Job(path: path, continuation: continuation))
+    let canonicalPath = try CommanderWebView.validatedFileURL(for: path).standardizedFileURL.path
+    let cacheKey = canonicalPath as NSString
+    if let cached = cache.object(forKey: cacheKey) {
+      return cached as String
+    }
+    return try await withCheckedThrowingContinuation { continuation in
+      if waiters[canonicalPath] != nil {
+        waiters[canonicalPath]?.append(continuation)
+      } else {
+        waiters[canonicalPath] = [continuation]
+        jobs.append(canonicalPath)
+      }
       scheduleNext()
     }
   }
@@ -479,12 +498,19 @@ private final class CommanderFileIconRequestQueue {
       scheduled = false
       return
     }
-    let job = jobs.removeFirst()
+    let path = jobs.removeFirst()
+    let continuations = waiters.removeValue(forKey: path) ?? []
     scheduled = false
     do {
-      job.continuation.resume(returning: try CommanderWebView.fileIconDataURL(for: job.path))
+      let dataURL = try renderer(path)
+      cache.setObject(
+        dataURL as NSString,
+        forKey: path as NSString,
+        cost: dataURL.lengthOfBytes(using: .utf8)
+      )
+      continuations.forEach { $0.resume(returning: dataURL) }
     } catch {
-      job.continuation.resume(throwing: error)
+      continuations.forEach { $0.resume(throwing: error) }
     }
     scheduleNext()
   }

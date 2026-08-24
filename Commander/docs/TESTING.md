@@ -5,7 +5,8 @@
 - [ ] Type a misspelling in the root launcher and confirm macOS does not show a correction/replacement popover.
 - [ ] Search for an application or path-backed file/folder and confirm its real Finder icon replaces the generic Commander glyph.
 - [ ] Run a broad query with at least 30 path-backed results, then move selection rapidly through the rows. Generic or
-      cached icons must paint immediately; Commander may resolve only the focused row's Finder icon at a time, and the
+      cached icons must paint immediately; every visible row must progressively receive its real Finder icon (selected
+      first) through the bounded queue. Rerun the query to confirm cached icons return without a bridge burst, and the
       macOS cursor must never become a rainbow beachball while visible results are already available.
 - [ ] Create a disposable file and folder beneath an indexed root, run Index Files Now and Index Directories Now,
       then verify both appear in root search with native icons, Open, Show in Finder, Copy Path, and Finder-compatible drag-out.

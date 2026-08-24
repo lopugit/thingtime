@@ -280,6 +280,30 @@ final class CommanderWebViewTests: XCTestCase {
     XCTAssertThrowsError(try CommanderWebView.fileIconDataURL(for: "relative/file.txt"))
   }
 
+  func testNativeFileIconQueueCoalescesAndCachesRepeatedPaths() async throws {
+    let file = FileManager.default.temporaryDirectory
+      .appendingPathComponent("commander-icon-cache-\(UUID().uuidString).txt")
+    XCTAssertTrue(FileManager.default.createFile(atPath: file.path, contents: Data("icon".utf8)))
+    defer { try? FileManager.default.removeItem(at: file) }
+
+    var renderedPaths: [String] = []
+    let queue = CommanderFileIconRequestQueue { path in
+      renderedPaths.append(path)
+      return "data:image/png;base64,Y2FjaGVk"
+    }
+
+    async let first = queue.dataURL(for: file.path)
+    async let duplicate = queue.dataURL(for: file.path)
+    let responses = try await (first, duplicate)
+    XCTAssertEqual(responses.0, "data:image/png;base64,Y2FjaGVk")
+    XCTAssertEqual(responses.1, "data:image/png;base64,Y2FjaGVk")
+    XCTAssertEqual(renderedPaths, [file.standardizedFileURL.path])
+
+    let cachedResponse = try await queue.dataURL(for: file.path)
+    XCTAssertEqual(cachedResponse, "data:image/png;base64,Y2FjaGVk")
+    XCTAssertEqual(renderedPaths.count, 1)
+  }
+
   func testPreparedFileDragKeepsLauncherVisibleUntilTheSessionEnds() throws {
     let ready = DaemonReady(
       type: "ready",
