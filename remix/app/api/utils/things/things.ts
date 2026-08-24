@@ -718,6 +718,9 @@ export const SCHEMA_RESERVED_ID_PREFIX = 'schema-';
 // reserve the prefix so a client can't pre-claim (and impersonate) a seeded
 // library component.
 export const COMPONENT_RESERVED_ID_PREFIX = 'component-';
+// Action seeds mint shareId `action-<slug>` the same way (and the executor
+// mints `action-run-<uuid>` run records under the same prefix).
+export const ACTION_RESERVED_ID_PREFIX = 'action-';
 // Subscription tier revisions and user assignments use deterministic ids so
 // historical links stay stable. They are protected control-plane destinations
 // and cannot be pre-claimed through generic Thing creation.
@@ -742,6 +745,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
     trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
     trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(COMPONENT_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(ACTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) ||

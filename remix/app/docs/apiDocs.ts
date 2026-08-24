@@ -8125,6 +8125,115 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'actions-run',
+    group: 'actions',
+    title: 'Run an action',
+    endpoint: '/api/v1/actions/run',
+    summary: 'Execute one action thing inside its declared capability + budget envelope.',
+    detail:
+      'The Action Thing executor: action things (thingtime ["action"]) are small declarative programs over a ' +
+      'closed operation vocabulary (things.create/get/search/update, actions.invoke, return) with typed inputs, ' +
+      'author-declared capabilities, and a limits envelope. Capabilities only NARROW — every operation delegates ' +
+      'to the ordinary things API as the signed-in caller, so ACL, quotas and schema validation always apply and ' +
+      'an action can never do something its invoker couldn’t do by hand. One budget (deadline, operation count, ' +
+      'depth, child actions, result bytes) is shared across the whole invocation including child actions.invoke ' +
+      'calls, so recursive chains terminate by construction. Every run lands a protected action-run thing ' +
+      '(targetId = the action) with a per-step trace; the response carries the same runId, status, result, ' +
+      'budget usage and trace.',
+    auth: {
+      mode: 'session',
+      description: 'Session cookie required. PATs and app tokens are default-denied in v1.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { action: "<shareId or your actionKey>", inputs: { ... } }.',
+      'Inputs are validated against the action’s typed descriptors (400 on mismatch).',
+      'The executor runs the steps inside the budget; refs like "$input.name" and "$step.1.id" substitute whole values.',
+      'Read status ("ok" | "error"), result, trace, and budget usage from the response.',
+      'Fetch history later via GET /api/v1/actions/runs?action=<id>.'
+    ],
+    requestExamples: [
+      {
+        name: 'Run create-customer',
+        description: 'Execute an action by its key with typed inputs.',
+        method: 'POST',
+        body: { action: 'create-customer', inputs: { name: 'Ada Lovelace', email: 'ada@example.com' } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Run completed (status may still be "error" if a step failed — the envelope is ok).',
+        body: {
+          ok: true,
+          runId: 'action-run-4f6a…',
+          status: 'ok',
+          actionId: 'abc123',
+          result: { id: 'thing456', schema: 'customer' },
+          durationMs: 482,
+          opsUsed: 2,
+          depthUsed: 0,
+          childActionsUsed: 0,
+          trace: [{ step: '1', op: 'things.create', ms: 41, target: 'thing456' }]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'actions-runs',
+    group: 'actions',
+    title: 'List action runs',
+    endpoint: '/api/v1/actions/runs',
+    summary: 'Your own action-run records, newest first — the inspectable audit trail.',
+    detail:
+      'action-run things are PROTECTED (executor-minted only, invisible to the generic thing reads), so run ' +
+      'history has this dedicated read model: the signed-in caller’s own runs, optionally filtered to one action ' +
+      'via action=<shareId>, newest first, limit ≤ 50. Each run carries status, startedAt, durationMs, budget ' +
+      'usage, a size-capped echo of the inputs and result, and the per-step trace the /actions inspector renders.',
+    auth: {
+      mode: 'session',
+      description: 'Session cookie required; you only ever see your own runs.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with optional action=<shareId> and limit (max 50).',
+      'Runs are newest-first; each entry links its actionId (targetId).',
+      'Handle 401 when signed out and 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Latest runs of one action',
+        description: 'The last 20 runs of a specific action.',
+        method: 'GET',
+        query: { action: 'abc123', limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Run history returned.',
+        body: {
+          ok: true,
+          runs: [
+            {
+              id: 'action-run-4f6a…',
+              actionId: 'abc123',
+              status: 'ok',
+              startedAt: '2026-08-24T10:00:00.000Z',
+              durationMs: 482,
+              opsUsed: 2,
+              error: null,
+              trace: [{ step: '1', op: 'things.create', ms: 41, target: 'thing456' }],
+              result: { id: 'thing456' },
+              inputs: { name: 'Ada Lovelace' },
+              createdAt: '2026-08-24T10:00:01.000Z'
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'components-browse',
     group: 'components',
     title: 'Browse UI components',
