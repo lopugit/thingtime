@@ -169,6 +169,31 @@ run-name: >-
       && format('Lopu manages promotion for source PR #{0}', inputs.promotion_source_pr)
       || github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
+      && inputs.review_only == true
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'github-actions'
+      && inputs.pr_number != ''
+      && inputs.branch == ''
+      && format('Lopu reviews PR #{0} from the control plane', inputs.pr_number)
+      || github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
+      && inputs.review_only == true
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'github-actions'
+      && inputs.pr_number == ''
+      && inputs.branch != ''
+      && format('Lopu reviews PRs matching {0} from the control plane', inputs.branch)
+      || github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
+      && inputs.review_only == true
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'github-actions'
+      && inputs.pr_number == ''
+      && inputs.branch == ''
+      && 'Lopu reviews all eligible PRs from the control plane'
+      || github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
+      && inputs.review_only != true
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
@@ -204,6 +229,11 @@ on:
         type: string
       detector_handoff:
         description: "Internal: exact-PR handoff to the github-actions resolver control plane (leave false)"
+        required: false
+        default: false
+        type: boolean
+      review_only:
+        description: "Internal: run Lopu's repository-level PR review without a conflict replay"
         required: false
         default: false
         type: boolean
@@ -298,6 +328,11 @@ on:
         required: false
         default: false
         type: boolean
+      review_only:
+        description: "Internal: run Lopu's repository-level PR review without a conflict replay"
+        required: false
+        default: false
+        type: boolean
       manual_retry:
         description: "Internal: carry a human explicit-selector retry through the trusted handoff"
         required: false
@@ -352,7 +387,8 @@ on:
 concurrency:
   # Distinct namespaces are load-bearing:
   #   resolve-detect-*   external/event/API-only detectors
-  #   resolve-pr<N>      one internal github-actions-control-plane worker per PR
+  #   resolve-pr<N>      one internal github-actions-control-plane resolver per PR
+  #   lopu-review-*      one batch review scope; model work is fleet-serialized
   # A human exact-PR detector therefore cannot cancel the worker it creates.
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
@@ -374,6 +410,17 @@ concurrency:
         && format('resolve-invalid-promotion-{0}', github.run_id)
         || github.event_name == 'workflow_dispatch'
         && inputs.detector_handoff == true
+        && inputs.review_only == true
+        && github.actor == 'github-actions[bot]'
+        && (github.ref_name == 'github-actions'
+           || github.workflow_ref
+           == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+           || github.workflow_ref
+           == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
+        && format('lopu-review-{0}', inputs.pr_number || inputs.branch || 'all')
+        || github.event_name == 'workflow_dispatch'
+        && inputs.detector_handoff == true
+        && inputs.review_only != true
         && github.actor == 'github-actions[bot]'
         && (github.ref_name == 'github-actions'
            || github.workflow_ref
@@ -420,8 +467,10 @@ concurrency:
                   && inputs.promotion_source_pr == ''
                   && inputs.promotion_plan_b64 == ''
                   && inputs.detector_handoff == true
-                  && inputs.pr_number != ''
-                  && inputs.branch == ''))) }}
+                  && ((inputs.review_only == true)
+                      || (inputs.review_only != true
+                          && inputs.pr_number != ''
+                          && inputs.branch == ''))))) }}
 
 permissions:
   contents: read
@@ -440,8 +489,10 @@ jobs:
       internal_worker: >-
         ${{ github.event_name == 'workflow_dispatch'
             && inputs.detector_handoff == true
-            && inputs.pr_number != ''
-            && inputs.branch == ''
+            && ((inputs.review_only == true)
+                || (inputs.review_only != true
+                    && inputs.pr_number != ''
+                    && inputs.branch == ''))
             && inputs.promotion_source_pr == ''
             && inputs.promotion_plan_b64 == '' }}
       pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.pull_request.number || '' }}
@@ -465,6 +516,7 @@ jobs:
       needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
+      && inputs.review_only != true
       && !(github.event_name == 'workflow_dispatch'
            && inputs.detector_handoff == true
            && github.actor == 'github-actions[bot]')
@@ -488,6 +540,7 @@ jobs:
       needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
+      && inputs.review_only != true
       && (github.event_name != 'push' || github.event.deleted == false)
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
@@ -1312,6 +1365,7 @@ jobs:
     needs: [route, detect]
     if: >-
       needs.detect.outputs.any == 'true'
+      && inputs.review_only != true
       && (github.event_name != 'workflow_dispatch'
           || inputs.detector_handoff != true
           || github.actor != 'github-actions[bot]'
@@ -1374,6 +1428,148 @@ jobs:
                   --input -
           done < <(jq -r '.[] | @base64' <<<"$PRS")
 
+  review_detect:
+    name: Find PRs for Lopu repository review
+    needs: route
+    # Reviews run when a PR is opened, its head/base moves, or an operator asks
+    # for a selector. The scheduled conflict backstop deliberately does not
+    # re-review unchanged clean PRs over and over.
+    if: >-
+      needs.route.outputs.execute == 'true'
+      && inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && inputs.review_only != true
+      && github.event_name != 'schedule'
+      && (github.event_name != 'push' || github.event.deleted == false)
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      any: ${{ steps.scan.outputs.any }}
+      pr_number: ${{ steps.scan.outputs.pr_number }}
+      branch: ${{ steps.scan.outputs.branch }}
+    steps:
+      - name: Select one Lopu review scope
+        id: scan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref_name }}
+          SELECTED_PR: ${{ inputs.pr_number || github.event.pull_request.number || github.event.client_payload.pr_number || '' }}
+          SELECTED_BRANCH: ${{ inputs.branch || github.event.client_payload.branch || github.event.pull_request.base.ref || '' }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$SELECTED_PR" ] && ! [[ "$SELECTED_PR" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::A Lopu review selector must use a positive pull-request number."
+            exit 1
+          fi
+
+          open="$(gh pr list --repo "$REPO" --state open --limit 500 \
+            --json number,headRefName,baseRefName,headRefOid,isCrossRepository,isDraft,mergeable,labels)"
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          if [ -n "$SELECTED_PR" ]; then
+            candidates="$(jq -c --argjson number "$SELECTED_PR" '[.[] | select(.number == $number)]' <<<"$open")"
+          elif [ "$EVENT_NAME" = push ] && [ "$EVENT_REF" != github-actions ]; then
+            candidates="$(jq -c --arg branch "$EVENT_REF" '[.[] | select(.baseRefName == $branch or .headRefName == $branch)]' <<<"$open")"
+          elif [ -n "$SELECTED_BRANCH" ]; then
+            candidates="$(jq -c --arg branch "$SELECTED_BRANCH" '[.[] | select(.baseRefName == $branch or .headRefName == $branch)]' <<<"$open")"
+          else
+            candidates="$open"
+          fi
+          candidates="$(jq -c --arg default_ref "$default_ref" '
+            [.[]
+              | select(.isCrossRepository | not)
+              | select(.isDraft | not)
+              | select(.headRefName != $default_ref)
+              | select(.mergeable != "CONFLICTING")
+              | select([.labels[].name] | index("no-lopu-review") == null)
+              | select([.labels[].name] | index("promotion") == null)
+              | select([.labels[].name] | index("ai-rebase-in-progress") == null)
+              | select([.labels[].name] | index("ai-merge-paused") == null)]
+          ' <<<"$candidates")"
+          count="$(jq 'length' <<<"$candidates")"
+          if [ "$count" -eq 0 ]; then
+            echo 'No eligible same-repository PR needs a Lopu review in this event scope.'
+            echo 'any=false' >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Lopu will review $count PR(s) in one serialized session:"
+          jq -r '.[] | "  #\(.number) \(.headRefName) -> \(.baseRefName)"' <<<"$candidates"
+          echo 'any=true' >>"$GITHUB_OUTPUT"
+          if [ -n "$SELECTED_PR" ]; then
+            echo "pr_number=$SELECTED_PR" >>"$GITHUB_OUTPUT"
+            echo 'branch=' >>"$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = push ] && [ "$EVENT_REF" != github-actions ]; then
+            echo 'pr_number=' >>"$GITHUB_OUTPUT"
+            echo "branch=$EVENT_REF" >>"$GITHUB_OUTPUT"
+          elif [ -n "$SELECTED_BRANCH" ]; then
+            echo 'pr_number=' >>"$GITHUB_OUTPUT"
+            echo "branch=$SELECTED_BRANCH" >>"$GITHUB_OUTPUT"
+          else
+            echo 'pr_number=' >>"$GITHUB_OUTPUT"
+            echo 'branch=' >>"$GITHUB_OUTPUT"
+          fi
+
+  review_handoff:
+    name: Hand off one Lopu repository review session
+    needs: [route, review_detect]
+    if: >-
+      needs.review_detect.outputs.any == 'true'
+      && !(github.event_name == 'workflow_dispatch'
+           && inputs.detector_handoff == true
+           && inputs.review_only == true
+           && github.actor == 'github-actions[bot]'
+           && github.ref_name == 'github-actions')
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the single serialized Lopu review worker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.review_detect.outputs.pr_number }}
+          BRANCH: ${{ needs.review_detect.outputs.branch }}
+          EXECUTION_PROVIDER: ${{ needs.route.outputs.execution_provider || 'github-actions' }}
+          RUNNER_LABEL: ${{ needs.route.outputs.runner_label || '' }}
+          CONTROL_DISPATCH_ID: ${{ needs.route.outputs.control_dispatch_id || '' }}
+          ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
+          ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg pr_number "$PR_NUMBER" \
+            --arg branch "$BRANCH" \
+            --arg execution_provider "$EXECUTION_PROVIDER" \
+            --arg runner_label "$RUNNER_LABEL" \
+            --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
+            --arg routing_proof "$ROUTING_PROOF" \
+            --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" '
+              {
+                ref:"github-actions",
+                inputs:{
+                  pr_number:$pr_number,
+                  branch:$branch,
+                  detector_handoff:true,
+                  review_only:true,
+                  manual_retry:false,
+                  depth:"0",
+                  execution_provider:$execution_provider,
+                  runner_label:$runner_label,
+                  control_dispatch_id:$control_dispatch_id,
+                  routing_proof:$routing_proof,
+                  routing_proof_issued_at:$routing_proof_issued_at
+                }
+              }
+            ' | gh api --method POST \
+              "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+              --input -
+
   model_config:
     name: Load the conflict-resolver model waterfall
     needs: [route, detect, promotion_validate]
@@ -1394,8 +1590,14 @@ jobs:
            && inputs.promotion_source_pr == ''
            && inputs.promotion_plan_b64 == ''
            && inputs.detector_handoff == true
+           && inputs.review_only != true
            && inputs.pr_number != ''
            && inputs.branch == '')
+          || (github.actor == 'github-actions[bot]'
+              && inputs.promotion_source_pr == ''
+              && inputs.promotion_plan_b64 == ''
+              && inputs.detector_handoff == true
+              && inputs.review_only == true)
           || (needs.promotion_validate.result == 'success'
               && needs.promotion_validate.outputs.ready == 'true'
               && github.actor == 'github-actions[bot]'
@@ -1413,6 +1615,7 @@ jobs:
     outputs:
       model_args: ${{ steps.waterfall.outputs.model_args }}
       primary_model: ${{ steps.waterfall.outputs.primary_model }}
+      backend_label: ${{ steps.waterfall.outputs.backend_label }}
     steps:
       - name: Fetch and validate the configured waterfall
         id: waterfall
@@ -1493,6 +1696,11 @@ jobs:
           done
 
           primary="${models[0]}"
+          case "$primary" in
+            claude-fable-5) backend_label="Claude Fable 5 Max Fast" ;;
+            claude-opus-5) backend_label="Claude Opus 5" ;;
+            *) backend_label="Claude Code default" ;;
+          esac
           model_args="--model $primary"
           if [ "${#models[@]}" -gt 1 ]; then
             fallbacks="$(IFS=,; echo "${models[*]:1}")"
@@ -1505,6 +1713,408 @@ jobs:
           echo "A model that completes but leaves conflict markers does not mechanically trigger the next model."
           echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
           echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
+          echo "backend_label=$backend_label" >> "$GITHUB_OUTPUT"
+
+  # Clean PRs still need a principal-engineering review. This batch worker is
+  # intentionally reached through the same fixed control plane as conflict
+  # resolution: one Lopu session receives every PR selected by one source
+  # event, then reasons over each complete head/base worktree before deciding
+  # whether a change is warranted. The fleet concurrency lock below ensures
+  # that a develop push affecting many PRs creates one active Lopu, not a
+  # parallel model per PR.
+  review:
+    name: Lopu reviews selected PRs
+    needs: [route, review_detect, promotion_validate, model_config]
+    if: >-
+      always()
+      && !cancelled()
+      && needs.route.result == 'success'
+      && needs.model_config.result == 'success'
+      && github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
+      && inputs.review_only == true
+      && inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && github.actor == 'github-actions[bot]'
+      && (github.ref_name == 'github-actions'
+         || github.workflow_ref
+         == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+         || github.workflow_ref
+         == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
+    timeout-minutes: 360
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      issues: write
+    concurrency:
+      group: lopu-agent-fleet-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      REPO: ${{ github.repository }}
+      SELECTED_PR: ${{ inputs.pr_number }}
+      SELECTED_BRANCH: ${{ inputs.branch }}
+      MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
+      BACKEND_LABEL: ${{ needs.model_config.outputs.backend_label }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      GIT_CONFIG_COUNT: "2"
+      GIT_CONFIG_KEY_0: core.hooksPath
+      GIT_CONFIG_VALUE_0: /dev/null
+      GIT_CONFIG_KEY_1: core.fsmonitor
+      GIT_CONFIG_VALUE_1: "false"
+      GIT_CONFIG_GLOBAL: /dev/null
+      GIT_CONFIG_SYSTEM: /dev/null
+    steps:
+      - name: Check out the fixed trusted github-actions control plane
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          fetch-depth: 0
+          persist-credentials: false
+          path: trusted
+          set-safe-directory: false
+
+      - name: Prepare complete PR worktrees for one Lopu review session
+        id: prepare
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FETCH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$SELECTED_PR" ] && ! [[ "$SELECTED_PR" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Internal Lopu review handoff has an invalid PR number."
+            exit 1
+          fi
+          if [ -n "$SELECTED_BRANCH" ] \
+             && ! git check-ref-format "refs/heads/$SELECTED_BRANCH" >/dev/null 2>&1; then
+            echo "::error::Internal Lopu review handoff has an invalid branch selector."
+            exit 1
+          fi
+
+          review_root="$RUNNER_TEMP/lopu-review-worktrees"
+          manifest="$RUNNER_TEMP/lopu-review-manifest.json"
+          rm -rf "$review_root"
+          mkdir -p "$review_root" "$RUNNER_TEMP/lopu-review-reports"
+          printf '[]\n' >"$manifest"
+
+          open="$(gh pr list --repo "$REPO" --state open --limit 500 \
+            --json number,headRefName,baseRefName,headRefOid,baseRefOid,isCrossRepository,isDraft,mergeable,labels)"
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          if [ -n "$SELECTED_PR" ]; then
+            candidates="$(jq -c --argjson number "$SELECTED_PR" '[.[] | select(.number == $number)]' <<<"$open")"
+          elif [ -n "$SELECTED_BRANCH" ]; then
+            candidates="$(jq -c --arg branch "$SELECTED_BRANCH" '[.[] | select(.baseRefName == $branch or .headRefName == $branch)]' <<<"$open")"
+          else
+            candidates="$open"
+          fi
+          candidates="$(jq -c --arg default_ref "$default_ref" '
+            [.[]
+              | select(.isCrossRepository | not)
+              | select(.isDraft | not)
+              | select(.headRefName != $default_ref)
+              | select(.mergeable != "CONFLICTING")
+              | select([.labels[].name] | index("no-lopu-review") == null)
+              | select([.labels[].name] | index("promotion") == null)
+              | select([.labels[].name] | index("ai-rebase-in-progress") == null)
+              | select([.labels[].name] | index("ai-merge-paused") == null)]
+          ' <<<"$candidates")"
+          if [ "$(jq 'length' <<<"$candidates")" -eq 0 ]; then
+            echo 'No eligible same-repository PR remains in this Lopu review scope.'
+            {
+              echo 'any=false'
+              echo "manifest=$manifest"
+            } >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          basic="$(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)"
+          fetch_ref() {
+            local ref="$1"
+            GIT_CONFIG_COUNT=3 \
+            GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
+            GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false \
+            GIT_CONFIG_KEY_2=http.https://github.com/.extraheader \
+            GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $basic" \
+              git -C "$GITHUB_WORKSPACE/trusted" fetch -q --no-tags --force \
+                "https://github.com/$REPO.git" \
+                "+refs/heads/$ref:refs/remotes/origin/$ref"
+          }
+
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            candidate="$(base64 --decode <<<"$encoded")"
+            number="$(jq -r '.number' <<<"$candidate")"
+            head="$(jq -r '.headRefName' <<<"$candidate")"
+            base="$(jq -r '.baseRefName' <<<"$candidate")"
+            git check-ref-format "refs/heads/$head" >/dev/null 2>&1 \
+              || { echo "::error::PR #$number returned an invalid head ref."; exit 1; }
+            git check-ref-format "refs/heads/$base" >/dev/null 2>&1 \
+              || { echo "::error::PR #$number returned an invalid base ref."; exit 1; }
+            fetch_ref "$base"
+            fetch_ref "$head"
+            base_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$base^{commit}")"
+            head_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$head^{commit}")"
+            worktree="$review_root/$number"
+            git -C "$GITHUB_WORKSPACE/trusted" worktree add --detach --quiet "$worktree" "$head_sha"
+            record="$(jq -cn \
+              --argjson number "$number" \
+              --arg head "$head" \
+              --arg base "$base" \
+              --arg head_sha "$head_sha" \
+              --arg base_sha "$base_sha" \
+              --arg path "$worktree" \
+              '{number:$number,head:$head,base:$base,head_sha:$head_sha,base_sha:$base_sha,path:$path}')"
+            jq -c --argjson record "$record" '. + [$record]' "$manifest" >"$manifest.next"
+            mv "$manifest.next" "$manifest"
+          done < <(jq -r '.[] | @base64' <<<"$candidates")
+          unset basic FETCH_TOKEN
+
+          count="$(jq 'length' "$manifest")"
+          echo "Lopu prepared $count complete PR worktree(s) for one repository review session."
+          jq -r '.[] | "  #\(.number) \(.head) -> \(.base): \(.path)"' "$manifest"
+          {
+            echo 'any=true'
+            echo "count=$count"
+            echo "manifest=$manifest"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Require an AI credential
+        if: steps.prepare.outputs.any == 'true'
+        env:
+          HAS_AI_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          [ "$HAS_AI_CREDENTIAL" = true ] \
+            || { echo "::error::Add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN to enable Lopu's configured Claude backend."; exit 1; }
+
+      - name: Review the repository and improve selected PRs as Lopu
+        id: lopu_review
+        if: steps.prepare.outputs.any == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          allowed_bots: "github-actions"
+          prompt: |
+            You are Lopu, Thingtime's principal developer, PR manager, and
+            repository steward. You have full repository, shell, GitHub, and
+            web-tool access. Complete a thoughtful engineering review for every
+            candidate described in `$RUNNER_TEMP/lopu-review-manifest.json`.
+
+            The manifest gives each PR's number, exact head/base SHAs, and a
+            complete working directory under `$RUNNER_TEMP/lopu-review-worktrees`.
+            For every candidate, `cd` into its worktree and compare its full head
+            against its target base. Inspect relevant architecture, repository
+            direction, project docs, Graphify output when useful, related GitHub
+            history/PRs, tests, and operational conventions before deciding what to
+            do. Review for correctness, security, crashes, performance, data/API
+            compatibility, test coverage, and maintainability before style.
+
+            Lopu owns the decision: make only changes that are genuinely justified
+            by that understanding, but do make those changes directly in the PR
+            worktree. You may inspect or edit any repository path. Run the focused
+            validation that best demonstrates each change. Do not make speculative
+            churn just to create a commit.
+
+            These worktrees start detached at immutable PR heads. Do not merge,
+            rebase, delete branches, or push target/default branches. Leave any
+            desired PR fixes as normal uncommitted worktree changes; the following
+            trusted Lopu step will create a bot-authored commit and push only back
+            to that PR's exact head branch after checking its current lease.
+
+            For every reviewed PR, write a concise Markdown report to
+            `$RUNNER_TEMP/lopu-review-reports/<PR_NUMBER>.md`: summarize what you
+            compared, key findings, every change you made (or why none was needed),
+            and validation run/results. Never place secrets, tokens, or private
+            values in the report. The report is Lopu's reviewer update to the PR.
+          claude_args: |
+            ${{ needs.model_config.outputs.model_args }}
+            --effort max
+            --max-turns 500
+            --dangerously-skip-permissions
+            --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
+
+      - name: Continue the exact Lopu repository-review session until it finishes
+        if: steps.prepare.outputs.any == 'true' && steps.lopu_review.outcome == 'failure'
+        continue-on-error: true
+        shell: bash
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
+        run: |
+          set -euo pipefail
+
+          classify_output() {
+            node - "$1" <<'NODE'
+          const fs = require('node:fs');
+          let parsed;
+          try { parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); }
+          catch { process.stdout.write('invalid\t\n'); process.exit(0); }
+          const messages = Array.isArray(parsed) ? parsed : [parsed];
+          const result = [...messages].reverse().find((message) => message?.type === 'result');
+          const init = messages.find((message) => message?.type === 'system' && message?.subtype === 'init');
+          let subtype = typeof result?.subtype === 'string' ? result.subtype : 'invalid';
+          if (result?.is_error === true && subtype === 'success') subtype = 'error_result';
+          let session = typeof result?.session_id === 'string' ? result.session_id : typeof init?.session_id === 'string' ? init.session_id : '';
+          if (!/^[a-z0-9_]+$/.test(subtype)) subtype = 'invalid';
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(session)) session = '';
+          process.stdout.write(`${subtype}\t${session}\n`);
+          NODE
+          }
+          read_classification() {
+            local classification
+            classification="$(classify_output "$1")"
+            RESULT_SUBTYPE="${classification%%$'\t'*}"
+            RESULT_SESSION="${classification#*$'\t'}"
+          }
+
+          read_classification "$RUNNER_TEMP/claude-execution-output.json"
+          if [ "$RESULT_SUBTYPE" != error_max_turns ] || [ -z "$RESULT_SESSION" ]; then
+            echo "::warning::Lopu repository review stopped with subtype $RESULT_SUBTYPE; no unrelated retry was sent."
+            exit 1
+          fi
+          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-fable-5|claude-opus-5)(\ --fallback-model\ (default|claude-fable-5|claude-opus-5)(,(default|claude-fable-5|claude-opus-5))*)?$ ]] || {
+            echo "::warning::The Lopu review model handoff no longer matches its closed argument grammar."
+            exit 1
+          }
+          IFS=' ' read -r -a model_args <<<"$MODEL_ARGS"
+          session_id="$RESULT_SESSION"
+          continuation=0
+          while true; do
+            continuation=$((continuation + 1))
+            echo "Lopu reached 500 turns; resuming exact repository-review session $session_id (continuation $continuation)."
+            output="$RUNNER_TEMP/thingtime-lopu-review-continuation.json"
+            stderr="$RUNNER_TEMP/thingtime-lopu-review-continuation.stderr"
+            status=0
+            claude --resume "$session_id" --print \
+              "Continue Lopu's repository-review task from this exact session. Finish the review and reports for every candidate in the original manifest, retaining the original task objective and full repository access." \
+              "${model_args[@]}" \
+              --effort max \
+              --max-turns 500 \
+              --output-format json \
+              --dangerously-skip-permissions \
+              --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch" \
+              >"$output" 2>"$stderr" || status=$?
+            read_classification "$output"
+            if (( status == 0 )) && [ "$RESULT_SUBTYPE" = success ]; then
+              echo "Lopu completed exact repository-review session $session_id after $continuation continuation request(s)."
+              break
+            fi
+            if [ "$RESULT_SUBTYPE" != error_max_turns ] || [ -z "$RESULT_SESSION" ]; then
+              echo "::warning::Lopu repository-review continuation stopped with subtype $RESULT_SUBTYPE (exit $status); private output was withheld."
+              exit 1
+            fi
+            session_id="$RESULT_SESSION"
+          done
+
+      - name: Commit and push Lopu's justified PR improvements
+        id: publish
+        if: steps.prepare.outputs.any == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUSH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          MANIFEST: ${{ steps.prepare.outputs.manifest }}
+        run: |
+          set -euo pipefail
+
+          results="$RUNNER_TEMP/lopu-review-results.json"
+          printf '[]\n' >"$results"
+          basic="$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)"
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            record="$(base64 --decode <<<"$encoded")"
+            number="$(jq -r '.number' <<<"$record")"
+            head="$(jq -r '.head' <<<"$record")"
+            initial_head="$(jq -r '.head_sha' <<<"$record")"
+            worktree="$(jq -r '.path' <<<"$record")"
+            git -C "$worktree" diff --check
+            git -C "$worktree" config user.name 'Lopu'
+            git -C "$worktree" config user.email 'lopu[bot]@users.noreply.github.com'
+            git -C "$worktree" add -A
+            if ! git -C "$worktree" diff --cached --quiet; then
+              git -C "$worktree" commit -m 'chore(lopu): apply repository review improvements'
+            fi
+            local_head="$(git -C "$worktree" rev-parse HEAD)"
+            remote_head="$(gh api "repos/$REPO/git/ref/heads/$(jq -rn --arg value "$head" '$value | @uri')" --jq '.object.sha')"
+            outcome='no-change'
+            if [ "$remote_head" = "$local_head" ]; then
+              if [ "$local_head" != "$initial_head" ]; then outcome='already-published'; fi
+            elif [ "$remote_head" != "$initial_head" ]; then
+              outcome='newer-head-kept'
+              echo "::warning::PR #$number head moved during Lopu review; preserving the newer remote branch."
+            elif [ "$local_head" != "$initial_head" ]; then
+              GIT_CONFIG_COUNT=3 \
+              GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
+              GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false \
+              GIT_CONFIG_KEY_2=http.https://github.com/.extraheader \
+              GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $basic" \
+                git -C "$worktree" push --force-with-lease="refs/heads/$head:$initial_head" \
+                  "https://github.com/$REPO.git" "HEAD:refs/heads/$head"
+              outcome='pushed'
+            fi
+            entry="$(jq -cn --argjson number "$number" --arg outcome "$outcome" --arg head "$head" --arg sha "$local_head" \
+              '{number:$number,outcome:$outcome,head:$head,sha:$sha}')"
+            jq -c --argjson entry "$entry" '. + [$entry]' "$results" >"$results.next"
+            mv "$results.next" "$results"
+          done < <(jq -r '.[] | @base64' "$MANIFEST")
+          unset basic PUSH_TOKEN
+          echo "results=$results" >>"$GITHUB_OUTPUT"
+
+      - name: Publish Lopu's PR review updates
+        if: always() && steps.prepare.outputs.any == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANIFEST: ${{ steps.prepare.outputs.manifest }}
+          RESULTS: ${{ steps.publish.outputs.results }}
+        run: |
+          set -euo pipefail
+          marker='<!-- thingtime-lopu-review:v1 -->'
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            record="$(base64 --decode <<<"$encoded")"
+            number="$(jq -r ".number" <<<"$record")"
+            head="$(jq -r ".head" <<<"$record")"
+            result="$(jq -c --argjson number "$number" ".[] | select(.number == \$number)" "$RESULTS" 2>/dev/null || true)"
+            outcome="$(jq -r ".outcome // \"review-complete\"" <<<"$result")"
+            sha="$(jq -r ".sha // \"unchanged\"" <<<"$result")"
+            report="$RUNNER_TEMP/lopu-review-reports/$number.md"
+            body="$RUNNER_TEMP/lopu-review-comment-$number.md"
+            {
+              echo '## Lopu repository review'
+              echo
+              printf 'Lopu reviewed this PR against %s as Thingtime\047s principal PR and repository manager. Backend: **%s**.\n\n' "$(jq -r ".base" <<<"$record")" "${BACKEND_LABEL:-Claude Code default}"
+              case "$outcome" in
+                pushed) printf 'Lopu made justified improvements and pushed %s to %s.\n' "$sha" "$head" ;;
+                already-published) printf 'Lopu\047s reviewed changes are already present at %s.\n' "$sha" ;;
+                newer-head-kept) echo 'The PR head moved during review, so Lopu preserved the newer branch and did not overwrite it.' ;;
+                *) echo 'Lopu found no justified local change to publish from this review pass.' ;;
+              esac
+              echo
+              if [ -s "$report" ]; then
+                sed -n '1,240p' "$report"
+              else
+                echo '_The model did not leave a detailed report; inspect this workflow run for the Lopu session log._'
+              fi
+              echo
+              printf '[View Lopu workflow run](%s)\n\n%s\n' "$RUN_URL" "$marker"
+            } >"$body"
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp \
+              | jq -r "add // [] | [.[] | select(.user.login == \"github-actions[bot]\") | select(.body | contains(\"thingtime-lopu-review:v1\")) | .id] | last // empty")"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
+            fi
+          done < <(jq -r ".[] | @base64" "$MANIFEST")
+
   resolve_promotion:
     name: "Resolve promotion for source PR #${{ inputs.promotion_source_pr }}"
     needs: [promotion_validate, model_config]
@@ -3042,6 +3652,7 @@ jobs:
       && needs.detect.outputs.any == 'true'
       && github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
+      && inputs.review_only != true
       && github.actor == 'github-actions[bot]'
       && (github.ref_name == 'github-actions'
          || github.workflow_ref

@@ -34,6 +34,11 @@ assert.match(workflow, /^name: Lopu PR manager$/m);
 assert.match(workflow, /manage_rebases:/);
 assert.match(workflow, /uses: \.\/\.github\/workflows\/rebase-pr-stacks\.yml/);
 assert.match(workflow, /name: Lopu scans rebases and stack cascades/);
+assert.match(workflow, /review_detect:/);
+assert.match(workflow, /review_handoff:/);
+assert.match(workflow, /review:\s+name: Lopu reviews selected PRs/);
+assert.match(workflow, /review_only:true/);
+assert.match(workflow, /Lopu prepared \$count complete PR worktree\(s\) for one repository review session/);
 assert.match(
   workflow,
   /manage_rebases:[\s\S]*?permissions:\s+actions: write\s+contents: write\s+pull-requests: write\s+issues: write/,

@@ -2174,7 +2174,7 @@ function pathspecAuthorityIntegrationTest(assert) {
       "add", "--", literalPathspec("normal.txt"), literalPathspec("critical.txt"),
       literalPathspec(literalExclude), literalPathspec(leadingSpace), literalPathspec(trailingSpace),
     ]);
-    testGit(["commit", "-m", "PROMOTION-QUARANTINE-SOURCE-SENTINEL"]);
+    testGit(["commit", "-m", "PROMOTION-FULL-ACCESS-SOURCE-SENTINEL"]);
     const sourceCommit = testGit(["rev-parse", "HEAD"]);
 
     // Only the ordinary critical path is later removed. If the literal
