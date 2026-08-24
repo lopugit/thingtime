@@ -1060,24 +1060,35 @@ is fixed, and cite the checklist you ran in the PR description.
 ## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
 
 - [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
-      returns the public key, ordered waterfall, and curated model catalog;
-      `POST` returns 401. A signed-in non-admin `POST` returns 403, while an
-      admin can save a valid reordered waterfall.
+      returns the public key, ordered waterfall, and the base-model catalog
+      with per-model `provider`, `efforts`, and `speeds`; `POST` returns 401.
+      A signed-in non-admin `POST` returns 403, while an admin can save a
+      valid reordered waterfall.
 - [ ] Settings → Admin paints the last-known waterfall immediately, then
-      reconciles in the background. Add Fable 5 and Opus 5, drag a row by its
-      dedicated handle, use the Up/Down controls, remove a non-default row,
-      save, reload, and confirm the exact order persists. `default` stays
-      present and cannot be removed.
+      reconciles in the background. Via the Add-fallback picker, add a Claude
+      model with an explicit effort, an OpenAI model with effort + Fast, and
+      at least five total entries (more than the historical 3-entry cap);
+      drag a row by its dedicated handle, use the Up/Down controls, remove a
+      non-default row, save, reload, and confirm the exact order persists.
+      `default` stays present and cannot be removed. The effort select only
+      offers that model's tiers and the speed select only appears for models
+      with a fast lane; re-adding an already-listed combo is blocked.
 - [ ] Exercise the editor at desktop and mobile widths from the top to the
-      bottom of `/settings`: model names, Max-effort badges, handles, fallback
-      copy, and save/add/remove controls never clip, overlap, or create
-      horizontal scrolling.
-- [ ] Resolver workflow config parsing accepts only `default`,
-      `claude-fable-5`, and `claude-opus-5`, preserves their public order, and
-      appends `default` defensively. An unavailable endpoint, malformed JSON,
-      duplicate/unknown model, wrong key, or empty array emits a warning and
-      selects only `--model default`; no stored value can inject another CLI
-      flag.
+      bottom of `/settings`: model names, provider/effort/speed subtitles,
+      handles, the add-fallback picker row, and save/add/remove controls
+      never clip, overlap, or create horizontal scrolling.
+- [ ] Composed variant ids (`<model>[:<effort>][:fast]`) validate per model:
+      efforts a model does not support, `fast` on a model without a fast
+      lane, and duplicate segments are rejected on write; reads drop unknown
+      entries without discarding the rest of the order and always keep
+      `default` present.
+- [ ] Resolver workflow config parsing in the `github-actions` control plane
+      still accepts only bare `default`, `claude-fable-5`, and
+      `claude-opus-5` until it is upgraded for the expanded catalog: any
+      other saved entry makes the workflow fail closed with a warning and
+      only `--model default`. Preserved legacy orders keep their public
+      order, append `default` defensively, and no stored value can inject
+      another CLI flag.
 - [ ] Save a new Admin order, then issue GETs through separate warm app
       instances immediately (no 15-second wait): both must read the new
       home-DB value. With Mongo unavailable, a warm instance may return its
@@ -1092,13 +1103,20 @@ is fixed, and cite the checklist you ran in the PR description.
       --self-test` in the `github-actions` control plane to prove both the
       delegated callers and every AI runtime remain bound to the contract.
 - [ ] Request an AI-backed Lopu musing with an Anthropic key and confirm its
-      Anthropic request uses the same current Admin primary. Reorder from Opus
-      to Fable without restarting the app; the next musing must use Fable.
+      Anthropic request uses the first Anthropic-capable Admin entry — model
+      plus any explicit effort (`output_config.effort`) and fast mode.
+      Reorder from Opus to Fable without restarting the app; the next musing
+      must use Fable. An OpenAI entry ordered above the Claude entry must not
+      change the Anthropic request.
 - [ ] Put `default` first and request an Anthropic-backed Lopu musing. It must
       use the provider-valid `LOPU_CLAUDE_MODEL` fallback, never send the
-      literal Claude Code `default` sentinel to Anthropic. With OpenAI first,
-      the OpenAI call must retain `LOPU_OPENAI_MODEL`; if it falls through to
-      Claude, that Claude call must still resolve the current Admin preference.
+      literal Claude Code `default` sentinel to Anthropic. With
+      `LOPU_PROVIDER=openai` and an OpenAI entry configured, the OpenAI call
+      must use that entry's model/`reasoning_effort`/priority tier; with no
+      OpenAI entry above `default` it must retain `LOPU_OPENAI_MODEL`. If it
+      falls through to Claude, that Claude call must still resolve the
+      current Admin preference. A rejected effort/fast knob retries once bare
+      on the same model before the provider is skipped.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently

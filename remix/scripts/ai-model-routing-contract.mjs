@@ -38,15 +38,21 @@ assert.deepEqual(
 // TT_MODERATION_MODEL is only the provider default for the 'default' slot.
 const moderation = readFileSync(join(remixRoot, 'app/api/utils/moderation/claudeProvider.ts'), 'utf8');
 assert.match(moderation, /getAiPreferredModelWaterfall/);
-assert.match(moderation, /resolveAiPreferredClaudeModel/);
-assert.match(moderation, /resolveAiPreferredClaudeModel\(await getAiPreferredModelWaterfall\(\), providerDefaultModel\)/);
+assert.match(moderation, /resolveAiPreferredAnthropicChoice/);
+assert.match(moderation, /resolveAiPreferredAnthropicChoice\(await getAiPreferredModelWaterfall\(\), providerDefaultModel\)/);
 assert.doesNotMatch(moderation, /model:\s*env\.TT_MODERATION_MODEL/);
 
+// Lopu musings resolve BOTH provider preferences from one waterfall read:
+// Claude runs the first Anthropic-capable entry, ChatGPT the first OpenAI
+// entry; LOPU_*_MODEL env values are only the 'default'-slot fallbacks.
 const musing = readFileSync(join(remixRoot, directClientFiles[0]), 'utf8');
 assert.match(musing, /getAiPreferredModelWaterfall/);
-assert.match(musing, /resolveAiPreferredClaudeModel/);
-assert.match(musing, /streamClaude\(SYSTEM_PROMPT, user, await getLopuClaudeModel\(\)\)/);
+assert.match(musing, /resolveAiPreferredAnthropicChoice/);
+assert.match(musing, /resolveAiPreferredOpenAiChoice/);
+assert.match(musing, /streamClaude\(SYSTEM_PROMPT, user, choices\.claude\)/);
+assert.match(musing, /streamOpenAI\(SYSTEM_PROMPT, user, choices\.openai\)/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_CLAUDE_MODEL/);
+assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_OPENAI_MODEL/);
 
 // This developer-only helper intentionally targets the local Codex proxy. It
 // is not a Thingtime runtime and cannot consume Claude model aliases; pin the
