@@ -706,6 +706,16 @@ jobs:
             jq -e 'index("ai-merge-paused") != null' >/dev/null <<<"$labels" \
               && merge_paused=true
 
+            # This label is a user-controlled hard stop shared by both AI
+            # automations. Never clear, recover, or supersede it: a user must
+            # remove it before a rebase detector or worker may proceed.
+            if [ "$merge_paused" = true ]; then
+              echo "Skipping #$number: user-controlled ai-merge-paused is present."
+              release_recovered_lock
+              [ "$stack_member" != true ] || add_barrier
+              continue
+            fi
+
             # Both answers are required for every candidate: a real stack with
             # M=false/R=true still belongs to this workflow and needs a clean
             # history replay. Standalone automatic candidates never do.
@@ -759,24 +769,10 @@ jobs:
                  && ! remove_label_verified ai-rebase-paused; then
                 label_cleanup_failed=true
               fi
-              if [ "$merge_paused" = true ] \
-                 && ! remove_label_verified ai-merge-paused; then
-                label_cleanup_failed=true
-              fi
               if [ "$stack_member" = true ] && [ "$no_ai_rebase" = true ] \
                  && [ "$rebaseable" = false ]; then
                 add_barrier
               fi
-              continue
-            fi
-
-            # Rebase ownership supersedes only the opposing PAUSE, never a
-            # fresh in-progress mutex (handled above). Verify its removal so
-            # a stale merge hold cannot survive a successful rebase.
-            if [ "$merge_paused" = true ] \
-               && ! remove_label_verified ai-merge-paused; then
-              label_cleanup_failed=true
-              add_barrier
               continue
             fi
 
@@ -1168,8 +1164,7 @@ jobs:
           fi
 
           if jq -e 'index("ai-merge-paused") != null' >/dev/null <<<"$labels"; then
-            remove_label ai-merge-paused \
-              || { echo "::error::Could not clear stale ai-merge-paused after proving rebase ownership."; exit 1; }
+            skip "ai-merge-paused is user-controlled; a user must remove it before an AI rebase may run."
           fi
           if jq -e 'index("ai-rebase-paused") != null' >/dev/null <<<"$labels"; then
             if [ "$MANUAL" = true ]; then
@@ -2751,9 +2746,6 @@ jobs:
           fi
 
           if [ "$rebase_owned" = true ]; then
-            gh api --method DELETE \
-              "repos/$REPO/issues/$PR_NUMBER/labels/ai-merge-paused" \
-              >/dev/null 2>&1 || true
             merge_pause_absent="$(gh api "repos/$REPO/issues/$PR_NUMBER" \
               --jq '[.labels[].name] | index("ai-merge-paused") == null' \
               2>/dev/null || true)"
@@ -2778,7 +2770,7 @@ jobs:
                 echo "::warning::Could not apply ai-rebase-paused."
               fi
             else
-              echo "::warning::Could not clear opposing ai-merge-paused, so no rebase pause was applied."
+              echo "::notice::A user-controlled ai-merge-paused label is present, so no automation label was changed."
             fi
           else
             gh api --method DELETE \

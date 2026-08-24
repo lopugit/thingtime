@@ -1,16 +1,16 @@
-# Graph Report - commander-release-control-plane  (2026-08-23)
+# Graph Report - thingtime  (2026-08-24)
 
 ## Corpus Check
-- 20 files · ~117,568 words
+- 20 files · ~117,442 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 499 nodes · 1141 edges · 32 communities (23 shown, 9 thin omitted)
+- 500 nodes · 1143 edges · 32 communities (23 shown, 9 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.54)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `0e6b0d70`
+- Built from commit: `b285aaff`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -112,7 +112,7 @@ Nodes (23): action, aiBlock, checkpointPending, checkpointPush, cleanWorkerDispa
 
 ### Community 7 - "workflow-control-plane-contract.mjs"
 Cohesion: 0.13
-Nodes (24): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, ALLOWED_MODELS, appReentryDisposition(), assertAdminLoader(), assertAdminModelRouting(), assertBareControlPlaneTree() (+16 more)
+Nodes (25): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, ALLOWED_MODELS, appReentryDisposition(), assertAdminLoader(), assertAdminModelRouting(), assertBareControlPlaneTree() (+17 more)
 
 ### Community 8 - "refresh-promotion-graphify.sh"
 Cohesion: 0.13
