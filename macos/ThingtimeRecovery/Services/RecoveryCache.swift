@@ -26,6 +26,14 @@ public final class RecoveryCache {
         }.sorted { ($0.entry.cachedAt ?? "") > ($1.entry.cachedAt ?? "") }
     }
 
+    /// Resolves a handoff source back to its manifest entry. The installer
+    /// derives the trust lane from this local metadata rather than accepting a
+    /// caller-controlled "unsigned" flag in its launch plan.
+    public func bundle(at appURL: URL) throws -> CachedBundle? {
+        let requested = appURL.standardizedFileURL
+        return try listBundles().first { $0.appURL.standardizedFileURL == requested }
+    }
+
     public func remove(key: String) throws {
         guard Self.isValidKey(key) else { throw RecoveryError.invalidPath("That cached bundle key is invalid.") }
         try ensureRoot()

@@ -968,3 +968,27 @@ an offline database or offline conflict resolution layer.
   GitHub desktop asset, and completed an actual signed Recovery self-replace /
   relaunch. Production publication remains correctly blocked on the existing
   Developer ID + notarization credential prerequisite.
+
+### Unsigned Recovery handoff audit (2026-08-24)
+
+- The unsigned catalog/cache UI already exposed explicitly acknowledged
+  `UNSIGNED` assets, but the detached Recovery installer unconditionally used
+  signed-team verification. That made an ad-hoc release cacheable yet unable to
+  launch or install—a broken fallback path.
+- The installer now resolves the selected app back to its constrained cache
+  manifest and derives the trust lane from `isUnsigned`; callers cannot supply
+  their own unsigned flag. An unsigned Recovery launcher can therefore verify
+  and launch/install only explicitly marked ad-hoc bundles. A missing legacy
+  marker remains strict signed behavior and fails closed when the unsigned
+  launcher has no team identity. Replaced bundles are classified and cached in
+  their matching lane before an atomic replacement.
+- The Electron detached handoff also repeats its production Developer ID,
+  notarization, and nested-code verification after the main process exits and
+  immediately before either a cached launch or install. This is separate from
+  the explicitly opt-in unsigned native Recovery lane.
+- Verified locally with 77 Electron tests and 9 Recovery-core tests, including
+  a real ad-hoc app fixture that launches via the detached unsigned Recovery
+  path and a regression proving a missing `isUnsigned` marker cannot downgrade
+  verification. A fresh release-mode unsigned Recovery ZIP round-trip also
+  passed. A live GitHub unsigned release requires the still-open protected
+  control-plane PR #390 to merge before the release worker can publish one.

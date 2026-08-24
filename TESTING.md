@@ -2148,6 +2148,12 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       launch, and atomic install path; it must never appear as a verified
       update. With all six secrets present, repeat the strict signed/notarized
       ZIP round-trip instead.
+- [ ] From an ad-hoc unsigned Recovery app, launch and atomically install an
+      explicitly acknowledged `isUnsigned: true` cached desktop bundle. The
+      detached helper must derive the unsigned lane from that cache manifest,
+      re-check the ad-hoc bundle before each use, and preserve the prior bundle
+      on failure. Remove that manifest marker and confirm it fails closed as a
+      signed release rather than silently downgrading verification.
 - [ ] Run the Swift tests and release-build both `ThingtimeNode` products; run
       MCP typecheck, tests, and `build:desktop`; then run the Electron tests.
       Cancellation/timeout cases must terminate the connector child and mark

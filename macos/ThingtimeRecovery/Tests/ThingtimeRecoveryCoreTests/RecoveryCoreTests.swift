@@ -3,6 +3,25 @@ import Testing
 @testable import ThingtimeRecoveryCore
 @testable import ThingtimeRecovery
 
+private func makeAdHocDesktopBundle(at appURL: URL) throws {
+    let contents = appURL.appendingPathComponent("Contents", isDirectory: true)
+    let executable = contents.appendingPathComponent("MacOS/Thingtime")
+    try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: executable)
+    let info: [String: Any] = [
+        "CFBundleExecutable": "Thingtime",
+        "CFBundleIdentifier": RecoveryComponent.desktop.bundleIdentifier,
+        "CFBundleName": "Thingtime",
+        "CFBundlePackageType": "APPL",
+        "CFBundleShortVersionString": "0.0.0",
+        "CFBundleVersion": "1",
+        "LSMinimumSystemVersion": "13.0"
+    ]
+    let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+    try data.write(to: contents.appendingPathComponent("Info.plist"))
+    _ = try ProcessExecution.run("/usr/bin/codesign", arguments: ["--force", "--deep", "--sign", "-", "--identifier", RecoveryComponent.desktop.bundleIdentifier, appURL.path], label: "Test unsigned Thingtime signing")
+}
+
 @Test("recovery app initialization never depends on implicit StateObject storage")
 @MainActor
 func recoveryAppInitializesExplicitly() {
@@ -118,6 +137,53 @@ func cacheDiscoveryIsConstrained() throws {
     let data = try JSONEncoder().encode(manifest)
     try data.write(to: root.appendingPathComponent("manifest.json"))
     #expect(try cache.listBundles().count == 1)
+}
+
+@Test("installer derives the unsigned lane from trusted cache metadata")
+func installerUsesCachedUnsignedProvenance() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-recovery-unsigned-mode-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let key = "unsigned-abcdef123456"
+    let app = root.appendingPathComponent("bundles/\(key)/Thingtime.app", isDirectory: true)
+    try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+    let cache = RecoveryCache(component: .desktop, root: root)
+    let manifest = CacheManifest(entries: [CacheManifestEntry(key: key, tag: "electron-v0.1.0.unsigned", isUnsigned: true)])
+    try JSONEncoder().encode(manifest).write(to: root.appendingPathComponent("manifest.json"))
+    let cachedBundle = try cache.bundle(at: app)
+    let bundle = try #require(cachedBundle)
+    #expect(RecoveryInstaller.verificationTrust(for: bundle) == .unsigned)
+}
+
+@Test("unsigned cached desktop bundles launch through the Recovery installer without a signing context")
+func unsignedCachedBundleCanUseDetachedLaunchPath() throws {
+    let home = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-recovery-unsigned-launch-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+    let paths = RecoveryPaths(homeDirectory: home)
+    let key = "unsigned-abcdef123456"
+    let app = paths.desktopCacheRoot.appendingPathComponent("bundles/\(key)/Thingtime.app", isDirectory: true)
+    try makeAdHocDesktopBundle(at: app)
+    let manifest = CacheManifest(entries: [CacheManifestEntry(key: key, tag: "electron-v0.0.0.unsigned", isUnsigned: true)])
+    try FileManager.default.createDirectory(at: paths.desktopCacheRoot, withIntermediateDirectories: true)
+    try JSONEncoder().encode(manifest).write(to: paths.desktopCacheRoot.appendingPathComponent("manifest.json"))
+
+    let plan = RecoveryInstallPlan(action: .launchDesktop, cacheRoot: paths.desktopCacheRoot, sourceApp: app, waitForPID: .max)
+    try RecoveryInstaller.execute(plan: plan, paths: paths, signingContext: nil)
+}
+
+@Test("a missing unsigned cache marker never downgrades signed verification")
+func signedCachedBundleStillRequiresSigningContext() throws {
+    let home = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-recovery-signed-context-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+    let paths = RecoveryPaths(homeDirectory: home)
+    let key = "signed-abcdef123456"
+    let app = paths.desktopCacheRoot.appendingPathComponent("bundles/\(key)/Thingtime.app", isDirectory: true)
+    try makeAdHocDesktopBundle(at: app)
+    let manifest = CacheManifest(entries: [CacheManifestEntry(key: key, tag: "electron-v0.0.0")])
+    try FileManager.default.createDirectory(at: paths.desktopCacheRoot, withIntermediateDirectories: true)
+    try JSONEncoder().encode(manifest).write(to: paths.desktopCacheRoot.appendingPathComponent("manifest.json"))
+
+    let plan = RecoveryInstallPlan(action: .launchDesktop, cacheRoot: paths.desktopCacheRoot, sourceApp: app, waitForPID: .max)
+    #expect(throws: RecoveryError.self) { try RecoveryInstaller.execute(plan: plan, paths: paths, signingContext: nil) }
 }
 
 @Test("handoff plans accept only the exact shared cache and expected cached bundle layout")

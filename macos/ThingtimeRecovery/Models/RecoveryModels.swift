@@ -92,6 +92,14 @@ public struct CachedBundle: Hashable, Identifiable {
     public var displayName: String { entry.name ?? entry.version ?? entry.tag ?? entry.key }
 }
 
+/// The cache records the distribution lane explicitly. A missing value is the
+/// legacy signed lane, so older cache manifests cannot silently downgrade a
+/// signed release into the unsigned path.
+public enum RecoveryBundleTrust: Hashable {
+    case signed
+    case unsigned
+}
+
 public struct RecoveryRelease: Hashable, Identifiable {
     public let asset: RecoveryReleaseAsset
     public let id: String

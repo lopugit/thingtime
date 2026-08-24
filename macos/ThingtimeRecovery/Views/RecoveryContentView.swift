@@ -89,7 +89,7 @@ private struct CacheListView: View {
             Text(component == .desktop ? "Launch an older desktop version or install it as the current app. Installing saves the current verified desktop first." : "This standalone recovery app can replace itself without depending on any Electron version.")
                 .foregroundStyle(.secondary)
             if bundles.isEmpty {
-                EmptyStateView(title: "No cached bundles", systemImage: "externaldrive.badge.questionmark", message: "Cache a signed GitHub release first.")
+                EmptyStateView(title: "No cached bundles", systemImage: "externaldrive.badge.questionmark", message: "Cache a GitHub release first. Unsigned releases remain visibly marked and require acknowledgement.")
             } else {
                 List(bundles) { bundle in
                     HStack {
