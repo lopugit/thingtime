@@ -27,3 +27,21 @@ test('account-hint privacy contracts publish their patch-level capability update
 	assert.equal(manifest.features['api.auth-account-hints'], '1.0.1');
 	assert.equal(manifest.features['api.auth-account-hints-resolve'], '1.0.1');
 });
+
+test('capabilities publish the non-secret data authority used by a bundle', () => {
+	const manifest = createApiCapabilitiesManifest([], {
+		schemaVersion: 1,
+		id: 'development',
+		kind: 'development',
+		federationId: 'development',
+		authorityOrigin: 'https://dev.thingtime.com'
+	});
+	assert.equal(manifest.features['api.capabilities'], '1.1.0');
+	assert.deepEqual(manifest.dataEnvironment, {
+		schemaVersion: 1,
+		id: 'development',
+		kind: 'development',
+		federationId: 'development',
+		authorityOrigin: 'https://dev.thingtime.com'
+	});
+});

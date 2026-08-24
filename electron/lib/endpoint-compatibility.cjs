@@ -9,7 +9,10 @@ const PROBE_TIMEOUT_MS = 10_000;
 // The packaged desktop exposes the current closed device-control vocabulary,
 // including consented app volume plus approval-gated Accessibility input. Do not activate that surface on
 // an origin whose advertised devices contract predates it.
-const DESKTOP_REQUIRED_CAPABILITIES = Object.freeze({ 'api.devices': '^1.8.0' });
+const DESKTOP_REQUIRED_CAPABILITIES = Object.freeze({
+	'api.capabilities': '^1.1.0',
+	'api.devices': '^1.8.0'
+});
 
 const checkedAt = () => new Date().toISOString();
 const probeResult = (status, message, extra = {}) => ({ checkedAt: checkedAt(), message, status, ...extra });
@@ -34,6 +37,15 @@ const supportsVersion = (version, range) => {
 	const expected = minimum.slice(1).map(Number);
 	return actual[0] === expected[0] && (actual[1] > expected[1] || (actual[1] === expected[1] && actual[2] >= expected[2]));
 };
+const hasDeploymentDataEnvironment = (value) =>
+	value &&
+	value.schemaVersion === 1 &&
+	typeof value.id === 'string' &&
+	/^[a-z0-9][a-z0-9-]{0,63}$/.test(value.id) &&
+	['production', 'development', 'custom'].includes(value.kind) &&
+	typeof value.federationId === 'string' &&
+	/^[a-z0-9][a-z0-9-]{0,63}$/.test(value.federationId) &&
+	(typeof value.authorityOrigin === 'string' && /^https:\/\/[^/]+$/i.test(value.authorityOrigin));
 
 function requestJson(target, userAgent) {
 	const client = target.protocol === 'http:' ? http : https;
@@ -114,6 +126,9 @@ async function probeEndpointCapabilities(rawUrl, { userAgent = 'Thingtime deskto
 		}
 		const missing = Object.entries(required).find(([feature, range]) => !supportsVersion(manifest.features[feature], range));
 		if (missing) return probeResult('incompatible', `This deployment does not support ${missing[0]} ${missing[1]}.`, { manifest });
+		if (required['api.capabilities'] && !hasDeploymentDataEnvironment(manifest.dataEnvironment)) {
+			return probeResult('incompatible', 'This deployment has not published a valid data-environment identity.', { manifest });
+		}
 		return probeResult('compatible', 'This deployment supports the desktop API contract.', { manifest });
 	} catch {
 		return probeResult('incompatible', 'This deployment returned an invalid capability manifest.');
@@ -157,5 +172,6 @@ module.exports = {
 	probeEndpointCapabilities,
 	probeEndpointDevices,
 	responseSupportsDevices,
+	hasDeploymentDataEnvironment,
 	supportsVersion
 };

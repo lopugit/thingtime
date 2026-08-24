@@ -1054,7 +1054,7 @@ export const ensureIndexes = async () => {
         col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         col('deploymentPeers').createIndex({ origin: 1 }, { unique: true }),
         col('deploymentPeers').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        col('deploymentPeers').createIndex({ lastSeenAt: -1, origin: 1 }),
+		col('deploymentPeers').createIndex({ federationId: 1, lastSeenAt: -1, origin: 1 }),
         // post view telemetry: one doc per (post, viewer identity) — the
         // unique index IS the dedup that keeps unique-viewer counts honest
         // under racing writes; its postId prefix serves the per-post stats

@@ -1,3 +1,5 @@
+import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
+
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type ApiAuthMode = 'none' | 'optional' | 'session' | 'bearer' | 'session-or-bearer';
@@ -551,26 +553,45 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 export const apiEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
 		id: 'capabilities',
+		contractVersion: '1.1.0',
 		group: 'platform',
 		title: 'API capabilities',
 		endpoint: '/api/v1/capabilities',
 		summary: 'Returns the origin-scoped compatibility manifest for every documented and executable Thingtime API operation.',
 		detail:
-			'Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. Additions are minor or patch changes and breaking changes receive a new major version.',
-		auth: { mode: 'none', description: 'Public deployment metadata; it contains no account, permission or environment data.' },
+			'Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. The manifest also declares the non-secret data/authentication environment and federation group for this origin, so aliases and previews can select the correct first-party authority without inferring it from a deployment URL. Additions are minor or patch changes and breaking changes receive a new major version.',
+		auth: { mode: 'none', description: 'Public deployment metadata only: never an account, connection string, credential, or other database secret.' },
 		methods: ['GET'],
 		steps: ['Fetch once per origin and honour the short cache window.', 'Compare only the feature contracts a client requires.'],
 		requestExamples: [{ name: 'Discover capabilities', description: 'Read the active API contract manifest.', method: 'GET' }],
-		responseExamples: [{ status: 200, description: 'Versioned capability manifest.', body: { ok: true, schemaVersion: 1, features: { 'api.devices': '1.0.0' } } }]
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Versioned capability manifest plus non-secret data authority.',
+				body: {
+					ok: true,
+					schemaVersion: 1,
+					features: { 'api.capabilities': '1.1.0', 'api.devices': '1.0.0' },
+					dataEnvironment: {
+						schemaVersion: 1,
+						id: 'development',
+						kind: 'development',
+						federationId: 'development',
+						authorityOrigin: 'https://dev.thingtime.com'
+					}
+				}
+			}
+		]
 	}),
 	endpoint({
 		id: 'peers',
+		contractVersion: '1.1.0',
 		group: 'platform',
 		title: 'Deployment peer discovery',
 		endpoint: '/api/v1/peers',
-		summary: 'Streams bounded, authenticated peer leases and accepts signed deployment announcements.',
+		summary: 'Streams bounded, authenticated same-data-environment peer leases and accepts signed deployment announcements.',
 		detail:
-			'First-party deployments authenticate with a short-lived HMAC envelope plus an Ed25519 deployment signature. The receiver pins each public key to its canonical origin; every NDJSON event is independently signed. GET returns a capped NDJSON page rather than an all-peers array; POST announces one peer or starts a bounded bootstrap-plus-gossip sync. Peer records are relational, TTL-reaped control-plane rows and contain only public deployment origins, signing public keys, and observed lease times.',
+			'First-party deployments authenticate with a short-lived HMAC envelope plus an Ed25519 deployment signature. The signed envelope binds the stable public federationId, so production, development, and custom database authorities never gossip into each other. The receiver pins each public key to its canonical origin; every NDJSON event is independently signed. GET returns a capped NDJSON page rather than an all-peers array; POST announces one peer or starts a bounded bootstrap-plus-gossip sync. Peer records are relational, TTL-reaped control-plane rows and contain only public deployment origins, signing public keys, safe data-environment ids, and observed lease times.',
 		auth: { mode: 'bearer', description: 'Deployment-to-deployment HMAC headers using THINGTIME_PEER_DISCOVERY_SECRET plus an Ed25519 signature from THINGTIME_PEER_SIGNING_PRIVATE_KEY; browser and user tokens are not accepted.' },
 		methods: ['GET', 'POST'],
 		steps: ['Sign the exact method, path, timestamp and raw request body.', 'GET pages NDJSON peer events with a maximum of 50 rows.', 'POST { op: "announce", origin } or a self-signed { op: "sync" }.'],
@@ -592,7 +613,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		auth: { mode: 'bearer', description: 'Exact CRON_SECRET bearer only; it is a deployment scheduler endpoint, not a browser or user API.' },
 		methods: ['GET'],
 		steps: [
-			'Configure CRON_SECRET, THINGTIME_PEER_DISCOVERY_SECRET, THINGTIME_PEER_SIGNING_PRIVATE_KEY, and THINGTIME_PUBLIC_ORIGIN in the deployment environment.',
+			'Configure CRON_SECRET, THINGTIME_PEER_DISCOVERY_SECRET, THINGTIME_PEER_SIGNING_PRIVATE_KEY, THINGTIME_PUBLIC_ORIGIN, and THINGTIME_DATA_ENV in the deployment environment.',
 			'Let the scheduler invoke the route; do not expose its credentials to clients.'
 		],
 		requestExamples: [{ name: 'Scheduled sync', description: 'Vercel supplies the private bearer header.', method: 'GET' }],
@@ -8926,9 +8947,10 @@ export const apiV1RouteKeys = apiEndpointDocs.filter((doc) => doc.endpoint.start
 export const apiV1DocsRouteKeys = apiV1RouteKeys.map((route) => `${route}-docs`);
 
 export type ApiCapabilitiesManifest = {
-  ok: true;
-  schemaVersion: 1;
-  features: Record<string, `${number}.${number}.${number}`>;
+	ok: true;
+	schemaVersion: 1;
+	features: Record<string, `${number}.${number}.${number}`>;
+	dataEnvironment: DeploymentDataEnvironment | null;
 };
 
 /** A stable machine-readable name for a concrete API route, including internal routes without public docs. */
@@ -8940,7 +8962,10 @@ export const apiRouteCapabilityId = (routeKey: string) => `route.${routeKey.repl
  * every executable endpoint discoverable, including intentionally undocumented
  * diagnostics and future routes while they are being documented.
  */
-export const createApiCapabilitiesManifest = (routeKeys: Iterable<string> = []): ApiCapabilitiesManifest => {
+export const createApiCapabilitiesManifest = (
+	routeKeys: Iterable<string> = [],
+	dataEnvironment: DeploymentDataEnvironment | null = null
+): ApiCapabilitiesManifest => {
   const features: ApiCapabilitiesManifest['features'] = Object.fromEntries(
     apiEndpointDocs.map((doc) => [`api.${doc.id}`, doc.contractVersion])
   );
@@ -8949,7 +8974,7 @@ export const createApiCapabilitiesManifest = (routeKeys: Iterable<string> = []):
     features[apiRouteCapabilityId(routeKey)] ||= '1.0.0';
   }
 
-  return { ok: true, schemaVersion: 1, features };
+	return { ok: true, schemaVersion: 1, features, dataEnvironment };
 };
 
 const shellQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;

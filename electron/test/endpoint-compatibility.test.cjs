@@ -11,6 +11,7 @@ const {
 	probeEndpointCapabilities,
 	probeEndpointDevices,
 	responseSupportsDevices,
+	hasDeploymentDataEnvironment,
 	supportsVersion
 } = require('../lib/endpoint-compatibility.cjs');
 
@@ -55,11 +56,25 @@ test('capability contracts use compatible major versions and reject a missing or
 	assert.equal(supportsVersion('2.0.0', '^1.0.0'), false);
 	assert.equal(supportsVersion('invalid', '^1.0.0'), false);
 	assert.equal(DESKTOP_REQUIRED_CAPABILITIES['api.devices'], '^1.8.0');
+	assert.equal(DESKTOP_REQUIRED_CAPABILITIES['api.capabilities'], '^1.1.0');
 	assert.equal(supportsVersion('1.7.0', DESKTOP_REQUIRED_CAPABILITIES['api.devices']), false);
 
 	const server = http.createServer((request, response) => {
 		response.setHeader('content-type', 'application/json');
-		response.end(JSON.stringify({ ok: true, schemaVersion: 1, features: { 'api.devices': '1.8.0', 'api.posts': '1.0.0' } }));
+		response.end(
+			JSON.stringify({
+				ok: true,
+				schemaVersion: 1,
+				features: { 'api.capabilities': '1.1.0', 'api.devices': '1.8.0', 'api.posts': '1.0.0' },
+				dataEnvironment: {
+					schemaVersion: 1,
+					id: 'development',
+					kind: 'development',
+					federationId: 'development',
+					authorityOrigin: 'https://dev.thingtime.com'
+				}
+			})
+		);
 	});
 	await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 	const { port } = server.address();
@@ -71,6 +86,20 @@ test('capability contracts use compatible major versions and reject a missing or
 	} finally {
 		await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 	}
+});
+
+test('a selected endpoint must publish a safe data-environment identity', () => {
+	assert.equal(
+		hasDeploymentDataEnvironment({
+			schemaVersion: 1,
+			id: 'development',
+			kind: 'development',
+			federationId: 'development',
+			authorityOrigin: 'https://dev.thingtime.com'
+		}),
+		true
+	);
+	assert.equal(hasDeploymentDataEnvironment({ schemaVersion: 1, id: 'production', kind: 'production', federationId: 'production' }), false);
 });
 
 test('the direct endpoint probe distinguishes an authenticated computers route from a missing one', async () => {

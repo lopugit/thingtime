@@ -11,6 +11,9 @@ const TEST_ENV_KEYS = [
   'VERCEL_URL',
   'THINGTIME_CI_ROUTER_SECRET',
   'THINGTIME_DEVELOPMENT_STATUS_ORIGIN',
+  'THINGTIME_DATA_ENV',
+  'THINGTIME_DATA_AUTHORITY_ORIGIN',
+  'THINGTIME_FEDERATION_ID',
   'THINGTIME_DEV_STATUS_ORIGIN',
   'THINGTIME_EMAIL_UNSUB_SECRET',
   'THINGTIME_GITHUB_WEBHOOK_SECRET',
@@ -33,6 +36,7 @@ const withTestEnv = async (run: () => Promise<void>) => {
     VERCEL_URL: 'thingtime.example.vercel.app',
     THINGTIME_CI_ROUTER_SECRET: 'router-secret-must-not-leak',
     THINGTIME_DEVELOPMENT_STATUS_ORIGIN: 'https://development.thingtime.com',
+    THINGTIME_DATA_ENV: 'production',
     THINGTIME_DEV_STATUS_ORIGIN: 'https://dev.thingtime.com',
     THINGTIME_EMAIL_UNSUB_SECRET: 'unsubscribe-secret-must-not-leak',
     THINGTIME_GITHUB_WEBHOOK_SECRET: 'github-secret-must-not-leak',
@@ -73,6 +77,13 @@ test('root data exposes only explicit browser-safe deployment values', async () 
     assert.equal(env.THINGTIME_VERCEL_ENV, 'production');
     assert.equal(env.THINGTIME_VERCEL_GIT_COMMIT_SHA, 'abc123');
     assert.equal(env.THINGTIME_VERCEL_URL, 'thingtime.example.vercel.app');
+    assert.deepEqual(body.dataEnvironment, {
+      schemaVersion: 1,
+      id: 'production',
+      kind: 'production',
+      federationId: 'production',
+      authorityOrigin: 'https://thingtime.com'
+    });
 
     assert.equal('THINGTIME_CI_ROUTER_SECRET' in env, false);
     assert.equal('THINGTIME_EMAIL_UNSUB_SECRET' in env, false);

@@ -75,17 +75,25 @@ export const AutoLoginPopup = () => {
 	const foreignOrigin =
 		typeof window !== 'undefined' && !isThingtimeFamilyHost(window.location.hostname);
 
-	// This deployment's environment (root-data envFromCookie) picks the hub
-	// whose database matches — see resolveSsoHub.
+	// This deployment's public data authority picks the hub whose database
+	// matches. Vercel metadata is legacy fallback only — see resolveSsoHub.
 	const rootData = useRouteLoaderData('root') as
-		| { envFromCookie?: { THINGTIME_BRANCH_NAME?: string; THINGTIME_VERCEL_ENV?: string } }
+		| {
+			envFromCookie?: { THINGTIME_BRANCH_NAME?: string; THINGTIME_VERCEL_ENV?: string };
+			dataEnvironment?: { kind?: 'production' | 'development' | 'custom'; authorityOrigin?: string | null } | null;
+		}
 		| undefined;
 	const hubEnv = React.useMemo(
 		() => ({
+			dataEnvironment: rootData?.dataEnvironment,
 			branch: rootData?.envFromCookie?.THINGTIME_BRANCH_NAME,
 			vercelEnv: rootData?.envFromCookie?.THINGTIME_VERCEL_ENV
 		}),
-		[rootData?.envFromCookie?.THINGTIME_BRANCH_NAME, rootData?.envFromCookie?.THINGTIME_VERCEL_ENV]
+		[
+			rootData?.dataEnvironment,
+			rootData?.envFromCookie?.THINGTIME_BRANCH_NAME,
+			rootData?.envFromCookie?.THINGTIME_VERCEL_ENV
+		]
 	);
 	const ssoHub = React.useMemo(
 		() => resolveSsoHub(hubEnv, readLocalCache<string>(SSO_HUB_CACHE_KEY)),
@@ -104,7 +112,7 @@ export const AutoLoginPopup = () => {
 	const autoFedcmTried = React.useRef(false);
 	const redeemRef = React.useRef<(code: string) => Promise<void>>();
 	React.useEffect(() => {
-		if (!foreignOrigin || user || !eligible || dismissed || autoFedcmTried.current) return;
+		if (!foreignOrigin || !ssoHubRef.current || user || !eligible || dismissed || autoFedcmTried.current) return;
 		if (typeof (window as any).IdentityCredential === 'undefined') return;
 		autoFedcmTried.current = true;
 		(async () => {
@@ -146,7 +154,7 @@ export const AutoLoginPopup = () => {
 	redeemRef.current = redeemSsoCode;
 
 	const signInViaHub = async () => {
-		if (ssoBusy) return;
+		if (ssoBusy || !ssoHub) return;
 		setSsoBusy(true);
 		const hub = ssoHub;
 		try {
@@ -241,10 +249,11 @@ export const AutoLoginPopup = () => {
 					Use your Thingtime account ✨
 				</Text>
 				<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-					This preview lives outside thingtime.com, so browser cookies can’t show account hints here.
-					Open {ssoHubName} to choose your signed-in account.
+					{ssoHub
+						? `This preview lives outside thingtime.com, so browser cookies can’t show account hints here. Open ${ssoHubName} to choose your signed-in account.`
+						: 'This deployment has no compatible data authority configured yet.'}
 				</Text>
-				<Button size="sm" onClick={signInViaHub} isLoading={ssoBusy} loadingText="Waiting for Thingtime…">
+				<Button size="sm" onClick={signInViaHub} isDisabled={!ssoHub} isLoading={ssoBusy} loadingText="Waiting for Thingtime…">
 					Continue with {ssoHubName} 🌈
 				</Button>
 				<Flex justifyContent="flex-end">

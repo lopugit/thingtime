@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 
 import { json } from '~/api/http';
+import { getDeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
 import { getPeerSigningIdentity, getSelfPeerOrigin, signedPeerNdjsonResponse, syncPeerMesh } from '~/api/utils/peers/peerDiscovery';
 
 const exactCronHeader = (authorization: string | null, secret: string) => {
@@ -35,8 +36,9 @@ export const createPeerSyncLoader = (overrides: Partial<PeerSyncLoaderDependenci
 		if (!exactCronHeader(request.headers.get('authorization'), cronSecret)) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 		const identity = dependencies.getIdentity();
 		const selfOrigin = dependencies.getSelfOrigin(request);
-		if (!identity || !selfOrigin) return json({ ok: false, error: 'Peer discovery is not configured' }, { status: 503 });
-		return signedPeerNdjsonResponse(identity, selfOrigin, dependencies.sync({ selfOrigin }));
+		const dataEnvironment = getDeploymentDataEnvironment();
+		if (!identity || !selfOrigin || !dataEnvironment) return json({ ok: false, error: 'Peer discovery is not configured' }, { status: 503 });
+		return signedPeerNdjsonResponse(identity, selfOrigin, dataEnvironment, dependencies.sync({ selfOrigin }));
 	};
 };
 
