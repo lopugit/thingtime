@@ -7,7 +7,7 @@ IFS=$'\n\t'
 
 root="$(mktemp -d)"
 trap 'rm -rf -- "$root"' EXIT
-source_subject_sentinel='PROMOTION-QUARANTINE-SOURCE-SENTINEL'
+source_subject_sentinel='PROMOTION-LOPU-SOURCE-SENTINEL'
 run_temp="$root/run"
 repo="$run_temp/repo"
 mkdir -p "$repo" "$run_temp"
@@ -165,13 +165,11 @@ SOURCE_START_SHA="$merge_feature_parent" SOURCE_END_SHA="$merge_endpoint" \
   bash "$authority" "$merge_repo" "$run_temp/pr-commits.json" "$run_temp/pr-files.json" >/dev/null 2>&1 \
   && { echo 'merge feature-side parent unexpectedly passed source authority' >&2; exit 1; }
 
-# NEVER CANCEL (owner decision, 2026-08-12): a review-required classification
-# REPLAYS for review instead of refusing — the worker review-gates it and the
-# published PR carries `source-lineage-unverified`. These fixtures prove the
-# replay proceeds AND stays review-gated. What must still never replay is a
-# plan whose declared classification differs from the worker's independent
-# re-derivation (forged or stale); that boundary keeps its own fixture below.
-require_review_replay() {
+# A review-required lineage classification still replays through Lopu instead
+# of being discarded. These fixtures prove the replay proceeds. A plan whose
+# declared classification differs from the worker's independent re-derivation
+# remains invalid (forged or stale), which keeps its own fixture below.
+require_lineage_replay() {
   local planned="$1" observed="$2" tip="$3"
   local fixture_repo="$run_temp/lineage-$planned-$observed" fixture_hash fixture_reservation
   local fixture_output fixture_log
@@ -210,11 +208,9 @@ require_review_replay() {
     cat "$fixture_log" >&2
     exit 1
   fi
-  # Same content conflict as the verified happy path — the model round still
-  # gets it — but the run is review-gated by lineage alone.
+  # Same content conflict as the verified happy path: Lopu receives it.
   grep -qx 'conflicted=true' "$fixture_output"
   grep -qx 'complete=false' "$fixture_output"
-  grep -qx 'review_gated=true' "$fixture_output"
   grep -qx "source_lineage_status=$planned" "$fixture_output"
 }
 
@@ -268,8 +264,8 @@ reject_lineage_mismatch() {
   [[ ! -d "$(git -C "$fixture_repo" rev-parse --git-dir)/rebase-apply" ]]
   [[ ! -s "$fixture_output" ]]
 }
-require_review_replay review-required-removed removed "$source_start"
-require_review_replay review-required-ambiguous ambiguous ""
+require_lineage_replay review-required-removed removed "$source_start"
+require_lineage_replay review-required-ambiguous ambiguous ""
 reject_lineage_mismatch verified ambiguous ""
 
 if SOURCE_LINEAGE_STATUS=review-required-removed \
@@ -368,7 +364,6 @@ SOURCE_LINEAGE_STATUS=verified PLAN_HASH="$delete_plan_hash" \
   bash "$worker" prepare "$delete_repo"
 grep -qx 'conflicted=false' "$delete_output"
 grep -qx 'complete=true' "$delete_output"
-grep -qx 'review_gated=false' "$delete_output"
 [[ "$(git -C "$delete_repo" rev-parse HEAD^1)" == "$delete_reservation" ]]
 git -C "$delete_repo" diff --name-status "$delete_reservation" HEAD | LC_ALL=C sort >"$root/delete-shape-diff"
 printf 'A\tkept.txt\nD\tdoomed.txt\nM\tsuper.txt\n' | diff -u - "$root/delete-shape-diff"
@@ -391,8 +386,6 @@ grep -qF 'already contained in the source history' "$delete_temp/promotion-disca
 bash "$worker" prepare "$repo"
 grep -qx 'conflicted=true' "$GITHUB_OUTPUT"
 grep -qx 'complete=false' "$GITHUB_OUTPUT"
-grep -qx 'ci_sensitive_paths=true' "$GITHUB_OUTPUT"
-grep -qx 'review_gated=true' "$GITHUB_OUTPUT"
 grep -qx 'workflow_paths=true' "$GITHUB_OUTPUT"
 grep -qx 'source_lineage_status=verified' "$GITHUB_OUTPUT"
 grep -qxF '.github/workflows/fixture.yml' "$GITHUB_OUTPUT"
@@ -423,7 +416,10 @@ grep -q '^<<<<<<<<<< ' "$marker_workspace/feature.txt"
 printf 'base intent\nsource intent\n' >"$repo/feature.txt"
 git -C "$repo" add -- ':(literal)feature.txt'
 GIT_EDITOR=true git -C "$repo" rebase --continue >/dev/null
-git -C "$repo" show -s --format=%s HEAD | grep -q '\[skip ci\]'
+if git -C "$repo" show -s --format=%s HEAD | grep -q '\[skip ci\]'; then
+  echo 'Lopu promotion replay unexpectedly suppressed CI' >&2
+  exit 1
+fi
 if git -C "$repo" log --format=%s "$base_sha..HEAD" \
   | grep -Fqx "$source_subject_sentinel"; then
   echo 'original source commit subject escaped the trusted synthetic replay' >&2
@@ -500,7 +496,7 @@ if bash "$worker" verify "$repo" >/dev/null 2>&1; then
 fi
 
 # A removed historical patch that honestly declares review-required lineage
-# now replays review-gated (never-cancel) — but a FORGED handoff that labels
+# still replays through Lopu — but a FORGED handoff that labels
 # the same removed patch `verified` must still hard-block: the worker's
 # independent source-tip proof contradicts the declaration before the
 # synthetic commit/rebase, so no candidate commit or promotable ref is
@@ -571,9 +567,8 @@ fi
   [[ ! -s "$lineage_output" ]]
 )
 
-# Owner decision (2026-08-12): no sensitive-path deny-list. A credential-named
-# workflow conflict — the exact shape the old policy refused — must now be
-# ELIGIBLE for the model round like any other coherent content conflict.
+# Lopu accepts .github workflow conflicts like any other coherent content
+# conflict, including a workflow file with a credential-related filename.
 policy_repo="$run_temp/policy-repo"
 policy_workspace="$run_temp/policy-workspace"
 policy_round="$run_temp/policy-round"

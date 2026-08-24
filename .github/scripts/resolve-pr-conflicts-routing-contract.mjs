@@ -202,7 +202,18 @@ function assertWorkflowSource() {
 
   const dispatchCount =
     source.match(/actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g)?.length || 0;
-  assert.equal(dispatchCount, 2, "detector handoff and stacked cascade both use fixed workflow dispatch");
+  assert.equal(dispatchCount, 3, "conflict detector, Lopu review batch, and stacked cascade use fixed workflow dispatch");
+  assert.match(source, /review_detect:/, "clean PRs have a Lopu review selector");
+  assert.match(source, /review_handoff:/, "one review selector handoff exists");
+  assert.match(
+    source,
+    /review_handoff:[\s\S]*?github\.ref_name == 'github-actions'[\s\S]*?workflow_ref[\s\S]*?refs\/heads\/develop[\s\S]*?workflow_ref[\s\S]*?refs\/heads\/main/,
+    "the review handoff originates only from the protected controller or a thin main/develop listener",
+  );
+  assert.match(source, /lopu-review:\$\{\{ github\.run_id \}\}/, "review handoff uses a default-branch-compatible marker");
+  assert.match(source, /review:\n\s+name: Lopu reviews selected PRs/, "Lopu has a repository review worker");
+  assert.match(source, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/, "review shares the single Lopu fleet lock");
+  assert.match(source, /lopu-review-\{0\}/, "review batches have a stable concurrency scope");
 
   assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock);
 }
