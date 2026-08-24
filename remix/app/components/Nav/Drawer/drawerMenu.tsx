@@ -89,6 +89,16 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'actions',
+		label: 'Actions',
+		icon: '⚡',
+		to: '/actions',
+		children: [
+			{ id: 'actions-browse', label: 'Browse', icon: '⚡', to: '/actions' },
+			{ id: 'actions-docs', label: 'API reference', icon: '📚', to: '/docs/api/actions' }
+		]
+	},
+	{
 		id: 'things',
 		label: 'Things',
 		icon: '📦',

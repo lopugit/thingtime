@@ -89,6 +89,8 @@ export const THINGS_KIND_FILTERS = [
   { id: 'post', label: 'Posts', icon: '📝' },
   { id: 'data', label: 'Data', icon: '📦' },
   { id: 'schema', label: 'Schemas', icon: '💎' },
+  { id: 'component', label: 'Components', icon: '🧩' },
+  { id: 'action', label: 'Actions', icon: '⚡' },
   { id: 'comment', label: 'Comments', icon: '💬' }
 ] as const;
 export type ThingsKindFilter = (typeof THINGS_KIND_FILTERS)[number]['id'];

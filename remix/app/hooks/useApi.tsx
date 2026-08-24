@@ -789,6 +789,16 @@ export function useApi() {
       browse: useCallback(async (args) => getJson(`/api/v1/components/browse${toQuery(args)}`), [])
       // creation rides the unified path: things.create({ thingtime: ['component'], crystal })
     },
+    actions: {
+      // execute one action inside its capability + budget envelope
+      run: useCallback(
+        async (args) => asyncFetcher.submit({ action: args?.action, inputs: args?.inputs }, { action: '/api/v1/actions/run' }),
+        [asyncFetcher]
+      ),
+      // your own run records — { action, limit }
+      runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
+      // creation rides the unified path: things.create({ thingtime: ['action'], crystal })
+    },
     waitlist: {
       join: useCallback(async (args) => asyncFetcher.submit({ email: args?.email }, { action: '/api/v1/waitlist' }), [asyncFetcher])
     }
