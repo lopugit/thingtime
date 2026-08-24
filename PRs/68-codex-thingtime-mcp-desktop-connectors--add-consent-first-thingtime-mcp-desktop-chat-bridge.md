@@ -856,3 +856,40 @@ an offline database or offline conflict resolution layer.
    stream UI; keep capture foundation unavailable until then.
 5. Apply the protected-workflow Developer ID/notarization patch and validate a
    stapled Gatekeeper-accepted artifact before production publication.
+
+### Signed PR release and recovery updater follow-up (2026-08-24)
+
+- Added a dedicated signed PR-release workflow rather than relaxing the `main`
+  release shim. It runs only for a same-repository owner PR carrying the
+  maintainer-applied `desktop-release` label (or an owner manual dispatch),
+  runs all tests before importing secrets, produces a Developer ID/notarized
+  ZIP-compatible release, and publishes the deterministic SemVer form
+  `base-pr.<PR>.<branch>.g<commit>` as a GitHub prerelease.
+- Desktop Settings now fetches and filters GitHub releases by version, PR,
+  branch, and commit. It treats a release as installable only after extracting
+  a GitHub-hosted macOS ZIP to the user-local recovery cache and re-verifying
+  the production nested signature, hardened runtime, and notarization.
+- A cached release launches through a detached handoff only after the current
+  Thingtime process exits, so two versions cannot share one local profile at
+  once. Installing first caches the current installed production bundle, then
+  delegates to the existing transactional installer after the Electron process
+  exits. The cache is intentionally bounded to twelve explicit recovery apps
+  and can be revealed in Finder, so a broken future updater UI does not strand
+  a person on that version.
+
+### Recovery updater verification follow-up (2026-08-24)
+
+- Release browsing now follows every GitHub API Link page rather than stopping
+  at 2,000 records. A loop is reported visibly instead of silently omitting
+  history. Download redirects stay on GitHub-controlled release hosts, and a
+  stale/tampered manifest entry cannot exhaust the twelve recovery slots or
+  leave a partial verified-app directory behind. GitHub outage state preserves
+  the local cache catalog so launch/install recovery actions remain usable
+  offline.
+- Live GitHub inspection subsequently registered **Signed Electron PR Release**
+  for this branch. Owner manual run
+  `32712878513` reached its real dependency gate and exposed a concrete
+  runner-only defect before any signing material was accessed: `MCP/` is
+  npm-managed and has `package-lock.json`, so a frozen pnpm install could never
+  succeed. The workflow now uses `npm ci --prefix MCP`; its contract test locks
+  that package-manager boundary before the next signed release attempt.

@@ -57,3 +57,25 @@ test('desktop launch and settings expose the default-on managed node restart con
 	assert.match(mainSource, /thingtime-desktop:set-node-auto-start/u);
 	assert.match(preloadSource, /setNodeAutoStart:\s*\(request\) => ipcRenderer\.invoke\('thingtime-desktop:set-node-auto-start', request\)/u);
 });
+
+test('desktop updater exposes a signed release catalog, cache recovery, and trusted IPC-only install actions', async () => {
+	const mainSource = await readFile(path.join(electronDir, 'main.cjs'), 'utf8');
+	const preloadSource = await readFile(path.join(electronDir, 'preload.cjs'), 'utf8');
+
+	for (const channel of [
+		'list-update-catalog',
+		'cache-release-bundle',
+		'install-cached-release',
+		'launch-cached-release',
+		'remove-cached-release',
+		'reveal-update-cache'
+	]) {
+		assert.match(preloadSource, new RegExp(`thingtime-desktop:${channel}`, 'u'));
+		assert.match(mainSource, new RegExp(`thingtime-desktop:${channel}`, 'u'));
+	}
+	assert.match(mainSource, /verifyProductionReleaseApp/u);
+	assert.match(mainSource, /ELECTRON_RUN_AS_NODE: '1'/u);
+	assert.match(mainSource, /scheduleCachedReleaseHandoff\('launch', entry\)/u);
+	assert.match(mainSource, /action, cacheRoot: updateCacheRoot\(\), format: 1/u);
+	assert.match(mainSource, /requireTrustedAiBridgeEvent\(event\);\n  return installCachedRelease/u);
+});

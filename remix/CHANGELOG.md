@@ -27,6 +27,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   than Vercel tier/branch inference, and signed peer gossip is scoped to the
   matching federation id. No MongoDB host, database name, connection string,
   account, or secret is exposed. — Codex (AI), 2026-08-24
+- **Signed PR release CI now installs the MCP bridge from its committed npm
+  lockfile**: the runner uses `npm ci --prefix MCP`, matching the package's
+  `package-lock.json` instead of requiring a nonexistent pnpm lockfile. This
+  keeps the unsigned verification gate deterministic and lets the signed,
+  notarized release pipeline proceed only after MCP dependencies install
+  reproducibly. — Codex (AI), 2026-08-24
 
 - **Paired-Mac display mode selections now persist**: resolution and refresh
   changes use Core Graphics' permanent display-configuration transaction rather
@@ -37,6 +43,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   2026-08-24
 
 ### Added
+
+- **Signed Desktop PR releases and recovery-first version switching**: an
+  owner-approved, same-repository PR carrying the `desktop-release` label can
+  now publish a Developer ID-signed, notarized GitHub prerelease whose SemVer
+  identifies its PR, normalized branch, and exact commit. Desktop Settings now
+  fetches/searches the GitHub release catalog, caches only verified signed
+  macOS ZIP bundles, lets a person launch or atomically install a cached
+  version, and preserves the current production app as a fallback before every
+  switch. The cache is bounded to twelve explicit recovery bundles, never
+  silently installs, and remains revealable in Finder if a later UI is broken.
+  — Codex (AI), 2026-08-24
+- **Desktop recovery updater hardening**: GitHub release discovery now follows
+  every API Link page instead of stopping at a fixed history cap, rejects
+  redirect hops outside GitHub release storage, repairs stale cache metadata
+  before applying its twelve-bundle limit, and removes a partial cache copy on
+  failed verification. Recovery launches now hand off after the current app
+  exits, preventing two cached/installed versions from sharing one local
+  profile at once; cached recovery choices remain visible and usable if GitHub
+  is offline. — Codex (AI), 2026-08-24
 
 - **Approval-gated remote pointer and keyboard controls for paired Macs**:
   the desktop node now accepts a closed, capability-gated set of screen-relative

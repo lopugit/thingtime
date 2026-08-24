@@ -4,11 +4,24 @@ const https = require('node:https');
 const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
+const { spawn, spawnSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 
 const { app, BrowserWindow, dialog, ipcMain, shell, Menu, nativeImage, session } = require('electron');
 const { checkEndpointCompatibility, compatibilityError, probeEndpointDevices } = require('./lib/endpoint-compatibility.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
+const {
+	cacheInstalledBundle,
+	cacheReleaseArchive,
+	getCachedBundles,
+	removeCachedBundle,
+	releaseCatalog
+} = require('./lib/release-cache.cjs');
+const {
+	fetchGithubReleaseCatalog: fetchAllGithubReleasePages,
+	isAllowedGithubReleaseAssetUrl,
+	releaseCatalogState
+} = require('./lib/github-release-catalog.cjs');
 const {
 	ThingtimeNodeBridgeError,
 	ThingtimeNodeIntegration,
@@ -21,7 +34,8 @@ const {
 const repoRoot = path.resolve(__dirname, '..');
 const localWebOutput = path.join(__dirname, 'dist', 'web', '.output');
 const electronReleaseLabel = process.env.THINGTIME_DESKTOP_RELEASE_LABEL || 'Electron App Release';
-const updateFeedUrl = process.env.THINGTIME_DESKTOP_UPDATE_FEED_URL || 'https://api.github.com/repos/lopugit/thingtime/releases?per_page=20';
+const updateFeedUrl = process.env.THINGTIME_DESKTOP_UPDATE_FEED_URL || 'https://api.github.com/repos/lopugit/thingtime/releases?per_page=100';
+const maxUpdateArchiveBytes = 5 * 1024 * 1024 * 1024;
 const macTitlebar = {
   height: 52,
   leftInset: 88,
@@ -314,7 +328,7 @@ function compareVersions(leftVersion, rightVersion) {
   return 0;
 }
 
-function requestJson(url, redirectCount = 0) {
+function requestJsonResponse(url, redirectCount = 0) {
   return new Promise((resolve, reject) => {
     const request = https.get(
       url,
@@ -330,7 +344,7 @@ function requestJson(url, redirectCount = 0) {
 
         if ([301, 302, 303, 307, 308].includes(statusCode) && location && redirectCount < 5) {
           response.resume();
-          resolve(requestJson(new URL(location, url).href, redirectCount + 1));
+          resolve(requestJsonResponse(new URL(location, url).href, redirectCount + 1));
           return;
         }
 
@@ -345,7 +359,7 @@ function requestJson(url, redirectCount = 0) {
         });
         response.on('end', () => {
           if (statusCode === 404) {
-            resolve(null);
+            resolve({ headers: response.headers, value: null });
             return;
           }
 
@@ -355,7 +369,7 @@ function requestJson(url, redirectCount = 0) {
           }
 
           try {
-            resolve(JSON.parse(body || 'null'));
+            resolve({ headers: response.headers, value: JSON.parse(body || 'null') });
           } catch (error) {
             reject(error);
           }
@@ -368,6 +382,15 @@ function requestJson(url, redirectCount = 0) {
     });
     request.on('error', reject);
   });
+}
+
+async function requestJson(url) {
+  const response = await requestJsonResponse(url);
+  return response.value;
+}
+
+async function fetchGithubReleaseCatalog() {
+	return fetchAllGithubReleasePages(updateFeedUrl, requestJsonResponse);
 }
 
 function releaseMatchesElectronLabel(release) {
@@ -527,25 +550,16 @@ function safeFileName(fileName) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  return cleaned || 'Thingtime-Electron-App-Release.dmg';
+	return (cleaned || 'Thingtime-Electron-App-Release.zip').slice(0, 180);
 }
 
-function uniqueDownloadPath(directory, fileName) {
-  const parsed = path.parse(fileName);
-  let candidate = path.join(directory, fileName);
-  let counter = 2;
-
-  while (fs.existsSync(candidate)) {
-    candidate = path.join(directory, `${parsed.name}-${counter}${parsed.ext}`);
-    counter += 1;
-  }
-
-  return candidate;
-}
-
-function downloadFile(url, targetPath, redirectCount = 0) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(targetPath, { flags: 'wx' });
+function downloadFile(url, targetPath, options = {}, redirectCount = 0) {
+	return new Promise((resolve, reject) => {
+		if (!isAllowedGithubReleaseAssetUrl(url)) {
+			reject(new Error('Thingtime update download was redirected outside GitHub release storage.'));
+			return;
+		}
+		const file = fs.createWriteStream(targetPath, { flags: 'wx' });
     let settled = false;
 
     const cleanup = (error) => {
@@ -572,20 +586,25 @@ function downloadFile(url, targetPath, redirectCount = 0) {
         const statusCode = response.statusCode || 0;
         const location = response.headers.location;
 
-        if ([301, 302, 303, 307, 308].includes(statusCode) && location && redirectCount < 5) {
-          response.resume();
-          file.close(() => {
-            fs.rm(targetPath, { force: true }, (error) => {
-              if (error) {
-                reject(error);
-                return;
-              }
+			if ([301, 302, 303, 307, 308].includes(statusCode) && location && redirectCount < 5) {
+				response.resume();
+				file.close(() => {
+					fs.rm(targetPath, { force: true }, (error) => {
+						if (error) {
+							reject(error);
+							return;
+						}
+						downloadFile(new URL(location, url).href, targetPath, options, redirectCount + 1).then(resolve, reject);
+					});
+				});
+				return;
+			}
 
-              downloadFile(new URL(location, url).href, targetPath, redirectCount + 1).then(resolve, reject);
-            });
-          });
-          return;
-        }
+			if ([301, 302, 303, 307, 308].includes(statusCode)) {
+				response.resume();
+				cleanup(new Error('Thingtime update download exceeded its permitted GitHub redirect limit.'));
+				return;
+			}
 
         if (statusCode >= 400) {
           response.resume();
@@ -593,12 +612,33 @@ function downloadFile(url, targetPath, redirectCount = 0) {
           return;
         }
 
+        const maximumBytes = options.maximumBytes || maxUpdateArchiveBytes;
+        const declaredLength = Number.parseInt(String(response.headers['content-length'] || ''), 10);
+        if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) {
+          response.resume();
+          cleanup(new Error('Update download is larger than the permitted cache size.'));
+          return;
+        }
+
+        let downloadedBytes = 0;
+        response.on('data', (chunk) => {
+          downloadedBytes += Buffer.byteLength(chunk);
+          if (downloadedBytes > maximumBytes) {
+            request.destroy(new Error('Update download is larger than the permitted cache size.'));
+          }
+        });
+
         response.pipe(file);
         response.on('error', cleanup);
         file.on('finish', () => {
           file.close((error) => {
             if (error) {
               cleanup(error);
+              return;
+            }
+
+            if (options.expectedBytes !== undefined && options.expectedBytes !== null && downloadedBytes !== options.expectedBytes) {
+              cleanup(new Error('Update download size did not match the GitHub release metadata.'));
               return;
             }
 
@@ -619,25 +659,191 @@ function downloadFile(url, targetPath, redirectCount = 0) {
   });
 }
 
-async function downloadUpdateBundle() {
-  const updateInfo = await resolveUpdateRelease();
+function updateCacheRoot() {
+  return path.join(app.getPath('userData'), 'release-cache');
+}
 
-  if (!updateInfo.asset?.downloadUrl) {
-    throw new Error(updateInfo.message || 'No downloadable Electron app bundle is available.');
+function publicCachedBundle(entry) {
+  const { appPath, sourceSha256, ...publicEntry } = entry;
+  return publicEntry;
+}
+
+function cacheEntryForKey(key) {
+  if (typeof key !== 'string' || !/^[a-z0-9.-]{1,100}-[a-f0-9]{12}$/u.test(key)) {
+    throw new Error('Thingtime update cache key is invalid.');
   }
+  const entry = getCachedBundles(updateCacheRoot()).find((candidate) => candidate.key === key);
+  if (!entry) throw new Error('That Thingtime version is not cached on this Mac.');
+  return entry;
+}
 
-  const downloadsDir = app.getPath('downloads');
-  const assetName = safeFileName(updateInfo.asset.name || `Thingtime-${updateInfo.latestVersion || 'latest'}.dmg`);
-  const downloadPath = uniqueDownloadPath(downloadsDir, assetName);
+function scheduleCachedReleaseHandoff(action, entry) {
+	if (!['install', 'launch'].includes(action)) throw new Error('Thingtime recovery action is invalid.');
+	const installedApp = installedThingtimeApp();
+	const pendingDirectory = path.join(updateCacheRoot(), 'pending');
+	fs.mkdirSync(pendingDirectory, { recursive: true, mode: 0o700 });
+	const planPath = path.join(pendingDirectory, `${crypto.randomUUID()}.json`);
+	fs.writeFileSync(
+		planPath,
+		`${JSON.stringify({ action, cacheRoot: updateCacheRoot(), format: 1, sourceApp: entry.appPath, targetDir: path.dirname(installedApp), waitForPid: process.pid })}\n`,
+		{ encoding: 'utf8', flag: 'wx', mode: 0o600 }
+	);
+	const helper = path.join(__dirname, 'scripts', 'install-cached-release.mjs');
+	try {
+		const child = spawn(process.execPath, [helper, planPath], {
+			detached: true,
+			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+			stdio: 'ignore'
+		});
+		child.unref();
+	} catch (error) {
+		fs.rmSync(planPath, { force: true });
+		throw error;
+	}
+	setTimeout(() => app.quit(), 100);
+}
 
-  await downloadFile(updateInfo.asset.downloadUrl, downloadPath);
-  shell.showItemInFolder(downloadPath);
+function packagedVerifierScript() {
+  return path.join(__dirname, 'scripts', 'verify-signed-app.mjs');
+}
 
+async function verifyProductionReleaseApp(appPath) {
+  const result = spawnSync(process.execPath, [packagedVerifierScript(), '--mode', 'production', appPath], {
+    encoding: 'utf8',
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  if (result.error || result.status !== 0) {
+    throw new Error('The downloaded Thingtime bundle did not pass Developer ID, notarization, and nested-code verification.');
+  }
+}
+
+function installedThingtimeApp() {
+  return path.join(app.getPath('home'), 'Applications', 'Thingtime.app');
+}
+
+function currentRecoveryRelease() {
+  const version = getCurrentAppVersion();
+  const normalized = normalizeVersionString(version) || app.getVersion();
+  const details = normalized.match(/^\d+\.\d+\.\d+-pr\.(\d+)\.([a-z0-9-]+)\.g([0-9a-f]{7,40})$/iu);
   return {
-    ...updateInfo,
+    branch: details?.[2] || null,
+    commit: details?.[3] || null,
+    name: `Previously installed Thingtime ${normalized}`,
+    pullRequestNumber: details ? Number(details[1]) : null,
+    tag: `installed-${normalized}`,
+    version: normalized
+  };
+}
+
+async function getReleaseCatalog() {
+	const currentVersion = getCurrentAppVersion();
+	const cachedBundles = getCachedBundles(updateCacheRoot()).map(publicCachedBundle);
+	try {
+		const { releases, truncated } = await fetchGithubReleaseCatalog();
+		return releaseCatalogState({
+			cachedBundles,
+			currentVersion,
+			feedUrl: updateFeedUrl,
+			releases: releaseCatalog(releases, currentVersion),
+			truncated
+		});
+	} catch {
+		return releaseCatalogState({
+			cachedBundles,
+			catalogError: 'GitHub releases are temporarily unavailable. Cached recovery bundles remain available on this Mac.',
+			currentVersion,
+			feedUrl: updateFeedUrl
+		});
+	}
+}
+
+async function cacheSelectedRelease(request) {
+  const releaseId = typeof request?.releaseId === 'string' && request.releaseId.length <= 240 ? request.releaseId : '';
+	if (!releaseId) throw new Error('Choose a Thingtime release first.');
+	const catalog = await getReleaseCatalog();
+	if (catalog.catalogError) throw new Error(catalog.catalogError);
+	const release = catalog.releases.find((candidate) => candidate.id === releaseId);
+  if (!release?.asset?.downloadUrl || !release.asset.name) {
+    throw new Error('That release does not include a signed macOS ZIP bundle.');
+  }
+  const cacheRoot = updateCacheRoot();
+  const downloadDirectory = path.join(cacheRoot, 'downloads');
+  fs.mkdirSync(downloadDirectory, { recursive: true, mode: 0o700 });
+  const temporaryArchive = path.join(downloadDirectory, `${crypto.randomUUID()}-${safeFileName(release.asset.name)}`);
+  try {
+    await downloadFile(release.asset.downloadUrl, temporaryArchive, {
+      expectedBytes: release.asset.size,
+      maximumBytes: maxUpdateArchiveBytes
+    });
+    const cachedBundle = await cacheReleaseArchive({
+      archivePath: temporaryArchive,
+      cacheRoot,
+      release,
+      verifyApp: verifyProductionReleaseApp
+    });
+    return { cachedBundle: publicCachedBundle(cachedBundle), catalog: await getReleaseCatalog() };
+  } finally {
+    await fs.promises.rm(temporaryArchive, { force: true });
+  }
+}
+
+async function launchCachedRelease(request) {
+	const entry = cacheEntryForKey(request?.key);
+	await verifyProductionReleaseApp(entry.appPath);
+	scheduleCachedReleaseHandoff('launch', entry);
+	return {
+		cachedBundle: publicCachedBundle(entry),
+		message: `Closing this Thingtime instance and launching ${entry.version || entry.tag} as a standalone recovery bundle.`,
+		status: 'relaunching'
+	};
+}
+
+async function installCachedRelease(request) {
+  const entry = cacheEntryForKey(request?.key);
+  await verifyProductionReleaseApp(entry.appPath);
+  const installedApp = installedThingtimeApp();
+  if (!fs.existsSync(installedApp)) throw new Error('The standard ~/Applications/Thingtime.app install is missing; launch the cached bundle instead.');
+  await cacheInstalledBundle({
+    cacheRoot: updateCacheRoot(),
+    release: currentRecoveryRelease(),
+    sourceApp: installedApp,
+    verifyApp: verifyProductionReleaseApp
+  });
+	scheduleCachedReleaseHandoff('install', entry);
+  return { cachedBundle: publicCachedBundle(entry), message: `Switching to ${entry.version || entry.tag} and keeping the current version as a recovery bundle.`, status: 'relaunching' };
+}
+
+async function removeCachedRelease(request) {
+  const key = typeof request?.key === 'string' ? request.key : '';
+  removeCachedBundle({ cacheRoot: updateCacheRoot(), key });
+  return getReleaseCatalog();
+}
+
+function revealUpdateCache() {
+  const root = updateCacheRoot();
+  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  shell.showItemInFolder(root);
+  return { cachePath: root };
+}
+
+async function downloadUpdateBundle() {
+  const catalog = await getReleaseCatalog();
+  const release = catalog.releases.find((candidate) => candidate.asset && !candidate.isCurrent) || catalog.releases.find((candidate) => candidate.asset);
+  if (!release) throw new Error('No signed macOS ZIP bundle is available in the GitHub release catalog.');
+  const result = await cacheSelectedRelease({ releaseId: release.id });
+  return {
+    asset: release.asset,
+    cachedBundle: result.cachedBundle,
+    checkedAt: result.catalog.checkedAt,
+    currentVersion: result.catalog.currentVersion,
     downloadedAt: new Date().toISOString(),
-    downloadPath,
-    message: `Downloaded ${assetName} to Downloads.`
+    latestVersion: release.version,
+    message: `Verified and cached ${release.version || release.tag}. Choose Install to switch to it.`,
+    releaseName: release.name,
+    releaseUrl: release.releaseUrl,
+    status: 'available',
+    updateAvailable: !release.isCurrent
   };
 }
 
@@ -1360,8 +1566,38 @@ ipcMain.handle('thingtime-desktop:load-url', (event, url) => {
 	requireTrustedAiBridgeEvent(event);
 	return selectAndLoadDesktopUrl(url);
 });
-ipcMain.handle('thingtime-desktop:check-for-updates', () => checkForUpdates());
-ipcMain.handle('thingtime-desktop:download-update-bundle', () => downloadUpdateBundle());
+ipcMain.handle('thingtime-desktop:check-for-updates', (event) => {
+  requireTrustedAiBridgeEvent(event);
+  return checkForUpdates();
+});
+ipcMain.handle('thingtime-desktop:download-update-bundle', (event) => {
+  requireTrustedAiBridgeEvent(event);
+  return downloadUpdateBundle();
+});
+ipcMain.handle('thingtime-desktop:list-update-catalog', (event) => {
+  requireTrustedAiBridgeEvent(event);
+  return getReleaseCatalog();
+});
+ipcMain.handle('thingtime-desktop:cache-release-bundle', (event, request) => {
+  requireTrustedAiBridgeEvent(event);
+  return cacheSelectedRelease(request);
+});
+ipcMain.handle('thingtime-desktop:install-cached-release', (event, request) => {
+  requireTrustedAiBridgeEvent(event);
+  return installCachedRelease(request);
+});
+ipcMain.handle('thingtime-desktop:launch-cached-release', (event, request) => {
+  requireTrustedAiBridgeEvent(event);
+  return launchCachedRelease(request);
+});
+ipcMain.handle('thingtime-desktop:remove-cached-release', (event, request) => {
+  requireTrustedAiBridgeEvent(event);
+  return removeCachedRelease(request);
+});
+ipcMain.handle('thingtime-desktop:reveal-update-cache', (event) => {
+  requireTrustedAiBridgeEvent(event);
+  return revealUpdateCache();
+});
 ipcMain.handle('thingtime-desktop:ai-discover', (event) => discoverAiSources(event));
 ipcMain.handle('thingtime-desktop:ai-begin-sync', (event, request) => beginAiSync(event, request));
 ipcMain.handle('thingtime-desktop:ai-read-batch', (event, request) => readAiSyncBatch(event, request));

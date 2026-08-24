@@ -224,8 +224,8 @@ export function acquireInstallLock(targetDir) {
   };
 }
 
-function defaultVerifyApp(appPath) {
-  runRequired(process.execPath, [verifyScript, '--mode', 'local', appPath], `Stable signature verification for ${appPath}`);
+function defaultVerifyApp(appPath, signatureMode = 'local') {
+  runRequired(process.execPath, [verifyScript, '--mode', signatureMode, appPath], `Stable signature verification for ${appPath}`);
 }
 
 function defaultCopyApp(sourceApp, destinationApp) {
@@ -242,7 +242,9 @@ export function installLocalApp(options = {}) {
   const targetApp = join(targetDir, appName);
   const targetExecutable = join(targetApp, 'Contents', 'MacOS', 'Thingtime');
   const targetNodeExecutable = join(targetApp, 'Contents', 'Helpers', 'Thingtime Node.app', 'Contents', 'MacOS', 'ThingtimeNode');
-  const verifyApp = options.verifyApp || defaultVerifyApp;
+  const signatureMode = options.signatureMode || process.env.THINGTIME_ELECTRON_SIGNATURE_MODE || 'local';
+  if (!['local', 'production'].includes(signatureMode)) throw new Error('Thingtime installation signature mode is invalid.');
+  const verifyApp = options.verifyApp || ((appPath) => defaultVerifyApp(appPath, signatureMode));
   const copyApp = options.copyApp || defaultCopyApp;
   const identifierReader = options.identifierReader || readBundleIdentifier;
   const runningPids = options.runningPids || exactRunningInstalledPids;
