@@ -133,7 +133,10 @@ jobs:
         run: |
           set -euo pipefail
           corepack pnpm --dir remix install --frozen-lockfile
-          corepack pnpm --dir MCP install --frozen-lockfile
+          # MCP is deliberately npm-managed and commits package-lock.json rather
+          # than a pnpm lockfile. Keep this deterministic so PR release builds
+          # cannot fail before their unsigned source checks or signing gate.
+          npm ci --prefix MCP
           corepack pnpm --dir electron install --frozen-lockfile
 
       - name: Test unsigned source before accessing signing credentials

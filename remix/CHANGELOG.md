@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Signed PR release CI now installs the MCP bridge from its committed npm
+  lockfile**: the runner uses `npm ci --prefix MCP`, matching the package's
+  `package-lock.json` instead of requiring a nonexistent pnpm lockfile. This
+  keeps the unsigned verification gate deterministic and lets the signed,
+  notarized release pipeline proceed only after MCP dependencies install
+  reproducibly. — Codex (AI), 2026-08-24
+
 - **Paired-Mac display mode selections now persist**: resolution and refresh
   changes use Core Graphics' permanent display-configuration transaction rather
   than an app-lifetime mode setter, matching the existing layout and mirroring

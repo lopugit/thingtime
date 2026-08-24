@@ -16,6 +16,8 @@ test('signed PR release workflow gates signing on a maintainer-approved same-rep
 	assert.match(workflow, /'desktop-release'/u);
 	assert.match(workflow, /release_version="\$\{base_version\}-pr\.\$\{PR_NUMBER\}\.\$\{branch_slug\}\.g\$\{short_sha\}"/u);
 	assert.match(workflow, /--prerelease/u);
+	assert.match(workflow, /npm ci --prefix MCP/u);
+	assert.doesNotMatch(workflow, /corepack pnpm --dir MCP install --frozen-lockfile/u);
 	assert.match(workflow, /corepack pnpm --dir electron run dist/u);
 	assert.match(workflow, /test "\$\{#zip_assets\[@\]\}" -gt 0/u);
 	assert.match(workflow, /Remove ephemeral signing material/u);

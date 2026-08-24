@@ -886,9 +886,10 @@ an offline database or offline conflict resolution layer.
   leave a partial verified-app directory behind. GitHub outage state preserves
   the local cache catalog so launch/install recovery actions remain usable
   offline.
-- Live GitHub inspection established that executable Electron release behavior
-  remains on `github-actions`; that ref is still the former unsigned runner.
-  GitHub has not registered the PR-local release workflow as a runnable signed
-  publisher for #68. The signed runner must be promoted to that trusted ref
-  (with its Developer ID/notarization secrets) before a real signed PR
-  prerelease can be created and cached end-to-end.
+- Live GitHub inspection subsequently registered **Signed Electron PR Release**
+  for this branch. Owner manual run
+  `32712878513` reached its real dependency gate and exposed a concrete
+  runner-only defect before any signing material was accessed: `MCP/` is
+  npm-managed and has `package-lock.json`, so a frozen pnpm install could never
+  succeed. The workflow now uses `npm ci --prefix MCP`; its contract test locks
+  that package-manager boundary before the next signed release attempt.
