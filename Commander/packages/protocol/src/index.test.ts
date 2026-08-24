@@ -117,6 +117,11 @@ describe('normalizeIndexingSettings', () => {
     expect(normalizeIndexingSettings(undefined)).toEqual(DEFAULT_INDEXING_SETTINGS);
   });
 
+  it('upgrades the former singleton home-directory default to whole-volume indexing', () => {
+    expect(normalizeIndexingSettings({ version: 4, roots: ['~'] }).roots).toEqual(['/']);
+    expect(normalizeIndexingSettings({ version: 4, roots: ['~/Projects'] }).roots).toEqual(['~/Projects']);
+  });
+
   it('preserves valid roots and wildcard/regex rules while enforcing resource bounds', () => {
     expect(
       normalizeIndexingSettings({

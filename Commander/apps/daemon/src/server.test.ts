@@ -184,10 +184,10 @@ describe('Commander daemon HTTP trust boundaries', () => {
       expect(indexingStatus.status).toBe(200);
       expect(await indexingStatus.json()).toMatchObject({
         available: false,
-        running: [],
+        running: expect.any(Array),
         databaseSizeBytes: 0,
         commands: { count: expect.any(Number), lastIndexedAtMs: expect.any(Number) },
-        automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 360 },
+        automaticRefresh: { applicationsMinutes: 360, filesystemMinutes: 360 },
       });
 
       const settingsSearch = await fetch(`${server.url}/api/search?q=settings`, {
@@ -642,7 +642,7 @@ describe('Commander daemon HTTP trust boundaries', () => {
     }
   });
 
-  it('re-ranks a nearby cached filesystem candidate set without a catalog-only downgrade', async () => {
+  it('does not replay a stale cache frame across a live catalog revision', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-stream-cache-test-'));
     const uiPath = path.join(temporary, 'ui');
     const indexerPath = path.join(temporary, 'fake-indexer.mjs');
@@ -671,9 +671,9 @@ describe('Commander daemon HTTP trust boundaries', () => {
 
       const refined = await fetch(`${server.url}/api/search/stream?q=comma`, { headers });
       const refinedEvents = await streamEvents(refined);
-      expect(refinedEvents[0]).toMatchObject({ phase: 'cache', cached: true, complete: false });
-      expect(refinedEvents.map((event) => event.phase)).toEqual(['cache', 'filesystem']);
-      expect(refinedEvents[0]?.hits).toEqual(
+      expect(refinedEvents[0]).toMatchObject({ phase: 'catalog', cached: false, complete: false });
+      expect(refinedEvents.map((event) => event.phase)).toEqual(['catalog', 'filesystem']);
+      expect(refinedEvents.at(-1)?.hits).toEqual(
         expect.arrayContaining([expect.objectContaining({ title: 'Commander-notes.md', kind: 'file' })]),
       );
     } finally {

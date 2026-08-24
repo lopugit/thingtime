@@ -247,6 +247,13 @@ export function extensionItems(extensions: CommanderExtension[]): SearchItem[] {
         favourite: false,
         extensionId: extension.id,
         commandName: command.name,
+        // System helper apps can coincidentally contain “emoji” in their
+        // bundle name. A direct user-facing built-in command should win that
+        // exact intent without preventing a learned preference from later
+        // promoting a different result.
+        ...(extension.id === emojiSymbolsExtension.id && command.name === searchEmojiSymbolsCommandName
+          ? { preferenceScore: 25_000 }
+          : {}),
         actions: [{ id: 'run', title: `Run ${command.title}`, shortcut: '↵' }],
       })),
   );

@@ -156,6 +156,12 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     onUpdate?: (event: SearchStreamEvent) => void,
   ): Promise<SearchHit[]> => {
     const snapshot = store.snapshot();
+    // A catalog refresh is a single atomic swap. Every request deliberately
+    // uses one snapshot, so a query in progress never combines an old catalog
+    // preview with a newer final result; the next keystroke/request gets the
+    // latest committed catalog without waiting for indexing.
+    const catalog = search.snapshot();
+    const catalogRevision = searchRevision;
     const calculation = calculatorSearchHit(query, snapshot.settings.calculator);
     const present = (hits: SearchHit[]) =>
       [
@@ -168,7 +174,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       order: snapshot.settings.resultCategoryOrder,
       windowMode: snapshot.settings.windowMode,
       favourites: snapshot.settings.showFavouritesInCompactMode,
-      revision: searchRevision,
+      revision: catalogRevision,
     });
     const key = JSON.stringify({
       version: SEARCH_CACHE_KEY_VERSION,
@@ -176,7 +182,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       order: snapshot.settings.resultCategoryOrder,
       windowMode: snapshot.settings.windowMode,
       favourites: snapshot.settings.showFavouritesInCompactMode,
-      revision: searchRevision,
+      revision: catalogRevision,
     });
     const indexedItemsPromise = indexing.queryItems(query);
     const cached = await searchCache.lookup({ key, contextKey, query: normalizedQuery });
@@ -202,8 +208,9 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       });
       emittedCachedResults = true;
     } else if (cached?.indexedItems.length) {
-      let previewHits = await search.search(
+      let previewHits = await search.searchSnapshot(
         query,
+        catalog,
         30,
         cached.indexedItems,
         preferenceScores,
@@ -224,8 +231,9 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     }
 
     if (!emittedCachedResults) {
-      let catalogHits = await search.search(
+      let catalogHits = await search.searchSnapshot(
         query,
+        catalog,
         30,
         [],
         preferenceScores,
@@ -242,8 +250,9 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     }
 
     const indexedItems = await indexedItemsPromise;
-    let hits = await search.search(
+    let hits = await search.searchSnapshot(
       query,
+      catalog,
       30,
       indexedItems,
       preferenceScores,
@@ -258,9 +267,13 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       complete: true,
       cached: false,
     });
-    void searchCache
-      .put({ key, contextKey, query: normalizedQuery, hits, indexedItems })
-      .catch(() => undefined);
+    // Never let a just-finished, older snapshot overwrite cache state after a
+    // live catalog update. Its response is still valid for its caller.
+    if (catalogRevision === searchRevision) {
+      void searchCache
+        .put({ key, contextKey, query: normalizedQuery, hits, indexedItems })
+        .catch(() => undefined);
+    }
     return presentedHits;
   };
 

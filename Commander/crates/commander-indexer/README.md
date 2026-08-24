@@ -16,6 +16,8 @@ private SQLite database. It never reads or stores file contents.
 - Apply additional wildcard (`glob`) and regular-expression (`regex`) ignore
   rules. A descendant glob such as `**/node_modules/**` also prunes the
   matching directory instead of walking every ignored child.
+- Reconcile disconnected/remapped volumes by pruning only caller-selected
+  source namespaces after a wholly successful scan.
 - Persist results and per-kind status in SQLite with a name-focused FTS5
   trigram index, shared typo/transposition ranking, and time-bounded coarse-name
   and path fallbacks that cannot monopolize a long-lived client.
@@ -63,6 +65,7 @@ An index configuration looks like this:
     { "kind": "regex", "pattern": "(^|/)scratch-[0-9]+(/|$)" }
   ],
   "maxEntries": null,
+  "pruneSourcePrefixes": ["filesystem:"],
   "resourceLimits": {
     "maxThreads": 2,
     "maxParallelism": 2,
@@ -85,6 +88,12 @@ limit aborts the transaction and leaves the previous searchable snapshot
 untouched. If the operating system cannot provide CPU or resident-memory
 counters, indexing fails closed instead of silently ignoring the requested
 ceiling.
+
+`pruneSourcePrefixes` is optional. When provided, records whose source IDs
+start with one of those prefixes but are absent from the completed source list
+are removed atomically. It is useful for mounted-volume inventories: an
+unplugged `filesystem:/Volumes/Work` source disappears without affecting a
+separate `applications:` namespace. Empty prefixes are rejected.
 
 Measured balanced defaults are 2 threads, 2 parallel tasks, 16 open directories, 60%
 total-machine CPU, and 512 MiB RAM. Supported ranges are 1–64 threads/tasks,

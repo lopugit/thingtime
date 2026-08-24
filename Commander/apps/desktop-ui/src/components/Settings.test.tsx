@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { api } from '../lib/api.js';
+import { nativeRequest } from '../lib/nativeBridge.js';
 import { Settings } from './Settings.js';
 
 vi.mock('../lib/api.js', () => ({
@@ -32,7 +33,8 @@ vi.mock('../lib/api.js', () => ({
           scope: 'files',
           occurredAtMs: Date.now() - 1_000,
           timeoutMs: 90_000,
-          message: 'Index Files timed out after 90 seconds. Increase the custom index timeout if this scan needs longer.',
+          message:
+            'Index Files timed out after 90 seconds. Increase the custom index timeout if this scan needs longer.',
         },
       ],
       lastRunResources: {
@@ -87,62 +89,65 @@ vi.mock('../lib/api.js', () => ({
 vi.mock('../lib/nativeBridge.js', () => ({
   beginWindowDrag: vi.fn(),
   nativeBridgeAvailable: vi.fn(() => true),
-  nativeRequest: vi.fn(async () => ({
-    sampledAtMs: 1,
-    commander: {
-      cpuPercent: 12,
-      residentMemoryBytes: 256 * 1024 * 1024,
-      virtualMemoryBytes: 1024 * 1024 * 1024,
-      storageBytes: 64 * 1024 * 1024,
-      processCount: 2,
-    },
-    machine: {
-      cpuPercent: 42,
-      logicalCpuCount: 8,
-      memoryUsedBytes: 8 * 1024 * 1024 * 1024,
-      memoryTotalBytes: 16 * 1024 * 1024 * 1024,
-      thermalState: 'nominal',
-      filesystemUsedBytes: 200 * 1024 * 1024 * 1024,
-      filesystemTotalBytes: 500 * 1024 * 1024 * 1024,
-      filesystemAvailableBytes: 300 * 1024 * 1024 * 1024,
-      memory: {
-        usedBytes: 8 * 1024 * 1024 * 1024,
-        totalBytes: 16 * 1024 * 1024 * 1024,
-        activeBytes: 4 * 1024 * 1024 * 1024,
-        wiredBytes: 2 * 1024 * 1024 * 1024,
-        cachedBytes: 1024 * 1024 * 1024,
-        compressedBytes: 512 * 1024 * 1024,
-        purgeableBytes: 256 * 1024 * 1024,
+  nativeRequest: vi.fn(async (method: string) => {
+    if (method === 'permission.fullDiskAccess') return { granted: true };
+    return {
+      sampledAtMs: 1,
+      commander: {
+        cpuPercent: 12,
+        residentMemoryBytes: 256 * 1024 * 1024,
+        virtualMemoryBytes: 1024 * 1024 * 1024,
+        storageBytes: 64 * 1024 * 1024,
+        processCount: 2,
       },
-      filesystem: {
-        usedBytes: 200 * 1024 * 1024 * 1024,
-        totalBytes: 500 * 1024 * 1024 * 1024,
-        availableBytes: 300 * 1024 * 1024 * 1024,
-        purgeableBytes: 12 * 1024 * 1024 * 1024,
+      machine: {
+        cpuPercent: 42,
+        logicalCpuCount: 8,
+        memoryUsedBytes: 8 * 1024 * 1024 * 1024,
+        memoryTotalBytes: 16 * 1024 * 1024 * 1024,
+        thermalState: 'nominal',
+        filesystemUsedBytes: 200 * 1024 * 1024 * 1024,
+        filesystemTotalBytes: 500 * 1024 * 1024 * 1024,
+        filesystemAvailableBytes: 300 * 1024 * 1024 * 1024,
+        memory: {
+          usedBytes: 8 * 1024 * 1024 * 1024,
+          totalBytes: 16 * 1024 * 1024 * 1024,
+          activeBytes: 4 * 1024 * 1024 * 1024,
+          wiredBytes: 2 * 1024 * 1024 * 1024,
+          cachedBytes: 1024 * 1024 * 1024,
+          compressedBytes: 512 * 1024 * 1024,
+          purgeableBytes: 256 * 1024 * 1024,
+        },
+        filesystem: {
+          usedBytes: 200 * 1024 * 1024 * 1024,
+          totalBytes: 500 * 1024 * 1024 * 1024,
+          availableBytes: 300 * 1024 * 1024 * 1024,
+          purgeableBytes: 12 * 1024 * 1024 * 1024,
+        },
+        processes: [
+          {
+            pid: 99,
+            parentPid: 1,
+            name: 'Commander',
+            cpuPercent: 12,
+            residentMemoryBytes: 256 * 1024 * 1024,
+            diskReadBytesPerSecond: 1024,
+            diskWriteBytesPerSecond: 2048,
+          },
+          {
+            pid: 100,
+            parentPid: 99,
+            name: 'Commander Daemon',
+            cpuPercent: 3,
+            residentMemoryBytes: 128 * 1024 * 1024,
+            diskReadBytesPerSecond: 0,
+            diskWriteBytesPerSecond: 0,
+          },
+        ],
+        gpu: { name: 'Apple GPU', available: true, utilizationPercent: 16, source: 'io-registry' },
       },
-      processes: [
-        {
-          pid: 99,
-          parentPid: 1,
-          name: 'Commander',
-          cpuPercent: 12,
-          residentMemoryBytes: 256 * 1024 * 1024,
-          diskReadBytesPerSecond: 1024,
-          diskWriteBytesPerSecond: 2048,
-        },
-        {
-          pid: 100,
-          parentPid: 99,
-          name: 'Commander Daemon',
-          cpuPercent: 3,
-          residentMemoryBytes: 128 * 1024 * 1024,
-          diskReadBytesPerSecond: 0,
-          diskWriteBytesPerSecond: 0,
-        },
-      ],
-      gpu: { name: 'Apple GPU', available: true, utilizationPercent: 16, source: 'io-registry' },
-    },
-  })),
+    };
+  }),
 }));
 
 const bootstrap: BootstrapResponse = {
@@ -271,7 +276,7 @@ describe('Commander settings deep links', () => {
     expect(screen.getByRole('heading', { name: 'Search Index' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Search' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('Fuzzy and adaptive everywhere')).toBeVisible();
-    expect(screen.getByDisplayValue('~')).toBeVisible();
+    expect(screen.getByDisplayValue('/')).toBeVisible();
     expect(screen.getByDisplayValue('**/node_modules/**')).toBeVisible();
     expect(screen.getByDisplayValue('**/*.noindex/**')).toBeVisible();
     expect(screen.getByText(/files and folders reconcile every 6 hours/i)).toBeVisible();
@@ -289,8 +294,14 @@ describe('Commander settings deep links', () => {
       ),
     );
     expect(screen.getByLabelText('Search index database size')).toHaveTextContent('Database 700 MB');
-    expect(screen.getByLabelText('Recent index timing')).toHaveTextContent(/12\.5 s average across 2 successful runs/i);
-    expect(screen.getByLabelText('Timed out index attempts')).toHaveTextContent(/index files timed out after 90 seconds/i);
+    expect(screen.getByLabelText('Recent index timing')).toHaveTextContent(
+      /12\.5 s average across 2 successful runs/i,
+    );
+    expect(screen.getByLabelText('Timed out index attempts')).toHaveTextContent(
+      /index files timed out after 90 seconds/i,
+    );
+    await waitFor(() => expect(screen.getByText('Full Disk Access granted')).toBeVisible());
+    expect(nativeRequest).toHaveBeenCalledWith('permission.fullDiskAccess');
 
     fireEvent.click(screen.getByRole('button', { name: 'Files' }));
     await waitFor(() => expect(api.indexNow).toHaveBeenCalledWith('files'));
@@ -331,5 +342,23 @@ describe('Commander settings deep links', () => {
     );
     fireEvent.change(timeout, { target: { value: '900000ms' } });
     expect(timeout).toHaveValue('900000');
+  });
+
+  it('reports a missing Full Disk Access grant and allows a native recheck', async () => {
+    window.history.replaceState({}, '', '/settings.html?tab=search');
+    vi.mocked(nativeRequest).mockImplementation(async (method: string) => {
+      if (method === 'permission.fullDiskAccess') return { granted: false };
+      return undefined;
+    });
+    vi.mocked(nativeRequest).mockClear();
+    render(<Settings state={state()} />);
+
+    await waitFor(() => expect(screen.getByText('Full Disk Access not granted')).toBeVisible());
+    fireEvent.click(screen.getByRole('button', { name: 'Recheck' }));
+    await waitFor(() =>
+      expect(
+        vi.mocked(nativeRequest).mock.calls.filter(([method]) => method === 'permission.fullDiskAccess'),
+      ).toHaveLength(2),
+    );
   });
 });

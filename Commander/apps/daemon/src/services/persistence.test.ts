@@ -209,9 +209,9 @@ describe('PersistentStore Thingtime defaults', () => {
       const store = new PersistentStore();
       await store.load();
       expect(store.snapshot().settings.indexing).toMatchObject({
-        version: 4,
+        version: 5,
         enabled: true,
-        roots: ['~'],
+        roots: ['/'],
         respectGitIgnore: true,
         includeHidden: true,
         maxEntries: null,

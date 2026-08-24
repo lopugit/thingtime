@@ -150,6 +150,12 @@ pub struct IndexConfiguration {
     pub max_entries: Option<usize>,
     #[serde(default)]
     pub resource_limits: IndexResourceLimits,
+    /// Optional source namespaces whose records should exactly match this
+    /// configuration after a successful run. Commander uses this to remove
+    /// stale results from an unplugged volume without touching another
+    /// independently indexed namespace.
+    #[serde(default)]
+    pub prune_source_prefixes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -358,6 +364,7 @@ impl IndexDatabase {
                 }
             }
         }
+        self.prune_absent_sources(configuration)?;
 
         let indexed = reports.iter().map(|report| report.indexed).sum();
         let skipped = reports.iter().map(|report| report.skipped).sum();
@@ -589,6 +596,45 @@ impl IndexDatabase {
                 ],
             )?;
         }
+        Ok(())
+    }
+
+    fn prune_absent_sources(
+        &mut self,
+        configuration: &IndexConfiguration,
+    ) -> Result<(), IndexerError> {
+        if configuration.prune_source_prefixes.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.connection.transaction()?;
+        for prefix in &configuration.prune_source_prefixes {
+            let active_ids = configuration
+                .sources
+                .iter()
+                .filter(|source| source.id.starts_with(prefix))
+                .map(|source| source.id.as_str())
+                .collect::<Vec<_>>();
+            let mut values = vec![SqlValue::Text(format!("{prefix}%"))];
+            values.extend(active_ids.iter().map(|id| SqlValue::Text((*id).to_owned())));
+            let selection = if active_ids.is_empty() {
+                "source_id LIKE ?1".to_owned()
+            } else {
+                let placeholders = (2..=active_ids.len() + 1)
+                    .map(|index| format!("?{index}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("source_id LIKE ?1 AND source_id NOT IN ({placeholders})")
+            };
+            transaction.execute(
+                &format!("DELETE FROM records WHERE {selection}"),
+                params_from_iter(values.iter()),
+            )?;
+            transaction.execute(
+                &format!("DELETE FROM source_status WHERE {selection}"),
+                params_from_iter(values.iter()),
+            )?;
+        }
+        transaction.commit()?;
         Ok(())
     }
 
@@ -1063,6 +1109,10 @@ fn scan_and_store(
         .threads(governor.effective().worker_threads)
         .hidden(!source.include_hidden)
         .follow_links(source.follow_symlinks)
+        // A source is a filesystem boundary. Commander supplies one source
+        // per mounted volume, which indexes all mounted files without walking
+        // another volume twice through a mount point.
+        .same_file_system(true)
         .ignore(source.respect_git_ignore)
         .parents(source.respect_git_ignore)
         .git_ignore(source.respect_git_ignore)
@@ -1508,6 +1558,27 @@ fn validate_configuration(configuration: &IndexConfiguration) -> Result<(), Inde
             "maxEntries must be null/omitted for unlimited indexing or at least 1",
         ));
     }
+    if configuration.prune_source_prefixes.len() > MAX_SOURCES {
+        return Err(IndexerError::new(
+            "invalid_configuration",
+            format!("at most {MAX_SOURCES} source-prune prefixes are allowed"),
+        ));
+    }
+    let mut prune_prefixes = HashSet::new();
+    for prefix in &configuration.prune_source_prefixes {
+        if prefix.trim().is_empty() || prefix.len() > 128 {
+            return Err(IndexerError::new(
+                "invalid_configuration",
+                "source-prune prefixes must contain between 1 and 128 bytes",
+            ));
+        }
+        if !prune_prefixes.insert(prefix.as_str()) {
+            return Err(IndexerError::new(
+                "invalid_configuration",
+                format!("duplicate source-prune prefix: {prefix}"),
+            ));
+        }
+    }
     validate_resource_limits(&configuration.resource_limits)?;
     let mut ids = HashSet::new();
     for source in &configuration.sources {
@@ -1781,7 +1852,61 @@ mod tests {
             custom_ignores: Vec::new(),
             max_entries: Some(10_000),
             resource_limits: IndexResourceLimits::default(),
+            prune_source_prefixes: Vec::new(),
         }
+    }
+
+    #[test]
+    fn prunes_records_for_disconnected_sources_inside_the_requested_namespace() {
+        let temp = TempDir::new().expect("tempdir");
+        let boot = temp.path().join("boot");
+        let volume = temp.path().join("volume");
+        create_dir_all(&boot).expect("boot directory");
+        create_dir_all(&volume).expect("volume directory");
+        write(boot.join("boot.txt"), "boot").expect("boot file");
+        write(volume.join("volume.txt"), "volume").expect("volume file");
+
+        let mut first = configuration(&boot, vec![IndexKind::File]);
+        first.sources = vec![
+            IndexSource {
+                id: "filesystem:/".to_owned(),
+                root: boot.clone(),
+                kinds: vec![IndexKind::File],
+                respect_git_ignore: true,
+                include_hidden: false,
+                follow_symlinks: false,
+                max_depth: None,
+            },
+            IndexSource {
+                id: "filesystem:/Volumes/Work".to_owned(),
+                root: volume,
+                kinds: vec![IndexKind::File],
+                respect_git_ignore: true,
+                include_hidden: false,
+                follow_symlinks: false,
+                max_depth: None,
+            },
+        ];
+        first.prune_source_prefixes = vec!["filesystem:".to_owned()];
+        let mut database = database(&temp);
+        database.index(&first).expect("initial index");
+
+        let mut after_unmount = configuration(&boot, vec![IndexKind::File]);
+        after_unmount.sources[0].id = "filesystem:/".to_owned();
+        after_unmount.prune_source_prefixes = vec!["filesystem:".to_owned()];
+        database
+            .index(&after_unmount)
+            .expect("reconcile mounted sources");
+
+        let records = database
+            .query(&QueryRequest {
+                query: String::new(),
+                kinds: vec![IndexKind::File],
+                limit: 20,
+            })
+            .expect("query");
+        assert_eq!(records.records.len(), 1);
+        assert_eq!(records.records[0].name, "boot.txt");
     }
 
     #[test]
@@ -2022,11 +2147,12 @@ mod tests {
     }
 
     #[test]
-    fn application_bundles_are_indexed_without_walking_their_contents() {
+    fn deeply_nested_application_bundles_are_indexed_without_walking_their_contents() {
         let temp = TempDir::new().expect("tempdir");
-        create_dir_all(temp.path().join("Example.app/Contents/MacOS")).expect("app");
+        create_dir_all(temp.path().join("Managed/Store/Example.app/Contents/MacOS")).expect("app");
         write(
-            temp.path().join("Example.app/Contents/MacOS/example"),
+            temp.path()
+                .join("Managed/Store/Example.app/Contents/MacOS/example"),
             "binary",
         )
         .expect("binary");

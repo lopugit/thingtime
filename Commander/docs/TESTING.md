@@ -121,7 +121,9 @@
       the default. Re-run the winning profile unchanged; verify schema 3 avoids FTS churn, keeps the result count stable,
       and finishes materially faster than a fresh build. Open a schema-2 fixture and verify it upgrades in place without
       rebuilding or losing searchable records.
-- [ ] On macOS, verify Open Full Disk Access opens Privacy & Security → Full Disk Access without changing the toggle.
+- [ ] On macOS, verify Search → Search Index reports Full Disk Access granted or not granted from the native
+      read-only TCC probe, and Recheck updates the same state. Verify Open Full Disk Access opens Privacy & Security
+      → Full Disk Access without changing the toggle.
       With access withheld and a deliberately blocking root, verify the scan stops after 90 seconds, the writer recovers,
       actionable guidance appears, and the last committed index remains searchable.
 - [ ] In Search → Search Index → Index reliability, enter a digits-only custom timeout in milliseconds, close/reopen
@@ -135,8 +137,11 @@
       results from the last committed index; remove the rule and reindex successfully.
 - [ ] Set a disposable standalone index source above its entry cap. Verify the capped results remain searchable and
       Settings reports the warning instead of rolling the source back to an empty index.
-- [ ] Leave Commander running, add an `.app` bundle to `~/Applications`, and verify the app-directory watcher makes
-      it searchable promptly. Also verify the documented five-minute app and six-hour default file/folder reconciliation intervals.
+- [ ] Leave Commander running, add an `.app` bundle to `~/Applications` and to a mounted volume, and verify the
+      volume watcher makes it searchable promptly. Verify `/` indexes the boot disk plus mounted volumes without
+      crossing a mount boundary twice; the user-visible ignore and `.gitignore` rules must still exclude matches.
+      The six-hour app reconciliation is only a safety net for missed volume events, as are the six-hour default
+      file/folder refreshes.
 
 ## Extensions
 

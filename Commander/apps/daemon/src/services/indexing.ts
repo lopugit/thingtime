@@ -1,4 +1,4 @@
-import { access } from 'node:fs/promises';
+import { access, readdir } from 'node:fs/promises';
 import { watch, type FSWatcher } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,11 +22,14 @@ import type {
   Platform,
   SearchItem,
 } from '@commander/protocol';
-import { applicationDirectories, discoverApplications } from './applications.js';
+import { applicationDirectories, discoverApplications, discoverApplicationsQuick } from './applications.js';
 import { commanderDataDirectory } from './config.js';
 import { pathActions } from './pathActions.js';
 
-export const APPLICATION_REFRESH_MINUTES = 5;
+// Application bundle changes under active volumes are watched with FSEvents.
+// This slower reconciliation is only the safety net for a missed native event
+// or a newly mounted volume.
+export const APPLICATION_REFRESH_MINUTES = 6 * 60;
 
 interface IndexingCallbacks {
   applications(items: SearchItem[]): void;
@@ -110,19 +113,23 @@ export class IndexingService {
         await this.#reader.status();
         this.#available = true;
         applications = await this.#queryApplications();
-        if (!applications.length) {
-          await this.start('applications');
-          applications = await this.#queryApplications();
-        }
       } catch (error) {
         this.#disableRust(error);
       }
     }
-    if (!applications.length) applications = await discoverApplications();
+    // The fallback is deliberately quick and gives the launcher current
+    // top-level/managed applications immediately. The full Rust index below
+    // keeps scanning in the background; never hold Commander startup or the
+    // first search request behind a disk scan.
+    applications = mergeApplications(applications, await discoverApplicationsQuick());
     this.#callbacks.applications(applications);
     this.#timer = setInterval(() => void this.#automaticRefresh(), 60_000);
     this.#timer.unref();
-    await this.#watchApplications();
+    void this.#watchApplications();
+    // Search always reads the latest committed catalog snapshot. Indexing runs
+    // independently and swaps that catalog when its atomic database update
+    // completes, so new searches remain live without a startup race.
+    void this.start('applications').catch(() => undefined);
     void this.#automaticRefresh();
     return applications;
   }
@@ -136,7 +143,9 @@ export class IndexingService {
   }
 
   async queryItems(query: string, limit = FILESYSTEM_RESULT_LIMIT): Promise<SearchItem[]> {
-    if (!this.#reader || !this.#settings.enabled || query.trim().length < 2) return [];
+    // The Rust index has a bounded prefix path for one-character queries, so
+    // do not silently remove filesystem results while a user is still typing.
+    if (!this.#reader || !this.#settings.enabled || !query.trim()) return [];
     try {
       const response = await this.#reader.query({
         query,
@@ -206,7 +215,7 @@ export class IndexingService {
   #activateRun(run: ScheduledIndexRun): void {
     this.#activeRun = run;
     this.#running.add(run.scope);
-    if (run.scope === 'all' || run.scope === 'applications')
+    if ((!this.#reader || !this.#writer) && (run.scope === 'all' || run.scope === 'applications'))
       void this.#refreshFallbackApplications().catch(() => undefined);
     void this.#perform(run.scope)
       .then(() => run.resolve())
@@ -234,7 +243,7 @@ export class IndexingService {
   async status(): Promise<IndexingStatus> {
     const status =
       !this.#lastStatus || Date.now() - this.#lastStatusReadAtMs >= INDEX_STATUS_CACHE_MS
-        ? (await this.#safeRustStatus()) ?? this.#lastStatus
+        ? ((await this.#safeRustStatus()) ?? this.#lastStatus)
         : this.#lastStatus;
     return {
       available: this.#available,
@@ -310,24 +319,24 @@ export class IndexingService {
       await this.#refreshFallbackApplications();
       return;
     }
-    const roots = await existingDirectories(applicationDirectories(this.#platform));
+    const roots = await indexRoots(this.#platform, ['/']);
     if (!roots.length) {
       this.#callbacks.applications([]);
       return;
     }
     await this.#writeIndex({
-      sources: roots.map((root, index) => ({
-        id: `applications:${index}:${root}`,
+      sources: roots.map((root) => ({
+        id: `applications:${root}`,
         root,
         kinds: ['application'],
-        respectGitIgnore: false,
+        respectGitIgnore: this.#settings.respectGitIgnore,
         includeHidden: this.#settings.includeHidden,
         followSymlinks: false,
-        maxDepth: 1,
       })),
-      customIgnores: [],
+      customIgnores: this.#settings.customIgnores,
       maxEntries: this.#settings.maxEntries,
       resourceLimits: this.#settings.resourceLimits,
+      pruneSourcePrefixes: ['applications:'],
     });
     this.#available = true;
     this.#message = undefined;
@@ -336,12 +345,12 @@ export class IndexingService {
 
   async #indexFilesystem(kinds: IndexKind[]): Promise<void> {
     if (!this.#writer) throw new Error('The bundled Rust filesystem indexer is unavailable');
-    const roots = await existingDirectories(this.#settings.roots.map(expandRoot));
+    const roots = await indexRoots(this.#platform, this.#settings.roots);
     if (!roots.length) throw new Error('None of the configured filesystem index roots are available');
     const indexedKinds = [...new Set([...kinds, 'application' as const])];
     const configuration: IndexConfiguration = {
-      sources: roots.map((root, index) => ({
-        id: `filesystem:${index}:${root}`,
+      sources: roots.map((root) => ({
+        id: `filesystem:${root}`,
         root,
         kinds: indexedKinds,
         respectGitIgnore: this.#settings.respectGitIgnore,
@@ -351,6 +360,7 @@ export class IndexingService {
       customIgnores: this.#settings.customIgnores,
       maxEntries: this.#settings.maxEntries,
       resourceLimits: this.#settings.resourceLimits,
+      pruneSourcePrefixes: ['filesystem:'],
     };
     await this.#writeIndex(configuration);
     this.#available = true;
@@ -365,10 +375,8 @@ export class IndexingService {
       this.#settings.customTimeoutMs ??
       indexTimeoutMs(configuration.resourceLimits?.maxCpuPercent, configuration.maxEntries == null);
     try {
-      const report = await writer.index(
-        configuration,
-        timeoutMs,
-        (progress) => this.#recordProgress(progress),
+      const report = await writer.index(configuration, timeoutMs, (progress) =>
+        this.#recordProgress(progress),
       );
       this.#lastRunResources = report.resources;
       this.#recentTimings = [
@@ -459,7 +467,7 @@ export class IndexingService {
       kinds: ['application'],
       limit: APPLICATION_RESULT_LIMIT,
     });
-    return response.records.map(indexRecordToSearchItem);
+    return deduplicateSearchItems(response.records.map(indexRecordToSearchItem));
   }
 
   async #automaticRefresh(): Promise<void> {
@@ -511,17 +519,32 @@ export class IndexingService {
   }
 
   async #watchApplications(): Promise<void> {
-    const roots = await existingDirectories(applicationDirectories(this.#platform));
+    // Recursive volume watches deliver broad live coverage on macOS. Keep the
+    // familiar application directories as overlapping fallback watches in
+    // case a filesystem declines a recursive root watch.
+    const roots = await existingDirectories([
+      ...(await indexRoots(this.#platform, ['/'])),
+      ...applicationDirectories(this.#platform),
+    ]);
     for (const root of roots) {
       try {
-        const watcher = watch(root, { persistent: false }, () => {
-          if (this.#applicationDebounce) clearTimeout(this.#applicationDebounce);
-          this.#applicationDebounce = setTimeout(() => {
-            this.#applicationDebounce = undefined;
-            void this.start('applications').catch(() => undefined);
-          }, 750);
-          this.#applicationDebounce.unref();
-        });
+        const watcher = watch(
+          root,
+          { persistent: false, recursive: this.#platform === 'macos' },
+          (_event, filename) => {
+            // Watching a macOS volume recursively is inexpensive; rescanning
+            // it for every ordinary file save is not. Only application-bundle
+            // and volume-mount events trigger the application catalog refresh.
+            const changedPath = filename?.toString().replaceAll('\\', '/') ?? '';
+            if (changedPath && !isApplicationCatalogChange(changedPath)) return;
+            if (this.#applicationDebounce) clearTimeout(this.#applicationDebounce);
+            this.#applicationDebounce = setTimeout(() => {
+              this.#applicationDebounce = undefined;
+              void this.start('applications').catch(() => undefined);
+            }, 750);
+            this.#applicationDebounce.unref();
+          },
+        );
         watcher.on('error', () => undefined);
         this.#applicationWatchers.push(watcher);
       } catch {
@@ -604,6 +627,30 @@ function expandRoot(value: string): string {
   return path.resolve(value);
 }
 
+/**
+ * `/` means every eligible mounted volume on macOS, not merely the files that
+ * happened to be one directory below /Applications. Each source stays on its
+ * own filesystem in the Rust walker, avoiding duplicate traversal through
+ * mount points while still covering external disks explicitly.
+ */
+async function indexRoots(platform: Platform, roots: readonly string[]): Promise<string[]> {
+  const expanded = roots.map(expandRoot);
+  if (platform !== 'macos' || !expanded.some((root) => path.resolve(root) === path.parse(root).root))
+    return existingDirectories(expanded);
+  return existingDirectories([...expanded, ...(await mountedVolumeRoots())]);
+}
+
+async function mountedVolumeRoots(): Promise<string[]> {
+  try {
+    const entries = await readdir('/Volumes', { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
+      .map((entry) => path.join('/Volumes', entry.name));
+  } catch {
+    return [];
+  }
+}
+
 async function existingDirectories(values: string[]): Promise<string[]> {
   const unique = [...new Set(values.map((value) => path.resolve(value)))];
   const existing = await Promise.all(
@@ -617,6 +664,38 @@ async function existingDirectories(values: string[]): Promise<string[]> {
     }),
   );
   return existing.filter((value): value is string => Boolean(value));
+}
+
+function mergeApplications(indexed: SearchItem[], fallback: SearchItem[]): SearchItem[] {
+  const paths = new Set<string>();
+  return [...indexed, ...fallback].filter((item) => {
+    const key = item.path ?? item.id;
+    if (paths.has(key)) return false;
+    paths.add(key);
+    return true;
+  });
+}
+
+function deduplicateSearchItems(items: SearchItem[]): SearchItem[] {
+  const paths = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.kind}:${item.path ?? item.id}`;
+    if (paths.has(key)) return false;
+    paths.add(key);
+    return true;
+  });
+}
+
+function isApplicationCatalogChange(changedPath: string): boolean {
+  const normalized = changedPath.toLowerCase();
+  return (
+    normalized === 'applications' ||
+    normalized.startsWith('applications/') ||
+    normalized === 'volumes' ||
+    normalized.startsWith('volumes/') ||
+    normalized.endsWith('.app') ||
+    normalized.includes('.app/')
+  );
 }
 
 function isDue(status: IndexStatus, kind: IndexKind, minutes: number, now: number): boolean {

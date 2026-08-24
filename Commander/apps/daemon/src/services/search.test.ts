@@ -67,6 +67,15 @@ describe('fallbackSearch', () => {
       'first',
     ]);
   });
+
+  it('adds an item’s intentional command priority to learned and category ranking', () => {
+    const application = { ...item('application', 'Emoji Helper'), kind: 'application' as const };
+    const command = { ...item('emoji', 'Search Emoji & Symbols'), preferenceScore: 25_000 };
+    expect(fallbackSearch('emoji', [application, command], 10).map((hit) => hit.id)).toEqual([
+      'emoji',
+      'application',
+    ]);
+  });
 });
 
 describe('SearchService Rust failure fallback', () => {
@@ -115,6 +124,18 @@ describe('SearchService Rust failure fallback', () => {
 });
 
 describe('SearchService transient filesystem candidates', () => {
+  it('keeps an in-flight catalog snapshot coherent while new searches see a live update', async () => {
+    const service = new SearchService();
+    service.setItems([item('old', 'Old Catalogue Entry')]);
+    const snapshot = service.snapshot();
+
+    service.setItems([item('new', 'New Catalogue Entry')]);
+
+    await expect(service.searchSnapshot('old', snapshot)).resolves.toMatchObject([{ id: 'old' }]);
+    await expect(service.search('new')).resolves.toMatchObject([{ id: 'new' }]);
+    await expect(service.search('old')).resolves.toEqual([]);
+  });
+
   it('ranks additional indexed results without mutating the command catalog', async () => {
     const service = new SearchService();
     service.setItems(searchableItems);

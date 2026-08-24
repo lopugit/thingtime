@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   CommanderSettings,
   IndexIgnoreRule,
@@ -42,8 +42,28 @@ export function IndexingSettings({
   const [draft, setDraft] = useState<IndexingPreferences>(() => structuredClone(settings.indexing));
   const [status, setStatus] = useState<IndexingStatus | null>(null);
   const [requesting, setRequesting] = useState<IndexScope | null>(null);
+  const [fullDiskAccess, setFullDiskAccess] = useState<
+    'checking' | 'granted' | 'not-granted' | 'unavailable'
+  >('checking');
 
   useEffect(() => setDraft(structuredClone(settings.indexing)), [settings.indexing]);
+
+  const refreshFullDiskAccess = useCallback(async () => {
+    setFullDiskAccess('checking');
+    try {
+      const result = await nativeRequest<{ granted?: unknown }>('permission.fullDiskAccess');
+      setFullDiskAccess(
+        result === undefined ? 'unavailable' : result.granted === true ? 'granted' : 'not-granted',
+      );
+    } catch (error) {
+      setFullDiskAccess('unavailable');
+      onError(error instanceof Error ? error.message : 'Could not check Full Disk Access');
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    void refreshFullDiskAccess();
+  }, [refreshFullDiskAccess]);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,9 +177,9 @@ export function IndexingSettings({
 
       <div className="index-refresh-copy">
         <span>
-          Applications refresh every {status?.automaticRefresh.applicationsMinutes ?? 5} minutes; files and
-          folders reconcile every {formatInterval(draft.refreshIntervalMinutes)} and whenever their settings
-          change.
+          App bundle changes are watched live; every mounted volume is also reconciled every{' '}
+          {formatInterval(status?.automaticRefresh.applicationsMinutes ?? 360)}. Files and folders reconcile
+          every {formatInterval(draft.refreshIntervalMinutes)} and whenever their settings change.
         </span>
         <strong aria-label="Search index database size">
           Database {status ? formatBytes(status.databaseSizeBytes) : '—'}
@@ -169,12 +189,21 @@ export function IndexingSettings({
       <div className="index-privacy-note">
         <ShieldCheck />
         <span>
-          <strong>macOS whole-home access</strong>
+          <strong>{fullDiskAccessLabel(fullDiskAccess)}</strong>
           <small>
-            Grant Commander Full Disk Access for a complete ~ index. Without it, use explicitly allowed
-            folders as roots.
+            {fullDiskAccess === 'granted'
+              ? 'Commander can scan protected locations. The check only opens macOS’s protected TCC database and never reads its contents.'
+              : 'Grant Commander Full Disk Access for a complete whole-volume index. Without it, use explicitly allowed folders as roots.'}
           </small>
         </span>
+        <button
+          type="button"
+          className="secondary-button compact"
+          disabled={fullDiskAccess === 'checking'}
+          onClick={() => void refreshFullDiskAccess()}
+        >
+          {fullDiskAccess === 'checking' ? 'Checking…' : 'Recheck'}
+        </button>
         <button
           type="button"
           className="secondary-button compact"
@@ -194,7 +223,10 @@ export function IndexingSettings({
         <div className="index-section-heading">
           <div>
             <strong>Filesystem roots</strong>
-            <span>Use ~ for your home directory. Nested duplicate roots are de-duplicated by path.</span>
+            <span>
+              / indexes this Mac and every currently mounted volume. Use ~ for only your home directory;
+              nested duplicate roots are de-duplicated by path.
+            </span>
           </div>
           <button
             type="button"
@@ -264,7 +296,9 @@ export function IndexingSettings({
         <div className="index-section-heading">
           <div>
             <strong>Index reliability</strong>
-            <span>Set a custom timeout only when a healthy scan needs more time than Commander’s automatic limit.</span>
+            <span>
+              Set a custom timeout only when a healthy scan needs more time than Commander’s automatic limit.
+            </span>
           </div>
         </div>
         <div className="index-resource-grid single">
@@ -281,7 +315,9 @@ export function IndexingSettings({
             {formatDuration(status.timing.longestDurationMs ?? 0)}.
           </div>
         ) : (
-          <div className="index-resource-summary">Timing will appear after the next successful index run.</div>
+          <div className="index-resource-summary">
+            Timing will appear after the next successful index run.
+          </div>
         )}
         {status?.timeoutAttempts.length ? (
           <div className="index-timeout-history" aria-label="Timed out index attempts">
@@ -535,13 +571,7 @@ function OptionalEntryLimitInput({
   );
 }
 
-function TimeoutInput({
-  value,
-  onCommit,
-}: {
-  value: number | null;
-  onCommit(value: number | null): void;
-}) {
+function TimeoutInput({ value, onCommit }: { value: number | null; onCommit(value: number | null): void }) {
   const [draftValue, setDraftValue] = useState(value === null ? '' : String(value));
   useEffect(() => setDraftValue(value === null ? '' : String(value)), [value]);
   const commitValue = () => {
@@ -560,7 +590,9 @@ function TimeoutInput({
     <label className="index-resource-field">
       <span>
         <strong>Custom index timeout</strong>
-        <small>Milliseconds. Blank uses Commander’s automatic timeout; enter digits only, with no configured cap.</small>
+        <small>
+          Milliseconds. Blank uses Commander’s automatic timeout; enter digits only, with no configured cap.
+        </small>
       </span>
       <span className="index-resource-input wide">
         <input
@@ -604,6 +636,13 @@ function formatInterval(minutes: number): string {
   if (minutes % 60 !== 0) return `${minutes} minutes`;
   const hours = minutes / 60;
   return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+}
+
+function fullDiskAccessLabel(status: 'checking' | 'granted' | 'not-granted' | 'unavailable'): string {
+  if (status === 'granted') return 'Full Disk Access granted';
+  if (status === 'not-granted') return 'Full Disk Access not granted';
+  if (status === 'unavailable') return 'Full Disk Access status unavailable';
+  return 'Checking Full Disk Access…';
 }
 
 function IgnoreRuleRow({
