@@ -502,6 +502,14 @@ const rootThingSchema: ThingtimeSchema = {
 			description: 'Server-owned avatar/banner slot, present exactly when attachmentPurpose is profile.'
 		},
 		{
+			name: 'moderation',
+			type: 'object',
+			required: false,
+			system: true,
+			description:
+				'Protected server-owned moderation state. Generic Thing create/update input never writes it; only moderation analysis and admin review may stamp it.'
+		},
+		{
 			name: 'attachmentFinalizationLeaseId',
 			type: 'string',
 			required: false,
@@ -694,6 +702,14 @@ const attachmentSchema: ThingtimeSchema = {
 			required: true,
 			values: [...ATTACHMENT_MEDIA_KINDS],
 			description: 'Server-derived safe rendering class. SVG, HTML, and unknown types are files, never inline media.'
+		},
+		{
+			name: 'detectedContentType',
+			type: 'string',
+			required: false,
+			max: MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
+			description:
+				'Magic-byte-sniffed MIME type, preserved only when the served contentType stays application/octet-stream so downloads can still name the real container (for example video/x-msvideo for an AVI). Server-written at upload finalization; never client input.'
 		}
 	],
 	example: { name: 'sunset.webp', size: 482013, contentType: 'image/webp', mediaKind: 'image' }
@@ -1530,8 +1546,9 @@ const sessionSchema: ThingtimeSchema = {
       name: 'purpose',
       type: 'enum',
       required: false,
-      values: ['browser', 'service', 'app', 'app-sandbox', 'pat'],
-      description: 'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, or personal access token.'
+      values: ['browser', 'service', 'app', 'app-sandbox', 'pat', 'oauth-code'],
+      description:
+        'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, personal access token, or one-time desktop OAuth code.'
     },
     { name: 'expiresAt', type: 'date', required: false, description: 'Expiry (null = non-expiring service token).' },
     { name: 'revokedAt', type: 'date', required: false, description: 'Set when revoked — token stops working immediately.' },
@@ -2033,6 +2050,73 @@ const followSchema: ThingtimeSchema = {
   example: { followKey: '5eed…:c0ffee…' }
 };
 
+// A registered WebAuthn credential (passkey). Accumulating per user →
+// relational (FUNDAMENTALS §3): one thing per credential, ownerId = the
+// account it signs into. Credential material (credentialId, COSE public key,
+// signature counter) lives in the root `secure` blob — never crystal, never
+// projected, invisible to the $** text index — while owner-facing metadata
+// (nickname, provider, dates, revocation) is crystal on an always-private doc.
+// Global credential-id uniqueness + the login-time lookup ride uniqueKeys
+// ('passkeyCredential:<id>', BinData). Server-minted only (PROTECTED).
+const passkeyThingSchema: ThingtimeSchema = {
+	id: 'passkey',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Passkey',
+	summary: 'A WebAuthn credential (passkey) that can sign into its owner\'s account.',
+	detail:
+		'Registered via POST /api/v1/auth/passkeys/register-options + /register (password confirmation ' +
+		'required), authenticates via /api/v1/auth/passkeys/login-options + /login (discoverable ' +
+		'credentials — no username needed). ownerId is the account it signs into. Credential material ' +
+		'(credentialId, public key, sign counter) lives in the root secure blob; uniqueness and the ' +
+		'login lookup ride uniqueKeys. Revocation (crystal.revokedAt) immediately blocks logins while ' +
+		'keeping the record; revoked passkeys can then be deleted. The generic things CRUD refuses ' +
+		'this kind end to end.',
+	createdVia: 'POST /api/v1/auth/passkeys/register',
+	fields: [
+		{ name: 'nickname', type: 'string', required: false, description: 'Owner-chosen label, defaults to the provider name.' },
+		{ name: 'description', type: 'string', required: false, description: 'Free-form owner note.' },
+		{ name: 'providerName', type: 'string', required: false, description: 'Authenticator provider derived from its AAGUID (e.g. iCloud Keychain, 1Password).' },
+		{ name: 'aaguid', type: 'string', required: false, description: 'Authenticator AAGUID as reported at registration.' },
+		{ name: 'deviceType', type: 'enum', required: false, values: ['singleDevice', 'multiDevice'], description: 'Whether the credential is synced (multiDevice) or bound to one authenticator.' },
+		{ name: 'backedUp', type: 'boolean', required: false, description: 'True when the authenticator reports the credential as backed up/synced.' },
+		{ name: 'transports', type: 'string[]', required: false, description: 'Browser-reported transports (internal, hybrid, usb, nfc, ble).' },
+		{ name: 'lastUsedAt', type: 'string', required: false, description: 'ISO timestamp of the most recent successful login.' },
+		{ name: 'lastUsedOrigin', type: 'string', required: false, description: 'Origin of the most recent successful login.' },
+		{ name: 'revokedAt', type: 'string', required: false, description: 'ISO timestamp — set once revoked; a revoked passkey can never log in.' }
+	],
+	example: { nickname: 'MacBook Touch ID', providerName: 'iCloud Keychain', deviceType: 'multiDevice', backedUp: true }
+};
+
+// Where a passkey has been used: one thing per (passkey, app/origin) pair,
+// upserted on each login (usageCount/lastUsedAt update in place — the doc set
+// is bounded by distinct apps, never per-use growth). targetId = the passkey
+// thing; uniqueKeys 'passkeyAppLink:<passkeyId>:<appKey>' dedups the pair.
+const passkeyAppLinkThingSchema: ThingtimeSchema = {
+	id: 'passkey-app-link',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Passkey app link',
+	summary: 'A record that a passkey has authenticated a particular app or origin.',
+	detail:
+		'Minted/updated server-side whenever POST /api/v1/auth/passkeys/login succeeds: the deployment ' +
+		'origin always links, and an SSO/app context (clientId) links additionally. Aggregated onto ' +
+		'GET /api/v1/auth/passkeys as each passkey\'s linkedApps. ownerId = the passkey\'s owner, ' +
+		'targetId = the passkey thing. The generic things CRUD refuses this kind.',
+	requiresTarget: true,
+	createdVia: 'POST /api/v1/auth/passkeys/login',
+	fields: [
+		{ name: 'appKey', type: 'string', required: true, description: 'Stable link key — `origin:<origin>` or `app:<clientId>`.' },
+		{ name: 'appName', type: 'string', required: false, description: 'Display name for the app/origin.' },
+		{ name: 'firstUsedAt', type: 'string', required: true, description: 'ISO timestamp of the first login through this link.' },
+		{ name: 'lastUsedAt', type: 'string', required: true, description: 'ISO timestamp of the most recent login through this link.' },
+		{ name: 'usageCount', type: 'number', required: true, description: 'Total successful logins through this link.' }
+	],
+	example: { appKey: 'origin:https://thingtime.com', appName: 'thingtime.com', usageCount: 4 }
+};
+
 // ---------------------------------------------------------------------------
 // System kinds — the satellite collections collapsing into things (see
 // claude-todo/12-everything-is-a-thing-collections.md). These kinds are
@@ -2070,10 +2154,15 @@ export const PROTECTED_THINGTIME = [
 	'app-storage',
 	'service-quota',
   MIGRATION_DIAGNOSTIC_THINGTIME,
+	'moderationFlag',
   ...CI_CONTROL_THINGTIME,
   'follow',
   'friend',
-  'notification'
+  'notification',
+  // auth-plane credentials: a forged passkey doc would BE a working login
+  // credential, so these are server-minted end to end (auth/passkeys.ts)
+  'passkey',
+  'passkey-app-link'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -2217,6 +2306,9 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   // supersedes the earlier followThingSchema (crystal.follow marker) draft.
   friendThingSchema,
   notificationThingSchema,
+  // auth-plane credentials (protected, server-minted by auth/passkeys.ts)
+  passkeyThingSchema,
+  passkeyAppLinkThingSchema,
   // messenger kinds (dedicated endpoints only — no generic sanitizers)
   communitySchema,
   communityMemberSchema,
@@ -2275,6 +2367,74 @@ export type ThingtimeCrystalValidationOptions = {
 	// context; the dedicated attachment store verifies ownership/state first and
 	// the post transaction rechecks while binding.
 	postAttachments?: { hasAny: boolean; hasVisual: boolean };
+};
+
+// Owner-chosen gallery layout for a post's visual attachments. Post-LEVEL
+// presentation data (one bounded object on the post crystal), never a field on
+// the attachments themselves — absent means the automatic masonry default.
+// Shared with the client so the composer controls and this validator agree.
+export const MEDIA_LAYOUT_MODES = ['masonry', 'rows', 'grid'] as const;
+export const MEDIA_LAYOUT_SPAN_VALUES = ['normal', 'wide', 'tall', 'big'] as const;
+export const MAX_MEDIA_LAYOUT_ENTRIES = 25; // pattern rows + span entries share the attachment cap
+export const MAX_MEDIA_LAYOUT_TRACK = 6; // max images per row / grid columns
+export type MediaLayoutSpan = (typeof MEDIA_LAYOUT_SPAN_VALUES)[number];
+export type PostMediaLayout = {
+	mode: (typeof MEDIA_LAYOUT_MODES)[number];
+	pattern?: number[];
+	columns?: number;
+	spans?: Record<string, MediaLayoutSpan>;
+};
+
+const sanitizeMediaLayout = (value: unknown): { ok: true; mediaLayout: PostMediaLayout | null } | Fail => {
+	if (value === undefined || value === null) return { ok: true, mediaLayout: null };
+	if (typeof value !== 'object' || Array.isArray(value)) return fail(400, 'mediaLayout must be an object');
+	const raw = value as Record<string, unknown>;
+	const mode = MEDIA_LAYOUT_MODES.includes(raw.mode as any) ? (raw.mode as PostMediaLayout['mode']) : null;
+	if (!mode) return fail(400, 'mediaLayout.mode must be masonry, rows, or grid');
+	if (mode === 'masonry') return { ok: true, mediaLayout: { mode } };
+
+	if (mode === 'rows') {
+		const pattern = raw.pattern;
+		if (!Array.isArray(pattern) || !pattern.length || pattern.length > MAX_MEDIA_LAYOUT_ENTRIES) {
+			return fail(400, `mediaLayout.pattern must be 1-${MAX_MEDIA_LAYOUT_ENTRIES} row sizes`);
+		}
+		const rows: number[] = [];
+		for (const entry of pattern) {
+			if (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 1 || entry > MAX_MEDIA_LAYOUT_TRACK) {
+				return fail(400, `mediaLayout.pattern rows must be integers 1-${MAX_MEDIA_LAYOUT_TRACK}`);
+			}
+			rows.push(entry);
+		}
+		return { ok: true, mediaLayout: { mode, pattern: rows } };
+	}
+
+	// grid
+	const columns = raw.columns === undefined ? 3 : raw.columns;
+	if (typeof columns !== 'number' || !Number.isInteger(columns) || columns < 1 || columns > MAX_MEDIA_LAYOUT_TRACK) {
+		return fail(400, `mediaLayout.columns must be an integer 1-${MAX_MEDIA_LAYOUT_TRACK}`);
+	}
+	let spans: Record<string, MediaLayoutSpan> | undefined;
+	if (raw.spans !== undefined && raw.spans !== null) {
+		if (typeof raw.spans !== 'object' || Array.isArray(raw.spans)) return fail(400, 'mediaLayout.spans must be an object');
+		const entries = Object.entries(raw.spans as Record<string, unknown>);
+		if (entries.length > MAX_MEDIA_LAYOUT_ENTRIES) return fail(400, `mediaLayout.spans can hold at most ${MAX_MEDIA_LAYOUT_ENTRIES} entries`);
+		const cleaned: Record<string, MediaLayoutSpan> = Object.create(null);
+		for (const [key, entry] of entries) {
+			// Attachment ids are generated UUIDs or att_<sha256> values. Keep the
+			// persisted map free of Mongo path characters and prototype keys rather
+			// than treating arbitrary object properties as attachment identities.
+			if (!/^[A-Za-z0-9][A-Za-z0-9_:-]{0,127}$/.test(key)) {
+				return fail(400, 'mediaLayout.spans keys must be attachment ids');
+			}
+			if (!MEDIA_LAYOUT_SPAN_VALUES.includes(entry as any)) {
+				return fail(400, 'mediaLayout.spans values must be normal, wide, tall, or big');
+			}
+			// normal is the default — storing it would be dead weight
+			if (entry !== 'normal') cleaned[key] = entry as MediaLayoutSpan;
+		}
+		if (Object.keys(cleaned).length) spans = { ...cleaned };
+	}
+	return { ok: true, mediaLayout: { mode, columns, ...(spans ? { spans } : {}) } };
 };
 
 const sanitizePostCrystal = (
@@ -2362,7 +2522,13 @@ const sanitizePostCrystal = (
 		return fail(400, 'Image posts need at least one image or video attachment');
 	}
 
-  return { ok: true, crystal: { type, text, images, listing, thing } };
+	const layout = sanitizeMediaLayout(input.mediaLayout);
+	if (layout.ok === false) return layout;
+
+	return {
+		ok: true,
+		crystal: { type, text, images, listing, thing, ...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}) }
+	};
 };
 
 const sanitizeCommentCrystal = (input: Record<string, unknown>, ids?: string[]): { ok: true; crystal: Record<string, unknown> } | Fail => {
@@ -2519,6 +2685,15 @@ const sanitizeDataValue = (
   return { ok: true, value: rootOut };
 };
 
+// Data crystals reserve NO field names: relationship dedupe (followKey,
+// memberKey, dmKey, inviteCode, emojiKey, friendKey, voteKey …) rides the
+// server-only root uniqueKeys namespace (api/utils/messenger/shared.ts +
+// the uniqueKeys index in collections.ts), never crystal-path unique
+// indexes, so a data thing carrying any of those names at its crystal root
+// is ordinary user data — it enters no unique index and can collide with
+// nothing. Keep it that way: a new unique index over a crystal path would
+// reopen the squat class the uniqueKeys migration closed (see
+// KIND-BLIND history in collections.ts).
 const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const sanitized = sanitizeDataValue(input);
 	if (sanitized.ok === false) return sanitized;

@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
@@ -6,8 +8,11 @@ import { ACL_INHERIT, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '../../../sch
 import {
 	ATTACHMENT_ENVELOPE_VERSION,
 	ATTACHMENT_THINGTIME,
+	applyAttachmentAnnotationPatch,
 	isAttachmentFinalizationLeaseId,
 	isAttachmentObjectVersionId,
+	planAttachmentReorder,
+	type AttachmentAnnotationPatch,
 	type AttachmentCrystal,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
@@ -62,6 +67,20 @@ export type AttachmentDoc = {
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
+	// owner-chosen display position within the bound target (stamped at
+	// bind/reorder time; legacy bound docs without it sort by createdAt)
+	attachmentSortIndex?: number;
+	// Protected moderation stamp (api/utils/moderation) — written only by the
+	// server-side analysis pipeline and admin review, never by upload input.
+	moderation?: {
+		status: 'pending' | 'skipped' | 'clear' | 'nsfw' | 'blocked';
+		categories?: string[];
+		provider?: string;
+		model?: string;
+		analyzedAt?: Date;
+		reason?: string;
+		flagPending?: boolean;
+	};
 	createdAt: Date;
 	updatedAt: Date;
 };
@@ -151,6 +170,8 @@ export type AttachmentStore = {
 	listUnboundOwned(ownerId: string, limit: number): Promise<AttachmentDoc[]>;
 	listExpiredOwned(ownerId: string, limit: number): Promise<AttachmentDoc[]>;
 	listExpired(limit: number, expiredAtOrBefore: Date): Promise<AttachmentDoc[]>;
+	listReadyUndetected(limit: number, afterId?: string): Promise<AttachmentDoc[]>;
+	upgradeReadyCrystal(id: string, crystal: AttachmentCrystal, expectedObjectVersionId: string): Promise<AttachmentDoc>;
 };
 
 export const expiredAttachmentDraftFilter = (
@@ -409,6 +430,10 @@ export const attachmentStore: AttachmentStore = {
 				crystal,
 				objectVersionId,
 				attachmentState: 'ready' as const,
+				// Quarantine every newly durable object until analysis either clears/
+				// flags it or deliberately marks it skipped. This lands before complete
+				// returns, so a fast bind cannot expose unscreened bytes during outage.
+				moderation: { status: 'pending' as const },
 				attachmentExpiresAt: expiresAt,
 				updatedAt: new Date()
 			};
@@ -433,6 +458,7 @@ export const attachmentStore: AttachmentStore = {
 						crystal,
 						objectVersionId,
 						attachmentState: 'ready',
+						moderation: { status: 'pending' },
 						attachmentExpiresAt: expiresAt,
 						sizeBytes: nextSize,
 						updatedAt: next.updatedAt
@@ -636,6 +662,66 @@ export const attachmentStore: AttachmentStore = {
 			.sort({ attachmentExpiresAt: 1, shareId: 1 })
 			.limit(Math.max(1, Math.min(1001, Math.floor(limit))))
 			.toArray()) as any as AttachmentDoc[];
+	},
+
+	// Ready rows finalized before server-side magic-byte detection existed:
+	// opaque contentType with no sniffed label. shareId-ordered so a caller can
+	// resume with the last id it saw even when a pass writes nothing (dry run,
+	// undetectable bytes).
+	async listReadyUndetected(limit, afterId) {
+		return (await (
+			await getHomeThingsCollection()
+		)
+			.find({
+				thingtime: ATTACHMENT_THINGTIME,
+				attachmentState: 'ready',
+				'crystal.contentType': 'application/octet-stream',
+				'crystal.detectedContentType': { $exists: false },
+				...(afterId ? { shareId: { $gt: afterId } } : {})
+			} as any)
+			.sort({ shareId: 1 })
+			.limit(Math.max(1, Math.min(1001, Math.floor(limit))))
+			.toArray()) as any as AttachmentDoc[];
+	},
+
+	// Publish a re-detected crystal on an already-ready row. Only detection
+	// metadata may change: name and size are immutable here so the object-byte
+	// side of storage accounting cannot move, while the row's JSON payload delta
+	// is still settled through the same transactional ledger markReady uses. The
+	// write is fenced to the exact object version the caller detected against —
+	// a concurrent delete, re-finalize, or version swap loses cleanly.
+	async upgradeReadyCrystal(id, crystal, expectedObjectVersionId) {
+		if (!isAttachmentObjectVersionId(expectedObjectVersionId)) throw new AttachmentStoreConflictError('Invalid object version');
+		return withHomeMongoTransaction(async (session) => {
+			const things = await getHomeThingsCollection();
+			const before = (await things.findOne(attachmentMatch(id) as any, { session })) as any as AttachmentDoc | null;
+			if (!before) throw new AttachmentStoreConflictError('Attachment not found');
+			if (before.attachmentState !== 'ready') throw new AttachmentStoreConflictError('Attachment is not ready');
+			if (before.objectVersionId !== expectedObjectVersionId) throw new AttachmentStoreConflictError('Attachment object version changed');
+			if (before.crystal.name !== crystal.name || before.crystal.size !== crystal.size) {
+				throw new AttachmentStoreConflictError('Attachment name and size cannot change during a crystal upgrade');
+			}
+			if (isDeepStrictEqual(before.crystal, crystal)) return before;
+
+			const next = { ...before, crystal, updatedAt: new Date() };
+			const nextSize = thingStorageSizeBytes(next);
+			const deltaBytes = nextSize - canonicalStoredBytes(before);
+			await applyUserStorageDelta(before.ownerId, deltaBytes, session);
+			const write = await things.updateOne(
+				{
+					_id: before._id,
+					ownerId: before.ownerId,
+					attachmentState: 'ready',
+					objectVersionId: expectedObjectVersionId,
+					updatedAt: before.updatedAt,
+					sizeBytes: before.sizeBytes
+				} as any,
+				{ $set: { crystal, sizeBytes: nextSize, updatedAt: next.updatedAt } },
+				{ session }
+			);
+			if (!write.matchedCount) throw new AttachmentStoreConflictError();
+			return { ...next, sizeBytes: nextSize };
+		});
 	}
 };
 
@@ -710,31 +796,115 @@ const bindReadyAttachmentsForPurpose = async (
 		throw new AttachmentBindingError(409, 'One or more attachments are unavailable or already attached');
 	}
 
-	const write = await things.updateMany(
-		{
-			shareId: { $in: ids },
-			ownerId,
-			thingtime: ATTACHMENT_THINGTIME,
-			attachmentState: 'ready',
-			$and: [
-				purposeFence,
-				{ attachmentProfileSlot: { $exists: false } },
-				{
-			$or: [
-				{ targetId, attachmentExpiresAt: { $exists: false } },
-				{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
-			]
+	// One update per id so each doc gets its list position stamped — the id
+	// order the client sent IS the display order the target renders.
+	const write = await things.bulkWrite(
+		ids.map((id, index) => ({
+			updateOne: {
+				filter: {
+					shareId: id,
+					ownerId,
+					thingtime: ATTACHMENT_THINGTIME,
+					attachmentState: 'ready',
+					$and: [
+						purposeFence,
+						{ attachmentProfileSlot: { $exists: false } },
+						{
+							$or: [
+								{ targetId, attachmentExpiresAt: { $exists: false } },
+								{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
+							]
+						}
+					]
+				},
+				update: {
+					$set: { targetId, acl: [ACL_INHERIT], attachmentPurpose: purpose, attachmentSortIndex: index, updatedAt: now },
+					$unset: { attachmentExpiresAt: '', attachmentProfileSlot: '' }
 				}
-			]
-		} as any,
-		{
-			$set: { targetId, acl: [ACL_INHERIT], attachmentPurpose: purpose, updatedAt: now },
-			$unset: { attachmentExpiresAt: '', attachmentProfileSlot: '' }
-		},
-		{ session }
+			}
+		})) as any,
+		{ session, ordered: true }
 	);
 	if (write.matchedCount !== ids.length) {
 		throw new AttachmentBindingError(409, `One or more attachments changed while the ${attachmentPurposeLabel[purpose]} was being created`);
+	}
+};
+
+// Owner-authored title/description on a READY attachment. Ready-only on
+// purpose: finalize (markReady) rebuilds the crystal from the verified S3
+// object, so annotating an in-flight upload would be silently clobbered.
+// Crystal bytes change, so the delta rides the same exact-accounting
+// transaction markReady uses.
+export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch): Promise<AttachmentDoc> =>
+	withHomeMongoTransaction(async (session) => {
+		const things = await getHomeThingsCollection();
+		const before = (await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session })) as any as AttachmentDoc | null;
+		if (!before) throw new AttachmentBindingError(404, 'Attachment not found');
+		if (before.attachmentState !== 'ready') {
+			throw new AttachmentBindingError(409, 'This file is still uploading — try again once it is ready');
+		}
+
+		const annotated = applyAttachmentAnnotationPatch(before.crystal, patch);
+		if (annotated.ok === false) throw new AttachmentBindingError(400, annotated.error);
+		const nextCrystal: AttachmentCrystal = annotated.crystal;
+		if (
+			nextCrystal.title === before.crystal.title &&
+			nextCrystal.description === before.crystal.description &&
+			nextCrystal.name === before.crystal.name
+		) {
+			return before;
+		}
+
+		const next: AttachmentDoc = { ...before, crystal: nextCrystal, updatedAt: new Date() };
+		const nextSize = thingStorageSizeBytes(next);
+		const deltaBytes = nextSize - canonicalStoredBytes(before);
+		if (deltaBytes !== 0) await applyUserStorageDelta(ownerId, deltaBytes, session);
+
+		const write = await things.updateOne(
+			{
+				_id: before._id,
+				ownerId,
+				attachmentState: 'ready',
+				updatedAt: before.updatedAt,
+				sizeBytes: before.sizeBytes
+			} as any,
+			{ $set: { crystal: nextCrystal, sizeBytes: nextSize, updatedAt: next.updatedAt } },
+			{ session }
+		);
+		if (write.matchedCount !== 1) {
+			throw new AttachmentBindingError(409, 'Attachment changed while it was being updated — try again');
+		}
+		return { ...next, sizeBytes: nextSize };
+	});
+
+// Re-stamp the display order of the ready attachments already bound to one
+// target. The requested list must be a pure permutation of the bound set —
+// planAttachmentReorder rejects everything else, so a stale client can never
+// half-apply an order after the post's attachments changed.
+export const reorderBoundTargetAttachments = async (ownerId: string, targetId: string, requestedIds: readonly unknown[]): Promise<void> => {
+	if (isCustomMongoEndpointActive()) {
+		throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+	}
+	if (!targetId.trim()) throw new AttachmentBindingError(400, 'Attachment target is required');
+	const things = await getHomeThingsCollection();
+	const fence = { ownerId, thingtime: ATTACHMENT_THINGTIME, attachmentState: 'ready', targetId };
+	const bound = (await things.find(fence as any, { projection: { shareId: 1 } }).toArray()) as Array<{ shareId: string }>;
+	const plan = planAttachmentReorder(
+		requestedIds,
+		bound.map((doc) => String(doc.shareId)),
+		MAX_ATTACHMENTS_PER_TARGET
+	);
+	if (plan.ok === false) throw new AttachmentBindingError(plan.status, plan.error);
+	if (!plan.orderedIds.length) return;
+	const now = new Date();
+	const write = await things.bulkWrite(
+		plan.orderedIds.map((shareId, index) => ({
+			updateOne: { filter: { ...fence, shareId }, update: { $set: { attachmentSortIndex: index, updatedAt: now } } }
+		})) as any,
+		{ ordered: true }
+	);
+	if (write.matchedCount !== plan.orderedIds.length) {
+		throw new AttachmentBindingError(409, 'The attachments on this post changed — refresh and reorder again');
 	}
 };
 

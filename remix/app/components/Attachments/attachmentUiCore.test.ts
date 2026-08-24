@@ -7,6 +7,8 @@ import {
 	attachmentCleanupAction,
 	attachmentCompleteRetryPhase,
 	attachmentSnapshot,
+	attachmentTypeLabel,
+	attachmentUploadScopeForPurpose,
 	attachmentUploadError,
 	attachmentUploadFailurePhase,
 	canonicalPostTags,
@@ -20,14 +22,27 @@ import {
 	shouldFreezeAmbiguousPostSubmission
 } from './attachmentUiCore.ts';
 
+test('upload purposes map to exactly one canonical approval scope', () => {
+	for (const purpose of ['post', 'comment', 'custom-emoji'] as const) {
+		assert.equal(attachmentUploadScopeForPurpose(purpose), 'public');
+	}
+	for (const purpose of ['message', 'profile-avatar', 'profile-banner'] as const) {
+		assert.equal(attachmentUploadScopeForPurpose(purpose), 'private');
+	}
+});
+
 test('only vetted raster image and video types render inline', () => {
 	assert.equal(safeAttachmentMediaKind('image/jpeg', 'image'), 'image');
 	assert.equal(safeAttachmentMediaKind('video/mp4', 'video'), 'video');
 	assert.equal(safeAttachmentMediaKind('image/svg+xml', 'image'), 'file');
 	assert.equal(safeAttachmentMediaKind('text/html', 'image'), 'file');
 	assert.equal(safeAttachmentMediaKind('application/javascript', 'video'), 'file');
-	assert.equal(safeAttachmentMediaKind('video/quicktime', 'video'), 'file');
-	assert.equal(safeAttachmentMediaKind('video/ogg', 'video'), 'file');
+	assert.equal(safeAttachmentMediaKind('video/quicktime', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('video/ogg', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('video/x-m4v', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('video/x-matroska', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('video/3gpp', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('video/x-msvideo', 'video'), 'file');
 	assert.equal(safeAttachmentMediaKind('image/png', 'file'), 'file');
 });
 
@@ -54,7 +69,48 @@ test('normalises only canonical stable attachment metadata', () => {
 		mediaKind: 'file'
 	});
 	assert.equal(normalizePublicAttachment({ id: 'legacy', name: 'photo.jpg', sizeBytes: 42, contentType: 'image/jpeg', previewKind: 'image' }), null);
+	assert.deepEqual(
+		normalizePublicAttachment({
+			id: 'att-3',
+			name: 'clip.avi',
+			size: 9,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			detectedContentType: 'VIDEO/X-MSVIDEO'
+		}),
+		{
+			id: 'att-3',
+			name: 'clip.avi',
+			size: 9,
+			contentType: 'application/octet-stream',
+			detectedContentType: 'video/x-msvideo',
+			mediaKind: 'file'
+		}
+	);
+	assert.deepEqual(
+		normalizePublicAttachment({
+			id: 'att-4',
+			name: 'blob.bin',
+			size: 1,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			detectedContentType: 'application/octet-stream'
+		}),
+		{ id: 'att-4', name: 'blob.bin', size: 1, contentType: 'application/octet-stream', mediaKind: 'file' }
+	);
 	assert.equal(MAX_POST_ATTACHMENTS, 25);
+});
+
+test('download rows label the sniffed container instead of application/octet-stream', () => {
+	assert.equal(attachmentTypeLabel({ contentType: 'application/octet-stream', detectedContentType: 'video/x-msvideo' }), 'AVI video');
+	assert.equal(attachmentTypeLabel({ contentType: 'application/octet-stream', detectedContentType: 'video/quicktime' }), 'QuickTime video');
+	assert.equal(
+		attachmentTypeLabel({ contentType: 'application/octet-stream', detectedContentType: 'application/x-iso9660-image' }),
+		'application/x-iso9660-image'
+	);
+	assert.equal(attachmentTypeLabel({ contentType: 'application/octet-stream' }), 'File');
+	assert.equal(attachmentTypeLabel({ contentType: 'audio/mpeg' }), 'MP3 audio');
+	assert.equal(attachmentTypeLabel({ contentType: 'text/plain' }), 'text/plain');
 });
 
 test('content links are stable same-origin routes derived only from attachment ids', () => {
@@ -86,6 +142,8 @@ test('upload errors are fixed client-authored messages', () => {
 		/verifying this account’s storage balance/i
 	);
 	assert.match(attachmentUploadError({ status: 500, error: 'proxy stack' }, 'upload'), /could not reach storage/i);
+	assert.match(attachmentUploadError({ status: 403, code: 'public_uploads_not_approved' }, 'prepare'), /public media uploads need admin approval/i);
+	assert.match(attachmentUploadError({ status: 403, code: 'private_uploads_not_approved' }, 'prepare'), /private media uploads need admin approval/i);
 	assert.match(
 		attachmentUploadError({ status: 409, code: 'upload_parts_retryable', retryable: true, error: 'private server detail' }, 'complete'),
 		/parts need uploading again/i

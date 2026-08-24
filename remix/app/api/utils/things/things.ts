@@ -17,7 +17,24 @@ import {
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { userSubscriptionLedgerMatch } from '../subscriptions/subscriptionIdentity';
 import { attachmentCascadeCleanupTargets } from '../attachments/attachmentCascadeCore';
-import { toAttachmentPublicMetadata, type AttachmentPublicMetadata, type AttachmentPurpose } from '../attachments/attachmentCore';
+import {
+	orderAttachmentDocsByStoredSort,
+	toAttachmentPublicMetadata,
+	type AttachmentPublicMetadata,
+	type AttachmentPurpose
+} from '../attachments/attachmentCore';
+import {
+	moderatedContentFingerprint,
+	pendingModerationStamp,
+	postInsertModerationPlan,
+	queueTextModeration,
+	screenTextForCreate,
+	setModerationReleaseNotifier,
+	TEXT_MODERATED_THINGTIMES,
+	upsertTextModerationFlag
+} from '../moderation/analyzeText';
+import { hasModeratedContent, moderatedContentOf } from '../moderation/textModeration';
+import { attachmentIsBlocked, attachmentModerationStatus } from '../moderation/moderationCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
@@ -43,6 +60,7 @@ import {
   validateThingtimeCrystal,
   visibilityFromAcl,
   type NotificationType,
+  type PostMediaLayout,
   type ThingVisibility
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
@@ -223,6 +241,8 @@ export type PublicComment = {
   text: string;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
+	// owner-chosen gallery layout for the visual attachments (null = masonry)
+	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   thing: Record<string, any> | null;
   tags: string[];
@@ -249,6 +269,8 @@ export type PublicPost = {
   text: string;
   images: string[];
 	attachments: AttachmentPublicMetadata[];
+	// owner-chosen gallery layout for the visual attachments (null = masonry)
+	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   // thingtime posts: the free-form structured thing under crystal.thing
   thing: Record<string, any> | null;
@@ -632,6 +654,12 @@ const crystalOf = (doc: ThingDoc): Record<string, any> => {
   return { type: doc.type, text: doc.text || '', images: doc.images || [], listing: doc.listing || null };
 };
 
+// crystal.mediaLayout is sanitized on write; surface it as-is (null = masonry)
+const mediaLayoutOf = (crystal: Record<string, any>): PostMediaLayout | null =>
+	crystal.mediaLayout && typeof crystal.mediaLayout === 'object' && !Array.isArray(crystal.mediaLayout)
+		? (crystal.mediaLayout as PostMediaLayout)
+		: null;
+
 // shareId of the thing this thing is attached to (comment/reaction/share)
 const targetIdOf = (doc: ThingDoc): string | null => {
   if (isV2(doc)) return doc.targetId || null;
@@ -978,7 +1006,9 @@ export const createThing = async (
   if (isFail(folderAssignment)) return folderAssignment;
 
   if (validated.thingtime.includes('comment') && target) {
-    const commentCount = await countCommentsOf(target);
+		// includeBlocked: the cap is a physical doc bound — blocked spam must not
+		// free up quota for more child docs under the same post
+		const commentCount = await countCommentsOf(target, { includeBlocked: true });
     if (commentCount >= MAX_COMMENTS_PER_POST) return fail(400, 'This post has reached its comment limit');
   }
 
@@ -1048,6 +1078,23 @@ export const createThing = async (
 		const charge = await chargeAppStorage(app, sizeBytes);
 		if (charge.ok === false) return fail(charge.status, charge.error);
 	}
+	// Hybrid create-time text screen: bounded free omni race. A verdict in
+	// time means the doc is BORN stamped (a blocked post never renders
+	// anywhere, not even in a feed refresh between insert and async verdict);
+	// timeout/outage/off resolves null and the async queue + hourly sweep own
+	// it. screenTextForCreate never throws and never exceeds its budget.
+	if (thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind))) {
+		const moderatedContent = moderatedContentOf(doc as any);
+		if (hasModeratedContent(moderatedContent)) {
+			const screen = await screenTextForCreate(moderatedContent);
+			if (screen.kind === 'verdict') (doc as any).moderation = screen.stamp;
+			// fail-closed: no verdict while the surface is ON → born PENDING
+			// (owner-private) until the async queue / hourly cron releases it
+			else if (screen.kind === 'unavailable') (doc as any).moderation = pendingModerationStamp(moderatedContent);
+			// 'skip' (surface off / custom plane) publishes normally, unstamped
+		}
+	}
+
   try {
 		if (billable || registeredApp || target || hooks.afterInsert) {
 			await withMongoTransaction(async (session) => {
@@ -1097,9 +1144,39 @@ export const createThing = async (
     throw err;
   }
 
-  // notification side effects — emit* never throws, so a notification hiccup
-  // can't fail the write that triggered it
+	// Post-insert moderation plan (pure helper, unit-tested):
+	//   notify     — born-blocked docs are invisible everywhere, so followers
+	//                are never notified about content they can't open
+	//   inlineFlag — a born-flagged doc's admin moderationFlag lands in the
+	//                SAME request as its stamp; only if that write fails does
+	//                the flagPending marker + hourly sweep own it
+	//   queueAsync — no sync verdict: the ordinary async screen runs as before
+	const moderationPlan = postInsertModerationPlan(doc as any);
+	if (moderationPlan.notify) {
+		// notification side effects — emit* never throws, so a notification
+		// hiccup can't fail the write that triggered it
   await emitCreationNotifications(doc, target, asOwner);
+	}
+	if (moderationPlan.inlineFlag) {
+		try {
+			const home = await getHomeThingsCollection();
+			const flaggedContent = moderatedContentOf(doc as any);
+			await upsertTextModerationFlag(
+				home,
+				doc as any,
+				(doc as any).moderation,
+				flaggedContent.text.trim() || `[image urls] ${flaggedContent.imageUrls.slice(0, 3).join(' ')}`,
+				new Date()
+			);
+			await things.updateOne({ shareId: doc.shareId, 'moderation.flagPending': true } as any, { $unset: { 'moderation.flagPending': '' } } as any);
+		} catch (error) {
+			// flagPending stays on the stamp — the hourly sweep retries the flag
+			console.warn('[moderation] inline flag write failed; sweep will retry:', (error as Error)?.message || error);
+			queueTextModeration(doc.shareId);
+		}
+	} else if (moderationPlan.queueAsync) {
+		queueTextModeration(doc.shareId);
+	}
   return { ok: true, doc };
 };
 
@@ -1190,6 +1267,7 @@ export type CreatePostInput = {
   images?: unknown;
   listing?: unknown;
   thing?: unknown;
+	mediaLayout?: unknown;
   extended?: unknown;
   acl?: unknown;
   visibility?: unknown;
@@ -1212,7 +1290,7 @@ export const createPost = async (
     ownerId,
     {
       thingtime: ['post'],
-      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing, thing: input.thing },
+      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing, thing: input.thing, mediaLayout: input.mediaLayout },
       extended: input.extended,
       acl: input.acl,
       visibility: input.visibility,
@@ -1295,6 +1373,67 @@ type RelatedThings = {
 // One batched pass for a page of post docs: standalone comment/reaction
 // things for those posts plus live share counts across both eras. Embedded
 // v1 residue on each doc is merged in per-post below.
+// Field whitelists for the child-thing passes below. These reads are
+// unbounded by design — a page's complete comment and reaction set — so what
+// is NOT fetched matters more than what is. Un-projected, a viral post drags
+// its entire `crystal` (rich comment bodies, image lists, arbitrary `thing`
+// payloads) plus `extended` (up to 512KB per doc) and `acl` across the wire to
+// render a handful of comment rows and an emoji tally.
+//
+// Every field here is one the projection's consumers actually read: the
+// pass-1/level loops below, mergedCommentsOf/mergedReactionsOf, and
+// buildComment + the attachment target pass in toPublicPosts. `_id` rides
+// along by default and is what the legacy era keys comments by.
+// Exported for the projection-contract test: this is the single field set used
+// for direct comments and every eagerly shipped reply level.
+export const RELATED_CHILD_PROJECTION = {
+  // schemaVersion is LOAD-BEARING and easy to miss: isV2() reads it, and
+  // thingtimeOf/crystalOf/targetIdOf all branch on isV2(). Project it away and
+  // every doc silently reads as a v1 post — thingtimeOf returns ['post'], so
+  // neither the comment nor the reaction branch matches and the whole child
+  // set vanishes from the response with no error.
+  schemaVersion: 1,
+  shareId: 1,
+  ownerId: 1,
+  targetId: 1,
+  createdAt: 1,
+  thingtime: 1,
+  tags: 1,
+  'crystal.text': 1,
+  'crystal.type': 1,
+  'crystal.images': 1,
+  // Rich comments use the same post crystal as top-level posts. Keeping this
+  // field is required for their owner-selected rows/grid layout to survive a
+  // feed or permalink reload; without it mediaLayoutOf() silently falls back
+  // to masonry.
+  'crystal.mediaLayout': 1,
+  'crystal.listing': 1,
+  'crystal.thing': 1,
+  'crystal.emoji': 1,
+  // v1 residue: the fields thingtimeOf/crystalOf/targetIdOf fall back to for
+  // pre-v2 docs, which this collection still legitimately holds.
+  shareOfId: 1,
+  type: 1,
+  text: 1,
+  images: 1,
+  listing: 1
+} as const;
+
+// The interim kind-era docs carry their payload as flat top-level fields.
+const RELATED_LEGACY_PROJECTION = {
+  schemaVersion: 1,
+  parentId: 1,
+  kind: 1,
+  ownerId: 1,
+  commentId: 1,
+  createdAt: 1,
+  text: 1,
+  token: 1
+} as const;
+
+// Reactions only ever contribute (userId, emoji) pairs.
+const RELATED_REACTION_PROJECTION = { schemaVersion: 1, targetId: 1, ownerId: 1, 'crystal.emoji': 1 } as const;
+
 const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   const ids = docs.map((doc) => doc.shareId);
   const commentsByTarget = new Map<string, CommentEntry[]>();
@@ -1306,19 +1445,21 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   const things = await getThingsCollection();
   const [related, legacyRelational, shareCounts] = await Promise.all([
     things
-      .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] } } as any)
+      .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] }, 'moderation.status': { $nin: ['blocked', 'pending'] } } as any)
+      .project(RELATED_CHILD_PROJECTION)
       .sort({ createdAt: 1, shareId: 1 })
       .toArray() as Promise<any[]>,
     // interim relational era: kind:'reaction'/'comment' docs linked by parentId
     // (written by the pre-unification relational model; converted by the things
     // migration, folded here until then)
     things
-      .find({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids } } as any)
+      .find({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids }, 'moderation.status': { $nin: ['blocked', 'pending'] } } as any)
+      .project(RELATED_LEGACY_PROJECTION)
       .sort({ createdAt: 1 })
       .toArray() as Promise<any[]>,
     things
       .aggregate([
-        { $match: { $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } },
+        { $match: { 'moderation.status': { $nin: ['blocked', 'pending'] }, $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } },
         { $group: { _id: { $ifNull: ['$targetId', '$shareOfId'] }, count: { $sum: 1 } } }
       ])
       .toArray() as Promise<any[]>
@@ -1385,19 +1526,32 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
     const withDocs = depth < SHIPPED_REPLY_LEVELS;
     const [levelReactions, replyGroups] = await Promise.all([
       things
-        .find({ targetId: { $in: levelIds }, thingtime: 'reaction' } as any)
+        .find({ targetId: { $in: levelIds }, thingtime: 'reaction', 'moderation.status': { $nin: ['blocked', 'pending'] } } as any)
+        .project(RELATED_REACTION_PROJECTION)
         .sort({ createdAt: 1, shareId: 1 })
         .toArray() as Promise<any[]>,
+      // blocked replies neither ship as docs nor inflate per-level counts —
+      // this mirrors the first-pass related queries above (a blocked doc must
+      // vanish from EVERY thread payload, not just level 1)
       things
         .aggregate(
           withDocs
             ? [
-                { $match: { targetId: { $in: levelIds }, thingtime: 'comment' } },
+                { $match: { targetId: { $in: levelIds }, thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } } },
                 { $sort: { createdAt: -1, shareId: 1 } },
+                // Project BEFORE the $group: $push accumulates every matching
+                // reply into one document, and $group is capped at 100MB with
+                // allowDiskUse unset — pushing whole $$ROOT docs made a large
+                // enough thread fail the request outright, not merely run slow.
+                // Only REPLIES_PER_LEVEL of them survive the $slice anyway.
+                { $project: RELATED_CHILD_PROJECTION },
                 { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
                 { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
               ]
-            : [{ $match: { targetId: { $in: levelIds }, thingtime: 'comment' } }, { $group: { _id: '$targetId', count: { $sum: 1 } } }]
+            : [
+                { $match: { targetId: { $in: levelIds }, thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } } },
+                { $group: { _id: '$targetId', count: { $sum: 1 } } }
+              ]
         )
         .toArray() as Promise<any[]>
     ]);
@@ -1440,13 +1594,14 @@ const resolvePostAttachments = async (
 	const things = await getThingsCollection();
 	const docs = (await things
 		.find({ thingtime: 'attachment', targetId: { $in: ids }, attachmentState: 'ready' } as any)
-		.project({ shareId: 1, targetId: 1, ownerId: 1, attachmentPurpose: 1, crystal: 1, createdAt: 1 })
+		.project({ shareId: 1, targetId: 1, ownerId: 1, attachmentPurpose: 1, attachmentSortIndex: 1, crystal: 1, moderation: 1, createdAt: 1 })
 		.sort({ createdAt: 1, shareId: 1 })
 		.toArray()) as any[];
-	for (const doc of docs) {
+	// stamped display order wins; legacy unstamped docs keep createdAt order
+	for (const doc of orderAttachmentDocsByStoredSort(docs)) {
 		const targetId = typeof doc.targetId === 'string' ? doc.targetId : '';
 		const expected = expectedTargets?.get(targetId);
-		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
+		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
 		if (
 			!targetId ||
 			!attachment ||
@@ -1462,6 +1617,23 @@ const resolvePostAttachments = async (
 		byTarget.set(targetId, current);
 	}
 	return byTarget;
+};
+
+// The trusted attachment context updateThing feeds the crystal validator —
+// the PATCH equivalent of the route-inspected postAttachments hook on create.
+// Bound attachments are server-authored state, so live presence is exactly as
+// trustworthy as the create-time inspection, and an attachment-only post must
+// stay editable (its content IS the bound media).
+const boundAttachmentPresence = async (ownerId: string, targetId: string): Promise<{ hasAny: boolean; hasVisual: boolean }> => {
+	const things = await getThingsCollection();
+	const docs = (await things
+		.find({ thingtime: 'attachment', targetId, ownerId, attachmentState: 'ready' } as any)
+		.project({ 'crystal.mediaKind': 1 })
+		.toArray()) as any[];
+	return {
+		hasAny: docs.length > 0,
+		hasVisual: docs.some((doc) => doc?.crystal?.mediaKind === 'image' || doc?.crystal?.mediaKind === 'video')
+	};
 };
 
 // Total comment count for whole threads (every descendant, not just direct
@@ -1482,7 +1654,9 @@ const resolveThreadCounts = async (ids: string[]): Promise<Map<string, number>> 
           connectFromField: 'shareId',
           connectToField: 'targetId',
           as: 'thread',
-          restrictSearchWithMatch: { thingtime: 'comment' }
+          // blocked comments (and via graph pruning their whole subtrees)
+          // don't count — totals must match the visible lists
+          restrictSearchWithMatch: { thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } }
         }
       },
       { $project: { shareId: 1, total: { $size: '$thread' } } }
@@ -1573,8 +1747,6 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
 			if (entry.doc) expectedAttachmentTargets.set(entry.doc.shareId, { ownerId: String(entry.doc.ownerId), purpose: 'comment' });
 		}
 	}
-	const attachmentsByTarget = await resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets);
-
   const userIds: string[] = [];
   [...docs, ...originals].forEach((doc) => {
     userIds.push(doc.ownerId);
@@ -1584,7 +1756,12 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   for (const entries of related.commentsByTarget.values()) {
     entries.forEach((entry) => userIds.push(entry.userId));
   }
-  const profiles = await resolveProfiles(userIds);
+  // Attachments and profiles both derive from `related`, but NOT from each
+  // other — running them together keeps the second off the critical path.
+  const [attachmentsByTarget, profiles] = await Promise.all([
+    resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets),
+    resolveProfiles(userIds)
+  ]);
 
   // comments share the post schema — surface the post vocabulary (rich
   // ["post","comment"] bodies, reactions, reply counts); legacy-era entries
@@ -1602,6 +1779,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       text: comment.text,
       images: (commentCrystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(comment.id) || [],
+			mediaLayout: mediaLayoutOf(commentCrystal),
       listing: (commentCrystal.listing as MarketplaceListing) || null,
       thing:
         commentCrystal.thing && typeof commentCrystal.thing === 'object' && !Array.isArray(commentCrystal.thing)
@@ -1641,6 +1819,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       text: String(crystal.text || ''),
       images: (crystal.images as string[]) || [],
 			attachments: attachmentsByTarget.get(doc.shareId) || [],
+			mediaLayout: mediaLayoutOf(crystal),
       listing: (crystal.listing as MarketplaceListing) || null,
       thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
       tags: doc.tags || [],
@@ -1707,6 +1886,21 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
 	if (thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME)) return false;
+	// Moderation-blocked things vanish from every ordinary read for everyone —
+	// owner included, same as blocked attachments. Admins review through the
+	// moderationFlag queue (which carries a bounded excerpt), never this path.
+	if (attachmentIsBlocked(doc as any)) return false;
+	// Text-moderation PENDING = born private: the owner sees their own post
+	// while it waits for a verdict (omni outage / async-release mode); nobody
+	// else does until the screen releases it. Kind-scoped so in-flight
+	// ATTACHMENT analysis (also status pending) keeps today's visibility.
+	if (
+		attachmentModerationStatus(doc as any) === 'pending' &&
+		thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
+		doc.ownerId !== viewer?.id
+	) {
+		return false;
+	}
   if (viewer?.id && doc.ownerId === viewer.id) return true;
   return aclAllows(aclOf(doc), viewer, doc.ownerId);
 };
@@ -1721,6 +1915,17 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
+	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
+	// terminal — a blocked or born-private comment under a clean post must
+	// vanish for non-owners too
+	if (attachmentIsBlocked(doc as any)) return false;
+	if (
+		attachmentModerationStatus(doc as any) === 'pending' &&
+		thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
+		doc.ownerId !== viewer?.id
+	) {
+		return false;
+	}
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
   return !!terminal && canView(terminal, viewer);
 };
@@ -1732,7 +1937,7 @@ export const canViewInherited = async (
 // one per doc×hop — the per-doc walks were fine locally but timed the /things
 // function out in production, where each Mongo round trip crosses regions
 // (~200ms Vercel iad1 ↔ Atlas Sydney).
-const batchedThingLookup = (): ((shareId: string) => Promise<ThingDoc | null>) => {
+export const batchedThingLookup = (): ((shareId: string) => Promise<ThingDoc | null>) => {
   const cache = new Map<string, Promise<ThingDoc | null>>();
   let pending: { ids: Set<string>; promise: Promise<Map<string, ThingDoc>> } | null = null;
   return (shareId: string) => {
@@ -1844,6 +2049,17 @@ const appMembershipOk = (app: AppNamespaceScope, doc: ThingDoc): boolean => {
 // thing is as visible as that thing; a chain that escapes the namespace or
 // breaks fails closed).
 const appNamespaceVerdict = async (app: AppNamespaceScope, doc: ThingDoc): Promise<boolean> => {
+	// moderation-blocked docs are invisible under app lenses too — this path
+	// never reaches canView, so it needs its own gate; born-pending docs are
+	// visible only when the lens acts for their owner
+	if (attachmentIsBlocked(doc as any)) return false;
+	if (
+		attachmentModerationStatus(doc as any) === 'pending' &&
+		thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
+		String(doc.ownerId) !== app.ownerId
+	) {
+		return false;
+	}
   if (!appMembershipOk(app, doc)) return false;
   let judged: ThingDoc = doc;
   if (aclOf(doc).includes(ACL_INHERIT)) {
@@ -1949,11 +2165,15 @@ export const appShapeProjections = async (
   });
 };
 
-const countCommentsOf = async (target: ThingDoc): Promise<number> => {
+const countCommentsOf = async (target: ThingDoc, options: { includeBlocked?: boolean } = {}): Promise<number> => {
   const things = await getThingsCollection();
+	// visible counts must match what the read paths render (blocked comments
+	// are excluded everywhere); the comment CAP passes includeBlocked because
+	// it doubles as a physical per-post doc bound
+	const blockedClause = options.includeBlocked ? {} : { 'moderation.status': { $nin: ['blocked', 'pending'] } };
   const [standalone, legacyRelational] = await Promise.all([
-    things.countDocuments({ targetId: target.shareId, thingtime: 'comment' } as any),
-    things.countDocuments({ kind: 'comment', parentId: target.shareId } as any)
+    things.countDocuments({ targetId: target.shareId, thingtime: 'comment', ...blockedClause } as any),
+    things.countDocuments({ kind: 'comment', parentId: target.shareId, ...blockedClause } as any)
   ]);
   return standalone + legacyRelational + (target.comments || []).length;
 };
@@ -2173,11 +2393,16 @@ export const getThing = async (
   }
 
   const isComment = thingtimeOf(doc).includes('comment');
-  const post = isPostThing(doc) || isComment ? (await toPublicPosts([doc], viewer))[0] : null;
+	// Media attachments are Things with their own /media/:id page: the
+	// post-shaped projection carries their reactions, comments, and view
+	// aggregates (those resolvers are target-generic), and the parent walk
+	// links the page back to the post the media is bound to.
+	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
+	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer))[0] : null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
-  if (isComment && targetIdOf(doc)) {
+	if ((isComment || isMediaAttachment) && targetIdOf(doc)) {
     // walk up the thread — depth is unbounded, no rail: the visited set is
     // the only terminator (finite db + no revisits), and the loop is
     // iterative so chain length never touches the call stack
@@ -2192,10 +2417,16 @@ export const getThing = async (
       if (!thingtimeOf(up).includes('comment')) break;
       cursor = up;
     }
-    const visibleChain: ThingDoc[] = [];
-    for (const entry of chain) {
-      if (await canViewInherited(entry, viewer)) visibleChain.push(entry);
-    }
+    // Each canViewInherited re-walks that entry's own ACL chain, so checking
+    // them one at a time with no shared lookup cost n + n(n-1)/2 sequential
+    // round trips for a comment at depth n — 15 at depth 5, 55 at depth 10,
+    // on top of the walk above that already fetched these same documents.
+    // Nesting is uncapped, so this was a tail-latency cliff on deep threads.
+    // One shared batched lookup, checks concurrent: one round trip per chain
+    // LEVEL, matching listThings and the search path.
+    const lookup = batchedThingLookup();
+    const verdicts = await Promise.all(chain.map((entry) => canViewInherited(entry, viewer, lookup)));
+    const visibleChain = chain.filter((_, index) => verdicts[index]);
     if (visibleChain.length) {
       const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer);
       const byId = new Map(projected.map((entry) => [entry.id, entry]));
@@ -2710,6 +2941,7 @@ export type AddCommentInput =
       images?: unknown;
       listing?: unknown;
       thing?: unknown;
+			mediaLayout?: unknown;
       tags?: unknown;
 			shareId?: unknown;
 	  };
@@ -2762,12 +2994,13 @@ export const addComment = async (
 		body.images !== undefined ||
 		body.listing !== undefined ||
 		body.thing !== undefined ||
+		body.mediaLayout !== undefined ||
 		options.createHooks?.postAttachments?.hasAny === true;
 
 	const createInput: CreateThingInput = rich
       ? {
           thingtime: ['post', 'comment'],
-          crystal: { type: body.type ?? 'text', text: body.text, images: body.images, listing: body.listing, thing: body.thing },
+          crystal: { type: body.type ?? 'text', text: body.text, images: body.images, listing: body.listing, thing: body.thing, mediaLayout: body.mediaLayout },
           tags: body.tags,
 				shareId: body.shareId,
           targetId: target.shareId
@@ -2848,6 +3081,7 @@ export const addComment = async (
     text: String(crystal.text || ''),
     images: (crystal.images as string[]) || [],
 		attachments: options.attachments || [],
+		mediaLayout: mediaLayoutOf(crystal),
     listing: (crystal.listing as MarketplaceListing) || null,
     thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
     tags: doc.tags || [],
@@ -2862,7 +3096,9 @@ export const addComment = async (
     // self-author shaped by the acting grant; count fenced to the namespace
     await appShapeProjections(app, [doc], [comment]);
     const things = await getThingsCollection();
-    const commentCount = await things.countDocuments(withMatch({ targetId: target.shareId, thingtime: 'comment' }, ...appMatchClauses(app)) as any);
+    const commentCount = await things.countDocuments(
+			withMatch({ targetId: target.shareId, thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } }, ...appMatchClauses(app)) as any
+		);
     return { ok: true, comment, commentCount };
   }
 
@@ -3440,7 +3676,12 @@ export const updateThing = async (
   }
   const patch = input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal) ? (input.crystal as Record<string, unknown>) : {};
   const nextCrystal = options.replaceCrystal ? patch : { ...crystalOf(doc), ...patch };
-  const validated = validateThingtimeCrystal(thingtime, nextCrystal);
+	// Post edits validate with the same trusted attachment context creates get:
+	// an attachment-only post's crystal has no text/images, and without this
+	// the sanitizer would reject every edit of it with "Say something first".
+	const postAttachments =
+		thingtime.includes('post') && !isCustomMongoEndpointActive() ? await boundAttachmentPresence(doc.ownerId, doc.shareId) : undefined;
+	const validated = validateThingtimeCrystal(thingtime, nextCrystal, { postAttachments });
   if (isFail(validated)) return validated;
 
   // Re-run the createThing provenance check ONLY when this write changes the
@@ -3653,6 +3894,17 @@ export const updateThing = async (
 		delete updated.storageClass;
 		delete updated.storageAccountingVersion;
 		if (!storageScope) delete updated.sizeBytes;
+	}
+
+	// Edited moderated content (prose, listing text, tags, image URLs) gets
+	// re-screened: the old verdict describes content that no longer exists
+	// (emptied content clears a stale pipeline stamp). The analyzer refuses to
+	// overwrite admin review stamps and no-ops on custom data planes.
+	if (
+		thingtimeOf(updated).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
+		moderatedContentFingerprint(moderatedContentOf(updated as any)) !== moderatedContentFingerprint(moderatedContentOf(doc as any))
+	) {
+		queueTextModeration(doc.shareId);
 	}
 
   const thing = (await toPublicThings([updated], viewer))[0];
@@ -3990,3 +4242,15 @@ export const getPostFeatures = async (viewerInput: string | Viewer, shareIds: st
     .toArray()) as any as ThingDoc[];
   return new Map(docs.filter((doc) => canView(doc, viewer)).map((doc) => [doc.shareId, featuresOf(doc)]));
 };
+
+// Registered at module scope: when the moderation pipeline RELEASES a
+// born-pending doc (verdict clear/nsfw), its creation notifications fire now —
+// followers hear about a post at the moment it becomes visible to them.
+setModerationReleaseNotifier((shareId) => {
+	void (async () => {
+		const doc = await findThing(shareId);
+		if (!doc) return;
+		const target = (doc as any).targetId ? await findThing(String((doc as any).targetId)) : null;
+		await emitCreationNotifications(doc, target, asViewer(String(doc.ownerId)));
+	})().catch((error) => console.warn('[moderation] release notification failed:', (error as Error)?.message || error));
+});

@@ -7,6 +7,11 @@ import {
   Button,
   Flex,
   Heading,
+  Menu,
+  MenuButton,
+  MenuDivider,
+  MenuItem,
+  MenuList,
   Spinner,
   Tab,
   TabList,
@@ -26,6 +31,7 @@ import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { CIControlDashboard } from '~/components/Admin/CIControl/CIControlDashboard';
 import { AdminRowQueryControls, useAdminRowQuery } from '~/components/Admin/AdminRowQueryControls';
 import { LinkManagerModal } from '~/components/Admin/LinkManagerModal';
+import { ModerationTab } from '~/components/Admin/ModerationTab';
 import { SubscriptionEditorModal } from '~/components/Admin/SubscriptionEditorModal';
 import { TierManager } from '~/components/Admin/TierManager';
 import { loadCompleteAdminSnapshot, type CompleteAdminSnapshot } from '~/components/Admin/adminDirectoryClient';
@@ -55,6 +61,11 @@ type UserRow = {
   createdAt: string | null;
   isAdmin: boolean;
   envAdmin: boolean;
+  emailVerified: boolean;
+  publicUploadsEnabled: boolean;
+  privateUploadsEnabled: boolean;
+  publicUploadsPending: boolean;
+  privateUploadsPending: boolean;
   accountKind: 'user' | 'service';
 	storage: AdminStorageProjection;
   storageAllowanceBytes: number | null;
@@ -201,6 +212,11 @@ const USER_QUERY_FIELDS: readonly AdminRowField<UserRow>[] = [
 		sortable: true
 	},
   { id: 'isAdmin', label: 'Administrator', kind: 'boolean', sortable: true },
+  { id: 'emailVerified', label: 'Email verified', kind: 'boolean', sortable: true },
+  { id: 'publicUploadsEnabled', label: 'Public uploads enabled', kind: 'boolean', sortable: true },
+  { id: 'privateUploadsEnabled', label: 'Private uploads enabled', kind: 'boolean', sortable: true },
+  { id: 'publicUploadsPending', label: 'Public uploads awaiting approval', kind: 'boolean', sortable: true },
+  { id: 'privateUploadsPending', label: 'Private uploads awaiting approval', kind: 'boolean', sortable: true },
   { id: 'envAdmin', label: 'Environment administrator', kind: 'boolean', sortable: true },
 	{ id: 'storage.usedBytes', label: 'Account storage used (bytes)', kind: 'number', sortable: true },
 	{ id: 'storage.allowanceBytes', label: 'Account storage allowance (bytes)', kind: 'number', sortable: true },
@@ -356,6 +372,89 @@ const SnapshotErrorNotice = ({ hasPreviousRows, onRetry }: { hasPreviousRows: bo
   </Alert>
 );
 
+// File/media uploads are withheld from every account created since the
+// signup-permissions hotfix — verifying an email address no longer grants
+// them. This is the manual approval control, per scope: PUBLIC covers
+// post/comment/custom-emoji attachments, PRIVATE covers message attachments +
+// the user's own profile media, and "all" is both at once. Each action hits
+// POST /api/v1/admin/users/public-uploads { userId, enabled, scope } and
+// refreshes the snapshot.
+//
+// Optimistic per the UI house rule: the badge flips the moment the admin
+// clicks and reverts if the request fails, so approving never shows a spinner
+// where a known state already exists.
+const UploadApprovalsControl = ({ row, onChanged }: { row: UserRow; onChanged: () => void }) => {
+  const api = useApi();
+  const lopu = useLopu();
+  const [optimistic, setOptimistic] = React.useState<{ pub: boolean; priv: boolean } | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const pub = optimistic?.pub ?? row.publicUploadsEnabled;
+  const priv = optimistic?.priv ?? row.privateUploadsEnabled;
+
+  // A fresh snapshot is authoritative again — drop the local override.
+  React.useEffect(() => {
+    setOptimistic(null);
+  }, [row.publicUploadsEnabled, row.privateUploadsEnabled]);
+
+  const save = async (scope: 'public' | 'private' | 'all', enabled: boolean) => {
+    setOptimistic({ pub: scope === 'private' ? pub : enabled, priv: scope === 'public' ? priv : enabled });
+    setSaving(true);
+    try {
+      const result = await api.v1.admin.setUserPublicUploads({ userId: row.id, enabled, scope });
+      if (result?.ok === false) throw new Error(result.error || 'Request failed');
+      lopu({
+        title: enabled
+          ? `${scope === 'all' ? 'All' : scope === 'public' ? 'Public' : 'Private'} uploads enabled for @${row.username} 🎉`
+          : `${scope === 'all' ? 'All' : scope === 'public' ? 'Public' : 'Private'} uploads withheld for @${row.username}`
+      });
+      onChanged();
+    } catch (error: any) {
+      setOptimistic(null);
+      lopu({ title: error?.error || error?.message || 'Could not update upload permission', status: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const pending = row.publicUploadsPending || row.privateUploadsPending;
+  const summary = pub && priv ? 'all' : pub ? 'public' : priv ? 'private' : pending ? 'pending' : 'off';
+  const summaryColor = pub && priv ? 'green' : pub || priv ? 'teal' : pending ? 'orange' : 'gray';
+
+  return (
+    <Flex align="center" gap={2}>
+      <Badge
+        colorScheme={summaryColor}
+        fontSize="0.6em"
+        title={`Public uploads: ${pub ? 'enabled' : 'withheld'} · Private uploads: ${priv ? 'enabled' : 'withheld'}`}
+      >
+        {summary}
+      </Badge>
+      {row.isAdmin ? (
+        <Text fontSize="10px" opacity={0.55}>
+          admin
+        </Text>
+      ) : (
+        <Menu isLazy>
+          <MenuButton as={Button} size="xs" variant="outline" isLoading={saving}>
+            Approve ▾
+          </MenuButton>
+          <MenuList fontSize="sm" minW="220px">
+            <MenuItem onClick={() => save('public', !pub)}>{pub ? 'Withhold public uploads' : 'Enable public uploads'}</MenuItem>
+            <MenuItem onClick={() => save('private', !priv)}>{priv ? 'Withhold private uploads' : 'Enable private uploads'}</MenuItem>
+            <MenuDivider />
+            <MenuItem isDisabled={pub && priv} onClick={() => save('all', true)}>
+              Enable all
+            </MenuItem>
+            <MenuItem isDisabled={!pub && !priv} onClick={() => save('all', false)}>
+              Withhold all
+            </MenuItem>
+          </MenuList>
+        </Menu>
+      )}
+    </Flex>
+  );
+};
+
 const UsersTab = () => {
   const api = useApi();
   const apiRef = React.useRef(api);
@@ -378,6 +477,10 @@ const UsersTab = () => {
   });
   const [subscriptionFor, setSubscriptionFor] = React.useState<UserRow | null>(null);
   const [linksFor, setLinksFor] = React.useState<UserRow | null>(null);
+  const pendingUploadCount = React.useMemo(
+    () => (rows ?? []).filter((row) => row.publicUploadsPending || row.privateUploadsPending).length,
+    [rows]
+  );
 
   return (
     <Box>
@@ -392,6 +495,13 @@ const UsersTab = () => {
           value={userQuery.query}
         />
       </Box>
+      {pendingUploadCount > 0 && (
+        <Alert status="warning" mb={3} borderRadius="md" fontSize="sm">
+          <AlertIcon />
+          {pendingUploadCount} new {pendingUploadCount === 1 ? 'account is' : 'accounts are'} awaiting file &amp; media upload
+          approval — use Approve on a row to enable public, private, or all uploads.
+        </Alert>
+      )}
       {error ? <SnapshotErrorNotice hasPreviousRows={rows !== null} onRetry={refresh} /> : null}
       {loading && !rows ? (
         <Flex justify="center" py={10}>
@@ -404,6 +514,7 @@ const UsersTab = () => {
               <Tr>
                 <Th>User</Th>
                 <Th>Tier</Th>
+                <Th>Uploads</Th>
                 <Th>Created</Th>
 								<Th isNumeric>Account storage</Th>
 								<Th isNumeric>App data subset</Th>
@@ -436,6 +547,9 @@ const UsersTab = () => {
                   </Td>
                   <Td>
                     <TierBadge subscription={row.subscription} />
+                  </Td>
+                  <Td whiteSpace="nowrap">
+                    <UploadApprovalsControl row={row} onChanged={refresh} />
                   </Td>
                   <Td fontSize="xs" whiteSpace="nowrap" title={row.createdAt || undefined}>
                     {formatAdminDate(row.createdAt)}
@@ -485,7 +599,7 @@ const UsersTab = () => {
               ))}
               {rows && userQuery.rows.length === 0 && (
                 <Tr>
-                  <Td colSpan={9}>
+                  <Td colSpan={10}>
                     <Text fontSize="sm" opacity={0.6} py={2}>
                       No users match this query.
                     </Text>
@@ -750,6 +864,7 @@ export const AdminDashboard = () => {
         <TabList flexWrap="wrap">
           <Tab>Users</Tab>
           <Tab>Apps</Tab>
+          <Tab>Moderation</Tab>
           <Tab>Tiers</Tab>
           <Tab>CI Control</Tab>
           <Tab>System</Tab>
@@ -760,6 +875,9 @@ export const AdminDashboard = () => {
           </TabPanel>
           <TabPanel px={0}>
             <AppsTab />
+          </TabPanel>
+          <TabPanel px={0}>
+            <ModerationTab />
           </TabPanel>
           <TabPanel px={0}>
             <TierManager />

@@ -7,6 +7,14 @@ import { apiEndpointDocs } from '~/docs/apiDocs';
 // Math.random here
 const uniqueSuffix = () => `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
+// Documentation-only IPv6 range (RFC 3849), randomized per runner load so the
+// inherited auth.register IP bucket cannot mask the body-cap assertion on
+// repeated local/CI runs.
+const uniqueTestIp = () => {
+  const hex = crypto.randomUUID().replace(/-/g, '');
+  return `2001:db8:${hex.slice(0, 4)}:${hex.slice(4, 8)}:${hex.slice(8, 12)}:${hex.slice(12, 16)}:${hex.slice(16, 20)}:${hex.slice(20, 24)}`;
+};
+
 // Email tests deliver to the configured test inbox via plus aliases so real
 // sends stay contained: support@x.com → support+signup-<suffix>@x.com.
 const DEFAULT_EMAIL_TEST_RECIPIENT = 'support@thingtime.com';
@@ -250,6 +258,22 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/auth/register',
     body: {},
     expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Register returned validation error.')
+  },
+  {
+    id: 'auth-register-body-cap',
+    name: 'Register caps body size',
+    description: 'An oversized register body is rejected (413) before it is buffered/validated, rather than parsed in full.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/register',
+    headers: { 'X-Forwarded-For': uniqueTestIp() },
+    // ~64 KB payload, well over the 16 KB route cap.
+    body: { username: 'tt-api-test-oversized', password: 'valid-length-password', pad: 'x'.repeat(64 * 1024) },
+    expect: expectJson(
+      [413],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Oversized register body was rejected with a 413 error shape.'
+    )
   },
   {
     id: 'auth-login-invalid',
@@ -876,6 +900,22 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-data-relationship-names-open',
+    name: 'Data crystals may carry relationship key names',
+    description:
+      'Relationship dedupe rides the server-only root uniqueKeys namespace, so a data thing carrying followKey (or memberKey, dmKey, …) at its crystal root is ordinary user data: it enters no unique index, squats nothing, and saves normally (401 anonymous).',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { thingtime: ['data'], crystal: { followKey: 'just:data', memberKey: 'mine', note: 'relationship names are not reserved' }, visibility: 'private' },
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && (body?.thing?.id || body?.post?.id)) || (body?.ok === false && typeof body?.error === 'string'),
+      'Relationship names saved as ordinary data (or 401 anonymous).'
+    )
+  },
+  {
     id: 'things-user-missing-username',
     name: 'User posts require a username',
     description: 'The user-posts route validates the username parameter.',
@@ -1112,6 +1152,25 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/admin/set-admin',
     body: { userId: '000000000000000000000000', admin: true },
     expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin promote attempt was rejected.')
+  },
+  {
+    id: 'admin-moderation-guarded',
+    name: 'Moderation queue is admin-only',
+    description: 'Reading the NSFW/TOS moderation review queue requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/moderation',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin moderation read was rejected.')
+  },
+  {
+    id: 'admin-moderation-review-guarded',
+    name: 'Moderation review is admin-only',
+    description: 'Overriding a moderation verdict requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/moderation',
+    body: { action: 'review', attachmentId: '000000000000000000000000', verdict: 'block' },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin review attempt was rejected.')
   },
   {
     id: 'admin-users-overview-guarded',
@@ -1745,6 +1804,35 @@ export const apiTests: ApiTestDefinition[] = [
       [200, 429],
       (body) => body?.ok === true || typeof body?.error === 'string',
       'Waitlist join succeeded (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'apps-desktop-authorize-guarded',
+    name: 'Desktop authorization requires a session and complete PKCE request',
+    description:
+      'POST /api/v1/oauth/desktop/authorize is registered and rejects anonymous or incomplete installed-app consent requests before issuing a code.',
+    group: 'apps',
+    method: 'POST',
+    path: '/api/v1/oauth/desktop/authorize',
+    body: {},
+    expect: expectJson(
+      [400, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Desktop authorize rejected an unauthenticated/incomplete request with the bounded error envelope.'
+    )
+  },
+  {
+    id: 'apps-desktop-token-grant-type',
+    name: 'Desktop token exchange rejects unsupported grants',
+    description: 'POST /api/v1/oauth/token is registered and accepts only the authorization_code grant.',
+    group: 'apps',
+    method: 'POST',
+    path: '/api/v1/oauth/token',
+    body: { grantType: 'client_credentials' },
+    expect: expectJson(
+      [400, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Desktop token endpoint rejected an unsupported grant with the bounded error envelope.'
     )
   },
   {

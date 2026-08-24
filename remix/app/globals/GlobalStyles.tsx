@@ -84,9 +84,6 @@ export const GlobalStyles = () => {
 				'html.thingtime-native-webview': {
 					'--thingtime-devkit-bottom-offset': 'var(--thingtime-visual-devkit-bottom-offset, 36px)'
 				},
-				'html.thingtime-native-webview .drawerTrigger': {
-					display: 'none'
-				},
 				'html.thingtime-native-webview .thingtimeFooter': {
 					paddingBottom:
 						'calc(var(--thingtime-visual-bottom-padding, 72px) + var(--thingtime-safe-area-bottom, 0px)) !important'

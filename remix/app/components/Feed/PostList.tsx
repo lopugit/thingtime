@@ -39,6 +39,40 @@ const SkeletonCard = () => (
   </Box>
 );
 
+// One memoized row per post. PostCard is already React.memo, but the props it
+// received were built inline in the .map body — a fresh `onChanged` closure and
+// a fresh `ref` callback on every PostList render — so the memo never hit and
+// every engagement event re-rendered every mounted card. Scrolling a 100-post
+// feed fires up to 200 session-deduped view/dwell updates, making the wasted
+// work quadratic in posts loaded.
+//
+// Hooks cannot live in a .map body, so the per-post callbacks move into this
+// component, where useCallback can key them on the post id. The parent's
+// onPostChanged / onEngagement / observeView are all already useCallback-stable,
+// so these identities hold across renders and both memos actually stick. The
+// stale ref identity also stopped forcing observeView(null) + observeView(el)
+// for every wrapper on each of those re-renders.
+const PostRow = React.memo(function PostRow({
+  post,
+  onPostChanged,
+  onEngagement,
+  observeView
+}: {
+  post: PublicPost;
+  onPostChanged: (id: string, next: PostChange) => void;
+  onEngagement?: (event: EngagementEvent) => void;
+  observeView: (element: Element | null, thingId: string) => void;
+}) {
+  const handleChanged = React.useCallback((next: PostChange) => onPostChanged(post.id, next), [onPostChanged, post.id]);
+  const setRef = React.useCallback((element: HTMLDivElement | null) => observeView(element, post.id), [observeView, post.id]);
+
+  return (
+    <Box data-thing-id={post.id} ref={setRef}>
+      <PostCard post={post} onChanged={handleChanged} onEngagement={onEngagement} />
+    </Box>
+  );
+});
+
 export const PostList = (props: PostListProps) => {
   const { posts, loading, hasMore, onLoadMore, onPostChanged, onEngagement, emptyLabel } = props;
 
@@ -76,13 +110,13 @@ export const PostList = (props: PostListProps) => {
   return (
     <Flex flexDirection="column" rowGap={4} width="100%">
       {posts.map((post) => (
-        <Box key={post.id} data-thing-id={post.id} ref={(element: HTMLDivElement | null) => observeView(element, post.id)}>
-          <PostCard
-            post={post}
-            onChanged={(next) => onPostChanged(post.id, next)}
-            onEngagement={onEngagement}
-          />
-        </Box>
+        <PostRow
+          key={post.id}
+          post={post}
+          onPostChanged={onPostChanged}
+          onEngagement={onEngagement}
+          observeView={observeView}
+        />
       ))}
 
       {loading && (

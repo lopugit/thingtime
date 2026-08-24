@@ -6,6 +6,128 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Passkeys + cross-deployment auto-login
+
+- [ ] Settings → Security → "Add a passkey ✨": wrong password → error toast,
+      no platform sheet; correct password → the browser/1Password/iCloud sheet
+      opens and the saved passkey appears in the list with provider name,
+      created date, and your nickname. Cancelling the sheet shows NO error
+      toast (cancel is silent).
+- [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
+      44/44 — full software-authenticator ceremony: registration, duplicate
+      409, challenge replay refusals, usernameless login, lastUsed + linked
+      apps, revocation blocking login, revoke-before-delete, hint liveness.
+- [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
+      sheet → welcome toast → roster merged, other accounts untouched); the
+      username field offers the browser's own passkey autofill popup
+      (conditional UI) on browsers that support it.
+- [ ] Revoked passkey: revoke (password-confirmed) → the passkey stops logging
+      in IMMEDIATELY (401), stays listed with a Revoked badge, Delete appears
+      only after revocation and asks for the password again.
+- [ ] Passkey login bypasses email-OTP 2FA (a 2FA-enabled account logs
+      straight in with a passkey — the passkey is the second factor).
+- [ ] Auto-login popup: with a live session on another `*.thingtime.com`
+      deployment, a signed-out visit shows the "Continue as… ✨" corner card;
+      picking an account routes to `/login?u=<username>` with the username
+      prefilled and password focused; "Not now" snoozes it for a day; it never
+      renders on `/login`, `/register`, `/authorize`, `/reset-password`, or
+      while signed in.
+- [ ] Hint liveness: log out on the OTHER deployment → the suggestion
+      disappears here on the next fetch (hints resolve live sessions, never a
+      cached identity). `GET /api/v1/auth/account-hints` responses carry no
+      email — only id/username/displayName/avatarUrl.
+
+## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
+
+- [ ] Commander desktop OAuth: from the signed macOS Commander app, open
+      Thingtime login and complete consent in the system browser. The callback
+      must reach only Commander’s exact `127.0.0.1` loopback origin, exchange
+      a one-time S256 PKCE code, and create the expected Keychain-backed
+      account. Replaying the callback code, changing the callback URI, or
+      changing the verifier must fail without creating another grant.
+
+- [ ] `node scripts/verify-federated-login.mjs` passes (31 checks) against two
+      stacks on DIFFERENT databases (recipe in the script header — stack B
+      must be a production build; a second dev stack silently shares `.env`'s
+      database). Proves: per-environment hint authority + federated resolve
+      (CORS allow family / deny others, read-only), handoff aud binding,
+      cross-environment fail-closed, single-use + replay-revokes-session, and
+      the full FedCM accounts→assertion→session loop.
+- [ ] On a `*.thingtime.com` page, DevTools → Network shows at most
+      `MAX_FEDERATED_ORIGINS` (4) `/account-hints/resolve` fan-out fetches,
+      only for origins the local endpoint reported `unresolved`, and the
+      popup/login strip merges accounts without duplicate users.
+- [ ] On a NON-thingtime origin (immutable `*.vercel.app` preview) while
+      signed out: the corner card offers "Sign in with Thingtime 🌈" (never
+      the hints list); the button opens the `/authorize?self=1` popup, the
+      popup shows "Continue to <host>?" with the ACTIVE account, Continue
+      signs the page in (welcome toast) and the popup closes; Cancel closes
+      with nothing shared. In Chrome with FedCM available, the native
+      "Continue as" sheet ALSO auto-appears on page load (no click; the
+      browser's own dismissal cooldown governs re-prompts) and completes the
+      same loop. Until the hub code is live on production thingtime.com, set
+      `localStorage['tt-sso-hub'] = '"https://pr-<N>.previews.dev.thingtime.com"'`
+      (JSON string, matching localCache format) on the foreign origin to
+      point both flows at a preview hub sharing the deployment's database.
+- [ ] The `/authorize?self=1` popup signed OUT shows the embedded login (with
+      the cross-deployment hints strip) before the confirm card.
+- [ ] Replaying a captured sso-session code fails AND kills the session it
+      minted (theft response); a code redeemed on the wrong origin 403s; an
+      expired (>2 min) code 401s.
+- [ ] FedCM endpoints refuse non-browser fetches (no
+      `Sec-Fetch-Dest: webidentity` → 400) and `/fedcm/accounts` 401s when
+      signed out.
+
+## Public upload approval (new-signup permissions)
+
+- [ ] Register a brand-new account. `POST /api/v1/auth/register` returns
+      `publicUploadsEnabled: false` AND `privateUploadsEnabled: false`;
+      `POST /api/v1/attachments/uploads` answers `403` with
+      `code: "public_uploads_not_approved"` for public purposes (`post`,
+      `comment`, `custom-emoji`, or no purpose) and
+      `code: "private_uploads_not_approved"` for private ones (`message`,
+      `profile-avatar`, `profile-banner`).
+- [ ] Open the verification link. `emailVerified` flips to `true` while both
+      `*UploadsEnabled` flags stay `false` — verifying an email must never be
+      what grants uploads.
+- [ ] Scopes stay independent: approve only `private`
+      (`POST /api/v1/admin/users/public-uploads` with `scope: "private"`) and
+      confirm `profile-avatar`/`message` starts pass the gate while `post`
+      still 403s; approve only `public` on another account and confirm the
+      reverse; `scope: "all"` enables both, and a request without `scope`
+      keeps the legacy public-only behavior.
+- [ ] At desktop and 390px mobile widths, withheld post/comment/custom-emoji
+      composers show the public approval card while withheld message/profile
+      composers show the private card. Approving only one scope unlocks only
+      its matching pickers after revalidation; there is no one-boolean alias.
+- [ ] Revoke a scope while a draft upload is already selected. The picker stops
+      accepting new files, but the current rows and their finish/retry/remove
+      controls remain reachable so lifecycle cleanup still works after
+      revocation. Once the draft is empty, the approval card replaces it.
+- [ ] Confirm the `admin.new_user` message reaches
+      `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default `admin@thingtime.com`) with
+      the username, display name, email, user id, and signup time. In dev read
+      it from the `email_messages_v2` outbox.
+- [ ] Stop the mail provider (or set an unroutable recipient) and verify again:
+      verification still succeeds and still redirects to `/login?verify=success`
+      — a mail outage must never fail a committed verification, nor grant the
+      permission.
+- [ ] In **/admin → Users**, the account shows a `pending` Uploads badge and
+      the warning banner counts it. Use the **Approve ▾** menu: "Enable public
+      uploads" / "Enable private uploads" flip only that scope (badge shows
+      `public` or `private`), "Enable all" turns the badge green `all` — each
+      optimistically with a Lopu toast — and the matching upload starts stop
+      403ing.
+- [ ] Withhold from the same menu: that scope 403s again ("Withhold all"
+      returns the badge to `pending`). An account that predates the change (no
+      `meta.publicUploads`/`meta.privateUploads`) shows `all`, and an admin row
+      shows `all` with no menu.
+- [ ] Non-admins calling `POST /api/v1/admin/users/public-uploads` get `403`;
+      a missing `userId`, non-boolean `enabled`, or unknown `scope` gets `400`;
+      an unknown user gets `404`.
+- [ ] Run `npm run test:attachments` (it carries the public-upload permission
+      unit tests alongside the upload-gate regression test).
+
 ## Canonical AI instruction links (`AI_ALL.md`)
 
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
@@ -40,14 +162,20 @@ is fixed, and cite the checklist you ran in the PR description.
 ## Develop-target Vercel PR previews
 
 - [ ] Confirm `.github/workflows/develop-pr-preview.yml` and its controller
-      script are present on the default `main` branch before expecting
-      `pull_request_target` to run; a workflow present only on the feature PR is
-      deliberately inactive.
+      listener are present on the default `main` branch, while the reusable
+      implementation and controller script are present on the protected
+      `github-actions` branch, before expecting `pull_request_target` to run; a
+      listener present only on the feature PR is deliberately inactive.
 - [ ] On a product branch, run
       `node remix/scripts/workflow-caller-contract.mjs` and
       `node --test remix/scripts/vercel-config.test.mjs`: the thin listener
-      checks out the trusted controller from `main`, `.github/scripts/` is
-      empty, and every Vercel cron `(path, schedule)` pair appears exactly once.
+      calls the trusted implementation on `github-actions`, `.github/scripts/`
+      is empty, and every Vercel cron `(path, schedule)` pair appears exactly
+      once.
+- [ ] Manually run `Develop S3 PR preview` from `main` with a valid develop PR
+      number: the caller converts the dispatch string to the reusable
+      workflow's numeric `pr_number`, creates the controller job instead of a
+      zero-job failure, and performs the requested publish or cleanup.
 - [ ] Inspect an eligible PR's two runs: the `pull_request_target` dispatcher
       has no GitHub Environment/Vercel secret, checks out no code, and emits one
       bounded `repository_dispatch`; only the downstream default-branch run
@@ -140,11 +268,24 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## iOS web destination drawer
 
-- [ ] Confirm `https://thingtime.com/api/v1/vercel/deployments?limit=50` reports
-      `source: "api"`, `hasError: false`, and more than the production `main`
-      deployment before testing the native picker. A tokenless response or
-      `Vercel API returned 403` means the Vercel project token must be repaired
-      and a fresh deployment built before the app can discover previews.
+- [ ] At a phone-width native WebView destination, open the web app navigation
+      drawer from the top-left menu icon. The same fixed icon used by mobile web
+      stays inside the drawer header while the page and top nav move aside; no
+      duplicate icon appears at the drawer's outside edge. Close it, scroll from
+      the page top to bottom, reopen it, and confirm the icon remains tappable.
+- [ ] From any media composer in the native iOS app, choose Add Media → Take
+      Photo or Video. The system requests camera access instead of terminating
+      the app; photo capture returns a selectable file. Repeat with video and
+      confirm microphone permission is requested, then verify Photo Library
+      selection still returns media without a crash.
+- [ ] Confirm
+      `https://thingtime.com/api/v1/vercel/deployments?limit=50&history=10`
+      reports `source: "api"`, `hasError: false`, and `deploymentGroups` with
+      up to ten newest-first deployments per branch before testing the native
+      picker. The compatibility `deployments` array must still expose one
+      latest row per branch. A tokenless response or `Vercel API returned 403`
+      means the Vercel project token must be repaired and a fresh deployment
+      built before the app can discover previews.
 - [ ] Launch the iOS app with at least twelve returned destinations, open the
       left-edge Web destination drawer, and scroll from the first row to the
       final row and back. The header, refresh, and close controls stay pinned;
@@ -153,6 +294,16 @@ is fixed, and cite the checklist you ran in the PR description.
       without dismissing the drawer. Then swipe predominantly left and confirm
       the drawer closes; reopen it, select an off-screen preview, and confirm
       the web view loads that exact URL.
+- [ ] Find a branch whose newest deployment is queued/building and whose prior
+      deployment is ready. Expand the branch row, confirm both deployments are
+      shown newest first and the ready child is labelled `Last successful`,
+      then select that child and verify the WebView loads its immutable URL
+      rather than the queued branch alias. Reopen the drawer and confirm the
+      selected branch expands automatically with the child checkmark visible.
+- [ ] Expand and collapse several branches while scrolling to the bottom and
+      back in portrait and landscape. Nested deployment rows remain inside
+      their branch cards, disclosure controls stay tappable, and vertical
+      scrolling never triggers the horizontal drawer-close gesture.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
@@ -171,14 +322,47 @@ is fixed, and cite the checklist you ran in the PR description.
       ESLint starts. `npm --prefix remix run ensure-deps -- --check` also proves
       both ESLint and the directly declared Prettier CLI can start.
 
+## Branding page (`remix/app/routes/branding/_index.tsx`, `remix/app/components/Branding/`)
+
+- [ ] `/branding` renders full-width with a centred max-width column at desktop
+      (≥1280px) and mobile (375px); no horizontal scrollbar at either size and
+      no borders/cards/checkerboard grids anywhere — previews sit on soft
+      panels only.
+- [ ] Every variant section (wordmark, icon, both pink cuts) shows its live
+      SVG preview; the light/dark panel dots swap the preview surface.
+- [ ] "Download SVG" and "PNG · 1024px" point at real committed files under
+      `/branding/generated/<slug>/…` (200s, not client blobs); the ready-made
+      grid lazy-loads (`loading="lazy"`) one `<img>` per size up to 10000px,
+      wordmark sizes keep the 27:5 trimmed aspect (e.g. 1024×190).
+- [ ] Ready-made sizes render as two lines — the SVG line
+      (`SVG · scalable · <size>`) above the PNG line — and every PNG chip is
+      labelled `PNG · <W>×<H> · <KB/MB>`; chips wrap without horizontal
+      scroll at 375px.
+- [ ] Custom export: format PNG/SVG, any width, padding all-sides and
+      per-side, background transparent/white/ink — downloads a file named
+      `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding, and fires a
+      Lopu success toast (errors also route through Lopu, never `alert`).
+- [ ] Exports and previews are whitespace-trimmed: `npm --prefix remix run
+      test:branding` passes (trim + padding + pixel-size unit tests).
+- [ ] Press kit grid renders all generated marketing images; the portrait
+      phone wallpaper previews as a centre crop and must not stretch its grid
+      row (no giant empty gap beside it).
+- [ ] Palette swatches copy their hex via clipboard with a Lopu toast.
+- [ ] After changing `logoMatrix.ts` matrices/colours, re-run
+      `npm --prefix remix run branding-assets` and commit the refreshed
+      `remix/public/branding/` + `brandingAssets.generated.json` (byte-stable
+      when nothing changed).
+
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
-- [ ] Seed the `thingtime` LocalForage value with a legacy unrevivable function
-      plus root `set` / `get` runtime methods, then load `/feed` ONCE: the
+- [ ] Seed the `thingtime` LocalForage value with valid-looking hostile and
+      malformed legacy function tags plus root `set` / `get` runtime
+      methods, then load `/feed` ONCE: no payload executes, the code-defined
+      editor factory is restored, the
       collapsed “What's on your mind?” control opens, Editor.js accepts focus
       and typing, Latest / Filters and the global search remain interactive,
       and the repaired stored snapshot already contains neither runtime method
-      nor the legacy fallback before a second navigation.
+      nor any function source before a second navigation.
 - [ ] Open the feed composer → Thingtime tab: the editor shows exactly ONE
       root property, `New Thing`, with no default children (no `name`).
 - [ ] The draft path is session-scoped (`tmp.<sessionId>.New Thing`): add a
@@ -205,6 +389,61 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
+      `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
+      with a red border, light red wash, centered NSFW badge, and a
+      `Show Anyway` button that reveals it (per attachment, per page view).
+      An image named `tt-test-illegal.png` disappears from public payloads and
+      its `/api/v1/attachments/content` URL 404s for non-admins, while a
+      `moderationFlag` row appears in `/admin` → Moderation.
+- [ ] Deliberately hold a just-completed attachment in `pending`: it is absent
+      from another account's attachment projection and content returns not
+      found, while its owner and an admin can still open the exact evidence.
+      Run the moderation sweep after restoring the deterministic provider and
+      confirm it releases the item to `clear`, `nsfw`, or `blocked`.
+- [ ] Generic Things create/update requests cannot set the root `moderation`
+      field or create a `thingtime: moderationFlag` record. Pre-create an
+      ordinary Thing with the deterministic `modflag-<target>` id, analyze a
+      flagged target, and confirm the ordinary Thing remains byte-for-byte
+      ordinary while the target remains `flagPending` for operator review.
+- [ ] With `THINGTIME_MODERATION_PROVIDER=openai+claude` (+ both API keys), a
+      clearly clean image stamps `clear` with provider `openai` (free omni
+      screen, no Claude spend) while an explicit image stamps via provider
+      `claude` (escalated) — check the provider column in `/admin` →
+      Moderation. With `ANTHROPIC_API_KEY` removed, an omni-flagged image still
+      lands `nsfw` (blur + flag) instead of staying pending.
+- [ ] `/admin` → Moderation → AI moderation settings: switching Media uploads
+      to "OpenAI omni only (free)" updates the "running:" label and subsequent
+      uploads stamp provider `openai`; switching either surface to Off stops
+      new stamps. Choices survive a reload (settings collection, not local
+      state).
+- [ ] With an OpenAI key configured, a post/comment containing threatening
+      harassment vanishes from feeds/threads for everyone shortly after
+      creation and a `text` flag row (with excerpt, no View button) appears in
+      `/admin` → Moderation; Clear restores the post, Block re-hides it.
+      Editing a clean post to add flagged text re-screens it.
+- [ ] Hybrid create gate: with text moderation on, posting text that omni
+      flags as block-worthy never appears in any feed/thread — even a refresh
+      fired immediately after posting (the doc is born blocked; a `text` flag
+      row appears for admins). With `TT_TEXT_SCREEN_BUDGET_MS=0` (or omni
+      unreachable) the post is born pending and owner-private until the async
+      verdict or sweep releases it.
+- [ ] Fail-closed pending flow: with text moderation on and omni unreachable
+      (or `TT_TEXT_SCREEN_BUDGET_MS=0`), a new post appears for its author but
+      NOT for other accounts; once omni is reachable again (queue retry or
+      cron sweep) the post appears for everyone and follower notifications
+      arrive at release time. Turning text moderation Off releases any
+      stranded pending posts on the next sweep.
+- [ ] URL-photos moderation: a post created through the multi-URL photo flow
+      pointing at an explicit external image gets flagged (nsfw advisory row
+      with the URL in the excerpt) without any text in the post; editing the
+      listing title or tags of a clean marketplace post to violating text
+      re-screens it.
+- [ ] Text sweep safety net: with text moderation on, manually strip the
+      `moderation` field from a flagged post (simulating a mid-flight death),
+      then hit `/api/v1/moderation/sweep` with the CRON_SECRET bearer (or the
+      admin Run analysis sweep button) — the post gets stamped/flagged and the
+      "text post(s) awaiting analysis" count in `/admin` → Moderation drops.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
@@ -221,6 +460,17 @@ is fixed, and cite the checklist you ran in the PR description.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] With two or more selected files, drag the ⠿ grip (mouse AND touch) to
+      reorder media tiles and file rows; arrow keys on a focused grip move one
+      step, Home/End jump to the edges. Tiles reorder live while dragging, a
+      tile drag never triggers the panel's file-drop styling, and the posted
+      card renders images and files in exactly the chosen order after reload.
+- [ ] Edit a post with 2+ attachments: the composer shows the read-only
+      reorderable gallery (no upload panel), dragging or arrow keys reorder it,
+      Save persists the order (card + `/post/:id` + reload agree), and saving
+      with no changes sends no attachment reorder. A stale edit saved after the
+      post's attachments changed fails with the refresh-and-reorder 409 rather
+      than half-applying.
 - [ ] Cancel an in-flight file, remove a completed draft file, and retry both a
       failed part upload and a failed completion. No file is silently omitted,
       duplicated, charged twice, or left in a permanent uploading state.
@@ -254,6 +504,26 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Feed, profile, nested repost, and permalink cards render vetted raster
       images and videos inline. SVG, HTML, script, and unknown types render only
       as named download rows; their bytes never execute inline.
+- [ ] Upload a QuickTime screen recording (a `.mov`, or a QuickTime container
+      misnamed `.mp4` — check for `ftypqt` magic bytes) plus an MKV or M4V.
+      Each finalizes as its sniffed `video/*` type and plays inline in feed and
+      permalink cards; the decision follows magic bytes, never the filename
+      extension.
+- [ ] Upload a non-web-playable container (for example an AVI) and confirm its
+      download row labels the real sniffed container (for example "AVI video"
+      from `detectedContentType`) instead of `application/octet-stream`, while
+      the bytes still download as opaque octet-stream.
+- [ ] In a browser missing the codec inside an allowed container (for example
+      HEVC QuickTime in Firefox), the failed `<video>` degrades to the named
+      download row instead of an inert black player.
+- [ ] For a ready upload finalized before magic-byte detection (crystal
+      `application/octet-stream`, no `detectedContentType`, renders as a file
+      card), run the admin `POST /api/v1/attachments/backfill-detected-types`
+      sweep — `dryRun: true` first, then for real, following `nextCursor` while
+      `hasMore` — and confirm the already-posted attachment flips to inline
+      video (or gains its sniffed download label) without re-uploading, with
+      name, size, and any owner-authored title/description unchanged. A repeat
+      run reports zero changes.
 - [ ] Let a content URL expire at the storage provider and open the attachment
       again: the stable authenticated `/api/v1/attachments/content?id=…` route
       issues fresh access. A private post's attachment fails closed for another
@@ -335,6 +605,69 @@ is fixed, and cite the checklist you ran in the PR description.
       draft or delete its post. The exact S3 version disappears and the account
       storage meter returns to its starting value without touching the
       production bucket.
+
+## Media thing pages — masonry, lightbox, `/media/:id`, annotate (`remix/app/components/Attachments/`, `remix/app/routes/media.tsx`)
+
+- [ ] A post with 3+ images renders the image section as a CSS-columns masonry
+      (natural aspect ratios, `break-inside` avoided) with 1/2/3 responsive
+      columns; at desktop and 375px mobile widths there is no horizontal
+      overflow, and video/file sections keep their existing layouts.
+- [ ] Clicking (and keyboard-activating) a masonry image opens the lightbox:
+      full image, title/description when present, prev/next across only that
+      post's images, an Open-page link to `/media/:id`, a download link, and
+      Esc/backdrop close. Error-state tiles never open a broken lightbox.
+- [ ] `/media/:id` renders inside the Thingtime UI shell (nav, centered
+      max-width): large media, title/description, author, a link back to the
+      parent post, plus working reactions and comments on the media thing
+      itself. Comments/reactions persist after reload, an unknown or private id
+      404s safely, and `GET /api/v1/things?id=<attachmentId>` leaks no private
+      object fields.
+- [ ] As the owner, use the pencil affordance on a ready composer tile, an
+      edit-gallery tile, and the `/media/:id` page to set/edit title (≤200) and
+      description (≤2000). The editor saves via `/api/v1/attachments/annotate`,
+      updates optimistically (revert + Lopu toast on failure), clears fields
+      when emptied, and the saved values survive reload on card, lightbox, and
+      media page. A non-owner and an unauthenticated caller get no pencil and a
+      403/401 from the endpoint.
+- [ ] Annotate a legacy opaque attachment that already has a server-written
+      `detectedContentType`. Title/description edits and clears preserve that
+      field exactly, so #319/#321's detected label and accounting survive; a
+      malformed pre-existing crystal fails closed instead of being rewritten.
+- [ ] On `/media/:id`, the timestamp, owner-menu Copy link, and outward Share
+      all resolve to `/media/:id` (never the blank `/post/:id` attachment
+      projection). Repost/quote controls are absent until attachment-target
+      shares have a real renderer, so the media card cannot create an empty
+      feed share.
+- [ ] Media layout editor: on a post with 3+ images, switch Layout between
+      Auto 🧱 / Rows 🥞 / Grid 🔳 in the composer AND in edit mode. Rows accepts
+      a pattern like 1-2-3 (hero, two, three; extras repeat the last row size),
+      Grid gets a 1-6 column stepper plus per-tile size badges cycling
+      normal → wide → tall → big. Saved layouts persist through create, edit,
+      reload, and render identically for a non-owner viewer; Auto clears
+      `mediaLayout` from the crystal. Layout controls only appear with 2+
+      visual attachments and never break the drag-reorder grips.
+- [ ] Media layout transport: after creating a post or rich comment through
+      `useApi`, reopen the editor and confirm the selected Rows/Grid mode,
+      columns/pattern, and non-default spans survived the client request. A
+      correct pre-submit preview is not sufficient evidence of persistence.
+
+- [ ] Reload a post with a rich comment using Rows or Grid. Its chosen
+      `mediaLayout` (including columns/pattern and non-default spans) survives
+      the feed, profile, and `/post/:id` projections rather than silently
+      falling back to masonry.
+- [ ] Server bounds: `mediaLayout` rejects pattern rows over 25 entries or
+      outside 1..6, columns outside 1..6, spans maps over 25 entries, and
+      non-object payloads with a 400; unknown keys are stripped; legacy posts
+      without the field stay valid; Auto removes the `mediaLayout` key rather
+      than storing `null`; lightbox order stays attachment order in every mode;
+      desktop and 375px render every mode with no horizontal overflow.
+- [ ] Drag-resize canvas editor (grid mode): dragging a tile's edge handle
+      resizes it snap-to-cell (wide/tall/big), including via touch, with a
+      keyboard fallback on a focused tile; the column slider relayouts live;
+      the resulting layout matches what non-edit viewers see after save.
+- [ ] Deleting the parent post (and separately a single attachment) cascades:
+      the media thing's own comments/reactions are removed, its `/media/:id`
+      404s, and no orphan child things remain.
 
 ## Profile avatar and banner media (`remix/app/components/Profile/`)
 
@@ -896,6 +1229,31 @@ is fixed, and cite the checklist you ran in the PR description.
       drop data.
 - [ ] `["post","data"]` combinations still 400 (data crystals stand alone);
       a thingtime post's free-form payload lives ONLY under `crystal.thing`.
+- [ ] Unique-slot squat class (closed structurally): relationship dedupe
+      rides the server-only root `uniqueKeys` namespace
+      (`<crystalField>:<key>` BinData, stamped in `messenger/shared.ts`
+      `newThingDoc` + the friend writer): after a follow/friend/DM/join/
+      invite/emoji create, the doc must carry `uniqueKeys`, a duplicate
+      insert of the same key must E11000 on the `uniqueKeys` index, and the
+      seven crystal-path indexes (including `voteKey`, even while the poll
+      product remains deferred) must be the non-unique `things_*_lookup`
+      generation (old `things_*_unique` names dropped by the boot-time
+      ensure swap, including the superseded `things_follow_unique` marker
+      generation — verify with `getIndexes()`). Legacy docs get stamped by
+      the idempotent `backfill-relationship-unique-keys` migration, whose
+      notes also census (never modify) data things carrying relationship
+      names from the pre-fix era. Unit coverage:
+      `remix/app/api/utils/messenger/relationshipUniqueKeys.test.ts`.
+- [ ] The data-crystal namespace reserves NO names: a data thing carrying
+      `followKey`, `memberKey`, `dmKey`, `inviteCode`, `emojiKey`,
+      `friendKey`, or `voteKey` at its crystal root (any nesting, any value
+      type) saves as ordinary data, collides with nothing, and never blocks
+      or is blocked by real relationship flows — verify a data thing with
+      `crystal.followKey` equal to a real pair key coexists with that real
+      follow. New unique indexes over crystal paths reachable by free-form
+      data crystals are forbidden (see KIND-BLIND HISTORY in
+      `collections.ts`); dedupe belongs in `uniqueKeys`. API coverage:
+      `things-data-relationship-names-open` in the /tests suite.
 
 ## Feed & profile advanced filters (`remix/app/components/Feed/AdvancedFilters.tsx`)
 
@@ -949,6 +1307,10 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] `merge-legacy-collections` dry-run reports per-collection copy counts and
       writes nothing; the real run copies only docs missing at the destination
       (re-run reports 0) and never deletes a legacy collection.
+- [ ] When `merge-legacy-collections` reports `0 pending`, stale physical
+      generations remain visible in the Storage generations table without an
+      orange adoption warning. Make one legacy document genuinely pending and
+      confirm the warning returns until the merge converges again.
 - [ ] Against a disposable replica-set database, the first registered and
       sandbox app-storage counter can be created without MongoDB code 224:
       the ensure upsert uses only the deterministic `shareId`, while the
@@ -960,6 +1322,11 @@ is fixed, and cite the checklist you ran in the PR description.
       restores `storageClass: "control"`; running
       `backfill-user-storage-accounting` directly invokes that repair first.
       A community/user-owned `thingtime: ["schema"]` Thing remains billable.
+- [ ] Seed a canonical attachment with every protected object-accounting root
+      field, then dry-run and run `backfill-user-storage-accounting`. Both
+      passes retain the complete attachment envelope while calculating exact
+      bytes, converge to zero pending, and never misclassify the attachment as
+      `InvalidAttachmentStorageEnvelopeError` because of a Mongo projection.
 - [ ] Force a migration runner exception once: the public error field remains
       a safe exception class/code (never a raw Mongo message, query, document
       id, host, or credential), and Lopu renders contextual text beneath the
@@ -1034,6 +1401,39 @@ is fixed, and cite the checklist you ran in the PR description.
       blocking) swaps "Loading the SDK…" for the failure notice with the
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
+
+## Register request body cap (`remix/app/routes/api/v1/auth/register/_register.tsx`)
+
+- [ ] Register rejects an oversize body with 413 (`readJsonBody` 16 KiB cap)
+      before validation, bcrypt, or account writes; the existing limiter still
+      consumes the request first, and a normal signup from a fresh IP returns
+      200 with a session cookie.
+
+## Persisted-state codec (`remix/app/Providers/thingtimeSerialization.ts`)
+
+- [ ] `npm run test:persist` passes (tagged Dates, untagged ISO-lookalike user
+      strings including ambiguous legacy values, malformed tag
+      preservation, circular/shared data, invalid Dates, no serialized function
+      source, hostile legacy functions inert, and code-defined default refill).
+- [ ] Live: type a post whose text is a full ISO timestamp (e.g.
+      `2026-01-01T00:00:00.000Z`), reload twice — the text must stay a string
+      (older builds turned it into a Date and rewrote it permanently).
+- [ ] Live: app hydrates under the CSP with no `unsafe-eval`; theme pre-paint
+      and `[LC]`/env title prefix still work from `/tt-boot.js`.
+- [ ] `npm run verify:vercel-output` rejects app `script-src` policies that add
+      `unsafe-inline`/`unsafe-eval`, an inline executable shell script, or a
+      missing `/tt-boot.js` or `/tt-preview-freshness.js`. On a
+      built/Vercel preview, append an inline script
+      element that sets a harmless test variable — CSP blocks it and the
+      variable remains unset.
+- [ ] Commander search/navigation, registered magic-word actions, and data-only
+      assignments (`path = 42`, JSON objects/arrays, quoted/plain strings)
+      work under the strict policy. Program text is stored as text and never
+      executes; never restore global `unsafe-eval` for programmable commands.
+- [ ] A `/docs/design-bundles/<slug>/index.html` prototype still renders: its
+      repo-controlled generated runtime gets the path-scoped `unsafe-eval` +
+      unpkg compatibility policy, while `/`, `/authorize`, and ordinary app
+      routes keep the strict policy without `unsafe-eval`.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
@@ -1328,6 +1728,13 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 
 ## Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`)
 
+- [ ] `/admin` → Moderation lists flags (unreviewed first) with status badges;
+      `View` opens the raw media (blocked media opens for admins only);
+      `Clear` / `NSFW` / `Block` override the verdict with a Lopu toast and
+      stamp reviewedBy; exercise all three overrides on deterministic clear,
+      nsfw, and blocked uploads. `Run analysis sweep` reports
+      analyzed/flagged/skipped counts and drains pending attachments plus
+      verdicts whose flag write was interrupted.
 Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
 restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
 name already on the allowlist is refused, so register FIRST). One command
@@ -1776,6 +2183,10 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       shown everywhere names render; promote/demote/remove for admins with
       the owner untouchable; owner leaving hands the chat to the earliest
       admin, else earliest member.
+- [ ] Member batch durability fault injection: a membership `insertMany` with
+      only duplicate-key write errors stays idempotent, while the same result
+      plus a write-concern failure returns an error instead of reporting a
+      successful chat creation or member add.
 - [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
       kind 403s ("managed by their own endpoints"); chats/messages are 404
       through `GET /api/v1/things?id=` for non-owners;
@@ -1861,17 +2272,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Things New/View/Arrange controls all respond; production-domain tabs do
       not run this preview freshness check.
 - [ ] On iOS Safari, navigate away from a Vercel preview and return with Back.
-      The inline preview recovery bootstrap loads before the main application
-      entry and a `pageshow.persisted` restore immediately replaces the page
-      with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
+      The external same-origin preview recovery bootstrap loads before the main
+      application entry; a `pageshow.persisted` restore immediately replaces
+      the page with a unique network URL. `curl -I` for `/`, `/index.html`, `/feed`, and
       `/things` returns `Cache-Control: private, no-store, max-age=0,
       must-revalidate`, while `/assets/*` remains outside the HTML no-store
       route.
 - [ ] With a legacy local Thingtime blob containing anonymous, arrow, scoped,
-      and the old `Function could not be revived` fallback values, reload Feed
-      and open “What's on your mind?”. Hydration reports no function syntax
-      exception; the composer focuses and edits, Photos opens, close restores
-      the collapsed composer, and Latest / Filters / navigation still respond.
+      hostile, and old failed-revival function tags, reload Feed and open
+      “What's on your mind?”. Hydration executes none of them, removes every
+      tag, restores the code-defined composer functions, and atomically stores
+      the clean snapshot; the composer focuses and edits, Photos opens, close
+      restores the collapsed composer, and Latest / Filters / navigation still
+      respond.
 - [ ] In Mobile Safari with a retained signed-in session and Commander closed,
       physically tap the collapsed “What's on your mind?” control immediately
       after a fresh Feed navigation. The composer opens on that first tap;

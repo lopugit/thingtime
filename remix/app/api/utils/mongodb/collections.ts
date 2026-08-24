@@ -400,10 +400,28 @@ const thingsCollection = (db: any) => db.collection(physicalCollectionName('thin
 //
 // everything in `things` is a thing (see api/utils/things + app/schemas);
 // shareId is included so the (createdAt desc, shareId asc) page sort is
-// fully index-provided instead of an in-memory sort per request. The
+// fully index-provided instead of an in-memory sort per request. That
+// holds only while EVERY branch of a query can provide the sort: the
+// dual-era post match is an $or over thingtime and kind, and a branch
+// with no matching index forces the planner to fetch the whole $or
+// result and sort it in memory — see the kind/createdAt index below. The
 // kind-prefixed indexes serve v1-era docs until the things migration
 // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
 // array), and targetId serves comment/reaction/share lookups.
+// KIND-BLIND HISTORY (the unique-slot squat class): the relationship key
+// indexes below were once UNIQUE with filters that saw only `crystal.<key>`
+// — no kind scoping — so a free-form data thing carrying e.g.
+// crystal.followKey '<followerId>:<followeeId>' entered the index and
+// permanently blocked the victim's real follow with E11000. Their
+// uniqueness now rides the server-only root uniqueKeys namespace (index
+// below + messenger/shared.ts relationshipUniqueKeys), the crystal-path
+// indexes are plain lookups, and data crystals reserve no names. NEVER add
+// a new unique index over a crystal path reachable by free-form data
+// crystals: put dedupe in uniqueKeys, or — where a crystal-path unique
+// index is truly needed — use the thingtime-scoped filter pattern of
+// things_app_data_unique (partial-filter equality on the multikey thingtime
+// array verifiedly includes array-contains matches on MongoDB 8.0).
+
 const createThingsDataIndexes = (db: any): Promise<any>[] => {
   // Tagged so a createIndex failure names the exact `things.<index>` that
   // broke, whether this runs on the home db or a custom endpoint.
@@ -411,8 +429,13 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
   return [
     col.createIndex({ shareId: 1 }, { unique: true, sparse: true }),
     // generalized uniqueness for system kinds (username:<u>, hashed email
-    // keys, schema:<id>, …): multikey unique — each element unique across
-    // the collection; sparse so ordinary things skip the index entirely
+    // keys, schema:<id>, …) AND relationship dedupe (followKey:<a>:<b>,
+    // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey: — stamped by
+    // messenger/shared.ts relationshipUniqueKeys): multikey unique — each
+    // element unique across the collection; sparse so ordinary things skip
+    // the index entirely. Root field + BinData = no user input can ever
+    // reach this namespace, which is why relationship invariants live here
+    // instead of on user-writable crystal paths.
     col.createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
     // login + people-search lookups on user things (thingtime is the only
     // multikey field here, so the compound is legal)
@@ -422,6 +445,22 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
 		col.createIndex({ secureAdmin: 1 }, { partialFilterExpression: { secureAdmin: true } }),
     col.createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+    // The feed and profile matches are $or over BOTH eras
+    // ({thingtime:'post'} | {kind:'post'} — see postMatch in things.ts). The
+    // thingtime side had its (createdAt desc, shareId asc) index above; the
+    // kind side had one only when also filtered by visibility or ownerId, so
+    // a plain chronological feed left that branch sortless. The planner then
+    // could not push the limit into the scan: it fetched EVERY post the
+    // viewer can see and sorted them in memory, scaling linearly with the
+    // visible-post count.
+    //
+    // Purely additive — no query changes, both eras stay correct, and
+    // dropping the kind branch instead would silently hide v1-era posts
+    // (custom data-plane endpoints may still hold unmigrated docs).
+    // Verified on a local dataset: the plan goes from SORT <- FETCH <- OR
+    // (67 docs examined to return 21) to LIMIT <- FETCH <- SORT_MERGE with
+    // no blocking sort (38 examined).
+    col.createIndex({ kind: 1, createdAt: -1, shareId: 1 }),
     // Admin user/app snapshots filter by thingtime without ownerId, then
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
@@ -432,6 +471,23 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Control-plane history is relational: one ci-event per provider delivery
     // and parent entity, never an unbounded status array on the current row.
     col.createIndex({ thingtime: 1, parentId: 1, createdAt: -1, shareId: 1 }),
+    // The unread-notification badge counts (thingtime, ownerId, readAt: null).
+    // The general (thingtime, ownerId, createdAt, shareId) index above narrows
+    // to the user's notifications, but readAt is not a key in it, so the count
+    // landed in a FETCH stage that pulled EVERY notification that user had
+    // ever received just to test one field — cost grew with history, on a
+    // badge polled by every session.
+    //
+    // Partial on readAt: null so the index holds only the unread set, which is
+    // normally a handful and empty for a caught-up user. Verified against a
+    // local dataset: the planner selects this index (isPartial) and the same
+    // query drops from fetching every notification to examining none when
+    // there is nothing unread, with counts identical to a collection scan
+    // across every owner.
+    col.createIndex(
+      { thingtime: 1, ownerId: 1 },
+      { name: 'notification_unread', partialFilterExpression: { thingtime: 'notification', readAt: null } }
+    ),
     // Canonical account-storage reconciliation: content allocations are
     // grouped by owner and summed from their exact versioned byte stamps.
     // Control-plane Things never enter this partial index.
@@ -440,6 +496,22 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { partialFilterExpression: { storageClass: 'content' } }
     ),
     col.createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+    // Live share counts are an $or of the v2 shape ({thingtime:'share',
+    // targetId}) and the v1 shape (a post carrying shareOfId). shareOfId had
+    // no index, and one unindexed branch drags the whole $or down: the
+    // aggregation ran as a full COLLSCAN of `things` on EVERY feed page,
+    // profile page, search page, single-post read, post/comment create,
+    // thing update AND every reaction toggle (resolveRelated runs it for the
+    // reaction's target). Measured locally: 4,846 documents examined and 0
+    // index keys to produce share counts for 20 posts; with this index the
+    // same aggregation examines 6 documents and 6 keys.
+    //
+    // sparse rather than a $type partial filter: sparse is provably usable
+    // for the $in over non-null strings, while $type subsumption proving is
+    // more fragile across server versions. Additive — dropping the v1 branch
+    // instead would be faster still but would silently stop counting
+    // un-migrated v1 shares (thingtimeOf/targetIdOf still read that shape).
+    col.createIndex({ shareOfId: 1 }, { sparse: true }),
     // Private-S3 attachment lifecycle scans. Deliberately NOT a TTL index:
     // expiry cleanup must delete/abort S3 first and refund the user ledger in
     // one Mongo transaction; TTL deletion would orphan bytes and accounting.
@@ -504,30 +576,26 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       },
       ['targetId_1_ownerId_1_crystal.emoji_1']
     ),
-    // One follow edge per (followed, follower): toggle-on is an idempotent
-    // upsert, deduped under races. Only follow things carry crystal.follow
-    // (constant true) — same marker-field trick as the reaction index, since
-    // partial filters can't reliably scope on the multikey thingtime array.
-    createIndexReplacing(
-      col,
-      { targetId: 1, ownerId: 1 },
-      {
-        name: 'things_follow_unique',
-        unique: true,
-        partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.follow': { $exists: true } }
-      }
-    ),
+    // Retire the superseded follow-marker generation. Current follow writers
+    // use crystal.followKey for lookup and protected root uniqueKeys for
+    // dedupe; no registered schema mints crystal.follow. Leaving this old
+    // kind-blind unique index behind would needlessly constrain ordinary data
+    // Things after the crystal namespace reopens in phase 2.
+    dropIndexRetrying(col, 'things_follow_unique'),
     // One friendship doc per unordered user pair, regardless of who asked:
     // crystal.friendKey is '<minId>~<maxId>', written only by the friend
-    // endpoint. Uniqueness kills duplicate/crossed requests structurally.
+    // endpoint. Uniqueness rides uniqueKeys ('friendKey:<min>~<max>', stamped
+    // at insert) so duplicate/crossed requests still die structurally; this
+    // index is now the LOOKUP only. createIndexReplacing keeps a friendKey
+    // index live throughout the swap and retires the old unique name.
     createIndexReplacing(
       col,
       { 'crystal.friendKey': 1 },
       {
-        name: 'things_friend_unique',
-        unique: true,
+        name: 'things_friend_key_lookup',
         partialFilterExpression: { 'crystal.friendKey': { $exists: true } }
-      }
+      },
+      ['things_friend_unique']
     ),
     // (Notification list/unread queries are served by the general
     // { thingtime, ownerId, createdAt desc, shareId } index above.)
@@ -633,33 +701,64 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { 'crystal.targetId': 1, 'crystal.linkKind': 1 },
       { partialFilterExpression: { 'crystal.targetId': { $exists: true } } }
     ),
-    // Messenger (api/utils/messenger). Structural invariants ride single
-    // crystal key fields with partial unique indexes (the reaction-index
-    // pattern — acl/thingtime are multikey, so compounds over them are out):
-    // one membership per (chat|community, user)…
-    col.createIndex(
+    // Messenger (api/utils/messenger) relationship LOOKUP indexes. The
+    // structural invariants (one membership per (chat|community, user), one
+    // DM per pair, collision-proof invite codes, one emoji name per scope,
+    // one follow edge per pair) ride the server-only uniqueKeys namespace
+    // above — stamped in newThingDoc (messenger/shared.ts), backfilled onto
+    // legacy docs by the backfill-relationship-unique-keys migration. The
+    // crystal-path indexes here serve the findOne/$in query shapes only;
+    // their old kind-blind UNIQUE ancestors were squattable through
+    // free-form data crystals (see KIND-BLIND HISTORY above) and are
+    // retired by each swap, create-then-drop, so a lookup index stays
+    // live throughout:
+    createIndexReplacing(
+      col,
       { 'crystal.memberKey': 1 },
-      { name: 'things_member_key_unique', unique: true, partialFilterExpression: { 'crystal.memberKey': { $type: 'string' } } }
+      { name: 'things_member_key_lookup', partialFilterExpression: { 'crystal.memberKey': { $type: 'string' } } },
+      ['things_member_key_unique']
     ),
-    // …one DM per participant pair (toggle-safe under create races)…
-    col.createIndex(
+    createIndexReplacing(
+      col,
       { 'crystal.dmKey': 1 },
-      { name: 'things_dm_key_unique', unique: true, partialFilterExpression: { 'crystal.dmKey': { $type: 'string' } } }
+      { name: 'things_dm_key_lookup', partialFilterExpression: { 'crystal.dmKey': { $type: 'string' } } },
+      ['things_dm_key_unique']
     ),
-    // …invite codes are unguessable AND collision-proof…
-    col.createIndex(
+    createIndexReplacing(
+      col,
       { 'crystal.inviteCode': 1 },
-      { name: 'things_invite_code_unique', unique: true, partialFilterExpression: { 'crystal.inviteCode': { $type: 'string' } } }
+      { name: 'things_invite_code_lookup', partialFilterExpression: { 'crystal.inviteCode': { $type: 'string' } } },
+      ['things_invite_code_unique']
     ),
-    // …one custom emoji name per scope…
-    col.createIndex(
+    createIndexReplacing(
+      col,
       { 'crystal.emojiKey': 1 },
-      { name: 'things_emoji_key_unique', unique: true, partialFilterExpression: { 'crystal.emojiKey': { $type: 'string' } } }
+      { name: 'things_emoji_key_lookup', partialFilterExpression: { 'crystal.emojiKey': { $type: 'string' } } },
+      ['things_emoji_key_unique']
     ),
-    // …and one follow edge per (follower, followee).
-    col.createIndex(
+    createIndexReplacing(
+      col,
       { 'crystal.followKey': 1 },
-      { name: 'things_follow_key_unique', unique: true, partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } }
+      { name: 'things_follow_key_lookup', partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } },
+      ['things_follow_key_unique']
+    ),
+    // Poll voting is deliberately outside this release, but its preview
+    // branch already installed the old kind-blind index in the shared develop
+    // database. Retire it here with the rest of the family so phase 2 can
+    // safely reopen voteKey too. Any existing vote docs are backfilled into
+    // uniqueKeys; this lookup preserves the future query shape without
+    // shipping the poll product surface.
+    createIndexReplacing(
+      col,
+      { 'crystal.voteKey': 1 },
+      { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
+      ['things_vote_key_unique']
+    ),
+    // One passkey app link per (passkey, app/origin) — the per-login upsert's
+    // update→insert race resolves through this index (auth/passkeys.ts).
+    col.createIndex(
+      { 'crystal.linkKey': 1 },
+      { name: 'things_passkey_link_key_unique', unique: true, partialFilterExpression: { 'crystal.linkKey': { $type: 'string' } } }
     ),
     // Thread replies list under their root message (main chat pages ride the
     // shared { targetId, thingtime, createdAt, shareId } index above).

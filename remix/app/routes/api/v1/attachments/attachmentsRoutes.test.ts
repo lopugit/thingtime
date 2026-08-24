@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createAttachmentMutationAction, isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
+import { createAttachmentDetectionBackfillAction } from './backfill-detected-types/_backfill-detected-types';
 import { createAttachmentCleanupLoader } from './cleanup/_cleanup';
 import { createAttachmentContentLoader } from './content/_content';
 
@@ -49,6 +50,79 @@ test('same-origin mutations honor the proxy-owned public origin and still fail c
 		),
 		false
 	);
+});
+
+// Signup-permissions hotfix: a brand-new account (both upload scopes withheld,
+// even once its email is verified) must not be able to START an upload, and
+// the requested purpose decides WHICH scope gates it (public =
+// post/comment/custom-emoji, private = message/profile media; "all" is both
+// flags). Approved scopes are unaffected — and routes that DON'T opt in stay
+// open so an in-flight upload can still be completed or cancelled after a
+// revoke.
+test('upload starts require the upload-permission scope matching the purpose', async () => {
+	let serviceCalls = 0;
+	const gated = (viewer: any) =>
+		createAttachmentMutationAction(
+			{
+				rateKey: 'attachments.start',
+				service: async () => {
+					serviceCalls += 1;
+					return { ok: true };
+				},
+				requireUploadPermission: true
+			},
+			{ getUser: async () => viewer, enforceLimit: allowed as any }
+		);
+
+	const pending = {
+		id: 'user-new',
+		accountKind: 'user',
+		emailVerified: true,
+		publicUploadsEnabled: false,
+		privateUploadsEnabled: false
+	} as any;
+	// no purpose defaults to 'post' — a public surface
+	const denied = await gated(pending)({ request: post({}) });
+	assert.equal(denied.status, 403);
+	assert.equal(serviceCalls, 0);
+	const deniedBody = await denied.json();
+	assert.equal(deniedBody.code, 'public_uploads_not_approved');
+	assert.equal(denied.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+	for (const purpose of ['post', 'comment', 'custom-emoji']) {
+		const res = await gated(pending)({ request: post({ purpose }) });
+		assert.equal(res.status, 403, `public purpose ${purpose} not gated`);
+		assert.equal((await res.json()).code, 'public_uploads_not_approved');
+	}
+	for (const purpose of ['message', 'profile-avatar', 'profile-banner']) {
+		const res = await gated(pending)({ request: post({ purpose }) });
+		assert.equal(res.status, 403, `private purpose ${purpose} not gated`);
+		assert.equal((await res.json()).code, 'private_uploads_not_approved');
+	}
+	assert.equal(serviceCalls, 0);
+
+	// each scope grants ONLY its own purposes — "all" is simply both flags
+	const publicOnly = { id: 'user-pub', accountKind: 'user', publicUploadsEnabled: true, privateUploadsEnabled: false } as any;
+	assert.equal((await gated(publicOnly)({ request: post({ purpose: 'post' }) })).status, 200);
+	assert.equal((await gated(publicOnly)({ request: post({ purpose: 'message' }) })).status, 403);
+	const privateOnly = { id: 'user-priv', accountKind: 'user', publicUploadsEnabled: false, privateUploadsEnabled: true } as any;
+	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'profile-avatar' }) })).status, 200);
+	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'comment' }) })).status, 403);
+	const approvedAll = { id: 'user-ok', accountKind: 'user', publicUploadsEnabled: true, privateUploadsEnabled: true } as any;
+	assert.equal((await gated(approvedAll)({ request: post({}) })).status, 200);
+	assert.equal((await gated(approvedAll)({ request: post({ purpose: 'message' }) })).status, 200);
+	assert.equal(serviceCalls, 4);
+
+	// an unknown purpose reaches the service's own validation (no scope gates it)
+	assert.equal((await gated(pending)({ request: post({ purpose: 'nonsense' }) })).status, 200);
+	assert.equal(serviceCalls, 5);
+
+	// Lifecycle routes (parts/complete/abort/delete) never opt in, so a
+	// permission flipped off mid-upload can't strand a reserved MPU.
+	const ungated = createAttachmentMutationAction(
+		{ rateKey: 'attachments.complete', service: async () => ({ ok: true }) },
+		{ getUser: async () => pending, enforceLimit: allowed as any }
+	);
+	assert.equal((await ungated({ request: post({}) })).status, 200);
 });
 
 test('attachment mutations enforce same-origin JSON, full users, caps, and private responses', async () => {
@@ -210,6 +284,86 @@ test('cleanup route requires the exact cron bearer secret with no user-auth fall
 	});
 	assert.equal(authorized.headers.get('Cache-Control'), 'private, no-store, max-age=0');
 	assert.equal(reaps, 1);
+});
+
+test('detection backfill route is admin-only, same-origin JSON, and forwards one bounded pass', async () => {
+	const report = {
+		ok: true as const,
+		dryRun: true,
+		scanned: 1,
+		upgradedInline: 1,
+		labeledOpaque: 0,
+		undetected: 0,
+		missingObject: 0,
+		conflicts: 0,
+		failed: 0,
+		hasMore: false,
+		stoppedForTimeBudget: false
+	};
+	const serviceInputs: unknown[] = [];
+	const handler = (overrides: Record<string, unknown> = {}) =>
+		createAttachmentDetectionBackfillAction({
+			admin: async () => ({ user: { id: 'admin-1' } }) as any,
+			enforceLimit: allowed as any,
+			service: async (input: unknown) => {
+				serviceInputs.push(input);
+				return report;
+			},
+			...overrides
+		} as any);
+
+	// anonymous and signed-in non-admin callers never reach the service
+	const anonymous = await handler({ admin: async () => ({ error: { status: 401, message: 'Unauthorized' } }) })({
+		request: post({ dryRun: true })
+	});
+	assert.equal(anonymous.status, 401);
+	const nonAdmin = await handler({ admin: async () => ({ error: { status: 403, message: 'Admins only' } }) })({
+		request: post({ dryRun: true })
+	});
+	assert.equal(nonAdmin.status, 403);
+	assert.deepEqual(await nonAdmin.json(), { ok: false, error: 'Admins only' });
+
+	// transport gates fire before auth: cross-origin, wrong media type, wrong method
+	const crossOrigin = await handler()({
+		request: new Request(endpoint, {
+			method: 'POST',
+			headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' },
+			body: '{}'
+		})
+	});
+	assert.equal(crossOrigin.status, 403);
+	const wrongType = await handler()({ request: post('{}', { 'Content-Type': 'text/plain' }) });
+	assert.equal(wrongType.status, 415);
+	const wrongMethod = await handler()({
+		request: new Request(endpoint, {
+			method: 'PUT',
+			headers: { Origin: 'https://thingtime.example', 'Content-Type': 'application/json' },
+			body: '{}'
+		})
+	});
+	assert.equal(wrongMethod.status, 405);
+	assert.equal(serviceInputs.length, 0);
+
+	// throttled admins get the shared 429 shape
+	const limited = await handler({
+		enforceLimit: async () => ({ allowed: false, limit: 30, remaining: 0, resetAt: new Date(Date.now() + 60_000).toISOString() })
+	})({ request: post({}) });
+	assert.equal(limited.status, 429);
+	assert.equal(serviceInputs.length, 0);
+
+	// a real admin call forwards the body and returns the pass report privately
+	const okResponse = await handler()({ request: post({ dryRun: true, limit: 50 }) });
+	assert.equal(okResponse.status, 200);
+	assert.deepEqual(await okResponse.json(), report);
+	assert.equal(okResponse.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+	assert.deepEqual(serviceInputs, [{ dryRun: true, limit: 50 }]);
+
+	// service failures pass their status through unchanged
+	const failing = await handler({
+		service: async () => ({ ok: false as const, status: 400, error: 'Invalid backfill request' })
+	})({ request: post({}) });
+	assert.equal(failing.status, 400);
+	assert.deepEqual(await failing.json(), { ok: false, error: 'Invalid backfill request' });
 });
 
 test('cleanup route fails closed when CRON_SECRET is unavailable', async () => {
