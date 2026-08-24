@@ -8,6 +8,15 @@ on:
     branches: ["**"]
   pull_request_target:
     types: [opened, reopened]
+  # GitHub evaluates issue/review-comment and check-run workflows from the
+  # default branch, so this thin listener forwards those PR-manager signals to
+  # the protected Lopu controller at @github-actions.
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  check_run:
+    types: [completed]
   schedule:
     - cron: "2,32 * * * *"
   workflow_dispatch:
