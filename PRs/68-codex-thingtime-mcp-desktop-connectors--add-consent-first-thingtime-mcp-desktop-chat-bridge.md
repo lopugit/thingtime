@@ -307,7 +307,8 @@ relational shape for later ThingtimeDB storage and platform chat views.
   persist across a Thingtime Node restart just like display origin and
   mirroring, while remaining limited to a current node-advertised display and
   mode id. The paired-device manifest contracts are bumped to `1.6.0` for the
-  durable side-effect correction.
+  durable side-effect correction, and Electron now refuses to activate its
+  device surface against an origin below that declared minimum.
 
 ## Security and product boundaries
 

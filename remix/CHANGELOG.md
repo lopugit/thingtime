@@ -22,9 +22,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Paired-Mac display mode selections now persist**: resolution and refresh
   changes use Core Graphics' permanent display-configuration transaction rather
   than an app-lifetime mode setter, matching the existing layout and mirroring
-  persistence. The closed command shape, fresh approval boundary, and
-  advertised-mode validation are unchanged. Paired-device API contracts are
-  now `1.6.0`. — Codex (AI), 2026-08-24
+  persistence. The desktop endpoint probe now requires the matching `api.devices`
+  `^1.6.0` contract before activating controls. The closed command shape, fresh
+  approval boundary, and advertised-mode validation are unchanged. — Codex (AI),
+  2026-08-24
 
 ### Added
 

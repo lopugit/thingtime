@@ -6,7 +6,10 @@ const https = require('node:https');
 const DEVICE_PROBE_PATH = '/api/v1/devices?limit=1';
 const CAPABILITIES_PROBE_PATH = '/api/v1/capabilities';
 const PROBE_TIMEOUT_MS = 10_000;
-const DESKTOP_REQUIRED_CAPABILITIES = Object.freeze({ 'api.devices': '^1.0.0' });
+// The packaged desktop exposes the current closed device-control vocabulary,
+// including persistent display mode changes. Do not activate that surface on
+// an origin whose advertised devices contract predates it.
+const DESKTOP_REQUIRED_CAPABILITIES = Object.freeze({ 'api.devices': '^1.6.0' });
 
 const checkedAt = () => new Date().toISOString();
 const probeResult = (status, message, extra = {}) => ({ checkedAt: checkedAt(), message, status, ...extra });

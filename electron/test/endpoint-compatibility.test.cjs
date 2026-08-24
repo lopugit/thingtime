@@ -5,6 +5,7 @@ const http = require('node:http');
 const test = require('node:test');
 
 const {
+	DESKTOP_REQUIRED_CAPABILITIES,
 	checkEndpointCompatibility,
 	probeBundledProxy,
 	probeEndpointCapabilities,
@@ -53,10 +54,12 @@ test('capability contracts use compatible major versions and reject a missing or
 	assert.equal(supportsVersion('1.2.0', '^1.0.0'), true);
 	assert.equal(supportsVersion('2.0.0', '^1.0.0'), false);
 	assert.equal(supportsVersion('invalid', '^1.0.0'), false);
+	assert.equal(DESKTOP_REQUIRED_CAPABILITIES['api.devices'], '^1.6.0');
+	assert.equal(supportsVersion('1.5.0', DESKTOP_REQUIRED_CAPABILITIES['api.devices']), false);
 
 	const server = http.createServer((request, response) => {
 		response.setHeader('content-type', 'application/json');
-		response.end(JSON.stringify({ ok: true, schemaVersion: 1, features: { 'api.devices': '1.2.0', 'api.posts': '1.0.0' } }));
+		response.end(JSON.stringify({ ok: true, schemaVersion: 1, features: { 'api.devices': '1.6.0', 'api.posts': '1.0.0' } }));
 	});
 	await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 	const { port } = server.address();
