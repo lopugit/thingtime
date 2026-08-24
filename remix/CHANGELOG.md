@@ -29,6 +29,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Admin deployment peer explorer**: **Dev → Deployment peers** now presents
+  locally known signed mesh leases in grid, card, and list views, with a
+  property-aware search selector and deliberate cursor paging. The browser
+  uses a separate private admin projection; HMAC material, private keys,
+  request signatures, and gossip cursors remain inaccessible to clients. —
+  Codex (AI), 2026-08-24
+
 - **Approval-gated remote pointer and keyboard controls for paired Macs**:
   the desktop node now accepts a closed, capability-gated set of screen-relative
   pointer moves/clicks/scrolls, bounded text entry, and allowlisted keyboard

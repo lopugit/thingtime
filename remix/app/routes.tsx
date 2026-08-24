@@ -26,6 +26,7 @@ import MediaPage from './routes/media';
 import MongoStatusPage from './routes/mongodb-status';
 import Ode from './routes/ode';
 import PostPage from './routes/post';
+import DeploymentPeersRoute from './routes/peers';
 import Profile from './routes/profile';
 import Rainbow from './routes/rainbow.$';
 import Raw from './routes/raw';
@@ -163,6 +164,9 @@ export const router = createBrowserRouter([
       { path: 'ode', element: <Ode /> },
       // shareable permalink for any post or comment (timestamps link here)
       { path: 'post/:id', element: <PostPage /> },
+			// Developer-only, admin-gated deployment mesh diagnostics. The page
+			// itself renders the same shareable quiet gate as /admin.
+			{ path: 'peers', element: <DeploymentPeersRoute /> },
 			// every attachment is a Thing — its own page with comments/reactions
 			// (post lightbox + file rows deeplink here)
 			{ path: 'media/:id', element: <MediaPage /> },

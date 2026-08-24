@@ -6,6 +6,21 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Deployment peer explorer (`/peers`, `/api/v1/admin/peers`)
+
+- [ ] As an administrator, open **Dev → Deployment peers**. Verify the first
+      page retains current rows while Refresh runs, requests at most 25 rows,
+      and **Load next bounded page** advances only one opaque cursor page (no
+      all-peers request or automatic unbounded hydration).
+- [ ] Exercise Grid, Cards, and List at desktop and 390px widths. Search
+      origin, `active`/`expired`, a signing-key fragment, and each displayed
+      timestamp via the property selector; every view shows the same filtered
+      rows with no horizontal page overflow (the List table itself may scroll).
+- [ ] As a non-admin or signed-out user, `/peers` shows only the quiet access
+      gate and `GET /api/v1/admin/peers` returns 401/403 with private no-store
+      headers. Confirm no browser response contains `syncCursor`, request
+      signatures, a peer secret, or a private key.
+
 ## Passkeys + cross-deployment auto-login
 
 - [ ] Settings → Security → "Add a passkey ✨": wrong password → error toast,
