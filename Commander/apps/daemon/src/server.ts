@@ -54,6 +54,7 @@ import { CALCULATOR_RESULT_ITEM_ID, calculatorSearchHit } from './services/calcu
 // installed Commander never replays results produced by an older search core.
 const SEARCH_CONTEXT_VERSION = 3;
 const SEARCH_CACHE_KEY_VERSION = 2;
+const COMMANDER_NATIVE_REDIRECT_URI = 'com.thingtime.commander://oauth/callback';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -599,7 +600,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       return json(response, 200, { ok: true });
     }
     if (request.method === 'POST' && url.pathname === '/api/accounts/login') {
-      const start = thingtime.beginLogin(state.settings, `${baseUrl}/oauth/callback`);
+      const start = thingtime.beginLogin(state.settings, COMMANDER_NATIVE_REDIRECT_URI);
       return json(response, 200, { authorizeUrl: start.authorizeUrl, state: start.state });
     }
     if (request.method === 'PUT' && url.pathname === '/api/accounts/active') {
@@ -647,6 +648,14 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   }
 
   async function routeNativeApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
+    if (request.method === 'POST' && url.pathname === '/api/native/oauth/callback') {
+      const { callbackUrl } = await readBody<{ callbackUrl?: string }>(request);
+      const callback = parseNativeOAuthCallback(callbackUrl);
+      if (!callback)
+        return json(response, 400, { error: 'Commander rejected an invalid native sign-in callback' });
+      const result = await completeOAuthCallback(callback, COMMANDER_NATIVE_REDIRECT_URI);
+      return json(response, 200, { ok: true, accountId: result.account.id });
+    }
     if (request.method === 'POST' && url.pathname === '/api/native/credentials/claim') {
       const { accountId } = await readBody<{ accountId?: string }>(request);
       if (!accountId || pendingCredential?.accountId !== accountId)
@@ -671,42 +680,49 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   }
 
   async function oauthCallback(response: ServerResponse, url: URL): Promise<void> {
+    try {
+      const result = await completeOAuthCallback(url, `${baseUrl}/oauth/callback`);
+      return html(
+        response,
+        200,
+        callbackPage(
+          'You’re signed in',
+          `Commander connected @${result.account.username}. You can close this tab.`,
+          true,
+        ),
+      );
+    } catch (error) {
+      return html(
+        response,
+        400,
+        callbackPage(
+          'Thingtime sign-in failed',
+          error instanceof Error ? error.message : 'Commander could not complete sign-in.',
+          false,
+        ),
+      );
+    }
+  }
+
+  async function completeOAuthCallback(
+    url: URL,
+    redirectUri: string,
+  ): Promise<{ account: CommanderAccount }> {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
     const error = url.searchParams.get('error');
     if (error) {
       if (!state || !thingtime.cancel(state))
-        return html(
-          response,
-          400,
-          callbackPage(
-            'Thingtime sign-in failed',
-            'The authorization response was not requested by Commander.',
-            false,
-          ),
-        );
-      return html(response, 400, callbackPage('Thingtime sign-in cancelled', error, false));
+        throw new Error('The authorization response was not requested by Commander.');
+      throw new Error(error);
     }
-    if (!code || !state)
-      return html(
-        response,
-        400,
-        callbackPage('Thingtime sign-in failed', 'Missing authorization response', false),
-      );
+    if (!code || !state) throw new Error('Missing authorization response');
     const snapshot = store.snapshot();
-    const result = await thingtime.exchange(snapshot.settings, state, code, `${baseUrl}/oauth/callback`);
+    const result = await thingtime.exchange(snapshot.settings, state, code, redirectUri);
     credentials.set(result.account.id, result.token);
     pendingCredential = { accountId: result.account.id, token: result.token, createdAt: Date.now() };
     await store.upsertAccount(result.account);
-    return html(
-      response,
-      200,
-      callbackPage(
-        'You’re signed in',
-        `Commander connected @${result.account.username}. You can close this tab.`,
-        true,
-      ),
-    );
+    return { account: result.account };
   }
 
   return {
@@ -794,6 +810,47 @@ function safeToken(candidate: string | string[] | undefined, expected: string): 
   const left = Buffer.from(candidate);
   const right = Buffer.from(expected);
   return left.length === right.length && timingSafeEqual(left, right);
+}
+
+/**
+ * The native URL handler is an untrusted browser entry point. Keep its parser
+ * just as strict as the AppKit side before it reaches the pending PKCE state.
+ */
+function parseNativeOAuthCallback(value: unknown): URL | null {
+  if (typeof value !== 'string' || !value || value.length > 8_192) return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (
+    url.protocol !== 'com.thingtime.commander:' ||
+    url.hostname !== 'oauth' ||
+    url.pathname !== '/callback' ||
+    url.port ||
+    url.username ||
+    url.password ||
+    url.hash
+  )
+    return null;
+
+  const allowed = new Set(['code', 'state', 'error', 'error_description']);
+  const entries = [...url.searchParams.entries()];
+  if (entries.some(([key]) => !allowed.has(key))) return null;
+  const grouped = new Map<string, string[]>();
+  for (const [key, item] of entries) grouped.set(key, [...(grouped.get(key) ?? []), item]);
+  if ([...grouped.values()].some((items) => items.length !== 1)) return null;
+  const state = grouped.get('state')?.[0];
+  const code = grouped.get('code')?.[0];
+  const error = grouped.get('error')?.[0];
+  const description = grouped.get('error_description')?.[0];
+  if (!state || state.length < 16 || state.length > 512) return null;
+  if ((code === undefined) === (error === undefined)) return null;
+  if (code !== undefined && (!code || code.length > 4096)) return null;
+  if (error !== undefined && (!error || error.length > 1024)) return null;
+  if (description !== undefined && description.length > 1024) return null;
+  return url;
 }
 async function serveStatic(response: ServerResponse, root: string, pathname: string): Promise<void> {
   const rootReal = await realpath(root);

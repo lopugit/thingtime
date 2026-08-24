@@ -21,6 +21,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   private var focusRecentOnCurrentDisplay = true
   private var hasAppliedWindowPinningSettings = false
   private var isTerminating = false
+  private var pendingOAuthCallbacks: [URL] = []
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.setActivationPolicy(.accessory)
@@ -38,6 +39,12 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     showMostRecentLauncher()
     return false
+  }
+
+  func application(_ application: NSApplication, open urls: [URL]) {
+    for url in urls where CommanderOAuthCallback.isValid(url) {
+      receiveOAuthCallback(url)
+    }
   }
 
   private func startDaemon() {
@@ -60,6 +67,25 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     daemonReady = ready
     settings = SettingsWindowController(ready: ready, bridge: makeBridge(ready: ready, launcherID: nil))
     _ = try? createLauncher(show: false)
+    let callbacks = pendingOAuthCallbacks
+    pendingOAuthCallbacks.removeAll(keepingCapacity: false)
+    callbacks.forEach(receiveOAuthCallback)
+  }
+
+  private func receiveOAuthCallback(_ url: URL) {
+    guard CommanderOAuthCallback.isValid(url) else { return }
+    guard let ready = daemonReady else {
+      pendingOAuthCallbacks.append(url)
+      return
+    }
+    Task { @MainActor [weak self] in
+      do {
+        try await OAuthCallbackHandoff(ready: ready).deliver(url)
+        self?.settings?.show(tab: .account)
+      } catch {
+        NSLog("Commander OAuth callback handoff failed: %@", error.localizedDescription)
+      }
+    }
   }
 
   private func makeBridge(ready: DaemonReady, launcherID: UUID?) -> CommanderNativeBridge {

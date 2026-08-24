@@ -62,6 +62,29 @@ describe('Commander daemon HTTP trust boundaries', () => {
       });
       expect(uiRouteWithNativeToken.status).toBe(401);
 
+      const login = await fetch(`${server.url}/api/accounts/login`, {
+        method: 'POST',
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(login.status).toBe(200);
+      const loginBody = (await login.json()) as { authorizeUrl: string };
+      expect(new URL(loginBody.authorizeUrl).searchParams.get('redirect_uri')).toBe(
+        'com.thingtime.commander://oauth/callback',
+      );
+
+      const malformedNativeCallback = await fetch(`${server.url}/api/native/oauth/callback`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-commander-native': server.nativeToken,
+        },
+        body: JSON.stringify({ callbackUrl: 'com.thingtime.commander://oauth/callback?code=no-state' }),
+      });
+      expect(malformedNativeCallback.status).toBe(400);
+      expect(await malformedNativeCallback.json()).toEqual({
+        error: 'Commander rejected an invalid native sign-in callback',
+      });
+
       const bootstrap = await fetch(`${server.url}/api/bootstrap`, {
         headers: { 'x-commander-session': server.token },
       });

@@ -4627,16 +4627,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		summary: 'Register and list the apps that can embed "Login with Thingtime" on other websites.',
 		detail:
 			'An app is what an external website registers before it can show a "Login with Thingtime" button ' +
-			'(via the embed SDK at /sdk/thingtime-login.js). POST { name, origins } registers one: the server ' +
+			'(via the embed SDK at /sdk/thingtime-login.js). POST { name, origins, nativeRedirectUris? } registers one: the server ' +
 			'mints the clientId (ttapp_<uuid>) and validates origins — bare https origins like ' +
 			'https://example.com, with http allowed only for localhost dev. Only those exact origins can open ' +
-			'the authorize popup and receive tokens. Each app starts on a 5 GiB aggregate free plan and a 50 MiB ' +
+			'the authorize popup and receive tokens. Installed apps may also register exact reverse-domain nativeRedirectUris such as com.example.app://oauth/callback; these are not web origins and never permit wildcards. Each app starts on a 5 GiB aggregate free plan and a 50 MiB ' +
 			'default cap for each app user; GET lists live usage, remaining aggregate bytes, and both allowances. ' +
 			'Owners and linked co-managers change plans/defaults/user sub-tiers through /api/v1/apps/storage.',
 		auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer). App-scoped tokens are rejected.' },
 		methods: ['GET', 'POST'],
 		steps: [
-			'POST { name, origins } to register an app and receive its clientId.',
+			'POST { name, origins, nativeRedirectUris? } to register an app and receive its clientId.',
 			'Drop the SDK + clientId into the external site (see /sdk/thingtime-login.js).',
 			'GET to list your apps; update or delete them via /api/v1/apps/update and /api/v1/apps/delete.'
 		],
@@ -4775,9 +4775,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		group: 'embed',
 		title: 'Update an embed app',
 		endpoint: '/api/v1/apps/update',
-		summary: 'Rename one of your embed apps or change its origin allowlist.',
+			summary: 'Rename one of your embed apps or change its web/native callback allowlists.',
 		detail:
-			'POST { clientId, name?, origins? }. Origins are re-validated like registration. Removing an origin ' +
+			'POST { clientId, name?, origins?, nativeRedirectUris? }. Origins and exact native callbacks are re-validated like registration. Removing an origin ' +
 			'takes effect on the next request from any token bound to it — the app-token resolver re-checks the ' +
 			'allowlist every time. Storage allowance and usage fields are server-owned and ignored here, so an ' +
 			'app developer cannot raise either quota through this identity/origin route. Use /api/v1/apps/storage ' +
@@ -4840,9 +4840,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		group: 'embed',
 		title: 'Public app lookup',
 		endpoint: '/api/v1/apps/public',
-		summary: 'Anonymous lookup the authorize popup uses to validate a clientId + origin pair.',
+		summary: 'Anonymous lookup the authorize popup uses to validate a clientId + web origin or native callback.',
 		detail:
-			"GET ?clientId=…&origin=…&scope=…&optional_scope=…. Returns the app's public face (clientId + " +
+			"GET ?clientId=…&origin=…&scope=…&optional_scope=… or ?clientId=…&redirect_uri=…. Returns the app's public face (clientId + " +
 			'name) plus the REQUIRED (`scope`) and OPTIONAL (`optional_scope`) permission sets as descriptor ' +
 			"entries ({ id, title, description, kind, baseline }) for the consent screen's permissions " +
 			'selector — only when the app exists AND the origin is on its allowlist, so the popup can refuse ' +
@@ -4855,7 +4855,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		auth: { mode: 'none', description: 'Anonymous — returns only the app name + scope descriptors.' },
 		methods: ['GET'],
 		steps: [
-			'GET with clientId, the embedding page origin, and the requested scope set.',
+			'GET with clientId, either the embedding page origin or an exact registered native redirect_uri, and the requested scope set.',
 			'Render the consent screen from the returned name + scope descriptors.'
 		],
 		requestExamples: [
@@ -4975,9 +4975,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		detail:
 			'POST { clientId, redirectUri, codeChallenge, codeChallengeMethod: "S256", state, scope?, ' +
 			'optionalScope?, extra?, scopes?, sharedThings? } from the first-party /authorize page with the ' +
-			"user's real session. redirectUri must be plain HTTP on 127.0.0.1 or [::1], carry an explicit " +
-			'unprivileged port, have no existing query/fragment/credentials, and its exact origin (including ' +
-			'port) must be registered on the app. state is required (16-512 characters) and must be generated ' +
+				"user's real session. redirectUri is either plain HTTP on 127.0.0.1 or [::1] with an explicit " +
+				'unprivileged port (whose exact origin is registered on the app), or an exact reverse-domain native callback registered in nativeRedirectUris. It has no existing query/fragment/credentials. state is required (16-512 characters) and must be generated ' +
 			'randomly by the client. The response contains redirectTo with a signed five-minute ' +
 			'authorization code plus the echoed state. The code is backed by a purpose oauth-code session, ' +
 			'cannot authenticate any normal Thingtime endpoint, and can be consumed exactly once at ' +
@@ -4985,7 +4984,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		auth: { mode: 'session', description: "The end user's Thingtime browser session after explicit consent." },
 		methods: ['POST'],
 		steps: [
-			'Bind the loopback listener before opening the system browser.',
+			'Bind the loopback listener before opening the system browser, or register an exact native callback URI.',
 			'Open /authorize with client_id, redirect_uri, code_challenge, code_challenge_method=S256, state, and scopes.',
 			'After consent, navigate to redirectTo and verify the required random callback state before exchanging its code.'
 		],
@@ -5039,8 +5038,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		auth: { mode: 'none', description: 'The one-time code plus S256 verifier are the public client proof.' },
 		methods: ['POST'],
 		steps: [
-			'Verify the state received by the loopback callback.',
-			'POST the code with the original verifier, clientId, and same callback URI (normalized, then path/port-bound exactly).',
+			'Verify the state received by the loopback or native callback.',
+			'POST the code with the original verifier, clientId, and same callback URI (normalized and bound exactly).',
 			'Store accessToken in Keychain, Windows Credential Manager, or Secret Service and call /oauth/userinfo.'
 		],
 		requestExamples: [

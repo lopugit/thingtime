@@ -265,7 +265,7 @@ export const AuthorizePage = () => {
     }
 
     if (desktopFlow && (!desktopRedirect || !desktopChallenge || !desktopState)) {
-      setInvalidReason('This desktop login link is missing its loopback callback, random state, or S256 PKCE challenge.');
+      setInvalidReason('This desktop login link is missing its registered callback, random state, or S256 PKCE challenge.');
       return;
     }
 
@@ -279,7 +279,10 @@ export const AuthorizePage = () => {
     }
 
     fetchJson(
-      `/api/v1/apps/public?clientId=${encodeURIComponent(clientId)}&origin=${encodeURIComponent(origin)}` +
+      `/api/v1/apps/public?clientId=${encodeURIComponent(clientId)}` +
+        (desktopFlow
+          ? `&redirect_uri=${encodeURIComponent(desktopRedirect!.uri)}`
+          : `&origin=${encodeURIComponent(origin)}`) +
         `&scope=${encodeURIComponent(scopeParam)}&optional_scope=${encodeURIComponent(optionalScopeParam)}`
     ).then((resp) => {
       if (resp?.ok && resp.app) {

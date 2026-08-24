@@ -50,7 +50,7 @@ describe('ThingtimeService OAuth', () => {
 
     const service = new ThingtimeService();
     const settings = configuredSettings();
-    const redirectUri = 'http://127.0.0.1:47820/oauth/callback';
+    const redirectUri = 'com.thingtime.commander://oauth/callback';
     const login = service.beginLogin(settings, redirectUri);
     const authorizeUrl = new URL(login.authorizeUrl);
 
