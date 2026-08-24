@@ -405,7 +405,8 @@ export function Launcher({ state }: { state: CommanderState }) {
           icon={hit.icon}
           kind={hit.kind}
           path={hit.path}
-          shouldLoadNativeIcon={!historyVisible && rowSelected && !state.resultsStale}
+          shouldLoadNativeIcon={!historyVisible && !state.resultsStale}
+          nativeIconPriority={rowSelected ? 0 : 1 + Math.abs(rowIndex - state.selectedIndex)}
         />
         <span className="result-copy">
           <span className="result-title">{displayTitle(hit)}</span>
