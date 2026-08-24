@@ -170,6 +170,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Signed-release native gate no longer relies on wall-clock scheduling**:
+  the long-running lease-heartbeat test now waits for its three intended
+  renewals before completing dispatch, then verifies renewal stops. This keeps
+  the behavior under test intact while eliminating macOS runner timing flakes.
+  — Codex (AI), 2026-08-24
+
 - **Signed-release native checks now build across macOS SDK overlays**: printer
   identifiers and names are converted through the Core Foundation Get-rule
   bridge, rather than force-cast from one SDK-specific declaration. The

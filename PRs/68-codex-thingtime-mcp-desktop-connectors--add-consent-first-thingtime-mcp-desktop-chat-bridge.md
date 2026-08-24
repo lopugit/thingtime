@@ -901,3 +901,8 @@ an offline database or offline conflict resolution layer.
   unlike the local overlay that had masked the issue. Printer telemetry and
   selection now normalize Swift, Core Foundation, and unmanaged Core Foundation
   string declarations through the Core Foundation Get rule before comparison.
+- That next runner exercised an existing scheduler-test race: a fixed dispatch
+  sleep sometimes yielded only two renewal ticks under GitHub's scheduler. The
+  test now holds dispatch until all three intended renewals arrive (with a
+  bounded timeout), then confirms renewal stops after completion; it no longer
+  treats a wall-clock assumption as correctness.
