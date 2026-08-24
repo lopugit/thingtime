@@ -5,6 +5,7 @@ import type { JwtClaims } from './jwt';
 import { getLiveSession } from './sessions';
 import { findUserById, toPublicUser } from './users';
 import type { PublicUser } from './users';
+import { sessionPurposeCanActAsAccount } from './credentialPurpose';
 
 const SERVICE_EMAIL_VERIFICATION_GRACE_MS = 1000 * 60 * 60 * 24 * 7;
 
@@ -56,7 +57,7 @@ export const resolveSessionUser = async (jti: string, expectedUserId: string): P
   // sessions — they only resolve through resolveThingsActor and the token
   // introspection endpoint, never here, so a PAT can never mint more tokens,
   // change auth settings, or reach unscoped surfaces.
-  if (session.purpose === 'app' || session.purpose === 'app-sandbox' || session.purpose === 'pat') return null;
+  if (!sessionPurposeCanActAsAccount(session.purpose)) return null;
 
   if (!user) return null;
   if (!serviceAccountAuthenticationAllowed(user)) {

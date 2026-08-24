@@ -1,1 +1,1 @@
-{"nodes": [{"id": "ai_all_instructions", "label": "AI_ALL.md canonical agent instructions", "file_type": "document", "source_file": "AI_ALL.md", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}
+{"nodes": [{"id": "ai_all", "label": "Canonical AI Instructions (AI_ALL.md)", "file_type": "document", "source_file": "AI_ALL.md", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

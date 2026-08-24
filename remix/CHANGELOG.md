@@ -17,6 +17,39 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **/branding redesigned as a full brand-resources page**: full-width
+  Meta-style sections per logo variant with whitespace-trimmed previews and a
+  minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
+  optional background); pre-generated PNG ladders (10px → 10000px) + SVGs
+  committed under `remix/public/branding/generated/` via the new
+  `npm run branding-assets` (zero-dep deterministic PNG encoder), lazy-loaded
+  for Google-image indexing; generated press-kit suite (OG cards, banners,
+  wallpapers, tiles, confetti pattern); palette + usage sections; Asset
+  library JSON dump removed. Details:
+  `PRs/129-claude-todo08-branding-svg-png-s1--branding-brand-resources-redesign.md`.
+  — Claude (AI), 2026-08-22
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
+
 ### Fixed
 
 - **PR #299 Messenger membership durability**: unordered batched member writes
@@ -24,6 +57,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   no accompanying write-concern failure. The check covers the current driver's
   concern-only and result-level error shapes and fails closed when the result
   cannot be inspected. — Codex (AI), 2026-08-24
+- **Storage-accounting migrations retain protected attachment fields**: the
+  pending census and real whole-account backfill now project the complete
+  attachment object envelope before calculating canonical bytes, preventing
+  legitimate preview uploads from stopping migration with
+  `InvalidAttachmentStorageEnvelopeError`. — Codex (AI), 2026-08-23
 
 - **Media layout selections now reach the Things API**: the shared client API
   transport preserves `mediaLayout` for post creation and rich comments, so a
@@ -36,6 +74,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `develop` Vercel Custom Environment is reserved for isolated PR deployments
   and owns no stable domain, so a controller-created preview cannot advance the
   signed-in staging origin. — Codex (AI), 2026-08-21
+
+- **Stable develop alias advances only to an exact native develop build**: the
+  protected controller fences the current GitHub `develop` SHA, Vercel project,
+  repository, custom environment, native non-PR Git source, READY state, and
+  post-assignment domain binding before moving `dev.thingtime.com`. Merged PRs
+  wait boundedly for their build, while scheduled reconciliation provides an
+  idempotent recovery path. — Codex (AI), 2026-08-21
 
 - **PR #321 legacy detected-type backfill preserves media annotations**:
   re-detecting a pre-#319 opaque attachment now changes only its server-owned
@@ -128,6 +173,51 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
+  Three layers, all powered by the browser's own sessions — never a central
+  session store. (1) *Federated hint resolution*: `/api/v1/auth/account-hints`
+  now reports foreign-database origins as `unresolved`, and the client fans
+  out to each origin's new `/account-hints/resolve` (CORS restricted to the
+  Thingtime family, credentialed, read-only) so every environment vouches
+  only for its own sessions. (2) *Cross-origin session handoff*: a signed-in
+  surface mints a 2-minute, aud-bound, single-use code
+  (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
+  cookie family (immutable `*.vercel.app` previews) redeems at its own
+  `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
+  the session (theft signal), different-environment redemption fails closed;
+  the `/authorize?self=1` popup ("Continue to <host>?") and a
+  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) *FedCM
+  identity provider*: `/.well-known/web-identity` + config/accounts/
+  client-metadata/assertion endpoints let Chromium render its native
+  "Continue as…" sheet on any domain from the switcher roster
+  (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,
+  assertion mints handoff codes for Thingtime-self or baseline app tokens for
+  registered clients). E2E: `remix/scripts/verify-federated-login.mjs` — 31
+  checks against two stacks on separate mongods, including the full
+  FedCM→assertion→session loop. — Claude (AI), 2026-08-19
+
+- **Passkeys (WebAuthn) + cross-deployment auto-login.** Full passkey support:
+  password-confirmed registration (`POST /api/v1/auth/passkeys/register-options`
+  → `/register`), usernameless discoverable login (`/login-options` → `/login`,
+  bypasses email-OTP by design, sessions carry `meta.method: "passkey"`), and a
+  Settings → Security manager (nicknames, descriptions, provider names derived
+  from authenticator AAGUIDs, created/last-used dates, linked apps, revoke +
+  delete, both password-confirmed). rpID is `thingtime.com` for every
+  `*.thingtime.com` deployment so one passkey works on production, dev, and
+  previews; conditional-UI autofill (`autocomplete="username webauthn"` +
+  `mediation: conditional`) surfaces the native iCloud Keychain / 1Password
+  popups on the login form. Credentials are protected `passkey` things (secure
+  blob + uniqueKeys, HOME collection — a `tt_mongo` override can never capture
+  or plant credentials); usage records are `passkey-app-link` child things.
+  Auto-login: every sign-in writes a `{rosterId, origin}` pointer into the
+  `Domain=.thingtime.com` `tt_hints` cookie; `GET /api/v1/auth/account-hints`
+  resolves pointers live (same roster/session chokepoints as the switcher) so
+  signed-out visitors get a "Continue as…" popup listing accounts with live
+  sessions on other deployments — picking one still requires that account's
+  password or passkey. E2E-verified by `remix/scripts/verify-passkeys.mjs`, a
+  software WebAuthn authenticator (P-256 + CBOR) driving the real API (44
+  checks). — Claude (AI), 2026-08-19
+
 - **Admin AI-moderation settings + free omni text moderation (2026-08-19,
   Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
   card choosing the provider per surface — media uploads (default / tiered /
@@ -189,7 +279,57 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
   (PR #308 note has details).
 
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
+
 ### Added
+
+- **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
+  Three layers, all powered by the browser's own sessions — never a central
+  session store. (1) *Federated hint resolution*: `/api/v1/auth/account-hints`
+  now reports foreign-database origins as `unresolved`, and the client fans
+  out to each origin's new `/account-hints/resolve` (CORS restricted to the
+  Thingtime family, credentialed, read-only) so every environment vouches
+  only for its own sessions. (2) *Cross-origin session handoff*: a signed-in
+  surface mints a 2-minute, aud-bound, single-use code
+  (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
+  cookie family (immutable `*.vercel.app` previews) redeems at its own
+  `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
+  the session (theft signal), different-environment redemption fails closed;
+  the `/authorize?self=1` popup ("Continue to <host>?") and a
+  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) *FedCM
+  identity provider*: `/.well-known/web-identity` + config/accounts/
+  client-metadata/assertion endpoints let Chromium render its native
+  "Continue as…" sheet on any domain from the switcher roster
+  (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,
+  assertion mints handoff codes for Thingtime-self or baseline app tokens for
+  registered clients). E2E: `remix/scripts/verify-federated-login.mjs` — 31
+  checks against two stacks on separate mongods, including the full
+  FedCM→assertion→session loop. — Claude (AI), 2026-08-19
+
+- **Passkeys (WebAuthn) + cross-deployment auto-login.** Full passkey support:
+  password-confirmed registration (`POST /api/v1/auth/passkeys/register-options`
+  → `/register`), usernameless discoverable login (`/login-options` → `/login`,
+  bypasses email-OTP by design, sessions carry `meta.method: "passkey"`), and a
+  Settings → Security manager (nicknames, descriptions, provider names derived
+  from authenticator AAGUIDs, created/last-used dates, linked apps, revoke +
+  delete, both password-confirmed). rpID is `thingtime.com` for every
+  `*.thingtime.com` deployment so one passkey works on production, dev, and
+  previews; conditional-UI autofill (`autocomplete="username webauthn"` +
+  `mediation: conditional`) surfaces the native iCloud Keychain / 1Password
+  popups on the login form. Credentials are protected `passkey` things (secure
+  blob + uniqueKeys, HOME collection — a `tt_mongo` override can never capture
+  or plant credentials); usage records are `passkey-app-link` child things.
+  Auto-login: every sign-in writes a `{rosterId, origin}` pointer into the
+  `Domain=.thingtime.com` `tt_hints` cookie; `GET /api/v1/auth/account-hints`
+  resolves pointers live (same roster/session chokepoints as the switcher) so
+  signed-out visitors get a "Continue as…" popup listing accounts with live
+  sessions on other deployments — picking one still requires that account's
+  password or passkey. E2E-verified by `remix/scripts/verify-passkeys.mjs`, a
+  software WebAuthn authenticator (P-256 + CBOR) driving the real API (44
+  checks). — Claude (AI), 2026-08-19
 
 - **Admin AI-moderation settings + free omni text moderation (2026-08-19,
   Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"

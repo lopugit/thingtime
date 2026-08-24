@@ -754,6 +754,12 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
       ['things_vote_key_unique']
     ),
+    // One passkey app link per (passkey, app/origin) — the per-login upsert's
+    // update→insert race resolves through this index (auth/passkeys.ts).
+    col.createIndex(
+      { 'crystal.linkKey': 1 },
+      { name: 'things_passkey_link_key_unique', unique: true, partialFilterExpression: { 'crystal.linkKey': { $type: 'string' } } }
+    ),
     // Thread replies list under their root message (main chat pages ride the
     // shared { targetId, thingtime, createdAt, shareId } index above).
     col.createIndex(

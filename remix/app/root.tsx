@@ -17,6 +17,7 @@ import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
 import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
+import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
 import { rememberAuthReturnTo } from './utils/authReturn';
 
 const setThingtime = (glob: any) => {
@@ -93,7 +94,9 @@ export default function App() {
                   ? `${baseTitle} - Admin`
                   : pathname === '/things'
                     ? `${baseTitle} - Things`
-                    : baseTitle;
+                    : pathname === '/branding'
+                      ? `${baseTitle} - Brand resources`
+                      : baseTitle;
 
       document.title = routeTitle;
     }
@@ -132,6 +135,9 @@ export default function App() {
         {isAuthorizePopup ? null : <DrawerSystem />}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
+        {/* Signed out here but signed in on another Thingtime deployment →
+            "continue as" suggestions (cross-deployment auto-login). */}
+        {mounted && !isAuthorizePopup ? <AutoLoginPopup /> : null}
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
         <ConfettiCanvas />
         {mounted ? <EasterEggs /> : null}
