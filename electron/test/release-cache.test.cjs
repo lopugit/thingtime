@@ -1,0 +1,85 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const { mkdtemp, mkdir, rm, writeFile } = require('node:fs/promises');
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+const os = require('node:os');
+const test = require('node:test');
+
+const {
+	cacheInstalledBundle,
+	cacheReleaseArchive,
+	getCachedBundles,
+	removeCachedBundle,
+	releaseCatalog,
+	selectCacheableAsset
+} = require('../lib/release-cache.cjs');
+
+const verified = async () => undefined;
+
+test('release catalog preserves PR SemVer provenance and only selects GitHub-hosted macOS ZIP assets', () => {
+	const asset = selectCacheableAsset([
+		{ name: 'Thingtime.dmg', browser_download_url: 'https://github.com/lopugit/thingtime/releases/download/v1/Thingtime.dmg' },
+		{ name: 'Thingtime-macos-arm64.zip', browser_download_url: 'https://github.com/lopugit/thingtime/releases/download/v1/Thingtime-macos-arm64.zip', size: 123 }
+	]);
+	assert.equal(asset.name, 'Thingtime-macos-arm64.zip');
+	assert.equal(asset.size, 123);
+	assert.equal(selectCacheableAsset([{ name: 'Thingtime.zip', browser_download_url: 'https://example.test/Thingtime.zip' }]), null);
+
+	const catalog = releaseCatalog(
+		[
+			{
+				id: 68,
+				name: 'Thingtime Desktop 0.1.0-pr.68.codex-thingtime.gabcdef123456',
+				tag_name: 'electron-v0.1.0-pr.68.codex-thingtime.gabcdef123456',
+				published_at: '2026-08-24T00:00:00.000Z',
+				assets: [{ name: 'Thingtime-macos-arm64.zip', browser_download_url: 'https://github.com/lopugit/thingtime/releases/download/v1/Thingtime-macos-arm64.zip', size: 123 }]
+			}
+		],
+		'0.1.0-pr.68.codex-thingtime.gabcdef123456'
+	);
+	assert.equal(catalog.length, 1);
+	assert.equal(catalog[0].pullRequestNumber, 68);
+	assert.equal(catalog[0].branch, 'codex-thingtime');
+	assert.equal(catalog[0].commit, 'abcdef123456');
+	assert.equal(catalog[0].isCurrent, true);
+});
+
+test('verified release and installed bundles are cached as recoverable regular app directories', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'thingtime-release-cache-'));
+	try {
+		const sourceApp = path.join(root, 'source', 'Thingtime.app');
+		await mkdir(path.join(sourceApp, 'Contents', 'MacOS'), { recursive: true });
+		await writeFile(path.join(sourceApp, 'Contents', 'MacOS', 'Thingtime'), 'fixture');
+		const installed = await cacheInstalledBundle({
+			cacheRoot: path.join(root, 'cache'),
+			release: { tag: 'installed-0.1.0', version: '0.1.0' },
+			sourceApp,
+			verifyApp: verified
+		});
+		assert.equal(installed.cacheState, 'ready');
+		assert.equal(getCachedBundles(path.join(root, 'cache')).length, 1);
+
+		const archive = path.join(root, 'Thingtime.zip');
+		const result = spawnSync('/usr/bin/ditto', ['-c', '-k', '--keepParent', sourceApp, archive], { encoding: 'utf8' });
+		assert.equal(result.status, 0, result.stderr);
+		const cached = await cacheReleaseArchive({
+			archivePath: archive,
+			cacheRoot: path.join(root, 'cache'),
+			release: {
+				asset: { name: 'Thingtime.zip' },
+				id: 'release-68',
+				tag: 'electron-v0.1.0-pr.68.codex.gabcdef123456',
+				version: '0.1.0-pr.68.codex.gabcdef123456'
+			},
+			verifyApp: verified
+		});
+		assert.equal(cached.cacheState, 'ready');
+		assert.equal(getCachedBundles(path.join(root, 'cache')).length, 2);
+		removeCachedBundle({ cacheRoot: path.join(root, 'cache'), key: cached.key });
+		assert.equal(getCachedBundles(path.join(root, 'cache')).length, 1);
+	} finally {
+		await rm(root, { force: true, recursive: true });
+	}
+});

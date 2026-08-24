@@ -36,6 +36,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   request signatures, and gossip cursors remain inaccessible to clients. —
   Codex (AI), 2026-08-24
 
+- **Signed Desktop PR releases and recovery-first version switching**: an
+  owner-approved, same-repository PR carrying the `desktop-release` label can
+  now publish a Developer ID-signed, notarized GitHub prerelease whose SemVer
+  identifies its PR, normalized branch, and exact commit. Desktop Settings now
+  fetches/searches the GitHub release catalog, caches only verified signed
+  macOS ZIP bundles, lets a person launch or atomically install a cached
+  version, and preserves the current production app as a fallback before every
+  switch. The cache is bounded to twelve explicit recovery bundles, never
+  silently installs, and remains revealable in Finder if a later UI is broken.
+  — Codex (AI), 2026-08-24
+
 - **Approval-gated remote pointer and keyboard controls for paired Macs**:
   the desktop node now accepts a closed, capability-gated set of screen-relative
   pointer moves/clicks/scrolls, bounded text entry, and allowlisted keyboard

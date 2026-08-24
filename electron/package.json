@@ -37,6 +37,9 @@
 			"lib/**/*.cjs",
 			"main.cjs",
 			"preload.cjs",
+			"scripts/install-cached-release.mjs",
+			"scripts/install-local-app.mjs",
+			"scripts/verify-signed-app.mjs",
 			"package.json"
 		],
 		"extraResources": [

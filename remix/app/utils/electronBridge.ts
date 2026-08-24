@@ -59,6 +59,7 @@ export type ThingtimeDesktopUpdateAsset = {
 
 export type ThingtimeDesktopUpdateInfo = {
 	asset?: ThingtimeDesktopUpdateAsset | null;
+	cachedBundle?: ThingtimeDesktopCachedBundle | null;
 	checkedAt?: string;
 	currentVersion?: string;
 	downloadedAt?: string;
@@ -70,6 +71,44 @@ export type ThingtimeDesktopUpdateInfo = {
 	releaseUrl?: string | null;
 	status?: 'available' | 'error' | 'unavailable' | 'up-to-date';
 	updateAvailable?: boolean;
+};
+
+export type ThingtimeDesktopRelease = {
+	asset?: ThingtimeDesktopUpdateAsset | null;
+	branch?: string | null;
+	commit?: string | null;
+	id: string;
+	isCurrent?: boolean;
+	isPrerelease?: boolean;
+	name?: string | null;
+	publishedAt?: string | null;
+	pullRequestNumber?: number | null;
+	releaseUrl?: string | null;
+	tag?: string | null;
+	version?: string | null;
+};
+
+export type ThingtimeDesktopCachedBundle = {
+	assetName?: string | null;
+	branch?: string | null;
+	cachedAt?: string | null;
+	cacheState?: 'ready';
+	commit?: string | null;
+	key: string;
+	name?: string | null;
+	pullRequestNumber?: number | null;
+	releaseUrl?: string | null;
+	tag?: string | null;
+	version?: string | null;
+};
+
+export type ThingtimeDesktopReleaseCatalog = {
+	cachedBundles: ThingtimeDesktopCachedBundle[];
+	checkedAt?: string;
+	currentVersion?: string;
+	feedUrl?: string | null;
+	releases: ThingtimeDesktopRelease[];
+	truncated?: boolean;
 };
 
 export type ThingtimeAiDesktopSource = {
@@ -218,6 +257,12 @@ export type ThingtimeDesktopBridge = {
 	cancelAiSync?: (request: { syncId: string }) => Promise<{ ok: true }>;
 	checkForUpdates?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	downloadUpdateBundle?: () => Promise<ThingtimeDesktopUpdateInfo>;
+	listUpdateCatalog?: () => Promise<ThingtimeDesktopReleaseCatalog>;
+	cacheReleaseBundle?: (request: { releaseId: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; catalog: ThingtimeDesktopReleaseCatalog }>;
+	installCachedRelease?: (request: { key: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
+	launchCachedRelease?: (request: { key: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; launchedAt: string }>;
+	removeCachedRelease?: (request: { key: string }) => Promise<ThingtimeDesktopReleaseCatalog>;
+	revealUpdateCache?: () => Promise<{ cachePath: string }>;
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;
 	getDesktopSettings?: () => Promise<ThingtimeDesktopSettings>;
 	addEndpoint?: (request: { label: string; url: string }) => Promise<ThingtimeDesktopSettings>;

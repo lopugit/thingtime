@@ -8,6 +8,11 @@ import { createPinnedPnpmEnvironment } from './pinned-package-manager.mjs';
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronBuilder = path.join(electronDir, 'node_modules', '.bin', 'electron-builder');
 const packageManager = JSON.parse(await readFile(path.join(electronDir, 'package.json'), 'utf8')).packageManager;
+const releaseVersion = String(process.env.THINGTIME_ELECTRON_RELEASE_VERSION || '').trim();
+
+if (releaseVersion && !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(releaseVersion)) {
+	throw new Error('THINGTIME_ELECTRON_RELEASE_VERSION must be a SemVer version.');
+}
 
 function run(command, args, options = {}) {
 	const result = spawnSync(command, args, {
@@ -82,7 +87,15 @@ try {
 	await rm(path.join(electronDir, 'release'), { force: true, recursive: true });
 	run(
 		electronBuilder,
-		['--mac', '--publish', 'never', '--config.forceCodeSigning=true', `--config.mac.identity=${identity}`, '--config.mac.notarize=true'],
+		[
+			'--mac',
+			'--publish',
+			'never',
+			'--config.forceCodeSigning=true',
+			`--config.mac.identity=${identity}`,
+			'--config.mac.notarize=true',
+			...(releaseVersion ? [`--config.extraMetadata.version=${releaseVersion}`] : [])
+		],
 		{ env: pinnedPnpm.environment }
 	);
 } finally {
