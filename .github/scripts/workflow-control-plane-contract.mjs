@@ -477,6 +477,35 @@ function assertObservableLabelCleanup(rebase) {
   );
 }
 
+function assertUserControlledMergePause(resolver, rebase) {
+  for (const [name, source] of [
+    ["merge resolver", resolver],
+    ["rebase resolver", rebase],
+  ]) {
+    assert.doesNotMatch(
+      source,
+      /labels\/ai-merge-paused|labels:\s*\[\s*"ai-merge-paused"\s*\]|label create ai-merge-paused|remove_label(?:_verified)?\s+ai-merge-paused|--(?:add|remove)-label\s+ai-merge-paused/u,
+      `${name}: never mutates the user-controlled ai-merge-paused label`,
+    );
+  }
+
+  assert.match(
+    resolver,
+    /Honor user-controlled ai-merge-paused[\s\S]*skipping all automated resolution/u,
+    "merge resolver: queued workers re-check the user pause before checkout or AI work",
+  );
+  assert.match(
+    resolver,
+    /select\(\[\.labels\[\]\.name\] \| index\("ai-merge-paused"\) == null\)/u,
+    "merge resolver: detector excludes every user-paused PR without stale-snapshot recovery",
+  );
+  assert.match(
+    rebase,
+    /user-controlled ai-merge-paused is present[\s\S]*continue/u,
+    "rebase resolver: detector stops on the same user pause",
+  );
+}
+
 function assertResolverLockfileRecovery(resolver) {
   const prompt = workflowBlock(
     resolver,
@@ -742,6 +771,7 @@ export function assertControlPlaneContract() {
     );
   }
 
+  assertUserControlledMergePause(resolver, rebase);
   assertAdminModelRouting(resolver, rebase);
   assertResolverLockfileRecovery(resolver);
   assertObservableLabelCleanup(rebase);
