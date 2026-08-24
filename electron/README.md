@@ -179,13 +179,26 @@ a central pink/red mesh square. Native bundle verification requires both that
 resource and its `CFBundleIconFile` declaration before the helper can be
 embedded.
 
-The same settings surface includes an **Updates** section. Auto-check is stored
-at `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled` and defaults to
-on. The current build checks recent GitHub releases for one named or describing
-`Electron App Release`, then downloads the best matching app bundle asset from
-that release into `~/Downloads`. Prefer release assets with names or labels that
-include `Electron App Release`, `Thingtime`, `Electron`, and a macOS bundle
-extension such as `.dmg`, `.zip`, or `.pkg`.
+The same settings surface includes **Thingtime versions & recovery**. It pages
+through the public GitHub Releases feed (up to 2,000 entries per refresh),
+searches by SemVer, PR, branch, or commit, and accepts only a GitHub-hosted
+macOS `.zip` asset. Before a version can be launched or installed, Thingtime
+extracts it into `~/Library/Application Support/Thingtime/release-cache/`,
+checks the full nested app for its Developer ID signature, hardened runtime,
+notarization staple, exact Thingtime bundle IDs, and matching signed native
+node. A failed download or verification never changes the installed app.
+
+Cached `Thingtime.app` bundles are directly launchable as recovery versions.
+**Install** first caches the presently installed production app, then starts a
+tiny detached updater, quits the current app, runs the existing atomic
+installer, restarts the managed node only if it was registered, verifies the
+replacement, and reopens it. That installer restores the prior app and node if
+any replacement step fails. The cache keeps up to twelve explicitly verified
+bundles; remove an old entry from the UI before adding a thirteenth. **Reveal
+cache** makes the recovery folder accessible even if a future app UI is broken.
+Auto-check remains stored at
+`thingtime.settings.electron.${sessionHash}AutoUpdateEnabled` and defaults to
+on; it is a notification preference, never permission to install silently.
 
 ## GitHub Releases
 
@@ -227,6 +240,18 @@ only when a human intentionally asks for a real product version bump. The
 packaged app stores the full CI release version in `electron/dist/web/metadata.json`
 so the updater can distinguish `0.1.0+build.10423` from `0.1.0+build.10424`
 without requiring source-controlled version churn.
+
+`.github/workflows/electron-pr-release.yml` additionally creates signed
+**pre-releases for reviewable PR commits**. It never runs for forks. A PR must
+be same-repository, opened by the repository owner, and explicitly carry the
+`desktop-release` label; alternatively the owner may use **Run workflow** with
+the PR number. The workflow checks out that exact head commit, tests it before
+loading credentials, imports the Developer ID/notarization secrets only for the
+approved source, requires a macOS ZIP asset for recovery updates, and publishes
+a GitHub prerelease. Its version is SemVer and includes all provenance, for
+example `0.1.0-pr.68.codex-thingtime-mcp-desktop-connectors.gabcdef123456`.
+The PR number, normalized branch, and full commit are also recorded in the
+release notes.
 
 In local development, the Electron shell loads `remix/.env`, `remix/.env.local`,
 and `remix/.env.auto` before starting Nitro so the desktop app sees the same

@@ -856,3 +856,21 @@ an offline database or offline conflict resolution layer.
    stream UI; keep capture foundation unavailable until then.
 5. Apply the protected-workflow Developer ID/notarization patch and validate a
    stapled Gatekeeper-accepted artifact before production publication.
+
+### Signed PR release and recovery updater follow-up (2026-08-24)
+
+- Added a dedicated signed PR-release workflow rather than relaxing the `main`
+  release shim. It runs only for a same-repository owner PR carrying the
+  maintainer-applied `desktop-release` label (or an owner manual dispatch),
+  runs all tests before importing secrets, produces a Developer ID/notarized
+  ZIP-compatible release, and publishes the deterministic SemVer form
+  `base-pr.<PR>.<branch>.g<commit>` as a GitHub prerelease.
+- Desktop Settings now fetches and filters GitHub releases by version, PR,
+  branch, and commit. It treats a release as installable only after extracting
+  a GitHub-hosted macOS ZIP to the user-local recovery cache and re-verifying
+  the production nested signature, hardened runtime, and notarization.
+- A cached release can launch directly. Installing it first caches the current
+  installed production bundle, then delegates to the existing transactional
+  installer after the Electron process exits. The cache is intentionally
+  bounded to twelve explicit recovery apps and can be revealed in Finder, so a
+  broken future updater UI does not strand a person on that version.

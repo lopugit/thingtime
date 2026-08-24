@@ -1,0 +1,257 @@
+name: Signed Electron PR Release
+
+on:
+  pull_request:
+    types: [labeled, reopened, synchronize]
+    paths:
+      - electron/**
+      - MCP/**
+      - macos/**
+      - remix/**
+      - .github/workflows/electron-pr-release.yml
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Existing same-repository PR number to sign and publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: electron-pr-release-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish signed PR release
+    # A signed binary is a high-trust artifact. Automatic runs require both a
+    # same-repository PR and a maintainer-applied label; manual runs require the
+    # repository owner. Forks and unlabelled PRs never receive signing secrets.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner) ||
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.author_association == 'OWNER' &&
+        contains(github.event.pull_request.labels.*.name, 'desktop-release'))
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CSC_IDENTITY_AUTO_DISCOVERY: "true"
+    steps:
+      - name: Resolve and validate PR source
+        id: source
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          case "${PR_NUMBER}" in
+            ''|*[!0-9]*) echo "::error::A numeric PR number is required."; exit 1 ;;
+          esac
+
+          pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          head_repository="$(printf '%s' "${pr_json}" | jq -r '.head.repo.full_name // empty')"
+          head_ref="$(printf '%s' "${pr_json}" | jq -r '.head.ref // empty')"
+          head_sha="$(printf '%s' "${pr_json}" | jq -r '.head.sha // empty')"
+          author_association="$(printf '%s' "${pr_json}" | jq -r '.author_association // empty')"
+          test "${head_repository}" = "${GITHUB_REPOSITORY}"
+          test -n "${head_ref}"
+          test "${#head_sha}" = 40
+
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            test "${author_association}" = "OWNER"
+            printf '%s' "${pr_json}" | jq -e '[.labels[].name] | index("desktop-release")' >/dev/null
+          fi
+
+          {
+            echo "pr_number=${PR_NUMBER}"
+            echo "head_ref=${head_ref}"
+            echo "head_sha=${head_sha}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Check out approved PR commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.source.outputs.head_sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.12.1 --activate
+
+      - name: Derive SemVer PR release identity
+        id: version
+        shell: bash
+        env:
+          PR_NUMBER: ${{ steps.source.outputs.pr_number }}
+          PR_REF: ${{ steps.source.outputs.head_ref }}
+          PR_SHA: ${{ steps.source.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          base_version="$(node -p "require('./electron/package.json').version")"
+          branch_slug="$(printf '%s' "${PR_REF}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^0-9a-z]+/-/g; s/^-+//; s/-+$//')"
+          branch_slug="${branch_slug:0:48}"
+          test -n "${branch_slug}"
+          short_sha="${PR_SHA:0:12}"
+          release_version="${base_version}-pr.${PR_NUMBER}.${branch_slug}.g${short_sha}"
+          release_tag="electron-v${release_version}"
+          node -e 'const value = process.argv[1]; if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value)) process.exit(1)' "${release_version}"
+
+          {
+            echo "THINGTIME_ELECTRON_BASE_VERSION=${base_version}"
+            echo "THINGTIME_ELECTRON_RELEASE_VERSION=${release_version}"
+            echo "THINGTIME_ELECTRON_RELEASE_TAG=${release_tag}"
+          } >> "${GITHUB_ENV}"
+          {
+            echo "release_version=${release_version}"
+            echo "release_tag=${release_tag}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Stop if this release already exists
+        id: existing_release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "${THINGTIME_ELECTRON_RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+            echo "::notice::${THINGTIME_ELECTRON_RELEASE_TAG} already exists; skipping duplicate publication."
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Install release dependencies
+        if: steps.existing_release.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          corepack pnpm --dir remix install --frozen-lockfile
+          corepack pnpm --dir MCP install --frozen-lockfile
+          corepack pnpm --dir electron install --frozen-lockfile
+
+      - name: Test unsigned source before accessing signing credentials
+        if: steps.existing_release.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          corepack pnpm --dir MCP run typecheck
+          corepack pnpm --dir MCP test
+          corepack pnpm --dir MCP run build:desktop
+          swift test --package-path macos/ThingtimeNode
+          swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNode
+          swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNodeBridge
+          corepack pnpm --dir electron test
+
+      - name: Import Developer ID and notarization credentials
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          : "${MAC_CSC_LINK:?MAC_CSC_LINK is required}"
+          : "${MAC_CSC_KEY_PASSWORD:?MAC_CSC_KEY_PASSWORD is required}"
+          : "${APPLE_API_KEY_BASE64:?APPLE_API_KEY_BASE64 is required}"
+          : "${APPLE_API_KEY_ID:?APPLE_API_KEY_ID is required}"
+          : "${APPLE_API_ISSUER:?APPLE_API_ISSUER is required}"
+          : "${APPLE_TEAM_ID:?APPLE_TEAM_ID is required}"
+          keychain_path="${RUNNER_TEMP}/thingtime-signing.keychain-db"
+          certificate_path="${RUNNER_TEMP}/thingtime-developer-id.p12"
+          api_key_path="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
+          keychain_password="$(openssl rand -hex 32)"
+          printf '%s' "${MAC_CSC_LINK}" | /usr/bin/base64 -D > "${certificate_path}"
+          printf '%s' "${APPLE_API_KEY_BASE64}" | /usr/bin/base64 -D > "${api_key_path}"
+          chmod 600 "${certificate_path}" "${api_key_path}"
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security import "${certificate_path}" -k "${keychain_path}" -P "${MAC_CSC_KEY_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${keychain_password}" "${keychain_path}"
+          security list-keychains -d user -s "${keychain_path}"
+          security default-keychain -d user -s "${keychain_path}"
+          identity="$(security find-identity -v -p codesigning "${keychain_path}" | sed -nE 's/.*"(Developer ID Application:[^"]+)".*/\1/p' | head -n 1)"
+          test -n "${identity}"
+          {
+            echo "CSC_KEYCHAIN=${keychain_path}"
+            echo "CSC_NAME=${identity}"
+            echo "THINGTIME_ELECTRON_SIGNING_IDENTITY=${identity}"
+            echo "APPLE_API_KEY=${api_key_path}"
+            echo "APPLE_API_KEY_ID=${APPLE_API_KEY_ID}"
+            echo "APPLE_API_ISSUER=${APPLE_API_ISSUER}"
+            echo "APPLE_TEAM_ID=${APPLE_TEAM_ID}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Build signed and notarized Electron release
+        if: steps.existing_release.outputs.exists != 'true'
+        run: corepack pnpm --dir electron run dist
+
+      - name: Collect updater-compatible release assets
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          raw_assets=(electron/release/*.dmg electron/release/*.zip electron/release/*.pkg)
+          zip_assets=(electron/release/*.zip)
+          test "${#raw_assets[@]}" -gt 0
+          test "${#zip_assets[@]}" -gt 0
+          asset_dir="electron/release-upload"
+          rm -rf "${asset_dir}"
+          mkdir -p "${asset_dir}"
+          index=0
+          for asset in "${raw_assets[@]}"; do
+            ext="${asset##*.}"
+            destination="${asset_dir}/Thingtime-Electron-App-Release-${THINGTIME_ELECTRON_RELEASE_VERSION}-macos-$(uname -m)-${index}.${ext}"
+            cp "${asset}" "${destination}"
+            index=$((index + 1))
+          done
+
+      - name: Generate PR release notes
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        env:
+          PR_NUMBER: ${{ steps.source.outputs.pr_number }}
+          PR_REF: ${{ steps.source.outputs.head_ref }}
+          PR_SHA: ${{ steps.source.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Signed Thingtime Desktop PR release"
+            echo
+            echo "- Version: \`${THINGTIME_ELECTRON_RELEASE_VERSION}\`"
+            echo "- Pull request: #${PR_NUMBER}"
+            echo "- Branch: \`${PR_REF}\`"
+            echo "- Commit: \`${PR_SHA}\`"
+            echo "- Update asset: the attached macOS ZIP is verified, cached, launchable, and installable by Thingtime's recovery updater."
+          } > electron-release-notes.md
+
+      - name: Publish prerelease
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        env:
+          PR_SHA: ${{ steps.source.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          gh release create "${THINGTIME_ELECTRON_RELEASE_TAG}" electron/release-upload/* \
+            --target "${PR_SHA}" \
+            --title "Thingtime Desktop ${THINGTIME_ELECTRON_RELEASE_VERSION}" \
+            --notes-file electron-release-notes.md \
+            --prerelease
+
+      - name: Remove ephemeral signing material
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "${RUNNER_TEMP}/thingtime-signing.keychain-db" 2>/dev/null || true
+          rm -f "${RUNNER_TEMP}/thingtime-developer-id.p12" "${RUNNER_TEMP}"/AuthKey_*.p8
