@@ -1405,6 +1405,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-account-hints',
+    contractVersion: '1.0.1',
     group: 'auth',
     title: 'Cross-deployment account hints',
     endpoint: '/api/v1/auth/account-hints',
@@ -1416,7 +1417,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'its session on the other deployment is live, and dead pointers are pruned (the cookie is rewritten). ' +
       'Responses carry only public profile hints (username, display name, avatar) — never emails, session ' +
       'ids, or tokens — and picking a suggestion still requires that account\'s password or passkey. ' +
-      'Same-origin only: no CORS headers, so no cross-site page can read a browser\'s suggestions.',
+      'Same-origin only: no CORS headers, so no cross-site page can read a browser\'s suggestions. Every response is ' +
+      'Cache-Control: private, no-store and Vary: Cookie, so a shared intermediary cannot retain another browser\'s hints.',
     auth: { mode: 'none', description: 'Cookie-driven; works signed out (that is its point).' },
     methods: ['GET'],
     steps: [
@@ -1430,6 +1432,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'One live account found on another deployment.',
+        headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' },
         body: {
           ok: true,
           hints: [
@@ -1446,6 +1449,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-account-hints-resolve',
+    contractVersion: '1.0.1',
     group: 'auth',
     title: 'Resolve own-origin hints (federated)',
     endpoint: '/api/v1/auth/account-hints/resolve',
@@ -1456,7 +1460,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '(different database): the shared tt_hints cookie arrives on the same-site fetch, and THIS deployment ' +
       'resolves only the pointers its own origin wrote, through the same live roster/session chokepoints. ' +
       'Each environment answers only for its own sessions — the user\'s browser assembles the full picture; ' +
-      'no deployment ever holds another\'s session state. Read-only: never prunes, never sets cookies.',
+      'no deployment ever holds another\'s session state. Read-only: never prunes, never sets cookies. Every response is ' +
+      'Cache-Control: private, no-store and Vary: Origin, Cookie.',
     auth: { mode: 'none', description: 'Cookie-driven; answers only for pointers this origin minted.' },
     methods: ['GET'],
     steps: [
@@ -1469,6 +1474,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'This origin vouches for one live account.',
+        headers: { 'Cache-Control': 'private, no-store', Vary: 'Origin, Cookie' },
         body: { ok: true, hints: [{ user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', avatarUrl: null }, origins: [{ origin: 'https://dev.thingtime.com', lastSeenAt: '2026-08-19T03:12:00.000Z' }], alreadyHere: false }] }
       },
       { status: 200, description: 'Nothing to vouch for.', body: { ok: true, hints: [] } }

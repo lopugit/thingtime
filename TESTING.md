@@ -36,6 +36,10 @@ is fixed, and cite the checklist you ran in the PR description.
       disappears here on the next fetch (hints resolve live sessions, never a
       cached identity). `GET /api/v1/auth/account-hints` responses carry no
       email — only id/username/displayName/avatarUrl.
+- [ ] Account-hint response privacy: both the same-origin endpoint and the
+      credentialed federated resolver send `Cache-Control: private, no-store`;
+      their `Vary` headers include `Cookie` (the resolver also includes
+      `Origin`) and a 429 retains its `Retry-After` header.
 - [ ] Cross-deployment account hint: the compact row names the deployment
       environment (for example `Dev preview · PR #68`, never `Production` for
       a preview); expand its chevron to reveal every environment badge, exact

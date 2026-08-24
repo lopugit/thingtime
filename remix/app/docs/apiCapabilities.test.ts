@@ -20,3 +20,10 @@ test('capabilities advertise every executable API route, including undocumented 
 		assert.match(manifest.features[apiRouteCapabilityId(routeKey)] || '', /^\d+\.\d+\.\d+$/, routeKey);
 	}
 });
+
+test('account-hint privacy contracts publish their patch-level capability updates', () => {
+	const manifest = createApiCapabilitiesManifest();
+
+	assert.equal(manifest.features['api.auth-account-hints'], '1.0.1');
+	assert.equal(manifest.features['api.auth-account-hints-resolve'], '1.0.1');
+});

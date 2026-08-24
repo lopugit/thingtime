@@ -1,6 +1,7 @@
 import { json } from '~/api/http';
 
 import { resolveOwnOriginHints } from '~/api/utils/auth/accountHints';
+import { privateAccountHintsHeaders } from '~/api/utils/auth/accountHintsHeaders';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // Thingtime-family pages (plus localhost dev, which is same-site across ports)
@@ -41,9 +42,9 @@ export const loader = async ({ request }: { request: Request }) => {
 	const limit = await enforceRateLimit(request, 'auth.hintsResolve', null);
 	if (!limit.allowed) {
 		const init = rateLimitedResponseInit(limit);
-		return json({ ok: false, error: 'Too many requests — take a breather 🌸' }, { ...init, headers: { ...cors } });
+		return json({ ok: false, error: 'Too many requests — take a breather 🌸' }, { ...init, headers: privateAccountHintsHeaders(init.headers, cors) });
 	}
 
 	const hints = await resolveOwnOriginHints(request);
-	return json({ ok: true, hints }, { headers: cors });
+	return json({ ok: true, hints }, { headers: privateAccountHintsHeaders(cors) });
 };
