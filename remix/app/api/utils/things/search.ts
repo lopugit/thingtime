@@ -14,6 +14,7 @@ import {
   appShapeProjections,
   appVisiblePage,
   asViewer,
+  batchedThingLookup,
   canViewInherited,
   chronoCursorClause,
   fail,
@@ -381,7 +382,13 @@ const projectVisiblePage = async (
     await appShapeProjections(app, visible, things);
     return { things, posts: {} };
   }
-  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
+  // One shared batched lookup for the whole page, matching listThings: a page
+  // of attached things (comments, reactions, shares — anything carrying
+  // tt:inherit) then costs one round trip per chain LEVEL instead of one per
+  // doc. Unbatched, a 50-result page of depth-1 comments issued 50 findOnes
+  // against a 10-connection pool, draining as 5 serial pool waves.
+  const lookup = batchedThingLookup();
+  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
   const visible = page.filter((_, index) => verdicts[index]);
   const things = await toPublicThings(visible, viewer);
   const postDocs = visible.filter((doc) => isPostThing(doc));
