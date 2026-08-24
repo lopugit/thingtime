@@ -1,6 +1,13 @@
 import Foundation
 import Testing
 @testable import ThingtimeRecoveryCore
+@testable import ThingtimeRecovery
+
+@Test("recovery app initialization never depends on implicit StateObject storage")
+@MainActor
+func recoveryAppInitializesExplicitly() {
+    _ = ThingtimeRecoveryApp()
+}
 
 @Test("shared desktop cache and independent recovery cache are stable under Application Support")
 func stableCacheLocations() {

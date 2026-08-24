@@ -2113,6 +2113,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
 
+- [ ] Build and open the signed `Thingtime Recovery.app`; it must remain running
+      after launch without an `App.init()` nil-optional crash, and its recovery
+      store must render before the first refresh completes.
 - [ ] Run the Swift tests and release-build both `ThingtimeNode` products; run
       MCP typecheck, tests, and `build:desktop`; then run the Electron tests.
       Cancellation/timeout cases must terminate the connector child and mark
