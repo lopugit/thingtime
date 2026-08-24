@@ -619,6 +619,11 @@ is fixed, and cite the checklist you ran in the PR description.
       `useApi`, reopen the editor and confirm the selected Rows/Grid mode,
       columns/pattern, and non-default spans survived the client request. A
       correct pre-submit preview is not sufficient evidence of persistence.
+
+- [ ] Reload a post with a rich comment using Rows or Grid. Its chosen
+      `mediaLayout` (including columns/pattern and non-default spans) survives
+      the feed, profile, and `/post/:id` projections rather than silently
+      falling back to masonry.
 - [ ] Server bounds: `mediaLayout` rejects pattern rows over 25 entries or
       outside 1..6, columns outside 1..6, spans maps over 25 entries, and
       non-object payloads with a 400; unknown keys are stripped; legacy posts
@@ -1282,6 +1287,11 @@ is fixed, and cite the checklist you ran in the PR description.
       restores `storageClass: "control"`; running
       `backfill-user-storage-accounting` directly invokes that repair first.
       A community/user-owned `thingtime: ["schema"]` Thing remains billable.
+- [ ] Seed a canonical attachment with every protected object-accounting root
+      field, then dry-run and run `backfill-user-storage-accounting`. Both
+      passes retain the complete attachment envelope while calculating exact
+      bytes, converge to zero pending, and never misclassify the attachment as
+      `InvalidAttachmentStorageEnvelopeError` because of a Mongo projection.
 - [ ] Force a migration runner exception once: the public error field remains
       a safe exception class/code (never a raw Mongo message, query, document
       id, host, or credential), and Lopu renders contextual text beneath the
@@ -2138,6 +2148,10 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       shown everywhere names render; promote/demote/remove for admins with
       the owner untouchable; owner leaving hands the chat to the earliest
       admin, else earliest member.
+- [ ] Member batch durability fault injection: a membership `insertMany` with
+      only duplicate-key write errors stays idempotent, while the same result
+      plus a write-concern failure returns an error instead of reporting a
+      successful chat creation or member add.
 - [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
       kind 403s ("managed by their own endpoints"); chats/messages are 404
       through `GET /api/v1/things?id=` for non-owners;
