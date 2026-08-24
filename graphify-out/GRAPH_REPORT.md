@@ -1,16 +1,16 @@
 # Graph Report - thingtime  (2026-08-24)
 
 ## Corpus Check
-- 21 files · ~122,035 words
+- 21 files · ~124,098 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 520 nodes · 1173 edges · 40 communities (27 shown, 13 thin omitted)
+- 522 nodes · 1177 edges · 40 communities (27 shown, 13 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 10 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `62086421`
+- Built from commit: `787a0ffb`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -144,8 +144,8 @@ Cohesion: 0.35
 Nodes (12): classify_source_lineage(), emit(), emit_paths(), fail(), prepare(), require_environment(), require_reservation(), secure_git_environment() (+4 more)
 
 ### Community 13 - "resolve-pr-conflicts-routing-contract.mjs"
-Cohesion: 0.24
-Nodes (13): aiRuntimeSourceFiles(), assertAdminLoader(), assertAdminModelRouting(), assertRoute(), assertWorkflowSource(), positiveDecimal(), REBASE_ACTION_URL, REBASE_WORKFLOW_URL (+5 more)
+Cohesion: 0.22
+Nodes (15): aiRuntimeSourceFiles(), assertAdminLoader(), assertAdminModelRouting(), assertRoute(), assertWorkflowSource(), decodeBatch(), encodeBatch(), positiveDecimal() (+7 more)
 
 ### Community 14 - "start.sh"
 Cohesion: 0.46
