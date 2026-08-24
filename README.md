@@ -456,9 +456,9 @@ placeholder using URL encoding so special characters in the password are safe.
 ### Deployment peer discovery
 
 First-party production, preview, and development deployments can converge on a
-small mesh of live peers through `/api/v1/peers`. Configure the same private
-value on every participating deployment (never `PUBLIC_*`, never a browser
-variable):
+small mesh of live peers through `/api/v1/peers`. Configure the same discovery
+secret and a distinct persistent signing key on every participating deployment
+(never `PUBLIC_*`, never a browser variable):
 
 ```sh
 THINGTIME_PEER_DISCOVERY_SECRET="replace-with-a-random-32-plus-character-secret"
