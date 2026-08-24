@@ -141,8 +141,10 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Run `npm run test:vercel-root`: it proves root `vercel.json` owns the
       build, the nested config is absent, ordinary product commits build,
-      `github-actions` and duplicate SHAs skip, a valid Nitro artifact is
-      staged at root, and invalid source output preserves the prior artifact.
+      `github-actions` and generic Preview duplicate SHAs skip, the `develop`
+      Custom Environment still rebuilds an already-previewed SHA, a valid Nitro
+      artifact is staged at root, and invalid source output preserves the prior
+      artifact.
 - [ ] Run `npm run build:vercel` from the repository root. Confirm both the
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
@@ -218,6 +220,10 @@ is fixed, and cite the checklist you ran in the PR description.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] For an exact SHA that already has a READY generic Preview, run the
+      controller again and confirm its `develop` Custom Environment deployment
+      builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
+      marker comment must reach the ready state for that exact SHA.
 - [ ] Confirm the wildcard Vercel domain is verified and detached, its
       Cloudflare `*.previews.dev` CNAME targets `cname.vercel-dns.com` with
       DNS-only proxying, and `_acme-challenge.previews.dev` has NS delegations
@@ -315,6 +321,37 @@ is fixed, and cite the checklist you ran in the PR description.
       targeted lint command: the startup probe performs one forced relink and
       ESLint starts. `npm --prefix remix run ensure-deps -- --check` also proves
       both ESLint and the directly declared Prettier CLI can start.
+
+## Branding page (`remix/app/routes/branding/_index.tsx`, `remix/app/components/Branding/`)
+
+- [ ] `/branding` renders full-width with a centred max-width column at desktop
+      (≥1280px) and mobile (375px); no horizontal scrollbar at either size and
+      no borders/cards/checkerboard grids anywhere — previews sit on soft
+      panels only.
+- [ ] Every variant section (wordmark, icon, both pink cuts) shows its live
+      SVG preview; the light/dark panel dots swap the preview surface.
+- [ ] "Download SVG" and "PNG · 1024px" point at real committed files under
+      `/branding/generated/<slug>/…` (200s, not client blobs); the ready-made
+      grid lazy-loads (`loading="lazy"`) one `<img>` per size up to 10000px,
+      wordmark sizes keep the 27:5 trimmed aspect (e.g. 1024×190).
+- [ ] Ready-made sizes render as two lines — the SVG line
+      (`SVG · scalable · <size>`) above the PNG line — and every PNG chip is
+      labelled `PNG · <W>×<H> · <KB/MB>`; chips wrap without horizontal
+      scroll at 375px.
+- [ ] Custom export: format PNG/SVG, any width, padding all-sides and
+      per-side, background transparent/white/ink — downloads a file named
+      `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding, and fires a
+      Lopu success toast (errors also route through Lopu, never `alert`).
+- [ ] Exports and previews are whitespace-trimmed: `npm --prefix remix run
+      test:branding` passes (trim + padding + pixel-size unit tests).
+- [ ] Press kit grid renders all generated marketing images; the portrait
+      phone wallpaper previews as a centre crop and must not stretch its grid
+      row (no giant empty gap beside it).
+- [ ] Palette swatches copy their hex via clipboard with a Lopu toast.
+- [ ] After changing `logoMatrix.ts` matrices/colours, re-run
+      `npm --prefix remix run branding-assets` and commit the refreshed
+      `remix/public/branding/` + `brandingAssets.generated.json` (byte-stable
+      when nothing changed).
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -1288,6 +1325,10 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] `merge-legacy-collections` dry-run reports per-collection copy counts and
       writes nothing; the real run copies only docs missing at the destination
       (re-run reports 0) and never deletes a legacy collection.
+- [ ] When `merge-legacy-collections` reports `0 pending`, stale physical
+      generations remain visible in the Storage generations table without an
+      orange adoption warning. Make one legacy document genuinely pending and
+      confirm the warning returns until the merge converges again.
 - [ ] Against a disposable replica-set database, the first registered and
       sandbox app-storage counter can be created without MongoDB code 224:
       the ensure upsert uses only the deterministic `shareId`, while the

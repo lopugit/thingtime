@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Changed
+
+- **Signed Desktop PR releases now use the protected `github-actions` control
+  plane**: this branch contains only a `pull_request_target`/manual listener;
+  the owner-and-label gate, immutable PR-SHA checkout, unsigned verification,
+  signing, notarization, and prerelease publishing remain in the reusable
+  implementation. — Codex (AI), 2026-08-24
+
 ### Added
 
 - **Unlimited AI workflow model waterfall**: Admin → System's model order now
@@ -28,7 +36,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   to `["default"]` for non-legacy entries until its closed grammar is widened
   (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
   — Claude (AI), 2026-08-24
-
+- **/branding redesigned as a full brand-resources page**: full-width
+  Meta-style sections per logo variant with whitespace-trimmed previews and a
+  minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
+  optional background); pre-generated PNG ladders (10px → 10000px) + SVGs
+  committed under `remix/public/branding/generated/` via the new
+  `npm run branding-assets` (zero-dep deterministic PNG encoder), lazy-loaded
+  for Google-image indexing; generated press-kit suite (OG cards, banners,
+  wallpapers, tiles, confetti pattern); palette + usage sections; Asset
+  library JSON dump removed. Details:
+  `PRs/129-claude-todo08-branding-svg-png-s1--branding-brand-resources-redesign.md`.
+  — Claude (AI), 2026-08-22
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean
   merges collide semantically (duplicate helpers declared by two PRs), repairs
@@ -71,18 +89,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Rows/Grid preview no longer silently reopens as Auto after save. — Codex
   (AI), 2026-08-21
 
-- **Develop staging domain binding restored**: `dev.thingtime.com` is again
-  attached to the exact `develop` Git branch (`customEnvironmentId: null`),
-  so controller-managed PR deployments in the shared pre-production
-  environment cannot move the stable signed-in S3 staging origin away from
-  the current integration branch. — Codex (AI), 2026-08-21
+- **Develop staging domain kept on the protected branch during PR previews**:
+  `dev.thingtime.com` remains bound exclusively to the literal `develop` Git
+  branch (`gitBranch: develop`, with no custom-environment binding). The
+  `develop` Vercel Custom Environment is reserved for isolated PR deployments
+  and owns no stable domain, so a controller-created preview cannot advance the
+  signed-in staging origin. — Codex (AI), 2026-08-21
+
+- **Stable develop alias advances only to an exact native develop build**: the
+  protected controller fences the current GitHub `develop` SHA, Vercel project,
+  repository, custom environment, native non-PR Git source, READY state, and
+  post-assignment domain binding before moving `dev.thingtime.com`. Merged PRs
+  wait boundedly for their build, while scheduled reconciliation provides an
+  idempotent recovery path. — Codex (AI), 2026-08-21
 
 - **PR #321 legacy detected-type backfill preserves media annotations**:
   re-detecting a pre-#319 opaque attachment now changes only its server-owned
   type fields and retains #312's owner-authored title/description exactly;
   malformed annotation metadata fails closed instead of being erased. — Codex
   (AI), 2026-08-21
-
 - **PR #312 media integration hardening**: attachment annotation now preserves
   server-owned magic-byte `detectedContentType`, Auto layout removes the
   optional `mediaLayout` key, and media-card permalinks consistently use
@@ -92,18 +117,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   annotation accepts only its documented request fields, and media cards label
   their audience as inherited instead of incorrectly falling back to Public.
   — Codex (AI), 2026-08-21
-
-- **PR #99 final security reconciliation**: the current Thingtime serializer
-  now treats persisted state strictly as data—functions are omitted on write,
-  every legacy function tag is removed without compilation, code-defined
-  defaults refill runtime behavior, and graph-aware repair preserves circular
-  aliases. Explicit Date tags and data-first legacy handling stop repeated
-  hydration from changing ordinary text. The strict app CSP now loads preview
-  freshness from external `/tt-preview-freshness.js`, while active Commander
-  assignments parse data literals without `eval`. Registration preserves the
-  existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
-  streaming body cap. — Codex (AI), 2026-08-18
-
+- **Build-all push handoff permission boundary**: the thin product-branch
+  listener now grants `actions: write`, allowing the protected reusable
+  workflow's push-only handoff to dispatch its supported-event worker instead
+  of being rejected by GitHub before any job starts. The caller contract pins
+  the required grant. — Codex (AI), 2026-08-21
 - **CSP blocked attachment uploads on header-serving deployments**: the
   application Content-Security-Policy's `connect-src` never allowed the
   private S3 bucket origin, so on any surface that serves the CSP header
@@ -117,6 +135,170 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
   Verified via S3 preflight (bucket CORS already allowed the preview origins
   — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
+
+### Performance
+
+- **PR #299 performance audit — findings, notes and fixes**: full ten-dimension
+  audit of the codebase with every finding adversarially verified against the
+  real source (74 raw → 63 confirmed, 11 refuted); see
+  `PRs/299-claude-thingtime-performance-optimization-55ea95-performance-audit-findings-notes-and-fixes.md`
+  for the complete record. Landed this round: route-level code splitting plus
+  removal of the never-rendered FontAwesome solid set, taking the entry chunk
+  from 1,165 KB to 168 KB gzipped (−86%); `resolveSessionUser` now resolves
+  session, user and subscription concurrently, turning three sequential Mongo
+  round trips into one on every authenticated request; `useRecentReactions`
+  shares a single fetch across all consumers (8 → 1 identical requests per page,
+  ~40 → 1 on a 20-post feed); chat-member writes batch into one `insertMany`
+  (50 → 1 round trips per add); `toPublicPosts` overlaps attachment and profile
+  resolution; and the notifications bell no longer polls hidden tabs.
+  — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round two**: content-hashed `/assets/` now ship
+  `immutable` caching (index.html's ~80 eagerly-referenced chunks stopped costing
+  a conditional GET per repeat visit, restoring the zero-network disk-cache
+  path); the comment permalink's ancestor ACL checks share one batched lookup
+  (was n + n(n-1)/2 sequential round trips at nesting depth n); search result
+  pages use the same batched walk; a partial index backs the unread-notification
+  badge so the count no longer fetches every notification a user ever received;
+  `buildSummaryContext` resolves in 3 dependency stages instead of 6 serial ones;
+  the messenger access gate resolves chat and membership together; and the
+  `/api/docs` render cache is LRU-bounded (it was keyed by the caller-controlled
+  Host header). — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round three**: `resolveRelated`'s child reads are
+  projected (dropping each comment's `extended` sidecar, up to 512KB per doc)
+  and the reply aggregate projects before `$group`, removing a 100MB
+  `$group`-cap failure mode on large threads; a `{kind, createdAt, shareId}`
+  index gives the dual-era post match a sortable v1 branch, so the feed stops
+  fetching every visible post and sorting in memory; a sparse `shareOfId` index
+  turns the live share-count aggregation from a full collection scan into an
+  indexed lookup on every feed page, post read and reaction toggle; chat member
+  existence checks batch into two queries; and the feed's post row is memoized
+  so `PostCard`'s `React.memo` actually hits. — Claude (AI), 2026-08-18
+- **PR #299 independent review**: every push was re-reviewed by a second
+  session (verification record in the PR note's "Review record" section);
+  no invalid changes found. One hardening landed from review:
+  `insertChatMembers` rethrows bulk write-concern failures instead of
+  swallowing them with the benign duplicate-key races, matching the old
+  per-id `insertOne` semantics. The `readAt: null` partial-index spec was
+  confirmed against the production cluster's MongoDB 8.0.1.
+  — Claude (AI), 2026-08-18
+- **PR #299 follow-up review**: `resolveRelated`'s narrow child projection now
+  retains `crystal.mediaLayout`, so rich comments keep their selected Rows/Grid
+  layout across feed, profile, and permalink reloads instead of silently
+  falling back to masonry. A focused projection-contract regression test covers
+  every direct-comment and eagerly shipped reply-level use of that field.
+  — Codex (AI), 2026-08-24
+
+### Added
+
+- **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
+  Three layers, all powered by the browser's own sessions — never a central
+  session store. (1) *Federated hint resolution*: `/api/v1/auth/account-hints`
+  now reports foreign-database origins as `unresolved`, and the client fans
+  out to each origin's new `/account-hints/resolve` (CORS restricted to the
+  Thingtime family, credentialed, read-only) so every environment vouches
+  only for its own sessions. (2) *Cross-origin session handoff*: a signed-in
+  surface mints a 2-minute, aud-bound, single-use code
+  (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
+  cookie family (immutable `*.vercel.app` previews) redeems at its own
+  `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
+  the session (theft signal), different-environment redemption fails closed;
+  the `/authorize?self=1` popup ("Continue to <host>?") and a
+  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) *FedCM
+  identity provider*: `/.well-known/web-identity` + config/accounts/
+  client-metadata/assertion endpoints let Chromium render its native
+  "Continue as…" sheet on any domain from the switcher roster
+  (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,
+  assertion mints handoff codes for Thingtime-self or baseline app tokens for
+  registered clients). E2E: `remix/scripts/verify-federated-login.mjs` — 31
+  checks against two stacks on separate mongods, including the full
+  FedCM→assertion→session loop. — Claude (AI), 2026-08-19
+
+- **Passkeys (WebAuthn) + cross-deployment auto-login.** Full passkey support:
+  password-confirmed registration (`POST /api/v1/auth/passkeys/register-options`
+  → `/register`), usernameless discoverable login (`/login-options` → `/login`,
+  bypasses email-OTP by design, sessions carry `meta.method: "passkey"`), and a
+  Settings → Security manager (nicknames, descriptions, provider names derived
+  from authenticator AAGUIDs, created/last-used dates, linked apps, revoke +
+  delete, both password-confirmed). rpID is `thingtime.com` for every
+  `*.thingtime.com` deployment so one passkey works on production, dev, and
+  previews; conditional-UI autofill (`autocomplete="username webauthn"` +
+  `mediation: conditional`) surfaces the native iCloud Keychain / 1Password
+  popups on the login form. Credentials are protected `passkey` things (secure
+  blob + uniqueKeys, HOME collection — a `tt_mongo` override can never capture
+  or plant credentials); usage records are `passkey-app-link` child things.
+  Auto-login: every sign-in writes a `{rosterId, origin}` pointer into the
+  `Domain=.thingtime.com` `tt_hints` cookie; `GET /api/v1/auth/account-hints`
+  resolves pointers live (same roster/session chokepoints as the switcher) so
+  signed-out visitors get a "Continue as…" popup listing accounts with live
+  sessions on other deployments — picking one still requires that account's
+  password or passkey. E2E-verified by `remix/scripts/verify-passkeys.mjs`, a
+  software WebAuthn authenticator (P-256 + CBOR) driving the real API (44
+  checks). — Claude (AI), 2026-08-19
+
+- **Admin AI-moderation settings + free omni text moderation (2026-08-19,
+  Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
+  card choosing the provider per surface — media uploads (default / tiered /
+  free openai-only / claude / off) and post/comment text (default / free
+  openai / off) — stored under `Thingtime.ModerationSettings` and overriding
+  the env default. New text pipeline: post/comment/share `crystal.text` is
+  screened by the free omni endpoint on create and on edit; block-worthy
+  categories quarantine the thing (hidden from feeds/threads/search via
+  `canView` + thread loading), other flags queue an advisory `moderationFlag`
+  with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
+  and its stamps are final for the pipeline. A new hourly cron
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
+  29) retries text moderation lost to mid-flight process deaths or provider
+  outages and drains off-era backlog for free, plus the standard attachment
+  sweep; the admin sweep button runs both batches and the tab shows the text
+  backlog count. Post creation adds a hybrid sync gate: the free omni screen
+  races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
+  insert so flagged posts are born stamped (blocked content never renders,
+  even briefly), while timeouts/outages produce owner-private pending posts
+  for the async pipeline — moderation can never break posting; a per-instance circuit breaker
+  (3 failures → open, 60s cooldown) skips the omni call during confirmed
+  outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
+  obtainable while the surface is on, posts are born PENDING — owner-private
+  until the async queue / hourly cron screens and releases them (creation
+  notifications fire at release); `TT_TEXT_SCREEN_BUDGET_MS=0` becomes
+  async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
+  combined free request: prose + listing text + tags + legacy external image
+  URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
+
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
+- **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
+  moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
+  `omni-moderation-latest` endpoint screens every image first; clean images
+  stamp `clear` at $0 and only flagged/borderline images escalate to the paid
+  Claude vision call (fail-safes: omni outage → straight to Claude; Claude
+  outage → omni-flagged images stamp `nsfw`/blur instead of pending). New env:
+  `OPENAI_API_KEY` reused for the screen, optional
+  `TT_MODERATION_ESCALATION_SCORE` (default 0.2);
+  `THINGTIME_MODERATION_PROVIDER` accepts `openai+claude` (alias `tiered`) and
+  standalone `openai`, and the unset default picks the tiered pipeline when
+  both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
+  (PR #308 note has details).
 
 - **iOS build 14 TestFlight delivery**: rebuilt the production native shell
   with the drawer and media-capture fixes, verified the signed IPA metadata and
@@ -294,6 +476,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   flag-id collisions leave ordinary user Things untouched for operator
   review. — Codex (AI), 2026-08-21
 
+- **Relationship uniqueness is structural across all reserved key families**:
+  follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
+  protected root `uniqueKeys` namespace. Boot-time index convergence replaces
+  every kind-blind crystal-path unique index with a non-unique lookup, and the
+  idempotent backfill stamps legacy relationship docs while only reporting
+  suspicious free-form data. The vote family is migrated as security
+  substrate without shipping the deferred polls product; boot convergence also
+  removes the superseded `crystal.follow` marker index that no current writer
+  uses. — Codex (AI), 2026-08-21
+
 - **Canonical scoped-upload UX reconciliation**: every attachment picker now
   reads the existing public/private approval booleans directly and shows a
   purpose-specific approval card when its scope is withheld. The obsolete
@@ -344,12 +536,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #99 final security reconciliation**: the current Thingtime serializer
+  now treats persisted state strictly as data—functions are omitted on write,
+  every legacy function tag is removed without compilation, code-defined
+  defaults refill runtime behavior, and graph-aware repair preserves circular
+  aliases. Explicit Date tags and data-first legacy handling stop repeated
+  hydration from changing ordinary text. The strict app CSP now loads preview
+  freshness from external `/tt-preview-freshness.js`, while active Commander
+  assignments parse data literals without `eval`. Registration preserves the
+  existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
+  streaming body cap. — Codex (AI), 2026-08-18
 - **Native iOS drawer and media capture**: the iOS WebView now uses the same
   fixed drawer trigger as mobile web, so opening the drawer keeps its close
   control inside the panel instead of translating it with the top nav. The
   generated app Info.plist now declares camera, microphone, and photo-library
   purpose strings so WebKit's Take Photo or Video flow requests permission
   instead of terminating the app. — Codex (AI), 2026-08-17
+- **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
+  now lets the controller build an already-previewed commit in the isolated
+  `develop` Custom Environment instead of canceling it as a duplicate, while
+  the thin `github-actions` control plane remains excluded before every other
+  rule. — Codex (AI), 2026-08-17
 - **Manual develop-preview recovery reaches its controller**: the thin `main`
   listener now converts `workflow_dispatch`'s string PR number to the numeric
   input required by the protected reusable workflow. Manual recovery no longer
