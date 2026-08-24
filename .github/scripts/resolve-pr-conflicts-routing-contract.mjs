@@ -26,6 +26,7 @@ export function route(input) {
   const ref = String(input.ref || "");
   const actor = String(input.actor || "");
   const prNumber = String(input.prNumber || "");
+  const eventPrNumber = String(input.eventPrNumber || "");
   const branch = String(input.branch || "");
   const target = branch || String(input.target || ref);
   const depth = String(input.depth ?? "0");
@@ -52,6 +53,9 @@ export function route(input) {
   const internalWorker = valid && internalShape;
   const humanDispatch = event === "workflow_dispatch" && !detectorHandoff;
   const humanExplicit = humanDispatch && Boolean(prNumber || branch);
+  const conversationEvent =
+    event === "issue_comment" || event === "pull_request_review_comment";
+  const failedCheckEvent = event === "check_run";
   const scanAll =
     event === "schedule" ||
     (humanDispatch && prNumber === "" && branch === "");
@@ -63,6 +67,8 @@ export function route(input) {
     ((detectorHandoff && routedManualRetry) || humanExplicit);
   const selector = prNumber
     ? `pr:${prNumber}`
+    : (conversationEvent || failedCheckEvent) && eventPrNumber
+      ? `pr:${eventPrNumber}`
     : scanAll
       ? "all"
       : scanHead
@@ -75,6 +81,10 @@ export function route(input) {
     concurrency = `resolve-detect-pr${prNumber}`;
   } else if (event === "workflow_dispatch" && branch) {
     concurrency = `resolve-detect-selector-${branch}`;
+  } else if (failedCheckEvent && eventPrNumber) {
+    concurrency = `lopu-check-fix-pr${eventPrNumber}`;
+  } else if (conversationEvent && eventPrNumber) {
+    concurrency = `lopu-conversation-pr${eventPrNumber}`;
   } else if (event === "workflow_dispatch" || event === "schedule") {
     concurrency = "resolve-detect-all-open";
   } else if (event === "repository_dispatch") {
@@ -117,6 +127,14 @@ function assertWorkflowSource() {
     source.indexOf("\n  model_config:"),
     source.indexOf("\n  resolve_promotion:"),
   );
+  const reviewBlock = source.slice(
+    source.indexOf("\n  review:"),
+    source.indexOf("\n  resolve_promotion:"),
+  );
+  const reviewHandoffBlock = source.slice(
+    source.indexOf("\n  review_handoff:"),
+    source.indexOf("\n  model_config:"),
+  );
   const resolveBlock = source.slice(source.indexOf("\n  resolve:"));
   const cascadeBlock = source.slice(
     source.indexOf("      - name: Cascade to PRs stacked on this head"),
@@ -154,6 +172,38 @@ function assertWorkflowSource() {
   assert.doesNotMatch(source, /ref:"develop"/);
   assert.match(source, /detector_handoff:true/);
   assert.match(source, /manual_retry:false/);
+  assert.match(source, /issue_comment:\n    types: \[created, edited\]/u, "human PR comments wake Lopu");
+  assert.match(
+    source,
+    /pull_request_review_comment:\n    types: \[created, edited\]/u,
+    "human inline review comments wake Lopu",
+  );
+  assert.match(source, /check_run:\n    types: \[completed\]/u, "failed PR checks wake Lopu");
+  assert.match(
+    source,
+    /github\.event\.issue\.pull_request[\s\S]*?github\.event\.comment\.user\.type == 'User'/u,
+    "only human PR conversation comments enter the Lopu route",
+  );
+  assert.match(
+    source,
+    /pr_number: \$\{\{ inputs\.pr_number \|\| github\.event\.client_payload\.pr_number \|\| github\.event\.issue\.number/u,
+    "issue comments select their exact PR",
+  );
+  assert.match(
+    source,
+    /manage_rebases:[\s\S]*?github\.event_name != 'issue_comment'/u,
+    "conversation events do not launch unrelated rebases",
+  );
+  assert.match(
+    source,
+    /detect:[\s\S]*?github\.event_name != 'pull_request_review_comment'/u,
+    "conversation events do not launch unrelated conflict scans",
+  );
+  assert.match(
+    source,
+    /github\.event\.check_run\.pull_requests\[0\]\.number[\s\S]*?github\.event\.check_run\.conclusion == 'failure'/u,
+    "only PR-associated failing checks enter the Lopu route",
+  );
   assert.match(source, /actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g);
   assert.doesNotMatch(source, /gh api "repos\/\$REPO\/dispatches"/);
   assert.doesNotMatch(cascadeBlock, /if: env\.HAS_WORKFLOW_PUSH/);
@@ -202,7 +252,52 @@ function assertWorkflowSource() {
 
   const dispatchCount =
     source.match(/actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g)?.length || 0;
-  assert.equal(dispatchCount, 2, "detector handoff and stacked cascade both use fixed workflow dispatch");
+  assert.equal(dispatchCount, 3, "conflict detector, Lopu review batch, and stacked cascade use fixed workflow dispatch");
+  assert.match(source, /review_detect:/, "clean PRs have a Lopu review selector");
+  assert.match(source, /review_handoff:/, "one review selector handoff exists");
+  assert.match(
+    source,
+    /review_handoff:[\s\S]*?github\.ref_name == 'github-actions'[\s\S]*?workflow_ref[\s\S]*?refs\/heads\/develop[\s\S]*?workflow_ref[\s\S]*?refs\/heads\/main/,
+    "the review handoff originates only from the protected controller or a thin main/develop listener",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /format\('lopu-review:\{0\}', github\.run_id\)/u,
+    "review handoff uses a default-branch-compatible marker",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /lopu-review:issue-comment:\{0\}:\{1\}/u,
+    "issue-comment handoffs preserve the triggering comment id",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /lopu-review:inline-comment:\{0\}:\{1\}/u,
+    "inline-comment handoffs preserve the triggering comment id",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /lopu-review:check-run:\{0\}:\{1\}/u,
+    "failing-check handoffs preserve the triggering check-run id",
+  );
+  assert.match(source, /review:\n\s+name: Lopu reviews selected PRs/, "Lopu has a repository review worker");
+  assert.match(source, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/, "review shares the single Lopu fleet lock");
+  assert.match(source, /lopu-review-\{0\}/, "review batches have a stable concurrency scope");
+  assert.match(reviewBlock, /GH_TOKEN: \$\{\{ github\.token \}\}/u, "Lopu receives authenticated GitHub CLI access");
+  assert.match(reviewBlock, /no\s+comment quota, template, or topic restriction/u, "Lopu comments are not capped or templated");
+  assert.match(reviewBlock, /POST repos\/\$REPO\/issues\/<PR_NUMBER>\/comments/u, "Lopu can post PR conversation comments");
+  assert.match(reviewBlock, /POST repos\/\$REPO\/pulls\/<PR_NUMBER>\/comments\/<COMMENT_ID>\/replies/u, "Lopu can reply inline");
+  assert.match(reviewBlock, /thingtime-lopu-conversation:v1/u, "Lopu marks its free-form conversational comments");
+  assert.match(reviewBlock, /Never\n            edit another actor's comment/u, "Lopu edits only its own comments");
+  assert.match(reviewBlock, /openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u, "Lopu has a pinned Codex review backend");
+  assert.match(reviewBlock, /OPENAI_API_KEY/u, "Codex review uses a GitHub Actions secret");
+  assert.match(modelBlock, /LOPU_REVIEW_BACKEND/u, "Lopu review backend is repository-configurable");
+  assert.match(modelBlock, /gpt-5\.6-terra/u, "Terra is an allowed Lopu Codex model");
+  assert.match(modelBlock, /gpt-5\.6-sol/u, "Sol is an allowed Lopu Codex model");
+  assert.match(modelBlock, /model_reasoning_effort/u, "Codex reasoning effort is configured explicitly");
+  assert.match(reviewBlock, /Publish Lopu's controller\/workflow fix as a PR/u, "controller failures have a dedicated Lopu PR publisher");
+  assert.match(reviewBlock, /--base github-actions/u, "controller fixes target the protected controller branch");
+  assert.match(reviewBlock, /Never push or merge `github-actions`, `main`, or any target\/default/u, "model may not directly publish protected branches");
 
   assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock);
 }
@@ -359,6 +454,33 @@ export function selfTest() {
     selector: "pr:190",
     concurrency: "resolve-detect-pr190",
     cancelInProgress: true,
+    modelAndResolve: false,
+  });
+
+  for (const [name, event] of [
+    ["human PR conversation", "issue_comment"],
+    ["human inline review conversation", "pull_request_review_comment"],
+  ]) {
+    assertRoute(name, {
+      event, ref: "main", actor: "lopugit", eventPrNumber: "190",
+    }, {
+      valid: true,
+      detectorOnly: true,
+      handoffEligible: true,
+      selector: "pr:190",
+      concurrency: "lopu-conversation-pr190",
+      modelAndResolve: false,
+    });
+  }
+
+  assertRoute("failing PR check", {
+    event: "check_run", ref: "main", actor: "github-actions[bot]", eventPrNumber: "190",
+  }, {
+    valid: true,
+    detectorOnly: true,
+    handoffEligible: true,
+    selector: "pr:190",
+    concurrency: "lopu-check-fix-pr190",
     modelAndResolve: false,
   });
 

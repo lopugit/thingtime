@@ -1,4 +1,4 @@
-# AI-assisted rebase support for same-repository pull requests and stacks.
+# Lopu's internal rebase and stack-cascade engine for same-repository pull requests.
 #
 # GitHub's `mergeable` and `rebaseable` answers describe different operations:
 # a PR can merge cleanly while replaying one of its commits still conflicts.
@@ -9,10 +9,10 @@
 # An explicit PR-number dispatch may still retry that legacy standalone replay
 # deliberately; blank/manual sweeps use the same stacks-only automatic policy.
 #
-# Security and race invariants:
-# - push and pull_request_target runs are API-only detectors. Actual work is
-#   handed to repository_dispatch, whose thin default-branch listener calls
-#   this reusable workflow from the protected github-actions control plane.
+# Coordination and race invariants:
+# - The public Lopu PR manager calls this reusable engine. Its detector hands
+#   exact work to repository_dispatch, whose thin default-branch listener
+#   calls this protected control-plane workflow again for the final rewrite.
 #   The worker checks out that same control ref before invoking local support.
 # - fork PRs, the default branch, protected head branches, opted-out PRs, and
 #   stale ref snapshots are rejected before checkout or Claude.
@@ -34,10 +34,10 @@
 #   rewritten history changes .github/workflows/. A PAT used here needs
 #   contents/pull-request/issues/workflow access appropriate to this repository.
 
-name: Rebase PRs and stacks (AI)
+name: Lopu rebase engine
 
 run-name: >-
-  Rebase PR history${{ github.event.client_payload.pr_number && format(' at #{0}', github.event.client_payload.pr_number) || inputs.pr_number && format(' at #{0}', inputs.pr_number) || '' }}
+  Lopu rebase and cascade${{ github.event.client_payload.pr_number && format(' for PR #{0}', github.event.client_payload.pr_number) || inputs.pr_number && format(' for PR #{0}', inputs.pr_number) || '' }}
 
 on:
   workflow_call:
@@ -116,104 +116,6 @@ on:
         default: ""
         type: string
       recover_stale_lock:
-        required: false
-        default: false
-        type: boolean
-  push:
-    branches:
-      - "**"
-  pull_request_target:
-    types: [opened, reopened]
-  schedule:
-    # GitHub emits no event when its "Rebase stack" operation stops on a
-    # conflict. The bounded sweep catches that state without relying on a UI
-    # event that does not exist.
-    - cron: "17,47 * * * *"
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: "Exact PR to retry; leave blank to scan conflicting stacks"
-        required: false
-        default: ""
-        type: string
-      branch:
-        description: "PR base or head branch to scan when no exact PR is supplied"
-        required: false
-        default: ""
-        type: string
-      cascade:
-        description: "Continue through PRs stacked on the rebased branch"
-        required: false
-        default: true
-        type: boolean
-      execution_provider:
-        description: "Internal: hosted compute selected by Thingtime CI Control"
-        required: false
-        default: "github-actions"
-        type: choice
-        options: [github-actions, vercel-sandbox]
-      runner_label:
-        description: "Internal: unique Vercel Sandbox self-hosted runner label"
-        required: false
-        default: ""
-        type: string
-      control_dispatch_id:
-        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
-        required: false
-        default: ""
-        type: string
-      routing_proof:
-        description: "Internal: signed proof for an already-validated provider route"
-        required: false
-        default: ""
-        type: string
-      routing_proof_issued_at:
-        description: "Internal: Unix timestamp bound into routing_proof"
-        required: false
-        default: ""
-        type: string
-      worker_handoff:
-        description: "Internal: exact snapshot worker routing flag (leave false)"
-        required: false
-        default: false
-        type: boolean
-      expected_head_sha:
-        description: "Internal: snapshotted head SHA"
-        required: false
-        default: ""
-        type: string
-      expected_base_sha:
-        description: "Internal: snapshotted base SHA"
-        required: false
-        default: ""
-        type: string
-      old_base_sha:
-        description: "Internal: previous stack parent SHA"
-        required: false
-        default: ""
-        type: string
-      new_base_sha:
-        description: "Internal: rewritten stack parent SHA"
-        required: false
-        default: ""
-        type: string
-      manual:
-        description: "Internal: explicit retry provenance"
-        required: false
-        default: false
-        type: boolean
-      depth:
-        description: "Internal: cascade depth"
-        required: false
-        default: "0"
-        type: string
-      visited:
-        description: "Internal: cycle-safe visited PR list"
-        required: false
-        default: ""
-        type: string
-      recover_stale_lock:
-        description: "Internal: stale-lock recovery permission"
         required: false
         default: false
         type: boolean
@@ -376,7 +278,7 @@ jobs:
           ' <<<"$all")"
           explicit=false
           case "$EVENT_NAME" in
-            workflow_dispatch)
+            workflow_dispatch|workflow_call)
               if [ -n "${MANUAL_PR:-}" ]; then
                 explicit=true
                 candidates="$(jq -c --argjson n "$MANUAL_PR" '[.[] | select(.number == $n)]' <<<"$same_repo")"
@@ -988,6 +890,11 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+    # Shared with conflict and promotion repair: Lopu works through the
+    # repository's queue one model-backed operation at a time.
+    concurrency:
+      group: lopu-agent-fleet-${{ github.repository }}
+      cancel-in-progress: false
     env:
       REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.client_payload.pr_number || inputs.pr_number }}
@@ -1217,7 +1124,7 @@ jobs:
             eta="$(date -u -d '+15 minutes' '+%H:%M UTC')"
             body="$RUNNER_TEMP/rebase-start-comment.md"
             {
-              printf '🤖 **Auto-rebase running** — the stack rebase started working on this PR at %s.\n\n' "$started"
+              printf '🤖 **Lopu is rebasing this stack** — work started at %s.\n\n' "$started"
               printf 'Expected to finish around **%s** (most rebases still land in 5-15 minutes; the hosted-runner ceiling is 360). ' "$eta"
               printf 'On success this branch is force-pushed onto its new base and a result comment follows — no manual action is needed meanwhile.\n\n'
               printf '[Live status](%s)\n\n%s\n' "$RUN_URL" "$marker"
