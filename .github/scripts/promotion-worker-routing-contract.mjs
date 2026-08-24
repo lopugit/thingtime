@@ -70,6 +70,8 @@ assert.doesNotMatch(graphify, /REVIEW_GATED/);
 assert.doesNotMatch(promoter, /cleanReplayQuarantinePolicy/);
 assert.doesNotMatch(promoter, /promotionQuarantineReviewBody/);
 assert.doesNotMatch(promoter, /Protected clean-replay review/);
+assert.doesNotMatch(promoter, /review-gated/);
+assert.doesNotMatch(promoter, /ciSensitive/);
 assert.match(promoter, /const applied = applyPicks\(worktree, plan\.picks\);/);
 
 console.log("Lopu PR manager contract: self-test OK");

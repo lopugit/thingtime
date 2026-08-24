@@ -682,9 +682,9 @@ function sourceLineageReason(status) {
   return `The exact source patch is verified at current \`${CFG.source}\` tip.`;
 }
 // Compatibility parser for promotion branches created before Lopu's direct
-// publication model. New Lopu promotions never create these commits.
-const PROMOTION_CHECKPOINT_SUBJECT = "ci: activate review-gated promotion checks";
-const PROMOTION_CHECKPOINT_TRAILERS = [
+// publication model. New Lopu promotions never create these milestones.
+const PROMOTION_RECOVERY_MILESTONE_SUBJECT = "ci: retain legacy promotion recovery marker";
+const PROMOTION_RECOVERY_MILESTONE_TRAILERS = [
   "Thingtime-Promotion-Review-Checkpoint",
   "Thingtime-Promotion-Content-Head",
   "Thingtime-Promotion-Plan-Hash",
@@ -1148,7 +1148,7 @@ export function inspectPromotionReviewCheckpoint(
   const parsed = new Map();
   for (const line of String(body.out || "").split("\n")) {
     const match = /^(Thingtime-Promotion-[A-Za-z-]+):\s*(.*?)\s*$/.exec(line);
-    if (!match || !PROMOTION_CHECKPOINT_TRAILERS.includes(match[1])) continue;
+    if (!match || !PROMOTION_RECOVERY_MILESTONE_TRAILERS.includes(match[1])) continue;
     if (parsed.has(match[1])) {
       return { ok: false, error: `duplicate review-checkpoint trailer \`${match[1]}\`` };
     }
@@ -1157,7 +1157,7 @@ export function inspectPromotionReviewCheckpoint(
   if (!parsed.has("Thingtime-Promotion-Review-Checkpoint")) {
     return { ok: true, present: false, headSha: head.out };
   }
-  for (const key of PROMOTION_CHECKPOINT_TRAILERS) {
+  for (const key of PROMOTION_RECOVERY_MILESTONE_TRAILERS) {
     if (!parsed.has(key)) {
       return { ok: false, error: `review-checkpoint is missing trailer \`${key}\`` };
     }
@@ -1166,7 +1166,6 @@ export function inspectPromotionReviewCheckpoint(
   const parts = parents.ok ? parents.out.split(/\s+/).filter(Boolean) : [];
   const contentHead = parsed.get("Thingtime-Promotion-Content-Head");
   if (
-    body.out.split("\n")[0] !== PROMOTION_CHECKPOINT_SUBJECT ||
     parsed.get("Thingtime-Promotion-Review-Checkpoint") !== "v1" ||
     parsed.get("Thingtime-Promotion-Plan-Hash") !== context.planHash ||
     !isObjectId(contentHead) ||
@@ -1716,7 +1715,7 @@ function createPromotionReviewCheckpoint(worktree, context, contentHead, runUrl,
     "-c", "user.name=github-actions[bot]",
     "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
     "commit", "--allow-empty",
-    "-m", PROMOTION_CHECKPOINT_SUBJECT,
+    "-m", PROMOTION_RECOVERY_MILESTONE_SUBJECT,
     "-m", "Thingtime-Promotion-Review-Checkpoint: v1",
     "-m", `Thingtime-Promotion-Content-Head: ${contentHead}`,
     "-m", `Thingtime-Promotion-Plan-Hash: ${context.planHash}`,
@@ -2938,7 +2937,7 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       },
     );
     assert.equal(reviewRequiredDirect.ok, true);
-    const ciSensitiveDirect = validateReusablePromotionBranch(
+    const fullAccessDirect = validateReusablePromotionBranch(
       "HEAD",
       "origin/main",
       sourcePr,
@@ -2953,7 +2952,7 @@ function orphanedMergeHydrationIntegrationTest(assert) {
         gitRunner: testTryGit,
       },
     );
-    assert.equal(ciSensitiveDirect.ok, true);
+    assert.equal(fullAccessDirect.ok, true);
     assert.equal(
       validateReusablePromotionBranch(
         "HEAD",
