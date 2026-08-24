@@ -79,6 +79,7 @@ const CAPABILITY_ALIASES: Record<string, string[]> = {
 	'system.bluetooth.device.connection.set': ['system.bluetooth.device.connection.write'],
 	'system.vpn.connection.set': ['system.vpn.connection.write'],
 	'system.power.idle-sleep-prevention.set': ['system.power.idle-sleep-prevention.write'],
+	'system.power.idle-timer.set': ['system.power.idle-timer.write'],
 	'system.lock': ['system.lock'],
 	'system.sleep': ['system.power.sleep'],
 	'system.restart': ['system.power.restart'],
@@ -197,6 +198,7 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 		case 'system.bluetooth.device.connection.set': return 'set-bluetooth-device-connected';
 		case 'system.vpn.connection.set': return 'set-vpn-connected';
 		case 'system.power.idle-sleep-prevention.set': return 'set-prevent-idle-sleep';
+		case 'system.power.idle-timer.set': return 'set-power-idle-timer';
 		case 'system.media.apple-music.playback.set': return 'set-apple-music-playback';
 		case 'system.media.spotify.playback.set': return 'set-spotify-playback';
 		case 'system.lock':
@@ -414,6 +416,7 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 			vpnServices: device.state?.vpnServices || [],
 			appleMusic: device.state?.appleMusic,
 			spotify: device.state?.spotify,
+			powerTimers: device.state?.powerTimers,
 			battery: device.state?.battery
 				? {
 					...device.state.battery,
@@ -645,6 +648,13 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 		}
 		case 'set-prevent-idle-sleep':
 			return typeof input.enabled === 'boolean' ? { ...base, kind: 'system.power.idle-sleep-prevention.set', input: { enabled: input.enabled } } : null;
+		case 'set-power-idle-timer': {
+			const scope = input.scope;
+			const minutes = typeof input.minutes === 'number' && Number.isSafeInteger(input.minutes) && input.minutes >= 0 && input.minutes <= 180 ? input.minutes : null;
+			return (scope === 'display' || scope === 'system' || scope === 'disk') && minutes !== null
+				? { ...base, kind: 'system.power.idle-timer.set', input: { scope, minutes } }
+				: null;
+		}
 		case 'set-apple-music-playback': {
 			const operation = input.operation;
 			return operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous'

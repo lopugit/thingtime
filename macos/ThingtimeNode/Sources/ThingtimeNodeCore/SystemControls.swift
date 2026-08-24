@@ -279,6 +279,71 @@ public enum SystemBattery {
     }
 }
 
+/// A closed interface to the three documented IOKit idle timers. It never
+/// exposes arbitrary `pmset` keys, power profiles, or a shell command.
+public enum SystemPowerTimers {
+    public enum Scope: String, CaseIterable, Sendable {
+        case display
+        case system
+        case disk
+
+        fileprivate var aggressiveness: UInt {
+            switch self {
+            case .display: return UInt(kPMMinutesToDim)
+            case .system: return UInt(kPMMinutesToSleep)
+            case .disk: return UInt(kPMMinutesToSpinDown)
+            }
+        }
+    }
+
+    public static func snapshot() -> PowerTimerTelemetry {
+        PowerTimerTelemetry(
+            displayIdleMinutes: read(.display),
+            systemSleepMinutes: read(.system),
+            diskIdleMinutes: read(.disk)
+        )
+    }
+
+    public static func set(scope: String, minutes: Int) throws -> Int {
+        guard let scope = Scope(rawValue: scope), isValidMinutes(minutes) else {
+            throw ThingtimeNodeError.invalidRequest("The requested power idle timer is invalid.")
+        }
+        let connection = IOPMFindPowerManagement(mach_port_t(0))
+        guard connection != 0 else {
+            throw ThingtimeNodeError.policyDenied("macOS did not provide the power-management service.")
+        }
+        defer { IOServiceClose(connection) }
+        guard IOPMSetAggressiveness(connection, scope.aggressiveness, UInt(minutes)) == kIOReturnSuccess else {
+            throw ThingtimeNodeError.policyDenied("macOS did not accept the requested power idle timer.")
+        }
+        guard let observed = read(scope), observed == minutes else {
+            throw ThingtimeNodeError.policyDenied("macOS did not persist the requested power idle timer.")
+        }
+        return observed
+    }
+
+    public static func isValid(scope: String?, minutes: Double?) -> Bool {
+        guard let scope, Scope(rawValue: scope) != nil,
+              let minutes, minutes.isFinite, minutes.rounded() == minutes,
+              minutes >= 0, minutes <= 180 else { return false }
+        return true
+    }
+
+    private static func isValidMinutes(_ minutes: Int) -> Bool {
+        (0 ... 180).contains(minutes)
+    }
+
+    private static func read(_ scope: Scope) -> Int? {
+        let connection = IOPMFindPowerManagement(mach_port_t(0))
+        guard connection != 0 else { return nil }
+        defer { IOServiceClose(connection) }
+        var minutes: UInt = 0
+        guard IOPMGetAggressiveness(connection, scope.aggressiveness, &minutes) == kIOReturnSuccess,
+              minutes <= UInt(Int.max) else { return nil }
+        return Int(minutes)
+    }
+}
+
 /// A fixed, consent-gated Apple Events surface for the user's Apple Music
 /// application. This intentionally does not expose a generic media player,
 /// arbitrary script source, media library data, queue, title, or history.

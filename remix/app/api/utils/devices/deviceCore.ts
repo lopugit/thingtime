@@ -35,6 +35,7 @@ export const DEVICE_COMMAND_KINDS = [
 	'system.bluetooth.device.connection.set',
 	'system.vpn.connection.set',
 	'system.power.idle-sleep-prevention.set',
+	'system.power.idle-timer.set',
 	'system.media.apple-music.playback.set',
 	'system.media.spotify.playback.set',
 	'system.lock',
@@ -69,7 +70,8 @@ const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>([
 	'system.shutdown',
 	'system.logout',
 	'system.media.apple-music.playback.set',
-	'system.media.spotify.playback.set'
+	'system.media.spotify.playback.set',
+	'system.power.idle-timer.set'
 ]);
 
 export const deviceCommandRequiresApproval = (kind: DeviceCommandKind, callerRequiresApproval: boolean): boolean =>
@@ -196,6 +198,7 @@ export type DeviceCamera = { id: string; name: string; isConnected: boolean; isP
 export type DeviceBluetoothDevice = { id: string; name: string; isConnected: boolean };
 export type DeviceVPNService = { id: string; name: string; isConnected: boolean };
 export type DeviceBatteryState = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean; isLowPowerModeEnabled: boolean };
+export type DevicePowerTimersState = { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
 export type DeviceAppleMusicState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceSpotifyState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceStateSnapshot = {
@@ -208,6 +211,7 @@ export type DeviceStateSnapshot = {
 	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
 	battery: DeviceBatteryState | null;
+	powerTimers?: DevicePowerTimersState;
 	openApps: DeviceOpenApp[];
 	audioDevices: DeviceAudioDevice[];
 	wifi?: DeviceWiFiState | null;
@@ -269,7 +273,7 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 	if (
 		!Object.keys(raw).every((key) =>
 			[
-				'locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'openApps', 'audioDevices', 'wifi',
+				'locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'powerTimers', 'openApps', 'audioDevices', 'wifi',
 				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic', 'spotify'
 			].includes(key)
 		)
@@ -334,6 +338,17 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		const isLowPowerModeEnabled = candidate.isLowPowerModeEnabled ?? false;
 		if ((candidate.level !== null && candidate.level !== undefined && level === null) || (candidate.charging !== null && candidate.charging !== undefined && charging === null) || (candidate.isExternalPower !== null && candidate.isExternalPower !== undefined && isExternalPower === null) || typeof isPreventingIdleSleep !== 'boolean' || typeof isLowPowerModeEnabled !== 'boolean') return null;
 		battery = { level, charging, isExternalPower, isPreventingIdleSleep, isLowPowerModeEnabled };
+	}
+	let powerTimers: DevicePowerTimersState | undefined;
+	if (raw.powerTimers !== undefined) {
+		if (!raw.powerTimers || typeof raw.powerTimers !== 'object' || Array.isArray(raw.powerTimers)) return null;
+		const candidate = raw.powerTimers as Record<string, unknown>;
+		if (!exactKeys(candidate, ['displayIdleMinutes', 'systemSleepMinutes', 'diskIdleMinutes'])) return null;
+		const displayIdleMinutes = candidate.displayIdleMinutes === null ? null : boundedInteger(candidate.displayIdleMinutes, 0, 180);
+		const systemSleepMinutes = candidate.systemSleepMinutes === null ? null : boundedInteger(candidate.systemSleepMinutes, 0, 180);
+		const diskIdleMinutes = candidate.diskIdleMinutes === null ? null : boundedInteger(candidate.diskIdleMinutes, 0, 180);
+		if ((candidate.displayIdleMinutes !== null && displayIdleMinutes === null) || (candidate.systemSleepMinutes !== null && systemSleepMinutes === null) || (candidate.diskIdleMinutes !== null && diskIdleMinutes === null)) return null;
+		powerTimers = { displayIdleMinutes, systemSleepMinutes, diskIdleMinutes };
 	}
 	const volume = raw.volume === undefined || raw.volume === null ? null : unitInterval(raw.volume);
 	let muted: boolean | null = null;
@@ -424,6 +439,7 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		soundEffectsMuted,
 		brightness,
 		battery,
+		powerTimers,
 		openApps,
 		audioDevices,
 		wifi,
@@ -643,6 +659,7 @@ export type DeviceCommandInputByKind = {
 	'system.bluetooth.device.connection.set': { id: string; connected: boolean };
 	'system.vpn.connection.set': { id: string; connected: boolean };
 	'system.power.idle-sleep-prevention.set': { enabled: boolean };
+	'system.power.idle-timer.set': { scope: 'display' | 'system' | 'disk'; minutes: number };
 	'system.media.apple-music.playback.set': { operation: 'play' | 'pause' | 'next' | 'previous' };
 	'system.media.spotify.playback.set': { operation: 'play' | 'pause' | 'next' | 'previous' };
 	'system.lock': Record<string, never>;
@@ -727,6 +744,7 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'system.bluetooth.device.connection.set': 'system.bluetooth.device.connection.write',
 	'system.vpn.connection.set': 'system.vpn.connection.write',
 	'system.power.idle-sleep-prevention.set': 'system.power.idle-sleep-prevention.write',
+	'system.power.idle-timer.set': 'system.power.idle-timer.write',
 	'system.media.apple-music.playback.set': 'system.media.apple-music.playback.write',
 	'system.media.spotify.playback.set': 'system.media.spotify.playback.write',
 	'system.lock': 'system.lock',
@@ -775,6 +793,7 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'system.bluetooth.device.connection.set': 'system.bluetooth.device.connection.write',
 	'system.vpn.connection.set': 'system.vpn.connection.write',
 	'system.power.idle-sleep-prevention.set': 'system.power.idle-sleep-prevention.write',
+	'system.power.idle-timer.set': 'system.power.idle-timer.write',
 	'system.media.apple-music.playback.set': 'system.media.apple-music.playback.write',
 	'system.media.spotify.playback.set': 'system.media.spotify.playback.write',
 	'device.lock.write': 'system.lock',
@@ -991,6 +1010,13 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 			return typeof raw.enabled === 'boolean' && exactKeys(raw, ['enabled'])
 				? ok({ enabled: raw.enabled })
 				: deviceFail(400, 'system.power.idle-sleep-prevention.set requires only a boolean enabled value');
+		case 'system.power.idle-timer.set': {
+			const scope = raw.scope;
+			const minutes = boundedInteger(raw.minutes, 0, 180);
+			return (scope === 'display' || scope === 'system' || scope === 'disk') && minutes !== null && exactKeys(raw, ['scope', 'minutes'])
+				? ok({ scope, minutes })
+				: deviceFail(400, 'system.power.idle-timer.set requires display, system, or disk scope and whole minutes from 0 to 180');
+		}
 		case 'system.media.apple-music.playback.set': {
 			const operation = raw.operation;
 			return (operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous') && exactKeys(raw, ['operation'])

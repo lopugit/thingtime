@@ -224,6 +224,40 @@ final class SafeActionPolicyTests: XCTestCase {
         ) else { return XCTFail("Expected unexpected Spotify fields to be denied") }
     }
 
+    func testPowerIdleTimersAreFixedAndRequireApproval() {
+        let valid = SafeActionRequest(kind: .setPowerIdleTimer, parameters: [
+            "scope": .string("display"), "minutes": .number(10)
+        ])
+        guard case .requireApproval = policy.evaluate(
+            action: valid,
+            context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+        ) else { return XCTFail("Expected power idle timer to require approval") }
+
+        let invalidScope = SafeActionRequest(kind: .setPowerIdleTimer, parameters: [
+            "scope": .string("all"), "minutes": .number(10)
+        ])
+        guard case .deny = policy.evaluate(
+            action: invalidScope,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected unsupported timer scope to be denied") }
+
+        let enormous = SafeActionRequest(kind: .setPowerIdleTimer, parameters: [
+            "scope": .string("display"), "minutes": .number(Double.greatestFiniteMagnitude)
+        ])
+        guard case .deny = policy.evaluate(
+            action: enormous,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected out-of-range timer value to be denied before conversion") }
+
+        let extra = SafeActionRequest(kind: .setPowerIdleTimer, parameters: [
+            "scope": .string("disk"), "minutes": .number(0), "profile": .string("never")
+        ])
+        guard case .deny = policy.evaluate(
+            action: extra,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected arbitrary power profile input to be denied") }
+    }
+
     func testAudioRouteAndMuteActionsStayClosedAndRequireApproval() {
         let output = SafeActionRequest(kind: .setDefaultOutputDevice, parameters: ["deviceId": .string("BuiltInOutputDevice")])
         guard case .requireApproval = policy.evaluate(

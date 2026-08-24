@@ -160,6 +160,7 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 		cameras: [{ id: 'camera-1', name: 'FaceTime HD', isConnected: true, isPreferred: true, authorization: 'denied' }],
 		bluetoothDevices: [{ id: 'bt-opaque', name: 'Headphones', isConnected: true }],
 		vpnServices: [{ id: 'vpn-1', name: 'Work VPN', isConnected: false }],
+		powerTimers: { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0 },
 		appleMusic: { isInstalled: true, isRunning: false },
 		spotify: { isInstalled: true, isRunning: false }
 	});
@@ -167,6 +168,7 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 	assert.deepEqual(normalized?.wifi, { powerOn: true, ssid: 'Thingtime Guest' });
 	assert.equal(normalized?.displays?.[0]?.currentMode?.refreshRate, 60);
 	assert.equal(normalized?.bluetoothDevices?.[0]?.id, 'bt-opaque');
+	assert.deepEqual(normalized?.powerTimers, { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0 });
 	assert.deepEqual(normalized?.appleMusic, { isInstalled: true, isRunning: false });
 	assert.deepEqual(normalized?.spotify, { isInstalled: true, isRunning: false });
 	assert.deepEqual(
@@ -176,6 +178,8 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 	assert.equal(normalizeDeviceState({ locked: false, displays: [{ id: 1, width: 1, height: 1, isMain: true, isBuiltIn: false, brightness: null, brightnessControlSupported: false, currentMode: null, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false, path: '/private' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, appleMusic: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);
 	assert.equal(normalizeDeviceState({ locked: false, spotify: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);
+	assert.equal(normalizeDeviceState({ locked: false, powerTimers: { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0, profile: 'private' }, openApps: [] }), null);
+	assert.equal(normalizeDeviceState({ locked: false, powerTimers: { displayIdleMinutes: 10.5, systemSleepMinutes: 30, diskIdleMinutes: 0 }, openApps: [] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, openApps: [{ id: 'x', name: 'X', frontmost: false, path: '/Applications/X.app' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, volume: 'not-a-level', openApps: [] }), null);
 	assert.ok(
@@ -290,6 +294,7 @@ test('device-wide commands require the capability from the signed pairing claim'
 	assert.equal(deviceSupportsCommand('system.audio.sound-effects.volume.set', ['system.audio.sound-effects.volume.write']), true);
 	assert.equal(deviceSupportsCommand('system.audio.sound-effects.mute.set', ['system.audio.sound-effects.mute.write']), true);
 	assert.equal(deviceSupportsCommand('system.brightness.set', ['system.brightness.write']), true);
+	assert.equal(deviceSupportsCommand('system.power.idle-timer.set', ['system.power.idle-timer.write']), true);
 	assert.equal(deviceSupportsCommand('system.sleep', ['system.power.sleep']), true);
 	assert.equal(deviceSupportsCommand('system.sleep', ['system.lock']), false);
 	assert.equal(deviceSupportsCommand('screen.start', ['screen.view']), true);
@@ -335,6 +340,7 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'system.bluetooth.device.connection.set',
 		'system.vpn.connection.set',
 		'system.power.idle-sleep-prevention.set',
+		'system.power.idle-timer.set',
 		'system.media.apple-music.playback.set',
 		'system.media.spotify.playback.set',
 		'system.lock',
@@ -390,6 +396,10 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	assert.equal(normalizeDeviceCommand('system.display.origin.set', { displayId: 42, x: -200, y: 0 }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.printer.default.set', { id: 'printer-1' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.bluetooth.device.connection.set', { id: 'bt-abc', connected: true }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'display', minutes: 10 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'display', minutes: 10.5 }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'all', minutes: 10 }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'disk', minutes: 0, profile: 'never' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'play' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'toggle' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'next', script: 'do shell script' }).ok, false);
@@ -446,7 +456,7 @@ test('paired account execution preferences default to always allow, with reversi
 	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
 	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
 	for (const kind of DEVICE_COMMAND_KINDS) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.media.apple-music.playback.set', 'system.media.spotify.playback.set'].includes(kind), kind);
+		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.media.apple-music.playback.set', 'system.media.spotify.playback.set'].includes(kind), kind);
 		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
 	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };

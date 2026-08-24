@@ -480,6 +480,7 @@ export const DeviceDetailsDrawer = memo(
 								<Section advanced deviceId={state.deviceId} key={`system-controls:${state.deviceId}`} label="Displays & system hardware" section="system-controls">
 									<DeviceSystemControls
 										appleMusic={snapshot?.observed.appleMusic}
+										powerTimers={snapshot?.observed.powerTimers}
 										spotify={snapshot?.observed.spotify}
 										battery={snapshot?.observed.battery || null}
 										bluetoothDevices={snapshot?.observed.bluetoothDevices || []}

@@ -188,6 +188,21 @@ public struct BatteryTelemetry: Codable, Equatable, Sendable {
     }
 }
 
+/// The supported root-domain idle timers, measured in minutes. Zero means the
+/// corresponding timer is disabled. No energy profile names or opaque power
+/// preference dictionaries leave the node.
+public struct PowerTimerTelemetry: Codable, Equatable, Sendable {
+    public let displayIdleMinutes: Int?
+    public let systemSleepMinutes: Int?
+    public let diskIdleMinutes: Int?
+
+    public init(displayIdleMinutes: Int?, systemSleepMinutes: Int?, diskIdleMinutes: Int?) {
+        self.displayIdleMinutes = displayIdleMinutes
+        self.systemSleepMinutes = systemSleepMinutes
+        self.diskIdleMinutes = diskIdleMinutes
+    }
+}
+
 /// A deliberately minimal, privacy-preserving Apple Music presence signal.
 /// Playback title, library, queue, and listening history are never collected.
 public struct AppleMusicTelemetry: Codable, Equatable, Sendable {
@@ -288,6 +303,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let bluetoothDevices: [BluetoothDeviceTelemetry]
     public let vpnServices: [VPNServiceTelemetry]
     public let battery: BatteryTelemetry
+    public let powerTimers: PowerTimerTelemetry
     public let appleMusic: AppleMusicTelemetry
     public let spotify: SpotifyTelemetry
     public let collectedAt: Date
@@ -316,6 +332,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         bluetoothDevices: [BluetoothDeviceTelemetry] = [],
         vpnServices: [VPNServiceTelemetry] = [],
         battery: BatteryTelemetry = BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: false),
+        powerTimers: PowerTimerTelemetry = PowerTimerTelemetry(displayIdleMinutes: nil, systemSleepMinutes: nil, diskIdleMinutes: nil),
         appleMusic: AppleMusicTelemetry = AppleMusicTelemetry(isInstalled: false, isRunning: false),
         spotify: SpotifyTelemetry = SpotifyTelemetry(isInstalled: false, isRunning: false)
     ) {
@@ -342,6 +359,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.bluetoothDevices = bluetoothDevices
         self.vpnServices = vpnServices
         self.battery = battery
+        self.powerTimers = powerTimers
         self.appleMusic = appleMusic
         self.spotify = spotify
     }
@@ -437,6 +455,7 @@ public final class DeviceTelemetryCollector {
             bluetoothDevices: SystemBluetooth.pairedDevices(),
             vpnServices: SystemVPN.services(),
             battery: SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep),
+            powerTimers: SystemPowerTimers.snapshot(),
             appleMusic: SystemAppleMusic.telemetry(),
             spotify: SystemSpotify.telemetry()
         )

@@ -37,6 +37,7 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'system.bluetooth.device.connection.set',
 	'system.vpn.connection.set',
 	'system.power.idle-sleep-prevention.set',
+	'system.power.idle-timer.set',
 	'system.media.apple-music.playback.set',
 	'system.media.spotify.playback.set',
 	'system.lock',
@@ -75,6 +76,7 @@ export type PublicDeviceState = {
 	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
 	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean; isLowPowerModeEnabled?: boolean } | null;
+	powerTimers?: { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
 	openApps: PublicDeviceOpenApp[];
 	audioDevices: Array<{
 		id: string;

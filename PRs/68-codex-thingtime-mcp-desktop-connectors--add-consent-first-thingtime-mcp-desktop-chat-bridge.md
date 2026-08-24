@@ -267,6 +267,22 @@ relational shape for later ThingtimeDB storage and platform chat views.
 - The four paired-device capability-manifest endpoint contracts are bumped to
   `1.3.0`.
 
+### 2026-08-24 persistent idle-timer follow-up
+
+- Paired-node telemetry now reports the three documented IOKit idle timers:
+  display dim, system sleep, and disk spindown. The matching command accepts
+  exactly one named scope (`display`, `system`, or `disk`) and a whole-minute
+  value from 0 (Never) through 180. It cannot carry an arbitrary `pmset` key,
+  power profile, shell input, or other control-plane settings.
+- Every timer update has its own device capability, always creates a fresh
+  approval, uses `IOPMSetAggressiveness`, and reads the exact value back before
+  reporting success. A rejected or clamped OS update is fail-closed as a
+  policy error rather than claiming a changed setting.
+- The four paired-device capability-manifest endpoint contracts are bumped to
+  `1.4.0`. Native policy, unpaired-node, telemetry-payload, and device-core
+  tests cover strict parameters, fresh approval, no side effect before pairing,
+  and the bounded state projection.
+
 ## Security and product boundaries
 
 MCP gives a host a standard way to invoke this server; it does not give the

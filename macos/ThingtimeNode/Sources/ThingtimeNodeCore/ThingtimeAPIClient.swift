@@ -121,6 +121,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             struct BluetoothDevice: Encodable { let id: String; let name: String; let isConnected: Bool }
             struct VPNService: Encodable { let id: String; let name: String; let isConnected: Bool }
             struct Battery: Encodable { let level: Double?; let charging: Bool?; let isExternalPower: Bool?; let isPreventingIdleSleep: Bool; let isLowPowerModeEnabled: Bool }
+            struct PowerTimers: Encodable { let displayIdleMinutes: Int?; let systemSleepMinutes: Int?; let diskIdleMinutes: Int? }
             struct AppleMusic: Encodable { let isInstalled: Bool; let isRunning: Bool }
             struct Spotify: Encodable { let isInstalled: Bool; let isRunning: Bool }
             let locked: Bool
@@ -140,6 +141,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             let bluetoothDevices: [BluetoothDevice]
             let vpnServices: [VPNService]
             let battery: Battery
+            let powerTimers: PowerTimers
             let appleMusic: AppleMusic
             let spotify: Spotify
         }
@@ -350,6 +352,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 bluetoothDevices: Array(telemetry.bluetoothDevices.prefix(64)).map { .init(id: String($0.id.prefix(120)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
                 vpnServices: Array(telemetry.vpnServices.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
                 battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep, isLowPowerModeEnabled: telemetry.battery.isLowPowerModeEnabled),
+                powerTimers: .init(displayIdleMinutes: telemetry.powerTimers.displayIdleMinutes, systemSleepMinutes: telemetry.powerTimers.systemSleepMinutes, diskIdleMinutes: telemetry.powerTimers.diskIdleMinutes),
                 appleMusic: .init(isInstalled: telemetry.appleMusic.isInstalled, isRunning: telemetry.appleMusic.isRunning),
                 spotify: .init(isInstalled: telemetry.spotify.isInstalled, isRunning: telemetry.spotify.isRunning)
             ),

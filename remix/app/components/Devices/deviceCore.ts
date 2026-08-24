@@ -62,6 +62,7 @@ const ACTION_CAPABILITY: Partial<Record<DeviceActionKind, string>> = {
 	'set-bluetooth-device-connected': 'system.bluetooth.device.connection.write',
 	'set-vpn-connected': 'system.vpn.connection.write',
 	'set-prevent-idle-sleep': 'system.power.idle-sleep-prevention.write',
+	'set-power-idle-timer': 'system.power.idle-timer.write',
 	'set-apple-music-playback': 'system.media.apple-music.playback.write',
 	'set-spotify-playback': 'system.media.spotify.playback.write',
 	'launch-app': 'apps.launch',

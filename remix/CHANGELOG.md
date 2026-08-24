@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Approval-gated persistent idle timers for paired Macs**: the node now
+  reads and can set the documented IOKit display-idle, system-sleep, and
+  disk-spindown timers from Never (0) through 180 minutes. Every change
+  requires a fresh approval and verifies the observed value after macOS
+  applies it; no power profile, arbitrary `pmset` key, or shell input is
+  accepted. Paired-device API contracts are now `1.4.0`. — Codex (AI), 2026-08-24
+
 - **Scoped Spotify playback controls for paired Macs**: the node now reports
   only whether Spotify is installed/running and accepts only fixed play,
   pause, previous, and next actions. Each command requires a fresh approval

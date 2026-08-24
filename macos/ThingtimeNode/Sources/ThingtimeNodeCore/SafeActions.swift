@@ -29,6 +29,7 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case setBluetoothDeviceConnected = "system.bluetooth.device.connection.set"
     case setVPNConnected = "system.vpn.connection.set"
     case setPreventIdleSleep = "system.power.idle-sleep-prevention.set"
+    case setPowerIdleTimer = "system.power.idle-timer.set"
     case setAppleMusicPlayback = "system.media.apple-music.playback.set"
     case setSpotifyPlayback = "system.media.spotify.playback.set"
     case activateApplication = "application.activate"
@@ -176,6 +177,15 @@ public struct SafeActionPolicy: Sendable {
         case .setPreventIdleSleep:
             guard action.parameters.count == 1, case .bool = action.parameters["enabled"] else {
                 return "system.power.idle-sleep-prevention.set requires only a boolean enabled value."
+            }
+            return nil
+        case .setPowerIdleTimer:
+            guard action.parameters.count == 2,
+                  SystemPowerTimers.isValid(
+                    scope: action.parameters["scope"]?.stringValue,
+                    minutes: action.parameters["minutes"]?.numberValue
+                  ) else {
+                return "system.power.idle-timer.set requires display, system, or disk scope and whole minutes from 0 to 180."
             }
             return nil
         case .setAppleMusicPlayback:
@@ -386,6 +396,15 @@ public final class SafeActionExecutor {
             }
             try telemetry.setPreventIdleSleep(enabled)
             return .object(["enabled": .bool(enabled)])
+        case .setPowerIdleTimer:
+            guard let scope = action.parameters["scope"]?.stringValue,
+                  let rawMinutes = action.parameters["minutes"]?.numberValue,
+                  rawMinutes.isFinite,
+                  rawMinutes.rounded() == rawMinutes else {
+                throw ThingtimeNodeError.invalidRequest("Missing power idle timer parameters.")
+            }
+            let minutes = try SystemPowerTimers.set(scope: scope, minutes: Int(rawMinutes))
+            return .object(["scope": .string(scope), "minutes": .number(Double(minutes))])
         case .setAppleMusicPlayback:
             guard let operation = action.parameters["operation"]?.stringValue else {
                 throw ThingtimeNodeError.invalidRequest("Missing Apple Music operation.")

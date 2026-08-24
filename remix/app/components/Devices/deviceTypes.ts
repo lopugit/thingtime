@@ -127,6 +127,7 @@ export type DeviceCamera = { id: string; name: string; isConnected: boolean; isP
 export type DeviceBluetoothDevice = { id: string; name: string; isConnected: boolean };
 export type DeviceVPNService = { id: string; name: string; isConnected: boolean };
 export type DeviceBattery = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean; isLowPowerModeEnabled?: boolean };
+export type DevicePowerTimers = { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
 export type DeviceAppleMusic = { isInstalled: boolean; isRunning: boolean };
 export type DeviceSpotify = { isInstalled: boolean; isRunning: boolean };
 
@@ -161,6 +162,7 @@ export type DeviceObservedState = {
 	bluetoothDevices?: DeviceBluetoothDevice[];
 	vpnServices?: DeviceVPNService[];
 	battery?: DeviceBattery | null;
+	powerTimers?: DevicePowerTimers;
 	appleMusic?: DeviceAppleMusic;
 	spotify?: DeviceSpotify;
 	observedAt: string;
@@ -241,6 +243,7 @@ export type DeviceActionKind =
 	| 'set-bluetooth-device-connected'
 	| 'set-vpn-connected'
 	| 'set-prevent-idle-sleep'
+	| 'set-power-idle-timer'
 	| 'set-apple-music-playback'
 	| 'set-spotify-playback'
 	| 'launch-app'
