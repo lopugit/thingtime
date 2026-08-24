@@ -285,6 +285,44 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-integrations',
+    group: 'admin',
+    title: 'Admin integration vault and proxy',
+    endpoint: '/api/v1/admin/integrations',
+    summary: 'Manage write-only encrypted external credentials and endpoint read/write policies (admin only).',
+    detail:
+      'Stores external credentials as AES-256-GCM ciphertext using THINGTIME_ADMIN_VAULT_KEY. GET returns only metadata, endpoint policy, and redacted audit rows—never a credential value. The proxy accepts a saved endpoint id, not an arbitrary upstream URL. It enforces HTTPS origin/path allowlists, selected read/create-only/full-write permissions, request/response byte bounds, redirects disabled, and a fail-closed rate limit. Vercel create-only environment-variable writes check the remote project env list before POST; they never use PATCH/upsert. Generic create-only endpoints are refused rather than simulated unsafely.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Provision THINGTIME_ADMIN_VAULT_KEY as a distinct 32-byte base64url server secret. Do not reuse JWT, session, peer, or cron secrets.',
+      'POST action:create-secret with a label and value. The value is write-only and never appears in a later response.',
+      'POST action:save-endpoint with a saved secret id, provider, HTTPS origin, closed path prefixes, and read/write policy.',
+      'POST action:proxy with endpointId, operation, path, and a bounded JSON body. Only the Vercel adapter supports create-only writes.'
+    ],
+    requestExamples: [
+      {
+        name: 'Create write-only credential',
+        description: 'Value is encrypted server-side and omitted from every response.',
+        method: 'POST',
+        body: { action: 'create-secret', label: 'Vercel project token', value: '<write-only-token>' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Vault metadata; no encrypted fields or credential values are exposed.',
+        body: {
+          ok: true,
+          vaultConfigured: true,
+          secrets: [{ id: 'secret_example', label: 'Vercel project token' }],
+          endpoints: [{ id: 'endpoint_example', writeMode: 'create-only' }]
+        }
+      },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-rate-limits',
     group: 'admin',
     title: 'Rate-limit config',
