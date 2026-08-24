@@ -940,3 +940,12 @@ the old per-id `insertOne` path always rethrew those.
 session latch (cross-device MRU staleness until reload). It follows the
 optimistic-rendering house rule and `pushRecent` keeps the local list current;
 revalidate-on-`visibilitychange` is the upgrade path if staleness ever matters.
+
+**2026-08-24 follow-up review**: the new `RELATED_CHILD_PROJECTION` retained
+the v2 discriminator but omitted `crystal.mediaLayout`. Rich comments use the
+post crystal and `buildComment` exposes that field, so a saved Rows/Grid layout
+silently became masonry after the feed, profile, or permalink re-read. The
+projection now carries it and `relatedProjection.test.ts` locks the contract.
+The current production build also resolved every lazy route chunk, and its
+patched Vercel output was checked for immutable `/assets/*` headers before the
+filesystem handler while `/index.html` remains `no-store`.

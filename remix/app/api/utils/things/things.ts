@@ -1384,7 +1384,9 @@ type RelatedThings = {
 // pass-1/level loops below, mergedCommentsOf/mergedReactionsOf, and
 // buildComment + the attachment target pass in toPublicPosts. `_id` rides
 // along by default and is what the legacy era keys comments by.
-const RELATED_CHILD_PROJECTION = {
+// Exported for the projection-contract test: this is the single field set used
+// for direct comments and every eagerly shipped reply level.
+export const RELATED_CHILD_PROJECTION = {
   // schemaVersion is LOAD-BEARING and easy to miss: isV2() reads it, and
   // thingtimeOf/crystalOf/targetIdOf all branch on isV2(). Project it away and
   // every doc silently reads as a v1 post — thingtimeOf returns ['post'], so
@@ -1400,6 +1402,11 @@ const RELATED_CHILD_PROJECTION = {
   'crystal.text': 1,
   'crystal.type': 1,
   'crystal.images': 1,
+  // Rich comments use the same post crystal as top-level posts. Keeping this
+  // field is required for their owner-selected rows/grid layout to survive a
+  // feed or permalink reload; without it mediaLayoutOf() silently falls back
+  // to masonry.
+  'crystal.mediaLayout': 1,
   'crystal.listing': 1,
   'crystal.thing': 1,
   'crystal.emoji': 1,

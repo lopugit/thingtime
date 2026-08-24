@@ -547,6 +547,11 @@ is fixed, and cite the checklist you ran in the PR description.
       `useApi`, reopen the editor and confirm the selected Rows/Grid mode,
       columns/pattern, and non-default spans survived the client request. A
       correct pre-submit preview is not sufficient evidence of persistence.
+
+- [ ] Reload a post with a rich comment using Rows or Grid. Its chosen
+      `mediaLayout` (including columns/pattern and non-default spans) survives
+      the feed, profile, and `/post/:id` projections rather than silently
+      falling back to masonry.
 - [ ] Server bounds: `mediaLayout` rejects pattern rows over 25 entries or
       outside 1..6, columns outside 1..6, spans maps over 25 entries, and
       non-object payloads with a 400; unknown keys are stripped; legacy posts

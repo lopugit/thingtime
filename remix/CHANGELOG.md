@@ -113,6 +113,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   per-id `insertOne` semantics. The `readAt: null` partial-index spec was
   confirmed against the production cluster's MongoDB 8.0.1.
   — Claude (AI), 2026-08-18
+- **PR #299 follow-up review**: `resolveRelated`'s narrow child projection now
+  retains `crystal.mediaLayout`, so rich comments keep their selected Rows/Grid
+  layout across feed, profile, and permalink reloads instead of silently
+  falling back to masonry. A focused projection-contract regression test covers
+  every direct-comment and eagerly shipped reply-level use of that field.
+  — Codex (AI), 2026-08-24
 
 ### Added
 
