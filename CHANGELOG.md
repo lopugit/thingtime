@@ -21,6 +21,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Signed Desktop PR releases now run from the protected control plane**:
+  the reusable builder/releaser validates current owner-labelled PR state and
+  pins its exact source SHA before checkout; the eventual product listener is
+  trigger-only. GitHub write access is scoped to GitHub API/publish steps, PR
+  checkout persists no credential, and Developer ID/notarization secrets enter
+  only after unsigned source tests pass. The workflow publishes both the
+  Desktop updater asset and its separately signed Thingtime Recovery companion.
+  — Codex (AI), 2026-08-24
 - **Lopu now performs whole-PR repository reviews in the same control plane**:
   a push or selector creates one serialized Lopu batch for the affected clean
   same-repository PRs, each checked out against its target branch. Lopu reviews
@@ -37,6 +45,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Preview wildcard fallbacks are environment-locked and stack-aware**:
+  `*.previews.dev.thingtime.com` must bind to `develop`, while the Vercel
+  production fallback for `*.previews.thingtime.com` must stay detached and
+  prove it resolves to `main`; the protected controller verifies each binding,
+  CNAME, and live runtime branch before publishing an alias. Trusted
+  same-repository stacked PRs now resolve their bounded parent chain to
+  `develop`, while missing, ambiguous, draft, untrusted, cyclic, or overlong
+  chains fail closed. — Codex (AI), 2026-08-24
 - **`ai-merge-paused` is now a durable user-controlled stop label**: neither
   conflict resolution nor stack rebasing can create, add, remove, recover, or
   supersede it. Detectors exclude it regardless of ref/topology changes, and
