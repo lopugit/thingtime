@@ -6,6 +6,78 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Passkeys + cross-deployment auto-login
+
+- [ ] Settings → Security → "Add a passkey ✨": wrong password → error toast,
+      no platform sheet; correct password → the browser/1Password/iCloud sheet
+      opens and the saved passkey appears in the list with provider name,
+      created date, and your nickname. Cancelling the sheet shows NO error
+      toast (cancel is silent).
+- [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
+      44/44 — full software-authenticator ceremony: registration, duplicate
+      409, challenge replay refusals, usernameless login, lastUsed + linked
+      apps, revocation blocking login, revoke-before-delete, hint liveness.
+- [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
+      sheet → welcome toast → roster merged, other accounts untouched); the
+      username field offers the browser's own passkey autofill popup
+      (conditional UI) on browsers that support it.
+- [ ] Revoked passkey: revoke (password-confirmed) → the passkey stops logging
+      in IMMEDIATELY (401), stays listed with a Revoked badge, Delete appears
+      only after revocation and asks for the password again.
+- [ ] Passkey login bypasses email-OTP 2FA (a 2FA-enabled account logs
+      straight in with a passkey — the passkey is the second factor).
+- [ ] Auto-login popup: with a live session on another `*.thingtime.com`
+      deployment, a signed-out visit shows the "Continue as… ✨" corner card;
+      picking an account routes to `/login?u=<username>` with the username
+      prefilled and password focused; "Not now" snoozes it for a day; it never
+      renders on `/login`, `/register`, `/authorize`, `/reset-password`, or
+      while signed in.
+- [ ] Hint liveness: log out on the OTHER deployment → the suggestion
+      disappears here on the next fetch (hints resolve live sessions, never a
+      cached identity). `GET /api/v1/auth/account-hints` responses carry no
+      email — only id/username/displayName/avatarUrl.
+
+## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
+
+- [ ] Commander desktop OAuth: from the signed macOS Commander app, open
+      Thingtime login and complete consent in the system browser. The callback
+      must reach only Commander’s exact `127.0.0.1` loopback origin, exchange
+      a one-time S256 PKCE code, and create the expected Keychain-backed
+      account. Replaying the callback code, changing the callback URI, or
+      changing the verifier must fail without creating another grant.
+
+- [ ] `node scripts/verify-federated-login.mjs` passes (31 checks) against two
+      stacks on DIFFERENT databases (recipe in the script header — stack B
+      must be a production build; a second dev stack silently shares `.env`'s
+      database). Proves: per-environment hint authority + federated resolve
+      (CORS allow family / deny others, read-only), handoff aud binding,
+      cross-environment fail-closed, single-use + replay-revokes-session, and
+      the full FedCM accounts→assertion→session loop.
+- [ ] On a `*.thingtime.com` page, DevTools → Network shows at most
+      `MAX_FEDERATED_ORIGINS` (4) `/account-hints/resolve` fan-out fetches,
+      only for origins the local endpoint reported `unresolved`, and the
+      popup/login strip merges accounts without duplicate users.
+- [ ] On a NON-thingtime origin (immutable `*.vercel.app` preview) while
+      signed out: the corner card offers "Sign in with Thingtime 🌈" (never
+      the hints list); the button opens the `/authorize?self=1` popup, the
+      popup shows "Continue to <host>?" with the ACTIVE account, Continue
+      signs the page in (welcome toast) and the popup closes; Cancel closes
+      with nothing shared. In Chrome with FedCM available, the native
+      "Continue as" sheet ALSO auto-appears on page load (no click; the
+      browser's own dismissal cooldown governs re-prompts) and completes the
+      same loop. Until the hub code is live on production thingtime.com, set
+      `localStorage['tt-sso-hub'] = '"https://pr-<N>.previews.dev.thingtime.com"'`
+      (JSON string, matching localCache format) on the foreign origin to
+      point both flows at a preview hub sharing the deployment's database.
+- [ ] The `/authorize?self=1` popup signed OUT shows the embedded login (with
+      the cross-deployment hints strip) before the confirm card.
+- [ ] Replaying a captured sso-session code fails AND kills the session it
+      minted (theft response); a code redeemed on the wrong origin 403s; an
+      expired (>2 min) code 401s.
+- [ ] FedCM endpoints refuse non-browser fetches (no
+      `Sec-Fetch-Dest: webidentity` → 400) and `/fedcm/accounts` 401s when
+      signed out.
+
 ## Public upload approval (new-signup permissions)
 
 - [ ] Register a brand-new account. `POST /api/v1/auth/register` returns
@@ -249,6 +321,37 @@ is fixed, and cite the checklist you ran in the PR description.
       targeted lint command: the startup probe performs one forced relink and
       ESLint starts. `npm --prefix remix run ensure-deps -- --check` also proves
       both ESLint and the directly declared Prettier CLI can start.
+
+## Branding page (`remix/app/routes/branding/_index.tsx`, `remix/app/components/Branding/`)
+
+- [ ] `/branding` renders full-width with a centred max-width column at desktop
+      (≥1280px) and mobile (375px); no horizontal scrollbar at either size and
+      no borders/cards/checkerboard grids anywhere — previews sit on soft
+      panels only.
+- [ ] Every variant section (wordmark, icon, both pink cuts) shows its live
+      SVG preview; the light/dark panel dots swap the preview surface.
+- [ ] "Download SVG" and "PNG · 1024px" point at real committed files under
+      `/branding/generated/<slug>/…` (200s, not client blobs); the ready-made
+      grid lazy-loads (`loading="lazy"`) one `<img>` per size up to 10000px,
+      wordmark sizes keep the 27:5 trimmed aspect (e.g. 1024×190).
+- [ ] Ready-made sizes render as two lines — the SVG line
+      (`SVG · scalable · <size>`) above the PNG line — and every PNG chip is
+      labelled `PNG · <W>×<H> · <KB/MB>`; chips wrap without horizontal
+      scroll at 375px.
+- [ ] Custom export: format PNG/SVG, any width, padding all-sides and
+      per-side, background transparent/white/ink — downloads a file named
+      `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding, and fires a
+      Lopu success toast (errors also route through Lopu, never `alert`).
+- [ ] Exports and previews are whitespace-trimmed: `npm --prefix remix run
+      test:branding` passes (trim + padding + pixel-size unit tests).
+- [ ] Press kit grid renders all generated marketing images; the portrait
+      phone wallpaper previews as a centre crop and must not stretch its grid
+      row (no giant empty gap beside it).
+- [ ] Palette swatches copy their hex via clipboard with a Lopu toast.
+- [ ] After changing `logoMatrix.ts` matrices/colours, re-run
+      `npm --prefix remix run branding-assets` and commit the refreshed
+      `remix/public/branding/` + `brandingAssets.generated.json` (byte-stable
+      when nothing changed).
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -1210,6 +1313,11 @@ is fixed, and cite the checklist you ran in the PR description.
       restores `storageClass: "control"`; running
       `backfill-user-storage-accounting` directly invokes that repair first.
       A community/user-owned `thingtime: ["schema"]` Thing remains billable.
+- [ ] Seed a canonical attachment with every protected object-accounting root
+      field, then dry-run and run `backfill-user-storage-accounting`. Both
+      passes retain the complete attachment envelope while calculating exact
+      bytes, converge to zero pending, and never misclassify the attachment as
+      `InvalidAttachmentStorageEnvelopeError` because of a Mongo projection.
 - [ ] Force a migration runner exception once: the public error field remains
       a safe exception class/code (never a raw Mongo message, query, document
       id, host, or credential), and Lopu renders contextual text beneath the
