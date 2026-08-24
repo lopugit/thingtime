@@ -1737,9 +1737,10 @@ is fixed, and cite the checklist you ran in the PR description.
       horizontal scroll in default or compact mode.
 - [ ] Run a broad query with at least 30 path-backed results and move selection
       quickly through the list. Results must stay interactive, rendering generic
-      or cached icons immediately and resolving no more than the focused Finder
-      icon at a time; macOS must never show a rainbow beachball once rows are
-      visible.
+      or cached icons immediately and progressively resolving every visible
+      Finder icon (selected first) through the bounded queue. Rerun the query
+      to confirm cached icons return without a bridge burst; macOS must never
+      show a rainbow beachball once rows are visible.
 - [ ] Search typo variants such as `settngs`, `extensoin`, and `raycsat` across
       apps, commands, extensions, files, and folders. Repeatedly choose a lower
       equivalent result, rerun the same query, and verify device-local learned
