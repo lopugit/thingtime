@@ -28,6 +28,7 @@ import {
 } from '~/schemas/registry';
 import { customReactionEmojiId, isCustomReactionToken, sanitizeChatReactionToken } from '~/utils/reactionTokens';
 import { getUserDisplayName } from '~/utils/userIdentity';
+import { isDuplicateOnlyBulkWriteError } from './bulkWriteError';
 import { matchesCommittedMessageRequest, messageIdForRequest, normalizedMessengerRequestId } from './messengerMediaCore';
 import { followersOfSet, followingSet, isFollowing } from './follows';
 import type { ChatRole, ChatType, Fail, MemberState, RequestOrigin } from './shared';
@@ -221,15 +222,9 @@ const insertChatMembers = async (chatId: string, members: Array<{ userId: string
       { ordered: false }
     );
   } catch (err: any) {
-    // A write-concern failure is not a duplicate: the docs may not be durably
-    // replicated even when every per-doc error is a benign 11000 race, and the
-    // per-id insertOne path always rethrew these.
-    if (err?.writeConcernErrors?.length) throw err;
-    // A bulk error whose every write failure is a duplicate key means those
-    // memberships already exist (a racing inserter won) — identical outcome to
-    // the per-id loop, which swallowed 11000 per id. Anything else is real.
-    const writeErrors = err?.writeErrors || (err?.code !== undefined ? [err] : []);
-    if (writeErrors.length && writeErrors.every((entry: any) => (entry?.code ?? entry?.err?.code) === 11000)) return;
+    // A batch is benign only when every failure is an already-existing member
+    // race and the driver confirms there was no simultaneous durability error.
+    if (isDuplicateOnlyBulkWriteError(err)) return;
     throw err;
   }
 };

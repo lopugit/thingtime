@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #299 Messenger membership durability**: unordered batched member writes
+  now treat duplicate-key failures as benign only when the Mongo driver reports
+  no accompanying write-concern failure. The check covers the current driver's
+  concern-only and result-level error shapes and fails closed when the result
+  cannot be inspected. — Codex (AI), 2026-08-24
+
 - **Media layout selections now reach the Things API**: the shared client API
   transport preserves `mediaLayout` for post creation and rich comments, so a
   Rows/Grid preview no longer silently reopens as Auto after save. — Codex

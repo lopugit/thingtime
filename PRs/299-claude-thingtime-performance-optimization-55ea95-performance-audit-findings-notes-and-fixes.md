@@ -931,10 +931,16 @@ production Atlas cluster runs **MongoDB 8.0.1** — the same version the index
 was empirically tested on — and CI's API suite (which boots `ensureIndexes()`)
 is green with all three new indexes.
 
-**Fix landed from review**: `insertChatMembers` now rethrows bulk errors that
-carry `writeConcernErrors` before the all-11000 duplicate swallow — a
-write-concern failure means the memberships may not be durably replicated, and
-the old per-id `insertOne` path always rethrew those.
+**Fix corrected in the 2026-08-24 safety pass**: the first review fix checked a
+top-level `writeConcernErrors` array, but the installed `mongodb@6.21` driver
+does not use that shape for collection bulk writes. Concern-only failures live
+on `MongoBulkWriteError.err`; when duplicate-key errors and a concern failure
+coexist, the latter survives only through
+`result.getWriteConcernError()`. `insertChatMembers` now classifies a batch as
+benign only when every write failure is 11000 and every supported concern shape
+is empty. Unknown or uninspectable result shapes fail closed, with regression
+coverage for duplicate-only, concern-only, combined, non-duplicate, and legacy
+compatible forms.
 
 **Considered and deliberately left**: the `useRecentReactions` one-fetch-per-
 session latch (cross-device MRU staleness until reload). It follows the

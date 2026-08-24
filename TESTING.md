@@ -2071,6 +2071,10 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       shown everywhere names render; promote/demote/remove for admins with
       the owner untouchable; owner leaving hands the chat to the earliest
       admin, else earliest member.
+- [ ] Member batch durability fault injection: a membership `insertMany` with
+      only duplicate-key write errors stays idempotent, while the same result
+      plus a write-concern failure returns an error instead of reporting a
+      successful chat creation or member add.
 - [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
       kind 403s ("managed by their own endpoints"); chats/messages are 404
       through `GET /api/v1/things?id=` for non-owners;
