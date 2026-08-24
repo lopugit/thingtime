@@ -5640,8 +5640,8 @@
     "semantic_hash": "e8315a94898451849a7d8da6b2f75162"
   },
   "Commander/apps/daemon/src/services/indexing.ts": {
-    "mtime": 1787558253.842014,
-    "ast_hash": "bba973b741e150bef1753c6f0e9b2d6e",
+    "mtime": 1787558846.0434198,
+    "ast_hash": "94192d8205b8b3883b364d815fbba2e3",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/macosSystem.test.ts": {
@@ -6290,13 +6290,13 @@
     "semantic_hash": "067d8de153ef9b86afdf972134b0f19a"
   },
   "Commander/packages/filesystem-indexer/src/index.test.ts": {
-    "mtime": 1787316455.5746832,
-    "ast_hash": "48e4194ff4b7d52619c8f9515dbe642c",
-    "semantic_hash": "48e4194ff4b7d52619c8f9515dbe642c"
+    "mtime": 1787558741.5798068,
+    "ast_hash": "6d087b699d4cb1ecd5d81be497668ed9",
+    "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/src/index.ts": {
-    "mtime": 1787558297.1760187,
-    "ast_hash": "1bd20def6c09ca5dd7755dd4e19ef5f2",
+    "mtime": 1787558741.5794287,
+    "ast_hash": "0944d8590fc115607c43816e1d9e2115",
     "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/src/test-fixtures/fake-indexer.mjs": {

@@ -39,6 +39,13 @@ interface IndexingServiceOptions {
   callbacks: IndexingCallbacks;
 }
 
+interface ScheduledIndexRun {
+  scope: IndexScope;
+  promise: Promise<void>;
+  resolve(): void;
+  reject(error: Error): void;
+}
+
 const FILESYSTEM_RESULT_LIMIT = 160;
 const APPLICATION_RESULT_LIMIT = 1_000;
 const COMMANDER_INDEX_TIMEOUT_MS = 90_000;
@@ -56,8 +63,8 @@ export class IndexingService {
   #available = false;
   #message: string | undefined;
   #running = new Set<IndexScope>();
-  #runs = new Map<IndexScope, Promise<void>>();
-  #writeQueue = Promise.resolve();
+  #activeRun: ScheduledIndexRun | undefined;
+  #pendingRun: ScheduledIndexRun | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
   #applicationWatchers: FSWatcher[] = [];
   #applicationDebounce: ReturnType<typeof setTimeout> | undefined;
@@ -151,26 +158,66 @@ export class IndexingService {
   }
 
   start(scope: IndexScope): Promise<void> {
-    const current = this.#runs.get(scope);
-    if (current) return current;
-    if (scope === 'all' || scope === 'applications')
+    const active = this.#activeRun;
+    if (!active) return this.#beginRun(scope);
+    // A complete run contains every narrower scope, so those requests can
+    // safely join it rather than scheduling an unnecessary scan.
+    if (active.scope === scope || active.scope === 'all') return active.promise;
+
+    const pending = this.#pendingRun;
+    if (pending) {
+      if (pending.scope === scope || pending.scope === 'all') return pending.promise;
+      // Keep the oldest active database writer intact, but make queued work
+      // latest-wins. This preserves automatic indexing without allowing a
+      // long queue of stale full-tree scans to build up behind it.
+      pending.resolve();
+    }
+    const next = this.#createRun(scope);
+    this.#pendingRun = next;
+    return next.promise;
+  }
+
+  #beginRun(scope: IndexScope): Promise<void> {
+    const run = this.#createRun(scope);
+    this.#activateRun(run);
+    return run.promise;
+  }
+
+  #createRun(scope: IndexScope): ScheduledIndexRun {
+    let resolve: (() => void) | undefined;
+    let reject: ((error: Error) => void) | undefined;
+    const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    return {
+      scope,
+      promise,
+      resolve: () => resolve?.(),
+      reject: (error) => reject?.(error),
+    };
+  }
+
+  #activateRun(run: ScheduledIndexRun): void {
+    this.#activeRun = run;
+    this.#running.add(run.scope);
+    if (run.scope === 'all' || run.scope === 'applications')
       void this.#refreshFallbackApplications().catch(() => undefined);
-    this.#running.add(scope);
-    const run = this.#writeQueue
-      .catch(() => undefined)
-      .then(() => this.#perform(scope))
+    void this.#perform(run.scope)
+      .then(() => run.resolve())
       .catch((error) => {
         this.#message = errorMessage(error);
-        throw error;
+        run.reject(error instanceof Error ? error : new Error(errorMessage(error)));
       })
       .finally(() => {
-        if (this.#progress?.scope === scope) this.#progress = undefined;
-        this.#running.delete(scope);
-        this.#runs.delete(scope);
+        if (this.#progress?.scope === run.scope) this.#progress = undefined;
+        this.#running.delete(run.scope);
+        if (this.#activeRun !== run) return;
+        this.#activeRun = undefined;
+        const next = this.#pendingRun;
+        this.#pendingRun = undefined;
+        if (next) this.#activateRun(next);
       });
-    this.#writeQueue = run.catch(() => undefined);
-    this.#runs.set(scope, run);
-    return run;
   }
 
   reindexCommands(): number {
@@ -220,6 +267,9 @@ export class IndexingService {
     this.#timer = undefined;
     this.#applicationDebounce = undefined;
     for (const watcher of this.#applicationWatchers.splice(0)) watcher.close();
+    const pending = this.#pendingRun;
+    this.#pendingRun = undefined;
+    pending?.reject(new Error('Filesystem indexing service closed'));
     await Promise.allSettled([this.#reader?.close(), this.#writer?.close()]);
     this.#reader = undefined;
     this.#writer = undefined;

@@ -179,6 +179,10 @@ export class FileSystemIndexerClient {
   #cpuTimer: ReturnType<typeof setInterval> | undefined;
   #highCpuSamples = 0;
   #indexRequests = new Set<string>();
+  // The JSONL daemon is single-threaded. Keep one index operation in flight so
+  // an accidental concurrent caller joins the same work instead of queueing a
+  // duplicate whole-tree scan behind it.
+  #indexOperation: Promise<IndexReport> | undefined;
   #restartAttempts = 0;
 
   constructor(options: FileSystemIndexerClientOptions) {
@@ -197,11 +201,22 @@ export class FileSystemIndexerClient {
     timeoutMs?: number,
     onProgress?: (progress: IndexProgress) => void,
   ): Promise<IndexReport> {
-    return this.#request<IndexReport>(
+    if (this.#indexOperation) return this.#indexOperation;
+    const operation = this.#request<IndexReport>(
       { operation: 'index', configuration },
       timeoutMs ?? this.#options.indexTimeoutMs ?? DEFAULT_INDEX_TIMEOUT_MS,
       onProgress,
     );
+    this.#indexOperation = operation;
+    void operation.then(
+      () => {
+        if (this.#indexOperation === operation) this.#indexOperation = undefined;
+      },
+      () => {
+        if (this.#indexOperation === operation) this.#indexOperation = undefined;
+      },
+    );
+    return operation;
   }
 
   query(request: QueryRequest): Promise<QueryResponse> {
@@ -343,6 +358,7 @@ export class FileSystemIndexerClient {
     }
     this.#pending.clear();
     this.#indexRequests.clear();
+    this.#indexOperation = undefined;
   }
 
   #scheduleRestart(): void {
