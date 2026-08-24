@@ -205,6 +205,16 @@ run-name: >-
       && format('Lopu scans PRs matching {0}', inputs.branch)
       || github.event_name == 'push' && github.ref_name == 'github-actions'
       && 'Lopu scans all open PRs (control-plane push)'
+      || github.event_name == 'issue_comment'
+      && github.event.issue.pull_request
+      && format('Lopu responds to PR #{0}', github.event.issue.number)
+      || github.event_name == 'pull_request_review_comment'
+      && format('Lopu responds to inline review on PR #{0}', github.event.pull_request.number)
+      || github.event_name == 'check_run'
+      && github.event.check_run.pull_requests[0].number
+      && format('Lopu investigates failed check {0} on PR #{1}',
+          github.event.check_run.name,
+          github.event.check_run.pull_requests[0].number)
       || (github.event_name == 'schedule'
           || (github.event_name == 'workflow_dispatch'
               && inputs.pr_number == '' && inputs.branch == ''))
@@ -300,6 +310,18 @@ on:
   # head push itself creates, without adding a per-PR target-context event.
   pull_request_target:
     types: [opened, reopened]
+  # A Lopu conversation is part of PR management too. Only human-authored
+  # events reach the review handoff below, so Lopu's own comments cannot loop
+  # back into another model session.
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  # A completed non-successful check is another Lopu review signal. Its route
+  # is PR-scoped and flows to the same serialized worker, which reads the live
+  # logs before deciding whether a code or controller fix is justified.
+  check_run:
+    types: [completed]
   schedule:
     # Event triggers already cover every branch. This global backstop catches
     # open conflicts whose creating event was missed or predates the workflow.
@@ -429,6 +451,16 @@ concurrency:
         && 'resolve-detect-all-open'
         || github.event_name == 'push'
         && format('resolve-detect-{0}', github.ref_name)
+        || github.event_name == 'check_run'
+        && github.event.check_run.pull_requests[0].number
+        && format('lopu-check-fix-pr{0}', github.event.check_run.pull_requests[0].number)
+        || (github.event_name == 'issue_comment'
+            || github.event_name == 'pull_request_review_comment')
+        && github.event.pull_request.number
+        && format('lopu-conversation-pr{0}', github.event.pull_request.number)
+        || github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && format('lopu-conversation-pr{0}', github.event.issue.number)
         || (github.event.pull_request.number
             && format('resolve-detect-pr{0}', github.event.pull_request.number))
         || github.event_name == 'repository_dispatch'
@@ -467,7 +499,20 @@ permissions:
 
 jobs:
   route:
-    if: inputs.promotion_source_pr == '' && inputs.promotion_plan_b64 == ''
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && (github.event_name != 'issue_comment'
+          || (github.event.issue.pull_request
+              && github.event.comment.user.type == 'User'))
+      && (github.event_name != 'pull_request_review_comment'
+          || github.event.comment.user.type == 'User')
+      && (github.event_name != 'check_run'
+          || (github.event.check_run.pull_requests[0].number
+              && (github.event.check_run.conclusion == 'failure'
+                  || github.event.check_run.conclusion == 'timed_out'
+                  || github.event.check_run.conclusion == 'cancelled'
+                  || github.event.check_run.conclusion == 'action_required')))
     uses: ./.github/workflows/ci-provider-router.yml
     with:
       workflow: resolve-conflicts
@@ -485,7 +530,7 @@ jobs:
                     && inputs.branch == ''))
             && inputs.promotion_source_pr == ''
             && inputs.promotion_plan_b64 == '' }}
-      pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.pull_request.number || '' }}
+      pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || '' }}
       branch: ${{ inputs.branch || (github.event_name == 'push' && github.ref_name) || '' }}
     secrets: inherit
 
@@ -507,6 +552,9 @@ jobs:
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
+      && github.event_name != 'issue_comment'
+      && github.event_name != 'pull_request_review_comment'
+      && github.event_name != 'check_run'
       && !(github.event_name == 'workflow_dispatch'
            && inputs.detector_handoff == true
            && github.actor == 'github-actions[bot]')
@@ -532,6 +580,9 @@ jobs:
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && (github.event_name != 'push' || github.event.deleted == false)
+      && github.event_name != 'issue_comment'
+      && github.event_name != 'pull_request_review_comment'
+      && github.event_name != 'check_run'
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
     # (~8 minutes) before classification starts; keep headroom for sweeps.
@@ -1431,6 +1482,11 @@ jobs:
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && github.event_name != 'schedule'
       && (github.event_name != 'push' || github.event.deleted == false)
+      && (github.event_name != 'issue_comment'
+          || (github.event.issue.pull_request
+              && github.event.comment.user.type == 'User'))
+      && (github.event_name != 'pull_request_review_comment'
+          || github.event.comment.user.type == 'User')
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
@@ -1448,7 +1504,7 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref_name }}
-          SELECTED_PR: ${{ inputs.pr_number || github.event.pull_request.number || github.event.client_payload.pr_number || '' }}
+          SELECTED_PR: ${{ inputs.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || github.event.client_payload.pr_number || '' }}
           SELECTED_BRANCH: ${{ inputs.branch || github.event.client_payload.branch || github.event.pull_request.base.ref || '' }}
         run: |
           set -euo pipefail
@@ -1537,7 +1593,14 @@ jobs:
           # already-published routing field as a closed internal marker rather
           # than adding a controller-only dispatch input that older listeners
           # cannot pass yet.
-          CONTROL_DISPATCH_ID: lopu-review:${{ github.run_id }}
+          CONTROL_DISPATCH_ID: >-
+            ${{ github.event_name == 'issue_comment'
+                && format('lopu-review:issue-comment:{0}:{1}', github.event.comment.id, github.run_id)
+                || github.event_name == 'pull_request_review_comment'
+                && format('lopu-review:inline-comment:{0}:{1}', github.event.comment.id, github.run_id)
+                || github.event_name == 'check_run'
+                && format('lopu-review:check-run:{0}:{1}', github.event.check_run.id, github.run_id)
+                || format('lopu-review:{0}', github.run_id) }}
           ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
@@ -1615,10 +1678,20 @@ jobs:
       model_args: ${{ steps.waterfall.outputs.model_args }}
       primary_model: ${{ steps.waterfall.outputs.primary_model }}
       backend_label: ${{ steps.waterfall.outputs.backend_label }}
+      review_backend: ${{ steps.waterfall.outputs.review_backend }}
+      review_backend_label: ${{ steps.waterfall.outputs.review_backend_label }}
+      codex_model: ${{ steps.waterfall.outputs.codex_model }}
+      codex_reasoning_effort: ${{ steps.waterfall.outputs.codex_reasoning_effort }}
     steps:
       - name: Fetch and validate the configured waterfall
         id: waterfall
         shell: bash
+        env:
+          # The resolver/promotion waterfall remains Claude-configured. This
+          # opt-in provider only selects Lopu's autonomous PR-review worker.
+          LOPU_REVIEW_BACKEND: ${{ vars.LOPU_REVIEW_BACKEND || 'claude' }}
+          LOPU_CODEX_MODEL: ${{ vars.LOPU_CODEX_MODEL || 'gpt-5.6-terra' }}
+          LOPU_CODEX_REASONING_EFFORT: ${{ vars.LOPU_CODEX_REASONING_EFFORT || 'xhigh' }}
         run: |
           set -euo pipefail
 
@@ -1714,6 +1787,52 @@ jobs:
           echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
           echo "backend_label=$backend_label" >> "$GITHUB_OUTPUT"
 
+          review_backend="${LOPU_REVIEW_BACKEND:-claude}"
+          case "$review_backend" in
+            claude)
+              review_backend_label="$backend_label"
+              codex_model=""
+              codex_reasoning_effort=""
+              ;;
+            codex)
+              codex_model="${LOPU_CODEX_MODEL:-gpt-5.6-terra}"
+              codex_reasoning_effort="${LOPU_CODEX_REASONING_EFFORT:-xhigh}"
+              case "$codex_model" in
+                gpt-5.6-terra) model_name="GPT-5.6 Terra" ;;
+                gpt-5.6-sol) model_name="GPT-5.6 Sol" ;;
+                *)
+                  echo "::warning::Unsupported LOPU_CODEX_MODEL '$codex_model'; using gpt-5.6-terra."
+                  codex_model="gpt-5.6-terra"
+                  model_name="GPT-5.6 Terra"
+                  ;;
+              esac
+              case "$codex_reasoning_effort" in
+                medium) effort_label="Medium" ;;
+                high) effort_label="High" ;;
+                xhigh) effort_label="Extra High" ;;
+                max) effort_label="Maximum" ;;
+                *)
+                  echo "::warning::Unsupported LOPU_CODEX_REASONING_EFFORT '$codex_reasoning_effort'; using xhigh."
+                  codex_reasoning_effort="xhigh"
+                  effort_label="Extra High"
+                  ;;
+              esac
+              review_backend_label="OpenAI API $model_name $effort_label"
+              ;;
+            *)
+              echo "::warning::Unsupported LOPU_REVIEW_BACKEND '$review_backend'; using claude."
+              review_backend="claude"
+              review_backend_label="$backend_label"
+              codex_model=""
+              codex_reasoning_effort=""
+              ;;
+          esac
+          echo "Lopu review backend: $review_backend ($review_backend_label)"
+          echo "review_backend=$review_backend" >> "$GITHUB_OUTPUT"
+          echo "review_backend_label=$review_backend_label" >> "$GITHUB_OUTPUT"
+          echo "codex_model=$codex_model" >> "$GITHUB_OUTPUT"
+          echo "codex_reasoning_effort=$codex_reasoning_effort" >> "$GITHUB_OUTPUT"
+
   # Clean PRs still need a principal-engineering review. This batch worker is
   # intentionally reached through the same fixed control plane as conflict
   # resolution: one Lopu session receives every PR selected by one source
@@ -1754,8 +1873,12 @@ jobs:
       REPO: ${{ github.repository }}
       SELECTED_PR: ${{ inputs.pr_number }}
       SELECTED_BRANCH: ${{ inputs.branch }}
+      REVIEW_DISPATCH_ID: ${{ inputs.control_dispatch_id }}
       MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
-      BACKEND_LABEL: ${{ needs.model_config.outputs.backend_label }}
+      REVIEW_BACKEND: ${{ needs.model_config.outputs.review_backend }}
+      REVIEW_BACKEND_LABEL: ${{ needs.model_config.outputs.review_backend_label }}
+      CODEX_MODEL: ${{ needs.model_config.outputs.codex_model }}
+      CODEX_REASONING_EFFORT: ${{ needs.model_config.outputs.codex_reasoning_effort }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       GIT_CONFIG_COUNT: "2"
       GIT_CONFIG_KEY_0: core.hooksPath
@@ -1883,15 +2006,29 @@ jobs:
       - name: Require an AI credential
         if: steps.prepare.outputs.any == 'true'
         env:
-          HAS_AI_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          REVIEW_BACKEND: ${{ needs.model_config.outputs.review_backend }}
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
           set -euo pipefail
-          [ "$HAS_AI_CREDENTIAL" = true ] \
-            || { echo "::error::Add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN to enable Lopu's configured Claude backend."; exit 1; }
+          case "$REVIEW_BACKEND" in
+            claude)
+              [ "$HAS_CLAUDE_CREDENTIAL" = true ] \
+                || { echo "::error::Add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN to enable Lopu's configured Claude review backend."; exit 1; }
+              ;;
+            codex)
+              [ "$HAS_OPENAI_CREDENTIAL" = true ] \
+                || { echo "::error::Add an OpenAI Platform project key as the OPENAI_API_KEY Actions secret to enable Lopu's Codex review backend."; exit 1; }
+              ;;
+            *)
+              echo "::error::Lopu review backend '$REVIEW_BACKEND' is not in the closed provider allowlist."
+              exit 1
+              ;;
+          esac
 
       - name: Review the repository and improve selected PRs as Lopu
         id: lopu_review
-        if: steps.prepare.outputs.any == 'true'
+        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.review_backend == 'claude'
         continue-on-error: true
         uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
         with:
@@ -1914,11 +2051,35 @@ jobs:
             do. Review for correctness, security, crashes, performance, data/API
             compatibility, test coverage, and maintainability before style.
 
+            Treat failing PR checks as a first-class review finding. For every
+            candidate, inspect the live check state with `gh pr checks` and read
+            the relevant GitHub Actions/check-run logs before diagnosing a
+            failure, cancellation, timeout, or required action. If
+            `REVIEW_DISPATCH_ID` starts with
+            `lopu-review:check-run:<CHECK_RUN_ID>:` retrieve that exact check
+            with `gh api repos/$REPO/check-runs/<CHECK_RUN_ID>` first, then
+            follow its details URL/run logs as needed. Distinguish a real,
+            reproducible defect from an external outage, stale result, or
+            cancellation before changing anything.
+
             Lopu owns the decision: make only changes that are genuinely justified
             by that understanding, but do make those changes directly in the PR
             worktree. You may inspect or edit any repository path. Run the focused
             validation that best demonstrates each change. Do not make speculative
             churn just to create a commit.
+
+            When the checked failure is caused by the PR, repair it in that PR's
+            worktree; the trusted publisher will push the fix back to its exact
+            head branch. When the root cause is in the protected GitHub Actions
+            control plane itself (`.github/workflows/**`, `.github/actions/**`,
+            or `.github/scripts/**`), do not put that fix on an unrelated PR
+            branch. Instead edit only the affected protected-controller files in
+            `$GITHUB_WORKSPACE/trusted` and write a concise diagnosis plus the
+            validation you ran to `$RUNNER_TEMP/lopu-workflow-fix.md`. Do not
+            commit or push that controller checkout yourself: the following
+            trusted step will create a dedicated Lopu fix branch and open a PR
+            against `github-actions`. Never push `github-actions`, `main`, or
+            another target/default branch directly.
 
             These worktrees start detached at immutable PR heads. Do not merge,
             rebase, delete branches, or push target/default branches. Leave any
@@ -1931,20 +2092,132 @@ jobs:
             compared, key findings, every change you made (or why none was needed),
             and validation run/results. Never place secrets, tokens, or private
             values in the report. The report is Lopu's reviewer update to the PR.
+
+            PR conversation is a first-class Lopu responsibility. You have no
+            comment quota, template, or topic restriction: post as many useful
+            Markdown comments as you judge appropriate, on any relevant
+            same-repository PR, without waiting for a separate approval. Use the
+            GitHub CLI/API to participate directly rather than leaving all
+            communication to the trusted report-publication step.
+
+            When `REVIEW_DISPATCH_ID` starts with
+            `lopu-review:issue-comment:<COMMENT_ID>:` this session was woken by
+            a human PR conversation comment. Retrieve that exact comment with
+            `gh api repos/$REPO/issues/comments/<COMMENT_ID>`, understand it in
+            the full PR context, and respond directly when a response would be
+            useful. Create normal conversation comments with
+            `POST repos/$REPO/issues/<PR_NUMBER>/comments`.
+
+            When `REVIEW_DISPATCH_ID` starts with
+            `lopu-review:inline-comment:<COMMENT_ID>:` retrieve the exact inline
+            review comment with `gh api repos/$REPO/pulls/comments/<COMMENT_ID>`.
+            Reply in its thread with
+            `POST repos/$REPO/pulls/<PR_NUMBER>/comments/<COMMENT_ID>/replies`
+            when that is the clearest response. Also inspect existing
+            conversation and review comments whenever they matter to the work.
+
+            You may improve or correct Lopu's earlier conversational comments at
+            any time. Before editing, fetch the comment and verify it belongs to
+            `github-actions[bot]` and carries `<!-- thingtime-lopu-conversation:v1 -->`.
+            Then PATCH the matching issue or pull-review comment endpoint. Never
+            edit another actor's comment or Lopu's deterministic resolver/status
+            comments. Add that hidden marker to every new free-form Lopu
+            conversational comment, alongside clear visible Lopu attribution.
           claude_args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
             --max-turns 500
             --dangerously-skip-permissions
             --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
+        env:
+          # Lopu uses the GitHub CLI/API directly for conversational PR work.
+          # This job grants issues/pull-requests write, so the token is scoped
+          # to its own repository comments and review replies.
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Review the repository and improve selected PRs as Lopu with Codex
+        id: lopu_review_codex
+        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.review_backend == 'codex'
+        continue-on-error: true
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          working-directory: .
+          # Lopu needs to run repository tests and GitHub CLI commands in the
+          # externally isolated Actions runner. It still drops sudo before the
+          # agent starts so no post-checkout root privilege is available.
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
+          codex-args: >-
+            --model ${{ needs.model_config.outputs.codex_model }}
+            --config 'model_reasoning_effort="${{ needs.model_config.outputs.codex_reasoning_effort }}"'
+          prompt: |
+            You are Lopu, Thingtime's principal developer, PR manager, and
+            repository steward, using ${{ needs.model_config.outputs.review_backend_label }}.
+            Complete a thoughtful engineering review for every candidate in
+            `$RUNNER_TEMP/lopu-review-manifest.json`.
+
+            For each candidate, work in its complete directory under
+            `$RUNNER_TEMP/lopu-review-worktrees`, compare its immutable head
+            against its base, and inspect relevant architecture, repository
+            direction, project docs, Graphify output when useful, related GitHub
+            history/PRs, tests, and operational conventions. Review correctness,
+            security, crashes, performance, data/API compatibility, test coverage,
+            and maintainability before style. Make only genuinely justified
+            changes, but make those changes directly in the PR worktree and run
+            focused validation. Leave desired PR fixes uncommitted: the following
+            trusted step lease-checks and pushes only to that exact PR head.
+
+            Treat failing PR checks as first-class review findings. For every
+            candidate inspect `gh pr checks` and the relevant check-run/Actions
+            logs. When `REVIEW_DISPATCH_ID` begins
+            `lopu-review:check-run:<CHECK_RUN_ID>:` first retrieve exactly that
+            check with `gh api repos/$REPO/check-runs/<CHECK_RUN_ID>`. Distinguish
+            reproducible defects from outages, stale results, and cancellations.
+            If the failure belongs to the PR, repair the PR worktree. If it belongs
+            to the protected controller (`.github/workflows/**`,
+            `.github/actions/**`, or `.github/scripts/**`), edit only that path
+            under `$GITHUB_WORKSPACE/trusted`, write diagnosis and validation to
+            `$RUNNER_TEMP/lopu-workflow-fix.md`, and do not commit or push it. A
+            trusted follow-up will make a dedicated PR against `github-actions`.
+            Never push or merge `github-actions`, `main`, or any target/default
+            branch yourself.
+
+            PR conversation is a first-class responsibility. You have no comment
+            quota, template, or topic restriction: use the GitHub CLI/API to post
+            as many relevant, useful Markdown comments as you judge appropriate
+            on same-repository PRs. When the dispatch id names an issue comment,
+            fetch it from `repos/$REPO/issues/comments/<COMMENT_ID>` and reply on
+            `repos/$REPO/issues/<PR_NUMBER>/comments` when useful. When it names
+            an inline review comment, fetch it from
+            `repos/$REPO/pulls/comments/<COMMENT_ID>` and reply through
+            `repos/$REPO/pulls/<PR_NUMBER>/comments/<COMMENT_ID>/replies` when
+            that is clearest. You may edit an earlier Lopu conversational comment
+            only after fetching it and verifying it is authored by
+            `github-actions[bot]` and contains
+            `<!-- thingtime-lopu-conversation:v1 -->`; never edit another actor's
+            comment or deterministic resolver/status comments. Add that marker and
+            visible Lopu attribution to every new free-form Lopu comment.
+
+            Do not merge, rebase, delete branches, or change files outside a
+            reviewed PR worktree except for the narrowly allowed controller fix.
+            For every reviewed PR, write a concise Markdown report to
+            `$RUNNER_TEMP/lopu-review-reports/<PR_NUMBER>.md` covering comparison,
+            findings, changes or why none were needed, and validation results.
+            Do not include secrets, tokens, or private values in reports/comments.
+        env:
+          # The Codex action receives the repository-scoped GitHub token for
+          # direct Lopu conversation/check inspection, never a push credential.
+          GH_TOKEN: ${{ github.token }}
 
       - name: Continue the exact Lopu repository-review session until it finishes
-        if: steps.prepare.outputs.any == 'true' && steps.lopu_review.outcome == 'failure'
+        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.review_backend == 'claude' && steps.lopu_review.outcome == 'failure'
         continue-on-error: true
         shell: bash
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
         run: |
           set -euo pipefail
@@ -2066,6 +2339,98 @@ jobs:
           unset basic PUSH_TOKEN
           echo "results=$results" >>"$GITHUB_OUTPUT"
 
+      - name: Publish Lopu's controller/workflow fix as a PR
+        id: workflow_fix
+        if: always() && steps.prepare.outputs.any == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          PUSH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          HAS_WORKFLOW_PUSH: ${{ secrets.CONFLICT_RESOLVER_PAT != '' }}
+        run: |
+          set -euo pipefail
+
+          trusted="$GITHUB_WORKSPACE/trusted"
+          report="$RUNNER_TEMP/lopu-workflow-fix.md"
+          printf 'url=\n' >>"$GITHUB_OUTPUT"
+          printf 'outcome=none\n' >>"$GITHUB_OUTPUT"
+          [ -d "$trusted/.git" ] || { echo "::error::Lopu trusted controller checkout is missing."; exit 1; }
+
+          mapfile -t changed < <(git -C "$trusted" status --porcelain=v1 --untracked-files=all | sed -E 's/^.. //')
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo 'Lopu did not propose a protected-controller fix in this review pass.'
+            exit 0
+          fi
+          for path in "${changed[@]}"; do
+            case "$path" in
+              .github/workflows/*|.github/actions/*|.github/scripts/*) ;;
+              *)
+                echo "::error::Lopu's protected-controller change is outside the allowed workflow/action/script scope: $path"
+                exit 1
+                ;;
+            esac
+          done
+          [ -s "$report" ] || {
+            echo '::error::Lopu changed protected-controller files without the required diagnosis report.'
+            exit 1
+          }
+          if [ "$HAS_WORKFLOW_PUSH" != true ] \
+             && printf '%s\n' "${changed[@]}" | grep -q '^\.github/workflows/'; then
+            echo '::error::A Lopu workflow fix needs CONFLICT_RESOLVER_PAT with workflow scope to publish its branch.'
+            exit 1
+          fi
+
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          [ "$default_ref" != github-actions ] || {
+            echo '::error::Refusing to publish Lopu controller changes because github-actions is this repository default branch.'
+            exit 1
+          }
+          source_sha="$(git -C "$trusted" rev-parse HEAD)"
+          current_sha="$(gh api "repos/$REPO/git/ref/heads/github-actions" --jq '.object.sha')"
+          [ "$source_sha" = "$current_sha" ] || {
+            echo '::warning::The github-actions controller changed during Lopu review; preserving its new head and awaiting a fresh review pass.'
+            printf 'outcome=stale-controller\n' >>"$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          git -C "$trusted" diff --check
+          branch="lopu/workflow-check-fix-${GITHUB_RUN_ID}"
+          git check-ref-format "refs/heads/$branch" >/dev/null
+          git -C "$trusted" switch --quiet -c "$branch" "$source_sha"
+          git -C "$trusted" config user.name 'Lopu'
+          git -C "$trusted" config user.email 'lopu[bot]@users.noreply.github.com'
+          git -C "$trusted" add -- "${changed[@]}"
+          git -C "$trusted" diff --cached --check
+          git -C "$trusted" commit -m 'fix(actions): Lopu repairs failed PR checks'
+
+          basic="$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)"
+          GIT_CONFIG_COUNT=3 \
+          GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
+          GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false \
+          GIT_CONFIG_KEY_2=http.https://github.com/.extraheader \
+          GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $basic" \
+            git -C "$trusted" push "https://github.com/$REPO.git" "HEAD:refs/heads/$branch"
+          unset basic PUSH_TOKEN
+
+          pr_body="$RUNNER_TEMP/lopu-workflow-fix-pr.md"
+          {
+            echo '## Lopu controller check repair'
+            echo
+            echo 'Lopu identified a failed PR check whose root cause is in the protected controller/workflow code.'
+            echo
+            sed -n '1,160p' "$report"
+            echo
+            printf '[Source Lopu workflow run](%s)\n' "$RUN_URL"
+          } >"$pr_body"
+          url="$(gh pr list --repo "$REPO" --state open --head "$branch" --base github-actions --json url --jq '.[0].url // empty')"
+          if [ -z "$url" ]; then
+            url="$(gh pr create --repo "$REPO" --base github-actions --head "$branch" \
+              --title 'fix(actions): Lopu repairs failed PR checks' --body-file "$pr_body")"
+          fi
+          echo "Lopu opened controller repair PR: $url"
+          printf 'url=%s\n' "$url" >>"$GITHUB_OUTPUT"
+          printf 'outcome=opened\n' >>"$GITHUB_OUTPUT"
+
       - name: Publish Lopu's PR review updates
         if: always() && steps.prepare.outputs.any == 'true'
         shell: bash
@@ -2073,6 +2438,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MANIFEST: ${{ steps.prepare.outputs.manifest }}
           RESULTS: ${{ steps.publish.outputs.results }}
+          WORKFLOW_FIX_URL: ${{ steps.workflow_fix.outputs.url }}
         run: |
           set -euo pipefail
           marker='<!-- thingtime-lopu-review:v1 -->'
@@ -2097,6 +2463,9 @@ jobs:
                 *) echo 'Lopu found no justified local change to publish from this review pass.' ;;
               esac
               echo
+              if [ -n "$WORKFLOW_FIX_URL" ]; then
+                printf 'Lopu also opened [a controller/workflow repair PR](%s) for the failed check root cause.\n\n' "$WORKFLOW_FIX_URL"
+              fi
               if [ -s "$report" ]; then
                 sed -n '1,240p' "$report"
               else
