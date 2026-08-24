@@ -62,6 +62,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Deployment peer discovery is bounded and gossip-based**: authenticated
+  first-party deployments now maintain one relational, TTL-reaped peer lease
+  per origin. `/api/v1/peers` streams cursor-paginated NDJSON instead of an
+  all-peers array; a self-signed sync announces to production then probes a
+  capped breadth-first peer set. HMAC binds method, path, timestamp, and raw
+  body; each peer identity and streamed result has an Ed25519 public signature
+  which is pinned to its origin. Anonymous, expired, tampered,
+  non-first-party, key-rotated, and unbounded requests fail closed. — Codex
+  (AI), 2026-08-24
+  The production bootstrap advances its bounded traversal with a five-minute
+  `CRON_SECRET`-protected Vercel schedule; other deployments can use the
+  documented scheduler endpoint. — Codex (AI), 2026-08-24
+
 - **Every API operation now advertises a compatibility contract**:
   `/api/v1/capabilities` is generated from the canonical API-doc registry and
   active runtime route map. It publishes a semantic `api.<endpoint-id>`

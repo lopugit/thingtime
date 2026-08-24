@@ -453,6 +453,41 @@ MONGO_PASS="<password>"
 literal `<db_password>` placeholder. The app substitutes `MONGO_PASS` into that
 placeholder using URL encoding so special characters in the password are safe.
 
+### Deployment peer discovery
+
+First-party production, preview, and development deployments can converge on a
+small mesh of live peers through `/api/v1/peers`. Configure the same private
+value on every participating deployment (never `PUBLIC_*`, never a browser
+variable):
+
+```sh
+THINGTIME_PEER_DISCOVERY_SECRET="replace-with-a-random-32-plus-character-secret"
+# Base64url PKCS#8 Ed25519 private key; create and store it in the deployment's secret manager.
+THINGTIME_PEER_SIGNING_PRIVATE_KEY="replace-with-base64url-ed25519-pkcs8-private-key"
+THINGTIME_PUBLIC_ORIGIN="https://this-deployment.example.thingtime.com"
+# Optional; defaults to https://thingtime.com
+THINGTIME_PEER_BOOTSTRAP_ORIGIN="https://thingtime.com"
+# Optional comma-separated first-party host suffixes; defaults to thingtime.com,vercel.app
+THINGTIME_PEER_ALLOWED_HOST_SUFFIXES="thingtime.com,vercel.app"
+```
+
+Peers sign exact request method, path, timestamp, and raw body using HMAC, then
+also add an Ed25519 signature derived from that deployment's private key. The
+receiver verifies the public signature and pins the public key to the canonical
+origin after first HMAC-authenticated contact; a later key change fails closed.
+Every NDJSON peer event is independently Ed25519-signed too. The protocol
+rejects anonymous requests, expired or tampered signatures, non-first-party
+origins, credentials in URLs, and arbitrary outbound targets. Each origin is a
+separate `deploymentPeers` control-plane row with a ten-minute TTL lease. A
+signed `POST {"op":"sync"}` first announces to the production bootstrap,
+then probes a bounded breadth-first set of known peers; `GET` is capped,
+cursor-paginated NDJSON rather than an all-peers array. Run self-sync from a
+trusted deployment scheduler or deploy hook at a modest cadence (for example
+every five minutes). The checked-in Vercel cron advances the production
+bootstrap every five minutes using its existing `CRON_SECRET`; preview and
+non-Vercel deployments need the equivalent trusted deploy hook or scheduler.
+Do not expose either peer credential to clients or forks.
+
 For a local MongoDB instance you can instead use a complete URI with no password
 placeholder:
 

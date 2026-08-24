@@ -268,6 +268,9 @@ export const getFeedAlgorithmsCollection = async () => getHomeCollection('feedAl
 // rate-limit config) and the general per-endpoint rate-limit windows.
 export const getSettingsCollection = async () => getHomeCollection('settings');
 export const getRateLimitsCollection = async () => getHomeCollection('rateLimits');
+// Peer discovery is a control plane: every deployment is a separate row with
+// a short TTL lease, never an unbounded embedded list on a settings document.
+export const getDeploymentPeersCollection = async () => getHomeCollection('deploymentPeers');
 // Owned email layer (see api/utils/email): every send writes an outbox row to
 // email_messages; events/suppression/unsubscribes back deliverability.
 export const getEmailMessagesCollection = async () => getHomeCollection('email_messages');
@@ -1049,6 +1052,9 @@ export const ensureIndexes = async () => {
         // general per-endpoint rate-limit windows; TTL reaps expired windows
         col('rateLimits').createIndex({ key: 1 }, { unique: true }),
         col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('deploymentPeers').createIndex({ origin: 1 }, { unique: true }),
+        col('deploymentPeers').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('deploymentPeers').createIndex({ lastSeenAt: -1, origin: 1 }),
         // post view telemetry: one doc per (post, viewer identity) — the
         // unique index IS the dedup that keeps unique-viewer counts honest
         // under racing writes; its postId prefix serves the per-post stats

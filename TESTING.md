@@ -2173,6 +2173,18 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       compatible `api.devices` minor/patch update, rejects a missing or new
       major, and uses the legacy `/api/v1/devices` probe only when an older
       deployment returns a manifest 404.
+- [ ] Configure the same private `THINGTIME_PEER_DISCOVERY_SECRET`, a distinct
+      persistent Ed25519 private key, and exact public origin on two first-party
+      deployments. A dual-signed announcement must create/renew only its own
+      relational peer lease and pin its public key; a changed public key for
+      the same origin must fail closed. `GET /api/v1/peers`
+      must return capped NDJSON peer rows plus an opaque cursor—never a single
+      unbounded JSON list—and must reject missing/expired/bad-body signatures,
+      non-first-party hostnames, and loopback origins in production. Trigger a
+      self-signed sync and verify it first announces to `thingtime.com`, then
+      discovers only the bounded peer budget; every NDJSON event must verify
+      against the sending deployment's public key. No browser request may
+      possess either private credential.
 - [ ] Select a build-seeded preview, reload, quit/reopen, reinstall the same
       signed bundle, then install a build which omits or renames that endpoint
       profile. `desktop-settings.json` must retain the normalized selected URL

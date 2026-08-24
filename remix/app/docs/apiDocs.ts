@@ -548,6 +548,42 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		requestExamples: [{ name: 'Discover capabilities', description: 'Read the active API contract manifest.', method: 'GET' }],
 		responseExamples: [{ status: 200, description: 'Versioned capability manifest.', body: { ok: true, schemaVersion: 1, features: { 'api.devices': '1.0.0' } } }]
 	}),
+	endpoint({
+		id: 'peers',
+		group: 'platform',
+		title: 'Deployment peer discovery',
+		endpoint: '/api/v1/peers',
+		summary: 'Streams bounded, authenticated peer leases and accepts signed deployment announcements.',
+		detail:
+			'First-party deployments authenticate with a short-lived HMAC envelope plus an Ed25519 deployment signature. The receiver pins each public key to its canonical origin; every NDJSON event is independently signed. GET returns a capped NDJSON page rather than an all-peers array; POST announces one peer or starts a bounded bootstrap-plus-gossip sync. Peer records are relational, TTL-reaped control-plane rows and contain only public deployment origins, signing public keys, and observed lease times.',
+		auth: { mode: 'bearer', description: 'Deployment-to-deployment HMAC headers using THINGTIME_PEER_DISCOVERY_SECRET plus an Ed25519 signature from THINGTIME_PEER_SIGNING_PRIVATE_KEY; browser and user tokens are not accepted.' },
+		methods: ['GET', 'POST'],
+		steps: ['Sign the exact method, path, timestamp and raw request body.', 'GET pages NDJSON peer events with a maximum of 50 rows.', 'POST { op: "announce", origin } or a self-signed { op: "sync" }.'],
+		requestExamples: [
+			{ name: 'Stream one page', description: 'A trusted deployment reads a bounded peer page.', method: 'GET', query: { limit: 25 } },
+			{ name: 'Announce this deployment', description: 'A trusted peer renews only its own lease.', method: 'POST', body: { op: 'announce', origin: 'https://pr-68.previews.dev.thingtime.com' } }
+		],
+		responseExamples: [{ status: 200, description: 'NDJSON peer events followed by a page-complete cursor.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }],
+		notes: ['Peer discovery is unavailable unless both private deployment credentials are configured. It never exposes users, data-plane endpoints, private keys, tokens, paths, or an unbounded peer list.']
+	}),
+	endpoint({
+		id: 'peers-sync',
+		group: 'platform',
+		title: 'Advance deployment peer discovery',
+		endpoint: '/api/v1/peers/sync',
+		summary: 'Trusted scheduler-only, bounded peer gossip pass.',
+		detail:
+			'Vercel Cron invokes this production bootstrap route every five minutes with CRON_SECRET. It emits the same independently Ed25519-signed NDJSON progress records as a self-signed peer sync, advances at most one cursor page for each bounded probe set, and never returns an all-peers array. Other deployments can schedule the same route with their own CRON_SECRET.',
+		auth: { mode: 'bearer', description: 'Exact CRON_SECRET bearer only; it is a deployment scheduler endpoint, not a browser or user API.' },
+		methods: ['GET'],
+		steps: [
+			'Configure CRON_SECRET, THINGTIME_PEER_DISCOVERY_SECRET, THINGTIME_PEER_SIGNING_PRIVATE_KEY, and THINGTIME_PUBLIC_ORIGIN in the deployment environment.',
+			'Let the scheduler invoke the route; do not expose its credentials to clients.'
+		],
+		requestExamples: [{ name: 'Scheduled sync', description: 'Vercel supplies the private bearer header.', method: 'GET' }],
+		responseExamples: [{ status: 200, description: 'A bounded signed NDJSON sync progression.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }],
+		notes: ['Vercel cron runs the production bootstrap. Preview and non-Vercel deployments need an equivalent trusted deploy hook or scheduler to join and keep renewing their lease.']
+	}),
 	...deviceEndpointDocs,
   endpoint({
     id: 'docs',

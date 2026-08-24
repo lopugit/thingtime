@@ -348,6 +348,8 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   rosters: 1,
   settings: 1,
   rateLimits: 1,
+  // bounded control-plane peer leases; one row per trusted deployment origin
+  deploymentPeers: 1,
   // post view telemetry: one doc per (postId, viewerKey) — see api/utils/things/views.ts
   postViews: 1,
   email_events: 1,
@@ -1713,6 +1715,27 @@ const rateLimitSchema: ThingtimeSchema = {
   example: { key: 'waitlist:9f2c…', count: 3, schemaVersion: 2 }
 };
 
+const deploymentPeerSchema: ThingtimeSchema = {
+  id: 'deployment-peer',
+  version: COLLECTION_SCHEMA_VERSIONS.deploymentPeers,
+  kind: 'collection',
+  collection: 'deploymentPeers',
+  title: 'Deployment peer lease',
+  summary: 'One bounded, expiring control-plane lease for each trusted Thingtime deployment origin.',
+  detail:
+    'Peer rows are relational control-plane records, not user Things. They are accepted only from deployments that hold the shared discovery secret, contain no account data, and expire quickly unless the peer announces again.',
+  fields: [
+    { name: 'origin', type: 'string', required: true, description: 'Canonical HTTPS deployment origin; unique.' },
+    { name: 'signingPublicKey', type: 'string', required: true, description: 'Pinned Ed25519 public key for signed peer traffic.' },
+    { name: 'firstSeenAt', type: 'date', required: true, description: 'First accepted announcement.' },
+    { name: 'lastSeenAt', type: 'date', required: true, description: 'Most recent accepted announcement.' },
+    { name: 'expiresAt', type: 'date', required: true, description: 'TTL lease expiry.' },
+    { name: 'syncCursor', type: 'string', required: false, description: 'Private bounded traversal cursor for the next remote peer page; never projected to peers.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: { origin: 'https://pr-68.previews.dev.thingtime.com', signingPublicKey: '<base64url-ed25519-spki>', lastSeenAt: '2026-08-24T00:00:00.000Z', schemaVersion: 1 }
+};
+
 const appSchema: ThingtimeSchema = {
   id: 'app',
   version: 3,
@@ -2652,7 +2675,8 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   passwordResetSchema,
   authOtpSchema,
   emailMessageSchema,
-  rateLimitSchema
+  rateLimitSchema,
+  deploymentPeerSchema
 ];
 
 export const getThingtimeSchema = (id: string): ThingtimeSchema | null => thingtimeSchemas.find((schema) => schema.id === id) || null;

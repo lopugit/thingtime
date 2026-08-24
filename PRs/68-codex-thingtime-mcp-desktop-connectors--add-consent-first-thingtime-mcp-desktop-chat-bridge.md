@@ -610,6 +610,29 @@ an offline database or offline conflict resolution layer.
   `index-CMT9dIqL.js` matches at
   `afe6e5365b08736a720dbfa6a3c717a2a49d3bc67ca507bcce5833c93cd57d7a`.
 
+### Deployment peer discovery follow-up (2026-08-24)
+
+- `/api/v1/peers` establishes a bounded first-party deployment gossip protocol.
+  Each active deployment is a separate `deploymentPeers` TTL lease; peer
+  discovery is HMAC-authenticated with method/path/timestamp/raw-body binding,
+  streams cursor-paginated NDJSON, and limits every sync to a small
+  breadth-first budget. The fixed production origin is the bootstrap seed, but
+  each trusted peer shares its own known peers, so later syncs converge without
+  a central all-peers list or fan-out storm.
+- Required fork-safe configuration is documented with placeholders only:
+  `THINGTIME_PEER_DISCOVERY_SECRET`, a persistent
+  `THINGTIME_PEER_SIGNING_PRIVATE_KEY`, `THINGTIME_PUBLIC_ORIGIN`, optional
+  bootstrap origin, and an explicit first-party hostname suffix allowlist.
+  HMAC admits only mesh members while Ed25519 signatures give each request and
+  streamed peer event a public-verification layer; public keys pin to origins
+  and unexpected rotation fails closed. Anonymous callers, stale signatures,
+  loopback/non-first-party origins, unbounded responses, and arbitrary outbound
+  targets fail closed.
+- The production bootstrap also advances the mesh with a five-minute
+  `CRON_SECRET`-protected `/api/v1/peers/sync` schedule. Previews and other
+  platforms use the same bounded endpoint from an equivalent trusted deploy
+  hook or scheduler; no peer credential is ever shipped to a client.
+
 ### Endpoint compatibility follow-up (2026-08-23)
 
 - `/api/v1/capabilities` is a public, origin-scoped generated contract
