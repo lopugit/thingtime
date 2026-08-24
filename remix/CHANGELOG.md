@@ -19,6 +19,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Unlimited AI workflow model waterfall**: Admin → System's model order now
+  accepts any number of unique entries from a 33-model Claude + OpenAI
+  catalog, each with a per-entry reasoning-effort tier and normal/fast mode
+  (composed ids `<model>[:<effort>][:fast]`; reads drop unknown entries
+  instead of collapsing; direct Anthropic/OpenAI features resolve their own
+  provider's first entry). The github-actions control plane still fail-closes
+  to `["default"]` for non-legacy entries until its closed grammar is widened
+  (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
+  — Claude (AI), 2026-08-24
+
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean
   merges collide semantically (duplicate helpers declared by two PRs), repairs
