@@ -784,6 +784,11 @@ export function useApi() {
       // paginated UGC schema browsing — { q, sort, cursor, limit, library, mine }
       browse: useCallback(async (args) => getJson(`/api/v1/schemas/browse${toQuery(args)}`), [])
     },
+    components: {
+      // paginated component browsing — { q, sort, cursor, limit, lib, category, library, mine }
+      browse: useCallback(async (args) => getJson(`/api/v1/components/browse${toQuery(args)}`), [])
+      // creation rides the unified path: things.create({ thingtime: ['component'], crystal })
+    },
     waitlist: {
       join: useCallback(async (args) => asyncFetcher.submit({ email: args?.email }, { action: '/api/v1/waitlist' }), [asyncFetcher])
     }
