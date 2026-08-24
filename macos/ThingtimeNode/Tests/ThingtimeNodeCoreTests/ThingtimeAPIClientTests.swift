@@ -155,6 +155,14 @@ final class ThingtimeAPIClientTests: XCTestCase {
 			XCTAssertEqual(audioDevice["isDefaultInput"] as? Bool, false)
 			XCTAssertEqual(audioDevice["isDefaultOutput"] as? Bool, true)
 			XCTAssertEqual(audioDevice["isDefaultSoundEffectsOutput"] as? Bool, true)
+			let displays = try XCTUnwrap(state["displays"] as? [[String: Any]])
+			XCTAssertEqual(displays.first?["id"] as? Int, 1)
+			XCTAssertEqual(displays.first?["hdrActive"] as? Bool, false)
+			XCTAssertEqual((state["printers"] as? [[String: Any]])?.first?["id"] as? String, "printer-1")
+			XCTAssertEqual((state["cameras"] as? [[String: Any]])?.first?["authorization"] as? String, "denied")
+			XCTAssertEqual((state["bluetoothDevices"] as? [[String: Any]])?.first?["id"] as? String, "bt-opaque")
+			XCTAssertEqual((state["vpnServices"] as? [[String: Any]])?.first?["id"] as? String, "vpn-1")
+			XCTAssertEqual((state["battery"] as? [String: Any])?["isPreventingIdleSleep"] as? Bool, true)
             let connectors = try XCTUnwrap(body["connectors"] as? [[String: Any]])
             XCTAssertEqual(connectors.count, 2)
             XCTAssertEqual(connectors[0]["projects"] as? [[String: String]], [
@@ -202,8 +210,18 @@ final class ThingtimeAPIClientTests: XCTestCase {
             ], session: .init(isLocked: false, isOnConsole: true),
             permissions: .init(accessibility: .denied, screenRecording: .denied),
             runningApplications: runningApplications,
-            displays: [.init(displayID: 1, width: 1_920, height: 1_080, isMain: true, isBuiltIn: true, brightness: 0.42, brightnessControlSupported: true)],
-            collectedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            displays: [.init(
+                displayID: 1, width: 1_920, height: 1_080, isMain: true, isBuiltIn: true, brightness: 0.42, brightnessControlSupported: true,
+                currentMode: .init(id: "1920x1080@60000:0", width: 1_920, height: 1_080, refreshRate: 60),
+                availableModes: [.init(id: "1920x1080@60000:0", width: 1_920, height: 1_080, refreshRate: 60)],
+                originX: 0, originY: 0, mirroredDisplayID: nil, hdrActive: false
+            )],
+            collectedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            printers: [.init(id: "printer-1", name: "Office printer", isDefault: true)],
+            cameras: [.init(id: "camera-1", name: "FaceTime HD Camera", isConnected: true, isPreferred: true, authorization: .denied)],
+            bluetoothDevices: [.init(id: "bt-opaque", name: "Headphones", isConnected: true)],
+            vpnServices: [.init(id: "vpn-1", name: "Work VPN", isConnected: false)],
+            battery: .init(level: 0.84, isCharging: true, isExternalPower: true, isPreventingIdleSleep: true)
         )
         try await client.sendHeartbeat(.init(
             deviceID: "device-1",

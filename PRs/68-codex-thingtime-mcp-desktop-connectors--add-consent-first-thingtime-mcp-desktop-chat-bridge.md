@@ -200,6 +200,37 @@ relational shape for later ThingtimeDB storage and platform chat views.
   system-power action offered is approval-gated Sleep. Restart and shutdown
   remain intentionally unavailable without shell or AppleScript execution.
 
+### 2026-08-24 display, hardware, and lifecycle controls
+
+- The paired-computer contract now has individually capability-gated controls
+  for every active display: mode/resolution/refresh rate, per-display
+  brightness, virtual origin/layout, and mirroring. The node reports bounded
+  display modes, current layout and read-only HDR state; callers can select
+  only ids and modes that the node just advertised.
+- The safe hardware surface now includes default-printer selection, preferred
+  camera selection, connect/disconnect for already-paired Bluetooth devices,
+  connect/disconnect for configured remote-access/VPN services, and a
+  per-node no-idle-sleep assertion. Telemetry is bounded and excludes device
+  addresses, camera content, network credentials, paths, and provider
+  configuration. Bluetooth addresses are one-way digested before leaving the
+  Mac.
+- Restart, shutdown, and log out are now fixed, argument-free System Events.
+  They never run caller-supplied scripts or shell commands; every request
+  always opens a fresh approval even when the device otherwise allows routine
+  actions. Their result is intentionally recorded as `needs-review`, since a
+  correctly accepted lifecycle request can terminate the node before it can
+  prove the final OS effect.
+- The Device drawer adds **Displays & system hardware** with display mode,
+  brightness, origin and mirroring controls, plus compact printer, camera,
+  Bluetooth, VPN, and keep-awake controls. The Power menu now makes the
+  lifecycle actions visible with the same approval/recovery semantics.
+- HDR toggling, Focus modes, AirDrop radio/state, Bluetooth radio power, and
+  global media playback remain intentionally absent: current macOS public APIs
+  do not offer a supported, scoped setter, and this PR does not substitute
+  private frameworks or UI automation. The API capability contracts for
+  paired devices, node state, command creation, and command leasing are
+  bumped to `1.1.0`.
+
 ## Security and product boundaries
 
 MCP gives a host a standard way to invoke this server; it does not give the

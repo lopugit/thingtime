@@ -19,6 +19,7 @@ test('device drawer preferences foreground everyday controls and collapse advanc
 		'observed-state': true,
 		audio: false,
 		network: false,
+		'system-controls': false,
 		power: false,
 		applications: true,
 		connectors: false,

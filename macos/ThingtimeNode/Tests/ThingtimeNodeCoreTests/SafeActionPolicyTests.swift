@@ -133,6 +133,57 @@ final class SafeActionPolicyTests: XCTestCase {
         ) else { return XCTFail("Expected invalid brightness to be denied") }
     }
 
+    func testDisplayConfigurationAndHardwareActionsStayClosed() {
+        let displayMode = SafeActionRequest(kind: .setDisplayMode, parameters: [
+            "displayId": .number(42), "modeId": .string("1920x1080@60000:0")
+        ])
+        guard case .requireApproval = policy.evaluate(
+            action: displayMode,
+            context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+        ) else { return XCTFail("Expected display changes to require approval") }
+
+        let mirroring = SafeActionRequest(kind: .setDisplayMirroring, parameters: [
+            "displayId": .number(42), "sourceDisplayId": .null
+        ])
+        XCTAssertEqual(
+            policy.evaluate(action: mirroring, context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)),
+            .allow
+        )
+
+        let invalidOrigin = SafeActionRequest(kind: .setDisplayOrigin, parameters: [
+            "displayId": .number(42), "x": .number(0.5), "y": .number(0)
+        ])
+        guard case .deny = policy.evaluate(
+            action: invalidOrigin,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected non-integral display coordinates to be denied") }
+
+        let bluetooth = SafeActionRequest(kind: .setBluetoothDeviceConnected, parameters: ["id": .string("bt-opaque"), "connected": .bool(true)])
+        guard case .requireApproval = policy.evaluate(
+            action: bluetooth,
+            context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+        ) else { return XCTFail("Expected paired Bluetooth action to require approval") }
+
+        let invalidPrinter = SafeActionRequest(kind: .setDefaultPrinter, parameters: ["id": .string("printer"), "path": .string("/tmp")])
+        guard case .deny = policy.evaluate(
+            action: invalidPrinter,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected unknown printer fields to be denied") }
+    }
+
+    func testLifecycleActionsAreArgumentFreeAndRequireApproval() {
+        for kind in [SafeActionKind.restartSystem, .shutDownSystem, .logOutSession] {
+            guard case .requireApproval = policy.evaluate(
+                action: SafeActionRequest(kind: kind),
+                context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+            ) else { return XCTFail("Expected \(kind.rawValue) to require approval") }
+            guard case .deny = policy.evaluate(
+                action: SafeActionRequest(kind: kind, parameters: ["script": .string("do shell script")]),
+                context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+            ) else { return XCTFail("Expected arbitrary lifecycle input to be denied") }
+        }
+    }
+
     func testAudioRouteAndMuteActionsStayClosedAndRequireApproval() {
         let output = SafeActionRequest(kind: .setDefaultOutputDevice, parameters: ["deviceId": .string("BuiltInOutputDevice")])
         guard case .requireApproval = policy.evaluate(

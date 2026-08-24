@@ -19,6 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Advanced paired-computer display, hardware, and lifecycle controls**:
+  paired Macs now advertise capability-gated per-display
+  mode/resolution/refresh, brightness, layout, mirroring and read-only HDR;
+  default printer, preferred camera, paired Bluetooth device, existing VPN,
+  and keep-awake controls; plus always-fresh-approved restart, shutdown, and
+  logout. The device drawer groups the new controls in **Displays & system
+  hardware**. Terminal lifecycle effects reconcile as `needs-review` after
+  reconnect; no arbitrary scripts or shell input is accepted. Details:
+  `PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md`.
+  — Codex (AI), 2026-08-24
+
 - **Categorized safe machine controls in the paired-computer drawer**: everyday
   volume, mute, brightness, and application focus controls remain immediately
   available; advanced Audio & routing, Network & connectivity, Power,

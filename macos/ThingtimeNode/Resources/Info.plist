@@ -26,9 +26,11 @@
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>ThingtimeNodeElectronManaged</key>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Thingtime Node requests a specifically approved restart, shutdown, or logout through macOS System Events. It never accepts arbitrary AppleScript.</string>
+	<key>ThingtimeNodeElectronManaged</key>
     <false/>
 </dict>
 </plist>

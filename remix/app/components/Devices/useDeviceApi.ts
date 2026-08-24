@@ -28,8 +28,20 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'system.audio.sound-effects.mute.set',
 	'system.audio.sound-effects-output.set',
 	'system.brightness.set',
+	'system.display.brightness.set',
+	'system.display.mode.set',
+	'system.display.origin.set',
+	'system.display.mirroring.set',
+	'system.printer.default.set',
+	'system.camera.preferred.set',
+	'system.bluetooth.device.connection.set',
+	'system.vpn.connection.set',
+	'system.power.idle-sleep-prevention.set',
 	'system.lock',
 	'system.sleep',
+	'system.restart',
+	'system.shutdown',
+	'system.logout',
 	'system.wifi.connect',
 	'system.wifi.disconnect',
 	'system.wifi.power.set',
@@ -60,7 +72,7 @@ export type PublicDeviceState = {
 	soundEffectsVolume?: number | null;
 	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
-	battery: { level: number; charging: boolean } | null;
+	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean } | null;
 	openApps: PublicDeviceOpenApp[];
 	audioDevices: Array<{
 		id: string;
@@ -72,6 +84,11 @@ export type PublicDeviceState = {
 		isDefaultSoundEffectsOutput: boolean;
 	}>;
 	wifi: { powerOn: boolean | null; ssid: string | null } | null;
+	displays?: Array<{ id: number; width: number; height: number; isMain: boolean; isBuiltIn: boolean; brightness: number | null; brightnessControlSupported: boolean; currentMode: { id: string; width: number; height: number; refreshRate: number } | null; availableModes: Array<{ id: string; width: number; height: number; refreshRate: number }>; originX: number; originY: number; mirroredDisplayId: number | null; hdrActive: boolean }>;
+	printers?: Array<{ id: string; name: string; isDefault: boolean }>;
+	cameras?: Array<{ id: string; name: string; isConnected: boolean; isPreferred: boolean; authorization: 'granted' | 'denied' }>;
+	bluetoothDevices?: Array<{ id: string; name: string; isConnected: boolean }>;
+	vpnServices?: Array<{ id: string; name: string; isConnected: boolean }>;
 	observedAt: string;
 	updatedAt: string;
 };
@@ -107,7 +124,7 @@ export type PublicDevice = {
 	locked: boolean | null;
 	volume: number | null;
 	brightness: number | null;
-	battery: { level: number; charging: boolean } | null;
+	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean } | null;
 	openApps: PublicDeviceOpenApp[];
 	state: PublicDeviceState | null;
 	connectors: PublicDeviceConnector[];

@@ -20,6 +20,15 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case setDefaultInputDevice = "system.audio.input.set"
     case setDefaultSoundEffectsOutputDevice = "system.audio.sound-effects-output.set"
     case setDisplayBrightness = "system.brightness.set"
+    case setDisplayBrightnessForDisplay = "system.display.brightness.set"
+    case setDisplayMode = "system.display.mode.set"
+    case setDisplayOrigin = "system.display.origin.set"
+    case setDisplayMirroring = "system.display.mirroring.set"
+    case setDefaultPrinter = "system.printer.default.set"
+    case setPreferredCamera = "system.camera.preferred.set"
+    case setBluetoothDeviceConnected = "system.bluetooth.device.connection.set"
+    case setVPNConnected = "system.vpn.connection.set"
+    case setPreventIdleSleep = "system.power.idle-sleep-prevention.set"
     case activateApplication = "application.activate"
     case launchApplication = "application.launch"
     case terminateApplication = "application.quit"
@@ -29,6 +38,9 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case hideOtherApplications = "application.hide-others"
     case lockScreen = "system.lock"
     case sleepSystem = "system.sleep"
+    case restartSystem = "system.restart"
+    case shutDownSystem = "system.shutdown"
+    case logOutSession = "system.logout"
     case connectWiFi = "system.wifi.connect"
     case disconnectWiFi = "system.wifi.disconnect"
     case setWiFiPower = "system.wifi.power.set"
@@ -85,7 +97,7 @@ public struct SafeActionPolicy: Sendable {
         switch action.kind {
         case .refreshTelemetry:
             return action.parameters.isEmpty ? nil : "telemetry.refresh does not accept parameters."
-        case .lockScreen, .sleepSystem, .hideOtherApplications:
+        case .lockScreen, .sleepSystem, .restartSystem, .shutDownSystem, .logOutSession, .hideOtherApplications:
             return action.parameters.isEmpty ? nil : "The requested system power action does not accept parameters."
         case .setOutputVolume, .setInputVolume, .setSoundEffectsOutputVolume:
             guard let volume = action.parameters["volume"]?.numberValue, (0 ... 1).contains(volume) else {
@@ -105,10 +117,63 @@ public struct SafeActionPolicy: Sendable {
             }
             return nil
         case .setDisplayBrightness:
-            guard let brightness = action.parameters["brightness"]?.numberValue,
+            guard action.parameters.count == 1,
+                  let brightness = action.parameters["brightness"]?.numberValue,
                   brightness.isFinite,
                   (0 ... 1).contains(brightness) else {
                 return "system.brightness.set requires a numeric brightness between 0 and 1."
+            }
+            return nil
+        case .setDisplayBrightnessForDisplay:
+            guard action.parameters.count == 2,
+                  validDisplayID(action.parameters["displayId"]),
+                  let brightness = action.parameters["brightness"]?.numberValue,
+                  brightness.isFinite,
+                  (0 ... 1).contains(brightness) else {
+                return "system.display.brightness.set requires a displayId and numeric brightness between 0 and 1."
+            }
+            return nil
+        case .setDisplayMode:
+            guard action.parameters.count == 2,
+                  validDisplayID(action.parameters["displayId"]),
+                  let modeID = action.parameters["modeId"]?.stringValue,
+                  validIdentifier(modeID) else {
+                return "system.display.mode.set requires only a displayId and advertised modeId."
+            }
+            return nil
+        case .setDisplayOrigin:
+            guard action.parameters.count == 3,
+                  validDisplayID(action.parameters["displayId"]),
+                  validCoordinate(action.parameters["x"]),
+                  validCoordinate(action.parameters["y"]) else {
+                return "system.display.origin.set requires a displayId and bounded integer x and y coordinates."
+            }
+            return nil
+        case .setDisplayMirroring:
+            guard action.parameters.count == 2,
+                  validDisplayID(action.parameters["displayId"]),
+                  validOptionalDisplayID(action.parameters["sourceDisplayId"]) else {
+                return "system.display.mirroring.set requires a displayId and a displayId or null mirror source."
+            }
+            return nil
+        case .setDefaultPrinter, .setPreferredCamera:
+            guard action.parameters.count == 1,
+                  let id = action.parameters["id"]?.stringValue,
+                  validIdentifier(id) else {
+                return "The requested hardware preference requires only an advertised id."
+            }
+            return nil
+        case .setBluetoothDeviceConnected, .setVPNConnected:
+            guard action.parameters.count == 2,
+                  let id = action.parameters["id"]?.stringValue,
+                  validIdentifier(id),
+                  case .bool = action.parameters["connected"] else {
+                return "The requested connection action requires an advertised id and boolean connected value."
+            }
+            return nil
+        case .setPreventIdleSleep:
+            guard action.parameters.count == 1, case .bool = action.parameters["enabled"] else {
+                return "system.power.idle-sleep-prevention.set requires only a boolean enabled value."
             }
             return nil
         case .activateApplication, .launchApplication, .terminateApplication, .forceTerminateApplication, .hideApplication, .unhideApplication:
@@ -140,6 +205,23 @@ public struct SafeActionPolicy: Sendable {
             value == value.trimmingCharacters(in: .whitespacesAndNewlines) &&
             value.utf8.count <= 512 &&
             value.rangeOfCharacter(from: .controlCharacters) == nil
+    }
+
+    private func validDisplayID(_ value: JSONValue?) -> Bool {
+        guard let value = value?.numberValue, value.isFinite, value >= 1, value <= Double(UInt32.max), value.rounded() == value else {
+            return false
+        }
+        return true
+    }
+
+    private func validOptionalDisplayID(_ value: JSONValue?) -> Bool {
+        if case .null? = value { return true }
+        return validDisplayID(value)
+    }
+
+    private func validCoordinate(_ value: JSONValue?) -> Bool {
+        guard let value = value?.numberValue, value.isFinite, value.rounded() == value else { return false }
+        return value >= -32_768 && value <= 32_768
     }
 }
 
@@ -230,6 +312,66 @@ public final class SafeActionExecutor {
             }
             try SystemDisplayBrightness.setMainDisplayBrightness(brightness)
             return .object(["brightness": .number(brightness)])
+        case .setDisplayBrightnessForDisplay:
+            guard let displayID = displayID(from: action.parameters["displayId"]),
+                  let brightness = action.parameters["brightness"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing display brightness parameters.")
+            }
+            try SystemDisplayBrightness.setDisplayBrightness(brightness, displayID: displayID)
+            return .object(["displayId": .number(Double(displayID)), "brightness": .number(brightness)])
+        case .setDisplayMode:
+            guard let displayID = displayID(from: action.parameters["displayId"]),
+                  let modeID = action.parameters["modeId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing display mode parameters.")
+            }
+            try SystemDisplayConfiguration.setMode(displayID: displayID, modeID: modeID)
+            return .object(["displayId": .number(Double(displayID)), "modeId": .string(modeID)])
+        case .setDisplayOrigin:
+            guard let displayID = displayID(from: action.parameters["displayId"]),
+                  let x = action.parameters["x"]?.numberValue,
+                  let y = action.parameters["y"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing display layout parameters.")
+            }
+            try SystemDisplayConfiguration.setOrigin(displayID: displayID, x: Int(x), y: Int(y))
+            return .object(["displayId": .number(Double(displayID)), "x": .number(x), "y": .number(y)])
+        case .setDisplayMirroring:
+            guard let displayID = displayID(from: action.parameters["displayId"]) else {
+                throw ThingtimeNodeError.invalidRequest("Missing display identifier.")
+            }
+            let sourceDisplayID = self.displayID(from: action.parameters["sourceDisplayId"])
+            try SystemDisplayConfiguration.setMirroring(displayID: displayID, sourceDisplayID: sourceDisplayID)
+            return .object([
+                "displayId": .number(Double(displayID)),
+                "sourceDisplayId": sourceDisplayID.map { JSONValue.number(Double($0)) } ?? JSONValue.null
+            ])
+        case .setDefaultPrinter:
+            guard let id = action.parameters["id"]?.stringValue else { throw ThingtimeNodeError.invalidRequest("Missing printer identifier.") }
+            try SystemPrinters.setDefault(id: id)
+            return .object(["id": .string(id), "default": .bool(true)])
+        case .setPreferredCamera:
+            guard let id = action.parameters["id"]?.stringValue else { throw ThingtimeNodeError.invalidRequest("Missing camera identifier.") }
+            try SystemCameras.setPreferred(id: id)
+            return .object(["id": .string(id), "preferred": .bool(true)])
+        case .setBluetoothDeviceConnected:
+            guard let id = action.parameters["id"]?.stringValue,
+                  case let .bool(connected)? = action.parameters["connected"] else {
+                throw ThingtimeNodeError.invalidRequest("Missing Bluetooth connection parameters.")
+            }
+            try SystemBluetooth.setConnected(id: id, connected: connected)
+            return .object(["id": .string(id), "connected": .bool(connected)])
+        case .setVPNConnected:
+            guard let id = action.parameters["id"]?.stringValue,
+                  case let .bool(connected)? = action.parameters["connected"] else {
+                throw ThingtimeNodeError.invalidRequest("Missing VPN connection parameters.")
+            }
+            try SystemVPN.setConnected(id: id, connected: connected)
+            return .object(["id": .string(id), "connected": .bool(connected)])
+        case .setPreventIdleSleep:
+            guard case let .bool(enabled)? = action.parameters["enabled"] else {
+                throw ThingtimeNodeError.invalidRequest("Missing keep-awake state.")
+            }
+            try telemetry.setPreventIdleSleep(enabled)
+            return .object(["enabled": .bool(enabled)])
         case .activateApplication:
             guard let bundleID = action.parameters["bundleIdentifier"]?.stringValue,
                   let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
@@ -296,6 +438,15 @@ public final class SafeActionExecutor {
         case .sleepSystem:
             try SystemPower.sleep()
             return .object(["sleepRequested": .bool(true)])
+        case .restartSystem:
+            try SystemLifecycle.restart()
+            throw ThingtimeNodeError.commandOutcomeUncertain
+        case .shutDownSystem:
+            try SystemLifecycle.shutDown()
+            throw ThingtimeNodeError.commandOutcomeUncertain
+        case .logOutSession:
+            try SystemLifecycle.logOut()
+            throw ThingtimeNodeError.commandOutcomeUncertain
         case .connectWiFi:
             guard let ssid = action.parameters["ssid"]?.stringValue else {
                 throw ThingtimeNodeError.invalidRequest("Missing Wi-Fi network name.")
@@ -312,6 +463,13 @@ public final class SafeActionExecutor {
             try SystemWiFi.setPower(enabled)
             return .object(["enabled": .bool(enabled)])
         }
+    }
+
+    private func displayID(from value: JSONValue?) -> UInt32? {
+        guard let number = value?.numberValue, number.isFinite, number >= 1, number <= Double(UInt32.max), number.rounded() == number else {
+            return nil
+        }
+        return UInt32(number)
     }
 }
 
@@ -345,6 +503,29 @@ public enum SystemPower {
         defer { IOServiceClose(connection) }
         guard IOPMSleepSystem(connection) == kIOReturnSuccess else {
             throw ThingtimeNodeError.policyDenied("macOS did not accept the sleep request.")
+        }
+    }
+}
+
+/// Restart, shutdown, and logout are deliberately fixed Apple Events. The
+/// node never accepts script text, shell fragments, application names, or a
+/// capability to automate anything else. Each operation is always presented
+/// as an approval card by the service and is journalled as uncertain because
+/// the process may terminate before it can confirm the terminal system effect.
+public enum SystemLifecycle {
+    public static func restart() throws { try run("tell application \"System Events\" to restart") }
+    public static func shutDown() throws { try run("tell application \"System Events\" to shut down") }
+    public static func logOut() throws { try run("tell application \"System Events\" to log out") }
+
+    private static func run(_ source: String) throws {
+        guard let script = NSAppleScript(source: source) else {
+            throw ThingtimeNodeError.policyDenied("macOS could not prepare the requested system lifecycle action.")
+        }
+        var error: NSDictionary?
+        script.executeAndReturnError(&error)
+        if let error {
+            let message = (error[NSAppleScript.errorMessage] as? String) ?? "System Events returned an unknown error."
+            throw ThingtimeNodeError.policyDenied("macOS did not accept the requested system lifecycle action: \(message)")
         }
     }
 }

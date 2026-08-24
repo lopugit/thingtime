@@ -6,6 +6,7 @@ export const DEVICE_DRAWER_SECTION_IDS = [
 	'observed-state',
 	'audio',
 	'network',
+	'system-controls',
 	'power',
 	'applications',
 	'connectors',

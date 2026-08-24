@@ -21,6 +21,7 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("ApplicationServices"),
+                .linkedFramework("AVFoundation"),
                 .linkedFramework("AudioToolbox"),
                 .linkedFramework("CoreAudio"),
                 .linkedFramework("CoreWLAN"),
@@ -30,9 +31,11 @@ let package = Package(
                 .linkedFramework("CoreVideo"),
                 .linkedFramework("CryptoKit"),
                 .linkedFramework("ImageIO"),
+                .linkedFramework("IOBluetooth"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("ScreenCaptureKit"),
-                .linkedFramework("Security")
+                .linkedFramework("Security"),
+                .linkedFramework("SystemConfiguration")
             ]
         ),
         .executableTarget(

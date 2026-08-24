@@ -154,10 +154,22 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 				isDefaultSoundEffectsOutput: true
 			}
 		],
-		wifi: { powerOn: true, ssid: 'Thingtime Guest' }
+		wifi: { powerOn: true, ssid: 'Thingtime Guest' },
+		displays: [{ id: 42, width: 1920, height: 1080, isMain: true, isBuiltIn: false, brightness: 0.6, brightnessControlSupported: true, currentMode: { id: '1920x1080@60000:0', width: 1920, height: 1080, refreshRate: 60 }, availableModes: [{ id: '1920x1080@60000:0', width: 1920, height: 1080, refreshRate: 60 }], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false }],
+		printers: [{ id: 'printer-1', name: 'Office printer', isDefault: true }],
+		cameras: [{ id: 'camera-1', name: 'FaceTime HD', isConnected: true, isPreferred: true, authorization: 'denied' }],
+		bluetoothDevices: [{ id: 'bt-opaque', name: 'Headphones', isConnected: true }],
+		vpnServices: [{ id: 'vpn-1', name: 'Work VPN', isConnected: false }]
 	});
 	assert.ok(normalized);
 	assert.deepEqual(normalized?.wifi, { powerOn: true, ssid: 'Thingtime Guest' });
+	assert.equal(normalized?.displays?.[0]?.currentMode?.refreshRate, 60);
+	assert.equal(normalized?.bluetoothDevices?.[0]?.id, 'bt-opaque');
+	assert.deepEqual(
+		normalizeDeviceState({ locked: false, battery: { level: 0.5, charging: true }, openApps: [] })?.battery,
+		{ level: 0.5, charging: true, isExternalPower: null, isPreventingIdleSleep: false }
+	);
+	assert.equal(normalizeDeviceState({ locked: false, displays: [{ id: 1, width: 1, height: 1, isMain: true, isBuiltIn: false, brightness: null, brightnessControlSupported: false, currentMode: null, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false, path: '/private' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, openApps: [{ id: 'x', name: 'X', frontmost: false, path: '/Applications/X.app' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, volume: 'not-a-level', openApps: [] }), null);
 	assert.ok(
@@ -308,8 +320,20 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'system.audio.sound-effects.mute.set',
 		'system.audio.sound-effects-output.set',
 		'system.brightness.set',
+		'system.display.brightness.set',
+		'system.display.mode.set',
+		'system.display.origin.set',
+		'system.display.mirroring.set',
+		'system.printer.default.set',
+		'system.camera.preferred.set',
+		'system.bluetooth.device.connection.set',
+		'system.vpn.connection.set',
+		'system.power.idle-sleep-prevention.set',
 		'system.lock',
 		'system.sleep',
+		'system.restart',
+		'system.shutdown',
+		'system.logout',
 		'system.wifi.connect',
 		'system.wifi.disconnect',
 		'system.wifi.power.set',
@@ -352,6 +376,14 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	assert.equal(normalizeDeviceCommand('system.audio.output.set', { deviceId: 'BuiltInOutputDevice' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.sleep', {}).ok, true);
 	assert.equal(normalizeDeviceCommand('system.sleep', { now: true }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.display.mode.set', { displayId: 42, modeId: '1920x1080@60000:0' }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.display.mode.set', { displayId: 42, modeId: 'x', profile: 'never' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.display.mirroring.set', { displayId: 42, sourceDisplayId: null }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.display.origin.set', { displayId: 42, x: -200, y: 0 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.printer.default.set', { id: 'printer-1' }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.bluetooth.device.connection.set', { id: 'bt-abc', connected: true }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.restart', {}).ok, true);
+	assert.equal(normalizeDeviceCommand('system.restart', { command: 'rm -rf /' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'Thingtime Guest' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'Thingtime Guest', password: 'never' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: ' Thingtime Guest' }).ok, false);
@@ -400,7 +432,7 @@ test('paired account execution preferences default to always allow, with reversi
 	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
 	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
 	for (const kind of DEVICE_COMMAND_KINDS) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), kind === 'app.force-quit', kind);
+		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout'].includes(kind), kind);
 		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
 	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };

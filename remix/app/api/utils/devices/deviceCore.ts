@@ -26,8 +26,20 @@ export const DEVICE_COMMAND_KINDS = [
 	'system.audio.sound-effects.mute.set',
 	'system.audio.sound-effects-output.set',
 	'system.brightness.set',
+	'system.display.brightness.set',
+	'system.display.mode.set',
+	'system.display.origin.set',
+	'system.display.mirroring.set',
+	'system.printer.default.set',
+	'system.camera.preferred.set',
+	'system.bluetooth.device.connection.set',
+	'system.vpn.connection.set',
+	'system.power.idle-sleep-prevention.set',
 	'system.lock',
 	'system.sleep',
+	'system.restart',
+	'system.shutdown',
+	'system.logout',
 	'system.wifi.connect',
 	'system.wifi.disconnect',
 	'system.wifi.power.set',
@@ -49,7 +61,7 @@ export const normalizeDevicePermissionMode = (value: unknown): DevicePermissionM
 
 // Force quitting can discard unsaved work. It must always create a fresh
 // approval, even when the paired device otherwise allows routine controls.
-const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>(['app.force-quit']);
+const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>(['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout']);
 
 export const deviceCommandRequiresApproval = (kind: DeviceCommandKind, callerRequiresApproval: boolean): boolean =>
 	callerRequiresApproval || ALWAYS_APPROVAL_DEVICE_COMMANDS.has(kind);
@@ -154,6 +166,27 @@ export type DeviceAudioDevice = {
 };
 export const MAX_DEVICE_AUDIO_DEVICES = 32;
 export type DeviceWiFiState = { powerOn: boolean | null; ssid: string | null };
+export type DeviceDisplayMode = { id: string; width: number; height: number; refreshRate: number };
+export type DeviceDisplay = {
+	id: number;
+	width: number;
+	height: number;
+	isMain: boolean;
+	isBuiltIn: boolean;
+	brightness: number | null;
+	brightnessControlSupported: boolean;
+	currentMode: DeviceDisplayMode | null;
+	availableModes: DeviceDisplayMode[];
+	originX: number;
+	originY: number;
+	mirroredDisplayId: number | null;
+	hdrActive: boolean;
+};
+export type DevicePrinter = { id: string; name: string; isDefault: boolean };
+export type DeviceCamera = { id: string; name: string; isConnected: boolean; isPreferred: boolean; authorization: 'granted' | 'denied' };
+export type DeviceBluetoothDevice = { id: string; name: string; isConnected: boolean };
+export type DeviceVPNService = { id: string; name: string; isConnected: boolean };
+export type DeviceBatteryState = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean };
 export type DeviceStateSnapshot = {
 	locked: boolean;
 	volume: number | null;
@@ -163,15 +196,57 @@ export type DeviceStateSnapshot = {
 	soundEffectsVolume?: number | null;
 	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
-	battery: { level: number; charging: boolean } | null;
+	battery: DeviceBatteryState | null;
 	openApps: DeviceOpenApp[];
 	audioDevices: DeviceAudioDevice[];
 	wifi?: DeviceWiFiState | null;
+	displays?: DeviceDisplay[];
+	printers?: DevicePrinter[];
+	cameras?: DeviceCamera[];
+	bluetoothDevices?: DeviceBluetoothDevice[];
+	vpnServices?: DeviceVPNService[];
 };
 
 const unitInterval = (value: unknown): number | null => {
 	const number = Number(value);
 	return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : null;
+};
+
+const boundedInteger = (value: unknown, minimum: number, maximum: number): number | null => {
+	const number = Number(value);
+	return Number.isSafeInteger(number) && number >= minimum && number <= maximum ? number : null;
+};
+
+const normalizeDisplayMode = (value: unknown): DeviceDisplayMode | null => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+	const raw = value as Record<string, unknown>;
+	if (!Object.keys(raw).every((key) => ['id', 'width', 'height', 'refreshRate'].includes(key))) return null;
+	const id = bounded(raw.id, 160);
+	const width = boundedInteger(raw.width, 1, 32_768);
+	const height = boundedInteger(raw.height, 1, 32_768);
+	const refreshRate = Number(raw.refreshRate);
+	if (!id || width === null || height === null || !Number.isFinite(refreshRate) || refreshRate < 0 || refreshRate > 1_000) return null;
+	return { id, width, height, refreshRate };
+};
+
+const normalizeNamedDeviceList = <T>(
+	value: unknown,
+	maximum: number,
+	keys: readonly string[],
+	normalize: (raw: Record<string, unknown>) => T | null
+): T[] | null => {
+	if (value === undefined) return [];
+	if (!Array.isArray(value) || value.length > maximum) return null;
+	const output: T[] = [];
+	for (const entry of value) {
+		if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+		const raw = entry as Record<string, unknown>;
+		if (!Object.keys(raw).every((key) => keys.includes(key))) return null;
+		const normalized = normalize(raw);
+		if (!normalized) return null;
+		output.push(normalized);
+	}
+	return output;
 };
 
 export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null => {
@@ -180,7 +255,10 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 	if (typeof raw.locked !== 'boolean') return null;
 	if (
 		!Object.keys(raw).every((key) =>
-			['locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'openApps', 'audioDevices', 'wifi'].includes(key)
+			[
+				'locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'openApps', 'audioDevices', 'wifi',
+				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices'
+			].includes(key)
 		)
 	)
 		return null;
@@ -235,10 +313,13 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 	if (raw.battery !== undefined && raw.battery !== null) {
 		if (!raw.battery || typeof raw.battery !== 'object') return null;
 		const candidate = raw.battery as Record<string, unknown>;
-		if (!Object.keys(candidate).every((key) => ['level', 'charging'].includes(key))) return null;
-		const level = unitInterval(candidate.level);
-		if (level === null || typeof candidate.charging !== 'boolean') return null;
-		battery = { level, charging: candidate.charging };
+		if (!Object.keys(candidate).every((key) => ['level', 'charging', 'isExternalPower', 'isPreventingIdleSleep'].includes(key))) return null;
+		const level = candidate.level === null || candidate.level === undefined ? null : unitInterval(candidate.level);
+		const charging = candidate.charging === null || candidate.charging === undefined ? null : typeof candidate.charging === 'boolean' ? candidate.charging : null;
+		const isExternalPower = candidate.isExternalPower === null || candidate.isExternalPower === undefined ? null : typeof candidate.isExternalPower === 'boolean' ? candidate.isExternalPower : null;
+		const isPreventingIdleSleep = candidate.isPreventingIdleSleep ?? false;
+		if ((candidate.level !== null && candidate.level !== undefined && level === null) || (candidate.charging !== null && candidate.charging !== undefined && charging === null) || (candidate.isExternalPower !== null && candidate.isExternalPower !== undefined && isExternalPower === null) || typeof isPreventingIdleSleep !== 'boolean') return null;
+		battery = { level, charging, isExternalPower, isPreventingIdleSleep };
 	}
 	const volume = raw.volume === undefined || raw.volume === null ? null : unitInterval(raw.volume);
 	let muted: boolean | null = null;
@@ -274,6 +355,37 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 	if (raw.inputVolume !== undefined && raw.inputVolume !== null && inputVolume === null) return null;
 	if (raw.soundEffectsVolume !== undefined && raw.soundEffectsVolume !== null && soundEffectsVolume === null) return null;
 	if (raw.brightness !== undefined && raw.brightness !== null && brightness === null) return null;
+	const displays = normalizeNamedDeviceList(raw.displays, 16, ['id', 'width', 'height', 'isMain', 'isBuiltIn', 'brightness', 'brightnessControlSupported', 'currentMode', 'availableModes', 'originX', 'originY', 'mirroredDisplayId', 'hdrActive'], (display) => {
+		const id = boundedInteger(display.id, 1, 4_294_967_295);
+		const width = boundedInteger(display.width, 1, 32_768);
+		const height = boundedInteger(display.height, 1, 32_768);
+		const brightness = display.brightness === null || display.brightness === undefined ? null : unitInterval(display.brightness);
+		const currentMode = display.currentMode === null || display.currentMode === undefined ? null : normalizeDisplayMode(display.currentMode);
+		if (id === null || width === null || height === null || typeof display.isMain !== 'boolean' || typeof display.isBuiltIn !== 'boolean' || typeof display.brightnessControlSupported !== 'boolean' || (display.brightness !== null && display.brightness !== undefined && brightness === null) || (display.currentMode !== null && display.currentMode !== undefined && !currentMode) || !Array.isArray(display.availableModes) || display.availableModes.length > 64 || typeof display.hdrActive !== 'boolean') return null;
+		const availableModes = display.availableModes.map(normalizeDisplayMode);
+		const originX = boundedInteger(display.originX, -32_768, 32_768);
+		const originY = boundedInteger(display.originY, -32_768, 32_768);
+		const mirroredDisplayId = display.mirroredDisplayId === null || display.mirroredDisplayId === undefined ? null : boundedInteger(display.mirroredDisplayId, 1, 4_294_967_295);
+		if (availableModes.some((mode) => !mode) || originX === null || originY === null || (display.mirroredDisplayId !== null && display.mirroredDisplayId !== undefined && mirroredDisplayId === null)) return null;
+		return { id, width, height, isMain: display.isMain, isBuiltIn: display.isBuiltIn, brightness, brightnessControlSupported: display.brightnessControlSupported, currentMode, availableModes: availableModes as DeviceDisplayMode[], originX, originY, mirroredDisplayId, hdrActive: display.hdrActive };
+	});
+	const printers = normalizeNamedDeviceList(raw.printers, 64, ['id', 'name', 'isDefault'], (printer) => {
+		const id = bounded(printer.id, 512), name = bounded(printer.name, 120);
+		return id && name && typeof printer.isDefault === 'boolean' ? { id, name, isDefault: printer.isDefault } : null;
+	});
+	const cameras = normalizeNamedDeviceList(raw.cameras, 32, ['id', 'name', 'isConnected', 'isPreferred', 'authorization'], (camera) => {
+		const id = bounded(camera.id, 512), name = bounded(camera.name, 120);
+		return id && name && typeof camera.isConnected === 'boolean' && typeof camera.isPreferred === 'boolean' && (camera.authorization === 'granted' || camera.authorization === 'denied') ? { id, name, isConnected: camera.isConnected, isPreferred: camera.isPreferred, authorization: camera.authorization as DeviceCamera['authorization'] } : null;
+	});
+	const bluetoothDevices = normalizeNamedDeviceList(raw.bluetoothDevices, 64, ['id', 'name', 'isConnected'], (device) => {
+		const id = bounded(device.id, 120), name = bounded(device.name, 120);
+		return id && name && typeof device.isConnected === 'boolean' ? { id, name, isConnected: device.isConnected } : null;
+	});
+	const vpnServices = normalizeNamedDeviceList(raw.vpnServices, 32, ['id', 'name', 'isConnected'], (service) => {
+		const id = bounded(service.id, 512), name = bounded(service.name, 120);
+		return id && name && typeof service.isConnected === 'boolean' ? { id, name, isConnected: service.isConnected } : null;
+	});
+	if (!displays || !printers || !cameras || !bluetoothDevices || !vpnServices) return null;
 	return {
 		locked: raw.locked,
 		volume,
@@ -286,7 +398,12 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		battery,
 		openApps,
 		audioDevices,
-		wifi
+		wifi,
+		displays,
+		printers,
+		cameras,
+		bluetoothDevices,
+		vpnServices
 	};
 };
 
@@ -487,8 +604,20 @@ export type DeviceCommandInputByKind = {
 	'system.audio.sound-effects.mute.set': { muted: boolean };
 	'system.audio.sound-effects-output.set': { deviceId: string };
 	'system.brightness.set': { level: number };
+	'system.display.brightness.set': { displayId: number; level: number };
+	'system.display.mode.set': { displayId: number; modeId: string };
+	'system.display.origin.set': { displayId: number; x: number; y: number };
+	'system.display.mirroring.set': { displayId: number; sourceDisplayId: number | null };
+	'system.printer.default.set': { id: string };
+	'system.camera.preferred.set': { id: string };
+	'system.bluetooth.device.connection.set': { id: string; connected: boolean };
+	'system.vpn.connection.set': { id: string; connected: boolean };
+	'system.power.idle-sleep-prevention.set': { enabled: boolean };
 	'system.lock': Record<string, never>;
 	'system.sleep': Record<string, never>;
+	'system.restart': Record<string, never>;
+	'system.shutdown': Record<string, never>;
+	'system.logout': Record<string, never>;
 	'system.wifi.connect': { ssid: string };
 	'system.wifi.disconnect': Record<string, never>;
 	'system.wifi.power.set': { enabled: boolean };
@@ -557,8 +686,20 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'system.audio.sound-effects.mute.set': 'system.audio.sound-effects.mute.write',
 	'system.audio.sound-effects-output.set': 'system.audio.sound-effects-output.write',
 	'system.brightness.set': 'system.brightness.write',
+	'system.display.brightness.set': 'system.display.brightness.write',
+	'system.display.mode.set': 'system.display.mode.write',
+	'system.display.origin.set': 'system.display.layout.write',
+	'system.display.mirroring.set': 'system.display.mirroring.write',
+	'system.printer.default.set': 'system.printer.default.write',
+	'system.camera.preferred.set': 'system.camera.preferred.write',
+	'system.bluetooth.device.connection.set': 'system.bluetooth.device.connection.write',
+	'system.vpn.connection.set': 'system.vpn.connection.write',
+	'system.power.idle-sleep-prevention.set': 'system.power.idle-sleep-prevention.write',
 	'system.lock': 'system.lock',
 	'system.sleep': 'system.power.sleep',
+	'system.restart': 'system.power.restart',
+	'system.shutdown': 'system.power.shutdown',
+	'system.logout': 'system.session.logout',
 	'system.wifi.connect': 'system.wifi.connect',
 	'system.wifi.disconnect': 'system.wifi.disconnect',
 	'system.wifi.power.set': 'system.wifi.power.write',
@@ -591,8 +732,20 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'system.audio.sound-effects.mute.set': 'system.audio.sound-effects.mute.write',
 	'system.audio.sound-effects-output.set': 'system.audio.sound-effects-output.write',
 	'system.brightness.set': 'system.brightness.write',
+	'system.display.brightness.set': 'system.display.brightness.write',
+	'system.display.mode.set': 'system.display.mode.write',
+	'system.display.origin.set': 'system.display.layout.write',
+	'system.display.mirroring.set': 'system.display.mirroring.write',
+	'system.printer.default.set': 'system.printer.default.write',
+	'system.camera.preferred.set': 'system.camera.preferred.write',
+	'system.bluetooth.device.connection.set': 'system.bluetooth.device.connection.write',
+	'system.vpn.connection.set': 'system.vpn.connection.write',
+	'system.power.idle-sleep-prevention.set': 'system.power.idle-sleep-prevention.write',
 	'device.lock.write': 'system.lock',
 	'system.sleep': 'system.power.sleep',
+	'system.restart': 'system.power.restart',
+	'system.shutdown': 'system.power.shutdown',
+	'system.logout': 'system.session.logout',
 	'system.wifi.connect': 'system.wifi.connect',
 	'system.wifi.disconnect': 'system.wifi.disconnect',
 	'system.wifi.power.set': 'system.wifi.power.write',
@@ -664,6 +817,8 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 	const session = () => opaqueId(raw.sessionId, 512);
 	const app = () => opaqueId(raw.appId, 200);
 	const screen = () => opaqueId(raw.screenSessionId, 160);
+	const displayId = () => boundedInteger(raw.displayId, 1, 4_294_967_295);
+	const hardwareId = () => opaqueId(raw.id, 512);
 	const ok = (input: unknown) => ({ ok: true as const, input: input as DeviceCommandInputByKind[K] });
 
 	switch (kind) {
@@ -755,8 +910,56 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 				? ok({ level })
 				: deviceFail(400, `${kind} requires only level from 0 to 1`);
 		}
+		case 'system.display.brightness.set': {
+			const id = displayId();
+			const level = Number(raw.level);
+			return id !== null && Number.isFinite(level) && level >= 0 && level <= 1 && exactKeys(raw, ['displayId', 'level'])
+				? ok({ displayId: id, level })
+				: deviceFail(400, 'system.display.brightness.set requires an advertised displayId and level from 0 to 1');
+		}
+		case 'system.display.mode.set': {
+			const id = displayId();
+			const modeId = bounded(raw.modeId, 160);
+			return id !== null && modeId && exactKeys(raw, ['displayId', 'modeId'])
+				? ok({ displayId: id, modeId })
+				: deviceFail(400, 'system.display.mode.set requires an advertised displayId and modeId');
+		}
+		case 'system.display.origin.set': {
+			const id = displayId();
+			const x = boundedInteger(raw.x, -32_768, 32_768);
+			const y = boundedInteger(raw.y, -32_768, 32_768);
+			return id !== null && x !== null && y !== null && exactKeys(raw, ['displayId', 'x', 'y'])
+				? ok({ displayId: id, x, y })
+				: deviceFail(400, 'system.display.origin.set requires an advertised displayId and bounded integer coordinates');
+		}
+		case 'system.display.mirroring.set': {
+			const id = displayId();
+			const sourceDisplayId = raw.sourceDisplayId === null ? null : boundedInteger(raw.sourceDisplayId, 1, 4_294_967_295);
+			return id !== null && sourceDisplayId !== undefined && (raw.sourceDisplayId === null || sourceDisplayId !== null) && exactKeys(raw, ['displayId', 'sourceDisplayId'])
+				? ok({ displayId: id, sourceDisplayId })
+				: deviceFail(400, 'system.display.mirroring.set requires an advertised displayId and sourceDisplayId or null');
+		}
+		case 'system.printer.default.set':
+		case 'system.camera.preferred.set': {
+			const id = hardwareId();
+			return id && exactKeys(raw, ['id']) ? ok({ id }) : deviceFail(400, `${kind} requires an advertised hardware id`);
+		}
+		case 'system.bluetooth.device.connection.set':
+		case 'system.vpn.connection.set': {
+			const id = hardwareId();
+			return id && typeof raw.connected === 'boolean' && exactKeys(raw, ['id', 'connected'])
+				? ok({ id, connected: raw.connected })
+				: deviceFail(400, `${kind} requires an advertised id and boolean connected value`);
+		}
+		case 'system.power.idle-sleep-prevention.set':
+			return typeof raw.enabled === 'boolean' && exactKeys(raw, ['enabled'])
+				? ok({ enabled: raw.enabled })
+				: deviceFail(400, 'system.power.idle-sleep-prevention.set requires only a boolean enabled value');
 		case 'system.lock':
 		case 'system.sleep':
+		case 'system.restart':
+		case 'system.shutdown':
+		case 'system.logout':
 		case 'app.hide-others':
 			return exactKeys(raw, []) ? ok({}) : deviceFail(400, `${kind} accepts no input fields`);
 		case 'system.audio.mute.set':

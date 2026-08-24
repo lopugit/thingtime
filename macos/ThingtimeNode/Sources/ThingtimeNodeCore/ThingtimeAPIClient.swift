@@ -100,6 +100,27 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 let powerOn: Bool?
                 let ssid: String?
             }
+            struct DisplayMode: Encodable { let id: String; let width: Int; let height: Int; let refreshRate: Double }
+            struct Display: Encodable {
+                let id: UInt32
+                let width: Int
+                let height: Int
+                let isMain: Bool
+                let isBuiltIn: Bool
+                let brightness: Double?
+                let brightnessControlSupported: Bool
+                let currentMode: DisplayMode?
+                let availableModes: [DisplayMode]
+                let originX: Int
+                let originY: Int
+                let mirroredDisplayId: UInt32?
+                let hdrActive: Bool
+            }
+            struct Printer: Encodable { let id: String; let name: String; let isDefault: Bool }
+            struct Camera: Encodable { let id: String; let name: String; let isConnected: Bool; let isPreferred: Bool; let authorization: String }
+            struct BluetoothDevice: Encodable { let id: String; let name: String; let isConnected: Bool }
+            struct VPNService: Encodable { let id: String; let name: String; let isConnected: Bool }
+            struct Battery: Encodable { let level: Double?; let charging: Bool?; let isExternalPower: Bool?; let isPreventingIdleSleep: Bool }
             let locked: Bool
             let volume: Double?
             let muted: Bool?
@@ -111,6 +132,12 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             let openApps: [App]
             let audioDevices: [AudioDevice]
             let wifi: WiFi
+            let displays: [Display]
+            let printers: [Printer]
+            let cameras: [Camera]
+            let bluetoothDevices: [BluetoothDevice]
+            let vpnServices: [VPNService]
+            let battery: Battery
         }
         struct Connector: Encodable {
             let id: String
@@ -296,7 +323,29 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                         isDefaultSoundEffectsOutput: $0.isDefaultSoundEffectsOutput
                     )
                 },
-                wifi: .init(powerOn: telemetry.wifi.powerOn, ssid: telemetry.wifi.ssid)
+                wifi: .init(powerOn: telemetry.wifi.powerOn, ssid: telemetry.wifi.ssid),
+                displays: Array(telemetry.displays.prefix(16)).map {
+                    .init(
+                        id: $0.displayID,
+                        width: $0.width,
+                        height: $0.height,
+                        isMain: $0.isMain,
+                        isBuiltIn: $0.isBuiltIn,
+                        brightness: $0.brightness,
+                        brightnessControlSupported: $0.brightnessControlSupported,
+                        currentMode: $0.currentMode.map { .init(id: String($0.id.prefix(160)), width: $0.width, height: $0.height, refreshRate: $0.refreshRate) },
+                        availableModes: Array($0.availableModes.prefix(64)).map { .init(id: String($0.id.prefix(160)), width: $0.width, height: $0.height, refreshRate: $0.refreshRate) },
+                        originX: $0.originX,
+                        originY: $0.originY,
+                        mirroredDisplayId: $0.mirroredDisplayID,
+                        hdrActive: $0.hdrActive
+                    )
+                },
+                printers: Array(telemetry.printers.prefix(64)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isDefault: $0.isDefault) },
+                cameras: Array(telemetry.cameras.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected, isPreferred: $0.isPreferred, authorization: $0.authorization.rawValue) },
+                bluetoothDevices: Array(telemetry.bluetoothDevices.prefix(64)).map { .init(id: String($0.id.prefix(120)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
+                vpnServices: Array(telemetry.vpnServices.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
+                battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep)
             ),
             connectors: connectors
         )

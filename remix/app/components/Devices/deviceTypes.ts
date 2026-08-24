@@ -106,6 +106,28 @@ export type DeviceWiFiState = {
 	ssid: string | null;
 };
 
+export type DeviceDisplayMode = { id: string; width: number; height: number; refreshRate: number };
+export type DeviceDisplay = {
+	id: number;
+	width: number;
+	height: number;
+	isMain: boolean;
+	isBuiltIn: boolean;
+	brightness: number | null;
+	brightnessControlSupported: boolean;
+	currentMode: DeviceDisplayMode | null;
+	availableModes: DeviceDisplayMode[];
+	originX: number;
+	originY: number;
+	mirroredDisplayId: number | null;
+	hdrActive: boolean;
+};
+export type DevicePrinter = { id: string; name: string; isDefault: boolean };
+export type DeviceCamera = { id: string; name: string; isConnected: boolean; isPreferred: boolean; authorization: 'granted' | 'denied' };
+export type DeviceBluetoothDevice = { id: string; name: string; isConnected: boolean };
+export type DeviceVPNService = { id: string; name: string; isConnected: boolean };
+export type DeviceBattery = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean };
+
 export type DeviceSystemProperties = {
 	model?: string | null;
 	osName?: string | null;
@@ -131,6 +153,12 @@ export type DeviceObservedState = {
 	runningApps: DeviceRunningApp[];
 	audioDevices?: DeviceAudioDevice[];
 	wifi?: DeviceWiFiState | null;
+	displays?: DeviceDisplay[];
+	printers?: DevicePrinter[];
+	cameras?: DeviceCamera[];
+	bluetoothDevices?: DeviceBluetoothDevice[];
+	vpnServices?: DeviceVPNService[];
+	battery?: DeviceBattery | null;
 	observedAt: string;
 };
 
@@ -200,6 +228,15 @@ export type DeviceActionKind =
 	| 'connect-wifi'
 	| 'disconnect-wifi'
 	| 'set-wifi-power'
+	| 'set-display-brightness'
+	| 'set-display-mode'
+	| 'set-display-origin'
+	| 'set-display-mirroring'
+	| 'set-default-printer'
+	| 'set-preferred-camera'
+	| 'set-bluetooth-device-connected'
+	| 'set-vpn-connected'
+	| 'set-prevent-idle-sleep'
 	| 'launch-app'
 	| 'quit-app'
 	| 'force-quit-app'
@@ -208,6 +245,9 @@ export type DeviceActionKind =
 	| 'hide-other-apps'
 	| 'lock'
 	| 'sleep'
+	| 'restart'
+	| 'shutdown'
+	| 'logout'
 	| 'start-screen-session'
 	| 'control-screen-session'
 	| 'stop-screen-session'

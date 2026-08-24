@@ -70,8 +70,20 @@ const CAPABILITY_ALIASES: Record<string, string[]> = {
 	'system.audio.sound-effects.mute.set': ['system.audio.sound-effects.mute.write'],
 	'system.audio.sound-effects-output.set': ['system.audio.sound-effects-output.write'],
 	'system.brightness.set': ['system.brightness.write'],
+	'system.display.brightness.set': ['system.display.brightness.write'],
+	'system.display.mode.set': ['system.display.mode.write'],
+	'system.display.origin.set': ['system.display.layout.write'],
+	'system.display.mirroring.set': ['system.display.mirroring.write'],
+	'system.printer.default.set': ['system.printer.default.write'],
+	'system.camera.preferred.set': ['system.camera.preferred.write'],
+	'system.bluetooth.device.connection.set': ['system.bluetooth.device.connection.write'],
+	'system.vpn.connection.set': ['system.vpn.connection.write'],
+	'system.power.idle-sleep-prevention.set': ['system.power.idle-sleep-prevention.write'],
 	'system.lock': ['system.lock'],
 	'system.sleep': ['system.power.sleep'],
+	'system.restart': ['system.power.restart'],
+	'system.shutdown': ['system.power.shutdown'],
+	'system.logout': ['system.session.logout'],
 	'system.wifi.connect': ['system.wifi.connect'],
 	'system.wifi.disconnect': ['system.wifi.disconnect'],
 	'system.wifi.power.set': ['system.wifi.power.write'],
@@ -176,10 +188,22 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 			return 'set-volume';
 		case 'system.brightness.set':
 			return 'set-brightness';
+		case 'system.display.brightness.set': return 'set-display-brightness';
+		case 'system.display.mode.set': return 'set-display-mode';
+		case 'system.display.origin.set': return 'set-display-origin';
+		case 'system.display.mirroring.set': return 'set-display-mirroring';
+		case 'system.printer.default.set': return 'set-default-printer';
+		case 'system.camera.preferred.set': return 'set-preferred-camera';
+		case 'system.bluetooth.device.connection.set': return 'set-bluetooth-device-connected';
+		case 'system.vpn.connection.set': return 'set-vpn-connected';
+		case 'system.power.idle-sleep-prevention.set': return 'set-prevent-idle-sleep';
 		case 'system.lock':
 			return 'lock';
 		case 'system.sleep':
 			return 'sleep';
+		case 'system.restart': return 'restart';
+		case 'system.shutdown': return 'shutdown';
+		case 'system.logout': return 'logout';
 		case 'system.wifi.connect':
 			return 'connect-wifi';
 		case 'system.wifi.disconnect':
@@ -381,6 +405,18 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 			})),
 			audioDevices: device.state?.audioDevices || [],
 			wifi: device.state?.wifi || null,
+			displays: device.state?.displays || [],
+			printers: device.state?.printers || [],
+			cameras: device.state?.cameras || [],
+			bluetoothDevices: device.state?.bluetoothDevices || [],
+			vpnServices: device.state?.vpnServices || [],
+			battery: device.state?.battery
+				? {
+					...device.state.battery,
+					isExternalPower: device.state.battery.isExternalPower ?? null,
+					isPreventingIdleSleep: device.state.battery.isPreventingIdleSleep ?? false
+				}
+				: null,
 			observedAt
 		},
 		permissions: [],
@@ -574,6 +610,36 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 			const level = unit(intent.desired?.brightness ?? input.level);
 			return level === null ? null : { ...base, kind: 'system.brightness.set', input: { level } };
 		}
+		case 'set-display-brightness': {
+			const displayId = Number(input.displayId ?? intent.targetId), level = unit(input.level);
+			return Number.isSafeInteger(displayId) && displayId > 0 && level !== null ? { ...base, kind: 'system.display.brightness.set', input: { displayId, level } } : null;
+		}
+		case 'set-display-mode': {
+			const displayId = Number(input.displayId ?? intent.targetId), modeId = inputString(input.modeId);
+			return Number.isSafeInteger(displayId) && displayId > 0 && modeId ? { ...base, kind: 'system.display.mode.set', input: { displayId, modeId } } : null;
+		}
+		case 'set-display-origin': {
+			const displayId = Number(input.displayId ?? intent.targetId), x = Number(input.x), y = Number(input.y);
+			return Number.isSafeInteger(displayId) && displayId > 0 && Number.isSafeInteger(x) && Number.isSafeInteger(y) ? { ...base, kind: 'system.display.origin.set', input: { displayId, x, y } } : null;
+		}
+		case 'set-display-mirroring': {
+			const displayId = Number(input.displayId ?? intent.targetId), sourceDisplayId = input.sourceDisplayId === null ? null : Number(input.sourceDisplayId);
+			return Number.isSafeInteger(displayId) && displayId > 0 && (sourceDisplayId === null || (Number.isSafeInteger(sourceDisplayId) && sourceDisplayId > 0)) ? { ...base, kind: 'system.display.mirroring.set', input: { displayId, sourceDisplayId } } : null;
+		}
+		case 'set-default-printer': {
+			const id = inputString(input.id || intent.targetId); return id ? { ...base, kind: 'system.printer.default.set', input: { id } } : null;
+		}
+		case 'set-preferred-camera': {
+			const id = inputString(input.id || intent.targetId); return id ? { ...base, kind: 'system.camera.preferred.set', input: { id } } : null;
+		}
+		case 'set-bluetooth-device-connected': {
+			const id = inputString(input.id || intent.targetId); return id && typeof input.connected === 'boolean' ? { ...base, kind: 'system.bluetooth.device.connection.set', input: { id, connected: input.connected } } : null;
+		}
+		case 'set-vpn-connected': {
+			const id = inputString(input.id || intent.targetId); return id && typeof input.connected === 'boolean' ? { ...base, kind: 'system.vpn.connection.set', input: { id, connected: input.connected } } : null;
+		}
+		case 'set-prevent-idle-sleep':
+			return typeof input.enabled === 'boolean' ? { ...base, kind: 'system.power.idle-sleep-prevention.set', input: { enabled: input.enabled } } : null;
 		case 'lock':
 			return { ...base, kind: 'system.lock', input: {} };
 		case 'connect-wifi': {
@@ -598,6 +664,9 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 			return { ...base, kind: 'app.hide-others', input: {} };
 		case 'sleep':
 			return { ...base, kind: 'system.sleep', input: {} };
+		case 'restart': return { ...base, kind: 'system.restart', input: {} };
+		case 'shutdown': return { ...base, kind: 'system.shutdown', input: {} };
+		case 'logout': return { ...base, kind: 'system.logout', input: {} };
 		default:
 			return null;
 	}

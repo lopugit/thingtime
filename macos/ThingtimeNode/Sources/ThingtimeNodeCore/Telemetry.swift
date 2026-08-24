@@ -60,6 +60,17 @@ public struct DisplayTelemetry: Codable, Equatable, Sendable {
     public let isBuiltIn: Bool
     public let brightness: Double?
     public let brightnessControlSupported: Bool
+    /// A stable, non-secret identifier for the selected display mode. It is
+    /// deliberately derived from public CoreGraphics mode attributes rather
+    /// than accepting an arbitrary EDID or display profile from a caller.
+    public let currentMode: DisplayModeTelemetry?
+    public let availableModes: [DisplayModeTelemetry]
+    public let originX: Int
+    public let originY: Int
+    public let mirroredDisplayID: UInt32?
+    /// macOS exposes the active HDR colour space but does not provide a public
+    /// API to toggle system HDR. This is therefore read-only telemetry.
+    public let hdrActive: Bool
 
     public init(
         displayID: UInt32,
@@ -68,7 +79,13 @@ public struct DisplayTelemetry: Codable, Equatable, Sendable {
         isMain: Bool,
         isBuiltIn: Bool,
         brightness: Double? = nil,
-        brightnessControlSupported: Bool = false
+        brightnessControlSupported: Bool = false,
+        currentMode: DisplayModeTelemetry? = nil,
+        availableModes: [DisplayModeTelemetry] = [],
+        originX: Int = 0,
+        originY: Int = 0,
+        mirroredDisplayID: UInt32? = nil,
+        hdrActive: Bool = false
     ) {
         self.displayID = displayID
         self.width = width
@@ -77,6 +94,95 @@ public struct DisplayTelemetry: Codable, Equatable, Sendable {
         self.isBuiltIn = isBuiltIn
         self.brightness = brightness
         self.brightnessControlSupported = brightnessControlSupported
+        self.currentMode = currentMode
+        self.availableModes = availableModes
+        self.originX = originX
+        self.originY = originY
+        self.mirroredDisplayID = mirroredDisplayID
+        self.hdrActive = hdrActive
+    }
+}
+
+public struct DisplayModeTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let width: Int
+    public let height: Int
+    public let refreshRate: Double
+
+    public init(id: String, width: Int, height: Int, refreshRate: Double) {
+        self.id = id
+        self.width = width
+        self.height = height
+        self.refreshRate = refreshRate
+    }
+}
+
+public struct PrinterTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let isDefault: Bool
+
+    public init(id: String, name: String, isDefault: Bool) {
+        self.id = id
+        self.name = name
+        self.isDefault = isDefault
+    }
+}
+
+public struct CameraTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let isConnected: Bool
+    public let isPreferred: Bool
+    public let authorization: PermissionPreflightState
+
+    public init(id: String, name: String, isConnected: Bool, isPreferred: Bool, authorization: PermissionPreflightState) {
+        self.id = id
+        self.name = name
+        self.isConnected = isConnected
+        self.isPreferred = isPreferred
+        self.authorization = authorization
+    }
+}
+
+/// Bluetooth device identifiers are a one-way digest of the public address.
+/// This lets a paired node match a device without publishing its hardware
+/// address to the remote control plane.
+public struct BluetoothDeviceTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let isConnected: Bool
+
+    public init(id: String, name: String, isConnected: Bool) {
+        self.id = id
+        self.name = name
+        self.isConnected = isConnected
+    }
+}
+
+public struct VPNServiceTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let isConnected: Bool
+
+    public init(id: String, name: String, isConnected: Bool) {
+        self.id = id
+        self.name = name
+        self.isConnected = isConnected
+    }
+}
+
+public struct BatteryTelemetry: Codable, Equatable, Sendable {
+    public let level: Double?
+    public let isCharging: Bool?
+    public let isExternalPower: Bool?
+    public let isPreventingIdleSleep: Bool
+
+    public init(level: Double?, isCharging: Bool?, isExternalPower: Bool?, isPreventingIdleSleep: Bool) {
+        self.level = level
+        self.isCharging = isCharging
+        self.isExternalPower = isExternalPower
+        self.isPreventingIdleSleep = isPreventingIdleSleep
     }
 }
 
@@ -151,6 +257,11 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let permissions: PermissionPreflight
     public let runningApplications: [RunningApplicationTelemetry]
     public let displays: [DisplayTelemetry]
+    public let printers: [PrinterTelemetry]
+    public let cameras: [CameraTelemetry]
+    public let bluetoothDevices: [BluetoothDeviceTelemetry]
+    public let vpnServices: [VPNServiceTelemetry]
+    public let battery: BatteryTelemetry
     public let collectedAt: Date
 
     public init(
@@ -171,7 +282,12 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         permissions: PermissionPreflight,
         runningApplications: [RunningApplicationTelemetry],
         displays: [DisplayTelemetry],
-        collectedAt: Date
+        collectedAt: Date,
+        printers: [PrinterTelemetry] = [],
+        cameras: [CameraTelemetry] = [],
+        bluetoothDevices: [BluetoothDeviceTelemetry] = [],
+        vpnServices: [VPNServiceTelemetry] = [],
+        battery: BatteryTelemetry = BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: false)
     ) {
         self.deviceName = deviceName
         self.hostName = hostName
@@ -191,6 +307,11 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.runningApplications = runningApplications
         self.displays = displays
         self.collectedAt = collectedAt
+        self.printers = printers
+        self.cameras = cameras
+        self.bluetoothDevices = bluetoothDevices
+        self.vpnServices = vpnServices
+        self.battery = battery
     }
 }
 
@@ -203,13 +324,20 @@ public enum ThingtimeNodeLog {
 @MainActor
 public final class DeviceTelemetryCollector {
     private let sessionActivity: SessionActivityMonitor
+    private let powerAssertions: PowerAssertionController
 
     public init() {
         sessionActivity = SessionActivityMonitor()
+        powerAssertions = PowerAssertionController()
     }
 
-    init(sessionActivity: SessionActivityMonitor) {
+    init(sessionActivity: SessionActivityMonitor, powerAssertions: PowerAssertionController) {
         self.sessionActivity = sessionActivity
+        self.powerAssertions = powerAssertions
+    }
+
+    convenience init(sessionActivity: SessionActivityMonitor) {
+        self.init(sessionActivity: sessionActivity, powerAssertions: PowerAssertionController())
     }
 
     /// Call from applicationDidFinishLaunching after this collector was
@@ -270,29 +398,18 @@ public final class DeviceTelemetryCollector {
                 .sorted {
                     ($0.name ?? $0.bundleIdentifier ?? "") < ($1.name ?? $1.bundleIdentifier ?? "")
                 },
-            displays: Self.displays(),
-            collectedAt: now
+            displays: SystemDisplayConfiguration.displays(),
+            collectedAt: now,
+            printers: SystemPrinters.all(),
+            cameras: SystemCameras.all(),
+            bluetoothDevices: SystemBluetooth.pairedDevices(),
+            vpnServices: SystemVPN.services(),
+            battery: SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep)
         )
     }
 
-    private static func displays() -> [DisplayTelemetry] {
-        var count: UInt32 = 0
-        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
-        var identifiers = Array(repeating: CGDirectDisplayID(), count: Int(count))
-        guard CGGetActiveDisplayList(count, &identifiers, &count) == .success else { return [] }
-        return identifiers.prefix(Int(count)).map { identifier in
-            let bounds = CGDisplayBounds(identifier)
-            let brightness = SystemDisplayBrightness.snapshot(for: identifier)
-            return DisplayTelemetry(
-                displayID: identifier,
-                width: Int(bounds.width),
-                height: Int(bounds.height),
-                isMain: CGDisplayIsMain(identifier) != 0,
-                isBuiltIn: CGDisplayIsBuiltin(identifier) != 0,
-                brightness: brightness?.level,
-                brightnessControlSupported: brightness?.canSet ?? false
-            )
-        }
+    public func setPreventIdleSleep(_ enabled: Bool) throws {
+        try powerAssertions.setPreventingIdleSleep(enabled)
     }
 
     private func sessionTelemetry() -> SessionTelemetry {
@@ -394,10 +511,13 @@ public enum SystemDisplayBrightness {
     }
 
     public static func setMainDisplayBrightness(_ level: Double) throws {
+        try setDisplayBrightness(level, displayID: CGMainDisplayID())
+    }
+
+    public static func setDisplayBrightness(_ level: Double, displayID: CGDirectDisplayID) throws {
         guard level.isFinite, (0 ... 1).contains(level) else {
             throw ThingtimeNodeError.invalidRequest("Brightness must be between 0 and 1.")
         }
-        let displayID = CGMainDisplayID()
         let result = withUniqueMatchingService(for: displayID) { service in
             IODisplaySetFloatParameter(
                 service,
@@ -408,7 +528,7 @@ public enum SystemDisplayBrightness {
         }
         if result == kIOReturnSuccess { return }
         throw ThingtimeNodeError.policyDenied(
-            "The main display does not expose public IOKit brightness control."
+            "The selected display does not expose public IOKit brightness control."
         )
     }
 

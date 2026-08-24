@@ -568,7 +568,7 @@ public actor PairingManager {
 
     private static func normalized(_ capabilities: [String]) throws -> [String] {
         let normalized = Array(Set(capabilities)).sorted()
-        guard normalized.count <= 32, normalized.allSatisfy({ capability in
+        guard normalized.count <= 64, normalized.allSatisfy({ capability in
             !capability.isEmpty && capability.utf8.count <= 80 && capability.utf8.allSatisfy {
                 ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) || $0 == 45 || $0 == 46 || $0 == 95
             }

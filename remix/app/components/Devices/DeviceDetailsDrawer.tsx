@@ -13,6 +13,7 @@ import { DeviceCommandTimeline } from './DeviceCommandTimeline';
 import { DeviceConnectors } from './DeviceConnectors';
 import { DeviceNetworkControls } from './DeviceNetworkControls';
 import { DevicePowerControls } from './DevicePowerControls';
+import { DeviceSystemControls } from './DeviceSystemControls';
 import type { DeviceActionHandler, DeviceControlResolver } from './DeviceStateGrid';
 import { DevicePolicyButton, DeviceStateGrid } from './DeviceStateGrid';
 import { ScreenSessionPanel } from './ScreenSessionPanel';
@@ -474,6 +475,20 @@ export const DeviceDetailsDrawer = memo(
 
 								<Section advanced deviceId={state.deviceId} key={`network:${state.deviceId}`} label="Network & connectivity" section="network">
 									<DeviceNetworkControls controlFor={controlFor} deviceId={state.deviceId} onAction={onAction} wifi={snapshot?.observed.wifi || null} />
+								</Section>
+
+								<Section advanced deviceId={state.deviceId} key={`system-controls:${state.deviceId}`} label="Displays & system hardware" section="system-controls">
+									<DeviceSystemControls
+										battery={snapshot?.observed.battery || null}
+										bluetoothDevices={snapshot?.observed.bluetoothDevices || []}
+										cameras={snapshot?.observed.cameras || []}
+										controlFor={controlFor}
+										deviceId={state.deviceId}
+										displays={snapshot?.observed.displays || []}
+										onAction={onAction}
+										printers={snapshot?.observed.printers || []}
+										vpnServices={snapshot?.observed.vpnServices || []}
+									/>
 								</Section>
 
 								<Section

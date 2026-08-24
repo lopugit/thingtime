@@ -81,6 +81,23 @@ public actor ThingtimeNodeController {
         "system.wifi.connect",
         "system.wifi.disconnect",
         "system.wifi.power.write",
+        "system.display.read",
+        "system.display.mode.write",
+        "system.display.layout.write",
+        "system.display.mirroring.write",
+        "system.printers.read",
+        "system.printer.default.write",
+        "system.camera.read",
+        "system.camera.preferred.write",
+        "system.bluetooth.read",
+        "system.bluetooth.device.connection.write",
+        "system.vpn.read",
+        "system.vpn.connection.write",
+        "system.power.battery.read",
+        "system.power.idle-sleep-prevention.write",
+        "system.power.restart",
+        "system.power.shutdown",
+        "system.session.logout",
         "apps.visibility"
     ]
     private static let connectorMethods: Set<String> = [
@@ -406,6 +423,17 @@ public actor ThingtimeNodeController {
                 pairingCapabilities.append("system.brightness.write")
             }
         }
+        if !device.displays.isEmpty {
+            pairingCapabilities.append("system.display.read")
+            pairingCapabilities.append(contentsOf: [
+                "system.display.mode.write",
+                "system.display.layout.write",
+                "system.display.mirroring.write"
+            ])
+            if device.displays.contains(where: { $0.brightnessControlSupported }) {
+                pairingCapabilities.append("system.display.brightness.write")
+            }
+        }
         let claimRequest: PairingClaimRequest
         if let prepared = try await pairing.preparedClaim(pairingID: challenge.pairingID) {
             claimRequest = prepared
@@ -557,10 +585,64 @@ public actor ThingtimeNodeController {
             }
             action = SafeActionRequest(kind: .setDefaultSoundEffectsOutputDevice, parameters: ["deviceId": .string(deviceID)])
         case "system.brightness.set":
+            try requireOnlyKeys(input, ["level"])
             guard let level = input["level"]?.numberValue else {
                 throw ThingtimeNodeError.invalidRequest("system.brightness.set requires level.")
             }
             action = SafeActionRequest(kind: .setDisplayBrightness, parameters: ["brightness": .number(level)])
+        case "system.display.brightness.set":
+            try requireOnlyKeys(input, ["displayId", "level"])
+            guard let displayID = input["displayId"]?.numberValue, let level = input["level"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("system.display.brightness.set requires displayId and level.")
+            }
+            action = SafeActionRequest(kind: .setDisplayBrightnessForDisplay, parameters: ["displayId": .number(displayID), "brightness": .number(level)])
+        case "system.display.mode.set":
+            try requireOnlyKeys(input, ["displayId", "modeId"])
+            guard let displayID = input["displayId"]?.numberValue, let modeID = input["modeId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("system.display.mode.set requires displayId and modeId.")
+            }
+            action = SafeActionRequest(kind: .setDisplayMode, parameters: ["displayId": .number(displayID), "modeId": .string(modeID)])
+        case "system.display.origin.set":
+            try requireOnlyKeys(input, ["displayId", "x", "y"])
+            guard let displayID = input["displayId"]?.numberValue,
+                  let x = input["x"]?.numberValue,
+                  let y = input["y"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("system.display.origin.set requires displayId, x, and y.")
+            }
+            action = SafeActionRequest(kind: .setDisplayOrigin, parameters: ["displayId": .number(displayID), "x": .number(x), "y": .number(y)])
+        case "system.display.mirroring.set":
+            try requireOnlyKeys(input, ["displayId", "sourceDisplayId"])
+            guard let displayID = input["displayId"]?.numberValue,
+                  let source = input["sourceDisplayId"] else {
+                throw ThingtimeNodeError.invalidRequest("system.display.mirroring.set requires displayId and sourceDisplayId.")
+            }
+            action = SafeActionRequest(kind: .setDisplayMirroring, parameters: ["displayId": .number(displayID), "sourceDisplayId": source])
+        case "system.printer.default.set":
+            try requireOnlyKeys(input, ["id"])
+            guard let id = input["id"]?.stringValue else { throw ThingtimeNodeError.invalidRequest("system.printer.default.set requires id.") }
+            action = SafeActionRequest(kind: .setDefaultPrinter, parameters: ["id": .string(id)])
+        case "system.camera.preferred.set":
+            try requireOnlyKeys(input, ["id"])
+            guard let id = input["id"]?.stringValue else { throw ThingtimeNodeError.invalidRequest("system.camera.preferred.set requires id.") }
+            action = SafeActionRequest(kind: .setPreferredCamera, parameters: ["id": .string(id)])
+        case "system.bluetooth.device.connection.set":
+            try requireOnlyKeys(input, ["id", "connected"])
+            guard let id = input["id"]?.stringValue, case let .bool(connected)? = input["connected"] else {
+                throw ThingtimeNodeError.invalidRequest("system.bluetooth.device.connection.set requires id and connected.")
+            }
+            action = SafeActionRequest(kind: .setBluetoothDeviceConnected, parameters: ["id": .string(id), "connected": .bool(connected)])
+        case "system.vpn.connection.set":
+            try requireOnlyKeys(input, ["id", "connected"])
+            guard let id = input["id"]?.stringValue, case let .bool(connected)? = input["connected"] else {
+                throw ThingtimeNodeError.invalidRequest("system.vpn.connection.set requires id and connected.")
+            }
+            action = SafeActionRequest(kind: .setVPNConnected, parameters: ["id": .string(id), "connected": .bool(connected)])
+        case "system.power.idle-sleep-prevention.set":
+            try requireOnlyKeys(input, ["enabled"])
+            guard case let .bool(enabled)? = input["enabled"] else {
+                throw ThingtimeNodeError.invalidRequest("system.power.idle-sleep-prevention.set requires enabled.")
+            }
+            action = SafeActionRequest(kind: .setPreventIdleSleep, parameters: ["enabled": .bool(enabled)])
         case "app.launch":
             try requireOnlyKeys(input, ["appId"])
             guard let appID = input["appId"]?.stringValue else {
@@ -606,6 +688,15 @@ public actor ThingtimeNodeController {
         case "system.sleep":
             try requireOnlyKeys(input, [])
             action = SafeActionRequest(kind: .sleepSystem)
+        case "system.restart":
+            try requireOnlyKeys(input, [])
+            action = SafeActionRequest(kind: .restartSystem)
+        case "system.shutdown":
+            try requireOnlyKeys(input, [])
+            action = SafeActionRequest(kind: .shutDownSystem)
+        case "system.logout":
+            try requireOnlyKeys(input, [])
+            action = SafeActionRequest(kind: .logOutSession)
         case "system.wifi.connect":
             try requireOnlyKeys(input, ["ssid"])
             guard let ssid = input["ssid"]?.stringValue else {

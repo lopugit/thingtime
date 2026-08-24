@@ -132,7 +132,11 @@ final class NodeControllerTests: XCTestCase {
             LeasedCommand(commandID: "force-quit", leaseID: "lease-force-quit", method: "app.force-quit", parameters: .object(["appId": .string("com.example.App")]), leaseExpiresAt: .distantFuture),
             LeasedCommand(commandID: "hide-others", leaseID: "lease-hide-others", method: "app.hide-others", parameters: .object([:]), leaseExpiresAt: .distantFuture),
             LeasedCommand(commandID: "wifi-connect", leaseID: "lease-wifi-connect", method: "system.wifi.connect", parameters: .object(["ssid": .string("Thingtime Guest")]), leaseExpiresAt: .distantFuture),
-            LeasedCommand(commandID: "wifi-power", leaseID: "lease-wifi-power", method: "system.wifi.power.set", parameters: .object(["enabled": .bool(false)]), leaseExpiresAt: .distantFuture)
+            LeasedCommand(commandID: "wifi-power", leaseID: "lease-wifi-power", method: "system.wifi.power.set", parameters: .object(["enabled": .bool(false)]), leaseExpiresAt: .distantFuture),
+            LeasedCommand(commandID: "display-mode", leaseID: "lease-display-mode", method: "system.display.mode.set", parameters: .object(["displayId": .number(42), "modeId": .string("1920x1080@60000:0")]), leaseExpiresAt: .distantFuture),
+            LeasedCommand(commandID: "printer", leaseID: "lease-printer", method: "system.printer.default.set", parameters: .object(["id": .string("printer-1")]), leaseExpiresAt: .distantFuture),
+            LeasedCommand(commandID: "keep-awake", leaseID: "lease-keep-awake", method: "system.power.idle-sleep-prevention.set", parameters: .object(["enabled": .bool(true)]), leaseExpiresAt: .distantFuture),
+            LeasedCommand(commandID: "restart", leaseID: "lease-restart", method: "system.restart", parameters: .object([:]), leaseExpiresAt: .distantFuture)
         ]
 		for command in commands {
 			let response = await controller.handleLeasedCommand(command)
