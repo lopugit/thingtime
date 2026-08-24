@@ -49,6 +49,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
   private let updateWindowMode: (String) throws -> Void
   private let updateWindowPinning: (Bool, Bool, Bool) -> Void
   private let metrics: SystemMetricsService
+  private let fileIconRequests = CommanderFileIconRequestQueue()
   weak var webView: WKWebView?
 
   init(
@@ -204,7 +205,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: raw)]); result = nil
       case "filesystem.icon":
         guard let path = request.params?["path"]?.string else { throw BridgeError.missing("path") }
-        result = ["dataUrl": try CommanderWebView.fileIconDataURL(for: path)]
+        result = ["dataUrl": try await fileIconRequests.dataURL(for: path)]
       case "filesystem.copy":
         guard let path = request.params?["path"]?.string else { throw BridgeError.missing("path") }
         let url = try CommanderWebView.validatedFileURL(for: path)
@@ -441,6 +442,51 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     if let error { payload["error"] = error }
     guard let data = try? JSONSerialization.data(withJSONObject: payload), let json = String(data: data, encoding: .utf8) else { return }
     webView?.evaluateJavaScript("window.commanderNativeReply(\(json))")
+  }
+}
+
+/// Finder icon lookup and PNG encoding use AppKit, so they must remain on the
+/// main actor. A broad search can otherwise deliver dozens of bridge messages
+/// in one renderer turn and starve AppKit long enough for macOS to show a
+/// spinning cursor. Admit one request per run-loop turn instead.
+@MainActor
+private final class CommanderFileIconRequestQueue {
+  private struct Job {
+    let path: String
+    let continuation: CheckedContinuation<String, Error>
+  }
+
+  private var jobs: [Job] = []
+  private var scheduled = false
+
+  func dataURL(for path: String) async throws -> String {
+    try await withCheckedThrowingContinuation { continuation in
+      jobs.append(Job(path: path, continuation: continuation))
+      scheduleNext()
+    }
+  }
+
+  private func scheduleNext() {
+    guard !scheduled, !jobs.isEmpty else { return }
+    scheduled = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(8)) { [weak self] in
+      self?.renderNext()
+    }
+  }
+
+  private func renderNext() {
+    guard !jobs.isEmpty else {
+      scheduled = false
+      return
+    }
+    let job = jobs.removeFirst()
+    scheduled = false
+    do {
+      job.continuation.resume(returning: try CommanderWebView.fileIconDataURL(for: job.path))
+    } catch {
+      job.continuation.resume(throwing: error)
+    }
+    scheduleNext()
   }
 }
 
