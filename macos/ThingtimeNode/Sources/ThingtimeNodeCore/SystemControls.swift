@@ -126,8 +126,8 @@ public enum SystemPrinters {
     public static func all() -> [PrinterTelemetry] {
         guard let printers = printerList() else { return [] }
         return printers.compactMap { printer in
-            guard let id = PMPrinterGetID(printer) as String?,
-                  let name = PMPrinterGetName(printer) as String? else { return nil }
+            guard let id = printerString(PMPrinterGetID(printer)),
+                  let name = printerString(PMPrinterGetName(printer)) else { return nil }
             return PrinterTelemetry(id: id, name: name, isDefault: PMPrinterIsDefault(printer))
         }
         .sorted { ($0.name, $0.id) < ($1.name, $1.id) }
@@ -137,7 +137,7 @@ public enum SystemPrinters {
 
     public static func setDefault(id: String) throws {
         guard let printers = printerList(),
-              let printer = printers.first(where: { PMPrinterGetID($0) as String? == id }) else {
+              let printer = printers.first(where: { printerString(PMPrinterGetID($0)) == id }) else {
             throw ThingtimeNodeError.policyDenied("The selected printer is no longer available.")
         }
         guard PMPrinterSetDefault(printer) == noErr else {
@@ -150,6 +150,20 @@ public enum SystemPrinters {
         guard PMServerCreatePrinterList(nil, &list) == noErr,
               let list = list?.takeRetainedValue() as? [PMPrinter] else { return nil }
         return list
+    }
+
+    // Different macOS SDK overlays have imported Core Printing's `Get` APIs as
+    // `String?`, `CFString?`, or an unretained `Unmanaged<CFString>?`. Keep the
+    // public telemetry shape stable and obey the Core Foundation Get rule for
+    // the unmanaged form instead of force-casting a build-SDK-specific type.
+    static func printerString(_ value: String?) -> String? { value }
+
+    static func printerString(_ value: CFString?) -> String? {
+        value.map { $0 as String }
+    }
+
+    static func printerString(_ value: Unmanaged<CFString>?) -> String? {
+        value.map { $0.takeUnretainedValue() as String }
     }
 }
 

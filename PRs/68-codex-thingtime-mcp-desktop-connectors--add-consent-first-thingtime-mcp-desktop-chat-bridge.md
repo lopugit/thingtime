@@ -896,3 +896,8 @@ an offline database or offline conflict resolution layer.
   second run then spent more than five minutes in its unnecessary full-history
   checkout, so the exact resolved SHA now uses `fetch-depth: 1`; this shortens
   the gate without widening the selected source or signing authority.
+- The first complete unsigned native build on the GitHub macOS SDK then exposed
+  `PMPrinterGetID`/`PMPrinterGetName` as unretained Core Foundation references,
+  unlike the local overlay that had masked the issue. Printer telemetry and
+  selection now normalize Swift, Core Foundation, and unmanaged Core Foundation
+  string declarations through the Core Foundation Get rule before comparison.

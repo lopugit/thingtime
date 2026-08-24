@@ -170,6 +170,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Signed-release native checks now build across macOS SDK overlays**: printer
+  identifiers and names are converted through the Core Foundation Get-rule
+  bridge, rather than force-cast from one SDK-specific declaration. The
+  release gate now works whether Core Printing imports these values as Swift,
+  Core Foundation, or unmanaged Core Foundation strings. — Codex (AI),
+  2026-08-24
+
 - **Deployment peer discovery is bounded and gossip-based**: authenticated
   first-party deployments now maintain one relational, TTL-reaped peer lease
   per origin. `/api/v1/peers` streams cursor-paginated NDJSON instead of an
