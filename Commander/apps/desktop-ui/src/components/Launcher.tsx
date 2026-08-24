@@ -401,7 +401,12 @@ export function Launcher({ state }: { state: CommanderState }) {
         }}
         onDoubleClick={() => void runHitAction(hit, hit.actions[0]?.id ?? 'open')}
       >
-        <ResultIcon icon={hit.icon} kind={hit.kind} path={hit.path} />
+        <ResultIcon
+          icon={hit.icon}
+          kind={hit.kind}
+          path={hit.path}
+          shouldLoadNativeIcon={!historyVisible && rowSelected && !state.resultsStale}
+        />
         <span className="result-copy">
           <span className="result-title">{displayTitle(hit)}</span>
           {hit.subtitle ? <span className="result-subtitle">{hit.subtitle}</span> : null}

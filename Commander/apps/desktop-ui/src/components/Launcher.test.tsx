@@ -194,6 +194,31 @@ describe('Launcher keyboard navigation', () => {
     });
   });
 
+  it('loads native Finder icons only for the focused result so broad searches cannot flood the host bridge', async () => {
+    const pathBackedHits: SearchHit[] = Array.from({ length: 30 }, (_, index) => ({
+      ...hits[1]!,
+      id: `file:batch-${index}`,
+      title: `batch-${index}.txt`,
+      subtitle: `/tmp/commander-batch-${index}.txt`,
+      kind: 'file',
+      path: `/tmp/commander-batch-${index}.txt`,
+      score: 1_000 - index,
+    }));
+    vi.mocked(nativeRequest).mockResolvedValue({ dataUrl: 'data:image/png;base64,aWNvbg==' });
+    const commander = state({ hits: pathBackedHits, selectedIndex: 0 });
+    const view = render(<Launcher state={commander} />);
+    const nativeIconCalls = () =>
+      vi.mocked(nativeRequest).mock.calls.filter(([method]) => method === 'filesystem.icon');
+
+    await waitFor(() => expect(nativeIconCalls()).toHaveLength(1));
+    expect(nativeIconCalls()[0]).toEqual(['filesystem.icon', { path: pathBackedHits[0]!.path }]);
+
+    view.rerender(<Launcher state={{ ...commander, selectedIndex: 1 }} />);
+
+    await waitFor(() => expect(nativeIconCalls()).toHaveLength(2));
+    expect(nativeIconCalls()[1]).toEqual(['filesystem.icon', { path: pathBackedHits[1]!.path }]);
+  });
+
   it('runs the selected primary action with Return', async () => {
     const commander = state({ selectedIndex: 1 });
     render(<Launcher state={commander} />);
