@@ -5600,8 +5600,8 @@
     "semantic_hash": "70e04ae967eb4d9727e3231ef76eb7b0"
   },
   "Commander/apps/daemon/src/server.test.ts": {
-    "mtime": 1787575850.424032,
-    "ast_hash": "1f6dd767a6ff9f7c8f579846ebcd75c4",
+    "mtime": 1787577238.8197942,
+    "ast_hash": "d05997e7acec615c78ec7777e5b12e8e",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/server.ts": {
@@ -5625,7 +5625,7 @@
     "semantic_hash": "bc67fc702d8001a94e9f83a95a4a2fb4"
   },
   "Commander/apps/daemon/src/services/catalog.ts": {
-    "mtime": 1787575804.94388,
+    "mtime": 1787577238.8191562,
     "ast_hash": "7dd1b2794d2960e8e6650c64fd726a91",
     "semantic_hash": ""
   },
@@ -5645,7 +5645,7 @@
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/macosSystem.test.ts": {
-    "mtime": 1787373945.687005,
+    "mtime": 1787577238.819435,
     "ast_hash": "ba706b418e409fd5ec5d70daa57d683a",
     "semantic_hash": "ba706b418e409fd5ec5d70daa57d683a"
   },
@@ -5785,8 +5785,8 @@
     "semantic_hash": "01b65afd46e858d575e5b34854dfcb2e"
   },
   "Commander/apps/desktop-ui/src/components/IndexingSettings.tsx": {
-    "mtime": 1787575711.4562314,
-    "ast_hash": "2c1e63663dae0cb2a0257573a2724cf1",
+    "mtime": 1787577100.1929083,
+    "ast_hash": "966452c5a53b3a1cc97b72d95e74379b",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Launcher.test.tsx": {
@@ -5820,14 +5820,14 @@
     "semantic_hash": "3aaae03456faab7f3b26e75252399afe"
   },
   "Commander/apps/desktop-ui/src/components/Settings.test.tsx": {
-    "mtime": 1787575653.309021,
-    "ast_hash": "4836eed95d8c711612a32019afc09219",
+    "mtime": 1787577362.5181332,
+    "ast_hash": "23291e3804b851ef3f43f3a29fa86584",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Settings.tsx": {
-    "mtime": 1787477129.3279023,
-    "ast_hash": "4c66d7f79d3ec87126fa90c613215651",
-    "semantic_hash": "4c66d7f79d3ec87126fa90c613215651"
+    "mtime": 1787577100.193491,
+    "ast_hash": "ba94b7c7d188312651d4cc5f16aef271",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/UiErrorBoundary.test.tsx": {
     "mtime": 1786957602.0644598,
@@ -6980,8 +6980,8 @@
     "semantic_hash": ""
   },
   "Commander/docs/TESTING.md": {
-    "mtime": 1787575517.0662348,
-    "ast_hash": "528efb3d847407df3474712d466ed120",
+    "mtime": 1787577142.199181,
+    "ast_hash": "c124253220202da32649450caebd106c",
     "semantic_hash": ""
   },
   "Commander/extensions/README.md": {

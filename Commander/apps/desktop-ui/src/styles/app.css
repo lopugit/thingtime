@@ -2360,35 +2360,61 @@
   font-weight: 600;
   white-space: nowrap;
 }
-.index-privacy-note {
+.full-disk-access-card {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 9px;
-  margin-top: 12px;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 6%, var(--hover));
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--hover));
 }
-.index-privacy-note > svg {
-  width: 18px;
-  height: 18px;
+.full-disk-access-card > svg {
+  width: 26px;
+  height: 26px;
   color: var(--accent);
 }
-.index-privacy-note > span {
+.full-disk-access-card > div {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
-.index-privacy-note strong {
-  font-size: 0.75rem;
+.full-disk-access-title-row {
+  align-items: center;
+  gap: 8px;
 }
-.index-privacy-note small {
+.full-disk-access-card strong {
+  font-size: 0.86rem;
+}
+.full-disk-access-card small {
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   line-height: 1.35;
+}
+.full-disk-access-status {
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--selected);
+  font-size: 0.64rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.full-disk-access-status.is-granted {
+  color: #268650;
+}
+.full-disk-access-status.is-not-granted,
+.full-disk-access-status.is-unavailable {
+  color: var(--danger);
+}
+.full-disk-access-actions {
+  flex: none;
+  flex-direction: row !important;
+  gap: 7px !important;
 }
 .index-settings-section {
   margin-top: 18px;
@@ -2581,12 +2607,12 @@
   .index-resource-grid.single {
     grid-template-columns: minmax(0, 1fr);
   }
-  .index-privacy-note {
-    grid-template-columns: 20px minmax(0, 1fr);
+  .full-disk-access-card {
+    grid-template-columns: 26px minmax(0, 1fr);
   }
-  .index-privacy-note .secondary-button {
+  .full-disk-access-actions {
     grid-column: 1 / -1;
-    justify-self: start;
+    flex-wrap: wrap;
   }
 }
 .callback-card span {

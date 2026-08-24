@@ -42,28 +42,8 @@ export function IndexingSettings({
   const [draft, setDraft] = useState<IndexingPreferences>(() => structuredClone(settings.indexing));
   const [status, setStatus] = useState<IndexingStatus | null>(null);
   const [requesting, setRequesting] = useState<IndexScope | null>(null);
-  const [fullDiskAccess, setFullDiskAccess] = useState<
-    'checking' | 'granted' | 'not-granted' | 'unavailable'
-  >('checking');
 
   useEffect(() => setDraft(structuredClone(settings.indexing)), [settings.indexing]);
-
-  const refreshFullDiskAccess = useCallback(async () => {
-    setFullDiskAccess('checking');
-    try {
-      const result = await nativeRequest<{ granted?: unknown }>('permission.fullDiskAccess');
-      setFullDiskAccess(
-        result === undefined ? 'unavailable' : result.granted === true ? 'granted' : 'not-granted',
-      );
-    } catch (error) {
-      setFullDiskAccess('unavailable');
-      onError(error instanceof Error ? error.message : 'Could not check Full Disk Access');
-    }
-  }, [onError]);
-
-  useEffect(() => {
-    void refreshFullDiskAccess();
-  }, [refreshFullDiskAccess]);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,39 +164,6 @@ export function IndexingSettings({
         <strong aria-label="Search index database size">
           Database {status ? formatBytes(status.databaseSizeBytes) : '—'}
         </strong>
-      </div>
-
-      <div className="index-privacy-note">
-        <ShieldCheck />
-        <span>
-          <strong>{fullDiskAccessLabel(fullDiskAccess)}</strong>
-          <small>
-            {fullDiskAccess === 'granted'
-              ? 'Commander can scan protected locations. The check only opens macOS’s protected TCC database and never reads its contents.'
-              : 'Grant Commander Full Disk Access for a complete whole-volume index. Without it, use explicitly allowed folders as roots.'}
-          </small>
-        </span>
-        <button
-          type="button"
-          className="secondary-button compact"
-          disabled={fullDiskAccess === 'checking'}
-          onClick={() => void refreshFullDiskAccess()}
-        >
-          {fullDiskAccess === 'checking' ? 'Checking…' : 'Recheck'}
-        </button>
-        <button
-          type="button"
-          className="secondary-button compact"
-          onClick={() =>
-            void nativeRequest('application.open', {
-              path: 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
-            }).catch((error) =>
-              onError(error instanceof Error ? error.message : 'Could not open System Settings'),
-            )
-          }
-        >
-          Open Full Disk Access
-        </button>
       </div>
 
       <div className="index-settings-section">
@@ -469,6 +416,76 @@ export function IndexingSettings({
           {message}
         </div>
       ))}
+    </section>
+  );
+}
+
+/**
+ * Kept at the very top of Search settings instead of inside the lengthy index
+ * configuration form. Permission state is important enough to be visible
+ * without scrolling, even before the first index has completed.
+ */
+export function FullDiskAccessCard({ onError }: { onError(value: string | null): void }) {
+  const [fullDiskAccess, setFullDiskAccess] = useState<
+    'checking' | 'granted' | 'not-granted' | 'unavailable'
+  >('checking');
+
+  const refreshFullDiskAccess = useCallback(async () => {
+    setFullDiskAccess('checking');
+    try {
+      const result = await nativeRequest<{ granted?: unknown }>('permission.fullDiskAccess');
+      setFullDiskAccess(
+        result === undefined ? 'unavailable' : result.granted === true ? 'granted' : 'not-granted',
+      );
+    } catch (error) {
+      setFullDiskAccess('unavailable');
+      onError(error instanceof Error ? error.message : 'Could not check Full Disk Access');
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    void refreshFullDiskAccess();
+  }, [refreshFullDiskAccess]);
+
+  return (
+    <section className="full-disk-access-card" aria-labelledby="full-disk-access-title">
+      <ShieldCheck aria-hidden="true" />
+      <div>
+        <div className="full-disk-access-title-row">
+          <strong id="full-disk-access-title">macOS whole-volume access</strong>
+          <span className={`full-disk-access-status is-${fullDiskAccess}`} aria-live="polite">
+            {fullDiskAccessLabel(fullDiskAccess)}
+          </span>
+        </div>
+        <small>
+          {fullDiskAccess === 'granted'
+            ? 'Commander can scan protected locations. The check only opens macOS’s protected TCC database and never reads its contents.'
+            : 'Grant Commander Full Disk Access for a complete whole-volume index. Without it, use explicitly allowed folders as roots.'}
+        </small>
+      </div>
+      <div className="full-disk-access-actions">
+        <button
+          type="button"
+          className="secondary-button compact"
+          disabled={fullDiskAccess === 'checking'}
+          onClick={() => void refreshFullDiskAccess()}
+        >
+          {fullDiskAccess === 'checking' ? 'Checking…' : 'Recheck'}
+        </button>
+        <button
+          type="button"
+          className="secondary-button compact"
+          onClick={() =>
+            void nativeRequest('application.open', {
+              path: 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
+            }).catch((error) =>
+              onError(error instanceof Error ? error.message : 'Could not open System Settings'),
+            )
+          }
+        >
+          Open Full Disk Access
+        </button>
+      </div>
     </section>
   );
 }
