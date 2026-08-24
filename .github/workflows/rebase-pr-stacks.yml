@@ -1124,7 +1124,7 @@ jobs:
             eta="$(date -u -d '+15 minutes' '+%H:%M UTC')"
             body="$RUNNER_TEMP/rebase-start-comment.md"
             {
-              printf '🤖 **Auto-rebase running** — the stack rebase started working on this PR at %s.\n\n' "$started"
+              printf '🤖 **Lopu is rebasing this stack** — work started at %s.\n\n' "$started"
               printf 'Expected to finish around **%s** (most rebases still land in 5-15 minutes; the hosted-runner ceiling is 360). ' "$eta"
               printf 'On success this branch is force-pushed onto its new base and a result comment follows — no manual action is needed meanwhile.\n\n'
               printf '[Live status](%s)\n\n%s\n' "$RUN_URL" "$marker"

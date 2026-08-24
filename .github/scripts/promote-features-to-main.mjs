@@ -1514,7 +1514,7 @@ function queueTrustedPromotionWorker({
       .join(", ");
     const handoffKind = conflicts.length > 0
       ? "Promotion conflict resolution"
-      : "Protected promotion replay";
+      : "Lopu promotion replay";
     const commented = tryGh([
       "pr", "comment", String(context.sourcePr), ...repoFlag(),
       "--body",
@@ -2047,8 +2047,8 @@ function finalizeAiPromotionMetadata(sourcePr, promotionNumber, context, attesta
     .replace(/`/g, "\\`");
   const reviewBody = [
     aiResolved
-      ? "🤖 **Automatic promotion conflict resolution completed.**"
-      : "🤖 **Protected promotion replay completed without an AI edit.**",
+      ? "🤖 **Lopu completed the promotion conflict resolution.**"
+      : "🤖 **Lopu completed the promotion replay without an AI edit.**",
     "",
     `Source PR: #${sourcePr.number} · plan: \`${context.planHash}\` · [workflow run](${attestation.run_url})`,
     "",
@@ -2071,13 +2071,6 @@ function finalizeAiPromotionMetadata(sourcePr, promotionNumber, context, attesta
             `\`${inline(attestation?.graphify_mode, "recorded in the linked run")}\` ` +
             `(semantic: \`${inline(attestation?.graphify_semantic, "recorded in the linked run")}\`).`,
         ]),
-    ...(attestation?.ci_sensitive === true
-      ? [
-          "",
-          "⚠️ CI-sensitive `.github/**` content is protected by an empty review-checkpoint; " +
-            "approve its PR checks only after reviewing the paths above.",
-        ]
-      : []),
     ...(sourceLineageReviewRequired(context)
       ? [
           "",
@@ -2095,7 +2088,7 @@ function finalizeAiPromotionMetadata(sourcePr, promotionNumber, context, attesta
   );
   if (!reviewed.ok) return reviewed;
   const statusBody = [
-    `✅ Automatic promotion conflict resolution opened #${promotionNumber} for \`${context.branch}\`.`,
+    `✅ Lopu opened promotion conflict resolution #${promotionNumber} for \`${context.branch}\`.`,
     "",
     `Review the exact resolved paths and immutable snapshot in the promotion PR comment. [Workflow run](${attestation.run_url}).`,
     ...(sourceLineageReviewRequired(context)
@@ -2927,7 +2920,7 @@ function orphanedMergeHydrationIntegrationTest(assert) {
         },
       ).ok,
       true,
-      "a verified non-CI-sensitive canonical direct branch keeps the fast-path recovery",
+      "a verified canonical direct branch keeps the fast-path recovery",
     );
     const reviewRequiredDirect = validateReusablePromotionBranch(
       "HEAD",

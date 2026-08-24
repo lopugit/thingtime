@@ -37,6 +37,7 @@ assert.match(workflow, /name: Lopu scans rebases and stack cascades/);
 assert.match(workflow, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/);
 assert.match(workflow, /--dangerously-skip-permissions/);
 assert.match(workflow, /--allowedTools "Bash\(\*\),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"/);
+assert.doesNotMatch(workflow, /DISALLOWED_TOOLS/);
 assert.doesNotMatch(workflow, /Gate publication of AI-resolved workflow files before model spend/);
 assert.doesNotMatch(workflow, /Workflow-file promotion requires the review-gated publication token/);
 
@@ -51,6 +52,7 @@ assert.match(rebaseWorkflow, /group: lopu-agent-fleet-\$\{\{ github\.repository 
 assert.match(action, /You are Lopu, Thingtime's principal PR and repository manager/);
 assert.match(action, /--dangerously-skip-permissions/);
 assert.match(action, /--allowedTools "Bash\(\*\),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"/);
+assert.doesNotMatch(action, /DISALLOWED_TOOLS/);
 assert.match(worker, /git commit -q/);
 assert.doesNotMatch(worker, /review_gated/);
 assert.doesNotMatch(worker, /ci_sensitive_paths/);
