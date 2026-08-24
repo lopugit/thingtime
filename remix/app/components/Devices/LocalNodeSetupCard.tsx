@@ -4,7 +4,7 @@ import { Badge, Box, Flex, Spinner, Text } from '@chakra-ui/react';
 import { FolderPlus, Laptop, Settings, ShieldCheck } from 'lucide-react';
 
 import { DevicePolicyButton, type DeviceActionHandler, type DeviceControlResolver } from './DeviceStateGrid';
-import { localNodeBadgePresentation } from './localNodePresentation';
+import { localNodeBadgePresentation, PASTEL_PAIRED_ACCOUNT_BADGE_STYLE } from './localNodePresentation';
 import type { LocalThingtimeNodeState } from './useLocalThingtimeNode';
 
 export const LocalNodeSetupCard = ({
@@ -72,7 +72,13 @@ export const LocalNodeSetupCard = ({
 								? 'Pair this Thingtime account to this Mac'
 								: 'Make this Mac a Thingtime node'}
 						</Text>
-						<Badge borderRadius="full" colorScheme={badge.colorScheme}>
+						<Badge
+							borderRadius="full"
+							borderWidth={paired ? '1px' : undefined}
+							colorScheme={badge.colorScheme}
+							data-paired-account-badge={paired ? 'true' : undefined}
+							style={paired ? PASTEL_PAIRED_ACCOUNT_BADGE_STYLE : undefined}
+						>
 							{badge.label}
 						</Badge>
 						{badge.showChecking ? (
