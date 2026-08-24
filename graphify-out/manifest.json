@@ -5820,13 +5820,13 @@
     "semantic_hash": "3aaae03456faab7f3b26e75252399afe"
   },
   "Commander/apps/desktop-ui/src/components/Settings.test.tsx": {
-    "mtime": 1787577362.5181332,
-    "ast_hash": "23291e3804b851ef3f43f3a29fa86584",
+    "mtime": 1787579162.0406053,
+    "ast_hash": "bee5d0fcd689bec76ccdf8a5ed84634f",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Settings.tsx": {
-    "mtime": 1787577100.193491,
-    "ast_hash": "ba94b7c7d188312651d4cc5f16aef271",
+    "mtime": 1787579162.0395663,
+    "ast_hash": "23419c7508b4e193accd165c4db9cfcb",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/UiErrorBoundary.test.tsx": {
