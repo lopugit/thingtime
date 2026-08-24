@@ -30,9 +30,33 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   library JSON dump removed. Details:
   `PRs/129-claude-todo08-branding-svg-png-s1--branding-brand-resources-redesign.md`.
   — Claude (AI), 2026-08-22
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
 
 ### Fixed
 
+- **PR #299 Messenger membership durability**: unordered batched member writes
+  now treat duplicate-key failures as benign only when the Mongo driver reports
+  no accompanying write-concern failure. The check covers the current driver's
+  concern-only and result-level error shapes and fails closed when the result
+  cannot be inspected. — Codex (AI), 2026-08-24
 - **Storage-accounting migrations retain protected attachment fields**: the
   pending census and real whole-account backfill now project the complete
   attachment object envelope before calculating canonical bytes, preventing
@@ -121,6 +145,58 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with the drawer and media-capture fixes, verified the signed IPA metadata and
   privacy descriptions, and published build 14 for internal TestFlight testing.
   — Codex (AI), 2026-08-18
+
+### Performance
+
+- **PR #299 performance audit — findings, notes and fixes**: full ten-dimension
+  audit of the codebase with every finding adversarially verified against the
+  real source (74 raw → 63 confirmed, 11 refuted); see
+  `PRs/299-claude-thingtime-performance-optimization-55ea95-performance-audit-findings-notes-and-fixes.md`
+  for the complete record. Landed this round: route-level code splitting plus
+  removal of the never-rendered FontAwesome solid set, taking the entry chunk
+  from 1,165 KB to 168 KB gzipped (−86%); `resolveSessionUser` now resolves
+  session, user and subscription concurrently, turning three sequential Mongo
+  round trips into one on every authenticated request; `useRecentReactions`
+  shares a single fetch across all consumers (8 → 1 identical requests per page,
+  ~40 → 1 on a 20-post feed); chat-member writes batch into one `insertMany`
+  (50 → 1 round trips per add); `toPublicPosts` overlaps attachment and profile
+  resolution; and the notifications bell no longer polls hidden tabs.
+  — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round two**: content-hashed `/assets/` now ship
+  `immutable` caching (index.html's ~80 eagerly-referenced chunks stopped costing
+  a conditional GET per repeat visit, restoring the zero-network disk-cache
+  path); the comment permalink's ancestor ACL checks share one batched lookup
+  (was n + n(n-1)/2 sequential round trips at nesting depth n); search result
+  pages use the same batched walk; a partial index backs the unread-notification
+  badge so the count no longer fetches every notification a user ever received;
+  `buildSummaryContext` resolves in 3 dependency stages instead of 6 serial ones;
+  the messenger access gate resolves chat and membership together; and the
+  `/api/docs` render cache is LRU-bounded (it was keyed by the caller-controlled
+  Host header). — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round three**: `resolveRelated`'s child reads are
+  projected (dropping each comment's `extended` sidecar, up to 512KB per doc)
+  and the reply aggregate projects before `$group`, removing a 100MB
+  `$group`-cap failure mode on large threads; a `{kind, createdAt, shareId}`
+  index gives the dual-era post match a sortable v1 branch, so the feed stops
+  fetching every visible post and sorting in memory; a sparse `shareOfId` index
+  turns the live share-count aggregation from a full collection scan into an
+  indexed lookup on every feed page, post read and reaction toggle; chat member
+  existence checks batch into two queries; and the feed's post row is memoized
+  so `PostCard`'s `React.memo` actually hits. — Claude (AI), 2026-08-18
+- **PR #299 independent review**: every push was re-reviewed by a second
+  session (verification record in the PR note's "Review record" section);
+  no invalid changes found. One hardening landed from review:
+  `insertChatMembers` rethrows bulk write-concern failures instead of
+  swallowing them with the benign duplicate-key races, matching the old
+  per-id `insertOne` semantics. The `readAt: null` partial-index spec was
+  confirmed against the production cluster's MongoDB 8.0.1.
+  — Claude (AI), 2026-08-18
+- **PR #299 follow-up review**: `resolveRelated`'s narrow child projection now
+  retains `crystal.mediaLayout`, so rich comments keep their selected Rows/Grid
+  layout across feed, profile, and permalink reloads instead of silently
+  falling back to masonry. A focused projection-contract regression test covers
+  every direct-comment and eagerly shipped reply-level use of that field.
+  — Codex (AI), 2026-08-24
 
 ### Added
 
