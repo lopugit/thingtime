@@ -30,8 +30,9 @@ is fixed, and cite the checklist you ran in the PR description.
       deployment, a signed-out visit shows the "Continue as… ✨" corner card;
       picking an account routes to `/login?u=<username>` with the username
       prefilled and password focused; "Not now" snoozes it for a day; it never
-      renders on `/login`, `/register`, `/authorize`, `/reset-password`, or
-      while signed in.
+      renders on `/authorize`, `/reset-password`, or while signed in. On a
+      foreign `*.vercel.app` login/register page, the recovery card is the
+      intentional exception: it opens the matching first-party hub.
 - [ ] Hint liveness: log out on the OTHER deployment → the suggestion
       disappears here on the next fetch (hints resolve live sessions, never a
       cached identity). `GET /api/v1/auth/account-hints` responses carry no
@@ -45,6 +46,11 @@ is fixed, and cite the checklist you ran in the PR description.
       a preview); expand its chevron to reveal every environment badge, exact
       origin, and last-active time without selecting or signing in as the
       suggested account.
+- [ ] Vercel-preview account recovery: on a `*.vercel.app` login page, the
+      account card remains available and opens `https://dev.thingtime.com`
+      (not production) for the same development environment. The preview
+      itself cannot read the `.thingtime.com` cookie; the Dev Thingtime popup
+      must present its first-party signed-in account choices instead.
 
 ## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
 
