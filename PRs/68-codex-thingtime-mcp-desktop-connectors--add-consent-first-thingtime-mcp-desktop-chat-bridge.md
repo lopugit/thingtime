@@ -912,3 +912,12 @@ an offline database or offline conflict resolution layer.
   `EPIPE`. The JSONL transport now consumes that stream error for the life of
   the child pipe and fails all pending work with the existing closed connector
   error, so teardown never crashes the node host.
+- Run `32716251316` passed every unsigned MCP, native, and Electron test on the
+  GitHub macOS runner, then stopped at the intentional credential boundary.
+  Repository and relevant environment secret listings contain none of the
+  required values, so the job received empty `MAC_CSC_LINK`,
+  `MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`,
+  `APPLE_API_ISSUER`, and `APPLE_TEAM_ID` inputs. The release is therefore
+  correctly blocked before an unsigned or unnotarized artifact can be built;
+  configuring those six repository secrets is the only remaining release
+  prerequisite before re-dispatching the workflow.
