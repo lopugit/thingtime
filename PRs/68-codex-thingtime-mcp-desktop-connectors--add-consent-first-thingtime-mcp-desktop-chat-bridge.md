@@ -218,6 +218,22 @@ relational shape for later ThingtimeDB storage and platform chat views.
   generic browser-player control remain out of scope.
 - The node reports only installed/running availability for these three media
   surfaces; it never performs Automation requests while publishing telemetry.
+
+### 2026-08-24 unsigned PR-release fallback
+
+- The protected `github-actions` release worker now chooses a trusted
+  Developer ID/notarized lane only when its full six-secret configuration is
+  present. When all six are absent it publishes an explicit `.unsigned` PR
+  SemVer and `UNSIGNED` Electron/Recovery ZIP names; a partial configuration
+  fails before publication.
+- The fallback uses ad-hoc signatures solely to keep nested macOS executables
+  functioning. It has no Apple team identity or notarization and the release
+  notes instruct the user to approve the first launch via **Privacy & Security
+  → Open Anyway**.
+- Thingtime Recovery recognizes the marker plus asset name, maintains a
+  separate UNSIGNED cache status, requires a deliberate acknowledgement, then
+  allows cache, launch, and atomic install. The normal signed cache remains
+  strict and never presents an unsigned build as verified.
   All three volume effects retain the journalled `needs-review` boundary after
   an Apple Event, rather than claiming the audible result was observed.
 - The four paired-device API contracts are now `1.7.0`; Electron refuses to
@@ -854,17 +870,20 @@ an offline database or offline conflict resolution layer.
    format exposes stable, verifiable file references.
 4. Install and validate a real peer media transport before enabling any screen
    stream UI; keep capture foundation unavailable until then.
-5. Apply the protected-workflow Developer ID/notarization patch and validate a
-   stapled Gatekeeper-accepted artifact before production publication.
+5. Merge the dedicated protected builder/releaser and thin `develop` listener,
+   configure their Developer ID/notarization secrets, then validate a stapled
+   Gatekeeper-accepted artifact before production publication.
 
 ### Signed PR release and recovery updater follow-up (2026-08-24)
 
-- Added a dedicated signed PR-release workflow rather than relaxing the `main`
-  release shim. It runs only for a same-repository owner PR carrying the
-  maintainer-applied `desktop-release` label (or an owner manual dispatch),
-  runs all tests before importing secrets, produces a Developer ID/notarized
-  ZIP-compatible release, and publishes the deterministic SemVer form
-  `base-pr.<PR>.<branch>.g<commit>` as a GitHub prerelease.
+- The signed PR builder/releaser is intentionally delivered as a separate
+  `github-actions` control-plane change, not executable code in this product
+  PR. A thin `develop` listener forwards only trusted lifecycle/manual events;
+  the protected worker revalidates the same-repository owner plus
+  `desktop-release` gate, checks out its immutable head SHA without retaining a
+  GitHub write token, tests before importing secrets, and publishes the
+  deterministic SemVer form `base-pr.<PR>.<branch>.g<commit>` as a GitHub
+  prerelease.
 - Desktop Settings now fetches and filters GitHub releases by version, PR,
   branch, and commit. It treats a release as installable only after extracting
   a GitHub-hosted macOS ZIP to the user-local recovery cache and re-verifying
@@ -886,10 +905,96 @@ an offline database or offline conflict resolution layer.
   leave a partial verified-app directory behind. GitHub outage state preserves
   the local cache catalog so launch/install recovery actions remain usable
   offline.
-- Live GitHub inspection subsequently registered **Signed Electron PR Release**
-  for this branch. Owner manual run
+- The earlier branch-local candidate release worker was exercised manually for
+  this branch. Owner manual run
   `32712878513` reached its real dependency gate and exposed a concrete
   runner-only defect before any signing material was accessed: `MCP/` is
   npm-managed and has `package-lock.json`, so a frozen pnpm install could never
   succeed. The workflow now uses `npm ci --prefix MCP`; its contract test locks
-  that package-manager boundary before the next signed release attempt.
+  that package-manager boundary before the next signed release attempt. A
+  second run then spent more than five minutes in its unnecessary full-history
+  checkout, so the exact resolved SHA now uses `fetch-depth: 1`; this shortens
+  the gate without widening the selected source or signing authority.
+- The first complete unsigned native build on the GitHub macOS SDK then exposed
+  `PMPrinterGetID`/`PMPrinterGetName` as unretained Core Foundation references,
+  unlike the local overlay that had masked the issue. Printer telemetry and
+  selection now normalize Swift, Core Foundation, and unmanaged Core Foundation
+  string declarations through the Core Foundation Get rule before comparison.
+- That next runner exercised an existing scheduler-test race: a fixed dispatch
+  sleep sometimes yielded only two renewal ticks under GitHub's scheduler. The
+  test now holds dispatch until all three intended renewals arrive (with a
+  bounded timeout), then confirms renewal stops after completion; it no longer
+  treats a wall-clock assumption as correctness.
+- The following runner then exposed a second genuine test-gate race: the
+  deliberately unavailable local Codex stub could close its stdin between the
+  transport writable check and an asynchronous write, emitting an unhandled
+  `EPIPE`. The JSONL transport now consumes that stream error for the life of
+  the child pipe and fails all pending work with the existing closed connector
+  error, so teardown never crashes the node host.
+- Run `32716251316` passed every unsigned MCP, native, and Electron test on the
+  GitHub macOS runner, then stopped at the intentional credential boundary.
+  Repository and relevant environment secret listings contain none of the
+  required values, so the job received empty `MAC_CSC_LINK`,
+  `MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`,
+  `APPLE_API_ISSUER`, and `APPLE_TEAM_ID` inputs. The release is therefore
+  correctly blocked before an unsigned or unnotarized artifact can be built;
+  configuring those six repository secrets plus merging the dedicated
+  control-plane worker/listener split are the remaining release prerequisites.
+
+### Independent Recovery launcher follow-up (2026-08-24)
+
+- Added `macos/ThingtimeRecovery`, a native SwiftUI `Thingtime Recovery.app`
+  with stable identifier `com.thingtime.desktop.recovery`. It can query the
+  public GitHub release catalog, cache separately named Desktop and Recovery
+  ZIPs, browse the local cache without GitHub, launch an old desktop bundle,
+  atomically install a selected desktop version, and update itself without
+  loading an Electron app.
+- Desktop rollback entries are now held at the stable shared location
+  `~/Library/Application Support/com.thingtime.desktop/release-cache`; recovery
+  launcher entries live beside it in `recovery-cache`. The Electron main
+  process carries a regular legacy per-userData cache forward non-destructively
+  the first time it reaches the new shared location. Electron deliberately
+  rejects `Thingtime-Recovery-App-Release-*.zip` as a desktop update asset.
+- The signed native installer only accepts strict cache layouts, regular
+  directories, the expected bundle identifier, and the same signing team. A
+  production Recovery app adds Developer ID, Gatekeeper, and notarization-staple
+  requirements. It asks the running target app to quit, retains the replaced
+  verified bundle before atomic replacement, and leaves the target unchanged on
+  verification or handoff failure.
+- Local acceptance built the app in a clean Library/Caches stage, signed both
+  nested installer and outer app with the stable Apple Development requirement,
+  installed and re-verified `~/Applications/Thingtime Recovery.app`, inspected
+  its release/cached-recovery UI, deliberately rejected an invalid historical
+  GitHub desktop asset, and completed an actual signed Recovery self-replace /
+  relaunch. Production publication remains correctly blocked on the existing
+  Developer ID + notarization credential prerequisite.
+
+### Unsigned Recovery handoff audit (2026-08-24)
+
+- The unsigned catalog/cache UI already exposed explicitly acknowledged
+  `UNSIGNED` assets, but the detached Recovery installer unconditionally used
+  signed-team verification. That made an ad-hoc release cacheable yet unable to
+  launch or install—a broken fallback path.
+- The installer now resolves the selected app back to its constrained cache
+  manifest and derives the trust lane from `isUnsigned`; callers cannot supply
+  their own unsigned flag. An unsigned Recovery launcher can therefore verify
+  and launch/install only explicitly marked ad-hoc bundles. A missing legacy
+  marker remains strict signed behavior and fails closed when the unsigned
+  launcher has no team identity. Replaced bundles are classified and cached in
+  their matching lane before an atomic replacement.
+- The Electron detached handoff also repeats its production Developer ID,
+  notarization, and nested-code verification after the main process exits and
+  immediately before either a cached launch or install. This is separate from
+  the explicitly opt-in unsigned native Recovery lane.
+- Verified locally with 78 Electron tests and 9 Recovery-core tests, including
+  a real ad-hoc app fixture that launches via the detached unsigned Recovery
+  path and a regression proving a missing `isUnsigned` marker cannot downgrade
+  verification. A fresh release-mode unsigned Recovery ZIP round-trip also
+  passed. A live GitHub unsigned release requires the still-open protected
+  control-plane PR #390 to merge before the release worker can publish one.
+- The first full Electron unsigned build also revealed that electron-builder's
+  implicit macOS target produced a DMG but no updater ZIP. `electron/package.json`
+  now explicitly requests both `dmg` and `zip`, with a contract test that locks
+  the rollback artifact in place. The final local release-mode artifacts both
+  verified independently at version
+  `0.1.0-pr.68.updater.g2048de7d6262.unsigned`.

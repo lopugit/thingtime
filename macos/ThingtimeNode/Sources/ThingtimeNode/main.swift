@@ -110,9 +110,11 @@ private final class LocalPairingPresenceGate {
 private struct PeerSignatureValidator {
     private let teamIdentifier: String?
     private let allowedIdentifiers: [String]
+    private let allowsUnsignedDistribution: Bool
 
     init() {
         teamIdentifier = Self.currentTeamIdentifier()
+        allowsUnsignedDistribution = ProcessInfo.processInfo.environment["THINGTIME_NODE_UNSIGNED_DISTRIBUTION"] == "1"
         let configured = ProcessInfo.processInfo.environment["THINGTIME_NODE_ALLOWED_CLIENT_IDENTIFIERS"]
             .map { $0.split(separator: ",").map { String($0) } }
         allowedIdentifiers = (configured ?? [
@@ -129,20 +131,26 @@ private struct PeerSignatureValidator {
 
     func accepts(_ connection: NSXPCConnection) -> Bool {
         guard connection.effectiveUserIdentifier == getuid() else { return false }
-        guard let teamIdentifier else {
-            // A Mach service that is not stably signed must not accept control
-            // requests from arbitrary same-user processes.
-            return false
-        }
-        guard teamIdentifier.range(of: #"^[A-Z0-9]{10}$"#, options: .regularExpression) != nil else {
-            return false
-        }
         guard !allowedIdentifiers.isEmpty else { return false }
 
         var guest: SecCode?
         let attributes = [kSecGuestAttributePid as String: NSNumber(value: connection.processIdentifier)] as CFDictionary
         guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &guest) == errSecSuccess,
               let guest else { return false }
+
+        if allowsUnsignedDistribution {
+            var requirement: SecRequirement?
+            guard SecRequirementCreateWithString("identifier \"com.thingtime.desktop.node.bridge\"" as CFString, [], &requirement) == errSecSuccess,
+                  let requirement else { return false }
+            return SecCodeCheckValidity(guest, SecCSFlags(rawValue: kSecCSStrictValidate), requirement) == errSecSuccess
+        }
+
+        guard let teamIdentifier,
+              teamIdentifier.range(of: #"^[A-Z0-9]{10}$"#, options: .regularExpression) != nil else {
+            // A Mach service that is not stably signed must not accept control
+            // requests from arbitrary same-user processes.
+            return false
+        }
 
         var requirement: SecRequirement?
         let identifiers = allowedIdentifiers.map { "identifier \"\($0)\"" }.joined(separator: " or ")

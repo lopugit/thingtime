@@ -25,6 +25,13 @@ const ALLOWED_SIGNATURE_MODES = new Set(['local', 'production', 'runtime']);
 const LOCAL_SIGNING_AUTHORITY_PREFIX = 'Apple Development:';
 const PRODUCTION_SIGNING_AUTHORITY_PREFIX = 'Developer ID Application:';
 const ELECTRON_ENTITLEMENTS = new Set(['com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory']);
+// Ad-hoc hardened-runtime applications do not inherit the Developer ID library
+// validation policy. Keep this relaxation confined to the explicitly labelled
+// temporary unsigned lane; the signed update path stays exact and unchanged.
+const UNSIGNED_ELECTRON_ENTITLEMENTS = new Set([
+	...ELECTRON_ENTITLEMENTS,
+	'com.apple.security.cs.disable-library-validation'
+]);
 
 const CONNECTOR_OPERATIONS = new Set([
 	'connector/list',
@@ -217,7 +224,8 @@ function buildLaunchAgentPlist({
 	apiBaseUrl,
 	projectRegistryPath = null,
 	menuBarIconId = 'tree-pink',
-	menuBarCustomIconPath = null
+	menuBarCustomIconPath = null,
+	unsignedDistribution = false
 }) {
 	for (const [label, value] of [
 		['helper executable', helperExecutable],
@@ -249,6 +257,7 @@ function buildLaunchAgentPlist({
 		THINGTIME_NODE_CONNECTOR_ENV_JSON: JSON.stringify(connectorEnvironment)
 	};
 	if (apiBaseUrl) environment.THINGTIME_NODE_API_BASE_URL = apiBaseUrl;
+	if (unsignedDistribution === true) environment.THINGTIME_NODE_UNSIGNED_DISTRIBUTION = '1';
 	if (!MENU_BAR_ICON_IDS.has(menuBarIconId)) {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Thingtime Node menu bar icon is invalid.');
 	}
@@ -662,6 +671,51 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 	return { identityClass: [...identityClasses][0], teamIdentifier: [...teams][0] };
 }
 
+/**
+ * A temporary distribution build is intentionally not signed by an Apple team
+ * or notarized. It is ad-hoc signed so nested macOS executables can still run.
+ * This validates only structure and identifiers; callers must never present it
+ * as an Apple-verified update.
+ */
+async function verifyUnsignedArtifacts(paths, runner = runProcess) {
+	const requiredPaths = [paths.helperApp, paths.helperExecutable, paths.bridgeExecutable, paths.runtimePath];
+	if (paths.outerApp) requiredPaths.push(paths.outerApp);
+	for (const requiredPath of requiredPaths) {
+		let stat;
+		try {
+			stat = await fsPromises.lstat(requiredPath);
+		} catch {
+			throw new ThingtimeNodeBridgeError('node_not_installed', 'Thingtime Node desktop resources are not installed.');
+		}
+		if (stat.isSymbolicLink()) {
+			throw new ThingtimeNodeBridgeError('invalid_installation', 'Thingtime Node resources must not be symbolic links.');
+		}
+	}
+
+	const unsigned = [
+		{ details: await signatureDetails(paths.helperApp, runner), expectedIdentifier: NODE_BUNDLE_ID, label: 'Thingtime Node' },
+		{ details: await signatureDetails(paths.bridgeExecutable, runner), expectedIdentifier: BRIDGE_BUNDLE_ID, label: 'Thingtime Node bridge' }
+	];
+	if (paths.outerApp) {
+		unsigned.push({ details: await signatureDetails(paths.outerApp, runner), expectedIdentifier: DESKTOP_BUNDLE_ID, label: 'Thingtime' });
+	}
+	for (const { details, expectedIdentifier, label } of unsigned) {
+		if (details.identifier !== expectedIdentifier) {
+			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} does not have the expected bundle identifier.`);
+		}
+		if (details.teamIdentifier && details.teamIdentifier !== 'not set') {
+			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is Apple-signed and must not be published as unsigned.`);
+		}
+		if (details.authorities.some((authority) => authority.startsWith(LOCAL_SIGNING_AUTHORITY_PREFIX) || authority.startsWith(PRODUCTION_SIGNING_AUTHORITY_PREFIX))) {
+			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is Apple-signed and must not be published as unsigned.`);
+		}
+	}
+	assertExpectedEntitlements(unsigned[0].details, [], 'Thingtime Node');
+	assertExpectedEntitlements(unsigned[1].details, [], 'Thingtime Node bridge');
+	if (paths.outerApp) assertExpectedEntitlements(unsigned.at(-1).details, UNSIGNED_ELECTRON_ENTITLEMENTS, 'Thingtime');
+	return { identityClass: 'unsigned', teamIdentifier: null };
+}
+
 function safeConnectorEnvironment(environment = process.env) {
 	const allowedKeys = ['PATH', 'HOME', 'TMPDIR', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'CODEX_HOME'];
 	const result = {};
@@ -850,11 +904,22 @@ class ThingtimeNodeIntegration {
 		});
 	}
 
+	isUnsignedDistribution() {
+		return this.app.isPackaged === true && /\.unsigned$/u.test(String(this.app.getVersion?.() || ''));
+	}
+
+	bridgeEnvironment() {
+		if (!this.isUnsignedDistribution()) return this.environment;
+		return { ...this.environment, THINGTIME_NODE_UNSIGNED_DISTRIBUTION: '1' };
+	}
+
 	async verify(paths = this.paths()) {
 		// Do not cache this result. The helper and bridge are executable trust
 		// boundaries, so every execution and service registration must verify the
 		// artifacts that are about to be used.
-		return verifySignedArtifacts(paths, this.runner);
+		return this.isUnsignedDistribution()
+			? verifyUnsignedArtifacts(paths, this.runner)
+			: verifySignedArtifacts(paths, this.runner);
 	}
 
 	async request(method, parameters = {}, suppliedCommandId) {
@@ -863,6 +928,7 @@ class ThingtimeNodeIntegration {
 		const request = nodeRequest(method, parameters, suppliedCommandId);
 		const encoded = `${boundedJson(request, 'node request')}\n`;
 		const response = await this.runner(paths.bridgeExecutable, [], {
+			env: this.bridgeEnvironment(),
 			input: encoded,
 			maximumOutputBytes: MAX_FRAME_BYTES,
 			timeoutMs: nodeRequestTimeoutMs(method)
@@ -984,7 +1050,8 @@ class ThingtimeNodeIntegration {
 			menuBarCustomIconPath,
 			menuBarIconId,
 			projectRegistryPath,
-			runtimePath: paths.runtimePath
+			runtimePath: paths.runtimePath,
+			unsignedDistribution: this.isUnsignedDistribution()
 		});
 	}
 
@@ -1139,5 +1206,6 @@ module.exports = {
 	safeConnectorEnvironment,
 	validateConnectorRequest,
 	validateDeviceRequest,
-	verifySignedArtifacts
+	verifySignedArtifacts,
+	verifyUnsignedArtifacts
 };

@@ -19,6 +19,11 @@ export type PeerPublicRecord = {
 	lastSeenAt: string;
 	expiresAt: string;
 };
+// The browser-facing developer projection intentionally contains only the
+// lease's public identity, its non-secret data-authority descriptor, and
+// observed timestamps. In particular, it never exposes `syncCursor`, request
+// signatures, or any deployment secret.
+export type PeerExplorerRecord = PeerPublicRecord & { status: 'active' | 'expired' };
 export type PeerCursor = { lastSeenAt: string; origin: string };
 
 type PeerSigningIdentity = { privateKey: ReturnType<typeof createPrivateKey>; publicKey: string };
@@ -209,6 +214,11 @@ const projectPeer = (row: any): PeerPublicRecord => ({
 	expiresAt: new Date(row.expiresAt).toISOString()
 });
 
+const projectPeerExplorer = (row: any, now: Date): PeerExplorerRecord => ({
+	...projectPeer(row),
+	status: new Date(row.expiresAt).getTime() > now.getTime() ? 'active' : 'expired'
+});
+
 export const announcePeer = async (
 	origin: string,
 	signingPublicKey: string,
@@ -287,6 +297,31 @@ export const listActivePeers = async ({
 			? encodePeerCursor({ lastSeenAt: page[page.length - 1].lastSeenAt, origin: page[page.length - 1].origin })
 			: null;
 	return { peers: page, nextCursor: next };
+};
+
+// Admin-only diagnostic read. It uses exactly the same keyset cursor and
+// maximum page limit as the signed mesh route, but includes temporarily
+// expired rows until MongoDB's TTL monitor reaps them. That makes lease health
+// visible without creating an all-peers browser endpoint or revealing the
+// private traversal cursor held on each row.
+export const listKnownPeers = async ({ cursor, limit, now = new Date() }: { cursor: PeerCursor | null; limit: number; now?: Date }) => {
+	const filter: any = { signingPublicKey: { $exists: true } };
+	if (cursor) {
+		filter.$or = [{ lastSeenAt: { $lt: new Date(cursor.lastSeenAt) } }, { lastSeenAt: new Date(cursor.lastSeenAt), origin: { $gt: cursor.origin } }];
+	}
+	const rows = await (
+		await getDeploymentPeersCollection()
+	)
+		.find(filter)
+		.sort({ lastSeenAt: -1, origin: 1 })
+		.limit(limit + 1)
+		.toArray();
+	const peers = rows.slice(0, limit).map((row) => projectPeerExplorer(row, now));
+	const nextCursor =
+		rows.length > limit && peers.length
+			? encodePeerCursor({ lastSeenAt: peers[peers.length - 1].lastSeenAt, origin: peers[peers.length - 1].origin })
+			: null;
+	return { peers, nextCursor };
 };
 
 const validRemoteCursor = (value: unknown): value is string =>

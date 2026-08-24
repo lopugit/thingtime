@@ -27,12 +27,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   than Vercel tier/branch inference, and signed peer gossip is scoped to the
   matching federation id. No MongoDB host, database name, connection string,
   account, or secret is exposed. — Codex (AI), 2026-08-24
-- **Signed PR release CI now installs the MCP bridge from its committed npm
-  lockfile**: the runner uses `npm ci --prefix MCP`, matching the package's
-  `package-lock.json` instead of requiring a nonexistent pnpm lockfile. This
-  keeps the unsigned verification gate deterministic and lets the signed,
-  notarized release pipeline proceed only after MCP dependencies install
-  reproducibly. — Codex (AI), 2026-08-24
 
 - **Paired-Mac display mode selections now persist**: resolution and refresh
   changes use Core Graphics' permanent display-configuration transaction rather
@@ -43,6 +37,34 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   2026-08-24
 
 ### Added
+
+- **Explicit UNSIGNED desktop-release fallback**: the owner-approved PR release
+  worker now publishes an ad-hoc-only Electron and Recovery pair when all six
+  Developer ID/notarization secrets are absent. Their SemVer, asset names,
+  GitHub title, and notes all say UNSIGNED; a partial secret configuration
+  stops the build. Recovery visibly separates them from verified releases and,
+  after acknowledgement, can cache, launch, or atomically install one while
+  warning that macOS may require Privacy & Security → Open Anyway. — Codex
+  (AI), 2026-08-24
+
+- **Admin deployment peer explorer**: **Dev → Deployment peers** now presents
+  locally known signed mesh leases in grid, card, and list views, with a
+  property-aware search selector and deliberate cursor paging. The browser
+  uses a separate private admin projection; HMAC material, private keys,
+  request signatures, and gossip cursors remain inaccessible to clients. —
+  Codex (AI), 2026-08-24
+
+- **Independent native rollback launcher for Thingtime Desktop**: the signed
+  `Thingtime Recovery.app` now has its own SwiftUI version browser, a separately
+  signed installer helper, its own companion release ZIP, and a self-update
+  path. It shares the durable desktop cache at
+  `~/Library/Application Support/com.thingtime.desktop/release-cache` while
+  keeping recovery-launcher copies separate. It caches only verified bundle
+  identifiers and same-team signatures, closes a running desktop before an
+  atomic install, preserves the replaced bundle, and rejects a stale or
+  malformed GitHub asset without changing the installed app. Its companion
+  asset is supplied by the dedicated protected-release control plane. — Codex
+  (AI), 2026-08-24
 
 - **Signed Desktop PR releases and recovery-first version switching**: an
   owner-approved, same-repository PR carrying the `desktop-release` label can
@@ -173,6 +195,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   wildcard branch”. — Claude (AI), 2026-08-18
 
 ### Fixed
+
+- **Signed-release MCP gate handles closed local connector pipes**: the JSONL
+  transport now treats a child-process `EPIPE` as an unavailable connector and
+  fails pending work closed, rather than allowing Node to throw an unhandled
+  stream error during teardown. — Codex (AI), 2026-08-24
+
+- **Signed-release native gate no longer relies on wall-clock scheduling**:
+  the long-running lease-heartbeat test now waits for its three intended
+  renewals before completing dispatch, then verifies renewal stops. This keeps
+  the behavior under test intact while eliminating macOS runner timing flakes.
+  — Codex (AI), 2026-08-24
+
+- **Signed-release native checks now build across macOS SDK overlays**: printer
+  identifiers and names are converted through the Core Foundation Get-rule
+  bridge, rather than force-cast from one SDK-specific declaration. The
+  release gate now works whether Core Printing imports these values as Swift,
+  Core Foundation, or unmanaged Core Foundation strings. — Codex (AI),
+  2026-08-24
 
 - **Deployment peer discovery is bounded and gossip-based**: authenticated
   first-party deployments now maintain one relational, TTL-reaped peer lease

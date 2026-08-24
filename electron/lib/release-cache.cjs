@@ -51,6 +51,10 @@ function scoreZipAsset(asset) {
 	const downloadUrl = safeString(asset?.browser_download_url, '') || '';
 	if (!downloadUrl || !isAllowedGithubReleaseAssetUrl(downloadUrl)) return -1;
 	if (!/\.zip$/iu.test(name)) return -1;
+	// The standalone recovery launcher is deliberately published beside the
+	// desktop ZIP. It has a different bundle identifier and cache contract, so
+	// the Electron updater must never mistake it for a Thingtime.app update.
+	if (/thingtime[- ]recovery|recovery[- ]app/iu.test(name)) return -1;
 	const haystack = `${name} ${safeString(asset?.label, '') || ''} ${safeString(asset?.content_type, '') || ''}`.toLowerCase();
 	let score = 100;
 	if (haystack.includes('thingtime')) score += 40;
@@ -198,6 +202,12 @@ function assertBundlePath(appPath) {
 	return appPath;
 }
 
+function assertBundleDirectory(bundleDirectory) {
+	const stat = fs.lstatSync(bundleDirectory);
+	if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('Cached update bundle directory is not a regular directory.');
+	return bundleDirectory;
+}
+
 function getCachedBundles(cacheRoot) {
 	const root = path.resolve(cacheRoot);
 	ensureCacheRoot(root);
@@ -207,6 +217,7 @@ function getCachedBundles(cacheRoot) {
 		try {
 			const bundleDirectory = resolveWithin(root, path.join(root, 'bundles', String(entry.key || '')), 'Cached bundle');
 			const appPath = resolveWithin(bundleDirectory, path.join(bundleDirectory, APP_NAME), 'Cached app');
+			assertBundleDirectory(bundleDirectory);
 			assertBundlePath(appPath);
 			entries.push({
 				...entry,

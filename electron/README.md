@@ -6,7 +6,8 @@ It does not duplicate the web source. The deterministic resource build stages:
 
 - the Vite client and Nitro server under `electron/dist/web`;
 - `ai-connectors.mjs` and `thingtime-node-runtime.mjs` under `electron/dist/ai`;
-- the signed `Thingtime Node.app` under `electron/dist/native`.
+- the signed local/production or ad-hoc UNSIGNED `Thingtime Node.app` under
+  `electron/dist/native`.
 
 `electron-builder` places the node at
 `Thingtime.app/Contents/Helpers/Thingtime Node.app` and the runtime under
@@ -32,6 +33,7 @@ corepack pnpm@10.12.1 --dir electron verify:native
 corepack pnpm@10.12.1 --dir electron test
 corepack pnpm@10.12.1 --dir electron dev
 corepack pnpm@10.12.1 --dir electron dist
+corepack pnpm@10.12.1 --dir electron dist:unsigned
 corepack pnpm@10.12.1 --dir electron install:local
 ```
 
@@ -183,7 +185,8 @@ The same settings surface includes **Thingtime versions & recovery**. It follows
 every public GitHub Releases page returned by the API (with loop detection),
 searches by SemVer, PR, branch, or commit, and accepts only a GitHub-hosted
 macOS `.zip` asset. Before a version can be launched or installed, Thingtime
-extracts it into `~/Library/Application Support/Thingtime/release-cache/`,
+extracts it into
+`~/Library/Application Support/com.thingtime.desktop/release-cache/`,
 checks the full nested app for its Developer ID signature, hardened runtime,
 notarization staple, exact Thingtime bundle IDs, and matching signed native
 node. A failed download or verification never changes the installed app.
@@ -204,6 +207,37 @@ Auto-check remains stored at
 `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled` and defaults to
 on; it is a notification preference, never permission to install silently.
 
+### Standalone Thingtime Recovery
+
+`macos/ThingtimeRecovery` builds **Thingtime Recovery.app**, a small native
+SwiftUI application which stays separate from every Electron app version. It
+reads the shared desktop cache above, keeps its own verified launcher copies in
+`~/Library/Application Support/com.thingtime.desktop/recovery-cache`, and uses
+a separately signed helper to wait for the current app to exit before atomically
+switching either app. Replacing Thingtime Desktop saves the current verified
+desktop bundle first; replacing Recovery saves the current launcher first.
+
+The native app queries public GitHub Releases and distinguishes
+`Thingtime-Electron-App-Release-*.zip` from
+`Thingtime-Recovery-App-Release-*.zip`; Electron will never mistake a recovery
+asset for a desktop update. Build and install the local Apple Development copy
+with:
+
+```sh
+swift test --package-path macos/ThingtimeRecovery
+macos/ThingtimeRecovery/script/build_and_run.sh --verify
+```
+
+Production CI passes its imported Developer ID identity and notarization API
+key to `macos/ThingtimeRecovery/script/build-production-release.sh`. That
+script signs the helper before the outer bundle, notarizes a ZIP, staples the
+app, then runs strict codesign, Gatekeeper, and stapler verification before it
+emits the companion release ZIP. While those credentials are absent, the
+owner-approved PR workflow can call
+`macos/ThingtimeRecovery/script/build-unsigned-release.sh`: its output is
+ad-hoc signed only, carries `UNSIGNED` in both asset name and SemVer suffix,
+and needs explicit macOS approval before first launch.
+
 ## GitHub Releases
 
 `.github/workflows/electron-release.yml` is the event-entry shim on `main`. It
@@ -216,17 +250,21 @@ run the Electron bridge tests before packaging. It creates a tag like
 `.pkg` assets to a GitHub Release titled `Thingtime Electron App Release
 0.1.0+build.10423`.
 
-Production publication is intentionally blocked until the protected workflow
-has a **Developer ID Application** certificate and notarization credentials.
-Apple Development is correct for stable local TCC testing, and Apple
-Distribution is for App Store workflows; neither substitutes for Developer ID
-direct distribution; Gatekeeper rejection is expected for the local Apple
-Development build. `pnpm --dir electron dist` requires an imported Developer
-ID Application identity plus one complete electron-builder notarization set
-(App Store Connect API key, Apple ID app-specific password, or a keychain
-profile). It enables Hardened Runtime and `mac.notarize`, then requires strict
-signature, Gatekeeper, and stapling validation. There is no unsigned/ad-hoc
-release command.
+The trusted production lane is intentionally blocked until the protected
+workflow has a **Developer ID Application** certificate and notarization
+credentials. Apple Development is correct for stable local TCC testing, and
+Apple Distribution is for App Store workflows; neither substitutes for
+Developer ID direct distribution. `pnpm --dir electron dist` requires an
+imported Developer ID Application identity plus one complete electron-builder
+notarization set. It enables Hardened Runtime and `mac.notarize`, then requires
+strict signature, Gatekeeper, and stapling validation.
+
+`pnpm --dir electron dist:unsigned` is a separate temporary PR-release command
+which requires a version ending in `.unsigned`. It deliberately uses ad-hoc
+signatures, no Apple team identity, and no notarization. It must never be
+described as a verified update. Thingtime Recovery shows those releases with an
+UNSIGNED badge and requires acknowledgement before caching, launching, or
+installing one; macOS may still require **Privacy & Security → Open Anyway**.
 
 The protected workflow currently lives on another ref and remains stale, so its
 signing change must be made there before publication can resume. The required
@@ -245,21 +283,20 @@ packaged app stores the full CI release version in `electron/dist/web/metadata.j
 so the updater can distinguish `0.1.0+build.10423` from `0.1.0+build.10424`
 without requiring source-controlled version churn.
 
-`.github/workflows/electron-pr-release.yml` defines signed **pre-releases for
-reviewable PR commits**. It never runs for forks. A PR must
-be same-repository, opened by the repository owner, and explicitly carry the
-`desktop-release` label; alternatively the owner may use **Run workflow** with
-the PR number. The workflow checks out that exact head commit, tests it before
-loading credentials, imports the Developer ID/notarization secrets only for the
-approved source, requires a macOS ZIP asset for recovery updates, and publishes
-a GitHub prerelease. Its version is SemVer and includes all provenance, for
-example `0.1.0-pr.68.codex-thingtime-mcp-desktop-connectors.gabcdef123456`.
-The PR number, normalized branch, and full commit are also recorded in the
-release notes. GitHub manual dispatch requires the workflow to exist on the
-default branch, and this repository keeps executable release behavior on the
-trusted `github-actions` ref. Therefore the equivalent signed PR runner must
-be deployed to that ref before it can publish review builds; a PR-local copy is
-reviewable policy and test coverage, not authority to mint signed releases.
+The signed **pre-release builder/releaser** is executable only on the protected
+`github-actions` branch. `develop` carries a tiny
+`.github/workflows/electron-pr-release.yml` listener that passes trusted PR or
+manual events to that worker; the product PR itself never supplies signing,
+notarization, or publishing code. The central worker revalidates a
+same-repository owner PR with the `desktop-release` label, checks out its exact
+head SHA without persisting a GitHub credential, tests before loading signing
+material, builds both the Electron ZIP and independently signed/notarized
+Recovery ZIP, then publishes a GitHub prerelease. Its SemVer includes source
+provenance, for example
+`0.1.0-pr.68.codex-thingtime-mcp-desktop-connectors.gabcdef123456`. The PR
+number, normalized branch, and full commit are also retained in the release
+notes. See [PRODUCTION_RELEASE.md](./PRODUCTION_RELEASE.md) for the required
+secrets and exact gate.
 
 In local development, the Electron shell loads `remix/.env`, `remix/.env.local`,
 and `remix/.env.auto` before starting Nitro so the desktop app sees the same

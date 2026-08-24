@@ -6,6 +6,21 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Deployment peer explorer (`/peers`, `/api/v1/admin/peers`)
+
+- [ ] As an administrator, open **Dev → Deployment peers**. Verify the first
+      page retains current rows while Refresh runs, requests at most 25 rows,
+      and **Load next bounded page** advances only one opaque cursor page (no
+      all-peers request or automatic unbounded hydration).
+- [ ] Exercise Grid, Cards, and List at desktop and 390px widths. Search
+      origin, `active`/`expired`, a signing-key fragment, and each displayed
+      timestamp via the property selector; every view shows the same filtered
+      rows with no horizontal page overflow (the List table itself may scroll).
+- [ ] As a non-admin or signed-out user, `/peers` shows only the quiet access
+      gate and `GET /api/v1/admin/peers` returns 401/403 with private no-store
+      headers. Confirm no browser response contains `syncCursor`, request
+      signatures, a peer secret, or a private key.
+
 ## Passkeys + cross-deployment auto-login
 
 - [ ] Settings → Security → "Add a passkey ✨": wrong password → error toast,
@@ -2135,6 +2150,32 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
 
+- [ ] Build and open the signed `Thingtime Recovery.app`; it must remain running
+      after launch without an `App.init()` nil-optional crash, and its recovery
+      store must render before the first refresh completes.
+- [ ] Recovery follows every GitHub Release `Link` page (no arbitrary history
+      cap) so older rollback bundles remain discoverable; a repeated next-page
+      URL fails closed instead of spinning or presenting a partial catalog.
+- [ ] Before publishing, production packaging must extract every desktop and
+      Recovery ZIP into a clean staging directory and run the same full
+      signed-app, Gatekeeper, and notarization checks used for the unpacked
+      artifact. A malformed ZIP must block release creation rather than
+      becoming a broken recovery option.
+- [ ] With all six Developer ID/notarization secrets absent, run the
+      owner-approved PR worker and confirm it produces only a SemVer suffix of
+      `.unsigned`, `UNSIGNED` desktop and Recovery asset names, and release
+      notes that direct people to **Privacy & Security → Open Anyway**. With a
+      partial secret set, it must stop before publishing. In Thingtime Recovery,
+      verify the UNSIGNED badge, explicit cache acknowledgement, cache entry,
+      launch, and atomic install path; it must never appear as a verified
+      update. With all six secrets present, repeat the strict signed/notarized
+      ZIP round-trip instead.
+- [ ] From an ad-hoc unsigned Recovery app, launch and atomically install an
+      explicitly acknowledged `isUnsigned: true` cached desktop bundle. The
+      detached helper must derive the unsigned lane from that cache manifest,
+      re-check the ad-hoc bundle before each use, and preserve the prior bundle
+      on failure. Remove that manifest marker and confirm it fails closed as a
+      signed release rather than silently downgrading verification.
 - [ ] Run the Swift tests and release-build both `ThingtimeNode` products; run
       MCP typecheck, tests, and `build:desktop`; then run the Electron tests.
       Cancellation/timeout cases must terminate the connector child and mark

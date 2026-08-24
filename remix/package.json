@@ -19,7 +19,7 @@
 		"test": "npm run test:unit && npm run test:api",
 		"test:api": "tsx scripts/run-api-tests.mts",
 		"test:api-capabilities": "node --import tsx --test app/docs/apiCapabilities.test.ts",
-		"test:peers": "node --import tsx --test app/api/utils/peers/*.test.ts app/routes/api/v1/peers/sync/_sync.test.ts",
+		"test:peers": "node --import tsx --test app/api/utils/peers/*.test.ts app/components/Peers/*.test.ts app/routes/api/v1/admin/peers/_peers.test.ts app/routes/api/v1/peers/sync/_sync.test.ts",
 		"test:unit": "npm run test:acl && npm run test:account-hints && npm run test:ai-model-routing && npm run test:api-capabilities && npm run test:attachments && npm run test:autosave && npm run test:branding && npm run test:commander && npm run test:ci-control && npm run test:client-errors && npm run test:collections && npm run test:dependencies && npm run test:devices && npm run test:editorjs && npm run test:lopu && npm run test:messenger && npm run test:migrations && npm run test:moderation && npm run test:nav && npm run test:peers && npm run test:preview-build && npm run test:quota && npm run test:rate-limit && npm run test:root-data && npm run test:schemas && npm run test:sensitive-reveal && npm run test:settings && npm run test:storage && npm run test:storage-recovery && npm run test:temporary-user && npm run test:things && npm run test:typecheck-ratchet && npm run test:vercel-status && npm run test:vercel-config && npm run test:vercel-root",
 		"typecheck": "tsc --noEmit",
 		"typecheck:ratchet": "node scripts/typecheck-ratchet.mjs",
