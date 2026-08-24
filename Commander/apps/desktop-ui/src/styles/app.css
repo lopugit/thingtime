@@ -2120,8 +2120,13 @@
   font-size: 0.72rem;
   line-height: 1.45;
 }
-.search-settings .indexing-card {
-  margin-top: 16px;
+.search-settings-stack {
+  display: grid;
+  gap: 16px;
+}
+.search-settings-stack > .full-disk-access-card,
+.search-settings-stack > .indexing-card {
+  margin-top: 0;
 }
 .advanced-card {
   overflow: hidden;

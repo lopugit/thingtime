@@ -352,19 +352,21 @@ function SearchSettings({
           <p>Control Commander’s local indexes and adaptive result ranking.</p>
         </div>
       </div>
-      <FullDiskAccessCard onError={onError} />
-      <div className="search-ranking-card">
-        <Search />
-        <div>
-          <strong>Fuzzy and adaptive everywhere</strong>
-          <span>
-            Apps, commands, extensions, files, and folders tolerate spelling mistakes. Choices made for each
-            search are learned locally so Commander ranks your preferred results first over time.
-          </span>
+      <div className="search-settings-stack">
+        <FullDiskAccessCard onError={onError} />
+        <div className="search-ranking-card">
+          <Search />
+          <div>
+            <strong>Fuzzy and adaptive everywhere</strong>
+            <span>
+              Apps, commands, extensions, files, and folders tolerate spelling mistakes. Choices made for each
+              search are learned locally so Commander ranks your preferred results first over time.
+            </span>
+          </div>
         </div>
+        <SearchPreferencesSettings settings={settings} onChange={onChange} onError={onError} />
+        <IndexingSettings settings={settings} onChange={onChange} onError={onError} />
       </div>
-      <SearchPreferencesSettings settings={settings} onChange={onChange} onError={onError} />
-      <IndexingSettings settings={settings} onChange={onChange} onError={onError} />
     </div>
   );
 }
