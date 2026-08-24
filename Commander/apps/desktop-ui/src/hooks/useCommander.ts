@@ -81,19 +81,21 @@ export function useCommander(): CommanderState {
   useEffect(() => {
     if (!bootstrap) return;
     let cancelled = false;
+    let timer: number | undefined;
     const poll = async () => {
       try {
         const status = await api.indexingStatus();
         if (!cancelled) setIndexingStatus(status);
       } catch {
         // Search remains available while the optional index status is temporarily unavailable.
+      } finally {
+        if (!cancelled) timer = window.setTimeout(() => void poll(), 5_000);
       }
     };
     void poll();
-    const timer = window.setInterval(() => void poll(), 1_000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [bootstrap]);
 

@@ -1,5 +1,6 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { promisify } from 'node:util';
 
 export type IndexKind = 'application' | 'file' | 'directory';
 export type IgnoreRuleKind = 'glob' | 'regex';
@@ -161,6 +162,11 @@ export interface FileSystemIndexerClientOptions {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_INDEX_TIMEOUT_MS = 30 * 60_000;
+const INDEXER_CPU_SAMPLE_MS = 2_000;
+const INDEXER_HIGH_CPU_PERCENT = 85;
+const INDEXER_HIGH_CPU_SAMPLES = 3;
+const INDEXER_MAX_RESTART_ATTEMPTS = 5;
+const execFileAsync = promisify(execFile);
 
 export class FileSystemIndexerClient {
   readonly #options: FileSystemIndexerClientOptions;
@@ -168,10 +174,18 @@ export class FileSystemIndexerClient {
   #pending = new Map<string, PendingRequest>();
   #sequence = 0;
   #stderrBytes = 0;
+  #closed = false;
+  #restartTimer: ReturnType<typeof setTimeout> | undefined;
+  #cpuTimer: ReturnType<typeof setInterval> | undefined;
+  #highCpuSamples = 0;
+  #indexRequests = new Set<string>();
+  #restartAttempts = 0;
 
   constructor(options: FileSystemIndexerClientOptions) {
     this.#options = options;
     this.#start();
+    this.#cpuTimer = setInterval(() => void this.#checkWorkerCpu(), INDEXER_CPU_SAMPLE_MS);
+    this.#cpuTimer.unref();
   }
 
   status(): Promise<IndexStatus> {
@@ -199,6 +213,11 @@ export class FileSystemIndexerClient {
   }
 
   async close(): Promise<void> {
+    this.#closed = true;
+    if (this.#restartTimer) clearTimeout(this.#restartTimer);
+    if (this.#cpuTimer) clearInterval(this.#cpuTimer);
+    this.#restartTimer = undefined;
+    this.#cpuTimer = undefined;
     const child = this.#process;
     this.#process = undefined;
     this.#failPending(new Error('Filesystem indexer closed'));
@@ -226,6 +245,9 @@ export class FileSystemIndexerClient {
     const child = spawn(this.#options.binaryPath, arguments_, {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
+      // Keep the Rust indexer in an isolated process group. A stalled worker can
+      // be terminated without taking down Commander or its Node daemon.
+      detached: process.platform !== 'win32',
     });
     this.#stderrBytes = 0;
     this.#process = child;
@@ -248,6 +270,7 @@ export class FileSystemIndexerClient {
     timeoutMs?: number,
     onProgress?: (progress: IndexProgress) => void,
   ): Promise<T> {
+    this.#closed = false;
     if (!this.#process) this.#start();
     const child = this.#process!;
     const id = `indexer-${process.pid}-${++this.#sequence}`;
@@ -262,11 +285,13 @@ export class FileSystemIndexerClient {
         timer,
         ...(onProgress ? { onProgress } : {}),
       });
+      if (operation.operation === 'index') this.#indexRequests.add(id);
       child.stdin.write(`${JSON.stringify({ id, ...operation })}\n`, (error) => {
         if (!error) return;
         const pending = this.#pending.get(id);
         if (!pending) return;
         this.#pending.delete(id);
+        this.#indexRequests.delete(id);
         clearTimeout(pending.timer);
         pending.reject(error);
       });
@@ -296,6 +321,8 @@ export class FileSystemIndexerClient {
       return;
     }
     this.#pending.delete(response.id);
+    this.#indexRequests.delete(response.id);
+    this.#restartAttempts = 0;
     clearTimeout(pending.timer);
     if (response.ok) pending.resolve(response.result);
     else pending.reject(new Error(`${response.error.code}: ${response.error.message}`));
@@ -306,6 +333,7 @@ export class FileSystemIndexerClient {
     this.#process = undefined;
     if (child.exitCode === null) child.kill('SIGTERM');
     this.#failPending(error);
+    this.#scheduleRestart();
   }
 
   #failPending(error: Error): void {
@@ -314,5 +342,41 @@ export class FileSystemIndexerClient {
       pending.reject(error);
     }
     this.#pending.clear();
+    this.#indexRequests.clear();
+  }
+
+  #scheduleRestart(): void {
+    if (this.#closed || this.#restartTimer || this.#restartAttempts >= INDEXER_MAX_RESTART_ATTEMPTS)
+      return;
+    const delay = Math.min(10_000, 1_000 * 2 ** this.#restartAttempts);
+    this.#restartAttempts += 1;
+    this.#restartTimer = setTimeout(() => {
+      this.#restartTimer = undefined;
+      if (!this.#closed && !this.#process) this.#start();
+    }, delay);
+    this.#restartTimer.unref();
+  }
+
+  async #checkWorkerCpu(): Promise<void> {
+    const child = this.#process;
+    if (this.#closed || !child || child.pid === undefined || this.#indexRequests.size > 0) {
+      this.#highCpuSamples = 0;
+      return;
+    }
+    try {
+      const { stdout } = await execFileAsync('/bin/ps', ['-o', '%cpu=', '-p', String(child.pid)], {
+        timeout: 1_000,
+        maxBuffer: 1_024,
+      });
+      const cpu = Number(stdout.trim());
+      this.#highCpuSamples = Number.isFinite(cpu) && cpu >= INDEXER_HIGH_CPU_PERCENT
+        ? this.#highCpuSamples + 1
+        : 0;
+      if (this.#highCpuSamples < INDEXER_HIGH_CPU_SAMPLES) return;
+      this.#highCpuSamples = 0;
+      this.#failProcess(child, new Error('Filesystem indexer restarted after sustained high CPU outside indexing'));
+    } catch {
+      // A process that exits between sampling and ps is handled by its exit listener.
+    }
   }
 }
