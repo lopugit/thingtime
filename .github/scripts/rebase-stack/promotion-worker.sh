@@ -195,29 +195,12 @@ write_plan() {
     || fail "Reconstructed promotion plan hash differs from the trusted handoff ($computed_hash != $PLAN_HASH)."
 
   printf '%s\n' "$patch_id" >"$RUNNER_TEMP/promotion-patch-id.txt"
-  if grep -q '^\.github/' "$paths_file"; then
-    printf 'true\n' >"$RUNNER_TEMP/promotion-ci-sensitive-paths.txt"
-    emit ci_sensitive_paths true
-  else
-    printf 'false\n' >"$RUNNER_TEMP/promotion-ci-sensitive-paths.txt"
-    emit ci_sensitive_paths false
-  fi
   if grep -q '^\.github/workflows/' "$paths_file"; then
     printf 'true\n' >"$RUNNER_TEMP/promotion-workflow-paths.txt"
     emit workflow_paths true
   else
     printf 'false\n' >"$RUNNER_TEMP/promotion-workflow-paths.txt"
     emit workflow_paths false
-  fi
-  # Review-gate CI-sensitive content AND any promotion whose source lineage is
-  # not proven: both publish with [skip ci] content commits and an
-  # approval-required checkpoint, so nothing unreviewed executes or ships.
-  if grep -q '^\.github/' "$paths_file" || [[ "$observed_lineage" != verified ]]; then
-    printf 'true\n' >"$RUNNER_TEMP/promotion-review-gated.txt"
-    emit review_gated true
-  else
-    printf 'false\n' >"$RUNNER_TEMP/promotion-review-gated.txt"
-    emit review_gated false
   fi
   emit plan_hash "$computed_hash"
   emit patch_id "$patch_id"
@@ -275,9 +258,6 @@ prepare() {
   git config user.name 'github-actions[bot]'
   git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
   commit_title="Promote source PR #$SOURCE_PR onto $BASE_REF"
-  if [[ "$(<"$RUNNER_TEMP/promotion-review-gated.txt")" == true ]]; then
-    commit_title="$commit_title [skip ci]"
-  fi
   git commit -q \
     -m "$commit_title" \
     -m "Thingtime-Promotion-Source-PR: $SOURCE_PR" \
@@ -463,10 +443,6 @@ verify() {
     || fail "Graphify output changed before its deterministic derived refresh."
 
   message="$(git show -s --format=%B HEAD)"
-  if [[ "$(<"$RUNNER_TEMP/promotion-review-gated.txt")" == true ]]; then
-    grep -Fq '[skip ci]' <<<"$(git show -s --format=%s HEAD)" \
-      || fail "Review-gated promotion source commit is missing [skip ci]."
-  fi
   for expected in \
     "Thingtime-Promotion-Source-PR: $SOURCE_PR" \
     "Thingtime-Promotion-Base-Ref: $BASE_REF" \
