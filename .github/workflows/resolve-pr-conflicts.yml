@@ -143,7 +143,7 @@ jobs:
             base_ref="$(jq -r '.base.ref // empty' <<<"$pr")"
             head_sha="$(jq -r '.head.sha // empty' <<<"$pr")"
             base_sha="$(jq -r '.base.sha // empty' <<<"$pr")"
-            labels="$(jq -r '[.labels[].name] | join("\\n")' <<<"$pr")"
+            held="$(jq -r '[.labels[].name] | any(IN("no-ai-merge","ai-merge-paused","ai-rebase-in-progress"))' <<<"$pr")"
 
             if [ "$state" != open ] || [ "$draft" = true ] || [ "$head_repo" != "$REPO" ]; then
               continue
@@ -151,7 +151,7 @@ jobs:
             if [ "$mergeable_state" != dirty ]; then
               continue
             fi
-            if printf '%s\n' "$labels" | grep -Fxq -e no-ai-merge -e ai-merge-paused -e ai-rebase-in-progress; then
+            if [ "$held" = true ]; then
               continue
             fi
             if [ "$head_ref" = "$default_branch" ] || ! valid_ref "$head_ref" || ! valid_ref "$base_ref"; then
@@ -258,14 +258,14 @@ jobs:
           head_sha="$(jq -r '.head.sha // empty' <<<"$pr")"
           base_sha="$(jq -r '.base.sha // empty' <<<"$pr")"
           mergeable_state="$(jq -r '.mergeable_state // unknown' <<<"$pr")"
-          labels="$(jq -r '[.labels[].name] | join("\\n")' <<<"$pr")"
+          held="$(jq -r '[.labels[].name] | any(IN("no-ai-merge","ai-merge-paused","ai-rebase-in-progress"))' <<<"$pr")"
 
           [ "$state" = open ] && [ "$draft" = false ] && [ "$head_repo" = "$REPO" ] \
             || skip "PR #$PR_NUMBER is not an open, ready same-repository PR."
           [ "$mergeable_state" = dirty ] || skip "PR #$PR_NUMBER no longer has a merge conflict."
           [ "$head_sha" = "$EXPECTED_HEAD_SHA" ] && [ "$base_sha" = "$EXPECTED_BASE_SHA" ] \
             || skip "PR refs moved after detection; a fresh detector pass will re-snapshot them."
-          if printf '%s\n' "$labels" | grep -Fxq -e no-ai-merge -e ai-merge-paused -e ai-rebase-in-progress; then
+          if [ "$held" = true ]; then
             skip "PR #$PR_NUMBER is opted out, paused, or owned by the rebase agent."
           fi
           if [ "$head_ref" = "$default_branch" ] || ! valid_ref "$head_ref" || ! valid_ref "$base_ref"; then
@@ -442,8 +442,8 @@ jobs:
           [ "$(jq -r '.state' <<<"$pr")" = open ] || { echo '::notice::PR closed before publication.'; exit 0; }
           [ "$(jq -r '.head.sha' <<<"$pr")" = "$HEAD_SHA" ] || { echo '::notice::PR head moved before publication.'; exit 0; }
           [ "$(jq -r '.base.sha' <<<"$pr")" = "$BASE_SHA" ] || { echo '::notice::PR base moved before publication.'; exit 0; }
-          labels="$(jq -r '[.labels[].name] | join("\\n")' <<<"$pr")"
-          if printf '%s\n' "$labels" | grep -Fxq -e no-ai-merge -e ai-merge-paused -e ai-rebase-in-progress; then
+          held="$(jq -r '[.labels[].name] | any(IN("no-ai-merge","ai-merge-paused","ai-rebase-in-progress"))' <<<"$pr")"
+          if [ "$held" = true ]; then
             echo '::notice::PR was opted out, paused, or claimed by the rebase agent before publication.'
             exit 0
           fi
