@@ -75,7 +75,9 @@ jobs:
       - name: Check out approved PR commit
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # The immutable SHA was resolved above; cloning every historical ref
+          # only delays the release gate and provides no additional trust.
+          fetch-depth: 1
           ref: ${{ steps.source.outputs.head_sha }}
 
       - name: Set up Node

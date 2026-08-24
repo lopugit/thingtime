@@ -892,4 +892,7 @@ an offline database or offline conflict resolution layer.
   runner-only defect before any signing material was accessed: `MCP/` is
   npm-managed and has `package-lock.json`, so a frozen pnpm install could never
   succeed. The workflow now uses `npm ci --prefix MCP`; its contract test locks
-  that package-manager boundary before the next signed release attempt.
+  that package-manager boundary before the next signed release attempt. A
+  second run then spent more than five minutes in its unnecessary full-history
+  checkout, so the exact resolved SHA now uses `fetch-depth: 1`; this shortens
+  the gate without widening the selected source or signing authority.

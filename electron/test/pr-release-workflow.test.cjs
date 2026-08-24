@@ -14,6 +14,8 @@ test('signed PR release workflow gates signing on a maintainer-approved same-rep
 	assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/u);
 	assert.match(workflow, /github\.event\.pull_request\.author_association == 'OWNER'/u);
 	assert.match(workflow, /'desktop-release'/u);
+	assert.match(workflow, /fetch-depth: 1/u);
+	assert.doesNotMatch(workflow, /fetch-depth: 0/u);
 	assert.match(workflow, /release_version="\$\{base_version\}-pr\.\$\{PR_NUMBER\}\.\$\{branch_slug\}\.g\$\{short_sha\}"/u);
 	assert.match(workflow, /--prerelease/u);
 	assert.match(workflow, /npm ci --prefix MCP/u);

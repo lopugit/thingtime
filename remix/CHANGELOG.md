@@ -25,6 +25,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   keeps the unsigned verification gate deterministic and lets the signed,
   notarized release pipeline proceed only after MCP dependencies install
   reproducibly. — Codex (AI), 2026-08-24
+- **Signed PR release CI now checks out only the approved commit**: it resolves
+  the PR head SHA before checkout, then uses shallow history. This removes an
+  unnecessary full-repository clone that delayed the first release retry while
+  retaining the immutable SHA trust boundary. — Codex (AI), 2026-08-24
 
 - **Paired-Mac display mode selections now persist**: resolution and refresh
   changes use Core Graphics' permanent display-configuration transaction rather
