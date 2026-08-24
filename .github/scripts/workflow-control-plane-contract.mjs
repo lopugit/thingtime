@@ -596,13 +596,8 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreview,
-    /github\.event\.pull_request\.base\.ref == 'develop'/u,
-    "develop preview dispatches events that currently target develop",
-  );
-  assert.match(
-    developPreview,
-    /github\.event\.changes\.base\.ref\.from == 'develop'/u,
-    "develop preview preserves cleanup when a PR is retargeted away from develop",
+    /^    if: github\.event_name == 'pull_request_target'$/mu,
+    "develop preview dispatches every PR event so the protected controller can resolve a bounded stack",
   );
   assert.match(
     developPreview,

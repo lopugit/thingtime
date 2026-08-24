@@ -45,6 +45,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Preview wildcard fallbacks are environment-locked and stack-aware**:
+  `*.previews.dev.thingtime.com` must bind to `develop`, while the Vercel
+  production fallback for `*.previews.thingtime.com` must stay detached and
+  prove it resolves to `main`; the protected controller verifies each binding,
+  CNAME, and live runtime branch before publishing an alias. Trusted
+  same-repository stacked PRs now resolve their bounded parent chain to
+  `develop`, while missing, ambiguous, draft, untrusted, cyclic, or overlong
+  chains fail closed. — Codex (AI), 2026-08-24
 - **`ai-merge-paused` is now a durable user-controlled stop label**: neither
   conflict resolution nor stack rebasing can create, add, remove, recover, or
   supersede it. Detectors exclude it regardless of ref/topology changes, and

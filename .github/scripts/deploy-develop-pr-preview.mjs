@@ -20,6 +20,7 @@ const MAX_DEPLOYMENT_PAGES = 20;
 const MAX_WORKFLOW_DEPLOYMENTS = 500;
 const MAX_RECONCILE_PULL_REQUESTS = 100;
 const MAX_GITHUB_PAGES = 10;
+const MAX_PR_STACK_DEPTH = 12;
 const REQUEST_TIMEOUT_MS = 30_000;
 const CANCEL_TIMEOUT_MS = 2 * 60 * 1000;
 const STABLE_DEVELOP_TIMEOUT_MS = 10 * 60 * 1000;
@@ -47,6 +48,11 @@ const requiredEnv = (name) => {
 	const value = process.env[name]?.trim();
 	if (!value) throw new Error(`Missing required workflow setting: ${name}`);
 	return value;
+};
+
+const optionalEnv = (name, fallback) => {
+	const value = process.env[name]?.trim();
+	return value || fallback;
 };
 
 const boundedInteger = (value, name) => {
@@ -179,6 +185,15 @@ const stableDevelopDomainBindingIssue = (customEnvironment, stableDomain, config
 	return null;
 };
 
+const previewWildcardBindingIssue = (wildcardDomain, { projectId, suffix, expectedGitBranch }) => {
+	if (wildcardDomain?.projectId !== projectId) return 'wrong-project';
+	if (wildcardDomain?.name !== `*.${suffix}`) return 'wrong-name';
+	if (wildcardDomain?.verified !== true) return 'unverified';
+	if ((wildcardDomain?.gitBranch ?? null) !== expectedGitBranch) return 'wrong-git-branch';
+	if (wildcardDomain?.customEnvironmentId != null && wildcardDomain.customEnvironmentId !== '') return 'custom-environment-bound';
+	return null;
+};
+
 const stableDevelopDeploymentIssue = (deployment, config, expectedSha) => {
 	if (!deployment || typeof deployment !== 'object') return 'missing-deployment';
 	if (!/^dpl_[A-Za-z0-9]+$/.test(deployment.id ?? '')) return 'invalid-deployment-id';
@@ -215,36 +230,46 @@ const runtimeConfig = () => ({
 	gitRepoId: boundedInteger(requiredEnv('VERCEL_GITHUB_REPO_ID'), 'Vercel Git repository id'),
 	customEnvironmentId: exactPrefixedId(requiredEnv('VERCEL_CUSTOM_ENVIRONMENT_ID'), 'Vercel custom environment id', 'env_'),
 	previewAliasSuffix: safeHostname(requiredEnv('PREVIEW_ALIAS_SUFFIX'), 'Preview alias suffix'),
+	productionPreviewAliasSuffix: safeHostname(
+		optionalEnv('PRODUCTION_PREVIEW_ALIAS_SUFFIX', 'previews.thingtime.com'),
+		'Production preview alias suffix'
+	),
 	stableDevelopDomain: safeHostname(requiredEnv('STABLE_DEVELOP_DOMAIN'), 'Stable develop domain')
 });
 
-const classifyPullRequest = (pullRequest, repository, repositoryId) => {
+const pullRequestShapeIssue = (pullRequest, repository, repositoryId) => {
 	if (!pullRequest || typeof pullRequest !== 'object') {
-		return { allowed: false, reason: 'missing-pull-request' };
+		return 'missing-pull-request';
 	}
-	if (pullRequest.state !== 'open') return { allowed: false, reason: 'not-open' };
-	if (pullRequest.base?.ref !== 'develop') return { allowed: false, reason: 'wrong-base' };
+	if (pullRequest.state !== 'open') return 'not-open';
 	if (Number(pullRequest.base?.repo?.id) !== repositoryId || pullRequest.base?.repo?.full_name !== repository) {
-		return { allowed: false, reason: 'wrong-base-repository' };
+		return 'wrong-base-repository';
 	}
 	if (Number(pullRequest.head?.repo?.id) !== repositoryId || pullRequest.head?.repo?.full_name !== repository) {
-		return { allowed: false, reason: 'fork' };
+		return 'fork';
 	}
 	if (!TRUSTED_ASSOCIATIONS.has(pullRequest.author_association)) {
-		return { allowed: false, reason: 'untrusted-association' };
+		return 'untrusted-association';
 	}
-	if (pullRequest.draft) return { allowed: false, reason: 'draft' };
+	if (pullRequest.draft) return 'draft';
 	if (!/^[0-9a-f]{40}$/.test(pullRequest.head?.sha ?? '')) {
-		return { allowed: false, reason: 'invalid-sha' };
+		return 'invalid-sha';
 	}
 	if (!isSafeHeadRef(pullRequest.head?.ref)) {
-		return { allowed: false, reason: 'invalid-ref' };
+		return 'invalid-ref';
 	}
 	try {
 		normalizeLogin(pullRequest.user?.login);
 	} catch {
-		return { allowed: false, reason: 'invalid-author' };
+		return 'invalid-author';
 	}
+	return null;
+};
+
+const classifyPullRequest = (pullRequest, repository, repositoryId, { terminalBranch = 'develop' } = {}) => {
+	const shapeIssue = pullRequestShapeIssue(pullRequest, repository, repositoryId);
+	if (shapeIssue) return { allowed: false, reason: shapeIssue };
+	if (pullRequest.base?.ref !== terminalBranch) return { allowed: false, reason: 'wrong-base' };
 	return { allowed: true };
 };
 
@@ -408,7 +433,7 @@ const deploymentListParams = (config, { prNumber = null, sha = null, until = nul
 	return params;
 };
 
-const runSelfTest = () => {
+const runSelfTest = async () => {
 	let checks = 0;
 	const equal = (actual, expected) => {
 		assert.deepEqual(actual, expected);
@@ -443,12 +468,15 @@ const runSelfTest = () => {
 		projectName: 'thingtime',
 		gitRepoId: 4242,
 		customEnvironmentId: 'env_develop',
-		stableDevelopDomain: 'dev.thingtime.com'
+		stableDevelopDomain: 'dev.thingtime.com',
+		previewAliasSuffix: 'previews.dev.thingtime.com',
+		productionPreviewAliasSuffix: 'previews.thingtime.com'
 	};
 
 	equal(classifyPullRequest(base, config.repository, config.repositoryId), { allowed: true });
 	equal(classifyPullRequest({ ...base, state: 'closed' }, config.repository, config.repositoryId).reason, 'not-open');
 	equal(classifyPullRequest({ ...base, base: { ...base.base, ref: 'main' } }, config.repository, config.repositoryId).reason, 'wrong-base');
+	equal(pullRequestShapeIssue({ ...base, base: { ...base.base, ref: 'codex/parent' } }, config.repository, config.repositoryId), null);
 	equal(
 		classifyPullRequest({ ...base, head: { ...base.head, repo: { id: 99, full_name: 'lopugit/thingtime' } } }, config.repository, config.repositoryId)
 			.reason,
@@ -545,6 +573,27 @@ const runSelfTest = () => {
 			{ domains: [] },
 			{ projectId: config.projectId, verified: true, gitBranch: null, customEnvironmentId: config.customEnvironmentId },
 			config
+		),
+		'wrong-git-branch'
+	);
+	equal(
+		previewWildcardBindingIssue(
+			{ projectId: config.projectId, name: '*.previews.dev.thingtime.com', verified: true, gitBranch: 'develop', customEnvironmentId: null },
+			{ projectId: config.projectId, suffix: config.previewAliasSuffix, expectedGitBranch: 'develop' }
+		),
+		null
+	);
+	equal(
+		previewWildcardBindingIssue(
+			{ projectId: config.projectId, name: '*.previews.thingtime.com', verified: true, gitBranch: null, customEnvironmentId: '' },
+			{ projectId: config.projectId, suffix: config.productionPreviewAliasSuffix, expectedGitBranch: null }
+		),
+		null
+	);
+	equal(
+		previewWildcardBindingIssue(
+			{ projectId: config.projectId, name: '*.previews.dev.thingtime.com', verified: true, gitBranch: null, customEnvironmentId: null },
+			{ projectId: config.projectId, suffix: config.previewAliasSuffix, expectedGitBranch: 'develop' }
 		),
 		'wrong-git-branch'
 	);
@@ -717,6 +766,37 @@ const runSelfTest = () => {
 			client_payload: { pr_number: '201', source_run_id: '123', actor: 'lopu', action: 'closed', head_sha: base.head.sha, head_ref: '' }
 		})
 	);
+	const stacked = {
+		...base,
+		number: 202,
+		base: { ref: 'codex/parent', repo: { id: 42, full_name: 'lopugit/thingtime' } },
+		head: { ...base.head, ref: 'codex/child', sha: 'c'.repeat(40) }
+	};
+	const parent = {
+		...base,
+		number: 203,
+		base: { ref: 'develop', repo: { id: 42, full_name: 'lopugit/thingtime' } },
+		head: { ...base.head, ref: 'codex/parent', sha: 'b'.repeat(40) }
+	};
+	const resolvedStack = await resolvePullRequestStack(config, stacked, {
+		findParent: async (_config, ref) => {
+			equal(ref, 'codex/parent');
+			return parent;
+		}
+	});
+	equal(
+		resolvedStack.chain.map((candidate) => candidate.number),
+		[202, 203]
+	);
+	await assert.rejects(
+		resolvePullRequestStack(config, stacked, {
+			findParent: async () => {
+				throw new EligibilityError('stack-parent-missing');
+			}
+		}),
+		(error) => error instanceof EligibilityError && error.reason === 'stack-parent-missing'
+	);
+	checks += 1;
 
 	console.log(`develop PR preview self-test: ${checks}/${checks} passed`);
 };
@@ -795,6 +875,41 @@ const vercelRequest = (path, options = {}) => {
 
 const getPullRequest = async (repository, number) => githubRequest(`/repos/${repository}/pulls/${boundedInteger(number, 'PR number')}`);
 
+const findOpenStackParent = async (config, headRef) => {
+	if (!isSafeHeadRef(headRef)) throw new EligibilityError('invalid-stack-base-ref');
+	const [owner] = config.repository.split('/');
+	const query = new URLSearchParams({ state: 'open', head: `${owner}:${headRef}`, per_page: '100' });
+	const candidates = await githubRequest(`/repos/${config.repository}/pulls?${query}`);
+	if (!Array.isArray(candidates)) throw new Error('GitHub stack-parent response was invalid');
+	const matching = candidates.filter(
+		(candidate) =>
+			candidate.head?.ref === headRef &&
+			Number(candidate.head?.repo?.id) === config.repositoryId &&
+			candidate.head?.repo?.full_name === config.repository
+	);
+	if (matching.length === 0) throw new EligibilityError('stack-parent-missing');
+	if (matching.length !== 1) throw new EligibilityError('stack-parent-ambiguous');
+	return matching[0];
+};
+
+const resolvePullRequestStack = async (config, pullRequest, { terminalBranch = 'develop', findParent = findOpenStackParent } = {}) => {
+	if (!['develop', 'main'].includes(terminalBranch)) throw new Error('Preview stack terminal branch is invalid');
+	const chain = [];
+	const seenNumbers = new Set();
+	let current = pullRequest;
+	for (let depth = 0; depth < MAX_PR_STACK_DEPTH; depth += 1) {
+		const shapeIssue = pullRequestShapeIssue(current, config.repository, config.repositoryId);
+		if (shapeIssue) throw new EligibilityError(depth === 0 ? shapeIssue : `stack-parent-${shapeIssue}`);
+		const number = boundedInteger(current.number, 'Pull request number');
+		if (seenNumbers.has(number)) throw new EligibilityError('stack-cycle');
+		seenNumbers.add(number);
+		chain.push(current);
+		if (current.base.ref === terminalBranch) return { chain, terminalBranch };
+		current = await findParent(config, current.base.ref);
+	}
+	throw new EligibilityError('stack-depth-exceeded');
+};
+
 const developRefSha = (reference) => {
 	if (reference?.ref !== 'refs/heads/develop' || reference?.object?.type !== 'commit' || !/^[0-9a-f]{40}$/.test(reference.object.sha ?? '')) {
 		throw new Error('GitHub develop ref was invalid');
@@ -856,16 +971,25 @@ const assertTrustedPrincipal = async (config, login, label) => {
 };
 
 const assertTrustedPullRequest = async (config, pullRequest, { actor = null } = {}) => {
-	const classification = classifyPullRequest(pullRequest, config.repository, config.repositoryId);
-	if (!classification.allowed) throw new EligibilityError(classification.reason);
+	const shapeIssue = pullRequestShapeIssue(pullRequest, config.repository, config.repositoryId);
+	if (shapeIssue) throw new EligibilityError(shapeIssue);
 	await assertTrustedPrincipal(config, pullRequest.user.login, 'author');
 	if (actor) await assertTrustedPrincipal(config, actor, 'actor');
 	return pullRequest;
 };
 
+const assertTrustedPullRequestStack = async (config, pullRequest, { actor = null } = {}) => {
+	const stack = await resolvePullRequestStack(config, pullRequest);
+	for (const candidate of stack.chain) {
+		await assertTrustedPullRequest(config, candidate);
+	}
+	if (actor) await assertTrustedPrincipal(config, actor, 'actor');
+	return { pullRequest, stack };
+};
+
 const assertCurrentPullRequest = async (config, snapshot, actor) => {
 	const current = await getPullRequest(config.repository, snapshot.number);
-	await assertTrustedPullRequest(config, current, { actor });
+	await assertTrustedPullRequestStack(config, current, { actor });
 	if (!pullRequestMatchesSnapshot(current, snapshot)) throw new EligibilityError('stale-head');
 	return current;
 };
@@ -1028,29 +1152,74 @@ const assertVercelConfiguration = async (config) => {
 		throw new Error(`Stable develop domain must track only the develop Git branch (${stableDomainIssue})`);
 	}
 
-	const wildcardDomainName = `*.${config.previewAliasSuffix}`;
-	const wildcardDomainPath = encodeURIComponent(wildcardDomainName).replaceAll('*', '%2A');
-	const wildcardDomain = await vercelRequest(`/v9/projects/${encodeURIComponent(config.projectId)}/domains/${wildcardDomainPath}`);
-	if (
-		wildcardDomain?.projectId !== config.projectId ||
-		wildcardDomain?.name !== wildcardDomainName ||
-		wildcardDomain?.verified !== true ||
-		wildcardDomain?.gitBranch != null ||
-		wildcardDomain?.customEnvironmentId != null
-	) {
-		throw new Error('PR preview wildcard must be verified and detached from branches and custom environments');
+	const wildcardPolicies = [
+		{ label: 'Development preview', suffix: config.previewAliasSuffix, expectedGitBranch: 'develop', expectedRuntimeBranch: 'develop' },
+		// Vercel deliberately refuses to bind a project domain to the production
+		// branch as a Preview domain. Detached is therefore the only valid
+		// production binding; the live branch probe below makes that default
+		// explicit and fails closed if Vercel ever routes it elsewhere.
+		{ label: 'Production preview', suffix: config.productionPreviewAliasSuffix, expectedGitBranch: null, expectedRuntimeBranch: 'main' }
+	];
+	for (const policy of wildcardPolicies) {
+		const wildcardDomainName = `*.${policy.suffix}`;
+		const wildcardDomainPath = encodeURIComponent(wildcardDomainName).replaceAll('*', '%2A');
+		const wildcardDomain = await vercelRequest(`/v9/projects/${encodeURIComponent(config.projectId)}/domains/${wildcardDomainPath}`);
+		const wildcardBindingIssue = previewWildcardBindingIssue(wildcardDomain, {
+			projectId: config.projectId,
+			suffix: policy.suffix,
+			expectedGitBranch: policy.expectedGitBranch
+		});
+		if (wildcardBindingIssue) {
+			const expected = policy.expectedGitBranch ?? 'the Vercel production default';
+			throw new Error(`${policy.label} wildcard must track only ${expected} (${wildcardBindingIssue})`);
+		}
+
+		const wildcardDomainConfig = await vercelRequest(`/v6/domains/${wildcardDomainPath}/config`);
+		let resolvedCnames;
+		try {
+			resolvedCnames = await resolveCname(`controller-dns-probe.${policy.suffix}`);
+		} catch {
+			throw new Error(`${policy.label} wildcard CNAME did not resolve`);
+		}
+		const wildcardDnsIssue = wildcardDnsConfigurationIssue(wildcardDomainConfig, resolvedCnames);
+		if (wildcardDnsIssue) {
+			throw new Error(`${policy.label} wildcard DNS failed live CNAME verification (${wildcardDnsIssue})`);
+		}
 	}
-	const wildcardDomainConfig = await vercelRequest(`/v6/domains/${wildcardDomainPath}/config`);
-	let resolvedCnames;
-	try {
-		resolvedCnames = await resolveCname(`controller-dns-probe.${config.previewAliasSuffix}`);
-	} catch {
-		throw new Error('PR preview wildcard CNAME did not resolve');
+	await assertWildcardFallbackRuntimes(config);
+};
+
+const verifyWildcardFallbackRuntime = async ({ suffix, expectedBranch }) => {
+	const hostname = `controller-fallback-probe.${suffix}`;
+	let lastError = null;
+	for (let attempt = 0; attempt < 5; attempt += 1) {
+		try {
+			const response = await fetch(`https://${hostname}/api/root-data`, {
+				headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+				redirect: 'manual',
+				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+			});
+			if (!response.ok) {
+				lastError = new Error(`HTTP ${response.status}`);
+			} else {
+				const payload = await response.json();
+				const branch = payload?.envFromCookie?.THINGTIME_BRANCH_NAME;
+				if (branch === expectedBranch) return;
+				lastError = new Error(`runtime branch was ${typeof branch === 'string' ? branch : 'missing'}`);
+			}
+		} catch (error) {
+			lastError = error;
+		}
+		if (attempt < 4) await delay(1_000 * (attempt + 1));
 	}
-	const wildcardDnsIssue = wildcardDnsConfigurationIssue(wildcardDomainConfig, resolvedCnames);
-	if (wildcardDnsIssue) {
-		throw new Error(`PR preview wildcard DNS failed live CNAME verification (${wildcardDnsIssue})`);
-	}
+	throw new Error(
+		`Wildcard fallback runtime did not resolve to ${expectedBranch} (${lastError instanceof Error ? lastError.message : 'unknown'})`
+	);
+};
+
+const assertWildcardFallbackRuntimes = async (config) => {
+	await verifyWildcardFallbackRuntime({ suffix: config.previewAliasSuffix, expectedBranch: 'develop' });
+	await verifyWildcardFallbackRuntime({ suffix: config.productionPreviewAliasSuffix, expectedBranch: 'main' });
 };
 
 const verifyPublishedAlias = async (aliasUrl) => {
@@ -1477,7 +1646,7 @@ const cleanupComment = (reason) => {
 const handleIneligible = async (config, pullRequest, reason, { comment = true } = {}) => {
 	const prNumber = boundedInteger(pullRequest.number, 'PR number');
 	const cleaned = await cleanupPrResources(config, prNumber);
-	if (comment) {
+	if (comment && (cleaned.aliasRemoved || cleaned.deleted > 0)) {
 		await upsertComment(
 			config.repository,
 			prNumber,
@@ -1506,7 +1675,7 @@ const reconcile = async (config) => {
 		let pullRequest = null;
 		try {
 			const candidate = await getPullRequest(config.repository, prNumber);
-			await assertTrustedPullRequest(config, candidate);
+			await assertTrustedPullRequestStack(config, candidate);
 			pullRequest = candidate;
 		} catch (error) {
 			if (!(error instanceof EligibilityError) && !(error instanceof HttpError && error.status === 404)) throw error;
@@ -1577,7 +1746,7 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 };
 
 const deploy = async (config, pullRequest) => {
-	await assertTrustedPullRequest(config, pullRequest, { actor: config.actor });
+	await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
 	const corsProbeUrl = safeCorsProbeUrl(requiredEnv('DEVELOP_S3_CORS_PROBE_URL'));
 	const snapshot = pullRequestSnapshot(pullRequest);
 	await assertVercelConfiguration(config);
@@ -1661,7 +1830,7 @@ const deploy = async (config, pullRequest) => {
 
 const main = async () => {
 	if (process.argv.includes('--self-test')) {
-		runSelfTest();
+		await runSelfTest();
 		return;
 	}
 
@@ -1690,7 +1859,6 @@ const main = async () => {
 		return;
 	}
 	const action = dispatch?.action ?? String(event.action ?? 'workflow_dispatch');
-	const classification = classifyPullRequest(pullRequest, config.repository, config.repositoryId);
 	const mergedIntoDevelop =
 		action === 'closed' &&
 		pullRequest.state === 'closed' &&
@@ -1699,13 +1867,23 @@ const main = async () => {
 		Number(pullRequest.base?.repo?.id) === config.repositoryId &&
 		pullRequest.base?.repo?.full_name === config.repository;
 
-	if (!classification.allowed) {
-		const cleanupRelevant = CLEANUP_ACTIONS.has(action) || pullRequest.base?.ref === 'develop' || event.changes?.base?.ref?.from === 'develop';
+	let stackEligibilityError = null;
+	try {
+		await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
+	} catch (error) {
+		if (!(error instanceof EligibilityError)) throw error;
+		stackEligibilityError = error;
+	}
+	if (stackEligibilityError) {
+		const cleanupRelevant =
+			CLEANUP_ACTIONS.has(action) ||
+			pullRequest.base?.ref === 'develop' ||
+			event.changes?.base?.ref?.from === 'develop';
 		if (cleanupRelevant) {
-			const reason = action === 'closed' ? 'closed' : classification.reason;
+			const reason = action === 'closed' ? 'closed' : stackEligibilityError.reason;
 			await handleIneligible(config, pullRequest, reason);
 		} else {
-			console.log(`Skipped unrelated PR #${prNumber}: ${classification.reason}`);
+			console.log(`Skipped unrelated PR #${prNumber}: ${stackEligibilityError.reason}`);
 		}
 		if (mergedIntoDevelop) {
 			await assertTrustedPrincipal(config, config.actor, 'actor');
@@ -1713,16 +1891,6 @@ const main = async () => {
 			await reconcileStableDevelopAlias(config, { waitForReady: true });
 		}
 		return;
-	}
-
-	try {
-		await assertTrustedPullRequest(config, pullRequest, { actor: config.actor });
-	} catch (error) {
-		if (error instanceof EligibilityError) {
-			await handleIneligible(config, pullRequest, error.reason);
-			return;
-		}
-		throw error;
 	}
 	await reconcileStableDevelopAlias(config);
 	await deploy(config, pullRequest);
