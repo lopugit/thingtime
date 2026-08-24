@@ -58,6 +58,9 @@ jobs:
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test
 
+      - name: Validate signed Electron PR release contract
+        run: node .github/scripts/electron-pr-release-contract.mjs
+
   contract-advisories:
     name: Contract advisories (non-blocking)
     runs-on: ubuntu-latest
@@ -125,6 +128,8 @@ jobs:
               node .github/scripts/deploy-develop-pr-preview.mjs --self-test
             run_contract 'Workflow control-plane examples' \
               node .github/scripts/workflow-control-plane-contract.mjs --self-test
+            run_contract 'Signed Electron PR release examples' \
+              node .github/scripts/electron-pr-release-contract.mjs
             run_contract 'Conflict-resolver routing examples' \
               node .github/scripts/resolve-pr-conflicts-routing-contract.mjs --self-test
             run_contract 'Rebase ownership routing examples' \
