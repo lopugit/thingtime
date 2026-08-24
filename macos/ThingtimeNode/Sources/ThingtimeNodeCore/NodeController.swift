@@ -97,6 +97,8 @@ public actor ThingtimeNodeController {
         "system.power.idle-sleep-prevention.write",
         "system.power.idle-timer.read",
         "system.power.idle-timer.write",
+        "system.policy.airdrop.profile.write",
+        "system.policy.camera.profile.write",
         "system.media.apple-music.read",
         "system.media.apple-music.playback.write",
         "system.media.spotify.read",
@@ -656,6 +658,18 @@ public actor ThingtimeNodeController {
                 throw ThingtimeNodeError.invalidRequest("system.power.idle-timer.set requires scope and minutes.")
             }
             action = SafeActionRequest(kind: .setPowerIdleTimer, parameters: ["scope": .string(scope), "minutes": .number(minutes)])
+        case "system.policy.airdrop.profile.propose":
+            try requireOnlyKeys(input, ["enabled"])
+            guard case let .bool(enabled)? = input["enabled"] else {
+                throw ThingtimeNodeError.invalidRequest("system.policy.airdrop.profile.propose requires enabled.")
+            }
+            action = SafeActionRequest(kind: .proposeAirDropPolicy, parameters: ["enabled": .bool(enabled)])
+        case "system.policy.camera.profile.propose":
+            try requireOnlyKeys(input, ["enabled"])
+            guard case let .bool(enabled)? = input["enabled"] else {
+                throw ThingtimeNodeError.invalidRequest("system.policy.camera.profile.propose requires enabled.")
+            }
+            action = SafeActionRequest(kind: .proposeCameraPolicy, parameters: ["enabled": .bool(enabled)])
         case "system.media.apple-music.playback.set":
             try requireOnlyKeys(input, ["operation"])
             guard let operation = input["operation"]?.stringValue else {

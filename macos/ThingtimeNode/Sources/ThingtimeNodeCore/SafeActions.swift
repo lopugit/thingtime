@@ -30,6 +30,8 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case setVPNConnected = "system.vpn.connection.set"
     case setPreventIdleSleep = "system.power.idle-sleep-prevention.set"
     case setPowerIdleTimer = "system.power.idle-timer.set"
+    case proposeAirDropPolicy = "system.policy.airdrop.profile.propose"
+    case proposeCameraPolicy = "system.policy.camera.profile.propose"
     case setAppleMusicPlayback = "system.media.apple-music.playback.set"
     case setSpotifyPlayback = "system.media.spotify.playback.set"
     case activateApplication = "application.activate"
@@ -186,6 +188,11 @@ public struct SafeActionPolicy: Sendable {
                     minutes: action.parameters["minutes"]?.numberValue
                   ) else {
                 return "system.power.idle-timer.set requires display, system, or disk scope and whole minutes from 0 to 180."
+            }
+            return nil
+        case .proposeAirDropPolicy, .proposeCameraPolicy:
+            guard action.parameters.count == 1, case .bool = action.parameters["enabled"] else {
+                return "The policy proposal requires only a boolean enabled value."
             }
             return nil
         case .setAppleMusicPlayback:
@@ -405,6 +412,19 @@ public final class SafeActionExecutor {
             }
             let minutes = try SystemPowerTimers.set(scope: scope, minutes: Int(rawMinutes))
             return .object(["scope": .string(scope), "minutes": .number(Double(minutes))])
+        case .proposeAirDropPolicy, .proposeCameraPolicy:
+            guard case let .bool(enabled)? = action.parameters["enabled"] else {
+                throw ThingtimeNodeError.invalidRequest("Missing policy proposal state.")
+            }
+            let scope: SystemConfigurationProfileProposal.Scope = action.kind == .proposeAirDropPolicy ? .airDrop : .camera
+            let profileURL = try await SystemConfigurationProfileProposal.propose(scope: scope, enabled: enabled)
+            return .object([
+                "scope": .string(scope.rawValue),
+                "enabled": .bool(enabled),
+                "profileProposed": .bool(true),
+                "installationRequired": .bool(true),
+                "profileFileName": .string(profileURL.lastPathComponent)
+            ])
         case .setAppleMusicPlayback:
             guard let operation = action.parameters["operation"]?.stringValue else {
                 throw ThingtimeNodeError.invalidRequest("Missing Apple Music operation.")

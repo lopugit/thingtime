@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **User-reviewed global availability policy proposals for paired Macs**:
+  AirDrop and camera availability now have separate capability-gated commands
+  that accept only a boolean and always require a fresh approval. Each command
+  writes one fixed local configuration profile and opens macOS’s profile-review
+  flow; macOS installation remains a separate local choice. The profiles never
+  create MDM enrollment, carry arbitrary payload content, or alter per-app
+  camera TCC grants. Paired-device API contracts are now `1.5.0`. — Codex (AI), 2026-08-24
+
 - **Approval-gated persistent idle timers for paired Macs**: the node now
   reads and can set the documented IOKit display-idle, system-sleep, and
   disk-spindown timers from Never (0) through 180 minutes. Every change

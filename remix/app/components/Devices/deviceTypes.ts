@@ -244,6 +244,8 @@ export type DeviceActionKind =
 	| 'set-vpn-connected'
 	| 'set-prevent-idle-sleep'
 	| 'set-power-idle-timer'
+	| 'propose-airdrop-policy-profile'
+	| 'propose-camera-policy-profile'
 	| 'set-apple-music-playback'
 	| 'set-spotify-playback'
 	| 'launch-app'

@@ -36,6 +36,8 @@ export const DEVICE_COMMAND_KINDS = [
 	'system.vpn.connection.set',
 	'system.power.idle-sleep-prevention.set',
 	'system.power.idle-timer.set',
+	'system.policy.airdrop.profile.propose',
+	'system.policy.camera.profile.propose',
 	'system.media.apple-music.playback.set',
 	'system.media.spotify.playback.set',
 	'system.lock',
@@ -71,7 +73,9 @@ const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>([
 	'system.logout',
 	'system.media.apple-music.playback.set',
 	'system.media.spotify.playback.set',
-	'system.power.idle-timer.set'
+	'system.power.idle-timer.set',
+	'system.policy.airdrop.profile.propose',
+	'system.policy.camera.profile.propose'
 ]);
 
 export const deviceCommandRequiresApproval = (kind: DeviceCommandKind, callerRequiresApproval: boolean): boolean =>
@@ -660,6 +664,8 @@ export type DeviceCommandInputByKind = {
 	'system.vpn.connection.set': { id: string; connected: boolean };
 	'system.power.idle-sleep-prevention.set': { enabled: boolean };
 	'system.power.idle-timer.set': { scope: 'display' | 'system' | 'disk'; minutes: number };
+	'system.policy.airdrop.profile.propose': { enabled: boolean };
+	'system.policy.camera.profile.propose': { enabled: boolean };
 	'system.media.apple-music.playback.set': { operation: 'play' | 'pause' | 'next' | 'previous' };
 	'system.media.spotify.playback.set': { operation: 'play' | 'pause' | 'next' | 'previous' };
 	'system.lock': Record<string, never>;
@@ -745,6 +751,8 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'system.vpn.connection.set': 'system.vpn.connection.write',
 	'system.power.idle-sleep-prevention.set': 'system.power.idle-sleep-prevention.write',
 	'system.power.idle-timer.set': 'system.power.idle-timer.write',
+	'system.policy.airdrop.profile.propose': 'system.policy.airdrop.profile.write',
+	'system.policy.camera.profile.propose': 'system.policy.camera.profile.write',
 	'system.media.apple-music.playback.set': 'system.media.apple-music.playback.write',
 	'system.media.spotify.playback.set': 'system.media.spotify.playback.write',
 	'system.lock': 'system.lock',
@@ -794,6 +802,8 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'system.vpn.connection.set': 'system.vpn.connection.write',
 	'system.power.idle-sleep-prevention.set': 'system.power.idle-sleep-prevention.write',
 	'system.power.idle-timer.set': 'system.power.idle-timer.write',
+	'system.policy.airdrop.profile.propose': 'system.policy.airdrop.profile.write',
+	'system.policy.camera.profile.propose': 'system.policy.camera.profile.write',
 	'system.media.apple-music.playback.set': 'system.media.apple-music.playback.write',
 	'system.media.spotify.playback.set': 'system.media.spotify.playback.write',
 	'device.lock.write': 'system.lock',
@@ -1017,6 +1027,11 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 				? ok({ scope, minutes })
 				: deviceFail(400, 'system.power.idle-timer.set requires display, system, or disk scope and whole minutes from 0 to 180');
 		}
+		case 'system.policy.airdrop.profile.propose':
+		case 'system.policy.camera.profile.propose':
+			return typeof raw.enabled === 'boolean' && exactKeys(raw, ['enabled'])
+				? ok({ enabled: raw.enabled })
+				: deviceFail(400, `${kind} requires only a boolean enabled value`);
 		case 'system.media.apple-music.playback.set': {
 			const operation = raw.operation;
 			return (operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous') && exactKeys(raw, ['operation'])

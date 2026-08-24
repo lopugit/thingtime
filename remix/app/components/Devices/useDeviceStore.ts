@@ -80,6 +80,8 @@ const CAPABILITY_ALIASES: Record<string, string[]> = {
 	'system.vpn.connection.set': ['system.vpn.connection.write'],
 	'system.power.idle-sleep-prevention.set': ['system.power.idle-sleep-prevention.write'],
 	'system.power.idle-timer.set': ['system.power.idle-timer.write'],
+	'system.policy.airdrop.profile.propose': ['system.policy.airdrop.profile.write'],
+	'system.policy.camera.profile.propose': ['system.policy.camera.profile.write'],
 	'system.lock': ['system.lock'],
 	'system.sleep': ['system.power.sleep'],
 	'system.restart': ['system.power.restart'],
@@ -199,6 +201,8 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 		case 'system.vpn.connection.set': return 'set-vpn-connected';
 		case 'system.power.idle-sleep-prevention.set': return 'set-prevent-idle-sleep';
 		case 'system.power.idle-timer.set': return 'set-power-idle-timer';
+		case 'system.policy.airdrop.profile.propose': return 'propose-airdrop-policy-profile';
+		case 'system.policy.camera.profile.propose': return 'propose-camera-policy-profile';
 		case 'system.media.apple-music.playback.set': return 'set-apple-music-playback';
 		case 'system.media.spotify.playback.set': return 'set-spotify-playback';
 		case 'system.lock':
@@ -655,6 +659,10 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 				? { ...base, kind: 'system.power.idle-timer.set', input: { scope, minutes } }
 				: null;
 		}
+		case 'propose-airdrop-policy-profile':
+			return typeof input.enabled === 'boolean' ? { ...base, kind: 'system.policy.airdrop.profile.propose', input: { enabled: input.enabled } } : null;
+		case 'propose-camera-policy-profile':
+			return typeof input.enabled === 'boolean' ? { ...base, kind: 'system.policy.camera.profile.propose', input: { enabled: input.enabled } } : null;
 		case 'set-apple-music-playback': {
 			const operation = input.operation;
 			return operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous'

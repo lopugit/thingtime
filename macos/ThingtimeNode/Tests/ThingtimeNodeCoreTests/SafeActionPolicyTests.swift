@@ -204,6 +204,20 @@ final class SafeActionPolicyTests: XCTestCase {
         ) else { return XCTFail("Expected unexpected Apple Music fields to be denied") }
     }
 
+    func testPolicyProfileProposalsAreBooleanOnlyAndRequireApproval() {
+        for kind in [SafeActionKind.proposeAirDropPolicy, .proposeCameraPolicy] {
+            guard case .requireApproval = policy.evaluate(
+                action: SafeActionRequest(kind: kind, parameters: ["enabled": .bool(false)]),
+                context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+            ) else { return XCTFail("Expected \(kind.rawValue) to require approval") }
+
+            guard case .deny = policy.evaluate(
+                action: SafeActionRequest(kind: kind, parameters: ["enabled": .bool(true), "PayloadContent": .string("untrusted")]),
+                context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+            ) else { return XCTFail("Expected unknown policy profile input to be denied") }
+        }
+    }
+
     func testSpotifyPlaybackIsFixedAndRequiresApproval() {
         let play = SafeActionRequest(kind: .setSpotifyPlayback, parameters: ["operation": .string("play")])
         guard case .requireApproval = policy.evaluate(

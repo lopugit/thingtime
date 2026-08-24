@@ -38,6 +38,8 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'system.vpn.connection.set',
 	'system.power.idle-sleep-prevention.set',
 	'system.power.idle-timer.set',
+	'system.policy.airdrop.profile.propose',
+	'system.policy.camera.profile.propose',
 	'system.media.apple-music.playback.set',
 	'system.media.spotify.playback.set',
 	'system.lock',

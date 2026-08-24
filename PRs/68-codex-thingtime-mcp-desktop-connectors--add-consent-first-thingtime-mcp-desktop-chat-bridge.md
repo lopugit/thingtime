@@ -283,6 +283,23 @@ relational shape for later ThingtimeDB storage and platform chat views.
   tests cover strict parameters, fresh approval, no side effect before pairing,
   and the bounded state projection.
 
+### 2026-08-24 user-reviewed AirDrop and camera policy-profile follow-up
+
+- The paired-device surface now exposes two intentionally fixed policy
+  proposals: global AirDrop availability and global camera availability. Each
+  accepts exactly one `enabled` boolean, has its own signed capability, and
+  always receives a fresh approval before the node writes the proposal.
+- The node creates only a deterministic `com.apple.applicationaccess`
+  configuration profile in its private Application Support proposal directory
+  and opens it in macOS’s review flow. It never performs a silent install,
+  creates an MDM enrollment, accepts a profile payload/key/identifier from the
+  caller, or changes per-app Camera TCC grants. Installing or declining stays
+  a local macOS user decision.
+- The four paired-device capability-manifest endpoint contracts are bumped to
+  `1.5.0`. Native profile-serialization and action-policy tests, unpaired-node
+  regression coverage, and device-core validation enforce the closed envelope
+  and fail-closed pairing boundary.
+
 ## Security and product boundaries
 
 MCP gives a host a standard way to invoke this server; it does not give the

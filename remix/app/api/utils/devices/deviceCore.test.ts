@@ -295,6 +295,8 @@ test('device-wide commands require the capability from the signed pairing claim'
 	assert.equal(deviceSupportsCommand('system.audio.sound-effects.mute.set', ['system.audio.sound-effects.mute.write']), true);
 	assert.equal(deviceSupportsCommand('system.brightness.set', ['system.brightness.write']), true);
 	assert.equal(deviceSupportsCommand('system.power.idle-timer.set', ['system.power.idle-timer.write']), true);
+	assert.equal(deviceSupportsCommand('system.policy.airdrop.profile.propose', ['system.policy.airdrop.profile.write']), true);
+	assert.equal(deviceSupportsCommand('system.policy.camera.profile.propose', ['system.policy.camera.profile.write']), true);
 	assert.equal(deviceSupportsCommand('system.sleep', ['system.power.sleep']), true);
 	assert.equal(deviceSupportsCommand('system.sleep', ['system.lock']), false);
 	assert.equal(deviceSupportsCommand('screen.start', ['screen.view']), true);
@@ -341,6 +343,8 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'system.vpn.connection.set',
 		'system.power.idle-sleep-prevention.set',
 		'system.power.idle-timer.set',
+		'system.policy.airdrop.profile.propose',
+		'system.policy.camera.profile.propose',
 		'system.media.apple-music.playback.set',
 		'system.media.spotify.playback.set',
 		'system.lock',
@@ -400,6 +404,9 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'display', minutes: 10.5 }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'all', minutes: 10 }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'disk', minutes: 0, profile: 'never' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.policy.airdrop.profile.propose', { enabled: false }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.policy.camera.profile.propose', { enabled: true }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.policy.camera.profile.propose', { enabled: true, payload: 'untrusted' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'play' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'toggle' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'next', script: 'do shell script' }).ok, false);
@@ -456,7 +463,7 @@ test('paired account execution preferences default to always allow, with reversi
 	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
 	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
 	for (const kind of DEVICE_COMMAND_KINDS) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.media.apple-music.playback.set', 'system.media.spotify.playback.set'].includes(kind), kind);
+		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.policy.airdrop.profile.propose', 'system.policy.camera.profile.propose', 'system.media.apple-music.playback.set', 'system.media.spotify.playback.set'].includes(kind), kind);
 		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
 	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };

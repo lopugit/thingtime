@@ -344,6 +344,102 @@ public enum SystemPowerTimers {
     }
 }
 
+/// Generates one of two fixed configuration profiles and opens macOS's own
+/// profile review. This is not an MDM enrolment or installation API: macOS
+/// remains the only party that can show and accept the installation UI.
+///
+/// The payloads use the documented Restrictions payload and have no caller
+/// controlled identifiers, display names, payload keys, or values other than
+/// the closed boolean for the selected restriction.
+@MainActor
+public enum SystemConfigurationProfileProposal {
+    public enum Scope: String, CaseIterable, Sendable {
+        case airDrop = "airdrop"
+        case camera
+
+        fileprivate var restrictionKey: String {
+            switch self {
+            case .airDrop: return "allowAirDrop"
+            case .camera: return "allowCamera"
+            }
+        }
+
+        fileprivate var identifier: String {
+            switch self {
+            case .airDrop: return "com.thingtime.desktop.policy.airdrop"
+            case .camera: return "com.thingtime.desktop.policy.camera"
+            }
+        }
+
+        fileprivate var rootUUID: String {
+            switch self {
+            case .airDrop: return "214A9B35-3D42-4AFC-BFF4-D52C6B7EE911"
+            case .camera: return "4C245E03-60C5-4D6A-8663-C2A3E6BC30A4"
+            }
+        }
+
+        fileprivate var restrictionsUUID: String {
+            switch self {
+            case .airDrop: return "1E3231EE-791E-463D-8361-E9E5FE5B116F"
+            case .camera: return "470F9F7A-1553-4EEF-9EFD-0FA06AD2E7F7"
+            }
+        }
+
+        fileprivate var displayName: String {
+            switch self {
+            case .airDrop: return "Thingtime AirDrop availability"
+            case .camera: return "Thingtime Camera availability"
+            }
+        }
+    }
+
+    public static func profileData(scope: Scope, enabled: Bool) throws -> Data {
+        let restrictions: [String: Any] = [
+            "PayloadType": "com.apple.applicationaccess",
+            "PayloadVersion": 1,
+            "PayloadIdentifier": "\(scope.identifier).restrictions",
+            "PayloadUUID": scope.restrictionsUUID,
+            "PayloadDisplayName": scope.displayName,
+            scope.restrictionKey: enabled
+        ]
+        let profile: [String: Any] = [
+            "PayloadType": "Configuration",
+            "PayloadVersion": 1,
+            "PayloadIdentifier": scope.identifier,
+            "PayloadUUID": scope.rootUUID,
+            "PayloadDisplayName": scope.displayName,
+            "PayloadDescription": "A locally approved Thingtime policy proposal. Review before installing.",
+            "PayloadContent": [restrictions]
+        ]
+        return try PropertyListSerialization.data(fromPropertyList: profile, format: .xml, options: 0)
+    }
+
+    public static func propose(scope: Scope, enabled: Bool, fileManager: FileManager = .default) async throws -> URL {
+        let directory = try proposalDirectory(fileManager: fileManager)
+        let state = enabled ? "enabled" : "disabled"
+        let url = directory.appendingPathComponent("thingtime-\(scope.rawValue)-\(state).mobileconfig", isDirectory: false)
+        try profileData(scope: scope, enabled: enabled).write(to: url, options: .atomic)
+        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        _ = try await NSWorkspace.shared.open(url, configuration: configuration)
+        return url
+    }
+
+    private static func proposalDirectory(fileManager: FileManager) throws -> URL {
+        guard let applicationSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw ThingtimeNodeError.policyDenied("macOS did not provide an application-support directory for the policy proposal.")
+        }
+        let directory = applicationSupport
+            .appendingPathComponent("Thingtime Node", isDirectory: true)
+            .appendingPathComponent("policy-proposals", isDirectory: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        return directory
+    }
+}
+
 /// A fixed, consent-gated Apple Events surface for the user's Apple Music
 /// application. This intentionally does not expose a generic media player,
 /// arbitrary script source, media library data, queue, title, or history.
