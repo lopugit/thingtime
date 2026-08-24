@@ -291,6 +291,7 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
   assert.deepEqual(actualRuntimeFiles, [
     ".github/actions/rebase-conflict-round/action.yml",
     ".github/scripts/rebase-stack/refresh-promotion-graphify.sh",
+    ".github/workflows/all-branch.yml",
     ".github/workflows/rebase-pr-stacks.yml",
     ".github/workflows/resolve-pr-conflicts.yml",
   ], "new AI runtime source must be added to the Admin-model contract");
@@ -298,6 +299,7 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
   const requiredModelBindings = new Map([
     [".github/actions/rebase-conflict-round/action.yml", "${{ inputs.model-args }}"],
     [".github/scripts/rebase-stack/refresh-promotion-graphify.sh", 'case "${PREFERRED_MODEL:-default}"'],
+    [".github/workflows/all-branch.yml", "${{ steps.models.outputs.model_args }}"],
     [".github/workflows/rebase-pr-stacks.yml", 'PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}'],
     [".github/workflows/resolve-pr-conflicts.yml", 'PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}'],
   ]);
