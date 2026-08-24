@@ -1154,6 +1154,14 @@ is fixed, and cite the checklist you ran in the PR description.
       falls through to Claude, that Claude call must still resolve the
       current Admin preference. A rejected effort/fast knob retries once bare
       on the same model before the provider is skipped.
+- [ ] Musing requests budget for reasoning: the OpenAI call sends
+      `max_completion_tokens` and never the deprecated `max_tokens` (o-series
+      and GPT-5 models reject it), and both providers leave enough output
+      headroom that a high/max-effort entry still streams visible text. Put a
+      reasoning entry first and confirm a real musing arrives, not an empty
+      one. If a provider does finish without a single text delta, the musing
+      must fall through to the next provider and then the canned library —
+      never render a blank message.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently

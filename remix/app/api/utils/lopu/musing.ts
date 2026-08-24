@@ -147,6 +147,15 @@ const getLopuModelChoices = createLopuModelChoicesResolver({
   getProviderDefaultModel: getDefaultLopuClaudeModel
 });
 
+// Output ceiling for one musing. The visible answer is one or two sentences,
+// but both providers bill internal reasoning against this same budget —
+// Anthropic counts thinking tokens inside `max_tokens`, OpenAI counts
+// reasoning tokens inside `max_completion_tokens`. Now that an Admin entry can
+// pin any catalog model, including reasoning models and explicit effort tiers,
+// a text-sized cap is spent thinking and the musing streams back empty. Keep a
+// hard ceiling for cost, with headroom for the text to survive the reasoning.
+const MUSING_MAX_OUTPUT_TOKENS = 4096;
+
 // Yield the text deltas of one Claude attempt. The Admin-selected effort and
 // fast-mode knobs are applied when present; if the decorated request fails
 // before producing any text (e.g. a knob the model rejects), one bare retry
@@ -155,7 +164,7 @@ async function* streamClaude(system: string, user: string, choice: AiWorkflowMod
   const client = new Anthropic();
   const base = {
     model: choice.model,
-    max_tokens: 200, // intentionally short — a musing is one or two sentences
+    max_tokens: MUSING_MAX_OUTPUT_TOKENS,
     system,
     messages: [{ role: 'user' as const, content: user }]
   };
@@ -205,7 +214,10 @@ async function* streamOpenAI(
   const client = new OpenAI();
   const base = {
     model: choice?.model || process.env.LOPU_OPENAI_MODEL || 'gpt-4o-mini',
-    max_tokens: 200,
+    // Never `max_tokens`: it is deprecated and outright incompatible with the
+    // o-series/GPT-5 reasoning models an admin can now put first, which would
+    // reject both the decorated call and its bare retry.
+    max_completion_tokens: MUSING_MAX_OUTPUT_TOKENS,
     stream: true as const,
     messages: [
       { role: 'system' as const, content: system },
@@ -299,6 +311,12 @@ export async function* streamLopuMusing(
       // Pull the first chunk inside the try so a failing provider (bad key, no
       // credits) is caught here and we move to the next one cleanly.
       const first = await gen.next();
+      // A provider that finishes without a single text delta is a failed
+      // attempt, not an empty musing — a reasoning entry can burn its whole
+      // output budget thinking. Fall through to the next provider (and
+      // ultimately the canned library) instead of committing to a blank
+      // message the user can never see.
+      if (first.done) continue;
       yield { type: 'meta', source: provider, mode };
       // "commented" prepends the chosen library line before the AI's comment.
       if (base) {
@@ -307,7 +325,7 @@ export async function* streamLopuMusing(
           await tick();
         }
       }
-      if (!first.done && first.value) yield { type: 'delta', text: first.value };
+      if (first.value) yield { type: 'delta', text: first.value };
       for await (const text of gen) yield { type: 'delta', text };
       yield { type: 'done' };
       return;

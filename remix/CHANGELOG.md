@@ -32,8 +32,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   catalog, each with a per-entry reasoning-effort tier and normal/fast mode
   (composed ids `<model>[:<effort>][:fast]`; reads drop unknown entries
   instead of collapsing; direct Anthropic/OpenAI features resolve their own
-  provider's first entry). The github-actions control plane still fail-closes
-  to `["default"]` for non-legacy entries until its closed grammar is widened
+  provider's first entry). Lopu musings budget for the reasoning those entries
+  now pay for — the OpenAI call uses `max_completion_tokens` (the deprecated
+  `max_tokens` is rejected by o-series/GPT-5) and a provider that streams no
+  text falls through instead of rendering a blank musing. The github-actions
+  control plane still fail-closes to `["default"]` for non-legacy entries until
+  its closed grammar is widened
   (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
   — Claude (AI), 2026-08-24
 - **/branding redesigned as a full brand-resources page**: full-width
