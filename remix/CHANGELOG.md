@@ -19,17 +19,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
-- **Signed PR release CI now installs the MCP bridge from its committed npm
-  lockfile**: the runner uses `npm ci --prefix MCP`, matching the package's
-  `package-lock.json` instead of requiring a nonexistent pnpm lockfile. This
-  keeps the unsigned verification gate deterministic and lets the signed,
-  notarized release pipeline proceed only after MCP dependencies install
-  reproducibly. — Codex (AI), 2026-08-24
-- **Signed PR release CI now checks out only the approved commit**: it resolves
-  the PR head SHA before checkout, then uses shallow history. This removes an
-  unnecessary full-repository clone that delayed the first release retry while
-  retaining the immutable SHA trust boundary. — Codex (AI), 2026-08-24
-
 - **Paired-Mac display mode selections now persist**: resolution and refresh
   changes use Core Graphics' permanent display-configuration transaction rather
   than an app-lifetime mode setter, matching the existing layout and mirroring
@@ -48,10 +37,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   keeping recovery-launcher copies separate. It caches only verified bundle
   identifiers and same-team signatures, closes a running desktop before an
   atomic install, preserves the replaced bundle, and rejects a stale or
-  malformed GitHub asset without changing the installed app. The PR release
-  workflow now signs, notarizes, validates, and publishes the companion asset
-  alongside Electron after the same trusted-source gate. — Codex (AI),
-  2026-08-24
+  malformed GitHub asset without changing the installed app. Its companion
+  asset is supplied by the dedicated protected-release control plane. — Codex
+  (AI), 2026-08-24
 
 - **Signed Desktop PR releases and recovery-first version switching**: an
   owner-approved, same-repository PR carrying the `desktop-release` label can

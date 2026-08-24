@@ -273,22 +273,20 @@ packaged app stores the full CI release version in `electron/dist/web/metadata.j
 so the updater can distinguish `0.1.0+build.10423` from `0.1.0+build.10424`
 without requiring source-controlled version churn.
 
-`.github/workflows/electron-pr-release.yml` defines signed **pre-releases for
-reviewable PR commits**. It never runs for forks. A PR must
-be same-repository, opened by the repository owner, and explicitly carry the
-`desktop-release` label; alternatively the owner may use **Run workflow** with
-the PR number. The workflow checks out that exact head commit, tests it before
-loading credentials, imports the Developer ID/notarization secrets only for the
-approved source, builds both the Electron ZIP and independently signed,
-notarized Recovery ZIP, and publishes a GitHub prerelease. Its version is
-SemVer and includes all provenance, for
-example `0.1.0-pr.68.codex-thingtime-mcp-desktop-connectors.gabcdef123456`.
-The PR number, normalized branch, and full commit are also recorded in the
-release notes. GitHub manual dispatch requires the workflow to exist on the
-default branch, and this repository keeps executable release behavior on the
-trusted `github-actions` ref. Therefore the equivalent signed PR runner must
-be deployed to that ref before it can publish review builds; a PR-local copy is
-reviewable policy and test coverage, not authority to mint signed releases.
+The signed **pre-release builder/releaser** is executable only on the protected
+`github-actions` branch. `develop` carries a tiny
+`.github/workflows/electron-pr-release.yml` listener that passes trusted PR or
+manual events to that worker; the product PR itself never supplies signing,
+notarization, or publishing code. The central worker revalidates a
+same-repository owner PR with the `desktop-release` label, checks out its exact
+head SHA without persisting a GitHub credential, tests before loading signing
+material, builds both the Electron ZIP and independently signed/notarized
+Recovery ZIP, then publishes a GitHub prerelease. Its SemVer includes source
+provenance, for example
+`0.1.0-pr.68.codex-thingtime-mcp-desktop-connectors.gabcdef123456`. The PR
+number, normalized branch, and full commit are also retained in the release
+notes. See [PRODUCTION_RELEASE.md](./PRODUCTION_RELEASE.md) for the required
+secrets and exact gate.
 
 In local development, the Electron shell loads `remix/.env`, `remix/.env.local`,
 and `remix/.env.auto` before starting Nitro so the desktop app sees the same

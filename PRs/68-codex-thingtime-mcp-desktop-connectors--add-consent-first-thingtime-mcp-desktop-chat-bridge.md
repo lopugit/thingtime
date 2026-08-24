@@ -854,17 +854,20 @@ an offline database or offline conflict resolution layer.
    format exposes stable, verifiable file references.
 4. Install and validate a real peer media transport before enabling any screen
    stream UI; keep capture foundation unavailable until then.
-5. Apply the protected-workflow Developer ID/notarization patch and validate a
-   stapled Gatekeeper-accepted artifact before production publication.
+5. Merge the dedicated protected builder/releaser and thin `develop` listener,
+   configure their Developer ID/notarization secrets, then validate a stapled
+   Gatekeeper-accepted artifact before production publication.
 
 ### Signed PR release and recovery updater follow-up (2026-08-24)
 
-- Added a dedicated signed PR-release workflow rather than relaxing the `main`
-  release shim. It runs only for a same-repository owner PR carrying the
-  maintainer-applied `desktop-release` label (or an owner manual dispatch),
-  runs all tests before importing secrets, produces a Developer ID/notarized
-  ZIP-compatible release, and publishes the deterministic SemVer form
-  `base-pr.<PR>.<branch>.g<commit>` as a GitHub prerelease.
+- The signed PR builder/releaser is intentionally delivered as a separate
+  `github-actions` control-plane change, not executable code in this product
+  PR. A thin `develop` listener forwards only trusted lifecycle/manual events;
+  the protected worker revalidates the same-repository owner plus
+  `desktop-release` gate, checks out its immutable head SHA without retaining a
+  GitHub write token, tests before importing secrets, and publishes the
+  deterministic SemVer form `base-pr.<PR>.<branch>.g<commit>` as a GitHub
+  prerelease.
 - Desktop Settings now fetches and filters GitHub releases by version, PR,
   branch, and commit. It treats a release as installable only after extracting
   a GitHub-hosted macOS ZIP to the user-local recovery cache and re-verifying
@@ -886,8 +889,8 @@ an offline database or offline conflict resolution layer.
   leave a partial verified-app directory behind. GitHub outage state preserves
   the local cache catalog so launch/install recovery actions remain usable
   offline.
-- Live GitHub inspection subsequently registered **Signed Electron PR Release**
-  for this branch. Owner manual run
+- The earlier branch-local candidate release worker was exercised manually for
+  this branch. Owner manual run
   `32712878513` reached its real dependency gate and exposed a concrete
   runner-only defect before any signing material was accessed: `MCP/` is
   npm-managed and has `package-lock.json`, so a frozen pnpm install could never
@@ -919,8 +922,8 @@ an offline database or offline conflict resolution layer.
   `MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`,
   `APPLE_API_ISSUER`, and `APPLE_TEAM_ID` inputs. The release is therefore
   correctly blocked before an unsigned or unnotarized artifact can be built;
-  configuring those six repository secrets is the only remaining release
-  prerequisite before re-dispatching the workflow.
+  configuring those six repository secrets plus merging the dedicated
+  control-plane worker/listener split are the remaining release prerequisites.
 
 ### Independent Recovery launcher follow-up (2026-08-24)
 
