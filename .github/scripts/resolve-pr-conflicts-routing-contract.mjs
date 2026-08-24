@@ -205,7 +205,7 @@ function assertWorkflowSource() {
   assert.equal(dispatchCount, 3, "conflict detector, Lopu review batch, and stacked cascade use fixed workflow dispatch");
   assert.match(source, /review_detect:/, "clean PRs have a Lopu review selector");
   assert.match(source, /review_handoff:/, "one review selector handoff exists");
-  assert.match(source, /review_only:true/, "review handoff is explicitly marked");
+  assert.match(source, /lopu-review:\$\{\{ github\.run_id \}\}/, "review handoff uses a default-branch-compatible marker");
   assert.match(source, /review:\n\s+name: Lopu reviews selected PRs/, "Lopu has a repository review worker");
   assert.match(source, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/, "review shares the single Lopu fleet lock");
   assert.match(source, /lopu-review-\{0\}/, "review batches have a stable concurrency scope");

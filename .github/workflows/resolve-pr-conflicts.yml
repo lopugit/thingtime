@@ -169,7 +169,7 @@ run-name: >-
       && format('Lopu manages promotion for source PR #{0}', inputs.promotion_source_pr)
       || github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
-      && inputs.review_only == true
+      && startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
@@ -177,7 +177,7 @@ run-name: >-
       && format('Lopu reviews PR #{0} from the control plane', inputs.pr_number)
       || github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
-      && inputs.review_only == true
+      && startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && inputs.pr_number == ''
@@ -185,7 +185,7 @@ run-name: >-
       && format('Lopu reviews PRs matching {0} from the control plane', inputs.branch)
       || github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
-      && inputs.review_only == true
+      && startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && inputs.pr_number == ''
@@ -193,7 +193,7 @@ run-name: >-
       && 'Lopu reviews all eligible PRs from the control plane'
       || github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
-      && inputs.review_only != true
+      && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
@@ -229,11 +229,6 @@ on:
         type: string
       detector_handoff:
         description: "Internal: exact-PR handoff to the github-actions resolver control plane (leave false)"
-        required: false
-        default: false
-        type: boolean
-      review_only:
-        description: "Internal: run Lopu's repository-level PR review without a conflict replay"
         required: false
         default: false
         type: boolean
@@ -328,11 +323,6 @@ on:
         required: false
         default: false
         type: boolean
-      review_only:
-        description: "Internal: run Lopu's repository-level PR review without a conflict replay"
-        required: false
-        default: false
-        type: boolean
       manual_retry:
         description: "Internal: carry a human explicit-selector retry through the trusted handoff"
         required: false
@@ -410,7 +400,7 @@ concurrency:
         && format('resolve-invalid-promotion-{0}', github.run_id)
         || github.event_name == 'workflow_dispatch'
         && inputs.detector_handoff == true
-        && inputs.review_only == true
+        && startsWith(inputs.control_dispatch_id, 'lopu-review:')
         && github.actor == 'github-actions[bot]'
         && (github.ref_name == 'github-actions'
            || github.workflow_ref
@@ -420,7 +410,7 @@ concurrency:
         && format('lopu-review-{0}', inputs.pr_number || inputs.branch || 'all')
         || github.event_name == 'workflow_dispatch'
         && inputs.detector_handoff == true
-        && inputs.review_only != true
+        && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
         && github.actor == 'github-actions[bot]'
         && (github.ref_name == 'github-actions'
            || github.workflow_ref
@@ -467,8 +457,8 @@ concurrency:
                   && inputs.promotion_source_pr == ''
                   && inputs.promotion_plan_b64 == ''
                   && inputs.detector_handoff == true
-                  && ((inputs.review_only == true)
-                      || (inputs.review_only != true
+                  && ((startsWith(inputs.control_dispatch_id, 'lopu-review:'))
+                      || (!startsWith(inputs.control_dispatch_id, 'lopu-review:')
                           && inputs.pr_number != ''
                           && inputs.branch == ''))))) }}
 
@@ -489,8 +479,8 @@ jobs:
       internal_worker: >-
         ${{ github.event_name == 'workflow_dispatch'
             && inputs.detector_handoff == true
-            && ((inputs.review_only == true)
-                || (inputs.review_only != true
+            && ((startsWith(inputs.control_dispatch_id, 'lopu-review:'))
+                || (!startsWith(inputs.control_dispatch_id, 'lopu-review:')
                     && inputs.pr_number != ''
                     && inputs.branch == ''))
             && inputs.promotion_source_pr == ''
@@ -516,7 +506,7 @@ jobs:
       needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
-      && inputs.review_only != true
+      && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && !(github.event_name == 'workflow_dispatch'
            && inputs.detector_handoff == true
            && github.actor == 'github-actions[bot]')
@@ -540,7 +530,7 @@ jobs:
       needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
-      && inputs.review_only != true
+      && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && (github.event_name != 'push' || github.event.deleted == false)
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
@@ -1365,7 +1355,7 @@ jobs:
     needs: [route, detect]
     if: >-
       needs.detect.outputs.any == 'true'
-      && inputs.review_only != true
+      && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && (github.event_name != 'workflow_dispatch'
           || inputs.detector_handoff != true
           || github.actor != 'github-actions[bot]'
@@ -1438,7 +1428,7 @@ jobs:
       needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
-      && inputs.review_only != true
+      && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && github.event_name != 'schedule'
       && (github.event_name != 'push' || github.event.deleted == false)
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
@@ -1521,7 +1511,7 @@ jobs:
       needs.review_detect.outputs.any == 'true'
       && !(github.event_name == 'workflow_dispatch'
            && inputs.detector_handoff == true
-           && inputs.review_only == true
+           && startsWith(inputs.control_dispatch_id, 'lopu-review:')
            && github.actor == 'github-actions[bot]'
            && github.ref_name == 'github-actions')
     runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
@@ -1537,7 +1527,12 @@ jobs:
           BRANCH: ${{ needs.review_detect.outputs.branch }}
           EXECUTION_PROVIDER: ${{ needs.route.outputs.execution_provider || 'github-actions' }}
           RUNNER_LABEL: ${{ needs.route.outputs.runner_label || '' }}
-          CONTROL_DISPATCH_ID: ${{ needs.route.outputs.control_dispatch_id || '' }}
+          # GitHub validates workflow_dispatch inputs against the repository
+          # default branch before this protected controller runs. Reuse an
+          # already-published routing field as a closed internal marker rather
+          # than adding a controller-only dispatch input that older listeners
+          # cannot pass yet.
+          CONTROL_DISPATCH_ID: lopu-review:${{ github.run_id }}
           ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
@@ -1556,7 +1551,6 @@ jobs:
                   pr_number:$pr_number,
                   branch:$branch,
                   detector_handoff:true,
-                  review_only:true,
                   manual_retry:false,
                   depth:"0",
                   execution_provider:$execution_provider,
@@ -1590,14 +1584,14 @@ jobs:
            && inputs.promotion_source_pr == ''
            && inputs.promotion_plan_b64 == ''
            && inputs.detector_handoff == true
-           && inputs.review_only != true
+           && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
            && inputs.pr_number != ''
            && inputs.branch == '')
           || (github.actor == 'github-actions[bot]'
               && inputs.promotion_source_pr == ''
               && inputs.promotion_plan_b64 == ''
               && inputs.detector_handoff == true
-              && inputs.review_only == true)
+              && startsWith(inputs.control_dispatch_id, 'lopu-review:'))
           || (needs.promotion_validate.result == 'success'
               && needs.promotion_validate.outputs.ready == 'true'
               && github.actor == 'github-actions[bot]'
@@ -1732,7 +1726,7 @@ jobs:
       && needs.model_config.result == 'success'
       && github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
-      && inputs.review_only == true
+      && startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && github.actor == 'github-actions[bot]'
@@ -3652,7 +3646,7 @@ jobs:
       && needs.detect.outputs.any == 'true'
       && github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
-      && inputs.review_only != true
+      && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && github.actor == 'github-actions[bot]'
       && (github.ref_name == 'github-actions'
          || github.workflow_ref

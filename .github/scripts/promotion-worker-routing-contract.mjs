@@ -37,7 +37,7 @@ assert.match(workflow, /name: Lopu scans rebases and stack cascades/);
 assert.match(workflow, /review_detect:/);
 assert.match(workflow, /review_handoff:/);
 assert.match(workflow, /review:\s+name: Lopu reviews selected PRs/);
-assert.match(workflow, /review_only:true/);
+assert.match(workflow, /startsWith\(inputs\.control_dispatch_id, 'lopu-review:'\)/);
 assert.match(workflow, /Lopu prepared \$count complete PR worktree\(s\) for one repository review session/);
 assert.match(
   workflow,
