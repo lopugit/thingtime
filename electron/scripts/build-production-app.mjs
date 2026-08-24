@@ -70,6 +70,14 @@ async function findBuiltApp() {
 	return null;
 }
 
+async function findReleaseArchives() {
+	const releaseRoot = path.join(electronDir, 'release');
+	return (await readdir(releaseRoot, { withFileTypes: true }))
+		.filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.zip'))
+		.map((entry) => path.join(releaseRoot, entry.name))
+		.sort((left, right) => left.localeCompare(right));
+}
+
 if (process.platform !== 'darwin') throw new Error('Thingtime production artifacts can only be built on macOS.');
 
 const identity = developerIdIdentity();
@@ -107,4 +115,12 @@ if (!appPath) throw new Error('electron-builder did not retain an unpacked Thing
 run(process.execPath, [path.join(electronDir, 'scripts', 'verify-signed-app.mjs'), '--mode', 'production', appPath], {
 	env: releaseEnvironment
 });
+const archives = await findReleaseArchives();
+if (!archives.length) throw new Error('electron-builder did not produce an updater-compatible Thingtime ZIP for publication.');
+for (const archive of archives) {
+	run(process.execPath, [path.join(electronDir, 'scripts', 'verify-release-archive.mjs'), '--mode', 'production', archive], {
+		env: releaseEnvironment
+	});
+}
 console.log(`Developer ID signed and notarized app verified at ${appPath}`);
+console.log(`Developer ID signed and notarized updater ZIPs verified: ${archives.join(', ')}`);

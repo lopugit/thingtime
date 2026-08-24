@@ -2116,6 +2116,14 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 - [ ] Build and open the signed `Thingtime Recovery.app`; it must remain running
       after launch without an `App.init()` nil-optional crash, and its recovery
       store must render before the first refresh completes.
+- [ ] Recovery follows every GitHub Release `Link` page (no arbitrary history
+      cap) so older rollback bundles remain discoverable; a repeated next-page
+      URL fails closed instead of spinning or presenting a partial catalog.
+- [ ] Before publishing, production packaging must extract every desktop and
+      Recovery ZIP into a clean staging directory and run the same full
+      signed-app, Gatekeeper, and notarization checks used for the unpacked
+      artifact. A malformed ZIP must block release creation rather than
+      becoming a broken recovery option.
 - [ ] Run the Swift tests and release-build both `ThingtimeNode` products; run
       MCP typecheck, tests, and `build:desktop`; then run the Electron tests.
       Cancellation/timeout cases must terminate the connector child and mark
