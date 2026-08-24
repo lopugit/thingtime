@@ -99,6 +99,11 @@ export class JsonlRpcProcess implements JsonRpcTransport {
 		this.child = child;
 		this.lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 		this.lines.on('line', (line) => void this.handleLine(line));
+		// A child can exit between the writable preflight and a queued write.
+		// Keep an error listener for the lifetime of this pipe: without it, an
+		// ordinary EPIPE is an unhandled Node event that can crash the connector
+		// host after the request has already been failed closed.
+		child.stdin.on('error', () => this.failAll(localConnectorError('connector_unavailable')));
 		child.stderr.resume();
 		child.once('error', () => this.failAll(localConnectorError('connector_unavailable')));
 		child.once('exit', () => {
@@ -130,7 +135,19 @@ export class JsonlRpcProcess implements JsonRpcTransport {
 			timer.unref();
 			this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject, timer });
 		});
-		await this.write({ id, method, params });
+		try {
+			await this.write({ id, method, params });
+		} catch {
+			const pending = this.pending.get(id);
+			if (pending) {
+				this.pending.delete(id);
+				clearTimeout(pending.timer);
+				pending.reject(localConnectorError('connector_unavailable'));
+			}
+			// Return the tracked promise so its rejection is observed by the caller
+			// rather than becoming an orphaned rejection after a failed write.
+			return result;
+		}
 		return result;
 	}
 
@@ -152,7 +169,11 @@ export class JsonlRpcProcess implements JsonRpcTransport {
 		if (!child?.stdin.writable) throw localConnectorError('connector_unavailable');
 		const line = `${JSON.stringify(message)}\n`;
 		await new Promise<void>((resolve, reject) => {
-			child.stdin.write(line, (error) => (error ? reject(localConnectorError('connector_unavailable')) : resolve()));
+			try {
+				child.stdin.write(line, (error) => (error ? reject(localConnectorError('connector_unavailable')) : resolve()));
+			} catch {
+				reject(localConnectorError('connector_unavailable'));
+			}
 		});
 	}
 

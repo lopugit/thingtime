@@ -170,6 +170,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Signed-release MCP gate handles closed local connector pipes**: the JSONL
+  transport now treats a child-process `EPIPE` as an unavailable connector and
+  fails pending work closed, rather than allowing Node to throw an unhandled
+  stream error during teardown. — Codex (AI), 2026-08-24
+
 - **Signed-release native gate no longer relies on wall-clock scheduling**:
   the long-running lease-heartbeat test now waits for its three intended
   renewals before completing dispatch, then verifies renewal stops. This keeps

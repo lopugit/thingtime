@@ -906,3 +906,9 @@ an offline database or offline conflict resolution layer.
   test now holds dispatch until all three intended renewals arrive (with a
   bounded timeout), then confirms renewal stops after completion; it no longer
   treats a wall-clock assumption as correctness.
+- The following runner then exposed a second genuine test-gate race: the
+  deliberately unavailable local Codex stub could close its stdin between the
+  transport writable check and an asynchronous write, emitting an unhandled
+  `EPIPE`. The JSONL transport now consumes that stream error for the life of
+  the child pipe and fails all pending work with the existing closed connector
+  error, so teardown never crashes the node host.
