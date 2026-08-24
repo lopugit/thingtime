@@ -355,9 +355,6 @@ case "$semantic" in
     detail="graphify update completed without an available semantic credential" ;;
 esac
 commit_title='chore: refresh graphify outputs after promotion resolution'
-if [ "${REVIEW_GATED:-false}" = true ]; then
-  commit_title="$commit_title [skip ci]"
-fi
 git commit -q \
   -m "$commit_title" \
   -m "$detail" \

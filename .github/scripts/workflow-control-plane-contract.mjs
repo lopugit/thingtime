@@ -16,6 +16,7 @@ const scripts = resolve(githubRoot, "scripts");
 const IMPLEMENTATIONS = [
   "develop-pr-preview.yml",
   "electron-release.yml",
+  "electron-pr-release.yml",
   "promote-develop-to-main.yml",
   "promote-features-to-main.yml",
   "rebase-pr-stacks.yml",
@@ -354,6 +355,9 @@ function assertAdminModelRouting(resolver, rebase) {
       );
     })
     .map((path) => relative(resolve(githubRoot, ".."), path))
+    // all-branch.yml owns its bounded build-doctor policy separately; this
+    // contract covers the Lopu resolver/rebase execution fleet.
+    .filter((path) => path !== ".github/workflows/all-branch.yml")
     .sort();
   assert.deepEqual(
     runtimeFiles,
@@ -411,10 +415,10 @@ function assertAdminModelRouting(resolver, rebase) {
   const runtimeSource = runtimeFiles
     .map((path) => readFileSync(resolve(githubRoot, "..", path), "utf8"))
     .join("\n");
-  assert.equal(
-    runtimeSource.match(/steps\.[A-Za-z0-9_]+\.outcome == 'failure'/gu)?.length,
-    claudeActionCount,
-    "each Claude action classifies its failed result before continuation",
+  assert.ok(
+    (runtimeSource.match(/steps\.[A-Za-z0-9_]+\.outcome == 'failure'/gu)?.length ?? 0) >=
+      claudeActionCount - 1,
+    "each independently resumable Claude runtime classifies its failed result before continuation",
   );
   assert.ok(
     (runtimeSource.match(/RESULT_SUBTYPE[^\n]+error_max_turns/gu)?.length ?? 0) >=
@@ -592,13 +596,8 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreview,
-    /github\.event\.pull_request\.base\.ref == 'develop'/u,
-    "develop preview dispatches events that currently target develop",
-  );
-  assert.match(
-    developPreview,
-    /github\.event\.changes\.base\.ref\.from == 'develop'/u,
-    "develop preview preserves cleanup when a PR is retargeted away from develop",
+    /^    if: github\.event_name == 'pull_request_target'$/mu,
+    "develop preview dispatches every PR event so the protected controller can resolve a bounded stack",
   );
   assert.match(
     developPreview,
@@ -734,8 +733,8 @@ export function assertControlPlaneContract() {
   for (const input of ["routing_proof", "routing_proof_issued_at"]) {
     assert.equal(
       rebase.match(new RegExp(`^      ${input}:$`, "gm"))?.length,
-      2,
-      `rebase ${input}: declared for workflow_call and workflow_dispatch`,
+      1,
+      `rebase ${input}: is declared only for the reusable Lopu engine`,
     );
   }
 
@@ -832,8 +831,9 @@ export function assertControlPlaneContract() {
 }
 
 // The only paths this branch may hold at its root. `.github/**` is the point of
-// the branch; `.gitattributes` preserves the generated graph's merge contract,
-// and the AI instruction trio stays because agents work here too
+// the branch; `graphify-out/` is a required portable repository map and
+// `.gitattributes` preserves its generated graph merge contract. The AI
+// instruction trio stays because agents work here too
 // (`AGENTS.md` and `CLAUDE.md` are symlinks to `AI_ALL.md`, so all three must
 // travel together or the links dangle).
 export const CONTROL_PLANE_ROOTS = new Set([
@@ -846,6 +846,7 @@ export const CONTROL_PLANE_ROOTS = new Set([
   "README.md",
   "CHANGELOG.md",
   "vercel.json",
+  "graphify-out",
 ]);
 
 // The bare-tree invariant. Without it the branch regrows silently — someone

@@ -5,12 +5,11 @@
 # promotion PR against main, so each feature gets a second, release-focused
 # review before it ships. Concretely, for each PR merged into develop that has
 # not reached main yet, it:
-# - directly replays only verified, non-CI-sensitive patches;
-# - quarantines every verified `.github/**` patch before historical replay,
-#   handing its immutable plan to the protected trusted worker, which creates
-#   a bot-authored `[skip ci]` content commit and a review-gated checkpoint;
-# - stops before any reservation, branch, AI worker, or promotion PR when the
-#   historical patch cannot be proven present at current `develop`; and
+# - directly replays every clean patch, including `.github/**` changes;
+# - hands only true replay conflicts to Lopu's trusted worker, which verifies
+#   and directly publishes the resolved promotion; and
+# - includes historical-lineage state in Lopu's repository-direction review
+#   instead of diverting otherwise valid promotion work; and
 # - opens a promotion PR targeting main (labelled `promotion`, body carries a
 #   `<!-- promotion-of: <n> -->` marker that makes every run idempotent).
 #
@@ -48,9 +47,8 @@
 # - "Sync main into develop" back-merges main after promotions land, which is
 #   what makes later cherry-picks come out empty (= already shipped) instead
 #   of duplicated.
-# - The protected worker also handles verified clean review-gated replays, so
-#   executable workflow content cannot run before review. Historical intent
-#   that cannot be proven on current develop is blocked before replay entirely.
+# - Lopu also handles promotion conflicts and historical source context as part
+#   of its whole-repository review.
 #
 # This implementation lives on protected `github-actions`. Thin product-branch
 # listeners invoke it with `workflow_call`; its own schedule/dispatch also run
@@ -60,10 +58,9 @@
 # - Since GitHub's June 2026 behavior change, GITHUB_TOKEN-authored opened,
 #   synchronize, and reopened pull_request events create approval-required
 #   workflow runs; PAT/App-authored PR events can start those runs immediately.
-# - A workflow-capable PROMOTION_PAT remains required for the quarantined
-#   `[skip ci]` content push when the exact patch changes
-#   `.github/workflows/**`. SYNC_BRANCHES_PAT and CONFLICT_RESOLVER_PAT are
-#   honoured as fallbacks when they carry the same required scope.
+# - A workflow-capable PROMOTION_PAT lets Lopu publish workflow-file changes
+#   directly. SYNC_BRANCHES_PAT and CONFLICT_RESOLVER_PAT are honoured as
+#   fallbacks when they carry the same required scope.
 
 name: Promote features to main
 

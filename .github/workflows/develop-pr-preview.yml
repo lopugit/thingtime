@@ -19,10 +19,10 @@ concurrency:
 jobs:
   dispatch:
     name: Dispatch trusted default-branch controller
-    if: >-
-      github.event_name == 'pull_request_target' &&
-      (github.event.pull_request.base.ref == 'develop' ||
-      github.event.changes.base.ref.from == 'develop')
+    # Stacked PRs may target another open PR rather than develop directly. The
+    # protected controller resolves that bounded chain and only grants the
+    # develop environment when its terminal base is develop.
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

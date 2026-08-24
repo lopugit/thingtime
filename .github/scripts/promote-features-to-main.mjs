@@ -4,12 +4,11 @@
 // Scans PRs merged into SOURCE_BRANCH (develop), and for each one that has not
 // yet reached TARGET_BRANCH (main) re-applies its exact diff on a dedicated
 // `promote/pr-<n>-<slug>` branch, then opens a promotion PR targeting main.
-// Verified non-CI-sensitive plans use the direct `git cherry-pick -x` fast
-// path. Every verified `.github/**` plan is quarantined before historical
-// replay and dispatched to the protected trusted worker, which reconstructs a
-// bot-authored `[skip ci]` content commit and publishes a review checkpoint.
-// A historical patch not provably present on current develop stops before any
-// branch, worker, or PR is created. PRs that belong to the same feature
+// Every clean plan, including `.github/**`, uses the direct `git cherry-pick -x`
+// path. A conflict is dispatched to Lopu's trusted worker, which reconstructs
+// and verifies the exact result before publishing it directly. Historical
+// lineage remains context for Lopu's repository-direction assessment, not a
+// publication diversion. PRs that belong to the same feature
 // group are stacked: the first promotion PR targets main, the second targets
 // the first promotion branch, and so on (ordered by merge time into develop).
 //
@@ -36,14 +35,11 @@
 //   - promotion OPEN    → reused as the base for later stack members.
 //   - promotion CLOSED  → the change was rejected for main; never recreated
 //                         (reopen the closed PR to change your mind).
-//   - cherry-pick conflict or clean replay requiring review quarantine →
-//     reserve the canonical promotion branch at its exact base and hand the
-//     immutable source plan to the trusted worker; later members of only that
-//     dependency group wait for the reviewed branch.
-//   - recoverable historical patch whose current-source intent is removed or
-//     ambiguous → block visibly before any branch, AI worker, or PR is created;
-//     only unrelated groups continue. Missing objects, malformed patches, and
-//     operational inspection failures use the same fail-closed boundary.
+//   - cherry-pick conflict → reserve the canonical promotion branch at its
+//     exact base and hand the immutable source plan to Lopu; later members of
+//     only that dependency group wait for the resolved branch.
+//   - malformed patches and operational inspection failures remain explicit
+//     errors; Lopu assesses known historical-lineage states in context.
 //
 // Maintenance passes each run: open promotion PRs whose base promotion PR has
 // merged are retargeted (backstop for GitHub's delete-branch auto-retarget),
@@ -431,7 +427,7 @@ export function inspectSourcePresence(
       error:
         `source-lineage safety block: the exact historical patch is not present at current ` +
         `\`${CFG.source}\` tip; it may have been intentionally removed or reverted, so the ` +
-        "promotion is quarantined for review instead of being published as verified",
+        "Lopu will create a reviewable candidate instead of labelling the patch verified",
       sourceLineageStatus: "review-required-removed",
     };
   }
@@ -441,7 +437,7 @@ export function inspectSourcePresence(
       error:
         `source-lineage safety block: the exact historical patch cannot be proven present at ` +
         `current \`${CFG.source}\` tip because later edits overlap its effect, so the ` +
-        "promotion is quarantined for review instead of being published as verified",
+        "Lopu will create a reviewable candidate instead of labelling the patch verified",
       sourceLineageStatus: "review-required-ambiguous",
     };
   }
@@ -670,24 +666,6 @@ function sourceLineageReviewRequired(value) {
   return sourceLineageStatus(value) !== "verified";
 }
 
-// Clean replays are safe to publish directly only when their historical source
-// intent is verified and they cannot change GitHub automation. Everything else
-// must pass through the trusted worker before the promoter applies any original
-// commit: the worker reconstructs one bot-authored content commit, stamps
-// CI-sensitive content [skip ci], opens the PR with the bot token, and publishes
-// its review checkpoint under an exact lease.
-export function cleanReplayQuarantinePolicy(context) {
-  const pathsKnown = Array.isArray(context?.paths) && context.paths.length > 0 &&
-    context.paths.every((path) => typeof path === "string" && path.length > 0);
-  const ciSensitive = pathsKnown && context.paths.some((path) => path.startsWith(".github/"));
-  const lineageReviewRequired = sourceLineageReviewRequired(context);
-  return {
-    quarantine: !pathsKnown || ciSensitive || lineageReviewRequired,
-    ciSensitive,
-    lineageReviewRequired,
-  };
-}
-
 function sourceLineageReason(status) {
   if (status === "review-required-removed") {
     return (
@@ -703,8 +681,10 @@ function sourceLineageReason(status) {
   }
   return `The exact source patch is verified at current \`${CFG.source}\` tip.`;
 }
-const PROMOTION_CHECKPOINT_SUBJECT = "ci: activate review-gated promotion checks";
-const PROMOTION_CHECKPOINT_TRAILERS = [
+// Compatibility parser for promotion branches created before Lopu's direct
+// publication model. New Lopu promotions never create these milestones.
+const PROMOTION_RECOVERY_MILESTONE_SUBJECT = "ci: retain legacy promotion recovery marker";
+const PROMOTION_RECOVERY_MILESTONE_TRAILERS = [
   "Thingtime-Promotion-Review-Checkpoint",
   "Thingtime-Promotion-Content-Head",
   "Thingtime-Promotion-Plan-Hash",
@@ -925,7 +905,7 @@ export function createPromotionReservation(worktree, context, gitRunner = tryGit
     };
   }
   const message = [
-    `chore(ci): reserve AI promotion resolution for #${context.sourcePr} [skip ci]`,
+    `chore(ci): reserve Lopu promotion resolution for #${context.sourcePr}`,
     "",
     ...promotionReservationTrailers(context),
   ].join("\n");
@@ -1168,7 +1148,7 @@ export function inspectPromotionReviewCheckpoint(
   const parsed = new Map();
   for (const line of String(body.out || "").split("\n")) {
     const match = /^(Thingtime-Promotion-[A-Za-z-]+):\s*(.*?)\s*$/.exec(line);
-    if (!match || !PROMOTION_CHECKPOINT_TRAILERS.includes(match[1])) continue;
+    if (!match || !PROMOTION_RECOVERY_MILESTONE_TRAILERS.includes(match[1])) continue;
     if (parsed.has(match[1])) {
       return { ok: false, error: `duplicate review-checkpoint trailer \`${match[1]}\`` };
     }
@@ -1177,7 +1157,7 @@ export function inspectPromotionReviewCheckpoint(
   if (!parsed.has("Thingtime-Promotion-Review-Checkpoint")) {
     return { ok: true, present: false, headSha: head.out };
   }
-  for (const key of PROMOTION_CHECKPOINT_TRAILERS) {
+  for (const key of PROMOTION_RECOVERY_MILESTONE_TRAILERS) {
     if (!parsed.has(key)) {
       return { ok: false, error: `review-checkpoint is missing trailer \`${key}\`` };
     }
@@ -1186,7 +1166,6 @@ export function inspectPromotionReviewCheckpoint(
   const parts = parents.ok ? parents.out.split(/\s+/).filter(Boolean) : [];
   const contentHead = parsed.get("Thingtime-Promotion-Content-Head");
   if (
-    body.out.split("\n")[0] !== PROMOTION_CHECKPOINT_SUBJECT ||
     parsed.get("Thingtime-Promotion-Review-Checkpoint") !== "v1" ||
     parsed.get("Thingtime-Promotion-Plan-Hash") !== context.planHash ||
     !isObjectId(contentHead) ||
@@ -1534,7 +1513,7 @@ function queueTrustedPromotionWorker({
       .join(", ");
     const handoffKind = conflicts.length > 0
       ? "Promotion conflict resolution"
-      : "Protected promotion replay";
+      : "Lopu promotion replay";
     const commented = tryGh([
       "pr", "comment", String(context.sourcePr), ...repoFlag(),
       "--body",
@@ -1736,7 +1715,7 @@ function createPromotionReviewCheckpoint(worktree, context, contentHead, runUrl,
     "-c", "user.name=github-actions[bot]",
     "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
     "commit", "--allow-empty",
-    "-m", PROMOTION_CHECKPOINT_SUBJECT,
+    "-m", PROMOTION_RECOVERY_MILESTONE_SUBJECT,
     "-m", "Thingtime-Promotion-Review-Checkpoint: v1",
     "-m", `Thingtime-Promotion-Content-Head: ${contentHead}`,
     "-m", `Thingtime-Promotion-Plan-Hash: ${context.planHash}`,
@@ -2067,8 +2046,8 @@ function finalizeAiPromotionMetadata(sourcePr, promotionNumber, context, attesta
     .replace(/`/g, "\\`");
   const reviewBody = [
     aiResolved
-      ? "🤖 **Automatic promotion conflict resolution completed.**"
-      : "🤖 **Protected promotion replay completed without an AI edit.**",
+      ? "🤖 **Lopu completed the promotion conflict resolution.**"
+      : "🤖 **Lopu completed the promotion replay without an AI edit.**",
     "",
     `Source PR: #${sourcePr.number} · plan: \`${context.planHash}\` · [workflow run](${attestation.run_url})`,
     "",
@@ -2091,13 +2070,6 @@ function finalizeAiPromotionMetadata(sourcePr, promotionNumber, context, attesta
             `\`${inline(attestation?.graphify_mode, "recorded in the linked run")}\` ` +
             `(semantic: \`${inline(attestation?.graphify_semantic, "recorded in the linked run")}\`).`,
         ]),
-    ...(attestation?.ci_sensitive === true
-      ? [
-          "",
-          "⚠️ CI-sensitive `.github/**` content is protected by an empty review-checkpoint; " +
-            "approve its PR checks only after reviewing the paths above.",
-        ]
-      : []),
     ...(sourceLineageReviewRequired(context)
       ? [
           "",
@@ -2115,7 +2087,7 @@ function finalizeAiPromotionMetadata(sourcePr, promotionNumber, context, attesta
   );
   if (!reviewed.ok) return reviewed;
   const statusBody = [
-    `✅ Automatic promotion conflict resolution opened #${promotionNumber} for \`${context.branch}\`.`,
+    `✅ Lopu opened promotion conflict resolution #${promotionNumber} for \`${context.branch}\`.`,
     "",
     `Review the exact resolved paths and immutable snapshot in the promotion PR comment. [Workflow run](${attestation.run_url}).`,
     ...(sourceLineageReviewRequired(context)
@@ -2201,7 +2173,7 @@ function pathspecAuthorityIntegrationTest(assert) {
       "add", "--", literalPathspec("normal.txt"), literalPathspec("critical.txt"),
       literalPathspec(literalExclude), literalPathspec(leadingSpace), literalPathspec(trailingSpace),
     ]);
-    testGit(["commit", "-m", "PROMOTION-QUARANTINE-SOURCE-SENTINEL"]);
+    testGit(["commit", "-m", "PROMOTION-FULL-ACCESS-SOURCE-SENTINEL"]);
     const sourceCommit = testGit(["rev-parse", "HEAD"]);
 
     // Only the ordinary critical path is later removed. If the literal
@@ -2325,8 +2297,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     assert.equal(ancestryReverted.sourceLineageStatus, "review-required-removed");
     assert.match(
       ancestryReverted.error,
-      /quarantined for review instead of being published as verified/,
-      "the verdict must describe the quarantine, not claim nothing was created",
+      /Lopu will create a reviewable candidate instead of labelling the patch verified/,
+      "the verdict must describe Lopu's candidate rather than claim nothing was created",
     );
 
     // Reproduce the historical failure: force-rewrite develop to an equivalent
@@ -2491,10 +2463,10 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       testTryGit,
     );
     assert.equal(reservation.ok, true);
-    assert.match(
+    assert.doesNotMatch(
       testGit(["show", "-s", "--format=%B", reservation.reservationSha], fresh),
       /\[skip ci\]/,
-      "empty reservation commits must not trigger unrelated push workflows",
+      "Lopu reservations publish directly without suppressing CI",
     );
     assert.deepEqual(
       validateReusablePromotionBranch(
@@ -2947,7 +2919,7 @@ function orphanedMergeHydrationIntegrationTest(assert) {
         },
       ).ok,
       true,
-      "a verified non-CI-sensitive canonical direct branch keeps the fast-path recovery",
+      "a verified canonical direct branch keeps the fast-path recovery",
     );
     const reviewRequiredDirect = validateReusablePromotionBranch(
       "HEAD",
@@ -2964,10 +2936,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
         gitRunner: testTryGit,
       },
     );
-    assert.equal(reviewRequiredDirect.ok, false);
-    assert.equal(reviewRequiredDirect.requiresReviewGateReplan, true);
-    assert.match(reviewRequiredDirect.error, /refusing PR creation or stack-base reuse/);
-    const ciSensitiveDirect = validateReusablePromotionBranch(
+    assert.equal(reviewRequiredDirect.ok, true);
+    const fullAccessDirect = validateReusablePromotionBranch(
       "HEAD",
       "origin/main",
       sourcePr,
@@ -2976,14 +2946,13 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       {
         promotionContext: {
           ...reservationContext.context,
-          paths: [".github/workflows/quarantine-restart-canary.yml"],
+          paths: [".github/workflows/lopu-restart-canary.yml"],
         },
         actualBranchName: reservationBranch,
         gitRunner: testTryGit,
       },
     );
-    assert.equal(ciSensitiveDirect.ok, false);
-    assert.equal(ciSensitiveDirect.requiresReviewGateReplan, true);
+    assert.equal(fullAccessDirect.ok, true);
     assert.equal(
       validateReusablePromotionBranch(
         "HEAD",
@@ -3060,8 +3029,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     // Merely finding an equivalent rewritten commit in history is not enough:
     // if a later source commit reverts it, preflight must refuse to call the
     // plan verified. Under the never-cancel policy that no longer means
-    // dropping the promotion — the plan survives, quarantined, so the trusted
-    // worker opens a labelled review PR instead of the change vanishing.
+    // dropping the promotion — the plan survives so Lopu can open a labelled
+    // review PR instead of the change vanishing.
     testGit(["revert", "--no-edit", rewrittenSha], writer);
     testGit(["push", "origin", "HEAD:develop"], writer);
     testGit([
@@ -3079,7 +3048,7 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     assert.match(revertedPlan.sourceLineageDetail, /source-lineage safety block/);
     assert.ok(
       Array.isArray(revertedPlan.picks) && revertedPlan.picks.length > 0,
-      "the quarantined plan must keep its picks so the worker has something to replay",
+      "the reviewable plan must keep its picks so Lopu has something to replay",
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -3101,12 +3070,12 @@ async function selfTest() {
       sourceLineageReviewRequired: true,
     }),
     true,
-    "an open promotion whose source patch was removed is quarantined, never closed",
+    "an open promotion whose source patch was removed remains reviewable, never closed",
   );
   assert.equal(
     sourceLineageReviewRequired({ sourceLineageStatus: "verified" }),
     false,
-    "verified source lineage never quarantines a promotion",
+    "verified source lineage needs no extra review state",
   );
 
   const pr = { number: 7, headRefName: "claude/search-index-abc123", title: "feat: add search" };
@@ -3401,43 +3370,16 @@ async function selfTest() {
   assert.ok(!setsEqual(new Set(["a"]), new Set(["a", "b"])));
   assert.equal(literalPathspec(":(top,glob)**"), ":(literal):(top,glob)**");
   assert.deepEqual(sortRepoPaths(["é.txt", "z.txt", "a.txt"]), ["a.txt", "z.txt", "é.txt"]);
-  assert.deepEqual(
-    cleanReplayQuarantinePolicy({
-      paths: ["remix/app/feature.ts"],
-      sourceLineageStatus: "verified",
-    }),
-    { quarantine: false, ciSensitive: false, lineageReviewRequired: false },
-  );
-  assert.deepEqual(
-    cleanReplayQuarantinePolicy({
-      paths: [".github/workflows/promotion-quarantine-canary.yml"],
-      sourceLineageStatus: "verified",
-    }),
-    { quarantine: true, ciSensitive: true, lineageReviewRequired: false },
-  );
-  assert.deepEqual(
-    cleanReplayQuarantinePolicy({
-      paths: ["remix/app/restored-feature.ts"],
-      sourceLineageStatus: "review-required-removed",
-    }),
-    { quarantine: true, ciSensitive: false, lineageReviewRequired: true },
-  );
-  assert.equal(
-    cleanReplayQuarantinePolicy({ sourceLineageStatus: "verified" }).quarantine,
-    true,
-    "an incomplete path classification must fail into quarantine",
-  );
-  const cleanQuarantineBody = promotionWorkerReviewBody(
+  const workflowConflictBody = promotionWorkerReviewBody(
     "candidate\n---\nfooter",
     {
       sourcePr: 7,
       baseRef: "main",
-      paths: [".github/workflows/promotion-quarantine-canary.yml"],
+      paths: [".github/workflows/promotion-canary.yml"],
       sourceLineageStatus: "verified",
     },
   );
-  assert.match(cleanQuarantineBody, /Protected clean-replay review/);
-  assert.doesNotMatch(cleanQuarantineBody, /exact source patch conflicted/);
+  assert.match(workflowConflictBody, /exact source patch conflicted/);
   assert.match(
     promotionWorkerReviewBody(
       "candidate\n---\nfooter",
@@ -4124,17 +4066,6 @@ export function validateReusablePromotionBranch(
           `\`${promotionContext.branch}\` before it can be reused`,
       };
     }
-    const quarantine = cleanReplayQuarantinePolicy(promotionContext);
-    if (quarantine.quarantine) {
-      return {
-        ok: false,
-        requiresReviewGateReplan: true,
-        error:
-          "legacy/plain promotion branch lacks the trusted review-gate reservation, " +
-          "bot attestation, and checkpoint required by its current immutable plan; " +
-          "preserving the branch and refusing PR creation or stack-base reuse",
-      };
-    }
   }
   const history = gitRunner(["log", "--format=%B", `${expectedBaseRef}..${branchRef}`], cwd);
   if (!history.ok) {
@@ -4541,8 +4472,8 @@ export function preflightPromotionPlans(
         // This used to drop the promotion entirely — no branch, no worker, no
         // PR, the verdict visible only in a run log — which is how #211 (the
         // conversion of `main` to thin listeners) went a full day unnoticed.
-        // The plan is kept and quarantined instead: because the status is not
-        // `verified`, `sourceLineageReviewRequired` routes it through the
+        // The plan is kept for Lopu: because the status is not `verified`,
+        // `sourceLineageReviewRequired` routes it through the
         // trusted AI worker, and the PR it opens carries the
         // `source-lineage-unverified` label plus a body that tells the reviewer
         // exactly what could not be proven. The safety property is unchanged —
@@ -4872,44 +4803,8 @@ function promotionConflictReviewBody(body, context) {
   return body.replace("\n---\n", `\n${review}\n---\n`);
 }
 
-function promotionQuarantineReviewBody(body, context, policy) {
-  const reasons = [
-    ...(policy.ciSensitive
-      ? ["the exact source patch changes CI-sensitive `.github/**` content"]
-      : []),
-    ...(policy.lineageReviewRequired
-      ? [`its source lineage is \`${context.sourceLineageStatus}\``]
-      : []),
-  ];
-  const review = [
-    "## Protected clean-replay review",
-    "",
-    `- This candidate was quarantined before the promoter applied any historical commit because ${reasons.join(" and ")}.`,
-    "- The trusted worker reconstructs the exact patch as a bot-authored synthetic commit instead of",
-    "  publishing original commit messages or executable workflow history with the promotion PAT.",
-    ...(policy.ciSensitive
-      ? [
-          "- CI-sensitive content commits are stamped `[skip ci]`; the bot-authored empty checkpoint",
-          "  exposes approval-required PR checks only after the review branch and PR exist.",
-        ]
-      : []),
-    `- A \`github-actions[bot]\` comment on source PR #${context.sourcePr} attests the exact`,
-    "  source endpoints, destination base, reservation, plan hash, and published head.",
-    "- Please review the exact candidate before merging; no manual branch repair is required.",
-    "",
-  ].join("\n");
-  const accurateBody = body.replace(
-    "  (`git cherry-pick -x`; each commit message references the original SHA).",
-    "  (the trusted worker reconstructs one exact bot-authored synthetic commit).",
-  );
-  return accurateBody.replace("\n---\n", `\n${review}\n---\n`);
-}
-
 function promotionWorkerReviewBody(body, context) {
-  const policy = cleanReplayQuarantinePolicy(context);
-  return policy.quarantine
-    ? promotionQuarantineReviewBody(body, context, policy)
-    : promotionConflictReviewBody(body, context);
+  return promotionConflictReviewBody(body, context);
 }
 
 function createPromotionPr({ branch, base, title, body, token = "", sourceLineage = "" }) {
@@ -5036,7 +4931,7 @@ async function runPromotion(results, state) {
       results.lineageReview.push(
         `#${pr.number} — exact historical patch recovered, but source lineage is ` +
         `\`${plan.sourceLineageStatus}\`: ${sourceLineageReason(plan.sourceLineageStatus)} ` +
-        "The workflow will create a visibly quarantined review candidate instead of treating it as verified.",
+        "Lopu will create a reviewable candidate instead of treating it as verified.",
       );
     } else if (plan?.sourceRewritten) {
       results.recovered.push(
@@ -5324,7 +5219,7 @@ async function runPromotion(results, state) {
         const loaded = loadExternalPromotionPlan(promotion);
         // NEVER CANCEL. An open promotion whose source lineage degrades used to
         // be CLOSED here, pre-empting review of a PR a human had already been
-        // given. It is now left open and handled by the quarantine path
+        // given. It is now left open and handled by Lopu's review path
         // immediately below: `sourceLineageReviewRequired` re-stamps the
         // metadata and the `source-lineage-unverified` label, so the reviewer
         // sees the downgraded verdict on the PR rather than losing the PR.
@@ -5949,7 +5844,7 @@ async function runPromotion(results, state) {
           ) {
             if (CFG.dryRun) {
               results.recovered.push(
-                `(dry-run) would finish the review-gated checkpoint for promotion #${record.number}.`,
+                `(dry-run) would finish the prior checkpoint recovery for promotion #${record.number}.`,
               );
             } else {
               const recovered = recoverPromotionReviewCheckpoint(
@@ -6138,16 +6033,12 @@ async function runPromotion(results, state) {
             const body = reusable.mode?.startsWith("ai-resolved")
               ? promotionWorkerReviewBody(plainBody, reusable.promotionContext)
               : plainBody;
-            const reviewGated =
-              reusable.mode === "ai-resolved-checkpoint-pending" ||
-              reusable.mode === "ai-resolved-checkpoint-finalize" ||
-              cleanReplayQuarantinePolicy(reusable.promotionContext).quarantine;
             const created = createPromotionPr({
               branch: existingBranch,
               base: baseName,
               title,
               body,
-              token: reviewGated ? process.env.ACTIONS_TOKEN : "",
+              token: "",
               sourceLineage: sourceLineageStatus(plan),
             });
             if (created.ok) {
@@ -6269,60 +6160,6 @@ async function runPromotion(results, state) {
           ));
           break;
         }
-        const quarantine = cleanReplayQuarantinePolicy(planned.context);
-        if (quarantine.quarantine) {
-          const title = promotionTitleFor(pr, group.key, position);
-          const body = promotionQuarantineReviewBody(
-            promotionBody(pr, group.key, position, group.prs, statusFor, plan),
-            planned.context,
-            quarantine,
-          );
-          createdCount += 1; // protected worker handoffs share MAX_NEW_PRS
-          if (CFG.dryRun) {
-            results.queued.push(
-              `(dry-run) would quarantine #${pr.number} before applying historical commits, ` +
-              `reserve \`${branch}\` at exact base \`${baseName}\` (\`${beforeSha}\`), and ` +
-              "dispatch the immutable plan to the trusted promotion worker.",
-            );
-            if (quarantine.lineageReviewRequired) {
-              results.lineageReview.push(
-                `(dry-run) #${pr.number} would be queued as a source-lineage review candidate ` +
-                `with \`${SOURCE_LINEAGE_REVIEW_LABEL}\`.`,
-              );
-            }
-            break;
-          }
-          const queued = queueTrustedPromotionWorker({
-            worktree,
-            context: planned.context,
-            title,
-            body,
-            conflictPaths: [],
-          });
-          if (!queued.ok) {
-            results.blocked.push(...groupFailureMessages(
-              group,
-              index,
-              `protected clean-replay handoff failed: ${queued.error}`,
-            ));
-            break;
-          }
-          remoteBranches.add(branch);
-          results.queued.push(
-            `#${pr.number} (**${pr.title}**) — quarantined before historical replay, reserved ` +
-            `\`${branch}\` at exact base \`${baseName}\` (\`${beforeSha}\`), and dispatched ` +
-            `the trusted promotion worker; reservation \`${queued.reservationSha}\`.`,
-          );
-          if (quarantine.lineageReviewRequired) {
-            results.lineageReview.push(
-              `#${pr.number} — queued the exact historical patch with ` +
-              `\`${SOURCE_LINEAGE_REVIEW_LABEL}\`; merging still requires source-intent review.`,
-            );
-          }
-          if (queued.warning) results.warnings.push(queued.warning);
-          break; // publication is async; later group members depend on this branch
-        }
-
         const applied = applyPicks(worktree, plan.picks);
         if (applied.status === "conflict") {
           const title = promotionTitleFor(pr, group.key, position);
