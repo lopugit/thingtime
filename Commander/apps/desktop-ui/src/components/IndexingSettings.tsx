@@ -47,19 +47,21 @@ export function IndexingSettings({
 
   useEffect(() => {
     let cancelled = false;
+    let timer: number | undefined;
     const refresh = async () => {
       try {
         const next = await api.indexingStatus();
         if (!cancelled) setStatus(next);
       } catch (error) {
         if (!cancelled) onError(error instanceof Error ? error.message : 'Could not load index status');
+      } finally {
+        if (!cancelled) timer = window.setTimeout(() => void refresh(), 5_000);
       }
     };
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 2_000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [onError]);
 

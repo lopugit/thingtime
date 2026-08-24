@@ -430,9 +430,11 @@ impl IndexDatabase {
     }
 
     pub fn status(&self) -> Result<IndexStatus, IndexerError> {
-        let total_records: i64 =
-            self.connection
-                .query_row("SELECT COUNT(*) FROM records", [], |row| row.get(0))?;
+        let total_records: i64 = self.connection.query_row(
+            "SELECT COALESCE(SUM(count), 0) FROM source_status",
+            [],
+            |row| row.get(0),
+        )?;
         let mut kinds = Vec::new();
         for kind in [
             IndexKind::Application,
@@ -440,7 +442,7 @@ impl IndexDatabase {
             IndexKind::Directory,
         ] {
             let count: i64 = self.connection.query_row(
-                "SELECT COUNT(*) FROM records WHERE kind = ?1",
+                "SELECT COALESCE(SUM(count), 0) FROM source_status WHERE kind = ?1",
                 [kind.as_str()],
                 |row| row.get(0),
             )?;

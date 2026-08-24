@@ -43,6 +43,7 @@ const FILESYSTEM_RESULT_LIMIT = 160;
 const APPLICATION_RESULT_LIMIT = 1_000;
 const COMMANDER_INDEX_TIMEOUT_MS = 90_000;
 const COMMANDER_MAX_INDEX_TIMEOUT_MS = 15 * 60_000;
+const INDEX_STATUS_CACHE_MS = 30_000;
 
 export class IndexingService {
   readonly #platform: Platform;
@@ -65,6 +66,7 @@ export class IndexingService {
   #commandCount = 0;
   #lastRunResources: IndexResourceUsage | undefined;
   #lastStatus: IndexStatus | undefined;
+  #lastStatusReadAtMs = 0;
   #progress: IndexingStatus['progress'];
   #progressSources = new Map<string, number>();
 
@@ -178,7 +180,10 @@ export class IndexingService {
   }
 
   async status(): Promise<IndexingStatus> {
-    const status = (await this.#safeRustStatus()) ?? this.#lastStatus;
+    const status =
+      !this.#lastStatus || Date.now() - this.#lastStatusReadAtMs >= INDEX_STATUS_CACHE_MS
+        ? (await this.#safeRustStatus()) ?? this.#lastStatus
+        : this.#lastStatus;
     return {
       available: this.#available,
       running: [...this.#running],
@@ -306,6 +311,7 @@ export class IndexingService {
       );
       this.#lastRunResources = report.resources;
       this.#lastStatus = structuredClone(report.status);
+      this.#lastStatusReadAtMs = Date.now();
       return report;
     } catch (error) {
       if (!errorMessage(error).includes('timed out')) throw error;
@@ -403,6 +409,7 @@ export class IndexingService {
       this.#available = true;
       this.#message = undefined;
       this.#lastStatus = structuredClone(status);
+      this.#lastStatusReadAtMs = Date.now();
       return status;
     } catch (error) {
       this.#disableRust(error);

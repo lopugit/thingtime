@@ -5640,9 +5640,9 @@
     "semantic_hash": "e8315a94898451849a7d8da6b2f75162"
   },
   "Commander/apps/daemon/src/services/indexing.ts": {
-    "mtime": 1787316380.1920805,
-    "ast_hash": "7fb8b9ab1569b17f1a02aac891e3ac34",
-    "semantic_hash": "7fb8b9ab1569b17f1a02aac891e3ac34"
+    "mtime": 1787558253.842014,
+    "ast_hash": "bba973b741e150bef1753c6f0e9b2d6e",
+    "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/macosSystem.test.ts": {
     "mtime": 1787373945.687005,
@@ -5785,9 +5785,9 @@
     "semantic_hash": "01b65afd46e858d575e5b34854dfcb2e"
   },
   "Commander/apps/desktop-ui/src/components/IndexingSettings.tsx": {
-    "mtime": 1787129784.7140536,
-    "ast_hash": "408a7d719a9c6090d325ea2562858c43",
-    "semantic_hash": "408a7d719a9c6090d325ea2562858c43"
+    "mtime": 1787558253.8427813,
+    "ast_hash": "bfdc95c0156cfb746621f6d32ea6621e",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Launcher.test.tsx": {
     "mtime": 1787372565.9216683,
@@ -5865,9 +5865,9 @@
     "semantic_hash": "fbe7f4c79b325d9f63a4560817c9f175"
   },
   "Commander/apps/desktop-ui/src/hooks/useCommander.ts": {
-    "mtime": 1787372464.4025495,
-    "ast_hash": "fe15bf03232d62b46291af68c03a23bd",
-    "semantic_hash": "fe15bf03232d62b46291af68c03a23bd"
+    "mtime": 1787558253.8423114,
+    "ast_hash": "6ee8c156b61e568ad93aba9724c82473",
+    "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/lib/api.ts": {
     "mtime": 1787485092.9225464,
@@ -5920,9 +5920,9 @@
     "semantic_hash": "0f2eeba7f17f1120fabf7e1bfa244a2a"
   },
   "Commander/crates/commander-indexer/src/lib.rs": {
-    "mtime": 1787322309.418804,
-    "ast_hash": "078193514d8885a7c395e736522b3734",
-    "semantic_hash": "078193514d8885a7c395e736522b3734"
+    "mtime": 1787558275.6542628,
+    "ast_hash": "0abbad7022d1c87a4e222132fadfe5d6",
+    "semantic_hash": ""
   },
   "Commander/crates/commander-indexer/src/main.rs": {
     "mtime": 1787316391.0940554,
@@ -6295,9 +6295,9 @@
     "semantic_hash": "48e4194ff4b7d52619c8f9515dbe642c"
   },
   "Commander/packages/filesystem-indexer/src/index.ts": {
-    "mtime": 1787316441.2329087,
-    "ast_hash": "9b677db1a9325dcba847bcf17e9ddfa7",
-    "semantic_hash": "9b677db1a9325dcba847bcf17e9ddfa7"
+    "mtime": 1787558297.1760187,
+    "ast_hash": "1bd20def6c09ca5dd7755dd4e19ef5f2",
+    "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/src/test-fixtures/fake-indexer.mjs": {
     "mtime": 1787316455.5743828,
