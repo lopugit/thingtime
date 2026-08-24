@@ -101,6 +101,46 @@ assert.match(
   'electron-pr-release.yml must let the protected publisher revalidate live PR state'
 );
 
+const electronPrReleaseCaller = readFileSync(
+  resolve(workflowsRoot, 'electron-pr-release.yml'),
+  'utf8'
+);
+assert.match(
+  electronPrReleaseCaller,
+  /^  pull_request_target:\n    types: \[labeled, reopened, synchronize\]$/m,
+  'electron-pr-release.yml must receive trusted PR lifecycle events from the base branch'
+);
+assert.match(
+  electronPrReleaseCaller,
+  /^      pr_number: \$\{\{ inputs\.pr_number \|\| '' \}\}$/m,
+  'electron-pr-release.yml must forward only the optional manual PR number'
+);
+assert.match(
+  electronPrReleaseCaller,
+  /^      triggering_event: \$\{\{ github\.event_name \}\}$/m,
+  'electron-pr-release.yml must forward the trusted caller event provenance'
+);
+const electronPrReleasePermissionsStart = electronPrReleaseCaller.indexOf('\npermissions:\n');
+const electronPrReleaseJobsStart = electronPrReleaseCaller.indexOf('\njobs:\n');
+assert.ok(
+  electronPrReleasePermissionsStart >= 0 && electronPrReleaseJobsStart > electronPrReleasePermissionsStart,
+  'electron-pr-release.yml must retain its top-level permissions block'
+);
+const electronPrReleasePermissions = electronPrReleaseCaller.slice(
+  electronPrReleasePermissionsStart,
+  electronPrReleaseJobsStart
+);
+assert.match(
+  electronPrReleasePermissions,
+  /^  contents: write$/m,
+  'electron-pr-release.yml must grant the protected publisher release access'
+);
+assert.match(
+  electronPrReleasePermissions,
+  /^  pull-requests: read$/m,
+  'electron-pr-release.yml must let the protected publisher revalidate live PR state'
+);
+
 const filesUnder = (root) => {
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
