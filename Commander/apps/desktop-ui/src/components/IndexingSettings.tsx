@@ -263,6 +263,42 @@ export function IndexingSettings({
       <div className="index-settings-section">
         <div className="index-section-heading">
           <div>
+            <strong>Index reliability</strong>
+            <span>Set a custom timeout only when a healthy scan needs more time than Commander’s automatic limit.</span>
+          </div>
+        </div>
+        <div className="index-resource-grid single">
+          <TimeoutInput
+            value={draft.customTimeoutMs}
+            onCommit={(customTimeoutMs) => commit({ ...draft, customTimeoutMs })}
+          />
+        </div>
+        {status?.timing.samples ? (
+          <div className="index-resource-summary" aria-label="Recent index timing">
+            This Commander session: {formatDuration(status.timing.averageDurationMs ?? 0)} average across{' '}
+            {status.timing.samples} successful {status.timing.samples === 1 ? 'run' : 'runs'}; last{' '}
+            {formatDuration(status.timing.lastDurationMs ?? 0)}, longest{' '}
+            {formatDuration(status.timing.longestDurationMs ?? 0)}.
+          </div>
+        ) : (
+          <div className="index-resource-summary">Timing will appear after the next successful index run.</div>
+        )}
+        {status?.timeoutAttempts.length ? (
+          <div className="index-timeout-history" aria-label="Timed out index attempts">
+            <strong>Timed out attempts this session</strong>
+            {status.timeoutAttempts.map((attempt) => (
+              <div key={attempt.id} className="index-status-message">
+                <span>{attempt.message}</span>
+                <time>{formatIndexedAt(attempt.occurredAtMs)}</time>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="index-settings-section">
+        <div className="index-section-heading">
+          <div>
             <strong>Index capacity</strong>
             <span>Leave the entry limit blank to index every matching item.</span>
           </div>
@@ -494,6 +530,55 @@ function OptionalEntryLimitInput({
           onBlur={commitValue}
           onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
         />
+      </span>
+    </label>
+  );
+}
+
+function TimeoutInput({
+  value,
+  onCommit,
+}: {
+  value: number | null;
+  onCommit(value: number | null): void;
+}) {
+  const [draftValue, setDraftValue] = useState(value === null ? '' : String(value));
+  useEffect(() => setDraftValue(value === null ? '' : String(value)), [value]);
+  const commitValue = () => {
+    const normalized = draftValue.trim();
+    if (!normalized) {
+      setDraftValue('');
+      if (value !== null) onCommit(null);
+      return;
+    }
+    const parsed = Number(normalized);
+    const next = Number.isSafeInteger(parsed) && parsed > 0 ? parsed : value;
+    setDraftValue(next === null ? '' : String(next));
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <label className="index-resource-field">
+      <span>
+        <strong>Custom index timeout</strong>
+        <small>Milliseconds. Blank uses Commander’s automatic timeout; enter digits only, with no configured cap.</small>
+      </span>
+      <span className="index-resource-input wide">
+        <input
+          aria-label="Custom index timeout in milliseconds"
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={draftValue}
+          placeholder="Automatic"
+          spellCheck={false}
+          onChange={(event) => {
+            const next = event.currentTarget.value;
+            if (/^\d*$/.test(next)) setDraftValue(next);
+          }}
+          onBlur={commitValue}
+          onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
+        />
+        <small>ms</small>
       </span>
     </label>
   );

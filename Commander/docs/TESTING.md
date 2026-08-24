@@ -124,6 +124,10 @@
 - [ ] On macOS, verify Open Full Disk Access opens Privacy & Security → Full Disk Access without changing the toggle.
       With access withheld and a deliberately blocking root, verify the scan stops after 90 seconds, the writer recovers,
       actionable guidance appears, and the last committed index remains searchable.
+- [ ] In Search → Search Index → Index reliability, enter a digits-only custom timeout in milliseconds, close/reopen
+      Settings, and verify it persists without a product maximum. Force a disposable scan past that limit; verify the
+      timeout appears in Timed out attempts, the recent timing summary remains visible, and Commander sends one macOS
+      notification recommending a higher limit while preserving the prior committed index.
 - [ ] Add a disposable index root. With `.gitignore` in a parent directory, verify ignored descendants stay absent;
       add wildcard `**/build/**` and regex `(^|/)scratch-[0-9]+(/|$)` rules and verify matching paths disappear after reindex.
       Verify a `large.noindex` directory is skipped by the defaults and descendant globs prune their directory tree.

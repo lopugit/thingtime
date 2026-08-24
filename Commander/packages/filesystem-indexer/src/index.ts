@@ -147,7 +147,7 @@ interface ProgressResponse {
 interface PendingRequest {
   resolve(value: unknown): void;
   reject(error: Error): void;
-  timer: ReturnType<typeof setTimeout>;
+  timeout: { cancel(): void };
   onProgress?: (progress: IndexProgress) => void;
 }
 
@@ -166,6 +166,7 @@ const INDEXER_CPU_SAMPLE_MS = 2_000;
 const INDEXER_HIGH_CPU_PERCENT = 85;
 const INDEXER_HIGH_CPU_SAMPLES = 3;
 const INDEXER_MAX_RESTART_ATTEMPTS = 5;
+const MAX_TIMER_DELAY_MS = 0x7fffffff;
 const execFileAsync = promisify(execFile);
 
 export class FileSystemIndexerClient {
@@ -291,13 +292,13 @@ export class FileSystemIndexerClient {
     const id = `indexer-${process.pid}-${++this.#sequence}`;
     return new Promise<T>((resolve, reject) => {
       const duration = timeoutMs ?? this.#options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-      const timer = setTimeout(() => {
+      const timeout = scheduleTimeout(() => {
         this.#failProcess(child, new Error(`Filesystem indexer request timed out after ${duration}ms`));
       }, duration);
       this.#pending.set(id, {
         resolve: (value) => resolve(value as T),
         reject,
-        timer,
+        timeout,
         ...(onProgress ? { onProgress } : {}),
       });
       if (operation.operation === 'index') this.#indexRequests.add(id);
@@ -307,7 +308,7 @@ export class FileSystemIndexerClient {
         if (!pending) return;
         this.#pending.delete(id);
         this.#indexRequests.delete(id);
-        clearTimeout(pending.timer);
+        pending.timeout.cancel();
         pending.reject(error);
       });
     });
@@ -338,7 +339,7 @@ export class FileSystemIndexerClient {
     this.#pending.delete(response.id);
     this.#indexRequests.delete(response.id);
     this.#restartAttempts = 0;
-    clearTimeout(pending.timer);
+    pending.timeout.cancel();
     if (response.ok) pending.resolve(response.result);
     else pending.reject(new Error(`${response.error.code}: ${response.error.message}`));
   }
@@ -353,7 +354,7 @@ export class FileSystemIndexerClient {
 
   #failPending(error: Error): void {
     for (const pending of this.#pending.values()) {
-      clearTimeout(pending.timer);
+      pending.timeout.cancel();
       pending.reject(error);
     }
     this.#pending.clear();
@@ -395,4 +396,30 @@ export class FileSystemIndexerClient {
       // A process that exits between sampling and ps is handled by its exit listener.
     }
   }
+}
+
+/**
+ * Node clamps a single setTimeout call above 2^31-1 milliseconds. Chain the
+ * timer internally so the user-facing index timeout has no product ceiling.
+ */
+function scheduleTimeout(callback: () => void, durationMs: number): { cancel(): void } {
+  let remaining = Math.max(1, Math.floor(durationMs));
+  let cancelled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const schedule = () => {
+    const delay = Math.min(remaining, MAX_TIMER_DELAY_MS);
+    timer = setTimeout(() => {
+      if (cancelled) return;
+      remaining -= delay;
+      if (remaining > 0) schedule();
+      else callback();
+    }, delay);
+  };
+  schedule();
+  return {
+    cancel() {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    },
+  };
 }

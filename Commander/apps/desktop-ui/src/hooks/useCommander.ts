@@ -55,6 +55,8 @@ export function useCommander(): CommanderState {
   const recentSearchSequence = useRef(0);
   const queryRef = useRef('');
   const recentSearchesRef = useRef<RecentSearch[]>([]);
+  const knownIndexTimeouts = useRef(new Set<string>());
+  const indexTimeoutsHydrated = useRef(false);
 
   const setQuery = useCallback((value: string) => {
     if (value !== queryRef.current) setResultsStale(true);
@@ -85,7 +87,24 @@ export function useCommander(): CommanderState {
     const poll = async () => {
       try {
         const status = await api.indexingStatus();
-        if (!cancelled) setIndexingStatus(status);
+        if (!cancelled) {
+          setIndexingStatus(status);
+          const attempts = status.timeoutAttempts ?? [];
+          if (indexTimeoutsHydrated.current) {
+            for (const attempt of attempts) {
+              if (knownIndexTimeouts.current.has(attempt.id)) continue;
+              knownIndexTimeouts.current.add(attempt.id);
+              void nativeRequest('notification.show', {
+                id: attempt.id,
+                title: 'Commander indexing timed out',
+                body: `${attempt.message} Open Search settings to adjust the limit.`,
+              }).catch(() => undefined);
+            }
+          } else {
+            for (const attempt of attempts) knownIndexTimeouts.current.add(attempt.id);
+            indexTimeoutsHydrated.current = true;
+          }
+        }
       } catch {
         // Search remains available while the optional index status is temporarily unavailable.
       } finally {

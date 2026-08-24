@@ -209,12 +209,13 @@ describe('PersistentStore Thingtime defaults', () => {
       const store = new PersistentStore();
       await store.load();
       expect(store.snapshot().settings.indexing).toMatchObject({
-        version: 3,
+        version: 4,
         enabled: true,
         roots: ['~'],
         respectGitIgnore: true,
         includeHidden: true,
         maxEntries: null,
+        customTimeoutMs: null,
         customIgnores: expect.arrayContaining([{ kind: 'glob', pattern: '**/node_modules/**' }]),
         resourceLimits: {
           maxThreads: 2,

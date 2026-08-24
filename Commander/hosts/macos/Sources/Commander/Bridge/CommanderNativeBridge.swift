@@ -1,5 +1,6 @@
 import AppKit
 import UniformTypeIdentifiers
+import UserNotifications
 import WebKit
 
 private struct BridgeRequest: Decodable {
@@ -28,7 +29,7 @@ private enum JSONValue: Decodable {
 }
 
 @MainActor
-final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
+final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
   private static let maximumMessageBytes = 1024 * 1024
   private let keychain: KeychainStore
   private let loginItem: LaunchAtLoginService
@@ -94,6 +95,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
     self.updateWindowMode = updateWindowMode
     self.updateWindowPinning = updateWindowPinning
     self.metrics = SystemMetricsService(daemonPID: ready.pid)
+    super.init()
   }
 
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -231,6 +233,17 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
         try FileManager.default.removeItem(at: url)
         result = ["deleted": true]
       case "system.metrics": result = metrics.snapshot()
+      case "notification.show":
+        guard let id = request.params?["id"]?.string,
+              let title = request.params?["title"]?.string,
+              let body = request.params?["body"]?.string,
+              !id.isEmpty,
+              id.count <= 256,
+              !title.isEmpty,
+              title.count <= 160,
+              body.count <= 1_024 else { throw BridgeError.invalidNotification }
+        try await showNotification(id: id, title: title, body: body)
+        result = ["shown": true]
       case "clipboard.write":
         guard let text = request.params?["text"]?.string else { throw BridgeError.missing("text") }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); result = nil
@@ -316,6 +329,33 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
           let accountID = request.params?["accountId"]?.string,
           !issuer.isEmpty, !clientID.isEmpty, !accountID.isEmpty else { throw BridgeError.missing("issuer/clientId/accountId") }
     return (issuer, clientID, accountID)
+  }
+
+  nonisolated func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .sound])
+  }
+
+  private func showNotification(id: String, title: String, body: String) async throws {
+    let center = UNUserNotificationCenter.current()
+    center.delegate = self
+    var settings = await center.notificationSettings()
+    if settings.authorizationStatus == .notDetermined {
+      let granted = try await center.requestAuthorization(options: [.alert, .sound])
+      guard granted else { throw BridgeError.notificationsDenied }
+      settings = await center.notificationSettings()
+    }
+    guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+      throw BridgeError.notificationsDenied
+    }
+    let content = UNMutableNotificationContent()
+    content.title = title
+    content.body = body
+    content.sound = .default
+    try await center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
   }
 
   private func decodeCommandShortcuts(_ value: JSONValue?) throws -> [String: String] {
@@ -404,13 +444,15 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
 }
 
 private enum BridgeError: LocalizedError {
-  case missing(String), invalidURL, invalidSettingsTab(String), invalidCommandShortcuts, unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, pasteboardWrite, daemon(String)
+  case missing(String), invalidURL, invalidSettingsTab(String), invalidCommandShortcuts, invalidNotification, notificationsDenied, unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, pasteboardWrite, daemon(String)
   var errorDescription: String? {
     switch self {
     case .missing(let key): "Native request is missing \(key)."
     case .invalidURL: "The requested URL is invalid."
     case .invalidSettingsTab(let tab): "Unsupported Commander settings tab: \(tab)"
     case .invalidCommandShortcuts: "The command shortcut map is invalid."
+    case .invalidNotification: "The notification details are invalid."
+    case .notificationsDenied: "Commander notifications are disabled in macOS Settings."
     case .unknownMethod(let method): "Unknown native method: \(method)"
     case .credentialMissing: "No saved credential exists for this account."
     case .invalidDaemonResponse: "The Commander service returned an invalid response."
