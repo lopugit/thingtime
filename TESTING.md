@@ -36,6 +36,11 @@ is fixed, and cite the checklist you ran in the PR description.
       disappears here on the next fetch (hints resolve live sessions, never a
       cached identity). `GET /api/v1/auth/account-hints` responses carry no
       email — only id/username/displayName/avatarUrl.
+- [ ] Cross-deployment account hint: the compact row names the deployment
+      environment (for example `Dev preview · PR #68`, never `Production` for
+      a preview); expand its chevron to reveal every environment badge, exact
+      origin, and last-active time without selecting or signing in as the
+      suggested account.
 
 ## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
 
