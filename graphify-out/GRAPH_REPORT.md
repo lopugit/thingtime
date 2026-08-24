@@ -4,12 +4,12 @@
 - cluster-only mode — file stats not available
 
 ## Summary
-- 478 nodes · 1114 edges · 33 communities (23 shown, 10 thin omitted)
+- 478 nodes · 1114 edges · 32 communities (22 shown, 10 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.54)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `933f3e28`
+- Built from commit: `e440e476`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -34,7 +34,6 @@
 - [[_COMMUNITY_start.sh|start.sh]]
 - [[_COMMUNITY_verify-promotion-source-authority.sh|verify-promotion-source-authority.sh]]
 - [[_COMMUNITY_vercel.json|vercel.json]]
-- [[_COMMUNITY_Community 20|Community 20]]
 - [[_COMMUNITY_rebase-ownership-routing-contract.sh|rebase-ownership-routing-contract.sh]]
 - [[_COMMUNITY_Graphify Rules|Graphify Rules]]
 - [[_COMMUNITY_Electron App Release Workflow|Electron App Release Workflow]]
@@ -80,7 +79,7 @@
 - **Provider Routed CI Workflows** — _github_workflows_ci_provider_router_route_ci_compute_provider, _github_workflows_promote_develop_to_main_promote_develop_to_main, _github_workflows_promote_features_to_main_promote_features_to_main, _github_workflows_rebase_pr_stacks_rebase_prs_and_stacks, _github_workflows_resolve_pr_conflicts_resolve_pr_conflicts, _github_workflows_sync_main_into_develop_sync_main_into_develop [EXTRACTED 0.90]
 - **Control Plane Branch Contract** — readme_ci_control_plane, changelog_control_plane_changelog, _github_workflows_control_plane_ci_workflow_control_plane_ci, _github_scripts_workflow_control_plane_contract_mjs [EXTRACTED 0.88]
 
-## Communities (33 total, 10 thin omitted)
+## Communities (32 total, 10 thin omitted)
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.07
@@ -91,8 +90,8 @@ Cohesion: 0.14
 Nodes (35): associatedPr(), bodyFile(), buildComment(), buildSection(), CFG, computeDelta(), computeMissingLabels(), contentIndex (+27 more)
 
 ### Community 2 - "selfTest"
-Cohesion: 0.10
-Nodes (31): botCommentsByLatestEvent(), clearSourceStandAside(), computePicks(), dependentMembersAfter(), externalStackPromotionState(), findBotPromotionRetirement(), groupFailureMessages(), groupKeyFor() (+23 more)
+Cohesion: 0.09
+Nodes (33): botCommentsByLatestEvent(), clearSourceStandAside(), computePicks(), dependentMembersAfter(), externalStackPromotionState(), findBotPromotionRetirement(), groupFailureMessages(), groupKeyFor() (+25 more)
 
 ### Community 3 - "build-all-branch.mjs"
 Cohesion: 0.19
@@ -100,11 +99,11 @@ Nodes (31): assertAllBranchWorkflowContract(), BASE_BRANCHES, buildMode(), check
 
 ### Community 4 - "failureDetail"
 Cohesion: 0.15
-Nodes (26): applyPicks(), buildPromotionPlanContext(), checkoutRemoteBranch(), createPromotionReservation(), ensureCommitAvailable(), ensureRemoteBranchAvailable(), expectedReservationTrailers(), failureDetail() (+18 more)
+Nodes (28): applyPicks(), buildPromotionPlanContext(), checkoutRemoteBranch(), createPromotionReservation(), ensureCommitAvailable(), ensureRemoteBranchAvailable(), expectedReservationTrailers(), failureDetail() (+20 more)
 
 ### Community 5 - "promote-features-to-main.mjs"
-Cohesion: 0.13
-Nodes (18): CFG, checkpointRecoveryDisposition(), encodePromotionAttestation(), env(), EXEC_OPTS, flag(), isExactPausedPromotionSnapshot(), listSourceIssueComments() (+10 more)
+Cohesion: 0.11
+Nodes (26): attestationMatches(), CFG, checkpointRecoveryDisposition(), createPromotionReviewCheckpoint(), encodePromotionAttestation(), env(), exactCheckpointPush(), EXEC_OPTS (+18 more)
 
 ### Community 6 - "promotion-worker-routing-contract.mjs"
 Cohesion: 0.29
@@ -162,10 +161,6 @@ Nodes (6): fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM, GI
 Cohesion: 0.33
 Nodes (5): framework, git, deploymentEnabled, ignoreCommand, $schema
 
-### Community 20 - "Community 20"
-Cohesion: 0.26
-Nodes (12): attestationMatches(), createPromotionReviewCheckpoint(), exactCheckpointPush(), inspectPromotionReviewCheckpoint(), isObjectId(), latestBotPromotionAttestationEvents(), liveRefShaWithActionsToken(), parsePromotionResolutionAttestations() (+4 more)
-
 ### Community 21 - "rebase-ownership-routing-contract.sh"
 Cohesion: 0.83
 Nodes (3): assert_owner(), assert_stack(), rebase-ownership-routing-contract.sh script
@@ -182,11 +177,11 @@ Nodes (12): Added, Changed, Control-plane changelog, Fixed, [Unreleased], Fork s
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `selfTest()` connect `selfTest` to `failureDetail`, `promote-features-to-main.mjs`, `runPromotion`, `repoFlag`, `Community 20`?**
+- **Why does `selfTest()` connect `selfTest` to `repoFlag`, `runPromotion`, `failureDetail`, `promote-features-to-main.mjs`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
-- **Why does `runPromotion()` connect `runPromotion` to `selfTest`, `Community 20`, `failureDetail`, `promote-features-to-main.mjs`?**
+- **Why does `runPromotion()` connect `runPromotion` to `selfTest`, `failureDetail`, `promote-features-to-main.mjs`?**
   _High betweenness centrality (0.002) - this node is a cross-community bridge._
-- **Why does `failureDetail()` connect `failureDetail` to `selfTest`, `promote-features-to-main.mjs`, `runPromotion`, `repoFlag`, `Community 20`?**
+- **Why does `failureDetail()` connect `failureDetail` to `repoFlag`, `selfTest`, `runPromotion`, `promote-features-to-main.mjs`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS` to the rest of the system?**
   _107 weakly-connected nodes found - possible documentation gaps or missing edges._
@@ -195,4 +190,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `promotion-pr-changelog.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.14126984126984127 - nodes in this community are weakly interconnected._
 - **Should `selfTest` be split into smaller, more focused modules?**
-  _Cohesion score 0.0989247311827957 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0928030303030303 - nodes in this community are weakly interconnected._

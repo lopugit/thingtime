@@ -1870,10 +1870,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L704",
       "_origin": "ast",
-      "community": 20,
+      "community": 5,
       "norm_label": "isobjectid()",
       "id": "github_scripts_promote_features_to_main_isobjectid",
-      "community_name": "Community 20"
+      "community_name": "promote-features-to-main.mjs"
     },
     {
       "label": "stablePromotionPlanManifest()",
@@ -1969,10 +1969,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L971",
       "_origin": "ast",
-      "community": 20,
+      "community": 2,
       "norm_label": "parsepromotionresolutionattestations()",
       "id": "github_scripts_promote_features_to_main_parsepromotionresolutionattestations",
-      "community_name": "Community 20"
+      "community_name": "selfTest"
     },
     {
       "label": "parsePromotionRetirements()",
@@ -2002,10 +2002,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1028",
       "_origin": "ast",
-      "community": 20,
+      "community": 2,
       "norm_label": "latestbotpromotionattestationevents()",
       "id": "github_scripts_promote_features_to_main_latestbotpromotionattestationevents",
-      "community_name": "Community 20"
+      "community_name": "selfTest"
     },
     {
       "label": "promotionRetirementMarker()",
@@ -2090,10 +2090,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1118",
       "_origin": "ast",
-      "community": 20,
+      "community": 5,
       "norm_label": "attestationmatches()",
       "id": "github_scripts_promote_features_to_main_attestationmatches",
-      "community_name": "Community 20"
+      "community_name": "promote-features-to-main.mjs"
     },
     {
       "label": "inspectPromotionReviewCheckpoint()",
@@ -2101,10 +2101,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1138",
       "_origin": "ast",
-      "community": 20,
+      "community": 5,
       "norm_label": "inspectpromotionreviewcheckpoint()",
       "id": "github_scripts_promote_features_to_main_inspectpromotionreviewcheckpoint",
-      "community_name": "Community 20"
+      "community_name": "promote-features-to-main.mjs"
     },
     {
       "label": "validateAiResolvedPromotionBranch()",
@@ -2112,10 +2112,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1185",
       "_origin": "ast",
-      "community": 20,
+      "community": 4,
       "norm_label": "validateairesolvedpromotionbranch()",
       "id": "github_scripts_promote_features_to_main_validateairesolvedpromotionbranch",
-      "community_name": "Community 20"
+      "community_name": "failureDetail"
     },
     {
       "label": "validateStalePendingAiPromotionBranch()",
@@ -2123,10 +2123,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1291",
       "_origin": "ast",
-      "community": 20,
+      "community": 4,
       "norm_label": "validatestalependingaipromotionbranch()",
       "id": "github_scripts_promote_features_to_main_validatestalependingaipromotionbranch",
-      "community_name": "Community 20"
+      "community_name": "failureDetail"
     },
     {
       "label": "buildPromotionDispatchRequest()",
@@ -2266,10 +2266,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1683",
       "_origin": "ast",
-      "community": 20,
+      "community": 5,
       "norm_label": "liverefshawithactionstoken()",
       "id": "github_scripts_promote_features_to_main_liverefshawithactionstoken",
-      "community_name": "Community 20"
+      "community_name": "promote-features-to-main.mjs"
     },
     {
       "label": "promotionAttestationBody()",
@@ -2288,10 +2288,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1708",
       "_origin": "ast",
-      "community": 20,
+      "community": 5,
       "norm_label": "createpromotionreviewcheckpoint()",
       "id": "github_scripts_promote_features_to_main_createpromotionreviewcheckpoint",
-      "community_name": "Community 20"
+      "community_name": "promote-features-to-main.mjs"
     },
     {
       "label": "exactCheckpointPush()",
@@ -2299,10 +2299,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1733",
       "_origin": "ast",
-      "community": 20,
+      "community": 5,
       "norm_label": "exactcheckpointpush()",
       "id": "github_scripts_promote_features_to_main_exactcheckpointpush",
-      "community_name": "Community 20"
+      "community_name": "promote-features-to-main.mjs"
     },
     {
       "label": "exactBranchDeleteWithActionsToken()",
@@ -2321,10 +2321,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1822",
       "_origin": "ast",
-      "community": 20,
+      "community": 5,
       "norm_label": "revalidatecheckpointrefs()",
       "id": "github_scripts_promote_features_to_main_revalidatecheckpointrefs",
-      "community_name": "Community 20"
+      "community_name": "promote-features-to-main.mjs"
     },
     {
       "label": "checkpointRecoveryDisposition()",
@@ -2354,10 +2354,10 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1868",
       "_origin": "ast",
-      "community": 20,
+      "community": 5,
       "norm_label": "recoverpromotionreviewcheckpoint()",
       "id": "github_scripts_promote_features_to_main_recoverpromotionreviewcheckpoint",
-      "community_name": "Community 20"
+      "community_name": "promote-features-to-main.mjs"
     },
     {
       "label": "finalizeSourceLineageMetadata()",
@@ -4736,7 +4736,7 @@
       "label": "aiRuntimeSourceFiles()",
       "file_type": "code",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L216",
+      "source_location": "L221",
       "_origin": "ast",
       "community": 14,
       "norm_label": "airuntimesourcefiles()",
@@ -4747,7 +4747,7 @@
       "label": "assertAdminLoader()",
       "file_type": "code",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L226",
+      "source_location": "L231",
       "_origin": "ast",
       "community": 14,
       "norm_label": "assertadminloader()",
@@ -4758,7 +4758,7 @@
       "label": "assertAdminModelRouting()",
       "file_type": "code",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L236",
+      "source_location": "L241",
       "_origin": "ast",
       "community": 14,
       "norm_label": "assertadminmodelrouting()",
@@ -4769,7 +4769,7 @@
       "label": "selfTest()",
       "file_type": "code",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L328",
+      "source_location": "L333",
       "_origin": "ast",
       "community": 14,
       "norm_label": "selftest()",
@@ -16471,7 +16471,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L216",
+      "source_location": "L221",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract",
@@ -16481,7 +16481,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L226",
+      "source_location": "L231",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract",
@@ -16491,7 +16491,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L236",
+      "source_location": "L241",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract",
@@ -16571,7 +16571,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L328",
+      "source_location": "L333",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract",
@@ -16635,7 +16635,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L417",
+      "source_location": "L422",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
@@ -16646,7 +16646,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L329",
+      "source_location": "L334",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
@@ -16657,7 +16657,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L213",
+      "source_location": "L218",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource",
@@ -16668,7 +16668,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L448",
+      "source_location": "L453",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
@@ -16679,7 +16679,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L290",
+      "source_location": "L295",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
@@ -16690,7 +16690,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L241",
+      "source_location": "L246",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
@@ -17589,5 +17589,5 @@
       "source_file": "README.md"
     }
   ],
-  "built_at_commit": "933f3e28f27c113b4d22bad7607a65975ebf7102"
+  "built_at_commit": "e440e476ab1811381a40b206d4caa736612289e6"
 }

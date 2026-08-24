@@ -1509,6 +1509,11 @@ jobs:
     needs: [route, review_detect]
     if: >-
       needs.review_detect.outputs.any == 'true'
+      && (github.ref_name == 'github-actions'
+          || github.workflow_ref
+          == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
+          || github.workflow_ref
+          == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
       && !(github.event_name == 'workflow_dispatch'
            && inputs.detector_handoff == true
            && startsWith(inputs.control_dispatch_id, 'lopu-review:')
