@@ -21,6 +21,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **`ai-merge-paused` is now a durable user-controlled stop label**: neither
+  conflict resolution nor stack rebasing can create, add, remove, recover, or
+  supersede it. Detectors exclude it regardless of ref/topology changes, and
+  queued workers re-check it before checkout or model work, preventing an
+  operator pause from being raced by an already-dispatched AI/Vercel/GitHub
+  automation. — Codex (AI), 2026-08-24
 - **Manual develop-preview recovery reaches the trusted controller again**:
   GitHub could drop the reusable workflow's forwarded typed input while
   evaluating its job guard, producing an immediate failed run with no jobs.
