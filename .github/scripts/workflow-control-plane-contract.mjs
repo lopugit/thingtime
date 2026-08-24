@@ -834,8 +834,9 @@ export function assertControlPlaneContract() {
 }
 
 // The only paths this branch may hold at its root. `.github/**` is the point of
-// the branch; `.gitattributes` preserves the generated graph's merge contract,
-// and the AI instruction trio stays because agents work here too
+// the branch; `graphify-out/` is a required portable repository map and
+// `.gitattributes` preserves its generated graph merge contract. The AI
+// instruction trio stays because agents work here too
 // (`AGENTS.md` and `CLAUDE.md` are symlinks to `AI_ALL.md`, so all three must
 // travel together or the links dangle).
 export const CONTROL_PLANE_ROOTS = new Set([
@@ -848,6 +849,7 @@ export const CONTROL_PLANE_ROOTS = new Set([
   "README.md",
   "CHANGELOG.md",
   "vercel.json",
+  "graphify-out",
 ]);
 
 // The bare-tree invariant. Without it the branch regrows silently — someone

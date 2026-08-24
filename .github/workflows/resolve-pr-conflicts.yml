@@ -2379,7 +2379,7 @@ jobs:
           # Lopu publishes the verified result directly. Use the workflow-scoped
           # token when configured so the GitHub API can accept workflow-file
           # changes; otherwise make the normal scoped-token attempt and report
-          # the server response without quarantining the promotion first.
+          # the server response without blocking the promotion first.
           push_token="$DEFAULT_TOKEN"
           if [ -n "$PUSH_PAT" ]; then
             push_token="$PUSH_PAT"

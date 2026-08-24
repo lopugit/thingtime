@@ -427,7 +427,7 @@ export function inspectSourcePresence(
       error:
         `source-lineage safety block: the exact historical patch is not present at current ` +
         `\`${CFG.source}\` tip; it may have been intentionally removed or reverted, so the ` +
-        "promotion is quarantined for review instead of being published as verified",
+        "Lopu will create a reviewable candidate instead of labelling the patch verified",
       sourceLineageStatus: "review-required-removed",
     };
   }
@@ -437,7 +437,7 @@ export function inspectSourcePresence(
       error:
         `source-lineage safety block: the exact historical patch cannot be proven present at ` +
         `current \`${CFG.source}\` tip because later edits overlap its effect, so the ` +
-        "promotion is quarantined for review instead of being published as verified",
+        "Lopu will create a reviewable candidate instead of labelling the patch verified",
       sourceLineageStatus: "review-required-ambiguous",
     };
   }
@@ -2298,8 +2298,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     assert.equal(ancestryReverted.sourceLineageStatus, "review-required-removed");
     assert.match(
       ancestryReverted.error,
-      /quarantined for review instead of being published as verified/,
-      "the verdict must describe the quarantine, not claim nothing was created",
+      /Lopu will create a reviewable candidate instead of labelling the patch verified/,
+      "the verdict must describe Lopu's candidate rather than claim nothing was created",
     );
 
     // Reproduce the historical failure: force-rewrite develop to an equivalent
@@ -2947,7 +2947,7 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       {
         promotionContext: {
           ...reservationContext.context,
-          paths: [".github/workflows/quarantine-restart-canary.yml"],
+          paths: [".github/workflows/lopu-restart-canary.yml"],
         },
         actualBranchName: reservationBranch,
         gitRunner: testTryGit,
@@ -3030,8 +3030,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     // Merely finding an equivalent rewritten commit in history is not enough:
     // if a later source commit reverts it, preflight must refuse to call the
     // plan verified. Under the never-cancel policy that no longer means
-    // dropping the promotion — the plan survives, quarantined, so the trusted
-    // worker opens a labelled review PR instead of the change vanishing.
+    // dropping the promotion — the plan survives so Lopu can open a labelled
+    // review PR instead of the change vanishing.
     testGit(["revert", "--no-edit", rewrittenSha], writer);
     testGit(["push", "origin", "HEAD:develop"], writer);
     testGit([
@@ -3049,7 +3049,7 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     assert.match(revertedPlan.sourceLineageDetail, /source-lineage safety block/);
     assert.ok(
       Array.isArray(revertedPlan.picks) && revertedPlan.picks.length > 0,
-      "the quarantined plan must keep its picks so the worker has something to replay",
+      "the reviewable plan must keep its picks so Lopu has something to replay",
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -3071,12 +3071,12 @@ async function selfTest() {
       sourceLineageReviewRequired: true,
     }),
     true,
-    "an open promotion whose source patch was removed is quarantined, never closed",
+    "an open promotion whose source patch was removed remains reviewable, never closed",
   );
   assert.equal(
     sourceLineageReviewRequired({ sourceLineageStatus: "verified" }),
     false,
-    "verified source lineage never quarantines a promotion",
+    "verified source lineage needs no extra review state",
   );
 
   const pr = { number: 7, headRefName: "claude/search-index-abc123", title: "feat: add search" };
@@ -4473,8 +4473,8 @@ export function preflightPromotionPlans(
         // This used to drop the promotion entirely — no branch, no worker, no
         // PR, the verdict visible only in a run log — which is how #211 (the
         // conversion of `main` to thin listeners) went a full day unnoticed.
-        // The plan is kept and quarantined instead: because the status is not
-        // `verified`, `sourceLineageReviewRequired` routes it through the
+        // The plan is kept for Lopu: because the status is not `verified`,
+        // `sourceLineageReviewRequired` routes it through the
         // trusted AI worker, and the PR it opens carries the
         // `source-lineage-unverified` label plus a body that tells the reviewer
         // exactly what could not be proven. The safety property is unchanged —
@@ -4932,7 +4932,7 @@ async function runPromotion(results, state) {
       results.lineageReview.push(
         `#${pr.number} — exact historical patch recovered, but source lineage is ` +
         `\`${plan.sourceLineageStatus}\`: ${sourceLineageReason(plan.sourceLineageStatus)} ` +
-        "The workflow will create a visibly quarantined review candidate instead of treating it as verified.",
+        "Lopu will create a reviewable candidate instead of treating it as verified.",
       );
     } else if (plan?.sourceRewritten) {
       results.recovered.push(
@@ -5220,7 +5220,7 @@ async function runPromotion(results, state) {
         const loaded = loadExternalPromotionPlan(promotion);
         // NEVER CANCEL. An open promotion whose source lineage degrades used to
         // be CLOSED here, pre-empting review of a PR a human had already been
-        // given. It is now left open and handled by the quarantine path
+        // given. It is now left open and handled by Lopu's review path
         // immediately below: `sourceLineageReviewRequired` re-stamps the
         // metadata and the `source-lineage-unverified` label, so the reviewer
         // sees the downgraded verdict on the PR rather than losing the PR.
@@ -5845,7 +5845,7 @@ async function runPromotion(results, state) {
           ) {
             if (CFG.dryRun) {
               results.recovered.push(
-                `(dry-run) would finish the review-gated checkpoint for promotion #${record.number}.`,
+                `(dry-run) would finish the prior checkpoint recovery for promotion #${record.number}.`,
               );
             } else {
               const recovered = recoverPromotionReviewCheckpoint(

@@ -63,9 +63,9 @@ require_environment() {
   [[ "$SOURCE_START_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_START_SHA must be a full SHA-1."
   [[ "$SOURCE_TIP_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_TIP_SHA must be a full SHA-1."
   [[ "$SOURCE_END_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_END_SHA must be a full SHA-1."
-  # NEVER CANCEL (owner decision, 2026-08-12): review-required lineage is
-  # accepted and review-gates publication instead of refusing it. The set is
-  # closed; anything else still fails.
+  # Historical lineage that needs product judgment is replayed for Lopu to
+  # assess rather than discarded. The set is closed; anything else still
+  # fails.
   case "$SOURCE_LINEAGE_STATUS" in
     verified|review-required-removed|review-required-ambiguous) ;;
     *) fail "SOURCE_LINEAGE_STATUS must be verified, review-required-removed, or review-required-ambiguous; got '$SOURCE_LINEAGE_STATUS'." ;;
@@ -172,8 +172,8 @@ write_plan() {
   observed_lineage="$(classify_source_lineage "$repo" "$lineage_patch_file")"
   # The independent re-derivation must agree with the trusted handoff exactly —
   # both run against the immutable SOURCE_TIP_SHA, so any difference means a
-  # forged or stale plan, never honest drift. A non-verified agreement is NOT a
-  # refusal (never-cancel): it review-gates publication below instead.
+  # forged or stale plan, never honest drift. A non-verified agreement remains
+  # eligible for Lopu's normal promotion path.
   [[ "$observed_lineage" == "$SOURCE_LINEAGE_STATUS" ]] \
     || fail "Source-lineage classification differs from the trusted handoff ($observed_lineage != $SOURCE_LINEAGE_STATUS)."
 
