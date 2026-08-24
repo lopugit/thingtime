@@ -33,6 +33,7 @@ export interface IndexConfiguration {
   customIgnores?: IgnoreRule[];
   maxEntries?: number | null;
   resourceLimits?: IndexResourceLimits;
+  pruneSourcePrefixes?: string[];
 }
 
 export interface IndexRecord {

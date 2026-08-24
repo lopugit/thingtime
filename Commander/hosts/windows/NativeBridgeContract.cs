@@ -16,6 +16,7 @@ public sealed record NativeSettingsSnapshot(
     string WindowMode,
     WindowPinningSettings WindowPinning);
 public sealed record CredentialKey(string Issuer, string ClientId, string AccountId);
+public sealed record FullDiskAccessStatus(bool Granted);
 public sealed record SystemMemoryBreakdown(
     long UsedBytes,
     long TotalBytes,
@@ -93,5 +94,6 @@ public interface INativeBridge
     Task UnlockCredentialAsync(CredentialKey key);
     Task DeleteCredentialAsync(CredentialKey key);
     Task<SystemMetricsSnapshot> GetSystemMetricsAsync();
+    Task<FullDiskAccessStatus> GetFullDiskAccessStatusAsync();
     Task ShowNotificationAsync(string id, string title, string body);
 }

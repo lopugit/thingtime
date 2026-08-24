@@ -75,7 +75,7 @@ export const COMMAND_SHORTCUT_LIMIT = 256;
 export const INDEXING_ROOT_LIMIT = 32;
 export const INDEXING_IGNORE_RULE_LIMIT = 256;
 export const INDEXING_MAX_ENTRIES_LIMIT = Number.MAX_SAFE_INTEGER;
-export const INDEXING_SETTINGS_VERSION = 4 as const;
+export const INDEXING_SETTINGS_VERSION = 5 as const;
 export const INDEXING_MAX_THREADS_LIMIT = 64;
 export const INDEXING_MAX_PARALLELISM_LIMIT = 64;
 export const INDEXING_MAX_OPEN_DIRECTORIES_LIMIT = 256;
@@ -167,7 +167,10 @@ export const DEFAULT_ACTIVITY_SETTINGS: ActivitySettings = {
 export const DEFAULT_INDEXING_SETTINGS: IndexingSettings = {
   version: INDEXING_SETTINGS_VERSION,
   enabled: true,
-  roots: ['~'],
+  // `/` is expanded by the daemon into the boot volume plus currently mounted
+  // macOS volumes. The Rust walker never crosses a mount boundary implicitly,
+  // so each file is indexed once unless a user explicitly adds an overlap.
+  roots: ['/'],
   respectGitIgnore: true,
   includeHidden: true,
   customIgnores: [
@@ -663,6 +666,10 @@ export function normalizeIndexingSettings(value: unknown): IndexingSettings {
         ? Math.min(24 * 60, Math.max(5, candidate.refreshIntervalMinutes!))
         : DEFAULT_INDEXING_SETTINGS.refreshIntervalMinutes;
   const currentVersion = candidate.version === INDEXING_SETTINGS_VERSION;
+  // `~` was Commander’s default before whole-volume indexing. Preserve every
+  // deliberate multi-root/custom configuration, while upgrading that legacy
+  // singleton default so existing installs receive the new behavior.
+  const upgradeLegacyDefaultRoot = !currentVersion && roots.length === 1 && roots[0] === '~';
   const maxEntries =
     candidate.maxEntries === null
       ? null
@@ -675,7 +682,11 @@ export function normalizeIndexingSettings(value: unknown): IndexingSettings {
   return {
     version: INDEXING_SETTINGS_VERSION,
     enabled: typeof candidate.enabled === 'boolean' ? candidate.enabled : DEFAULT_INDEXING_SETTINGS.enabled,
-    roots: roots.length ? roots : [...DEFAULT_INDEXING_SETTINGS.roots],
+    roots: upgradeLegacyDefaultRoot
+      ? [...DEFAULT_INDEXING_SETTINGS.roots]
+      : roots.length
+        ? roots
+        : [...DEFAULT_INDEXING_SETTINGS.roots],
     respectGitIgnore:
       typeof candidate.respectGitIgnore === 'boolean'
         ? candidate.respectGitIgnore
@@ -1101,6 +1112,7 @@ export interface NativeRequest<T = unknown> {
     | 'filesystem.trash'
     | 'filesystem.delete'
     | 'system.metrics'
+    | 'permission.fullDiskAccess'
     | 'notification.show'
     | 'settings.open'
     | 'application.open'

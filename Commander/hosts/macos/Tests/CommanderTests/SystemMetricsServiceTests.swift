@@ -3,6 +3,14 @@ import XCTest
 
 @MainActor
 final class SystemMetricsServiceTests: XCTestCase {
+  func testFullDiskAccessProbeReportsTheInjectedPermissionState() {
+    XCTAssertTrue(FullDiskAccessService.isGranted { path in
+      XCTAssertEqual(path, FullDiskAccessService.protectedProbePath)
+      return true
+    })
+    XCTAssertFalse(FullDiskAccessService.isGranted { _ in false })
+  }
+
   func testParsesMacOSGPUUtilizationWithOrWithoutSpacing() {
     XCTAssertEqual(
       SystemMetricsService.gpuUtilization(

@@ -233,6 +233,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
         try FileManager.default.removeItem(at: url)
         result = ["deleted": true]
       case "system.metrics": result = metrics.snapshot()
+      case "permission.fullDiskAccess": result = ["granted": FullDiskAccessService.isGranted]
       case "notification.show":
         guard let id = request.params?["id"]?.string,
               let title = request.params?["title"]?.string,

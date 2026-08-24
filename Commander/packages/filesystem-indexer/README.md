@@ -34,6 +34,11 @@ Use separate reader and writer clients against the same database if a host
 wants searches to continue against the last committed snapshot while a large
 background scan is running. SQLite WAL mode makes this safe.
 
+For a dynamic mounted-volume inventory, send stable source IDs and set
+`pruneSourcePrefixes` (for example `['filesystem:']`). Once all configured
+sources complete successfully, records from that namespace whose source is no
+longer present are removed; unrelated namespaces are retained.
+
 Resource limits are optional and use the Rust engine's balanced defaults when
 omitted. A completed `IndexReport.resources` records the effective worker count,
 logical CPU count, average whole-machine CPU share, peak resident memory,

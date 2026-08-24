@@ -34,6 +34,16 @@ export class SearchService {
     return this.#items;
   }
 
+  /**
+   * Returns the immutable-in-practice catalog a search should use for its
+   * entire lifetime. A catalog refresh swaps `#items` atomically, so taking a
+   * shallow copy here keeps an in-flight streamed search coherent while the
+   * next search sees the newer catalog immediately.
+   */
+  snapshot(): SearchItem[] {
+    return [...this.#items];
+  }
+
   async search(
     query: string,
     limit = 30,
@@ -41,10 +51,30 @@ export class SearchService {
     preferenceScores: Readonly<Record<string, number>> = {},
     categoryOrder: readonly SearchCategory[] = ['applications', 'commands', 'files'],
   ): Promise<SearchHit[]> {
-    const items = mergeItems(this.#items, additionalItems).map((item) => {
+    return this.searchSnapshot(
+      query,
+      this.snapshot(),
+      limit,
+      additionalItems,
+      preferenceScores,
+      categoryOrder,
+    );
+  }
+
+  async searchSnapshot(
+    query: string,
+    catalog: readonly SearchItem[],
+    limit = 30,
+    additionalItems: SearchItem[] = [],
+    preferenceScores: Readonly<Record<string, number>> = {},
+    categoryOrder: readonly SearchCategory[] = ['applications', 'commands', 'files'],
+  ): Promise<SearchHit[]> {
+    const items = mergeItems(catalog, additionalItems).map((item) => {
       const preferenceScore = Math.min(
         100_000,
-        Math.max(0, preferenceScores[item.id] ?? 0) + categoryPreferenceScore(item, categoryOrder),
+        Math.max(0, item.preferenceScore ?? 0) +
+          Math.max(0, preferenceScores[item.id] ?? 0) +
+          categoryPreferenceScore(item, categoryOrder),
       );
       return preferenceScore ? { ...item, preferenceScore } : item;
     });
@@ -137,8 +167,8 @@ function categoryPreferenceScore(item: SearchItem, order: readonly SearchCategor
   return Math.max(0, order.length - index - 1) * 600;
 }
 
-function mergeItems(catalog: SearchItem[], additional: SearchItem[]): SearchItem[] {
-  if (!additional.length) return catalog;
+function mergeItems(catalog: readonly SearchItem[], additional: SearchItem[]): SearchItem[] {
+  if (!additional.length) return [...catalog];
   const seen = new Set<string>();
   return [...catalog, ...additional].filter((item) =>
     seen.has(item.id) ? false : (seen.add(item.id), true),

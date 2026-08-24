@@ -5600,19 +5600,19 @@
     "semantic_hash": "70e04ae967eb4d9727e3231ef76eb7b0"
   },
   "Commander/apps/daemon/src/server.test.ts": {
-    "mtime": 1787555679.2700574,
-    "ast_hash": "17b3072bdda4d282838f6277dd2d3579",
+    "mtime": 1787575850.424032,
+    "ast_hash": "1f6dd767a6ff9f7c8f579846ebcd75c4",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/server.ts": {
-    "mtime": 1787555639.2085056,
-    "ast_hash": "4992c517bb4ee2994abf98bc3dd56dd1",
+    "mtime": 1787575360.7049618,
+    "ast_hash": "f24ddc40832a11c65137bb9ae8d45443",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/applications.ts": {
-    "mtime": 1787315534.6728673,
-    "ast_hash": "8d402e63a15e4126cdc74c75100e7712",
-    "semantic_hash": "8d402e63a15e4126cdc74c75100e7712"
+    "mtime": 1787575865.3748271,
+    "ast_hash": "2f7ce3d865fa28b87e379b76bb31f1ba",
+    "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/calculator.test.ts": {
     "mtime": 1787372670.3990464,
@@ -5625,9 +5625,9 @@
     "semantic_hash": "bc67fc702d8001a94e9f83a95a4a2fb4"
   },
   "Commander/apps/daemon/src/services/catalog.ts": {
-    "mtime": 1787470002.39849,
-    "ast_hash": "5488b42c50f297ca7717f9265f7b01f4",
-    "semantic_hash": "5488b42c50f297ca7717f9265f7b01f4"
+    "mtime": 1787575804.94388,
+    "ast_hash": "7dd1b2794d2960e8e6650c64fd726a91",
+    "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/config.ts": {
     "mtime": 1787120414.6268342,
@@ -5640,8 +5640,8 @@
     "semantic_hash": "e8315a94898451849a7d8da6b2f75162"
   },
   "Commander/apps/daemon/src/services/indexing.ts": {
-    "mtime": 1787560084.5753944,
-    "ast_hash": "d0fd872f5390ed923099f15505132c86",
+    "mtime": 1787575878.8396828,
+    "ast_hash": "2ff13670d97dc18e9d373fd1dcf67682",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/macosSystem.test.ts": {
@@ -5660,8 +5660,8 @@
     "semantic_hash": "ab5e00a09d5d17b1ca7bae2da3aa393b"
   },
   "Commander/apps/daemon/src/services/persistence.test.ts": {
-    "mtime": 1787560150.6391876,
-    "ast_hash": "6a0f57e4398386d3d11564c925c60be5",
+    "mtime": 1787575360.7084324,
+    "ast_hash": "e39b549698b5204069fdaeb2303168a2",
     "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/persistence.ts": {
@@ -5680,14 +5680,14 @@
     "semantic_hash": "0e885386b1962acf2f10bb76858955fa"
   },
   "Commander/apps/daemon/src/services/search.test.ts": {
-    "mtime": 1787316882.7950351,
-    "ast_hash": "65a25748e7361de0e5ddac232fca8109",
-    "semantic_hash": "65a25748e7361de0e5ddac232fca8109"
+    "mtime": 1787575797.452062,
+    "ast_hash": "84cfef78f13f248151db60222a9d7e4f",
+    "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/search.ts": {
-    "mtime": 1787315428.8331175,
-    "ast_hash": "b4aa81ba11fba96fdfb52643f63bef73",
-    "semantic_hash": "b4aa81ba11fba96fdfb52643f63bef73"
+    "mtime": 1787575779.882945,
+    "ast_hash": "fed8c8609eaa34b918ce88535824af86",
+    "semantic_hash": ""
   },
   "Commander/apps/daemon/src/services/searchCache.test.ts": {
     "mtime": 1787321979.5227537,
@@ -5785,8 +5785,8 @@
     "semantic_hash": "01b65afd46e858d575e5b34854dfcb2e"
   },
   "Commander/apps/desktop-ui/src/components/IndexingSettings.tsx": {
-    "mtime": 1787560283.9078915,
-    "ast_hash": "458d37461614b72edc5e55c87052ca0a",
+    "mtime": 1787575711.4562314,
+    "ast_hash": "2c1e63663dae0cb2a0257573a2724cf1",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Launcher.test.tsx": {
@@ -5820,8 +5820,8 @@
     "semantic_hash": "3aaae03456faab7f3b26e75252399afe"
   },
   "Commander/apps/desktop-ui/src/components/Settings.test.tsx": {
-    "mtime": 1787560134.591379,
-    "ast_hash": "007b1b8c78103eabd6defed9d65f3a8c",
+    "mtime": 1787575653.309021,
+    "ast_hash": "4836eed95d8c711612a32019afc09219",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Settings.tsx": {
@@ -5920,8 +5920,8 @@
     "semantic_hash": "0f2eeba7f17f1120fabf7e1bfa244a2a"
   },
   "Commander/crates/commander-indexer/src/lib.rs": {
-    "mtime": 1787558275.6542628,
-    "ast_hash": "0abbad7022d1c87a4e222132fadfe5d6",
+    "mtime": 1787575637.7952552,
+    "ast_hash": "5854ed749bbd09103ce95c38aa0eb12a",
     "semantic_hash": ""
   },
   "Commander/crates/commander-indexer/src/main.rs": {
@@ -6205,8 +6205,8 @@
     "semantic_hash": "eccbec619ae5dd913af481b28cd1884a"
   },
   "Commander/hosts/macos/Sources/Commander/Bridge/CommanderNativeBridge.swift": {
-    "mtime": 1787560116.5758302,
-    "ast_hash": "1725f264fcac021d378723b3776c7e87",
+    "mtime": 1787574863.7063375,
+    "ast_hash": "1b06432766d930154bdfc4c8acf61470",
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Services/DaemonSupervisor.swift": {
@@ -6265,9 +6265,9 @@
     "semantic_hash": "4215c20a5ebe4c44d4e0b44550204fca"
   },
   "Commander/hosts/macos/Tests/CommanderTests/SystemMetricsServiceTests.swift": {
-    "mtime": 1787474587.1735284,
-    "ast_hash": "9d22a057b06311e955272344aeaa79c0",
-    "semantic_hash": "9d22a057b06311e955272344aeaa79c0"
+    "mtime": 1787574863.7078164,
+    "ast_hash": "2db9231824767bb984946a84707d867a",
+    "semantic_hash": ""
   },
   "Commander/hosts/windows/Commander.Host.csproj": {
     "mtime": 1786538031.00106,
@@ -6275,8 +6275,8 @@
     "semantic_hash": "b96287f4582ebd532a2ae02d4cb34a4b"
   },
   "Commander/hosts/windows/NativeBridgeContract.cs": {
-    "mtime": 1787560016.831953,
-    "ast_hash": "4489f6265ab0b9c57fa2ef1fd4360fad",
+    "mtime": 1787574863.7069135,
+    "ast_hash": "4b1759938e3e076f291a96380a5edd31",
     "semantic_hash": ""
   },
   "Commander/package.json": {
@@ -6295,8 +6295,8 @@
     "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/src/index.ts": {
-    "mtime": 1787559968.7820754,
-    "ast_hash": "9282f10284eaf155db5c8d08e80e260c",
+    "mtime": 1787575625.1335928,
+    "ast_hash": "3739bdf01979ca6b83a5cf092791312e",
     "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/src/test-fixtures/fake-indexer.mjs": {
@@ -6315,13 +6315,13 @@
     "semantic_hash": "0ce06d40e2d7a57e255d7ef9279abd74"
   },
   "Commander/packages/protocol/src/index.test.ts": {
-    "mtime": 1787560029.864937,
-    "ast_hash": "100e696606bc079547fc86403d175ab6",
+    "mtime": 1787575711.5693514,
+    "ast_hash": "d0b9eaf8271903be3460d335a12f0bf4",
     "semantic_hash": ""
   },
   "Commander/packages/protocol/src/index.ts": {
-    "mtime": 1787559935.3912005,
-    "ast_hash": "931d0613b523c9b9f24fdebaef7d064c",
+    "mtime": 1787575392.4312015,
+    "ast_hash": "8ed2a7707df0e40135fff277343eaf7e",
     "semantic_hash": ""
   },
   "Commander/packages/protocol/tsconfig.json": {
@@ -6965,8 +6965,8 @@
     "semantic_hash": ""
   },
   "Commander/crates/commander-indexer/README.md": {
-    "mtime": 1787317016.3028278,
-    "ast_hash": "2721cdfd501035e5165ad7e38f7b68fa",
+    "mtime": 1787575668.1627924,
+    "ast_hash": "35b3bf5494371a2f339ea39775924bc0",
     "semantic_hash": ""
   },
   "Commander/design/DESIGN_SYSTEM.md": {
@@ -6980,8 +6980,8 @@
     "semantic_hash": ""
   },
   "Commander/docs/TESTING.md": {
-    "mtime": 1787560160.8322663,
-    "ast_hash": "c01fdcc486b65f7bcc0cf4dd3c737c6a",
+    "mtime": 1787575517.0662348,
+    "ast_hash": "528efb3d847407df3474712d466ed120",
     "semantic_hash": ""
   },
   "Commander/extensions/README.md": {
@@ -7025,8 +7025,8 @@
     "semantic_hash": ""
   },
   "Commander/packages/filesystem-indexer/README.md": {
-    "mtime": 1787317016.3026006,
-    "ast_hash": "af6f0ea8fa5e4ed1a473edddb18b772f",
+    "mtime": 1787575668.1635544,
+    "ast_hash": "a7012211f36e6a08c231a568da6d1324",
     "semantic_hash": ""
   },
   "Commander/pnpm-workspace.yaml": {
@@ -7672,6 +7672,16 @@
   "Commander/extensions/raycast/metadata/sips-4.png": {
     "mtime": 1786536620.862555,
     "ast_hash": "60a7fb5a6eedd8efc2c1da97c3aa0bab",
+    "semantic_hash": ""
+  },
+  "Commander/apps/daemon/src/services/applications.test.ts": {
+    "mtime": 1787575691.4216032,
+    "ast_hash": "c142768706b2895fbbd770d4f224a21b",
+    "semantic_hash": ""
+  },
+  "Commander/hosts/macos/Sources/Commander/Services/FullDiskAccessService.swift": {
+    "mtime": 1787574863.7071347,
+    "ast_hash": "3310fd078377d009dbe8fbe6a9aaae3e",
     "semantic_hash": ""
   }
 }
