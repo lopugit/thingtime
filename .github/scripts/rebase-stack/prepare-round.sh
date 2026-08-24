@@ -66,15 +66,9 @@ unsafe_path_syntax() {
   [[ "$path" =~ [[:cntrl:]] ]]
 }
 
-# There is deliberately NO sensitive-path deny-list here. Owner decision
-# (2026-08-12): the model may be shown any conflicted repo file. What still
-# constrains a resolution: mechanical shape checks below (regular files,
-# coherent markers, the size cap), the scope verifier (only recomputed
-# conflicted paths may change), and publication gating — CI-sensitive and
-# review-gated content ships [skip ci] with approval-required checks, so
-# model-authored content in CI-executing files does not run before a human
-# approves it. Do not reintroduce a path deny-list; the contract pins its
-# absence.
+# Lopu receives every conflicted repository file. The normal mechanical
+# correctness checks below still validate file shape, marker coherence, and
+# the recomputed conflict set; they are not path or publication restrictions.
 
 has_coherent_zdiff3_markers() {
   # A bare ======= outside an active conflict is intentionally ignored: it is

@@ -19,6 +19,22 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+### Changed
+
+- **Lopu now performs whole-PR repository reviews in the same control plane**:
+  a push or selector creates one serialized Lopu batch for the affected clean
+  same-repository PRs, each checked out against its target branch. Lopu reviews
+  the full codebase context, makes only justified fixes, commits and pushes
+  them to the PR heads, and posts a Lopu-branded update with the configured
+  Claude backend and validation report. — Codex (AI), 2026-08-24
+- **Lopu is now the single public PR-management workflow**: the conflict,
+  promotion, rebase, and stack-cascade paths share one Lopu entrypoint and a
+  serialized model-worker fleet. Clean `.github/**` promotions now publish
+  directly, without CI-sensitive quarantine, `[skip ci]` content commits, or
+  synthetic review checkpoints; Lopu receives full repository, shell, GitHub,
+  and web-tool access while deterministic Git checks continue to validate the
+  result. — Codex (AI), 2026-08-24
+
 ### Fixed
 
 - **`ai-merge-paused` is now a durable user-controlled stop label**: neither
