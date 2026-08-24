@@ -17,6 +17,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-08-24 — Action Thing v1 (declarative, capability-bounded programs)
+
+- New `action` + protected `action-run` kinds, executor
+  (`api/utils/actions/execute.ts`), `POST /api/v1/actions/run` +
+  `GET /api/v1/actions/runs`, /actions browse + inspector UI, ⚡ kind renderer
+  and Actions filter on /things, drawer entry, and the Customer/Invoice demo
+  seed (`scripts/seed-demo-app.mjs`). Verified by
+  `scripts/verify-actions.mjs` (52 live checks) + browser click-through.
+  Details: `PRs/action-thing-v1-design.md` and PR #387 (stacked on the
+  Components runtime split, PR #382).
+
 ### Changed
 
 - **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**

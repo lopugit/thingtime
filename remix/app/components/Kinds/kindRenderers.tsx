@@ -777,6 +777,65 @@ const ComponentKindRenderer = ({ value }: { value: ComponentKindValue; context: 
 	);
 };
 
+// ————— ⚡ action (declarative capability-bounded program) —————
+
+type ActionKindValue = {
+	name: string;
+	actionKey: string | null;
+	description: string | null;
+	ops: string[];
+	stepCount: number;
+	capabilityCount: number;
+};
+
+// Minimalist, Apple-like: quiet tinted dots per op tone instead of loud
+// badges, hairline chip borders, tokens throughout. Sizes ride the existing
+// context scale (compact → sm row, card → md, full → lg with description).
+const ACTION_OP_DOTS: Record<string, string> = {
+	'things.create': 'var(--tt-warning, #e8a33d)',
+	'things.update': 'var(--tt-warning, #e8a33d)',
+	'things.get': 'var(--tt-link, #4c7dff)',
+	'things.search': 'var(--tt-link, #4c7dff)',
+	'actions.invoke': 'var(--tt-accent, #7c6cff)',
+	return: 'var(--tt-muted, #9a9aa6)'
+};
+
+const ActionKindRenderer = ({ value, context }: { value: ActionKindValue; context: KindRenderContext }) => {
+	const size = context.size === 'compact' ? 'sm' : context.size === 'full' ? 'lg' : 'md';
+	const nameSize = size === 'sm' ? '13px' : size === 'lg' ? '16px' : '14px';
+	return (
+		<Box width="100%">
+			<Flex align="center" gap={2} minW={0}>
+				<Text fontSize={nameSize} lineHeight="1.2">
+					⚡
+				</Text>
+				<Text color="var(--tt-ink, #16161a)" fontSize={nameSize} fontWeight="600" isTruncated>
+					{value.name}
+				</Text>
+				<Flex align="center" gap="5px" ml="auto">
+					{value.ops.map((op) => (
+						<Box background={ACTION_OP_DOTS[op] || 'var(--tt-muted, #9a9aa6)'} borderRadius="full" height="6px" key={op} title={op} width="6px" />
+					))}
+				</Flex>
+			</Flex>
+			{size !== 'sm' ? (
+				<Flex align="center" gap={2} mt={1.5} wrap="wrap">
+					{value.actionKey ? <MutedMono>{value.actionKey}</MutedMono> : null}
+					<MutedMono>
+						{value.stepCount} step{value.stepCount === 1 ? '' : 's'} · {value.capabilityCount}{' '}
+						{value.capabilityCount === 1 ? 'capability' : 'capabilities'}
+					</MutedMono>
+				</Flex>
+			) : null}
+			{size === 'lg' && value.description ? (
+				<Text color="var(--tt-text, #33333c)" fontSize="13px" mt={2}>
+					{value.description}
+				</Text>
+			) : null}
+		</Box>
+	);
+};
+
 // ————— registration —————
 // Wrapped in an exported function (called lazily by kindRegistry) instead of running
 // at module scope: remix/package.json sets "sideEffects": false, so a bare
@@ -1134,6 +1193,40 @@ registerKindRenderer({
 		return { render: crystal.render, values: { ...defaultsFromArgs(args), ...savedArgs } };
 	},
 	render: ComponentKindRenderer
+});
+
+registerKindRenderer({
+	kind: 'action',
+	title: 'Action',
+	emoji: '⚡',
+	category: 'Builder',
+	description:
+		'A declarative capability-bounded program — typed inputs, a closed step vocabulary, explicit capabilities, and a shared execution budget. Inspect and run it on /actions.',
+	aliases: ['action-thing'],
+	match: (thing) => {
+		const crystal = thing.crystal as Record<string, unknown> | undefined;
+		return !!crystal && typeof crystal === 'object' && Array.isArray(crystal.steps) && ('capabilities' in crystal || 'actionKey' in crystal);
+	},
+	adapt: (thing): ActionKindValue | null => {
+		const crystal = ((thing.crystal as Record<string, unknown> | undefined) ?? thing) as Record<string, unknown>;
+		if (!Array.isArray(crystal.steps)) return null;
+		const ops = [
+			...new Set(
+				crystal.steps
+					.map((step) => (step && typeof step === 'object' ? String((step as Record<string, unknown>).op || '') : ''))
+					.filter(Boolean)
+			)
+		];
+		return {
+			name: typeof crystal.name === 'string' ? crystal.name : 'Action',
+			actionKey: typeof crystal.actionKey === 'string' ? crystal.actionKey : null,
+			description: typeof crystal.description === 'string' ? crystal.description : null,
+			ops,
+			stepCount: crystal.steps.length,
+			capabilityCount: Array.isArray(crystal.capabilities) ? crystal.capabilities.length : 0
+		};
+	},
+	render: ActionKindRenderer
 });
 
 };

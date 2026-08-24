@@ -2645,3 +2645,35 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       followed by topical tags (component, library, category, per-component
       topics); the attribution tag survives a reseed (it is stamped first so
       per-definition tags can never squeeze it out).
+
+## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
+
+- [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
+      end to end (52 checks: closed-vocabulary + capability-coverage + scope +
+      ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
+      run-time scope enforcement, shared budget across actions.invoke, direct +
+      ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
+      owner-private history, private-action 404, docs twins).
+- [ ] `node remix/scripts/seed-demo-app.mjs http://127.0.0.1:<nitro-port> <user>`
+      seeds the Customer/Invoice demo idempotently (re-run reports "exists").
+- [ ] /actions lists your actions with derived effect chips (creates/reads/
+      updates/invokes + the limits envelope) and schema IDs resolve to display
+      names; clicking a card opens /actions/:id.
+- [ ] The inspector shows Takes / Does (numbered steps with op tones, invoke
+      steps deep-link to the invoked action) / Can access / Cannot access (no
+      network, no secrets, no deletes + scoped-only lines) / Limits / Effects,
+      and the raw definition.
+- [ ] The Run panel renders one typed input per descriptor, runs the action,
+      and shows status + duration + ops/depth/child budget usage + the
+      hierarchical trace (1 → 1.1/1.2 for invoked children) with /thing/<id>
+      links; the Lopu toast fires on success and error.
+- [ ] Last runs refreshes after an in-page run and survives a reload (the
+      protected action-run trail).
+- [ ] A composed action (onboard-customer) consumes ONE shared budget: opsUsed
+      counts child ops, depthUsed 1, childActionsUsed 2.
+- [ ] /things: ⚡ action things render via the action kind renderer, the
+      Actions filter pill scopes the grid, and clicking an action opens the
+      inspector; data things created by runs render through their schema
+      {field} templates (the sent invoice shows "— sent" + sentAt).
+- [ ] Mobile (375px): /actions and the inspector have no horizontal scroll;
+      chips wrap; the run panel stays inside its card.
