@@ -599,6 +599,40 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'A bounded signed NDJSON sync progression.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }],
 		notes: ['Vercel cron runs the production bootstrap. Preview and non-Vercel deployments need an equivalent trusted deploy hook or scheduler to join and keep renewing their lease.']
 	}),
+	endpoint({
+		id: 'admin-peers',
+		group: 'admin',
+		title: 'Deployment peer explorer',
+		endpoint: '/api/v1/admin/peers',
+		summary: 'Returns an administrator-only, cursor-paged diagnostic projection of locally known deployment leases.',
+		detail:
+			'Used by Developer → Deployment peers. It reuses the signed mesh cursor bounds while returning JSON only to an authenticated administrator. It never exposes HMAC material, private keys, request signatures, or a peer traversal cursor; each row contains only origin, pinned public key, lease timestamps, and a derived active or expired status.',
+		auth: { mode: 'session-or-bearer', description: 'Thingtime administrator session or bearer token.' },
+		methods: ['GET'],
+		steps: ['GET one bounded page (default 25, maximum 50).', 'Follow nextCursor deliberately when more diagnostic rows are needed.', 'Use the Developer → Deployment peers page for all-field filtering and grid, card, or list presentation.'],
+		requestExamples: [{ name: 'Read one peer page', description: 'Administrators only.', method: 'GET', query: { limit: 25 } }],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Private diagnostic peer page.',
+				body: {
+					ok: true,
+					peers: [
+						{
+							origin: 'https://thingtime.com',
+							signingPublicKey: 'base64url-spki',
+							firstSeenAt: '2026-08-24T00:00:00.000Z',
+							lastSeenAt: '2026-08-24T00:05:00.000Z',
+							expiresAt: '2026-08-24T00:15:00.000Z',
+							status: 'active'
+						}
+					],
+					nextCursor: null
+				}
+			}
+		],
+		notes: ['The browser route is intentionally separate from /api/v1/peers. It cannot participate in gossip or access a deployment signing identity.']
+	}),
 	...deviceEndpointDocs,
   endpoint({
     id: 'docs',

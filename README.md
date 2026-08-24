@@ -488,6 +488,13 @@ bootstrap every five minutes using its existing `CRON_SECRET`; preview and
 non-Vercel deployments need the equivalent trusted deploy hook or scheduler.
 Do not expose either peer credential to clients or forks.
 
+Administrators can inspect the locally known lease projection at **Dev →
+Deployment peers** (`/peers`). The page calls a separate private,
+cursor-paginated admin endpoint—not the mesh protocol—and can filter every
+displayed public lease property in grid, card, or list form. It never returns
+HMAC material, private keys, signed request envelopes, or the persisted gossip
+cursor to a browser.
+
 For a local MongoDB instance you can instead use a complete URI with no password
 placeholder:
 

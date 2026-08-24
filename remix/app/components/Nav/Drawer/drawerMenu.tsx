@@ -121,6 +121,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/tests',
 		children: [
 			{ id: 'dev-admin', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true },
+			{ id: 'dev-peers', label: 'Deployment peers', icon: '🕸️', to: '/peers', adminOnly: true },
 			{ id: 'dev-tests', label: 'API tests', icon: '✅', to: '/tests' },
 			{ id: 'dev-crypto', label: 'Crypto', icon: '🔒', to: '/crypto' },
 			{ id: 'dev-migrations', label: 'Migrations', icon: '🛠️', to: '/migrations' }
