@@ -17,6 +17,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Changed
+
+- **Signed Desktop PR releases now use the protected `github-actions` control
+  plane**: this branch contains only a `pull_request_target`/manual listener;
+  the owner-and-label gate, immutable PR-SHA checkout, unsigned verification,
+  signing, notarization, and prerelease publishing remain in the reusable
+  implementation. — Codex (AI), 2026-08-24
+
 ### Added
 
 - **/branding redesigned as a full brand-resources page**: full-width
