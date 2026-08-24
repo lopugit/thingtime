@@ -179,26 +179,58 @@ a central pink/red mesh square. Native bundle verification requires both that
 resource and its `CFBundleIconFile` declaration before the helper can be
 embedded.
 
-The same settings surface includes **Thingtime versions & recovery**. It pages
-through the public GitHub Releases feed (up to 2,000 entries per refresh),
+The same settings surface includes **Thingtime versions & recovery**. It follows
+every public GitHub Releases page returned by the API (with loop detection),
 searches by SemVer, PR, branch, or commit, and accepts only a GitHub-hosted
 macOS `.zip` asset. Before a version can be launched or installed, Thingtime
-extracts it into `~/Library/Application Support/Thingtime/release-cache/`,
+extracts it into
+`~/Library/Application Support/com.thingtime.desktop/release-cache/`,
 checks the full nested app for its Developer ID signature, hardened runtime,
 notarization staple, exact Thingtime bundle IDs, and matching signed native
 node. A failed download or verification never changes the installed app.
 
-Cached `Thingtime.app` bundles are directly launchable as recovery versions.
-**Install** first caches the presently installed production app, then starts a
-tiny detached updater, quits the current app, runs the existing atomic
-installer, restarts the managed node only if it was registered, verifies the
-replacement, and reopens it. That installer restores the prior app and node if
-any replacement step fails. The cache keeps up to twelve explicitly verified
-bundles; remove an old entry from the UI before adding a thirteenth. **Reveal
-cache** makes the recovery folder accessible even if a future app UI is broken.
+**Launch** performs a recovery handoff: it starts a tiny detached helper, quits
+the current Thingtime instance, and only then opens the selected cached app, so
+two versions never operate the same user data concurrently. **Install** first
+caches the presently installed production app, then uses that same handoff to
+run the existing atomic installer, restart the managed node only if it was
+registered, verify the replacement, and reopen it. That installer restores the
+prior app and node if any replacement step fails. The cache keeps up to twelve
+explicitly verified bundles; remove an old entry from the UI before adding a
+thirteenth. **Reveal cache** makes the recovery folder accessible even if a
+future app UI is broken. If GitHub is offline, the settings surface still shows
+and permits launch/install of local recovery bundles; only browsing or caching
+new remote versions waits for GitHub to return.
 Auto-check remains stored at
 `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled` and defaults to
 on; it is a notification preference, never permission to install silently.
+
+### Standalone Thingtime Recovery
+
+`macos/ThingtimeRecovery` builds **Thingtime Recovery.app**, a small native
+SwiftUI application which stays separate from every Electron app version. It
+reads the shared desktop cache above, keeps its own verified launcher copies in
+`~/Library/Application Support/com.thingtime.desktop/recovery-cache`, and uses
+a separately signed helper to wait for the current app to exit before atomically
+switching either app. Replacing Thingtime Desktop saves the current verified
+desktop bundle first; replacing Recovery saves the current launcher first.
+
+The native app queries public GitHub Releases and distinguishes
+`Thingtime-Electron-App-Release-*.zip` from
+`Thingtime-Recovery-App-Release-*.zip`; Electron will never mistake a recovery
+asset for a desktop update. Build and install the local Apple Development copy
+with:
+
+```sh
+swift test --package-path macos/ThingtimeRecovery
+macos/ThingtimeRecovery/script/build_and_run.sh --verify
+```
+
+Production CI passes its imported Developer ID identity and notarization API
+key to `macos/ThingtimeRecovery/script/build-production-release.sh`. That
+script signs the helper before the outer bundle, notarizes a ZIP, staples the
+app, then runs strict codesign, Gatekeeper, and stapler verification before it
+emits the companion release ZIP. No recovery archive is published unsigned.
 
 ## GitHub Releases
 
@@ -241,17 +273,22 @@ packaged app stores the full CI release version in `electron/dist/web/metadata.j
 so the updater can distinguish `0.1.0+build.10423` from `0.1.0+build.10424`
 without requiring source-controlled version churn.
 
-`.github/workflows/electron-pr-release.yml` additionally creates signed
-**pre-releases for reviewable PR commits**. It never runs for forks. A PR must
+`.github/workflows/electron-pr-release.yml` defines signed **pre-releases for
+reviewable PR commits**. It never runs for forks. A PR must
 be same-repository, opened by the repository owner, and explicitly carry the
 `desktop-release` label; alternatively the owner may use **Run workflow** with
 the PR number. The workflow checks out that exact head commit, tests it before
 loading credentials, imports the Developer ID/notarization secrets only for the
-approved source, requires a macOS ZIP asset for recovery updates, and publishes
-a GitHub prerelease. Its version is SemVer and includes all provenance, for
+approved source, builds both the Electron ZIP and independently signed,
+notarized Recovery ZIP, and publishes a GitHub prerelease. Its version is
+SemVer and includes all provenance, for
 example `0.1.0-pr.68.codex-thingtime-mcp-desktop-connectors.gabcdef123456`.
 The PR number, normalized branch, and full commit are also recorded in the
-release notes.
+release notes. GitHub manual dispatch requires the workflow to exist on the
+default branch, and this repository keeps executable release behavior on the
+trusted `github-actions` ref. Therefore the equivalent signed PR runner must
+be deployed to that ref before it can publish review builds; a PR-local copy is
+reviewable policy and test coverage, not authority to mint signed releases.
 
 In local development, the Electron shell loads `remix/.env`, `remix/.env.local`,
 and `remix/.env.auto` before starting Nitro so the desktop app sees the same

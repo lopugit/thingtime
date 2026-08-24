@@ -17,6 +17,12 @@ const {
 	removeCachedBundle,
 	releaseCatalog
 } = require('./lib/release-cache.cjs');
+const { migrateLegacyReleaseCache, sharedReleaseCacheRoot } = require('./lib/shared-release-cache.cjs');
+const {
+	fetchGithubReleaseCatalog: fetchAllGithubReleasePages,
+	isAllowedGithubReleaseAssetUrl,
+	releaseCatalogState
+} = require('./lib/github-release-catalog.cjs');
 const {
 	ThingtimeNodeBridgeError,
 	ThingtimeNodeIntegration,
@@ -31,7 +37,6 @@ const localWebOutput = path.join(__dirname, 'dist', 'web', '.output');
 const electronReleaseLabel = process.env.THINGTIME_DESKTOP_RELEASE_LABEL || 'Electron App Release';
 const updateFeedUrl = process.env.THINGTIME_DESKTOP_UPDATE_FEED_URL || 'https://api.github.com/repos/lopugit/thingtime/releases?per_page=100';
 const maxUpdateArchiveBytes = 5 * 1024 * 1024 * 1024;
-const maxUpdateReleasePages = 20;
 const macTitlebar = {
   height: 52,
   leftInset: 88,
@@ -385,26 +390,8 @@ async function requestJson(url) {
   return response.value;
 }
 
-function githubNextPage(linkHeader) {
-  if (typeof linkHeader !== 'string') return null;
-  for (const link of linkHeader.split(',')) {
-    const match = link.match(/^\s*<([^>]+)>;\s*rel="next"\s*$/u);
-    if (match?.[1] && /^https:\/\/api\.github\.com\//iu.test(match[1])) return match[1];
-  }
-  return null;
-}
-
 async function fetchGithubReleaseCatalog() {
-  let url = updateFeedUrl;
-  const releases = [];
-  let truncated = false;
-  for (let page = 0; url && page < maxUpdateReleasePages; page += 1) {
-    const response = await requestJsonResponse(url);
-    if (Array.isArray(response.value)) releases.push(...response.value);
-    url = githubNextPage(response.headers?.link);
-  }
-  if (url) truncated = true;
-  return { releases, truncated };
+	return fetchAllGithubReleasePages(updateFeedUrl, requestJsonResponse);
 }
 
 function releaseMatchesElectronLabel(release) {
@@ -564,12 +551,16 @@ function safeFileName(fileName) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  return cleaned || 'Thingtime-Electron-App-Release.dmg';
+	return (cleaned || 'Thingtime-Electron-App-Release.zip').slice(0, 180);
 }
 
 function downloadFile(url, targetPath, options = {}, redirectCount = 0) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(targetPath, { flags: 'wx' });
+	return new Promise((resolve, reject) => {
+		if (!isAllowedGithubReleaseAssetUrl(url)) {
+			reject(new Error('Thingtime update download was redirected outside GitHub release storage.'));
+			return;
+		}
+		const file = fs.createWriteStream(targetPath, { flags: 'wx' });
     let settled = false;
 
     const cleanup = (error) => {
@@ -596,20 +587,25 @@ function downloadFile(url, targetPath, options = {}, redirectCount = 0) {
         const statusCode = response.statusCode || 0;
         const location = response.headers.location;
 
-        if ([301, 302, 303, 307, 308].includes(statusCode) && location && redirectCount < 5) {
-          response.resume();
-          file.close(() => {
-            fs.rm(targetPath, { force: true }, (error) => {
-              if (error) {
-                reject(error);
-                return;
-              }
+			if ([301, 302, 303, 307, 308].includes(statusCode) && location && redirectCount < 5) {
+				response.resume();
+				file.close(() => {
+					fs.rm(targetPath, { force: true }, (error) => {
+						if (error) {
+							reject(error);
+							return;
+						}
+						downloadFile(new URL(location, url).href, targetPath, options, redirectCount + 1).then(resolve, reject);
+					});
+				});
+				return;
+			}
 
-              downloadFile(new URL(location, url).href, targetPath, options, redirectCount + 1).then(resolve, reject);
-            });
-          });
-          return;
-        }
+			if ([301, 302, 303, 307, 308].includes(statusCode)) {
+				response.resume();
+				cleanup(new Error('Thingtime update download exceeded its permitted GitHub redirect limit.'));
+				return;
+			}
 
         if (statusCode >= 400) {
           response.resume();
@@ -665,7 +661,13 @@ function downloadFile(url, targetPath, options = {}, redirectCount = 0) {
 }
 
 function updateCacheRoot() {
-  return path.join(app.getPath('userData'), 'release-cache');
+	const sharedRoot = sharedReleaseCacheRoot(app.getPath('home'));
+	try {
+		migrateLegacyReleaseCache({ legacyRoot: path.join(app.getPath('userData'), 'release-cache'), sharedRoot });
+	} catch {
+		// A malformed old cache is never allowed to prevent a clean new cache.
+	}
+	return sharedRoot;
 }
 
 function publicCachedBundle(entry) {
@@ -680,6 +682,32 @@ function cacheEntryForKey(key) {
   const entry = getCachedBundles(updateCacheRoot()).find((candidate) => candidate.key === key);
   if (!entry) throw new Error('That Thingtime version is not cached on this Mac.');
   return entry;
+}
+
+function scheduleCachedReleaseHandoff(action, entry) {
+	if (!['install', 'launch'].includes(action)) throw new Error('Thingtime recovery action is invalid.');
+	const installedApp = installedThingtimeApp();
+	const pendingDirectory = path.join(updateCacheRoot(), 'pending');
+	fs.mkdirSync(pendingDirectory, { recursive: true, mode: 0o700 });
+	const planPath = path.join(pendingDirectory, `${crypto.randomUUID()}.json`);
+	fs.writeFileSync(
+		planPath,
+		`${JSON.stringify({ action, cacheRoot: updateCacheRoot(), format: 1, sourceApp: entry.appPath, targetDir: path.dirname(installedApp), waitForPid: process.pid })}\n`,
+		{ encoding: 'utf8', flag: 'wx', mode: 0o600 }
+	);
+	const helper = path.join(__dirname, 'scripts', 'install-cached-release.mjs');
+	try {
+		const child = spawn(process.execPath, [helper, planPath], {
+			detached: true,
+			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+			stdio: 'ignore'
+		});
+		child.unref();
+	} catch (error) {
+		fs.rmSync(planPath, { force: true });
+		throw error;
+	}
+	setTimeout(() => app.quit(), 100);
 }
 
 function packagedVerifierScript() {
@@ -716,23 +744,33 @@ function currentRecoveryRelease() {
 }
 
 async function getReleaseCatalog() {
-  const { releases, truncated } = await fetchGithubReleaseCatalog();
-  const catalog = releaseCatalog(releases, getCurrentAppVersion());
-  return {
-    cachedBundles: getCachedBundles(updateCacheRoot()).map(publicCachedBundle),
-    checkedAt: new Date().toISOString(),
-    currentVersion: getCurrentAppVersion(),
-    feedUrl: updateFeedUrl,
-    releases: catalog,
-    truncated
-  };
+	const currentVersion = getCurrentAppVersion();
+	const cachedBundles = getCachedBundles(updateCacheRoot()).map(publicCachedBundle);
+	try {
+		const { releases, truncated } = await fetchGithubReleaseCatalog();
+		return releaseCatalogState({
+			cachedBundles,
+			currentVersion,
+			feedUrl: updateFeedUrl,
+			releases: releaseCatalog(releases, currentVersion),
+			truncated
+		});
+	} catch {
+		return releaseCatalogState({
+			cachedBundles,
+			catalogError: 'GitHub releases are temporarily unavailable. Cached recovery bundles remain available on this Mac.',
+			currentVersion,
+			feedUrl: updateFeedUrl
+		});
+	}
 }
 
 async function cacheSelectedRelease(request) {
   const releaseId = typeof request?.releaseId === 'string' && request.releaseId.length <= 240 ? request.releaseId : '';
-  if (!releaseId) throw new Error('Choose a Thingtime release first.');
-  const catalog = await getReleaseCatalog();
-  const release = catalog.releases.find((candidate) => candidate.id === releaseId);
+	if (!releaseId) throw new Error('Choose a Thingtime release first.');
+	const catalog = await getReleaseCatalog();
+	if (catalog.catalogError) throw new Error(catalog.catalogError);
+	const release = catalog.releases.find((candidate) => candidate.id === releaseId);
   if (!release?.asset?.downloadUrl || !release.asset.name) {
     throw new Error('That release does not include a signed macOS ZIP bundle.');
   }
@@ -758,11 +796,14 @@ async function cacheSelectedRelease(request) {
 }
 
 async function launchCachedRelease(request) {
-  const entry = cacheEntryForKey(request?.key);
-  await verifyProductionReleaseApp(entry.appPath);
-  const opened = spawnSync('/usr/bin/open', ['-n', entry.appPath], { stdio: 'ignore' });
-  if (opened.error || opened.status !== 0) throw new Error('Thingtime could not launch that cached recovery bundle.');
-  return { cachedBundle: publicCachedBundle(entry), launchedAt: new Date().toISOString() };
+	const entry = cacheEntryForKey(request?.key);
+	await verifyProductionReleaseApp(entry.appPath);
+	scheduleCachedReleaseHandoff('launch', entry);
+	return {
+		cachedBundle: publicCachedBundle(entry),
+		message: `Closing this Thingtime instance and launching ${entry.version || entry.tag} as a standalone recovery bundle.`,
+		status: 'relaunching'
+	};
 }
 
 async function installCachedRelease(request) {
@@ -776,27 +817,7 @@ async function installCachedRelease(request) {
     sourceApp: installedApp,
     verifyApp: verifyProductionReleaseApp
   });
-  const pendingDirectory = path.join(updateCacheRoot(), 'pending');
-  fs.mkdirSync(pendingDirectory, { recursive: true, mode: 0o700 });
-  const planPath = path.join(pendingDirectory, `${crypto.randomUUID()}.json`);
-  fs.writeFileSync(
-    planPath,
-    `${JSON.stringify({ cacheRoot: updateCacheRoot(), format: 1, sourceApp: entry.appPath, targetDir: path.dirname(installedApp), waitForPid: process.pid })}\n`,
-    { encoding: 'utf8', flag: 'wx', mode: 0o600 }
-  );
-  const helper = path.join(__dirname, 'scripts', 'install-cached-release.mjs');
-  try {
-    const child = spawn(process.execPath, [helper, planPath], {
-      detached: true,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-      stdio: 'ignore'
-    });
-    child.unref();
-  } catch (error) {
-    fs.rmSync(planPath, { force: true });
-    throw error;
-  }
-  setTimeout(() => app.quit(), 100);
+	scheduleCachedReleaseHandoff('install', entry);
   return { cachedBundle: publicCachedBundle(entry), message: `Switching to ${entry.version || entry.tag} and keeping the current version as a recovery bundle.`, status: 'relaunching' };
 }
 

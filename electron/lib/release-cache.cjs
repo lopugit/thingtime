@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { isAllowedGithubReleaseAssetUrl } = require('./github-release-catalog.cjs');
 
 const APP_NAME = 'Thingtime.app';
 const CACHE_FORMAT = 1;
@@ -48,8 +49,12 @@ function releaseVersion(value) {
 function scoreZipAsset(asset) {
 	const name = safeString(asset?.name, '') || '';
 	const downloadUrl = safeString(asset?.browser_download_url, '') || '';
-	if (!downloadUrl || !/^https:\/\/(?:github\.com|objects\.githubusercontent\.com|github-releases\.githubusercontent\.com)\//iu.test(downloadUrl)) return -1;
+	if (!downloadUrl || !isAllowedGithubReleaseAssetUrl(downloadUrl)) return -1;
 	if (!/\.zip$/iu.test(name)) return -1;
+	// The standalone recovery launcher is deliberately published beside the
+	// desktop ZIP. It has a different bundle identifier and cache contract, so
+	// the Electron updater must never mistake it for a Thingtime.app update.
+	if (/thingtime[- ]recovery|recovery[- ]app/iu.test(name)) return -1;
 	const haystack = `${name} ${safeString(asset?.label, '') || ''} ${safeString(asset?.content_type, '') || ''}`.toLowerCase();
 	let score = 100;
 	if (haystack.includes('thingtime')) score += 40;
@@ -136,10 +141,28 @@ function cachePaths(cacheRoot, release) {
 	};
 }
 
+function ensureRegularDirectory(directory, label) {
+	try {
+		const stat = fs.lstatSync(directory);
+		if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`${label} must be a regular directory.`);
+	} catch (error) {
+		if (error?.code !== 'ENOENT') throw error;
+		fs.mkdirSync(directory, { mode: 0o700 });
+		const created = fs.lstatSync(directory);
+		if (created.isSymbolicLink() || !created.isDirectory()) throw new Error(`${label} must be a regular directory.`);
+	}
+	fs.chmodSync(directory, 0o700);
+}
+
 function ensureCacheRoot(root) {
-	fs.mkdirSync(path.join(root, 'bundles'), { recursive: true, mode: 0o700 });
-	const stat = fs.lstatSync(root);
-	if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('Thingtime update cache must be a regular directory.');
+	const cacheRoot = path.resolve(root);
+	try {
+		fs.mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });
+	} catch (error) {
+		throw new Error(`Thingtime update cache could not be created (${error instanceof Error ? error.message : String(error)}).`);
+	}
+	ensureRegularDirectory(cacheRoot, 'Thingtime update cache');
+	ensureRegularDirectory(path.join(cacheRoot, 'bundles'), 'Thingtime update cache bundles directory');
 }
 
 function readManifest(cacheRoot) {
@@ -179,14 +202,22 @@ function assertBundlePath(appPath) {
 	return appPath;
 }
 
+function assertBundleDirectory(bundleDirectory) {
+	const stat = fs.lstatSync(bundleDirectory);
+	if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('Cached update bundle directory is not a regular directory.');
+	return bundleDirectory;
+}
+
 function getCachedBundles(cacheRoot) {
 	const root = path.resolve(cacheRoot);
+	ensureCacheRoot(root);
 	const manifest = readManifest(root);
 	const entries = [];
 	for (const entry of manifest.entries) {
 		try {
 			const bundleDirectory = resolveWithin(root, path.join(root, 'bundles', String(entry.key || '')), 'Cached bundle');
 			const appPath = resolveWithin(bundleDirectory, path.join(bundleDirectory, APP_NAME), 'Cached app');
+			assertBundleDirectory(bundleDirectory);
 			assertBundlePath(appPath);
 			entries.push({
 				...entry,
@@ -200,6 +231,11 @@ function getCachedBundles(cacheRoot) {
 	return entries.sort((left, right) => String(right.cachedAt || '').localeCompare(String(left.cachedAt || '')));
 }
 
+function recoverableManifestEntries(cacheRoot, manifest) {
+	const recoverableKeys = new Set(getCachedBundles(cacheRoot).map((entry) => entry.key));
+	return manifest.entries.filter((entry) => typeof entry?.key === 'string' && recoverableKeys.has(entry.key));
+}
+
 async function cacheReleaseArchive({ archivePath, cacheRoot, release, verifyApp }) {
 	if (typeof verifyApp !== 'function') throw new Error('Thingtime update verification is unavailable.');
 	const paths = cachePaths(cacheRoot, release);
@@ -207,19 +243,22 @@ async function cacheReleaseArchive({ archivePath, cacheRoot, release, verifyApp 
 	const existing = getCachedBundles(paths.root).find((entry) => entry.key === paths.key);
 	if (existing) return { ...existing, alreadyCached: true };
 	const manifest = readManifest(paths.root);
-	if (manifest.entries.length >= MAX_CACHED_BUNDLES) {
+	const preservedEntries = recoverableManifestEntries(paths.root, manifest);
+	if (preservedEntries.length >= MAX_CACHED_BUNDLES) {
 		throw new Error(`Thingtime keeps up to ${MAX_CACHED_BUNDLES} verified recovery bundles. Remove one cached bundle before adding another.`);
 	}
 	const source = path.resolve(archivePath);
 	const archive = fs.lstatSync(source);
 	if (!archive.isFile() || archive.isSymbolicLink() || !/\.zip$/iu.test(source)) throw new Error('Thingtime can cache only a regular signed macOS ZIP release asset.');
 	const stagingRoot = await fsp.mkdtemp(path.join(paths.root, '.extract-'));
+	let bundleDirectoryCreated = false;
 	try {
 		await runRequiredAsync('/usr/bin/ditto', ['-x', '-k', source, stagingRoot], 'Thingtime update archive extraction');
 		const stagedApp = path.join(stagingRoot, APP_NAME);
 		assertBundlePath(stagedApp);
 		await verifyApp(stagedApp);
 		fs.mkdirSync(paths.bundleDirectory, { recursive: false, mode: 0o700 });
+		bundleDirectoryCreated = true;
 		const cachedApp = path.join(paths.bundleDirectory, APP_NAME);
 		await runRequiredAsync('/usr/bin/ditto', ['--rsrc', '--extattr', stagedApp, cachedApp], 'Thingtime recovery bundle copy');
 		assertBundlePath(cachedApp);
@@ -237,8 +276,11 @@ async function cacheReleaseArchive({ archivePath, cacheRoot, release, verifyApp 
 			tag: safeString(release?.tag),
 			version: safeString(release?.version)
 		};
-		writeManifest(paths.root, { entries: [entry, ...manifest.entries], format: CACHE_FORMAT });
+		writeManifest(paths.root, { entries: [entry, ...preservedEntries], format: CACHE_FORMAT });
 		return { ...entry, appPath: cachedApp, alreadyCached: false, cacheState: 'ready' };
+	} catch (error) {
+		if (bundleDirectoryCreated) fs.rmSync(paths.bundleDirectory, { force: true, recursive: true });
+		throw error;
 	} finally {
 		await fsp.rm(stagingRoot, { force: true, recursive: true });
 	}
@@ -251,7 +293,8 @@ async function cacheInstalledBundle({ cacheRoot, release, sourceApp, verifyApp }
 	const existing = getCachedBundles(paths.root).find((entry) => entry.key === paths.key);
 	if (existing) return { ...existing, alreadyCached: true };
 	const manifest = readManifest(paths.root);
-	if (manifest.entries.length >= MAX_CACHED_BUNDLES) {
+	const preservedEntries = recoverableManifestEntries(paths.root, manifest);
+	if (preservedEntries.length >= MAX_CACHED_BUNDLES) {
 		throw new Error(`Thingtime keeps up to ${MAX_CACHED_BUNDLES} verified recovery bundles. Remove one cached bundle before changing versions.`);
 	}
 	assertBundlePath(sourceApp);
@@ -275,7 +318,7 @@ async function cacheInstalledBundle({ cacheRoot, release, sourceApp, verifyApp }
 			tag: safeString(release?.tag),
 			version: safeString(release?.version)
 		};
-		writeManifest(paths.root, { entries: [entry, ...manifest.entries], format: CACHE_FORMAT });
+		writeManifest(paths.root, { entries: [entry, ...preservedEntries], format: CACHE_FORMAT });
 		return { ...entry, appPath: cachedApp, alreadyCached: false, cacheState: 'ready' };
 	} catch (error) {
 		fs.rmSync(paths.bundleDirectory, { force: true, recursive: true });
@@ -285,6 +328,7 @@ async function cacheInstalledBundle({ cacheRoot, release, sourceApp, verifyApp }
 
 function removeCachedBundle({ cacheRoot, key }) {
 	const root = path.resolve(cacheRoot);
+	ensureCacheRoot(root);
 	const manifest = readManifest(root);
 	const entry = manifest.entries.find((candidate) => candidate?.key === key);
 	if (!entry) throw new Error('That Thingtime recovery bundle is no longer cached.');

@@ -104,6 +104,7 @@ export type ThingtimeDesktopCachedBundle = {
 
 export type ThingtimeDesktopReleaseCatalog = {
 	cachedBundles: ThingtimeDesktopCachedBundle[];
+	catalogError?: string | null;
 	checkedAt?: string;
 	currentVersion?: string;
 	feedUrl?: string | null;
@@ -260,7 +261,7 @@ export type ThingtimeDesktopBridge = {
 	listUpdateCatalog?: () => Promise<ThingtimeDesktopReleaseCatalog>;
 	cacheReleaseBundle?: (request: { releaseId: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; catalog: ThingtimeDesktopReleaseCatalog }>;
 	installCachedRelease?: (request: { key: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
-	launchCachedRelease?: (request: { key: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; launchedAt: string }>;
+	launchCachedRelease?: (request: { key: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
 	removeCachedRelease?: (request: { key: string }) => Promise<ThingtimeDesktopReleaseCatalog>;
 	revealUpdateCache?: () => Promise<{ cachePath: string }>;
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;

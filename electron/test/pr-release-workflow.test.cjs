@@ -14,10 +14,17 @@ test('signed PR release workflow gates signing on a maintainer-approved same-rep
 	assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/u);
 	assert.match(workflow, /github\.event\.pull_request\.author_association == 'OWNER'/u);
 	assert.match(workflow, /'desktop-release'/u);
+	assert.match(workflow, /fetch-depth: 1/u);
+	assert.doesNotMatch(workflow, /fetch-depth: 0/u);
 	assert.match(workflow, /release_version="\$\{base_version\}-pr\.\$\{PR_NUMBER\}\.\$\{branch_slug\}\.g\$\{short_sha\}"/u);
 	assert.match(workflow, /--prerelease/u);
+	assert.match(workflow, /npm ci --prefix MCP/u);
+	assert.doesNotMatch(workflow, /corepack pnpm --dir MCP install --frozen-lockfile/u);
 	assert.match(workflow, /corepack pnpm --dir electron run dist/u);
+	assert.match(workflow, /swift test --package-path macos\/ThingtimeRecovery/u);
+	assert.match(workflow, /macos\/ThingtimeRecovery\/script\/build-production-release\.sh/u);
 	assert.match(workflow, /test "\$\{#zip_assets\[@\]\}" -gt 0/u);
+	assert.match(workflow, /recovery_assets=\(macos\/ThingtimeRecovery\/release\/Thingtime-Recovery-App-Release-\*\.zip\)/u);
 	assert.match(workflow, /Remove ephemeral signing material/u);
 	assert.doesNotMatch(workflow, /dist:unsigned/u);
 	assert.match(productionBuilder, /THINGTIME_ELECTRON_RELEASE_VERSION/u);

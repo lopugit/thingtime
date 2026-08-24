@@ -24,7 +24,7 @@ function readPlan(planPath) {
 	} catch {
 		fail('Thingtime update plan is unreadable.');
 	}
-	if (!parsed || parsed.format !== 1 || !Number.isSafeInteger(parsed.waitForPid) || parsed.waitForPid <= 1) {
+	if (!parsed || parsed.format !== 1 || !['install', 'launch'].includes(parsed.action) || !Number.isSafeInteger(parsed.waitForPid) || parsed.waitForPid <= 1) {
 		fail('Thingtime update plan is invalid.');
 	}
 	if (typeof parsed.cacheRoot !== 'string' || typeof parsed.sourceApp !== 'string' || typeof parsed.targetDir !== 'string') fail('Thingtime update plan is invalid.');
@@ -37,7 +37,7 @@ function readPlan(planPath) {
 		targetDir !== resolve(homedir(), 'Applications') ||
 		!existsSync(sourceApp)
 	) fail('Thingtime update source is invalid.');
-	return { sourceApp, targetDir, waitForPid: parsed.waitForPid };
+	return { action: parsed.action, sourceApp, targetDir, waitForPid: parsed.waitForPid };
 }
 
 function processExists(pid) {
@@ -57,8 +57,10 @@ const planPath = parseArguments(process.argv.slice(2));
 try {
 	const plan = readPlan(planPath);
 	await waitForExit(plan.waitForPid);
-	const result = installLocalApp({ sourceApp: plan.sourceApp, targetDir: plan.targetDir, signatureMode: 'production' });
-	const opened = spawnSync('/usr/bin/open', [result.targetApp], { stdio: 'ignore' });
+	const targetApp = plan.action === 'install'
+		? installLocalApp({ sourceApp: plan.sourceApp, targetDir: plan.targetDir, signatureMode: 'production' }).targetApp
+		: plan.sourceApp;
+	const opened = spawnSync('/usr/bin/open', ['-n', targetApp], { stdio: 'ignore' });
 	if (opened.error || opened.status !== 0) fail('Thingtime was installed but could not be reopened automatically.');
 } finally {
 	rmSync(planPath, { force: true });

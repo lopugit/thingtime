@@ -19,6 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Signed PR release CI now installs the MCP bridge from its committed npm
+  lockfile**: the runner uses `npm ci --prefix MCP`, matching the package's
+  `package-lock.json` instead of requiring a nonexistent pnpm lockfile. This
+  keeps the unsigned verification gate deterministic and lets the signed,
+  notarized release pipeline proceed only after MCP dependencies install
+  reproducibly. — Codex (AI), 2026-08-24
+- **Signed PR release CI now checks out only the approved commit**: it resolves
+  the PR head SHA before checkout, then uses shallow history. This removes an
+  unnecessary full-repository clone that delayed the first release retry while
+  retaining the immutable SHA trust boundary. — Codex (AI), 2026-08-24
+
 - **Paired-Mac display mode selections now persist**: resolution and refresh
   changes use Core Graphics' permanent display-configuration transaction rather
   than an app-lifetime mode setter, matching the existing layout and mirroring
@@ -36,6 +47,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   request signatures, and gossip cursors remain inaccessible to clients. —
   Codex (AI), 2026-08-24
 
+- **Independent native rollback launcher for Thingtime Desktop**: the signed
+  `Thingtime Recovery.app` now has its own SwiftUI version browser, a separately
+  signed installer helper, its own companion release ZIP, and a self-update
+  path. It shares the durable desktop cache at
+  `~/Library/Application Support/com.thingtime.desktop/release-cache` while
+  keeping recovery-launcher copies separate. It caches only verified bundle
+  identifiers and same-team signatures, closes a running desktop before an
+  atomic install, preserves the replaced bundle, and rejects a stale or
+  malformed GitHub asset without changing the installed app. The PR release
+  workflow now signs, notarizes, validates, and publishes the companion asset
+  alongside Electron after the same trusted-source gate. — Codex (AI),
+  2026-08-24
+
 - **Signed Desktop PR releases and recovery-first version switching**: an
   owner-approved, same-repository PR carrying the `desktop-release` label can
   now publish a Developer ID-signed, notarized GitHub prerelease whose SemVer
@@ -46,6 +70,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   switch. The cache is bounded to twelve explicit recovery bundles, never
   silently installs, and remains revealable in Finder if a later UI is broken.
   — Codex (AI), 2026-08-24
+- **Desktop recovery updater hardening**: GitHub release discovery now follows
+  every API Link page instead of stopping at a fixed history cap, rejects
+  redirect hops outside GitHub release storage, repairs stale cache metadata
+  before applying its twelve-bundle limit, and removes a partial cache copy on
+  failed verification. Recovery launches now hand off after the current app
+  exits, preventing two cached/installed versions from sharing one local
+  profile at once; cached recovery choices remain visible and usable if GitHub
+  is offline. — Codex (AI), 2026-08-24
 
 - **Approval-gated remote pointer and keyboard controls for paired Macs**:
   the desktop node now accepts a closed, capability-gated set of screen-relative
@@ -157,6 +189,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   wildcard branch”. — Claude (AI), 2026-08-18
 
 ### Fixed
+
+- **Signed-release MCP gate handles closed local connector pipes**: the JSONL
+  transport now treats a child-process `EPIPE` as an unavailable connector and
+  fails pending work closed, rather than allowing Node to throw an unhandled
+  stream error during teardown. — Codex (AI), 2026-08-24
+
+- **Signed-release native gate no longer relies on wall-clock scheduling**:
+  the long-running lease-heartbeat test now waits for its three intended
+  renewals before completing dispatch, then verifies renewal stops. This keeps
+  the behavior under test intact while eliminating macOS runner timing flakes.
+  — Codex (AI), 2026-08-24
+
+- **Signed-release native checks now build across macOS SDK overlays**: printer
+  identifiers and names are converted through the Core Foundation Get-rule
+  bridge, rather than force-cast from one SDK-specific declaration. The
+  release gate now works whether Core Printing imports these values as Swift,
+  Core Foundation, or unmanaged Core Foundation strings. — Codex (AI),
+  2026-08-24
 
 - **Deployment peer discovery is bounded and gossip-based**: authenticated
   first-party deployments now maintain one relational, TTL-reaped peer lease

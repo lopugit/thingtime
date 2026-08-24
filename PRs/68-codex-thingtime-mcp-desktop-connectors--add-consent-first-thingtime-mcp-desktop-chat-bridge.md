@@ -869,8 +869,83 @@ an offline database or offline conflict resolution layer.
   branch, and commit. It treats a release as installable only after extracting
   a GitHub-hosted macOS ZIP to the user-local recovery cache and re-verifying
   the production nested signature, hardened runtime, and notarization.
-- A cached release can launch directly. Installing it first caches the current
-  installed production bundle, then delegates to the existing transactional
-  installer after the Electron process exits. The cache is intentionally
-  bounded to twelve explicit recovery apps and can be revealed in Finder, so a
-  broken future updater UI does not strand a person on that version.
+- A cached release launches through a detached handoff only after the current
+  Thingtime process exits, so two versions cannot share one local profile at
+  once. Installing first caches the current installed production bundle, then
+  delegates to the existing transactional installer after the Electron process
+  exits. The cache is intentionally bounded to twelve explicit recovery apps
+  and can be revealed in Finder, so a broken future updater UI does not strand
+  a person on that version.
+
+### Recovery updater verification follow-up (2026-08-24)
+
+- Release browsing now follows every GitHub API Link page rather than stopping
+  at 2,000 records. A loop is reported visibly instead of silently omitting
+  history. Download redirects stay on GitHub-controlled release hosts, and a
+  stale/tampered manifest entry cannot exhaust the twelve recovery slots or
+  leave a partial verified-app directory behind. GitHub outage state preserves
+  the local cache catalog so launch/install recovery actions remain usable
+  offline.
+- Live GitHub inspection subsequently registered **Signed Electron PR Release**
+  for this branch. Owner manual run
+  `32712878513` reached its real dependency gate and exposed a concrete
+  runner-only defect before any signing material was accessed: `MCP/` is
+  npm-managed and has `package-lock.json`, so a frozen pnpm install could never
+  succeed. The workflow now uses `npm ci --prefix MCP`; its contract test locks
+  that package-manager boundary before the next signed release attempt. A
+  second run then spent more than five minutes in its unnecessary full-history
+  checkout, so the exact resolved SHA now uses `fetch-depth: 1`; this shortens
+  the gate without widening the selected source or signing authority.
+- The first complete unsigned native build on the GitHub macOS SDK then exposed
+  `PMPrinterGetID`/`PMPrinterGetName` as unretained Core Foundation references,
+  unlike the local overlay that had masked the issue. Printer telemetry and
+  selection now normalize Swift, Core Foundation, and unmanaged Core Foundation
+  string declarations through the Core Foundation Get rule before comparison.
+- That next runner exercised an existing scheduler-test race: a fixed dispatch
+  sleep sometimes yielded only two renewal ticks under GitHub's scheduler. The
+  test now holds dispatch until all three intended renewals arrive (with a
+  bounded timeout), then confirms renewal stops after completion; it no longer
+  treats a wall-clock assumption as correctness.
+- The following runner then exposed a second genuine test-gate race: the
+  deliberately unavailable local Codex stub could close its stdin between the
+  transport writable check and an asynchronous write, emitting an unhandled
+  `EPIPE`. The JSONL transport now consumes that stream error for the life of
+  the child pipe and fails all pending work with the existing closed connector
+  error, so teardown never crashes the node host.
+- Run `32716251316` passed every unsigned MCP, native, and Electron test on the
+  GitHub macOS runner, then stopped at the intentional credential boundary.
+  Repository and relevant environment secret listings contain none of the
+  required values, so the job received empty `MAC_CSC_LINK`,
+  `MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`,
+  `APPLE_API_ISSUER`, and `APPLE_TEAM_ID` inputs. The release is therefore
+  correctly blocked before an unsigned or unnotarized artifact can be built;
+  configuring those six repository secrets is the only remaining release
+  prerequisite before re-dispatching the workflow.
+
+### Independent Recovery launcher follow-up (2026-08-24)
+
+- Added `macos/ThingtimeRecovery`, a native SwiftUI `Thingtime Recovery.app`
+  with stable identifier `com.thingtime.desktop.recovery`. It can query the
+  public GitHub release catalog, cache separately named Desktop and Recovery
+  ZIPs, browse the local cache without GitHub, launch an old desktop bundle,
+  atomically install a selected desktop version, and update itself without
+  loading an Electron app.
+- Desktop rollback entries are now held at the stable shared location
+  `~/Library/Application Support/com.thingtime.desktop/release-cache`; recovery
+  launcher entries live beside it in `recovery-cache`. The Electron main
+  process carries a regular legacy per-userData cache forward non-destructively
+  the first time it reaches the new shared location. Electron deliberately
+  rejects `Thingtime-Recovery-App-Release-*.zip` as a desktop update asset.
+- The signed native installer only accepts strict cache layouts, regular
+  directories, the expected bundle identifier, and the same signing team. A
+  production Recovery app adds Developer ID, Gatekeeper, and notarization-staple
+  requirements. It asks the running target app to quit, retains the replaced
+  verified bundle before atomic replacement, and leaves the target unchanged on
+  verification or handoff failure.
+- Local acceptance built the app in a clean Library/Caches stage, signed both
+  nested installer and outer app with the stable Apple Development requirement,
+  installed and re-verified `~/Applications/Thingtime Recovery.app`, inspected
+  its release/cached-recovery UI, deliberately rejected an invalid historical
+  GitHub desktop asset, and completed an actual signed Recovery self-replace /
+  relaunch. Production publication remains correctly blocked on the existing
+  Developer ID + notarization credential prerequisite.
