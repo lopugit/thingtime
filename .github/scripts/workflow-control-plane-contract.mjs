@@ -16,6 +16,7 @@ const scripts = resolve(githubRoot, "scripts");
 const IMPLEMENTATIONS = [
   "develop-pr-preview.yml",
   "electron-release.yml",
+  "electron-pr-release.yml",
   "promote-develop-to-main.yml",
   "promote-features-to-main.yml",
   "rebase-pr-stacks.yml",
