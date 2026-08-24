@@ -1,27 +1,9 @@
-name: Rebase PRs and stacks (AI)
+name: Lopu PR manager (internal rebase handoff)
 
 run-name: >-
-  Rebase PR history${{ github.event.client_payload.pr_number && format(' at #{0}', github.event.client_payload.pr_number) || inputs.pr_number && format(' at #{0}', inputs.pr_number) || '' }}
+  Lopu rebase handoff${{ github.event.client_payload.pr_number && format(' for PR #{0}', github.event.client_payload.pr_number) || '' }}
 
 on:
-  push:
-    branches: ["**"]
-  pull_request_target:
-    types: [opened, reopened]
-  schedule:
-    - cron: "17,47 * * * *"
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: "Exact PR to retry; leave blank to scan conflicting stacks"
-        required: false
-        default: ""
-        type: string
-      cascade:
-        description: "Continue through PRs stacked on the rebased branch"
-        required: false
-        default: true
-        type: boolean
   repository_dispatch:
     types: [rebase-pr-stack-ai]
 
@@ -37,6 +19,6 @@ jobs:
   control-plane:
     uses: lopugit/thingtime/.github/workflows/rebase-pr-stacks.yml@github-actions
     with:
-      pr_number: ${{ inputs.pr_number || '' }}
-      cascade: ${{ github.event_name != 'workflow_dispatch' || inputs.cascade }}
+      pr_number: ""
+      cascade: true
     secrets: inherit
