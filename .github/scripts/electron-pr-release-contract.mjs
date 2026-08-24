@@ -32,6 +32,16 @@ function assertSignedPrReleaseContract() {
   );
   assert.match(
     workflow,
+    /github\.event_name == 'workflow_dispatch'[\s\S]*github\.ref_name == 'github-actions'/u,
+    "direct manual dispatch runs only from the protected control-plane ref",
+  );
+  assert.match(
+    workflow,
+    /github\.event_name == 'workflow_call'[\s\S]*github\.ref_name == 'develop'[\s\S]*github\.ref_name == 'main'/u,
+    "reusable release calls are accepted only from the protected product listeners",
+  );
+  assert.match(
+    workflow,
     /inputs\.triggering_event == 'pull_request_target'/u,
     "automatic release provenance must come from the protected PR listener",
   );
@@ -46,6 +56,11 @@ function assertSignedPrReleaseContract() {
     workflow,
     /Unsupported release caller event/u,
     "source validation rejects event types outside the two trusted entrypoints",
+  );
+  assert.match(
+    workflow,
+    /Release worker must run directly on github-actions or through a develop\/main listener/u,
+    "source validation repeats the protected-ref gate before checkout",
   );
   assert.match(workflow, /gh api "repos\/\$\{GITHUB_REPOSITORY\}\/pulls\/\$\{PR_NUMBER\}"/u, "PR source is re-resolved through GitHub");
   assert.match(workflow, /test "\$\{head_repository\}" = "\$\{GITHUB_REPOSITORY\}"/u, "PR head repository is revalidated");

@@ -97,6 +97,11 @@ repository, authored by the repository owner, and currently carry the
 a numeric PR number. Forks and ordinary contributors never reach a macOS
 runner with signing secrets.
 
+Direct manual dispatch of the worker itself is accepted only while it executes
+on the protected `github-actions` ref. Reusable calls are accepted only from a
+`develop` or `main` listener, so a feature branch cannot turn a modified copy
+of this workflow into a signing authority.
+
 The canonical repository must configure these GitHub Actions secrets (use your
 own values; never commit them):
 
