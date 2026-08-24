@@ -19,6 +19,15 @@ on:
   pull_request:
     # Unprivileged detector only: never check out or execute PR code here.
     types: [opened, reopened, synchronize, edited, ready_for_review]
+  # GitHub evaluates issue/review-comment and check-run workflows from the
+  # default branch, so these PR-manager signals reach the read-only detector
+  # below, which then hands eligible PRs to the trusted default-branch worker.
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  check_run:
+    types: [completed]
   schedule:
     - cron: "2,32 * * * *"
   workflow_dispatch:
