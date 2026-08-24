@@ -31,6 +31,27 @@ relational shape for later ThingtimeDB storage and platform chat views.
 - Setup, architecture, connector contract, safe workflow, example manifest,
   `.env` placeholders, and root README/changelog pointers.
 
+### 2026-08-24 admin integration vault + policy proxy
+
+- Settings → Admin now includes an **External integrations** section for
+  write-only encrypted credentials and relational endpoint policies. The
+  browser sees only labels, opaque ids, selected permissions, and redacted
+  bounded audit rows—never a stored credential, ciphertext, IV, auth tag, or
+  provider Authorization header.
+- `THINGTIME_ADMIN_VAULT_KEY` is a separate 32-byte base64url AES-256-GCM key;
+  setup explicitly forbids reuse of JWT/session, peer discovery, cron, or
+  provider credentials. A missing or invalid vault key disables credential
+  writes rather than storing plaintext. Generic policies require an exact
+  configured host allowlist; private, loopback, IP, redirect, full-URL, and
+  arbitrary-header paths are refused.
+- Endpoint policy separates **read**, **no writes**, **create new items only**,
+  and **full write**. The initial create-only implementation is Vercel project
+  environment variables: it places a short local unique claim and checks the
+  remote environment list before the documented POST, never invokes PATCH or
+  an upsert flag. It correctly refuses generic create-only because no proxy can
+  honestly invent a provider's conditional-create guarantee; out-of-band
+  writers remain a documented remote-read race boundary.
+
 ### 2026-08-17 Messenger + Electron integration
 
 - The packaged Electron app now bundles the desktop normalizer and exposes a

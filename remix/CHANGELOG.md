@@ -19,6 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Admin integration vault + policy proxy**: Settings → Admin now stores
+  external credentials as write-only AES-256-GCM ciphertext, binds them to
+  relational endpoint policies with explicit read / no-write / create-only /
+  full-write permissions, and exposes a bounded redacted audit trail. The
+  proxy accepts endpoint ids rather than arbitrary URLs, blocks private hosts,
+  redirects and sensitive caller headers, and fails closed on its own rate
+  limit. The initial Vercel create-only adapter checks the existing project env
+  list and reserves a local create lock before POST; it never uses PATCH or an
+  upsert option. Setup: `README.md` “Admin integration vault and policy proxy”.
+  — Codex (AI), 2026-08-24
+
 - **Advanced paired-computer display, hardware, and lifecycle controls**:
   paired Macs now advertise capability-gated per-display
   mode/resolution/refresh, brightness, layout, mirroring and read-only HDR;

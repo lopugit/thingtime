@@ -311,7 +311,7 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-password-reset-confirm-invalid',
     name: 'Password reset confirm rejects bad tokens',
-		description: 'Unknown/expired reset tokens are rejected with a 400 error shape (or 429 when the per-IP window is exhausted).',
+    description: 'Unknown/expired reset tokens are rejected with a 400 error shape (or 429 when the per-IP window is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/password-reset/confirm',
@@ -366,7 +366,7 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-resend-verification-empty',
     name: 'Resend verification empty body',
-		description: 'The resend route returns ok for empty input so account existence cannot be probed (or 429 when the per-IP window is exhausted).',
+    description: 'The resend route returns ok for empty input so account existence cannot be probed (or 429 when the per-IP window is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/resend-verification',
@@ -389,7 +389,8 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-service-account-validation',
     name: 'Service account email validation',
-    description: 'The service account endpoint is public but requires a valid email (429/503 when the per-IP provisioning window or limiter is exhausted).',
+    description:
+      'The service account endpoint is public but requires a valid email (429/503 when the per-IP provisioning window or limiter is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/service-account',
@@ -398,7 +399,10 @@ export const apiTests: ApiTestDefinition[] = [
       [400, 429, 503],
       (body, response) =>
         response.status === 400
-          ? body?.ok === false && String(body?.error || '').toLowerCase().includes('email')
+          ? body?.ok === false &&
+            String(body?.error || '')
+              .toLowerCase()
+              .includes('email')
           : body?.ok === false && typeof body?.error === 'string',
       'Service account route requires a valid email (or was rate-limited with an error shape).'
     )
@@ -908,7 +912,11 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/things',
     mutates: true,
-    body: { thingtime: ['data'], crystal: { followKey: 'just:data', memberKey: 'mine', note: 'relationship names are not reserved' }, visibility: 'private' },
+    body: {
+      thingtime: ['data'],
+      crystal: { followKey: 'just:data', memberKey: 'mine', note: 'relationship names are not reserved' },
+      visibility: 'private'
+    },
     expect: expectJson(
       [200, 401],
       (body) => (body?.ok === true && (body?.thing?.id || body?.post?.id)) || (body?.ok === false && typeof body?.error === 'string'),
@@ -1043,18 +1051,14 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/notifications',
     expect: expectJson(
       [200, 401],
-      (body) =>
-        body?.ok === false
-          ? typeof body?.error === 'string'
-          : Array.isArray(body?.notifications) && typeof body?.unreadCount === 'number',
+      (body) => (body?.ok === false ? typeof body?.error === 'string' : Array.isArray(body?.notifications) && typeof body?.unreadCount === 'number'),
       'Notifications returned a list + unreadCount (or 401 anonymous).'
     )
   },
   {
     id: 'notifications-settings-shape',
     name: 'Notification settings shape',
-    description:
-      'GET /notifications/settings returns the per-channel matrix — push + email per type plus channel masters (or 401 anonymous).',
+    description: 'GET /notifications/settings returns the per-channel matrix — push + email per type plus channel masters (or 401 anonymous).',
     group: 'notifications',
     method: 'GET',
     path: '/api/v1/notifications/settings',
@@ -1076,8 +1080,7 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'notifications-email-unsubscribe-bad-token',
     name: 'Email unsubscribe rejects bad links',
-    description:
-      'GET /notifications/email/unsubscribe with a bogus uid+token pair is refused (400 page) instead of flipping anything.',
+    description: 'GET /notifications/email/unsubscribe with a bogus uid+token pair is refused (400 page) instead of flipping anything.',
     group: 'notifications',
     method: 'GET',
     path: '/api/v1/notifications/email/unsubscribe?uid=nobody&token=bogus',
@@ -1093,25 +1096,21 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/notifications/email/weekly-summary?dryRun=1',
     expect: expectJson(
       [200, 401, 403],
-      (body) =>
-        body?.ok === false
-          ? typeof body?.error === 'string'
-          : typeof body?.sent === 'number' && body?.dryRun === true,
+      (body) => (body?.ok === false ? typeof body?.error === 'string' : typeof body?.sent === 'number' && body?.dryRun === true),
       'Weekly summary run was gated (or dry-ran for an admin without sending).'
     )
   },
   {
     id: 'things-views-anonymous-ok',
     name: 'View telemetry accepts anonymous batches',
-    description:
-      'POST /things/views works logged out (identity = salted ip+UA hash); unknown post ids are silently dropped, so counted is 0 here.',
+    description: 'POST /things/views works logged out (identity = salted ip+UA hash); unknown post ids are silently dropped, so counted is 0 here.',
     group: 'things',
     method: 'POST',
     path: '/api/v1/things/views',
     body: { events: [{ id: 'not-a-real-post-id', dwellMs: 1200, ratio: 1, pos: 0.4 }] },
     expect: expectJson(
       [200, 429],
-      (body) => body?.ok === true ? typeof body?.counted === 'number' : typeof body?.error === 'string',
+      (body) => (body?.ok === true ? typeof body?.counted === 'number' : typeof body?.error === 'string'),
       'View batch was accepted (unknown ids dropped) or rate-limited.'
     )
   },
@@ -1123,7 +1122,20 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/things/search',
     body: { conditions: [null] },
-    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Null condition entry was rejected with a 400 error shape.')
+    expect: expectJson(
+      [400],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Null condition entry was rejected with a 400 error shape.'
+    )
+  },
+  {
+    id: 'admin-integrations-guarded',
+    name: 'Integration vault is admin-only',
+    description: 'Listing external secret metadata and endpoint policies requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/integrations',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin integration vault read was rejected.')
   },
   {
     id: 'admin-rate-limits-guarded',
@@ -1468,9 +1480,7 @@ export const apiTests: ApiTestDefinition[] = [
       (body, response) =>
         response.status !== 200
           ? body?.ok === false && typeof body?.error === 'string'
-          : body?.ok === true &&
-            body?.thing?.crystal?.appId === appShapedDataCrystal.appId &&
-            body?.thing?.crystal?.key === appShapedDataCrystal.key,
+          : body?.ok === true && body?.thing?.crystal?.appId === appShapedDataCrystal.appId && body?.thing?.crystal?.key === appShapedDataCrystal.key,
       'Second data thing with identical appId + key crystal values persisted alongside the first.'
     )
   },
@@ -1602,39 +1612,39 @@ export const apiTests: ApiTestDefinition[] = [
       'Migration status either returned the census (admin) or was rejected (non-admin).'
     )
   },
-	{
-		id: 'admin-migrations-diagnostic-guarded',
-		name: 'Migration diagnostics are admin-only',
-		description: 'Anonymous/non-admin callers are rejected; inaccessible ids are non-enumerating 404s for admins.',
-		group: 'admin',
-		method: 'GET',
-		path: '/api/v1/admin/migrations/diagnostic?id=migration-diagnostic-00000000-0000-4000-8000-000000000000',
-		anonymous: true,
-		expect: expectJson(
-			[401],
-			(body) => body?.ok === false && body?.error === 'Unauthorized',
-			'The registered diagnostic route rejected an anonymous caller with its admin guard.'
-		)
-	},
-	{
-		id: 'things-sensitive-reveal-guarded',
-		name: 'Sensitive Thing reveal requires a full session',
-		description: 'The password-confirmed reveal route rejects anonymous callers before reading the submitted password.',
-		group: 'things',
-		method: 'POST',
-		path: '/api/v1/things/reveal',
-		anonymous: true,
-		body: {
-			thingId: 'migration-diagnostic-00000000-0000-4000-8000-000000000000',
-			reference: 'mongodb-object-id-1',
-			password: 'not-read-without-a-session'
-		},
-		expect: expectJson(
-			[401],
-			(body) => body?.ok === false && body?.error === 'Unauthorized',
-			'The registered sensitive reveal route rejected an anonymous caller before password confirmation.'
-		)
-	},
+  {
+    id: 'admin-migrations-diagnostic-guarded',
+    name: 'Migration diagnostics are admin-only',
+    description: 'Anonymous/non-admin callers are rejected; inaccessible ids are non-enumerating 404s for admins.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/migrations/diagnostic?id=migration-diagnostic-00000000-0000-4000-8000-000000000000',
+    anonymous: true,
+    expect: expectJson(
+      [401],
+      (body) => body?.ok === false && body?.error === 'Unauthorized',
+      'The registered diagnostic route rejected an anonymous caller with its admin guard.'
+    )
+  },
+  {
+    id: 'things-sensitive-reveal-guarded',
+    name: 'Sensitive Thing reveal requires a full session',
+    description: 'The password-confirmed reveal route rejects anonymous callers before reading the submitted password.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/reveal',
+    anonymous: true,
+    body: {
+      thingId: 'migration-diagnostic-00000000-0000-4000-8000-000000000000',
+      reference: 'mongodb-object-id-1',
+      password: 'not-read-without-a-session'
+    },
+    expect: expectJson(
+      [401],
+      (body) => body?.ok === false && body?.error === 'Unauthorized',
+      'The registered sensitive reveal route rejected an anonymous caller before password confirmation.'
+    )
+  },
   {
     id: 'admin-migrations-run-guarded',
     name: 'Migration run is admin-only',

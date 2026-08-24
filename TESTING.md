@@ -6,6 +6,30 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Admin integration vault + policy proxy
+
+- [ ] Sign in as an admin and open Settings → Admin → External integrations.
+      Without `THINGTIME_ADMIN_VAULT_KEY`, the visible warning explains setup
+      and **Save secret** is disabled; no browser request can reveal a prior
+      credential value.
+- [ ] With a disposable 32-byte base64url vault key, save a labelled Vercel
+      token. Refresh and confirm the row shows only label/id/date—not a masked
+      or plaintext value. Delete is blocked while an endpoint references it.
+- [ ] Save a Vercel endpoint with read + **Create new items only**, then verify
+      its row shows the origin, read state, and create-only badge. A Generic
+      endpoint cannot select create-only; it needs a host named in
+      `THINGTIME_ADMIN_PROXY_ALLOWED_HOSTS`.
+- [ ] Against a disposable Vercel project, create a fresh env variable through
+      the proxy. Creating the same key/target again is blocked before POST;
+      the audit row records only operation, path, status, and outcome—never
+      body, key value, authorization, token, or secret. Confirm no PATCH,
+      DELETE, redirect, private host, full URL, or arbitrary request header can
+      be sent through the proxy.
+- [ ] Signed-out and signed-in non-admin `GET /api/v1/admin/integrations`
+      receive 401/403. Run `node --import tsx --test
+app/api/utils/admin/integrationCore.test.ts`, `npm run test:schemas`,
+      `npm run test:api-capabilities`, and the focused lint command.
+
 ## Passkeys + cross-deployment auto-login
 
 - [ ] Settings → Security → "Add a passkey ✨": wrong password → error toast,
@@ -343,7 +367,7 @@ scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
       `thingtime-<slug>-<W>x<H>.<ext>` where W/H include padding, and fires a
       Lopu success toast (errors also route through Lopu, never `alert`).
 - [ ] Exports and previews are whitespace-trimmed: `npm --prefix remix run
-    test:branding` passes (trim + padding + pixel-size unit tests).
+test:branding` passes (trim + padding + pixel-size unit tests).
 - [ ] Press kit grid renders all generated marketing images; the portrait
       phone wallpaper previews as a centre crop and must not stretch its grid
       row (no giant empty gap beside it).

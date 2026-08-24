@@ -8,6 +8,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { AdminRowQueryControls, useAdminRowQuery } from './AdminRowQueryControls';
 import type { AdminRowField } from './adminRowQuery';
 import { PRConflictResolverModelWaterfallEditor } from './PRConflictResolverModelWaterfallEditor';
+import { IntegrationManager } from './IntegrationManager';
 
 // Admin-only control panel (rendered from SettingsPage when user.isAdmin).
 // Lets admins choose the conflict resolver model order, tune global rate
@@ -104,8 +105,7 @@ const RateLimitEditor = () => {
     };
   }, []);
 
-  const patch = (name: string, next: Partial<Rule>) =>
-    setConfig((prev) => (prev ? { ...prev, [name]: { ...prev[name], ...next } } : prev));
+  const patch = (name: string, next: Partial<Rule>) => setConfig((prev) => (prev ? { ...prev, [name]: { ...prev[name], ...next } } : prev));
 
   const save = async () => {
     if (!config) return;
@@ -279,13 +279,21 @@ const AdminManager = () => {
   };
 
   const row = (r: AdminRow) => (
-    <Flex key={r.id} alignItems="center" columnGap={2} padding={2} borderRadius="var(--tt-radius-sm, 9px)" _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}>
+    <Flex
+      key={r.id}
+      alignItems="center"
+      columnGap={2}
+      padding={2}
+      borderRadius="var(--tt-radius-sm, 9px)"
+      _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+    >
       <Box minWidth={0} flex="1 1 auto">
         <Text fontSize="sm" fontWeight={600} noOfLines={1}>
           {r.displayName || r.username}
           {r.envAdmin && (
             <Text as="span" fontSize="xs" opacity={0.6} fontWeight={400}>
-              {' '}· env admin
+              {' '}
+              · env admin
             </Text>
           )}
         </Text>
@@ -364,13 +372,18 @@ const AdminManager = () => {
           Search
         </Button>
       </Flex>
-      {results.length > 0 && <Flex flexDirection="column" rowGap={0}>{results.map(row)}</Flex>}
+      {results.length > 0 && (
+        <Flex flexDirection="column" rowGap={0}>
+          {results.map(row)}
+        </Flex>
+      )}
     </Flex>
   );
 };
 
 export const AdminPanel = () => (
   <Flex flexDirection="column" rowGap={5}>
+    <IntegrationManager />
     <PRConflictResolverModelWaterfallEditor />
     <RateLimitEditor />
     <AdminManager />

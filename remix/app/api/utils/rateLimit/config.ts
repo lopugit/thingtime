@@ -65,6 +65,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // showcase posts/schemas) — bound it tightly so repeated runs can't hammer
   // the DB or burn serverless compute. Enforced fail-closed at the route.
   'mongodb.populate': { limit: 3, windowMs: 60_000, enabled: true },
+  // Admin external-integration proxy: it decrypts a credential and can issue
+  // an outbound request, so this is rate-limited and its route fails closed.
+  'admin.integrations': { limit: 60, windowMs: 60_000, enabled: true },
   // Data-endpoint override actions (thin-frontend mode). Each activation/save
   // makes the SERVER probe (TCP connect + ping, ≤2.5s) whatever host:port the
   // caller supplied — unbounded, that's an anonymous outbound port-scan /

@@ -133,6 +133,7 @@ After deployment and App installation, create both provider webhooks and click
 open PRs, Actions runs, deployments, and previews; subsequent webhooks keep the
 projection current. Until that first successful reconcile, an empty dashboard
 with zero counts is expected.
+
 # 💹 Donate on Indiegogo to save humanity 🩷
 
 ### You can get Merch 🌈 + other benefits 🦄💯
@@ -527,6 +528,40 @@ suspension, and many-to-many ownership links (assign accounts to an owner so
 one login can switch into its service accounts without credentials, and assign
 apps to co-managers).
 
+### Admin integration vault and policy proxy
+
+The admin Settings panel can store a **write-only** external credential and
+bind it to a saved endpoint policy. A browser never receives the credential
+again—not masked, decrypted, or through an audit record. Provision this
+distinct server-only value before creating any secret:
+
+```sh
+# Generate once with a secure secret manager / CSPRNG. It must decode to exactly 32 bytes.
+THINGTIME_ADMIN_VAULT_KEY="<base64url-32-byte-aes-256-gcm-key>"
+# Optional: exact comma-separated hosts allowed for Generic endpoint policies.
+# Vercel is built in as https://api.vercel.com; localhost/private/IP hosts are always refused.
+THINGTIME_ADMIN_PROXY_ALLOWED_HOSTS="api.example.com"
+```
+
+Do **not** reuse `JWT_SECRET`, a peer-discovery secret, `CRON_SECRET`, or a
+provider token as the vault key. Give provider credentials the narrowest scope
+the provider supports (for Vercel, the intended project/team only). The proxy
+accepts a saved endpoint id rather than an arbitrary URL; it enforces the
+configured HTTPS origin, closed path prefixes, selected read permission, and
+selected `none` / `create-only` / `write` policy before decrypting a credential.
+It rejects redirects, private/loopback hosts, sensitive caller headers, and
+oversized request or response bodies; all logged proxy rows are redacted and
+TTL-reaped.
+
+The initial create-only adapter is intentionally specific to Vercel project
+environment variables. It reserves a short create claim and lists the current
+project environment variables before sending the documented `POST
+/v9|v10/projects/{idOrName}/env` request; it never calls PATCH or a provider
+upsert mode. An out-of-band provider writer can still race the remote read, so
+the proxy promises **no update request from Thingtime**, not impossible global
+serialization across external actors. Generic create-only policies are refused
+until a provider-specific conditional-create adapter exists.
+
 App owners and linked co-managers use `/apps/manage` to see the app's measured
 aggregate usage and choose among the current live tier cards (the bootstrapped
 catalog starts with Free 5 GiB, Plus 25 GiB, Pro 100 GiB, and metered PAYG).
@@ -672,11 +707,11 @@ verifying the email address does not grant it. The permission has two
 independent scopes, so an administrator can approve the **public**, **private**,
 or **all** variation per user:
 
-| Scope | Covers | Flag |
-| --- | --- | --- |
-| `public` | post, comment, and custom-emoji attachments | `meta.publicUploads` |
+| Scope     | Covers                                                     | Flag                  |
+| --------- | ---------------------------------------------------------- | --------------------- |
+| `public`  | post, comment, and custom-emoji attachments                | `meta.publicUploads`  |
 | `private` | message attachments + the user's own profile avatar/banner | `meta.privateUploads` |
-| `all` | both of the above in one write | both flags |
+| `all`     | both of the above in one write                             | both flags            |
 
 The account carries `meta.publicUploads: false` and `meta.privateUploads:
 false` from registration; `POST /api/v1/attachments/uploads` answers
@@ -688,11 +723,11 @@ defaults to `public` for pre-scope callers).
 
 Each flag is deliberately tri-state, so nothing here needs a data migration:
 
-| flag value | Meaning |
-| --- | --- |
-| absent | account predates the change — uploads stay enabled |
-| `false` | withheld, awaiting admin approval (every new signup) |
-| `true` | granted by an administrator |
+| flag value | Meaning                                              |
+| ---------- | ---------------------------------------------------- |
+| absent     | account predates the change — uploads stay enabled   |
+| `false`    | withheld, awaiting admin approval (every new signup) |
+| `true`     | granted by an administrator                          |
 
 Administrators bypass the flags entirely, so the account that grants the
 permission can never be locked out of the surface that grants it.

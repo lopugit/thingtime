@@ -16,15 +16,15 @@ import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTok
 // Pure attachment metadata/envelope vocabulary shared with the server storage
 // layer. This module has no Node imports, so registry remains browser-safe.
 import {
-	ATTACHMENT_ENVELOPE_VERSION,
-	ATTACHMENT_MEDIA_KINDS,
-	ATTACHMENT_PROFILE_SLOTS,
-	ATTACHMENT_PURPOSES,
-	ATTACHMENT_STATES,
-	ATTACHMENT_THINGTIME,
-	MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
-	MAX_ATTACHMENT_NAME_CHARS,
-	sanitizeAttachmentPublicMetadata
+  ATTACHMENT_ENVELOPE_VERSION,
+  ATTACHMENT_MEDIA_KINDS,
+  ATTACHMENT_PROFILE_SLOTS,
+  ATTACHMENT_PURPOSES,
+  ATTACHMENT_STATES,
+  ATTACHMENT_THINGTIME,
+  MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
+  MAX_ATTACHMENT_NAME_CHARS,
+  sanitizeAttachmentPublicMetadata
 } from '../api/utils/attachments/attachmentCore.ts';
 
 export type ThingtimeFieldType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]' | 'object' | 'record' | 'id';
@@ -350,6 +350,12 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   rateLimits: 1,
   // bounded control-plane peer leases; one row per trusted deployment origin
   deploymentPeers: 1,
+  // Admin-only encrypted vault, endpoint policy, short create locks, and
+  // redacted audit events. These are control-plane records, never user Things.
+  adminIntegrationSecrets: 1,
+  adminIntegrationEndpoints: 1,
+  adminIntegrationClaims: 1,
+  adminIntegrationAudit: 1,
   // post view telemetry: one doc per (postId, viewerKey) — see api/utils/things/views.ts
   postViews: 1,
   email_events: 1,
@@ -423,168 +429,168 @@ const rootThingSchema: ThingtimeSchema = {
       description: 'shareId of the thing this thing is about (comment → post, reaction → post, share → root post).'
     },
     { name: 'tags', type: 'string[]', required: true, max: 12, description: 'Lowercased tags, max 12 × 40 chars.' },
-		{
-			name: 'sizeBytes',
-			type: 'number',
-			required: false,
-			system: true,
-			description:
-				'Exact logical bytes billed to the owner: UTF-8 JSON crystal/extended/tags bytes plus verified objectSizeBytes for protected attachment Things; absent on platform control-plane Things.'
-		},
-		{
-			name: 'storageClass',
-			type: 'string',
-			required: false,
-			system: true,
-			description:
-				'Server-owned allocation class: content contributes sizeBytes to its owner account ledger; control identifies protected platform bookkeeping and never trusts user-authored crystal metadata.'
-		},
-		{
-			name: 'storageAccountingVersion',
-			type: 'number',
-			required: false,
-			system: true,
-			description: 'Version of the logical byte projection used for sizeBytes.'
-		},
-		{
-			name: 'attachmentEnvelopeVersion',
-			type: 'number',
-			required: false,
-			system: true,
-			description: `Server-only proof for attachment object accounting (currently ${ATTACHMENT_ENVELOPE_VERSION}); never accepted from generic Thing input.`
-		},
-		{
-			name: 'attachmentState',
-			type: 'enum',
-			required: false,
-			values: [...ATTACHMENT_STATES],
-			system: true,
-			description:
-				'Private upload lifecycle state. Pending, finalizing, ready, and deleting objects all remain billable until their source Thing is removed.'
-		},
-		{
-			name: 'objectSizeBytes',
-			type: 'number',
-			required: false,
-			min: 0,
-			system: true,
-			description: 'Verified S3 object bytes added to a protected attachment Thing’s ordinary JSON allocation.'
-		},
-		{
-			name: 'objectKey',
-			type: 'string',
-			required: false,
-			system: true,
-			description: 'Private server-generated S3 object key; never copied from generic Thing input or projected publicly.'
-		},
-		{
-			name: 'objectVersionId',
-			type: 'string',
-			required: false,
-			system: true,
-			description: 'Private immutable S3 version id used for exact reads and permanent deletion before quota is refunded.'
-		},
-		{
-			name: 'attachmentRequestFingerprint',
-			type: 'string',
-			required: false,
-			system: true,
-			description: 'Private server-derived fingerprint that makes upload-start retries idempotent without exposing request metadata.'
-		},
-		{
-			name: 'attachmentPurpose',
-			type: 'enum',
-			required: false,
-			values: [...ATTACHMENT_PURPOSES],
-			system: true,
-			description: 'Server-owned immutable binding domain: post, comment, message, profile, or custom-emoji media.'
-		},
-		{
-			name: 'attachmentProfileSlot',
-			type: 'enum',
-			required: false,
-			values: [...ATTACHMENT_PROFILE_SLOTS],
-			system: true,
-			description: 'Server-owned avatar/banner slot, present exactly when attachmentPurpose is profile.'
-		},
-		{
-			name: 'moderation',
-			type: 'object',
-			required: false,
-			system: true,
-			description:
-				'Protected server-owned moderation state. Generic Thing create/update input never writes it; only moderation analysis and admin review may stamp it.'
-		},
-		{
-			name: 'attachmentFinalizationLeaseId',
-			type: 'string',
-			required: false,
-			system: true,
-			description: 'Private server-generated fencing token for the one request allowed to finalize a multipart upload.'
-		},
-		{
-			name: 'attachmentPartsIssuedAt',
-			type: 'date',
-			required: false,
-			system: true,
-			description: 'Private proof that a presigned UploadPart URL left the server; only these MPUs require lifecycle-backed settlement before refund.'
-		},
-		{
-			name: 'attachmentObjectlessDelete',
-			type: 'boolean',
-			required: false,
-			system: true,
-			description: 'Private deletion proof for a reserved upload that never received a multipart upload id or object version.'
-		},
-		{
-			name: 'attachmentMpuEmptyVerifiedAt',
-			type: 'date',
-			required: false,
-			system: true,
-			description: 'Private timestamp of the first empty multipart verification; a later cron pass must independently confirm it before refund.'
-		},
-		{
-			name: 'uploadId',
-			type: 'string',
-			required: false,
-			system: true,
-			description: 'Private multipart-upload id while an attachment is pending or finalizing.'
-		},
-		{
-			name: 'attachmentExpiresAt',
-			type: 'date',
-			required: false,
-			system: true,
-			description: 'Private cleanup deadline for an unfinished upload; cleanup must refund transactionally rather than using Mongo TTL.'
-		},
-		{
-			name: 'expiresAt',
-			type: 'date',
-			required: false,
-			system: true,
-			description: 'Optional server-owned retention deadline for protected operational Things.'
-		},
-		{
-			name: 'avatarAttachmentId',
-			type: 'id',
-			required: false,
-			system: true,
-			description: 'Protected current managed-avatar attachment reference on a canonical user Thing.'
-		},
-		{
-			name: 'bannerAttachmentId',
-			type: 'id',
-			required: false,
-			system: true,
-			description: 'Protected current managed-banner attachment reference on a canonical user Thing.'
-		},
-		{
-			name: 'emojiAttachmentId',
-			type: 'id',
-			required: false,
-			system: true,
-			description: 'Protected exact S3 attachment reference on a custom-emoji Thing.'
-		},
+    {
+      name: 'sizeBytes',
+      type: 'number',
+      required: false,
+      system: true,
+      description:
+        'Exact logical bytes billed to the owner: UTF-8 JSON crystal/extended/tags bytes plus verified objectSizeBytes for protected attachment Things; absent on platform control-plane Things.'
+    },
+    {
+      name: 'storageClass',
+      type: 'string',
+      required: false,
+      system: true,
+      description:
+        'Server-owned allocation class: content contributes sizeBytes to its owner account ledger; control identifies protected platform bookkeeping and never trusts user-authored crystal metadata.'
+    },
+    {
+      name: 'storageAccountingVersion',
+      type: 'number',
+      required: false,
+      system: true,
+      description: 'Version of the logical byte projection used for sizeBytes.'
+    },
+    {
+      name: 'attachmentEnvelopeVersion',
+      type: 'number',
+      required: false,
+      system: true,
+      description: `Server-only proof for attachment object accounting (currently ${ATTACHMENT_ENVELOPE_VERSION}); never accepted from generic Thing input.`
+    },
+    {
+      name: 'attachmentState',
+      type: 'enum',
+      required: false,
+      values: [...ATTACHMENT_STATES],
+      system: true,
+      description:
+        'Private upload lifecycle state. Pending, finalizing, ready, and deleting objects all remain billable until their source Thing is removed.'
+    },
+    {
+      name: 'objectSizeBytes',
+      type: 'number',
+      required: false,
+      min: 0,
+      system: true,
+      description: 'Verified S3 object bytes added to a protected attachment Thing’s ordinary JSON allocation.'
+    },
+    {
+      name: 'objectKey',
+      type: 'string',
+      required: false,
+      system: true,
+      description: 'Private server-generated S3 object key; never copied from generic Thing input or projected publicly.'
+    },
+    {
+      name: 'objectVersionId',
+      type: 'string',
+      required: false,
+      system: true,
+      description: 'Private immutable S3 version id used for exact reads and permanent deletion before quota is refunded.'
+    },
+    {
+      name: 'attachmentRequestFingerprint',
+      type: 'string',
+      required: false,
+      system: true,
+      description: 'Private server-derived fingerprint that makes upload-start retries idempotent without exposing request metadata.'
+    },
+    {
+      name: 'attachmentPurpose',
+      type: 'enum',
+      required: false,
+      values: [...ATTACHMENT_PURPOSES],
+      system: true,
+      description: 'Server-owned immutable binding domain: post, comment, message, profile, or custom-emoji media.'
+    },
+    {
+      name: 'attachmentProfileSlot',
+      type: 'enum',
+      required: false,
+      values: [...ATTACHMENT_PROFILE_SLOTS],
+      system: true,
+      description: 'Server-owned avatar/banner slot, present exactly when attachmentPurpose is profile.'
+    },
+    {
+      name: 'moderation',
+      type: 'object',
+      required: false,
+      system: true,
+      description:
+        'Protected server-owned moderation state. Generic Thing create/update input never writes it; only moderation analysis and admin review may stamp it.'
+    },
+    {
+      name: 'attachmentFinalizationLeaseId',
+      type: 'string',
+      required: false,
+      system: true,
+      description: 'Private server-generated fencing token for the one request allowed to finalize a multipart upload.'
+    },
+    {
+      name: 'attachmentPartsIssuedAt',
+      type: 'date',
+      required: false,
+      system: true,
+      description: 'Private proof that a presigned UploadPart URL left the server; only these MPUs require lifecycle-backed settlement before refund.'
+    },
+    {
+      name: 'attachmentObjectlessDelete',
+      type: 'boolean',
+      required: false,
+      system: true,
+      description: 'Private deletion proof for a reserved upload that never received a multipart upload id or object version.'
+    },
+    {
+      name: 'attachmentMpuEmptyVerifiedAt',
+      type: 'date',
+      required: false,
+      system: true,
+      description: 'Private timestamp of the first empty multipart verification; a later cron pass must independently confirm it before refund.'
+    },
+    {
+      name: 'uploadId',
+      type: 'string',
+      required: false,
+      system: true,
+      description: 'Private multipart-upload id while an attachment is pending or finalizing.'
+    },
+    {
+      name: 'attachmentExpiresAt',
+      type: 'date',
+      required: false,
+      system: true,
+      description: 'Private cleanup deadline for an unfinished upload; cleanup must refund transactionally rather than using Mongo TTL.'
+    },
+    {
+      name: 'expiresAt',
+      type: 'date',
+      required: false,
+      system: true,
+      description: 'Optional server-owned retention deadline for protected operational Things.'
+    },
+    {
+      name: 'avatarAttachmentId',
+      type: 'id',
+      required: false,
+      system: true,
+      description: 'Protected current managed-avatar attachment reference on a canonical user Thing.'
+    },
+    {
+      name: 'bannerAttachmentId',
+      type: 'id',
+      required: false,
+      system: true,
+      description: 'Protected current managed-banner attachment reference on a canonical user Thing.'
+    },
+    {
+      name: 'emojiAttachmentId',
+      type: 'id',
+      required: false,
+      system: true,
+      description: 'Protected exact S3 attachment reference on a custom-emoji Thing.'
+    },
     { name: 'createdAt', type: 'date', required: true, system: true, description: 'Creation time.' },
     { name: 'updatedAt', type: 'date', required: true, system: true, description: 'Last mutation time.' }
   ],
@@ -666,59 +672,59 @@ const postSchema: ThingtimeSchema = {
 };
 
 const attachmentSchema: ThingtimeSchema = {
-	id: ATTACHMENT_THINGTIME,
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Attachment',
-	summary: 'A private-S3 file attached relationally to a post.',
-	detail:
-		'Attachment Things are created only through the dedicated upload endpoints. Their crystal contains ' +
-		'stable, safe public metadata; object keys, multipart ids, lifecycle state, and verified object bytes ' +
-		'are server-owned root fields. A ready post attachment points at its post through targetId and inherits that ' +
-		'post’s audience; managed profile media points at the exact public user and avatar/banner slot that references it. ' +
-		'Pending/finalizing/deleting rows remain billable source records until cleanup confirms ' +
-		'the object is inaccessible, preventing quota oversubscription and refund races.',
-	createdVia: 'POST /api/v1/attachments/uploads',
-	fields: [
-		{
-			name: 'name',
-			type: 'string',
-			required: true,
-			max: MAX_ATTACHMENT_NAME_CHARS,
-			description: 'Display filename only; never used as an S3 key.'
-		},
-		{
-			name: 'size',
-			type: 'number',
-			required: true,
-			min: 0,
-			description: 'Verified object size in bytes; must equal the server-owned root objectSizeBytes.'
-		},
-		{
-			name: 'contentType',
-			type: 'string',
-			required: true,
-			max: MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
-			description: 'Normalized MIME type, defaulting to application/octet-stream.'
-		},
-		{
-			name: 'mediaKind',
-			type: 'enum',
-			required: true,
-			values: [...ATTACHMENT_MEDIA_KINDS],
-			description: 'Server-derived safe rendering class. SVG, HTML, and unknown types are files, never inline media.'
-		},
-		{
-			name: 'detectedContentType',
-			type: 'string',
-			required: false,
-			max: MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
-			description:
-				'Magic-byte-sniffed MIME type, preserved only when the served contentType stays application/octet-stream so downloads can still name the real container (for example video/x-msvideo for an AVI). Server-written at upload finalization; never client input.'
-		}
-	],
-	example: { name: 'sunset.webp', size: 482013, contentType: 'image/webp', mediaKind: 'image' }
+  id: ATTACHMENT_THINGTIME,
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Attachment',
+  summary: 'A private-S3 file attached relationally to a post.',
+  detail:
+    'Attachment Things are created only through the dedicated upload endpoints. Their crystal contains ' +
+    'stable, safe public metadata; object keys, multipart ids, lifecycle state, and verified object bytes ' +
+    'are server-owned root fields. A ready post attachment points at its post through targetId and inherits that ' +
+    'post’s audience; managed profile media points at the exact public user and avatar/banner slot that references it. ' +
+    'Pending/finalizing/deleting rows remain billable source records until cleanup confirms ' +
+    'the object is inaccessible, preventing quota oversubscription and refund races.',
+  createdVia: 'POST /api/v1/attachments/uploads',
+  fields: [
+    {
+      name: 'name',
+      type: 'string',
+      required: true,
+      max: MAX_ATTACHMENT_NAME_CHARS,
+      description: 'Display filename only; never used as an S3 key.'
+    },
+    {
+      name: 'size',
+      type: 'number',
+      required: true,
+      min: 0,
+      description: 'Verified object size in bytes; must equal the server-owned root objectSizeBytes.'
+    },
+    {
+      name: 'contentType',
+      type: 'string',
+      required: true,
+      max: MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
+      description: 'Normalized MIME type, defaulting to application/octet-stream.'
+    },
+    {
+      name: 'mediaKind',
+      type: 'enum',
+      required: true,
+      values: [...ATTACHMENT_MEDIA_KINDS],
+      description: 'Server-derived safe rendering class. SVG, HTML, and unknown types are files, never inline media.'
+    },
+    {
+      name: 'detectedContentType',
+      type: 'string',
+      required: false,
+      max: MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
+      description:
+        'Magic-byte-sniffed MIME type, preserved only when the served contentType stays application/octet-stream so downloads can still name the real container (for example video/x-msvideo for an AVI). Server-written at upload finalization; never client input.'
+    }
+  ],
+  example: { name: 'sunset.webp', size: 482013, contentType: 'image/webp', mediaKind: 'image' }
 };
 
 const commentSchema: ThingtimeSchema = {
@@ -1000,7 +1006,7 @@ const saveThingSchema: ThingtimeSchema = {
 
 const subscriptionSchema: ThingtimeSchema = {
   id: 'subscription',
-	version: 3,
+  version: 3,
   kind: 'crystal',
   collection: null,
   title: 'Subscription',
@@ -1012,8 +1018,8 @@ const subscriptionSchema: ThingtimeSchema = {
     'assignment snapshots an immutable subscription-tier version id + version so a later publish/archive ' +
     'never changes the plan someone originally selected. The tier supplies default quotas; per-field admin overrides win, with null meaning ' +
     'unlimited. payg is the metered tier: no hard caps, usage is measured by the byte ledgers and billed. ' +
-		'The same protected Thing is the authoritative whole-account byte ledger, keeping the userStorageBytes ' +
-		'entitlement and storageUsedBytes admission counter together in one atomic document. Enforcement (account/app storage budgets, app/PAT mint caps) resolves through the merged "effective" quotas.',
+    'The same protected Thing is the authoritative whole-account byte ledger, keeping the userStorageBytes ' +
+    'entitlement and storageUsedBytes admission counter together in one atomic document. Enforcement (account/app storage budgets, app/PAT mint caps) resolves through the merged "effective" quotas.',
   fields: [
     { name: 'quotaKind', type: 'string', required: true, values: ['subscription'], description: 'Bookkeeping marker (like the app-storage ledger).' },
     {
@@ -1035,29 +1041,29 @@ const subscriptionSchema: ThingtimeSchema = {
       description: 'Per-field user quota overrides (userStorageBytes, maxApps, maxPats; null = unlimited).'
     },
     { name: 'note', type: 'string', required: false, max: 500, description: 'Admin note (why this assignment exists).' },
-		{ name: 'updatedBy', type: 'id', required: false, description: 'The admin who last changed it.' },
-		{
-			name: 'storageUsedBytes',
-			type: 'number',
-			required: true,
-			min: 0,
-			description: 'Canonical whole-account logical content bytes currently used.'
-		},
-		{
-			name: 'storageAccountingVersion',
-			type: 'number',
-			required: true,
-			min: 1,
-			description: 'Version of the byte projection and ledger contract; positive writes fail closed until initialized.'
-		},
-		{
-			name: 'storageLedgerStatus',
-			type: 'enum',
-			required: true,
-			values: ['initializing', 'ready', 'needs-reconcile'],
-			description: 'Ready admits growth; other states block growth while source-document reconciliation runs.'
-		},
-		{ name: 'storageReconciledAt', type: 'date', required: false, description: 'Last exact reconciliation from content size stamps.' }
+    { name: 'updatedBy', type: 'id', required: false, description: 'The admin who last changed it.' },
+    {
+      name: 'storageUsedBytes',
+      type: 'number',
+      required: true,
+      min: 0,
+      description: 'Canonical whole-account logical content bytes currently used.'
+    },
+    {
+      name: 'storageAccountingVersion',
+      type: 'number',
+      required: true,
+      min: 1,
+      description: 'Version of the byte projection and ledger contract; positive writes fail closed until initialized.'
+    },
+    {
+      name: 'storageLedgerStatus',
+      type: 'enum',
+      required: true,
+      values: ['initializing', 'ready', 'needs-reconcile'],
+      description: 'Ready admits growth; other states block growth while source-document reconciliation runs.'
+    },
+    { name: 'storageReconciledAt', type: 'date', required: false, description: 'Last exact reconciliation from content size stamps.' }
   ],
   example: {
     quotaKind: 'subscription',
@@ -1067,9 +1073,9 @@ const subscriptionSchema: ThingtimeSchema = {
     tierVersionId: 'subscription-tier-pro-v1',
     tierVersion: 1,
     overrides: { userStorageBytes: 21474836480 },
-		storageUsedBytes: 1048576,
-		storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
-		storageLedgerStatus: 'ready',
+    storageUsedBytes: 1048576,
+    storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+    storageLedgerStatus: 'ready',
     note: 'Beta partner'
   }
 };
@@ -1174,81 +1180,81 @@ const appStorageLedgerSchema: ThingtimeSchema = {
 };
 
 const serviceQuotaSchema: ThingtimeSchema = {
-	id: 'service-quota',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Service quota ledger',
-	summary: 'Protected rate/admission accounting for one user-owned service capability.',
-	detail:
-		'One deterministic server-owned Thing per (user, service key). Dedicated quota endpoints ' +
-		'atomically reserve, permit, release, and reset capacity. The generic Things API cannot create ' +
-		'or edit this protected kind, and the root storageClass is control so these operational counters ' +
-		'never inflate customer content usage. Legacy data-kind quota records are promoted on first use ' +
-		'and by the whole-account storage migration.',
-	createdVia: 'Dedicated service quota utilities',
-	fields: [
-		{ name: 'quotaKind', type: 'string', required: true, values: ['service-quota'], description: 'Protected bookkeeping marker.' },
-		{ name: 'quotaVersion', type: 'number', required: true, min: 1, description: 'Service quota state-machine version.' },
-		{ name: 'key', type: 'string', required: true, description: 'Server-selected capability key.' },
-		{ name: 'policy', type: 'record', required: true, description: 'Pinned daily and rolling-window limits.' },
-		{ name: 'dayKey', type: 'string', required: true, description: 'Current UTC accounting day.' },
-		{ name: 'dailyUsed', type: 'number', required: true, min: 0, description: 'Reserved capacity for the current UTC day.' },
-		{ name: 'reservations', type: 'object', required: true, description: 'Bounded idempotent reservation records.' },
-		{ name: 'permitIds', type: 'string[]', required: true, description: 'Granted rolling-window permit ids.' },
-		{ name: 'releasedIds', type: 'string[]', required: true, description: 'Released idempotency keys.' },
-		{ name: 'rollingPermits', type: 'object', required: true, description: 'Permit ids and timestamps still inside the rolling window.' }
-	],
-	example: {
-		quotaKind: 'service-quota',
-		quotaVersion: 1,
-		key: 'map-blocks',
-		policy: { dailyLimit: 1000, rollingLimit: 20, rollingWindowMs: 60000 },
-		dayKey: '2026-08-07',
-		dailyUsed: 12,
-		reservations: [],
-		permitIds: [],
-		releasedIds: [],
-		rollingPermits: []
-	}
+  id: 'service-quota',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Service quota ledger',
+  summary: 'Protected rate/admission accounting for one user-owned service capability.',
+  detail:
+    'One deterministic server-owned Thing per (user, service key). Dedicated quota endpoints ' +
+    'atomically reserve, permit, release, and reset capacity. The generic Things API cannot create ' +
+    'or edit this protected kind, and the root storageClass is control so these operational counters ' +
+    'never inflate customer content usage. Legacy data-kind quota records are promoted on first use ' +
+    'and by the whole-account storage migration.',
+  createdVia: 'Dedicated service quota utilities',
+  fields: [
+    { name: 'quotaKind', type: 'string', required: true, values: ['service-quota'], description: 'Protected bookkeeping marker.' },
+    { name: 'quotaVersion', type: 'number', required: true, min: 1, description: 'Service quota state-machine version.' },
+    { name: 'key', type: 'string', required: true, description: 'Server-selected capability key.' },
+    { name: 'policy', type: 'record', required: true, description: 'Pinned daily and rolling-window limits.' },
+    { name: 'dayKey', type: 'string', required: true, description: 'Current UTC accounting day.' },
+    { name: 'dailyUsed', type: 'number', required: true, min: 0, description: 'Reserved capacity for the current UTC day.' },
+    { name: 'reservations', type: 'object', required: true, description: 'Bounded idempotent reservation records.' },
+    { name: 'permitIds', type: 'string[]', required: true, description: 'Granted rolling-window permit ids.' },
+    { name: 'releasedIds', type: 'string[]', required: true, description: 'Released idempotency keys.' },
+    { name: 'rollingPermits', type: 'object', required: true, description: 'Permit ids and timestamps still inside the rolling window.' }
+  ],
+  example: {
+    quotaKind: 'service-quota',
+    quotaVersion: 1,
+    key: 'map-blocks',
+    policy: { dailyLimit: 1000, rollingLimit: 20, rollingWindowMs: 60000 },
+    dayKey: '2026-08-07',
+    dailyUsed: 12,
+    reservations: [],
+    permitIds: [],
+    releasedIds: [],
+    rollingPermits: []
+  }
 };
 
 const migrationDiagnosticSchema: ThingtimeSchema = {
-	id: MIGRATION_DIAGNOSTIC_THINGTIME,
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Migration diagnostic',
-	summary: 'A short-lived, admin-owned report captured when a database migration throws.',
-	detail:
-		'Protected control-plane Thing written only by the admin migration runner after its lease is released. ' +
-		'The crystal contains bounded run metadata; the full redacted error is an opaque binary root field, read ' +
-		'only through the current-admin diagnostic endpoint. Version 2 may retain a bounded map of explicitly contextual MongoDB ObjectIds behind value-free references; each raw value requires fresh current-password confirmation through the closed reveal endpoint. Credentials and ambiguous values remain irreversible. It expires automatically and never enters storage billing.',
-	createdVia: 'POST /api/v1/admin/migrations/run (failure path)',
-	fields: [
-		{ name: 'diagnosticVersion', type: 'number', required: true, description: 'Diagnostic envelope version.' },
-		{ name: 'migrationId', type: 'string', required: true, max: 128, description: 'Registered migration id.' },
-		{
-			name: 'mode',
-			type: 'enum',
-			required: true,
-			values: ['run'],
-			description: 'Only real runs persist diagnostics; failed dry runs never create a diagnostic Thing.'
-		},
-		{ name: 'status', type: 'number', required: true, description: 'HTTP status returned by the migration endpoint.' },
-		{ name: 'outcome', type: 'enum', required: true, values: ['rejected', 'unknown'], description: 'Whether mutation outcome is known.' },
-		{ name: 'summary', type: 'string', required: true, max: 2048, description: 'Safe operator-facing failure summary.' },
-		{ name: 'capturedAt', type: 'date', required: true, description: 'Diagnostic capture time.' }
-	],
-	example: {
-		diagnosticVersion: 2,
-		migrationId: 'backfill-user-storage-accounting',
-		mode: 'run',
-		status: 500,
-		outcome: 'unknown',
-		summary: 'Migration stopped before completion.',
-		capturedAt: '2026-08-08T00:00:00.000Z'
-	}
+  id: MIGRATION_DIAGNOSTIC_THINGTIME,
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Migration diagnostic',
+  summary: 'A short-lived, admin-owned report captured when a database migration throws.',
+  detail:
+    'Protected control-plane Thing written only by the admin migration runner after its lease is released. ' +
+    'The crystal contains bounded run metadata; the full redacted error is an opaque binary root field, read ' +
+    'only through the current-admin diagnostic endpoint. Version 2 may retain a bounded map of explicitly contextual MongoDB ObjectIds behind value-free references; each raw value requires fresh current-password confirmation through the closed reveal endpoint. Credentials and ambiguous values remain irreversible. It expires automatically and never enters storage billing.',
+  createdVia: 'POST /api/v1/admin/migrations/run (failure path)',
+  fields: [
+    { name: 'diagnosticVersion', type: 'number', required: true, description: 'Diagnostic envelope version.' },
+    { name: 'migrationId', type: 'string', required: true, max: 128, description: 'Registered migration id.' },
+    {
+      name: 'mode',
+      type: 'enum',
+      required: true,
+      values: ['run'],
+      description: 'Only real runs persist diagnostics; failed dry runs never create a diagnostic Thing.'
+    },
+    { name: 'status', type: 'number', required: true, description: 'HTTP status returned by the migration endpoint.' },
+    { name: 'outcome', type: 'enum', required: true, values: ['rejected', 'unknown'], description: 'Whether mutation outcome is known.' },
+    { name: 'summary', type: 'string', required: true, max: 2048, description: 'Safe operator-facing failure summary.' },
+    { name: 'capturedAt', type: 'date', required: true, description: 'Diagnostic capture time.' }
+  ],
+  example: {
+    diagnosticVersion: 2,
+    migrationId: 'backfill-user-storage-accounting',
+    mode: 'run',
+    status: 500,
+    outcome: 'unknown',
+    summary: 'Migration stopped before completion.',
+    capturedAt: '2026-08-08T00:00:00.000Z'
+  }
 };
 
 const ciEntitySchema = (id: Exclude<(typeof CI_CONTROL_THINGTIME)[number], 'ci-event'>, title: string, summary: string): ThingtimeSchema => ({
@@ -1386,7 +1392,7 @@ const followThingSchema: ThingtimeSchema = {
     '/api/v1/users/connections. The generic things CRUD refuses this kind.',
   requiresTarget: true,
   createdVia: 'POST /api/v1/users/follow',
-	fields: [{ name: 'follow', type: 'boolean', required: true, description: 'Always true — dedup index marker.' }],
+  fields: [{ name: 'follow', type: 'boolean', required: true, description: 'Always true — dedup index marker.' }],
   example: { follow: true }
 };
 
@@ -1468,7 +1474,7 @@ export const normalizeNotificationPrefs = (stored: Record<string, any> | null | 
   for (const type of NOTIFICATION_TYPES) push[type] = pushStored[type] !== false;
   const email: Record<string, boolean> = {};
   for (const type of EMAIL_NOTIFICATION_TYPES) {
-		email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type) ? emailStored[type] === true : emailStored[type] !== false;
+    email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type) ? emailStored[type] === true : emailStored[type] !== false;
   }
   return {
     push,
@@ -1488,7 +1494,7 @@ const notificationThingSchema: ThingtimeSchema = {
     'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
     'comments, replies, reacts, shares, or (fan-out, capped) posts while you follow them. ' +
     'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
-		"flips when read. Listed via GET /api/v1/notifications (filtered by the recipient's " +
+    "flips when read. Listed via GET /api/v1/notifications (filtered by the recipient's " +
     'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +
     '["tt:user"]; the generic things CRUD refuses this kind.',
   createdVia: 'server-side emission (social/engagement events)',
@@ -1730,10 +1736,121 @@ const deploymentPeerSchema: ThingtimeSchema = {
     { name: 'firstSeenAt', type: 'date', required: true, description: 'First accepted announcement.' },
     { name: 'lastSeenAt', type: 'date', required: true, description: 'Most recent accepted announcement.' },
     { name: 'expiresAt', type: 'date', required: true, description: 'TTL lease expiry.' },
-    { name: 'syncCursor', type: 'string', required: false, description: 'Private bounded traversal cursor for the next remote peer page; never projected to peers.' },
+    {
+      name: 'syncCursor',
+      type: 'string',
+      required: false,
+      description: 'Private bounded traversal cursor for the next remote peer page; never projected to peers.'
+    },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
   ],
-  example: { origin: 'https://pr-68.previews.dev.thingtime.com', signingPublicKey: '<base64url-ed25519-spki>', lastSeenAt: '2026-08-24T00:00:00.000Z', schemaVersion: 1 }
+  example: {
+    origin: 'https://pr-68.previews.dev.thingtime.com',
+    signingPublicKey: '<base64url-ed25519-spki>',
+    lastSeenAt: '2026-08-24T00:00:00.000Z',
+    schemaVersion: 1
+  }
+};
+
+const adminIntegrationSecretSchema: ThingtimeSchema = {
+  id: 'admin-integration-secret',
+  version: COLLECTION_SCHEMA_VERSIONS.adminIntegrationSecrets,
+  kind: 'collection',
+  collection: 'adminIntegrationSecrets',
+  title: 'Admin integration secret vault entry',
+  summary: 'Admin-only AES-256-GCM encrypted external credential; its value is never projected by an API.',
+  detail:
+    'Endpoint policies reference the credential through an opaque id. Ciphertext, IV, and authentication tag remain server-only; deleting is blocked while an endpoint references the secret.',
+  fields: [
+    { name: 'id', type: 'string', required: true, description: 'Opaque vault id.' },
+    { name: 'label', type: 'string', required: true, description: 'Non-sensitive operator label.' },
+    { name: 'cipherText', type: 'string', required: true, description: 'AES-GCM ciphertext. Never projected.' },
+    { name: 'iv', type: 'string', required: true, description: 'AES-GCM nonce. Never projected.' },
+    { name: 'tag', type: 'string', required: true, description: 'AES-GCM auth tag. Never projected.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Creation time.' },
+    { name: 'updatedAt', type: 'date', required: true, description: 'Rotation time.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: { id: 'secret_example', label: 'Vercel write-only token', cipherText: '<encrypted>', schemaVersion: 1 }
+};
+
+const adminIntegrationEndpointSchema: ThingtimeSchema = {
+  id: 'admin-integration-endpoint',
+  version: COLLECTION_SCHEMA_VERSIONS.adminIntegrationEndpoints,
+  kind: 'collection',
+  collection: 'adminIntegrationEndpoints',
+  title: 'Admin integration endpoint policy',
+  summary: 'Admin-managed upstream origin, closed paths, credential reference, and read/write permission policy.',
+  detail:
+    'The proxy receives an endpoint id rather than an arbitrary URL. It enforces the selected read, create-only, or full-write mode before decrypting the referenced credential.',
+  fields: [
+    { name: 'id', type: 'string', required: true, description: 'Opaque endpoint id.' },
+    { name: 'origin', type: 'string', required: true, description: 'Allowlisted HTTPS upstream origin.' },
+    { name: 'secretId', type: 'string', required: true, description: 'Referenced vault id.' },
+    { name: 'allowedPathPrefixes', type: 'string[]', required: true, description: 'Closed upstream path prefixes.' },
+    { name: 'allowRead', type: 'boolean', required: true, description: 'Whether GET through the proxy is permitted.' },
+    { name: 'writeMode', type: 'enum', required: true, values: ['none', 'create-only', 'write'], description: 'Allowed write policy.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: {
+    id: 'endpoint_example',
+    origin: 'https://api.vercel.com',
+    secretId: 'secret_example',
+    allowedPathPrefixes: ['/v9/projects'],
+    allowRead: true,
+    writeMode: 'create-only',
+    schemaVersion: 1
+  }
+};
+
+const adminIntegrationClaimSchema: ThingtimeSchema = {
+  id: 'admin-integration-claim',
+  version: COLLECTION_SCHEMA_VERSIONS.adminIntegrationClaims,
+  kind: 'collection',
+  collection: 'adminIntegrationClaims',
+  title: 'Admin integration create-only claim',
+  summary: 'Short-lived relational lock preventing concurrent create-only requests for the same provider resource.',
+  detail:
+    'Claims contain a derived provider resource identity but never a credential or request body. They expire automatically and are removed after each completed proxy call.',
+  fields: [
+    { name: 'endpointId', type: 'string', required: true, description: 'Saved endpoint policy id.' },
+    { name: 'resourceKey', type: 'string', required: true, description: 'Bounded provider-specific create identity.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Claim creation time.' },
+    { name: 'expiresAt', type: 'date', required: true, description: 'TTL expiry time.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: { endpointId: 'endpoint_example', resourceKey: 'project:ENV_KEY:production', expiresAt: '2026-08-24T00:02:00.000Z', schemaVersion: 1 }
+};
+
+const adminIntegrationAuditSchema: ThingtimeSchema = {
+  id: 'admin-integration-audit',
+  version: COLLECTION_SCHEMA_VERSIONS.adminIntegrationAudit,
+  kind: 'collection',
+  collection: 'adminIntegrationAudit',
+  title: 'Admin integration proxy audit event',
+  summary: 'Redacted, expiring control-plane evidence for a policy-proxied external call.',
+  detail:
+    'Audit rows record endpoint, operation, path, status, and coarse outcome only. Credentials, request bodies, response bodies, and provider secret values are never stored here.',
+  fields: [
+    { name: 'id', type: 'string', required: true, description: 'Opaque audit event id.' },
+    { name: 'endpointId', type: 'string', required: true, description: 'Saved endpoint policy id.' },
+    { name: 'operation', type: 'enum', required: true, values: ['read', 'create', 'write'], description: 'Policy operation.' },
+    { name: 'path', type: 'string', required: true, description: 'Allowed upstream path without query values.' },
+    { name: 'status', type: 'number', required: true, description: 'Upstream status or policy-block code.' },
+    { name: 'outcome', type: 'enum', required: true, values: ['allowed', 'blocked', 'failed'], description: 'Coarse result.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Event time.' },
+    { name: 'expiresAt', type: 'date', required: true, description: 'TTL expiry time.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' }
+  ],
+  example: {
+    id: 'audit_example',
+    endpointId: 'endpoint_example',
+    operation: 'create',
+    path: '/v10/projects/project/env',
+    status: 201,
+    outcome: 'allowed',
+    schemaVersion: 1
+  }
 };
 
 const appSchema: ThingtimeSchema = {
@@ -1876,7 +1993,7 @@ const communityMemberSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Community member',
-	summary: "One user's membership of one community (relational child doc).",
+  summary: "One user's membership of one community (relational child doc).",
   detail:
     'targetId = the community shareId, ownerId = the member. Uniqueness rides the single ' +
     'crystal.memberKey field (`<communityId>:<userId>`, partial unique index) — the reaction-index ' +
@@ -1942,24 +2059,24 @@ const chatSchema: ThingtimeSchema = {
     'join) or private (admins add).',
   createdVia: 'POST /api/v1/chats',
   fields: [
-		{
-			name: 'name',
-			type: 'string',
-			required: false,
-			max: MAX_CHAT_NAME_CHARS,
-			description: 'Chat name (null for DMs — the UI shows the other member).'
-		},
+    {
+      name: 'name',
+      type: 'string',
+      required: false,
+      max: MAX_CHAT_NAME_CHARS,
+      description: 'Chat name (null for DMs — the UI shows the other member).'
+    },
     { name: 'topic', type: 'string', required: false, max: MAX_CHAT_TOPIC_CHARS, description: 'Channel topic line.' },
     { name: 'chatType', type: 'enum', required: true, values: ['channel', 'group', 'dm'], description: 'Conversation shape.' },
     { name: 'communityId', type: 'id', required: false, description: 'Owning community shareId (channels only).' },
     { name: 'sectionId', type: 'id', required: false, description: 'Sidebar section shareId (channels only).' },
-		{
-			name: 'channelVisibility',
-			type: 'enum',
-			required: false,
-			values: ['public', 'private'],
-			description: 'Channel joinability within its community (channels only, default public).'
-		},
+    {
+      name: 'channelVisibility',
+      type: 'enum',
+      required: false,
+      values: ['public', 'private'],
+      description: 'Channel joinability within its community (channels only, default public).'
+    },
     { name: 'dmKey', type: 'string', required: false, description: 'Sorted participant-id pair key deduping DMs.' }
   ],
   example: { name: 'general', topic: 'Anything goes', chatType: 'channel', channelVisibility: 'public' }
@@ -1971,7 +2088,7 @@ const chatMemberSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Chat member',
-	summary: "One user's membership of one chat — role, nickname, request state and read receipt.",
+  summary: "One user's membership of one chat — role, nickname, request state and read receipt.",
   detail:
     'targetId = the chat shareId, ownerId = the member. Unique per (chat, user) via ' +
     'crystal.memberKey. state tracks the Messenger request flow: active, pending (message ' +
@@ -1983,13 +2100,13 @@ const chatMemberSchema: ThingtimeSchema = {
     { name: 'memberKey', type: 'string', required: true, description: 'Unique `<chatId>:<userId>` pair key.' },
     { name: 'role', type: 'enum', required: true, values: ['owner', 'admin', 'member'], description: 'Chat role.' },
     { name: 'nickname', type: 'string', required: false, max: MAX_NICKNAME_CHARS, description: 'Per-chat nickname (Messenger style).' },
-		{
-			name: 'state',
-			type: 'enum',
-			required: true,
-			values: ['active', 'pending', 'left', 'declined'],
-			description: 'Membership lifecycle / message-request state.'
-		},
+    {
+      name: 'state',
+      type: 'enum',
+      required: true,
+      values: ['active', 'pending', 'left', 'declined'],
+      description: 'Membership lifecycle / message-request state.'
+    },
     { name: 'requestOrigin', type: 'enum', required: false, values: ['follower', 'unknown'], description: 'Message-request bucket while pending.' },
     { name: 'lastReadMessageId', type: 'id', required: false, description: 'Newest message this member has read.' },
     { name: 'lastReadAt', type: 'string', required: false, description: 'ISO timestamp of that read (drives unread counts + seen-by).' },
@@ -2014,24 +2131,24 @@ const chatMessageSchema: ThingtimeSchema = {
     'standard reaction things targeting the message, including custom `custom:<emoji id>` tokens.',
   createdVia: 'POST /api/v1/chats/messages',
   fields: [
-		{
-			name: 'text',
-			type: 'string',
-			required: false,
-			max: MAX_MESSAGE_CHARS,
-			description: `Optional message text, max ${MAX_MESSAGE_CHARS} chars. A message may instead contain one or more bound attachments. :name: tokens render as custom emojis.`
-		},
+    {
+      name: 'text',
+      type: 'string',
+      required: false,
+      max: MAX_MESSAGE_CHARS,
+      description: `Optional message text, max ${MAX_MESSAGE_CHARS} chars. A message may instead contain one or more bound attachments. :name: tokens render as custom emojis.`
+    },
     { name: 'threadRootId', type: 'id', required: false, description: 'Root message shareId when this is a thread reply.' },
     { name: 'replyToId', type: 'id', required: false, description: 'Quoted message shareId (inline reply).' },
     { name: 'editedAt', type: 'string', required: false, description: 'ISO timestamp of the last edit.' },
     { name: 'deletedAt', type: 'string', required: false, description: 'ISO soft-delete timestamp (text is cleared).' },
-		{
-			name: 'systemType',
-			type: 'enum',
-			required: false,
-			values: ['member-added', 'member-left', 'member-removed', 'chat-renamed', 'chat-created', 'topic-changed'],
-			description: 'Set on system event messages.'
-		},
+    {
+      name: 'systemType',
+      type: 'enum',
+      required: false,
+      values: ['member-added', 'member-left', 'member-removed', 'chat-renamed', 'chat-created', 'topic-changed'],
+      description: 'Set on system event messages.'
+    },
     { name: 'systemMeta', type: 'record', required: false, description: 'Event payload for system messages ({ subjectId, value… }).' }
   ],
   example: { text: 'hello from the messenger 👋' }
@@ -2045,285 +2162,285 @@ const aiConnectionSchema: ThingtimeSchema = {
   title: 'AI desktop connection',
   summary: 'One consented ChatGPT or Claude desktop source linked to Thingtime Messenger.',
   detail:
-		'Created only through /api/v1/ai/connections or an authenticated device live sync. It stores bounded sync status and counts, ' +
+    'Created only through /api/v1/ai/connections or an authenticated device live sync. It stores bounded sync status and counts, ' +
     'never provider credentials, cookies, raw local paths or conversation bodies. Projects map ' +
-		'to communities, conversations or native sessions to chats, and visible completed messages to relational chat-message ' +
-		'Things with hashed source keys for idempotent resync. Live connections expose safe command capabilities and remain writable only through the paired device bridge.',
-	createdVia: 'POST /api/v1/ai/connections or /api/v1/devices/node/live-sync',
+    'to communities, conversations or native sessions to chats, and visible completed messages to relational chat-message ' +
+    'Things with hashed source keys for idempotent resync. Live connections expose safe command capabilities and remain writable only through the paired device bridge.',
+  createdVia: 'POST /api/v1/ai/connections or /api/v1/devices/node/live-sync',
   fields: [
-		{
-			name: 'sourceType',
-			type: 'enum',
-			required: true,
-			values: ['imported', 'live'],
-			description: 'Discriminates snapshot imports from a live paired connector.'
-		},
+    {
+      name: 'sourceType',
+      type: 'enum',
+      required: true,
+      values: ['imported', 'live'],
+      description: 'Discriminates snapshot imports from a live paired connector.'
+    },
     { name: 'provider', type: 'enum', required: true, values: ['chatgpt', 'claude'], description: 'Source provider.' },
     { name: 'sourceId', type: 'string', required: true, description: 'Non-secret desktop source identifier.' },
-		{ name: 'deviceId', type: 'id', required: false, description: 'Paired device for node-originated sources.' },
-		{ name: 'connectorId', type: 'string', required: false, max: 80, description: 'Live connector identifier.' },
+    { name: 'deviceId', type: 'id', required: false, description: 'Paired device for node-originated sources.' },
+    { name: 'connectorId', type: 'string', required: false, max: 80, description: 'Live connector identifier.' },
     { name: 'label', type: 'string', required: true, description: 'User-facing app/profile label.' },
     { name: 'connectors', type: 'string[]', required: true, description: 'Bounded connector ids seen for this source.' },
-		{ name: 'capabilities', type: 'string[]', required: false, max: 64, description: 'Safe live connector command capabilities.' },
+    { name: 'capabilities', type: 'string[]', required: false, max: 64, description: 'Safe live connector command capabilities.' },
     { name: 'status', type: 'enum', required: true, values: ['syncing', 'connected', 'error'], description: 'Latest sync state.' },
-		{ name: 'readOnly', type: 'boolean', required: true, description: 'True for imports; false for live connector-backed sessions.' },
+    { name: 'readOnly', type: 'boolean', required: true, description: 'True for imports; false for live connector-backed sessions.' },
     { name: 'lastSyncAt', type: 'string', required: false, description: 'Last completed sync timestamp.' }
   ],
-	example: {
-		sourceType: 'imported',
-		provider: 'claude',
-		sourceId: 'claude-thingtime',
-		label: 'Claude Thingtime',
-		connectors: ['claude-code-local'],
-		status: 'connected',
-		readOnly: true
-	}
+  example: {
+    sourceType: 'imported',
+    provider: 'claude',
+    sourceId: 'claude-thingtime',
+    label: 'Claude Thingtime',
+    connectors: ['claude-code-local'],
+    status: 'connected',
+    readOnly: true
+  }
 };
 
 const deviceSchema: ThingtimeSchema = {
-	id: 'device',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Mesh device',
-	summary: 'One paired computer participating in the user’s Thingtime mesh.',
-	detail:
-		'Created only by the one-time device pairing flow. The crystal contains bounded, safe display metadata and capability ids; the node credential hash lives only in its scoped session and is never projected. Device rows are protected private user content and count toward account storage.',
-	createdVia: 'POST /api/v1/devices/pairing/claim',
-	fields: [
-		{ name: 'deviceKey', type: 'string', required: true, description: 'Server-hashed unique owner/device key.' },
-		{ name: 'name', type: 'string', required: true, max: 120, description: 'User-facing computer name.' },
-		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux'], description: 'Operating-system family.' },
-		{ name: 'model', type: 'string', required: false, max: 160, description: 'Bounded hardware model label.' },
-		{ name: 'osVersion', type: 'string', required: false, max: 80, description: 'Bounded OS version label.' },
-		{ name: 'appVersion', type: 'string', required: false, max: 80, description: 'Thingtime node version.' },
-		{ name: 'capabilities', type: 'string[]', required: true, max: 64, description: 'Allowlisted capability identifiers reported at pairing.' },
-		{ name: 'pairedAt', type: 'date', required: true, description: 'Server pairing timestamp.' }
-	],
-	example: { name: 'Lopu’s MacBook Pro', platform: 'macos', capabilities: ['session.read', 'session.send'] }
+  id: 'device',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Mesh device',
+  summary: 'One paired computer participating in the user’s Thingtime mesh.',
+  detail:
+    'Created only by the one-time device pairing flow. The crystal contains bounded, safe display metadata and capability ids; the node credential hash lives only in its scoped session and is never projected. Device rows are protected private user content and count toward account storage.',
+  createdVia: 'POST /api/v1/devices/pairing/claim',
+  fields: [
+    { name: 'deviceKey', type: 'string', required: true, description: 'Server-hashed unique owner/device key.' },
+    { name: 'name', type: 'string', required: true, max: 120, description: 'User-facing computer name.' },
+    { name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux'], description: 'Operating-system family.' },
+    { name: 'model', type: 'string', required: false, max: 160, description: 'Bounded hardware model label.' },
+    { name: 'osVersion', type: 'string', required: false, max: 80, description: 'Bounded OS version label.' },
+    { name: 'appVersion', type: 'string', required: false, max: 80, description: 'Thingtime node version.' },
+    { name: 'capabilities', type: 'string[]', required: true, max: 64, description: 'Allowlisted capability identifiers reported at pairing.' },
+    { name: 'pairedAt', type: 'date', required: true, description: 'Server pairing timestamp.' }
+  ],
+  example: { name: 'Lopu’s MacBook Pro', platform: 'macos', capabilities: ['session.read', 'session.send'] }
 };
 
 const deviceStateSchema: ThingtimeSchema = {
-	id: 'device-state',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device state mirror',
-	summary: 'The latest bounded state snapshot for one paired device.',
-	detail:
-		'targetId is the device. Exactly one row per device is replace-on-write under a monotonic revision and content hash. Heartbeats stay in scoped session metadata rather than appending Things. Raw paths, process arguments, window titles, frames and media are never accepted. This persistent mirror counts toward account storage.',
-	createdVia: 'POST /api/v1/devices/node/state',
-	fields: [
-		{ name: 'deviceStateKey', type: 'string', required: true, description: 'Server-hashed unique device-state key.' },
-		{ name: 'revision', type: 'number', required: true, min: 1, description: 'Node-monotonic snapshot revision.' },
-		{ name: 'stateHash', type: 'string', required: true, description: 'Canonical content hash used for exact retry reconciliation.' },
-		{ name: 'snapshotHash', type: 'string', required: true, description: 'Canonical hash of the complete state plus connector snapshot.' },
-		{ name: 'state', type: 'record', required: true, description: 'Bounded locked, volume, brightness, battery and safe open-app summary.' },
-		{ name: 'observedAt', type: 'date', required: true, description: 'Server receipt timestamp.' }
-	],
-	example: { revision: 42, state: { locked: false, volume: 0.5, brightness: 0.8, openApps: [] } }
+  id: 'device-state',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Device state mirror',
+  summary: 'The latest bounded state snapshot for one paired device.',
+  detail:
+    'targetId is the device. Exactly one row per device is replace-on-write under a monotonic revision and content hash. Heartbeats stay in scoped session metadata rather than appending Things. Raw paths, process arguments, window titles, frames and media are never accepted. This persistent mirror counts toward account storage.',
+  createdVia: 'POST /api/v1/devices/node/state',
+  fields: [
+    { name: 'deviceStateKey', type: 'string', required: true, description: 'Server-hashed unique device-state key.' },
+    { name: 'revision', type: 'number', required: true, min: 1, description: 'Node-monotonic snapshot revision.' },
+    { name: 'stateHash', type: 'string', required: true, description: 'Canonical content hash used for exact retry reconciliation.' },
+    { name: 'snapshotHash', type: 'string', required: true, description: 'Canonical hash of the complete state plus connector snapshot.' },
+    { name: 'state', type: 'record', required: true, description: 'Bounded locked, volume, brightness, battery and safe open-app summary.' },
+    { name: 'observedAt', type: 'date', required: true, description: 'Server receipt timestamp.' }
+  ],
+  example: { revision: 42, state: { locked: false, volume: 0.5, brightness: 0.8, openApps: [] } }
 };
 
 const deviceConnectorSchema: ThingtimeSchema = {
-	id: 'device-connector',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device connector mirror',
-	summary: 'One bounded program connector available on a paired device.',
-	detail:
-		'targetId is the device. One row per connector is updated by monotonic snapshot revision and content hash. Credentials, cookies, raw local paths and process arguments are never stored. This persistent mirror counts toward account storage.',
-	createdVia: 'POST /api/v1/devices/node/state',
-	fields: [
-		{ name: 'deviceConnectorKey', type: 'string', required: true, description: 'Server-hashed unique device/connector key.' },
-		{ name: 'revision', type: 'number', required: true, min: 1, description: 'Node-monotonic connector revision.' },
-		{ name: 'connectorHash', type: 'string', required: true, description: 'Canonical content hash.' },
-		{ name: 'connector', type: 'record', required: true, description: 'Safe id, kind, label, status and capability projection.' }
-	],
-	example: {
-		revision: 42,
-		connector: { id: 'chatgpt-desktop', kind: 'chatgpt', label: 'ChatGPT', status: 'connected', capabilities: ['session.read'] }
-	}
+  id: 'device-connector',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Device connector mirror',
+  summary: 'One bounded program connector available on a paired device.',
+  detail:
+    'targetId is the device. One row per connector is updated by monotonic snapshot revision and content hash. Credentials, cookies, raw local paths and process arguments are never stored. This persistent mirror counts toward account storage.',
+  createdVia: 'POST /api/v1/devices/node/state',
+  fields: [
+    { name: 'deviceConnectorKey', type: 'string', required: true, description: 'Server-hashed unique device/connector key.' },
+    { name: 'revision', type: 'number', required: true, min: 1, description: 'Node-monotonic connector revision.' },
+    { name: 'connectorHash', type: 'string', required: true, description: 'Canonical content hash.' },
+    { name: 'connector', type: 'record', required: true, description: 'Safe id, kind, label, status and capability projection.' }
+  ],
+  example: {
+    revision: 42,
+    connector: { id: 'chatgpt-desktop', kind: 'chatgpt', label: 'ChatGPT', status: 'connected', capabilities: ['session.read'] }
+  }
 };
 
 const deviceCommandSchema: ThingtimeSchema = {
-	id: 'device-command',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device command',
-	summary: 'Bounded allowlisted work queued for one paired device.',
-	detail:
-		'Control-plane delivery state: exact requestId retries return the existing command and conflicting payloads return 409. Required-approval commands remain unleaseable until a linked one-decision approval atomically queues them. Commands use hashed short leases and never expose arbitrary shell, script, executable, path, SDP or frame input. User chat content persists once in quota-billed chat-message Things.',
-	createdVia: 'POST /api/v1/devices/commands',
-	fields: [
-		{ name: 'deviceCommandKey', type: 'string', required: true, description: 'Server-hashed unique owner/device/request key.' },
-		{ name: 'requestId', type: 'string', required: true, max: 160, description: 'Client idempotency identifier.' },
-		{ name: 'kind', type: 'string', required: true, description: 'Allowlisted typed command kind.' },
-		{ name: 'input', type: 'record', required: true, description: 'Closed, kind-specific bounded input.' },
-		{ name: 'requiresApproval', type: 'boolean', required: true, description: 'Whether dispatch requires an account-user decision.' },
-		{
-			name: 'approvalState',
-			type: 'enum',
-			required: true,
-			values: ['not-required', 'pending', 'approved', 'denied'],
-			description: 'Server-enforced dispatch approval gate.'
-		},
-		{
-			name: 'status',
-			type: 'enum',
-			required: true,
-			values: ['queued', 'claimed', 'running', 'needs-approval', 'succeeded', 'failed', 'cancelled', 'needs-review'],
-			description: 'Monotonic command lifecycle.'
-		},
-		{
-			name: 'controlBytes',
-			type: 'number',
-			required: true,
-			min: 0,
-			description: 'Logical command-envelope bytes used by the strict pending control-plane budget.'
-		},
-		{
-			name: 'inputTextHash',
-			type: 'string',
-			required: false,
-			description: 'Hash retained after a delivered session prompt is redacted from the control row.'
-		},
-		{
-			name: 'inputRedactedAt',
-			type: 'date',
-			required: false,
-			description: 'When duplicate prompt text was removed after durable Messenger materialization or terminal completion.'
-		},
-		{ name: 'expiresAt', type: 'date', required: false, description: 'TTL deadline applied only after the command becomes terminal.' }
-	],
-	example: {
-		requestId: 'web-123',
-		kind: 'session.send',
-		input: { connectorId: 'chatgpt', sessionId: 'chat-1', text: 'Hello', delivery: 'queue' },
-		status: 'queued'
-	}
+  id: 'device-command',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Device command',
+  summary: 'Bounded allowlisted work queued for one paired device.',
+  detail:
+    'Control-plane delivery state: exact requestId retries return the existing command and conflicting payloads return 409. Required-approval commands remain unleaseable until a linked one-decision approval atomically queues them. Commands use hashed short leases and never expose arbitrary shell, script, executable, path, SDP or frame input. User chat content persists once in quota-billed chat-message Things.',
+  createdVia: 'POST /api/v1/devices/commands',
+  fields: [
+    { name: 'deviceCommandKey', type: 'string', required: true, description: 'Server-hashed unique owner/device/request key.' },
+    { name: 'requestId', type: 'string', required: true, max: 160, description: 'Client idempotency identifier.' },
+    { name: 'kind', type: 'string', required: true, description: 'Allowlisted typed command kind.' },
+    { name: 'input', type: 'record', required: true, description: 'Closed, kind-specific bounded input.' },
+    { name: 'requiresApproval', type: 'boolean', required: true, description: 'Whether dispatch requires an account-user decision.' },
+    {
+      name: 'approvalState',
+      type: 'enum',
+      required: true,
+      values: ['not-required', 'pending', 'approved', 'denied'],
+      description: 'Server-enforced dispatch approval gate.'
+    },
+    {
+      name: 'status',
+      type: 'enum',
+      required: true,
+      values: ['queued', 'claimed', 'running', 'needs-approval', 'succeeded', 'failed', 'cancelled', 'needs-review'],
+      description: 'Monotonic command lifecycle.'
+    },
+    {
+      name: 'controlBytes',
+      type: 'number',
+      required: true,
+      min: 0,
+      description: 'Logical command-envelope bytes used by the strict pending control-plane budget.'
+    },
+    {
+      name: 'inputTextHash',
+      type: 'string',
+      required: false,
+      description: 'Hash retained after a delivered session prompt is redacted from the control row.'
+    },
+    {
+      name: 'inputRedactedAt',
+      type: 'date',
+      required: false,
+      description: 'When duplicate prompt text was removed after durable Messenger materialization or terminal completion.'
+    },
+    { name: 'expiresAt', type: 'date', required: false, description: 'TTL deadline applied only after the command becomes terminal.' }
+  ],
+  example: {
+    requestId: 'web-123',
+    kind: 'session.send',
+    input: { connectorId: 'chatgpt', sessionId: 'chat-1', text: 'Hello', delivery: 'queue' },
+    status: 'queued'
+  }
 };
 
 const deviceCommandEventSchema: ThingtimeSchema = {
-	id: 'device-command-event',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device event',
-	summary: 'One bounded device, command, approval or screen lifecycle event.',
-	detail:
-		'Relational child event consumed through the cursor-based NDJSON feed. Live AI rows may retain bounded visible deltas and safe activity briefly as control-plane events; reasoning, paths, tool input/output, frames and arbitrary output bodies are rejected. Completed chat content updates the corresponding quota-billed message row.',
-	createdVia: 'Device state machines',
-	fields: [
-		{ name: 'deviceEventKey', type: 'string', required: true, description: 'Server-hashed event idempotency key.' },
-		{ name: 'deviceControlEventScopeKey', type: 'string', required: true, description: 'Server-hashed owner/device retention namespace.' },
-		{
-			name: 'liveControlEventScopeKey',
-			type: 'string',
-			required: false,
-			description: 'Server-hashed connector/session retention namespace for live AI rows.'
-		},
-		{
-			name: 'retainedBytes',
-			type: 'number',
-			required: true,
-			min: 0,
-			description: 'Logical row bytes enforced by strict control-plane retention budgets.'
-		},
-		{
-			name: 'liveEventSequenceKey',
-			type: 'string',
-			required: false,
-			description: 'Server-hashed connector/session/sequence uniqueness key for live AI events.'
-		},
-		{
-			name: 'liveEventHash',
-			type: 'string',
-			required: false,
-			description: 'Canonical live event hash used to distinguish exact replay from conflicting reuse.'
-		},
-		{ name: 'liveActivityHash', type: 'string', required: false, description: 'Canonical safe historical activity hash used for revision checks.' },
-		{ name: 'eventType', type: 'string', required: true, description: 'Bounded event type.' },
-		{ name: 'resourceId', type: 'id', required: false, description: 'Related resource id.' },
-		{ name: 'revision', type: 'number', required: false, description: 'Related monotonic revision.' },
-		{ name: 'payload', type: 'record', required: true, description: 'Small safe event projection.' },
-		{
-			name: 'expiresAt',
-			type: 'date',
-			required: false,
-			description: 'TTL deadline for transient live deltas and activity; durable completed text lives in chat-message rows.'
-		}
-	],
-	example: { eventType: 'command.running', resourceId: 'command-id', payload: { status: 'running' } }
+  id: 'device-command-event',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Device event',
+  summary: 'One bounded device, command, approval or screen lifecycle event.',
+  detail:
+    'Relational child event consumed through the cursor-based NDJSON feed. Live AI rows may retain bounded visible deltas and safe activity briefly as control-plane events; reasoning, paths, tool input/output, frames and arbitrary output bodies are rejected. Completed chat content updates the corresponding quota-billed message row.',
+  createdVia: 'Device state machines',
+  fields: [
+    { name: 'deviceEventKey', type: 'string', required: true, description: 'Server-hashed event idempotency key.' },
+    { name: 'deviceControlEventScopeKey', type: 'string', required: true, description: 'Server-hashed owner/device retention namespace.' },
+    {
+      name: 'liveControlEventScopeKey',
+      type: 'string',
+      required: false,
+      description: 'Server-hashed connector/session retention namespace for live AI rows.'
+    },
+    {
+      name: 'retainedBytes',
+      type: 'number',
+      required: true,
+      min: 0,
+      description: 'Logical row bytes enforced by strict control-plane retention budgets.'
+    },
+    {
+      name: 'liveEventSequenceKey',
+      type: 'string',
+      required: false,
+      description: 'Server-hashed connector/session/sequence uniqueness key for live AI events.'
+    },
+    {
+      name: 'liveEventHash',
+      type: 'string',
+      required: false,
+      description: 'Canonical live event hash used to distinguish exact replay from conflicting reuse.'
+    },
+    { name: 'liveActivityHash', type: 'string', required: false, description: 'Canonical safe historical activity hash used for revision checks.' },
+    { name: 'eventType', type: 'string', required: true, description: 'Bounded event type.' },
+    { name: 'resourceId', type: 'id', required: false, description: 'Related resource id.' },
+    { name: 'revision', type: 'number', required: false, description: 'Related monotonic revision.' },
+    { name: 'payload', type: 'record', required: true, description: 'Small safe event projection.' },
+    {
+      name: 'expiresAt',
+      type: 'date',
+      required: false,
+      description: 'TTL deadline for transient live deltas and activity; durable completed text lives in chat-message rows.'
+    }
+  ],
+  example: { eventType: 'command.running', resourceId: 'command-id', payload: { status: 'running' } }
 };
 
 const deviceAiLiveStateSchema: ThingtimeSchema = {
-	id: 'device-ai-live-state',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device AI live cursor',
-	summary: 'One monotonic live-event cursor per device connector session.',
-	detail:
-		'Control-plane replay state only. The server hashes the owner/device/connector/session namespace, rejects gaps and stale sequence reuse, and never stores credentials, local paths, reasoning, or tool input/output.',
-	createdVia: 'POST /api/v1/devices/node/live-sync',
-	fields: [
-		{ name: 'deviceAiLiveStateKey', type: 'string', required: true, description: 'Server-hashed unique live session namespace.' },
-		{ name: 'connectorId', type: 'string', required: true, max: 80, description: 'Opaque connector identifier.' },
-		{ name: 'sessionId', type: 'string', required: true, max: 512, description: 'Opaque native session identifier.' },
-		{ name: 'lastSequence', type: 'number', required: true, min: 1, description: 'Last contiguous accepted event sequence.' },
-		{ name: 'lastObservedAt', type: 'date', required: true, description: 'Node observation time for the accepted cursor.' }
-	],
-	example: { connectorId: 'chatgpt-desktop', sessionId: 'session-1', lastSequence: 42, lastObservedAt: '2026-08-18T01:00:00.000Z' }
+  id: 'device-ai-live-state',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Device AI live cursor',
+  summary: 'One monotonic live-event cursor per device connector session.',
+  detail:
+    'Control-plane replay state only. The server hashes the owner/device/connector/session namespace, rejects gaps and stale sequence reuse, and never stores credentials, local paths, reasoning, or tool input/output.',
+  createdVia: 'POST /api/v1/devices/node/live-sync',
+  fields: [
+    { name: 'deviceAiLiveStateKey', type: 'string', required: true, description: 'Server-hashed unique live session namespace.' },
+    { name: 'connectorId', type: 'string', required: true, max: 80, description: 'Opaque connector identifier.' },
+    { name: 'sessionId', type: 'string', required: true, max: 512, description: 'Opaque native session identifier.' },
+    { name: 'lastSequence', type: 'number', required: true, min: 1, description: 'Last contiguous accepted event sequence.' },
+    { name: 'lastObservedAt', type: 'date', required: true, description: 'Node observation time for the accepted cursor.' }
+  ],
+  example: { connectorId: 'chatgpt-desktop', sessionId: 'session-1', lastSequence: 42, lastObservedAt: '2026-08-18T01:00:00.000Z' }
 };
 
 const deviceApprovalSchema: ThingtimeSchema = {
-	id: 'device-approval',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device approval',
-	summary: 'A one-decision approval requested by a local connector.',
-	detail:
-		'Operational approval state tied to one command/device. Exact repeats are idempotent, conflicting decisions return 409, and expired approvals cannot be revived.',
-	createdVia: 'POST /api/v1/devices/node/commands (approval-request)',
-	fields: [
-		{ name: 'deviceApprovalKey', type: 'string', required: true, description: 'Server-hashed unique command/request key.' },
-		{ name: 'commandId', type: 'id', required: true, description: 'Parent device command.' },
-		{ name: 'requestId', type: 'string', required: true, max: 160, description: 'Node idempotency id.' },
-		{ name: 'kind', type: 'string', required: true, max: 80, description: 'Approval category.' },
-		{ name: 'prompt', type: 'string', required: true, max: 1000, description: 'Human-readable bounded question.' },
-		{ name: 'status', type: 'enum', required: true, values: ['pending', 'approved', 'denied', 'expired'], description: 'One-decision state.' }
-	],
-	example: { commandId: 'command-id', requestId: 'approval-1', kind: 'computer-use', prompt: 'Allow app control?', status: 'pending' }
+  id: 'device-approval',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Device approval',
+  summary: 'A one-decision approval requested by a local connector.',
+  detail:
+    'Operational approval state tied to one command/device. Exact repeats are idempotent, conflicting decisions return 409, and expired approvals cannot be revived.',
+  createdVia: 'POST /api/v1/devices/node/commands (approval-request)',
+  fields: [
+    { name: 'deviceApprovalKey', type: 'string', required: true, description: 'Server-hashed unique command/request key.' },
+    { name: 'commandId', type: 'id', required: true, description: 'Parent device command.' },
+    { name: 'requestId', type: 'string', required: true, max: 160, description: 'Node idempotency id.' },
+    { name: 'kind', type: 'string', required: true, max: 80, description: 'Approval category.' },
+    { name: 'prompt', type: 'string', required: true, max: 1000, description: 'Human-readable bounded question.' },
+    { name: 'status', type: 'enum', required: true, values: ['pending', 'approved', 'denied', 'expired'], description: 'One-decision state.' }
+  ],
+  example: { commandId: 'command-id', requestId: 'approval-1', kind: 'computer-use', prompt: 'Allow app control?', status: 'pending' }
 };
 
 const deviceScreenSessionSchema: ThingtimeSchema = {
-	id: 'device-screen-session',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Device screen session',
-	summary: 'Safe lifecycle metadata for a remote screen session.',
-	detail:
-		'Persistent, quota-billed lifecycle metadata only. Frames, images, audio, SDP, ICE candidates and TURN credentials are never accepted or stored; media uses a separately authorized real-time channel with local approval.',
-	createdVia: 'POST /api/v1/devices/screen',
-	fields: [
-		{ name: 'deviceScreenKey', type: 'string', required: true, description: 'Server-hashed idempotency key.' },
-		{ name: 'requestId', type: 'string', required: true, max: 160, description: 'Client request id.' },
-		{
-			name: 'status',
-			type: 'enum',
-			required: true,
-			values: ['requested', 'awaiting-local-approval', 'connecting', 'active', 'ended', 'failed'],
-			description: 'Screen lifecycle state.'
-		},
-		{ name: 'viewOnly', type: 'boolean', required: true, description: 'Whether input control is disabled.' },
-		{ name: 'startedAt', type: 'date', required: false, description: 'Server timestamp when active.' },
-		{ name: 'endedAt', type: 'date', required: false, description: 'Server terminal timestamp.' }
-	],
-	example: { requestId: 'screen-1', status: 'awaiting-local-approval', viewOnly: true }
+  id: 'device-screen-session',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Device screen session',
+  summary: 'Safe lifecycle metadata for a remote screen session.',
+  detail:
+    'Persistent, quota-billed lifecycle metadata only. Frames, images, audio, SDP, ICE candidates and TURN credentials are never accepted or stored; media uses a separately authorized real-time channel with local approval.',
+  createdVia: 'POST /api/v1/devices/screen',
+  fields: [
+    { name: 'deviceScreenKey', type: 'string', required: true, description: 'Server-hashed idempotency key.' },
+    { name: 'requestId', type: 'string', required: true, max: 160, description: 'Client request id.' },
+    {
+      name: 'status',
+      type: 'enum',
+      required: true,
+      values: ['requested', 'awaiting-local-approval', 'connecting', 'active', 'ended', 'failed'],
+      description: 'Screen lifecycle state.'
+    },
+    { name: 'viewOnly', type: 'boolean', required: true, description: 'Whether input control is disabled.' },
+    { name: 'startedAt', type: 'date', required: false, description: 'Server timestamp when active.' },
+    { name: 'endedAt', type: 'date', required: false, description: 'Server terminal timestamp.' }
+  ],
+  example: { requestId: 'screen-1', status: 'awaiting-local-approval', viewOnly: true }
 };
 
 const customEmojiSchema: ThingtimeSchema = {
@@ -2335,8 +2452,8 @@ const customEmojiSchema: ThingtimeSchema = {
   summary: 'An uploaded emoji/gif usable in chat reactions and messages.',
   detail:
     'One thing per emoji (relational, FUNDAMENTALS §3 — never an array on the community). The ' +
-		'image is a protected, quota-accounted S3 attachment (gif/webp/png/jpeg, ≤512 KiB); legacy ' +
-		'inline data-URI rows remain read-compatible. Scope is ' +
+    'image is a protected, quota-accounted S3 attachment (gif/webp/png/jpeg, ≤512 KiB); legacy ' +
+    'inline data-URI rows remain read-compatible. Scope is ' +
     'a community (targetId set) or personal (targetId null); names are unique per scope via ' +
     'crystal.emojiKey. Reaction tokens reference emojis by id (`custom:<shareId>`), so renames ' +
     'never orphan reactions.',
@@ -2344,10 +2461,10 @@ const customEmojiSchema: ThingtimeSchema = {
   fields: [
     { name: 'name', type: 'string', required: true, max: MAX_EMOJI_NAME_CHARS, description: 'Lowercase [a-z0-9_-] name, rendered as :name:.' },
     { name: 'emojiKey', type: 'string', required: true, description: 'Unique `<scope>:<name>` key (scope = communityId or user:<userId>).' },
-		{ name: 'image', type: 'string', required: false, description: 'Legacy inline data:image/... base64 URI; never written for new emojis.' },
-		{ name: 'animated', type: 'boolean', required: false, description: 'True for new GIF uploads or a compatible legacy animated row.' }
+    { name: 'image', type: 'string', required: false, description: 'Legacy inline data:image/... base64 URI; never written for new emojis.' },
+    { name: 'animated', type: 'boolean', required: false, description: 'True for new GIF uploads or a compatible legacy animated row.' }
   ],
-	example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', animated: true }
+  example: { name: 'party-parrot', emojiKey: 'c0ffee…:party-parrot', animated: true }
 };
 
 const followSchema: ThingtimeSchema = {
@@ -2358,12 +2475,12 @@ const followSchema: ThingtimeSchema = {
   title: 'Follow',
   summary: 'One user following another (the start of the relationship graph).',
   detail:
-		"ownerId = the follower, targetId = the followed user's shareId; unique per pair via " +
+    "ownerId = the follower, targetId = the followed user's shareId; unique per pair via " +
     'crystal.followKey. Powers the messenger request buckets (a DM from someone you follow ' +
     'lands normally; from a follower it queues as a "follower" request; otherwise "unknown"). ' +
     'The acl circle entries (tt:userFriends…) are designed to plug into this graph later.',
   createdVia: 'POST /api/v1/users/follow',
-	fields: [{ name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }],
+  fields: [{ name: 'followKey', type: 'string', required: true, description: 'Unique `<followerId>:<followeeId>` pair key.' }],
   example: { followKey: '5eed…:c0ffee…' }
 };
 
@@ -2376,34 +2493,45 @@ const followSchema: ThingtimeSchema = {
 // Global credential-id uniqueness + the login-time lookup ride uniqueKeys
 // ('passkeyCredential:<id>', BinData). Server-minted only (PROTECTED).
 const passkeyThingSchema: ThingtimeSchema = {
-	id: 'passkey',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Passkey',
-	summary: 'A WebAuthn credential (passkey) that can sign into its owner\'s account.',
-	detail:
-		'Registered via POST /api/v1/auth/passkeys/register-options + /register (password confirmation ' +
-		'required), authenticates via /api/v1/auth/passkeys/login-options + /login (discoverable ' +
-		'credentials — no username needed). ownerId is the account it signs into. Credential material ' +
-		'(credentialId, public key, sign counter) lives in the root secure blob; uniqueness and the ' +
-		'login lookup ride uniqueKeys. Revocation (crystal.revokedAt) immediately blocks logins while ' +
-		'keeping the record; revoked passkeys can then be deleted. The generic things CRUD refuses ' +
-		'this kind end to end.',
-	createdVia: 'POST /api/v1/auth/passkeys/register',
-	fields: [
-		{ name: 'nickname', type: 'string', required: false, description: 'Owner-chosen label, defaults to the provider name.' },
-		{ name: 'description', type: 'string', required: false, description: 'Free-form owner note.' },
-		{ name: 'providerName', type: 'string', required: false, description: 'Authenticator provider derived from its AAGUID (e.g. iCloud Keychain, 1Password).' },
-		{ name: 'aaguid', type: 'string', required: false, description: 'Authenticator AAGUID as reported at registration.' },
-		{ name: 'deviceType', type: 'enum', required: false, values: ['singleDevice', 'multiDevice'], description: 'Whether the credential is synced (multiDevice) or bound to one authenticator.' },
-		{ name: 'backedUp', type: 'boolean', required: false, description: 'True when the authenticator reports the credential as backed up/synced.' },
-		{ name: 'transports', type: 'string[]', required: false, description: 'Browser-reported transports (internal, hybrid, usb, nfc, ble).' },
-		{ name: 'lastUsedAt', type: 'string', required: false, description: 'ISO timestamp of the most recent successful login.' },
-		{ name: 'lastUsedOrigin', type: 'string', required: false, description: 'Origin of the most recent successful login.' },
-		{ name: 'revokedAt', type: 'string', required: false, description: 'ISO timestamp — set once revoked; a revoked passkey can never log in.' }
-	],
-	example: { nickname: 'MacBook Touch ID', providerName: 'iCloud Keychain', deviceType: 'multiDevice', backedUp: true }
+  id: 'passkey',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Passkey',
+  summary: "A WebAuthn credential (passkey) that can sign into its owner's account.",
+  detail:
+    'Registered via POST /api/v1/auth/passkeys/register-options + /register (password confirmation ' +
+    'required), authenticates via /api/v1/auth/passkeys/login-options + /login (discoverable ' +
+    'credentials — no username needed). ownerId is the account it signs into. Credential material ' +
+    '(credentialId, public key, sign counter) lives in the root secure blob; uniqueness and the ' +
+    'login lookup ride uniqueKeys. Revocation (crystal.revokedAt) immediately blocks logins while ' +
+    'keeping the record; revoked passkeys can then be deleted. The generic things CRUD refuses ' +
+    'this kind end to end.',
+  createdVia: 'POST /api/v1/auth/passkeys/register',
+  fields: [
+    { name: 'nickname', type: 'string', required: false, description: 'Owner-chosen label, defaults to the provider name.' },
+    { name: 'description', type: 'string', required: false, description: 'Free-form owner note.' },
+    {
+      name: 'providerName',
+      type: 'string',
+      required: false,
+      description: 'Authenticator provider derived from its AAGUID (e.g. iCloud Keychain, 1Password).'
+    },
+    { name: 'aaguid', type: 'string', required: false, description: 'Authenticator AAGUID as reported at registration.' },
+    {
+      name: 'deviceType',
+      type: 'enum',
+      required: false,
+      values: ['singleDevice', 'multiDevice'],
+      description: 'Whether the credential is synced (multiDevice) or bound to one authenticator.'
+    },
+    { name: 'backedUp', type: 'boolean', required: false, description: 'True when the authenticator reports the credential as backed up/synced.' },
+    { name: 'transports', type: 'string[]', required: false, description: 'Browser-reported transports (internal, hybrid, usb, nfc, ble).' },
+    { name: 'lastUsedAt', type: 'string', required: false, description: 'ISO timestamp of the most recent successful login.' },
+    { name: 'lastUsedOrigin', type: 'string', required: false, description: 'Origin of the most recent successful login.' },
+    { name: 'revokedAt', type: 'string', required: false, description: 'ISO timestamp — set once revoked; a revoked passkey can never log in.' }
+  ],
+  example: { nickname: 'MacBook Touch ID', providerName: 'iCloud Keychain', deviceType: 'multiDevice', backedUp: true }
 };
 
 // Where a passkey has been used: one thing per (passkey, app/origin) pair,
@@ -2411,27 +2539,27 @@ const passkeyThingSchema: ThingtimeSchema = {
 // is bounded by distinct apps, never per-use growth). targetId = the passkey
 // thing; uniqueKeys 'passkeyAppLink:<passkeyId>:<appKey>' dedups the pair.
 const passkeyAppLinkThingSchema: ThingtimeSchema = {
-	id: 'passkey-app-link',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Passkey app link',
-	summary: 'A record that a passkey has authenticated a particular app or origin.',
-	detail:
-		'Minted/updated server-side whenever POST /api/v1/auth/passkeys/login succeeds: the deployment ' +
-		'origin always links, and an SSO/app context (clientId) links additionally. Aggregated onto ' +
-		'GET /api/v1/auth/passkeys as each passkey\'s linkedApps. ownerId = the passkey\'s owner, ' +
-		'targetId = the passkey thing. The generic things CRUD refuses this kind.',
-	requiresTarget: true,
-	createdVia: 'POST /api/v1/auth/passkeys/login',
-	fields: [
-		{ name: 'appKey', type: 'string', required: true, description: 'Stable link key — `origin:<origin>` or `app:<clientId>`.' },
-		{ name: 'appName', type: 'string', required: false, description: 'Display name for the app/origin.' },
-		{ name: 'firstUsedAt', type: 'string', required: true, description: 'ISO timestamp of the first login through this link.' },
-		{ name: 'lastUsedAt', type: 'string', required: true, description: 'ISO timestamp of the most recent login through this link.' },
-		{ name: 'usageCount', type: 'number', required: true, description: 'Total successful logins through this link.' }
-	],
-	example: { appKey: 'origin:https://thingtime.com', appName: 'thingtime.com', usageCount: 4 }
+  id: 'passkey-app-link',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Passkey app link',
+  summary: 'A record that a passkey has authenticated a particular app or origin.',
+  detail:
+    'Minted/updated server-side whenever POST /api/v1/auth/passkeys/login succeeds: the deployment ' +
+    'origin always links, and an SSO/app context (clientId) links additionally. Aggregated onto ' +
+    "GET /api/v1/auth/passkeys as each passkey's linkedApps. ownerId = the passkey's owner, " +
+    'targetId = the passkey thing. The generic things CRUD refuses this kind.',
+  requiresTarget: true,
+  createdVia: 'POST /api/v1/auth/passkeys/login',
+  fields: [
+    { name: 'appKey', type: 'string', required: true, description: 'Stable link key — `origin:<origin>` or `app:<clientId>`.' },
+    { name: 'appName', type: 'string', required: false, description: 'Display name for the app/origin.' },
+    { name: 'firstUsedAt', type: 'string', required: true, description: 'ISO timestamp of the first login through this link.' },
+    { name: 'lastUsedAt', type: 'string', required: true, description: 'ISO timestamp of the most recent login through this link.' },
+    { name: 'usageCount', type: 'number', required: true, description: 'Total successful logins through this link.' }
+  ],
+  example: { appKey: 'origin:https://thingtime.com', appName: 'thingtime.com', usageCount: 4 }
 };
 
 // ---------------------------------------------------------------------------
@@ -2459,14 +2587,14 @@ const passkeyAppLinkThingSchema: ThingtimeSchema = {
 // endpoints (/api/v1/users/follow, /api/v1/users/friend, notifications utils)
 // do direct inserts.
 export const DEVICE_THINGTIME = [
-	'device',
-	'device-state',
-	'device-connector',
-	'device-command',
-	'device-command-event',
-	'device-ai-live-state',
-	'device-approval',
-	'device-screen-session'
+  'device',
+  'device-state',
+  'device-connector',
+  'device-command',
+  'device-command-event',
+  'device-ai-live-state',
+  'device-approval',
+  'device-screen-session'
 ] as const;
 
 // Pairing challenges live in the versioned sessions collection. These three
@@ -2476,19 +2604,19 @@ export const DEVICE_THINGTIME = [
 export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
 export const PROTECTED_THINGTIME = [
-	ATTACHMENT_THINGTIME,
+  ATTACHMENT_THINGTIME,
   'user',
   'theme',
   'feed-algorithm',
   'waitlist',
-	'app',
+  'app',
   'subscription-tier',
   'subscription',
   'account-link',
-	'app-storage',
-	'service-quota',
+  'app-storage',
+  'service-quota',
   MIGRATION_DIAGNOSTIC_THINGTIME,
-	'moderationFlag',
+  'moderationFlag',
   ...CI_CONTROL_THINGTIME,
   'follow',
   'friend',
@@ -2497,7 +2625,7 @@ export const PROTECTED_THINGTIME = [
   // credential, so these are server-minted end to end (auth/passkeys.ts)
   'passkey',
   'passkey-app-link',
-	...DEVICE_THINGTIME
+  ...DEVICE_THINGTIME
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -2618,7 +2746,7 @@ const waitlistThingSchema: ThingtimeSchema = {
 export const thingtimeSchemas: ThingtimeSchema[] = [
   rootThingSchema,
   postSchema,
-	attachmentSchema,
+  attachmentSchema,
   commentSchema,
   reactionSchema,
   shareSchema,
@@ -2633,7 +2761,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   subscriptionSchema,
   accountLinkSchema,
   appStorageLedgerSchema,
-	serviceQuotaSchema,
+  serviceQuotaSchema,
   migrationDiagnosticSchema,
   ...ciControlSchemas,
   // social graph + notifications (protected, server-minted). The `follow`
@@ -2654,14 +2782,14 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   chatMemberSchema,
   chatMessageSchema,
   aiConnectionSchema,
-	deviceSchema,
-	deviceStateSchema,
-	deviceConnectorSchema,
-	deviceCommandSchema,
-	deviceCommandEventSchema,
-	deviceAiLiveStateSchema,
-	deviceApprovalSchema,
-	deviceScreenSessionSchema,
+  deviceSchema,
+  deviceStateSchema,
+  deviceConnectorSchema,
+  deviceCommandSchema,
+  deviceCommandEventSchema,
+  deviceAiLiveStateSchema,
+  deviceApprovalSchema,
+  deviceScreenSessionSchema,
   customEmojiSchema,
   followSchema,
   // system kinds (collections collapsing into things — dual-era)
@@ -2676,7 +2804,11 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   authOtpSchema,
   emailMessageSchema,
   rateLimitSchema,
-  deploymentPeerSchema
+  deploymentPeerSchema,
+  adminIntegrationSecretSchema,
+  adminIntegrationEndpointSchema,
+  adminIntegrationClaimSchema,
+  adminIntegrationAuditSchema
 ];
 
 export const getThingtimeSchema = (id: string): ThingtimeSchema | null => thingtimeSchemas.find((schema) => schema.id === id) || null;
@@ -2693,26 +2825,26 @@ const isFail = <T extends { ok: boolean }>(value: T | Fail): value is Fail => va
 
 const UNSAFE_HTTP_URL_CHAR_RE = /[\p{Cc}\p{Cf}\p{Cs}\s]/u;
 const isHttpUrl = (value: string): boolean => {
-	if (!/^https?:\/\//i.test(value) || UNSAFE_HTTP_URL_CHAR_RE.test(value) || value.includes('\\')) return false;
-	try {
-		const parsed = new URL(value);
-		return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !!parsed.hostname && !parsed.username && !parsed.password;
-	} catch {
-		return false;
-	}
+  if (!/^https?:\/\//i.test(value) || UNSAFE_HTTP_URL_CHAR_RE.test(value) || value.includes('\\')) return false;
+  try {
+    const parsed = new URL(value);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !!parsed.hostname && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
 };
 
 const sanitizeAttachmentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
-	const sanitized = sanitizeAttachmentPublicMetadata(input);
-	if (sanitized.ok === false) return fail(400, sanitized.error);
-	return sanitized;
+  const sanitized = sanitizeAttachmentPublicMetadata(input);
+  if (sanitized.ok === false) return fail(400, sanitized.error);
+  return sanitized;
 };
 
 export type ThingtimeCrystalValidationOptions = {
-	// Server-only attachment preflight. Generic Thing input never controls this
-	// context; the dedicated attachment store verifies ownership/state first and
-	// the post transaction rechecks while binding.
-	postAttachments?: { hasAny: boolean; hasVisual: boolean };
+  // Server-only attachment preflight. Generic Thing input never controls this
+  // context; the dedicated attachment store verifies ownership/state first and
+  // the post transaction rechecks while binding.
+  postAttachments?: { hasAny: boolean; hasVisual: boolean };
 };
 
 // Owner-chosen gallery layout for a post's visual attachments. Post-LEVEL
@@ -2725,80 +2857,80 @@ export const MAX_MEDIA_LAYOUT_ENTRIES = 25; // pattern rows + span entries share
 export const MAX_MEDIA_LAYOUT_TRACK = 6; // max images per row / grid columns
 export type MediaLayoutSpan = (typeof MEDIA_LAYOUT_SPAN_VALUES)[number];
 export type PostMediaLayout = {
-	mode: (typeof MEDIA_LAYOUT_MODES)[number];
-	pattern?: number[];
-	columns?: number;
-	spans?: Record<string, MediaLayoutSpan>;
+  mode: (typeof MEDIA_LAYOUT_MODES)[number];
+  pattern?: number[];
+  columns?: number;
+  spans?: Record<string, MediaLayoutSpan>;
 };
 
 const sanitizeMediaLayout = (value: unknown): { ok: true; mediaLayout: PostMediaLayout | null } | Fail => {
-	if (value === undefined || value === null) return { ok: true, mediaLayout: null };
-	if (typeof value !== 'object' || Array.isArray(value)) return fail(400, 'mediaLayout must be an object');
-	const raw = value as Record<string, unknown>;
-	const mode = MEDIA_LAYOUT_MODES.includes(raw.mode as any) ? (raw.mode as PostMediaLayout['mode']) : null;
-	if (!mode) return fail(400, 'mediaLayout.mode must be masonry, rows, or grid');
-	if (mode === 'masonry') return { ok: true, mediaLayout: { mode } };
+  if (value === undefined || value === null) return { ok: true, mediaLayout: null };
+  if (typeof value !== 'object' || Array.isArray(value)) return fail(400, 'mediaLayout must be an object');
+  const raw = value as Record<string, unknown>;
+  const mode = MEDIA_LAYOUT_MODES.includes(raw.mode as any) ? (raw.mode as PostMediaLayout['mode']) : null;
+  if (!mode) return fail(400, 'mediaLayout.mode must be masonry, rows, or grid');
+  if (mode === 'masonry') return { ok: true, mediaLayout: { mode } };
 
-	if (mode === 'rows') {
-		const pattern = raw.pattern;
-		if (!Array.isArray(pattern) || !pattern.length || pattern.length > MAX_MEDIA_LAYOUT_ENTRIES) {
-			return fail(400, `mediaLayout.pattern must be 1-${MAX_MEDIA_LAYOUT_ENTRIES} row sizes`);
-		}
-		const rows: number[] = [];
-		for (const entry of pattern) {
-			if (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 1 || entry > MAX_MEDIA_LAYOUT_TRACK) {
-				return fail(400, `mediaLayout.pattern rows must be integers 1-${MAX_MEDIA_LAYOUT_TRACK}`);
-			}
-			rows.push(entry);
-		}
-		return { ok: true, mediaLayout: { mode, pattern: rows } };
-	}
+  if (mode === 'rows') {
+    const pattern = raw.pattern;
+    if (!Array.isArray(pattern) || !pattern.length || pattern.length > MAX_MEDIA_LAYOUT_ENTRIES) {
+      return fail(400, `mediaLayout.pattern must be 1-${MAX_MEDIA_LAYOUT_ENTRIES} row sizes`);
+    }
+    const rows: number[] = [];
+    for (const entry of pattern) {
+      if (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 1 || entry > MAX_MEDIA_LAYOUT_TRACK) {
+        return fail(400, `mediaLayout.pattern rows must be integers 1-${MAX_MEDIA_LAYOUT_TRACK}`);
+      }
+      rows.push(entry);
+    }
+    return { ok: true, mediaLayout: { mode, pattern: rows } };
+  }
 
-	// grid
-	const columns = raw.columns === undefined ? 3 : raw.columns;
-	if (typeof columns !== 'number' || !Number.isInteger(columns) || columns < 1 || columns > MAX_MEDIA_LAYOUT_TRACK) {
-		return fail(400, `mediaLayout.columns must be an integer 1-${MAX_MEDIA_LAYOUT_TRACK}`);
-	}
-	let spans: Record<string, MediaLayoutSpan> | undefined;
-	if (raw.spans !== undefined && raw.spans !== null) {
-		if (typeof raw.spans !== 'object' || Array.isArray(raw.spans)) return fail(400, 'mediaLayout.spans must be an object');
-		const entries = Object.entries(raw.spans as Record<string, unknown>);
-		if (entries.length > MAX_MEDIA_LAYOUT_ENTRIES) return fail(400, `mediaLayout.spans can hold at most ${MAX_MEDIA_LAYOUT_ENTRIES} entries`);
-		const cleaned: Record<string, MediaLayoutSpan> = Object.create(null);
-		for (const [key, entry] of entries) {
-			// Attachment ids are generated UUIDs or att_<sha256> values. Keep the
-			// persisted map free of Mongo path characters and prototype keys rather
-			// than treating arbitrary object properties as attachment identities.
-			if (!/^[A-Za-z0-9][A-Za-z0-9_:-]{0,127}$/.test(key)) {
-				return fail(400, 'mediaLayout.spans keys must be attachment ids');
-			}
-			if (!MEDIA_LAYOUT_SPAN_VALUES.includes(entry as any)) {
-				return fail(400, 'mediaLayout.spans values must be normal, wide, tall, or big');
-			}
-			// normal is the default — storing it would be dead weight
-			if (entry !== 'normal') cleaned[key] = entry as MediaLayoutSpan;
-		}
-		if (Object.keys(cleaned).length) spans = { ...cleaned };
-	}
-	return { ok: true, mediaLayout: { mode, columns, ...(spans ? { spans } : {}) } };
+  // grid
+  const columns = raw.columns === undefined ? 3 : raw.columns;
+  if (typeof columns !== 'number' || !Number.isInteger(columns) || columns < 1 || columns > MAX_MEDIA_LAYOUT_TRACK) {
+    return fail(400, `mediaLayout.columns must be an integer 1-${MAX_MEDIA_LAYOUT_TRACK}`);
+  }
+  let spans: Record<string, MediaLayoutSpan> | undefined;
+  if (raw.spans !== undefined && raw.spans !== null) {
+    if (typeof raw.spans !== 'object' || Array.isArray(raw.spans)) return fail(400, 'mediaLayout.spans must be an object');
+    const entries = Object.entries(raw.spans as Record<string, unknown>);
+    if (entries.length > MAX_MEDIA_LAYOUT_ENTRIES) return fail(400, `mediaLayout.spans can hold at most ${MAX_MEDIA_LAYOUT_ENTRIES} entries`);
+    const cleaned: Record<string, MediaLayoutSpan> = Object.create(null);
+    for (const [key, entry] of entries) {
+      // Attachment ids are generated UUIDs or att_<sha256> values. Keep the
+      // persisted map free of Mongo path characters and prototype keys rather
+      // than treating arbitrary object properties as attachment identities.
+      if (!/^[A-Za-z0-9][A-Za-z0-9_:-]{0,127}$/.test(key)) {
+        return fail(400, 'mediaLayout.spans keys must be attachment ids');
+      }
+      if (!MEDIA_LAYOUT_SPAN_VALUES.includes(entry as any)) {
+        return fail(400, 'mediaLayout.spans values must be normal, wide, tall, or big');
+      }
+      // normal is the default — storing it would be dead weight
+      if (entry !== 'normal') cleaned[key] = entry as MediaLayoutSpan;
+    }
+    if (Object.keys(cleaned).length) spans = { ...cleaned };
+  }
+  return { ok: true, mediaLayout: { mode, columns, ...(spans ? { spans } : {}) } };
 };
 
 const sanitizePostCrystal = (
-	input: Record<string, unknown>,
-	appliedIds: string[],
-	options: ThingtimeCrystalValidationOptions = {}
+  input: Record<string, unknown>,
+  appliedIds: string[],
+  options: ThingtimeCrystalValidationOptions = {}
 ): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const type = POST_TYPES.includes(input.type as any) ? (input.type as string) : null;
   if (!type) return fail(400, 'Post type must be text, image, marketplace, or thingtime');
   // share things render the shared original, so their post payload may be
   // an empty caption regardless of type
   const isShare = appliedIds.includes('share');
-	// This context is server-only and arrives only after the attachment store
-	// verifies the exact owner, purpose, ready state and unbound expiry. It may
-	// therefore satisfy the same body rules for a top-level post or a rich
-	// ['post', 'comment'] Thing without opening those rules to generic input.
-	const hasAnyAttachment = options.postAttachments?.hasAny === true;
-	const hasVisualAttachment = options.postAttachments?.hasVisual === true;
+  // This context is server-only and arrives only after the attachment store
+  // verifies the exact owner, purpose, ready state and unbound expiry. It may
+  // therefore satisfy the same body rules for a top-level post or a rich
+  // ['post', 'comment'] Thing without opening those rules to generic input.
+  const hasAnyAttachment = options.postAttachments?.hasAny === true;
+  const hasVisualAttachment = options.postAttachments?.hasVisual === true;
 
   const text = typeof input.text === 'string' ? input.text.trim() : '';
   if (text.length > MAX_TEXT_CHARS) return fail(400, `Post text is too long (max ${MAX_TEXT_CHARS})`);
@@ -2855,7 +2987,7 @@ const sanitizePostCrystal = (
         return fail(400, 'Thingtime posts need a thing — an object with at least one field 🌀');
       }
       const sanitized = sanitizeDataValue(raw, { path: 'thing', depth: 2 });
-			if (sanitized.ok === false) return sanitized;
+      if (sanitized.ok === false) return sanitized;
       thing = sanitized.value as Record<string, unknown>;
     }
     if (!isShare && (!thing || !Object.keys(thing).length)) {
@@ -2863,18 +2995,18 @@ const sanitizePostCrystal = (
     }
   }
 
-	if (!isShare && type === 'text' && !text && !hasAnyAttachment) return fail(400, 'Say something first ✍️');
-	if (!isShare && type === 'image' && !images.length && !hasVisualAttachment) {
-		return fail(400, 'Image posts need at least one image or video attachment');
-	}
+  if (!isShare && type === 'text' && !text && !hasAnyAttachment) return fail(400, 'Say something first ✍️');
+  if (!isShare && type === 'image' && !images.length && !hasVisualAttachment) {
+    return fail(400, 'Image posts need at least one image or video attachment');
+  }
 
-	const layout = sanitizeMediaLayout(input.mediaLayout);
-	if (layout.ok === false) return layout;
+  const layout = sanitizeMediaLayout(input.mediaLayout);
+  if (layout.ok === false) return layout;
 
-	return {
-		ok: true,
-		crystal: { type, text, images, listing, thing, ...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}) }
-	};
+  return {
+    ok: true,
+    crystal: { type, text, images, listing, thing, ...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}) }
+  };
 };
 
 const sanitizeCommentCrystal = (input: Record<string, unknown>, ids?: string[]): { ok: true; crystal: Record<string, unknown> } | Fail => {
@@ -3042,7 +3174,7 @@ const sanitizeDataValue = (
 // KIND-BLIND history in collections.ts).
 const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const sanitized = sanitizeDataValue(input);
-	if (sanitized.ok === false) return sanitized;
+  if (sanitized.ok === false) return sanitized;
   return { ok: true, crystal: sanitized.value as Record<string, unknown> };
 };
 
@@ -3651,13 +3783,13 @@ const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crys
 
 const crystalSanitizers: Record<
   string,
-	(
-		input: Record<string, unknown>,
-		appliedIds: string[],
-		options?: ThingtimeCrystalValidationOptions
-	) => { ok: true; crystal: Record<string, unknown> } | Fail
+  (
+    input: Record<string, unknown>,
+    appliedIds: string[],
+    options?: ThingtimeCrystalValidationOptions
+  ) => { ok: true; crystal: Record<string, unknown> } | Fail
 > = {
-	attachment: sanitizeAttachmentCrystal,
+  attachment: sanitizeAttachmentCrystal,
   post: sanitizePostCrystal,
   folder: sanitizeFolderCrystal,
   comment: sanitizeCommentCrystal,
@@ -3685,9 +3817,9 @@ export type ValidatedCrystal = { ok: true; thingtime: string[]; crystal: Record<
 // non-empty thingtime; schema-lessness is an input convenience, never a stored
 // state.
 export const validateThingtimeCrystal = (
-	thingtime: unknown,
-	crystal: unknown,
-	options: ThingtimeCrystalValidationOptions = {}
+  thingtime: unknown,
+  crystal: unknown,
+  options: ThingtimeCrystalValidationOptions = {}
 ): ValidatedCrystal | Fail => {
   if (thingtime === undefined || thingtime === null || (Array.isArray(thingtime) && !thingtime.length)) {
     thingtime = ['data'];
@@ -3732,7 +3864,7 @@ export const validateThingtimeCrystal = (
       // refuse with the real reason instead of pretending they don't exist.
       return fail(403, `${id} things are managed by their own endpoints`);
     }
-		const sanitized = sanitizer(input, ids, options);
+    const sanitized = sanitizer(input, ids, options);
     if (sanitized.ok === false) return sanitized;
     Object.assign(merged, sanitized.crystal);
   }

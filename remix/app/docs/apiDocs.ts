@@ -51,545 +51,590 @@ export type SerializedApiEndpointDoc = ApiEndpointDoc & {
   platformExamples: ApiPlatformExamples;
 };
 
-const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> & Partial<Pick<ApiEndpointDoc, 'contractVersion'>>): ApiEndpointDoc => ({
+const endpoint = (
+  doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> & Partial<Pick<ApiEndpointDoc, 'contractVersion'>>
+): ApiEndpointDoc => ({
   ...doc,
   contractVersion: doc.contractVersion || '1.0.0',
   docsEndpoint: `${doc.endpoint}-docs`
 });
 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
-	endpoint({
-		id: 'devices',
-		contractVersion: '1.1.0',
-		group: 'devices',
-		title: 'Paired devices',
-		endpoint: '/api/v1/devices',
-		summary: 'Lists safe paired-computer summaries or one detailed mirror.',
-		detail:
-			'Returns protected dedicated projections for the caller’s devices, state and connectors. Generic /things never exposes these kinds. Credentials, hashes, paths, arguments and screen transport data are omitted.',
-		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
-		methods: ['GET'],
-		steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
-		requestExamples: [{ name: 'One device', description: 'Load one safe device projection.', method: 'GET', query: { id: 'device-id' } }],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Device mirror.',
-				body: { ok: true, devices: [{ id: 'device-id', name: 'MacBook Pro', online: true, locked: false, connectors: [] }] }
-			}
-		]
-	}),
-	endpoint({
-		id: 'devices-permissions',
-		group: 'devices',
-		title: 'Device permission mode',
-		endpoint: '/api/v1/devices/permissions',
-		summary: 'Sets the current account’s execution preference for one paired computer.',
-		detail:
-			'Each account/device connection defaults to always-allow, so supported actions run without a repeated Thingtime approval prompt. ask-every-time retains the existing one-command approval flow; deny rejects new remote actions. Pairing, freshness, capability, locked-session and macOS privacy checks remain enforced in every mode.',
-		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
-		methods: ['POST'],
-		steps: ['Choose a paired device.', 'Set its per-account execution mode.', 'Future commands follow the new preference.'],
-		requestExamples: [
-			{
-				name: 'Ask every time',
-				description: 'Require a prompt before each future command.',
-				method: 'POST',
-				body: { deviceId: 'device-id', mode: 'ask-every-time' }
-			}
-		],
-		responseExamples: [{ status: 200, description: 'Preference saved.', body: { ok: true, deviceId: 'device-id', mode: 'ask-every-time' } }]
-	}),
-	endpoint({
-		id: 'devices-pairing',
-		group: 'devices',
-		title: 'Create device pairing challenge',
-		endpoint: '/api/v1/devices/pairing',
-		summary: 'Creates one strong, short-lived, single-use pairing challenge.',
-		detail:
-			'Returns the only copy of a 256-bit pairing secret. Thingtime stores only its domain-separated SHA-256 hash in a TTL-reaped scoped session.',
-		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session; fail-closed rate limited.' },
-		methods: ['POST'],
-		steps: ['Create a challenge.', 'Transfer the secret to the local node over the QR/deep-link pairing channel.'],
-		requestExamples: [{ name: 'Pair computer', description: 'Create one challenge.', method: 'POST' }],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Challenge created.',
-				body: { ok: true, pairing: { pairingId: 'pair-id', pairingSecret: 'ttpair_…', expiresAt: '2026-08-18T01:00:00.000Z' } }
-			}
-		]
-	}),
-	endpoint({
-		id: 'devices-pairing-claim',
-		group: 'devices',
-		title: 'Claim device pairing',
-		endpoint: '/api/v1/devices/pairing/claim',
-		summary: 'Atomically pairs one node with a locally generated opaque credential.',
-		detail:
-			'The node generates a ttnode_ credential with at least 256 random bits and retains it in Keychain or an equivalent OS vault. Thingtime stores only its hash. Device creation, quota admission, credential session creation and challenge consumption commit together. Exact retries recover; changed retries return 409.',
-		auth: { mode: 'none', description: 'One-time pairing secret in the JSON body; fail-closed IP rate limit.' },
-		methods: ['POST'],
-		steps: [
-			'Generate and persist the node credential locally.',
-			'POST the challenge, credential, descriptor and capabilities once.',
-			'Use the credential only as Bearer auth on node routes.'
-		],
-		requestExamples: [
-			{
-				name: 'Claim',
-				description: 'Pair a macOS node.',
-				method: 'POST',
-				body: {
-					pairingSecret: 'ttpair_…',
-					credential: 'ttnode_…',
-					device: { name: 'MacBook Pro', platform: 'macos', model: 'MacBookPro', osVersion: '15.6', appVersion: '1.0' },
-					capabilities: ['session.read', 'session.send']
-				}
-			}
-		],
-		responseExamples: [
-			{ status: 200, description: 'Paired.', body: { ok: true, device: { id: 'device-id', name: 'MacBook Pro' }, credentialStored: true } },
-			{
-				status: 409,
-				description: 'Challenge was claimed with different content.',
-				body: { ok: false, error: 'This pairing challenge was already claimed with different device data' }
-			}
-		]
-	}),
-	endpoint({
-		id: 'devices-node-state',
-		contractVersion: '1.1.0',
-		group: 'devices',
-		title: 'Publish device state',
-		endpoint: '/api/v1/devices/node/state',
-		summary: 'Applies one quota-accounted, monotonic state and connector snapshot.',
-		detail:
-			'The credential fixes owner and device; request ids cannot override either. Equal revision/equal hash is a no-op, equal revision/different hash is 409, and older revisions are ignored. Raw paths, process arguments and window titles are not accepted.',
-		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
-		methods: ['POST'],
-		steps: [
-			'Increment the durable local revision.',
-			'Send the complete bounded state and connector snapshot.',
-			'Retry the exact body until acknowledged.'
-		],
-		requestExamples: [
-			{
-				name: 'Snapshot',
-				description: 'Publish device state.',
-				method: 'POST',
-				headers: { Authorization: 'Bearer ttnode_…' },
-				body: {
-					revision: 42,
-					state: {
-						locked: false,
-						volume: 0.5,
-						brightness: 0.8,
-						battery: null,
-						displays: [{ id: 42, width: 1728, height: 1117, isMain: true, isBuiltIn: true, brightness: 0.8, brightnessControlSupported: true, currentMode: { id: '1728x1117@60000:0', width: 1728, height: 1117, refreshRate: 60 }, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false }],
-						openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }]
-					},
-					connectors: [
-						{ id: 'chatgpt-desktop', kind: 'chatgpt', label: 'ChatGPT', status: 'connected', capabilities: ['session.read', 'session.send'] }
-					]
-				}
-			}
-		],
-		responseExamples: [{ status: 200, description: 'Applied or exactly replayed.', body: { ok: true, revision: 42, applied: true, stale: false } }]
-	}),
-	endpoint({
-		id: 'devices-commands',
-		contractVersion: '1.1.0',
-		group: 'devices',
-		title: 'Device commands',
-		endpoint: '/api/v1/devices/commands',
-		summary: 'Lists or creates idempotent, typed commands for one device.',
-		detail:
-			'Unknown kinds and unknown input fields are rejected. The typed vocabulary includes connector.start/stop, session.list/read/create/send/interrupt, approval.respond, app.focus/launch/quit/force-quit/hide/unhide/hide-others, audio routing/mute/levels, Wi-Fi connect/disconnect/power, per-display brightness/mode/origin/mirroring, default printer and preferred camera, paired Bluetooth-device and existing VPN-service connections, keep-awake, lock/sleep, restart/shutdown/logout, and screen.start/stop. Wi-Fi connection accepts only a visible SSID and uses an already-saved local credential or an open network; passwords are never accepted or persisted. Lifecycle actions always require a new approval and resolve as needs-review after reconnect because the node can terminate before confirming the terminal OS effect. HDR is read-only; Focus, AirDrop, Bluetooth radio state and global media playback are not exposed because macOS has no supported scoped setter. No arbitrary executable input exists. The per-account/device permission mode controls whether commands queue immediately, request one approval, or are denied. Pairing, capability, freshness, locked-session and macOS privacy checks remain required in every mode.',
-		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
-		methods: ['GET', 'POST'],
-		steps: ['Use a stable requestId.', 'POST one closed kind-specific envelope.', 'Retry it unchanged; changed reuse returns 409.'],
-		requestExamples: [
-			{
-				name: 'Queue chat message',
-				description: 'Queue, rather than steer, one session message.',
-				method: 'POST',
-				body: {
-					deviceId: 'device-id',
-					requestId: 'web-123',
-					kind: 'session.send',
-					input: { connectorId: 'chatgpt-desktop', sessionId: 'chat-1', text: 'Please run the tests.', delivery: 'queue' }
-				}
-			},
-			{
-				name: 'Steer current turn',
-				description: 'Optimistically locks steering to the visible turn.',
-				method: 'POST',
-				body: {
-					deviceId: 'device-id',
-					requestId: 'web-124',
-					kind: 'session.send',
-					input: { connectorId: 'chatgpt-desktop', sessionId: 'chat-1', text: 'Focus on auth.', delivery: 'steer', expectedTurnId: 'turn-9' }
-				}
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Command accepted.',
-				body: {
-					ok: true,
-					command: { id: 'command-id', status: 'queued', kind: 'session.send', requiresApproval: false, approvalState: 'not-required' },
-					idempotent: false
-				}
-			},
-			{ status: 409, description: 'requestId conflict.', body: { ok: false, error: 'requestId was already used for different command content' } }
-		]
-	}),
-	endpoint({
-		id: 'devices-node-commands',
-		contractVersion: '1.1.0',
-		group: 'devices',
-		title: 'Device command lease channel',
-		endpoint: '/api/v1/devices/node/commands',
-		summary: 'Claims, heartbeats and reports journal-backed device work.',
-		detail:
-			'op=claim optionally long-polls for 20 seconds and returns a short random lease. Only the lease hash is stored. Required-approval commands cannot be claimed while approvalState is pending or denied; a claimed envelope explicitly carries approvalState=approved or not-required. op=heartbeat extends the lease; op=report carries a stable eventId and a monotonic status. Ambiguous expired execution becomes needs-review and is never blindly reclaimed. approval-request and approvals implement the separate in-flight one-decision approval bridge; screen-status updates lifecycle metadata only.',
-		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
-		methods: ['POST'],
-		steps: ['Claim one command.', 'Journal before side effects.', 'Heartbeat while active.', 'Report with a stable eventId until acknowledged.'],
-		requestExamples: [
-			{
-				name: 'Claim',
-				description: 'Bounded long poll.',
-				method: 'POST',
-				headers: { Authorization: 'Bearer ttnode_…' },
-				body: { op: 'claim', waitMs: 20000 }
-			},
-			{
-				name: 'Report',
-				description: 'Report exact result metadata.',
-				method: 'POST',
-				headers: { Authorization: 'Bearer ttnode_…' },
-				body: {
-					op: 'report',
-					commandId: 'command-id',
-					leaseId: 'lease-secret',
-					eventId: 'journal-event-7',
-					status: 'succeeded',
-					outputRef: 'turn-10'
-				}
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Command claimed.',
-				body: {
-					ok: true,
-					command: { id: 'command-id', leaseId: 'lease-secret', status: 'claimed', requiresApproval: true, approvalState: 'approved' },
-					serverTime: '2026-08-18T01:00:00.000Z'
-				}
-			}
-		]
-	}),
-	endpoint({
-		id: 'devices-node-sync',
-		group: 'devices',
-		title: 'Device chat mirror sync',
-		endpoint: '/api/v1/devices/node/sync',
-		summary: 'Maps one bounded native AI batch into quota-billed relational Messenger rows.',
-		detail:
-			'Same bounded batch vocabulary as /ai/connections, but owner/device identity comes from the node credential and the connector must already be active on that device. Device and connector are included in server-hashed idempotency namespaces. Edits update existing message segments and delete stale trailing segments transactionally, so retries neither duplicate nor leak quota.',
-		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
-		methods: ['POST'],
-		steps: [
-			'Publish the connector in node/state.',
-			'Send projects, conversations, then messages.',
-			'Coalesce live deltas and retry batches unchanged.'
-		],
-		requestExamples: [
-			{
-				name: 'Sync message',
-				description: 'Upsert one mirrored message.',
-				method: 'POST',
-				headers: { Authorization: 'Bearer ttnode_…' },
-				body: {
-					source: { provider: 'chatgpt', sourceId: 'desktop', label: 'ChatGPT', connector: 'chatgpt-desktop', mode: 'local' },
-					groups: [],
-					conversations: [{ id: 'chat-1', title: 'Thingtime', groupId: null }],
-					messages: [{ id: 'message-1', conversationId: 'chat-1', role: 'assistant', text: 'Working…' }],
-					final: false
-				}
-			}
-		],
-		responseExamples: [
-			{ status: 200, description: 'Batch applied.', body: { ok: true, accepted: { groups: 0, conversations: 1, messages: 1, messageSegments: 1 } } }
-		]
-	}),
-	endpoint({
-		id: 'devices-node-live-sync',
-		group: 'devices',
-		title: 'Device live AI materialization',
-		endpoint: '/api/v1/devices/node/live-sync',
-		summary: 'Materializes bounded live desktop sessions, transcript pages and monotonic visible events.',
-		detail:
-			'Node identity fixes owner and device; connector metadata and capabilities come from the active device-connector row. sessions.upsert accepts up to 100 revisioned summaries with optional opaque projectId and projectLabel but never paths. transcript.page accepts up to 100 discriminated revisioned entries: completed visible user/assistant messages are quota-billed relational mirrors, while closed safe activity labels are retained briefly as control-plane history. events.append accepts 1..100 contiguous sequence events from the closed visible vocabulary: message.queued/submitted/delta, item.started/completed, turn.started/completed/interrupted, approval.requested/responded, and connector.warning. Accepted events enter /devices/events as ai.session-event payloads shaped {connectorId,sessionId,sequence,observedAt,turnId,itemId,type,payload}; reasoning, paths and tool input/output are rejected. Deltas preserve exact whitespace and expire, while each non-empty completed visible item and every submitted user prompt must carry a matching revisioned message envelope that reconciles in the same transaction. The envelope is never projected into the event payload. Equal revisions/hashes replay, changed equal revisions and stale revisions return 409, and shorter completed revisions delete trailing segments and refund their exact quota bytes.',
-		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
-		methods: ['POST'],
-		steps: [
-			'Publish the AI connector through node/state.',
-			'Upsert revisioned session summaries.',
-			'Page discriminated visible history into transcript.page.',
-			'Append contiguous live events and include matching message envelopes on submitted/completed visible text.'
-		],
-		requestExamples: [
-			{
-				name: 'Session summary',
-				description: 'Create or refresh one live native session.',
-				method: 'POST',
-				headers: { Authorization: 'Bearer ttnode_…' },
-				body: {
-					op: 'sessions.upsert',
-					connectorId: 'chatgpt-desktop',
-					sessions: [
-						{
-							sessionId: 'session-1',
-							revision: 4,
-							title: 'Thingtime',
-							projectId: 'project-1',
-							projectLabel: 'Thingtime',
-							state: 'running',
-							updatedAt: '2026-08-18T01:00:00.000Z'
-						}
-					]
-				}
-			},
-			{
-				name: 'Transcript page',
-				description: 'Materialize completed visible messages and safe activity.',
-				method: 'POST',
-				headers: { Authorization: 'Bearer ttnode_…' },
-				body: {
-					op: 'transcript.page',
-					connectorId: 'chatgpt-desktop',
-					sessionId: 'session-1',
-					page: { cursor: null, nextCursor: 'older-2', hasMore: true },
-					entries: [
-						{
-							type: 'message',
-							messageId: 'message-1',
-							revision: 1,
-							role: 'assistant',
-							text: 'Working…',
-							createdAt: null,
-							completedAt: '2026-08-18T01:00:02.000Z'
-						},
-						{
-							type: 'activity',
-							activityId: 'activity-1',
-							revision: 1,
-							turnId: 'turn-1',
-							activity: 'command',
-							label: 'Command execution',
-							status: 'completed',
-							observedAt: '2026-08-18T01:00:02.000Z'
-						}
-					]
-				}
-			},
-			{
-				name: 'Live delta',
-				description: 'Publish one exact visible assistant delta.',
-				method: 'POST',
-				headers: { Authorization: 'Bearer ttnode_…' },
-				body: {
-					op: 'events.append',
-					connectorId: 'chatgpt-desktop',
-					sessionId: 'session-1',
-					events: [
-						{
-							eventId: 'event-1',
-							sequence: 1,
-							observedAt: '2026-08-18T01:00:03.000Z',
-							turnId: 'turn-1',
-							itemId: 'message-2',
-							type: 'message.delta',
-							payload: { delta: ' Running tests…' }
-						}
-					]
-				}
-			},
-			{
-				name: 'Submitted prompt',
-				description: 'Persist a remote user prompt while publishing its live delivery event.',
-				method: 'POST',
-				headers: { Authorization: 'Bearer ttnode_…' },
-				body: {
-					op: 'events.append',
-					connectorId: 'chatgpt-desktop',
-					sessionId: 'session-1',
-					events: [
-						{
-							eventId: 'event-2',
-							sequence: 2,
-							observedAt: '2026-08-18T01:00:04.000Z',
-							turnId: 'turn-1',
-							itemId: null,
-							type: 'message.submitted',
-							payload: { commandId: 'command-1', mode: 'queue', text: 'Run the tests' },
-							message: {
-								messageId: 'command-1',
-								revision: 1,
-								role: 'user',
-								text: 'Run the tests',
-								createdAt: '2026-08-18T01:00:04.000Z',
-								completedAt: '2026-08-18T01:00:04.000Z'
-							}
-						}
-					]
-				}
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Events accepted.',
-				body: {
-					ok: true,
-					op: 'events.append',
-					acceptedEvents: 1,
-					replayedEvents: 0,
-					materializedMessages: 1,
-					idempotentMessages: 0,
-					messageSegments: 1,
-					lastSequence: 2
-				}
-			},
-			{ status: 409, description: 'Stale or gapped sequence.', body: { ok: false, error: 'Live event sequence 2 is required before 3' } }
-		]
-	}),
-	endpoint({
-		id: 'devices-approvals',
-		group: 'devices',
-		title: 'Device approvals',
-		endpoint: '/api/v1/devices/approvals',
-		summary: 'Lists approval requests or records one final decision.',
-		detail: 'Approvals are owner/device filtered. Repeating the same decision is a no-op; a conflicting or expired decision returns 409.',
-		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
-		methods: ['GET', 'POST'],
-		steps: ['GET pending approvals for a device.', 'POST approved or denied once.'],
-		requestExamples: [
-			{ name: 'Approve', description: 'Approve one local action.', method: 'POST', body: { approvalId: 'approval-id', decision: 'approved' } }
-		],
-		responseExamples: [
-			{ status: 200, description: 'Decision saved.', body: { ok: true, approval: { id: 'approval-id', status: 'approved' }, idempotent: false } }
-		]
-	}),
-	endpoint({
-		id: 'devices-events',
-		group: 'devices',
-		title: 'Device event stream',
-		endpoint: '/api/v1/devices/events',
-		summary: 'Returns a reconnectable, cursor-ordered NDJSON device event feed.',
-		detail:
-			'The request may wait up to 20 seconds. Each response emits hello, zero or more bounded events, and the next cursor, with no-store/no-buffer headers. Reconnect using the last acknowledged cursor; no high-frequency frames or token deltas are persisted here.',
-		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
-		methods: ['GET'],
-		steps: ['Open with deviceId and optional cursor.', 'Process newline-delimited events.', 'Reconnect with the final cursor.'],
-		requestExamples: [
-			{ name: 'Stream', description: 'Wait for events.', method: 'GET', query: { deviceId: 'device-id', cursor: null, waitMs: 20000, limit: 100 } }
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'application/x-ndjson stream.',
-				body: { type: 'cursor', cursor: 'opaque-cursor' },
-				headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' }
-			}
-		]
-	}),
-	endpoint({
-		id: 'devices-screen',
-		group: 'devices',
-		title: 'Screen session lifecycle',
-		endpoint: '/api/v1/devices/screen',
-		summary: 'Lists, starts or stops safe screen-session lifecycle metadata.',
-		detail:
-			'Stores only quota-billed requested/approval/connecting/active/terminal metadata. Frames, screenshots, audio, SDP, ICE and TURN credentials are rejected and never persist through this endpoint. Starting queues an allowlisted screen.start command requiring local approval.',
-		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
-		methods: ['GET', 'POST'],
-		steps: ['POST action=start with a stable requestId.', 'Wait for local approval and screen-status events.', 'POST action=stop when done.'],
-		requestExamples: [
-			{
-				name: 'Start view-only',
-				description: 'Request local approval.',
-				method: 'POST',
-				body: { action: 'start', deviceId: 'device-id', requestId: 'screen-1', viewOnly: true }
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Lifecycle created.',
-				body: { ok: true, session: { id: 'screen-id', status: 'requested', viewOnly: true }, command: { kind: 'screen.start', status: 'queued' } }
-			}
-		]
-	})
+  endpoint({
+    id: 'devices',
+    contractVersion: '1.1.0',
+    group: 'devices',
+    title: 'Paired devices',
+    endpoint: '/api/v1/devices',
+    summary: 'Lists safe paired-computer summaries or one detailed mirror.',
+    detail:
+      'Returns protected dedicated projections for the caller’s devices, state and connectors. Generic /things never exposes these kinds. Credentials, hashes, paths, arguments and screen transport data are omitted.',
+    auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+    methods: ['GET'],
+    steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
+    requestExamples: [{ name: 'One device', description: 'Load one safe device projection.', method: 'GET', query: { id: 'device-id' } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Device mirror.',
+        body: { ok: true, devices: [{ id: 'device-id', name: 'MacBook Pro', online: true, locked: false, connectors: [] }] }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'devices-permissions',
+    group: 'devices',
+    title: 'Device permission mode',
+    endpoint: '/api/v1/devices/permissions',
+    summary: 'Sets the current account’s execution preference for one paired computer.',
+    detail:
+      'Each account/device connection defaults to always-allow, so supported actions run without a repeated Thingtime approval prompt. ask-every-time retains the existing one-command approval flow; deny rejects new remote actions. Pairing, freshness, capability, locked-session and macOS privacy checks remain enforced in every mode.',
+    auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+    methods: ['POST'],
+    steps: ['Choose a paired device.', 'Set its per-account execution mode.', 'Future commands follow the new preference.'],
+    requestExamples: [
+      {
+        name: 'Ask every time',
+        description: 'Require a prompt before each future command.',
+        method: 'POST',
+        body: { deviceId: 'device-id', mode: 'ask-every-time' }
+      }
+    ],
+    responseExamples: [{ status: 200, description: 'Preference saved.', body: { ok: true, deviceId: 'device-id', mode: 'ask-every-time' } }]
+  }),
+  endpoint({
+    id: 'devices-pairing',
+    group: 'devices',
+    title: 'Create device pairing challenge',
+    endpoint: '/api/v1/devices/pairing',
+    summary: 'Creates one strong, short-lived, single-use pairing challenge.',
+    detail:
+      'Returns the only copy of a 256-bit pairing secret. Thingtime stores only its domain-separated SHA-256 hash in a TTL-reaped scoped session.',
+    auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session; fail-closed rate limited.' },
+    methods: ['POST'],
+    steps: ['Create a challenge.', 'Transfer the secret to the local node over the QR/deep-link pairing channel.'],
+    requestExamples: [{ name: 'Pair computer', description: 'Create one challenge.', method: 'POST' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Challenge created.',
+        body: { ok: true, pairing: { pairingId: 'pair-id', pairingSecret: 'ttpair_…', expiresAt: '2026-08-18T01:00:00.000Z' } }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'devices-pairing-claim',
+    group: 'devices',
+    title: 'Claim device pairing',
+    endpoint: '/api/v1/devices/pairing/claim',
+    summary: 'Atomically pairs one node with a locally generated opaque credential.',
+    detail:
+      'The node generates a ttnode_ credential with at least 256 random bits and retains it in Keychain or an equivalent OS vault. Thingtime stores only its hash. Device creation, quota admission, credential session creation and challenge consumption commit together. Exact retries recover; changed retries return 409.',
+    auth: { mode: 'none', description: 'One-time pairing secret in the JSON body; fail-closed IP rate limit.' },
+    methods: ['POST'],
+    steps: [
+      'Generate and persist the node credential locally.',
+      'POST the challenge, credential, descriptor and capabilities once.',
+      'Use the credential only as Bearer auth on node routes.'
+    ],
+    requestExamples: [
+      {
+        name: 'Claim',
+        description: 'Pair a macOS node.',
+        method: 'POST',
+        body: {
+          pairingSecret: 'ttpair_…',
+          credential: 'ttnode_…',
+          device: { name: 'MacBook Pro', platform: 'macos', model: 'MacBookPro', osVersion: '15.6', appVersion: '1.0' },
+          capabilities: ['session.read', 'session.send']
+        }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Paired.', body: { ok: true, device: { id: 'device-id', name: 'MacBook Pro' }, credentialStored: true } },
+      {
+        status: 409,
+        description: 'Challenge was claimed with different content.',
+        body: { ok: false, error: 'This pairing challenge was already claimed with different device data' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'devices-node-state',
+    contractVersion: '1.1.0',
+    group: 'devices',
+    title: 'Publish device state',
+    endpoint: '/api/v1/devices/node/state',
+    summary: 'Applies one quota-accounted, monotonic state and connector snapshot.',
+    detail:
+      'The credential fixes owner and device; request ids cannot override either. Equal revision/equal hash is a no-op, equal revision/different hash is 409, and older revisions are ignored. Raw paths, process arguments and window titles are not accepted.',
+    auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+    methods: ['POST'],
+    steps: [
+      'Increment the durable local revision.',
+      'Send the complete bounded state and connector snapshot.',
+      'Retry the exact body until acknowledged.'
+    ],
+    requestExamples: [
+      {
+        name: 'Snapshot',
+        description: 'Publish device state.',
+        method: 'POST',
+        headers: { Authorization: 'Bearer ttnode_…' },
+        body: {
+          revision: 42,
+          state: {
+            locked: false,
+            volume: 0.5,
+            brightness: 0.8,
+            battery: null,
+            displays: [
+              {
+                id: 42,
+                width: 1728,
+                height: 1117,
+                isMain: true,
+                isBuiltIn: true,
+                brightness: 0.8,
+                brightnessControlSupported: true,
+                currentMode: { id: '1728x1117@60000:0', width: 1728, height: 1117, refreshRate: 60 },
+                availableModes: [],
+                originX: 0,
+                originY: 0,
+                mirroredDisplayId: null,
+                hdrActive: false
+              }
+            ],
+            openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }]
+          },
+          connectors: [
+            { id: 'chatgpt-desktop', kind: 'chatgpt', label: 'ChatGPT', status: 'connected', capabilities: ['session.read', 'session.send'] }
+          ]
+        }
+      }
+    ],
+    responseExamples: [{ status: 200, description: 'Applied or exactly replayed.', body: { ok: true, revision: 42, applied: true, stale: false } }]
+  }),
+  endpoint({
+    id: 'devices-commands',
+    contractVersion: '1.1.0',
+    group: 'devices',
+    title: 'Device commands',
+    endpoint: '/api/v1/devices/commands',
+    summary: 'Lists or creates idempotent, typed commands for one device.',
+    detail:
+      'Unknown kinds and unknown input fields are rejected. The typed vocabulary includes connector.start/stop, session.list/read/create/send/interrupt, approval.respond, app.focus/launch/quit/force-quit/hide/unhide/hide-others, audio routing/mute/levels, Wi-Fi connect/disconnect/power, per-display brightness/mode/origin/mirroring, default printer and preferred camera, paired Bluetooth-device and existing VPN-service connections, keep-awake, lock/sleep, restart/shutdown/logout, and screen.start/stop. Wi-Fi connection accepts only a visible SSID and uses an already-saved local credential or an open network; passwords are never accepted or persisted. Lifecycle actions always require a new approval and resolve as needs-review after reconnect because the node can terminate before confirming the terminal OS effect. HDR is read-only; Focus, AirDrop, Bluetooth radio state and global media playback are not exposed because macOS has no supported scoped setter. No arbitrary executable input exists. The per-account/device permission mode controls whether commands queue immediately, request one approval, or are denied. Pairing, capability, freshness, locked-session and macOS privacy checks remain required in every mode.',
+    auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+    methods: ['GET', 'POST'],
+    steps: ['Use a stable requestId.', 'POST one closed kind-specific envelope.', 'Retry it unchanged; changed reuse returns 409.'],
+    requestExamples: [
+      {
+        name: 'Queue chat message',
+        description: 'Queue, rather than steer, one session message.',
+        method: 'POST',
+        body: {
+          deviceId: 'device-id',
+          requestId: 'web-123',
+          kind: 'session.send',
+          input: { connectorId: 'chatgpt-desktop', sessionId: 'chat-1', text: 'Please run the tests.', delivery: 'queue' }
+        }
+      },
+      {
+        name: 'Steer current turn',
+        description: 'Optimistically locks steering to the visible turn.',
+        method: 'POST',
+        body: {
+          deviceId: 'device-id',
+          requestId: 'web-124',
+          kind: 'session.send',
+          input: { connectorId: 'chatgpt-desktop', sessionId: 'chat-1', text: 'Focus on auth.', delivery: 'steer', expectedTurnId: 'turn-9' }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Command accepted.',
+        body: {
+          ok: true,
+          command: { id: 'command-id', status: 'queued', kind: 'session.send', requiresApproval: false, approvalState: 'not-required' },
+          idempotent: false
+        }
+      },
+      { status: 409, description: 'requestId conflict.', body: { ok: false, error: 'requestId was already used for different command content' } }
+    ]
+  }),
+  endpoint({
+    id: 'devices-node-commands',
+    contractVersion: '1.1.0',
+    group: 'devices',
+    title: 'Device command lease channel',
+    endpoint: '/api/v1/devices/node/commands',
+    summary: 'Claims, heartbeats and reports journal-backed device work.',
+    detail:
+      'op=claim optionally long-polls for 20 seconds and returns a short random lease. Only the lease hash is stored. Required-approval commands cannot be claimed while approvalState is pending or denied; a claimed envelope explicitly carries approvalState=approved or not-required. op=heartbeat extends the lease; op=report carries a stable eventId and a monotonic status. Ambiguous expired execution becomes needs-review and is never blindly reclaimed. approval-request and approvals implement the separate in-flight one-decision approval bridge; screen-status updates lifecycle metadata only.',
+    auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+    methods: ['POST'],
+    steps: ['Claim one command.', 'Journal before side effects.', 'Heartbeat while active.', 'Report with a stable eventId until acknowledged.'],
+    requestExamples: [
+      {
+        name: 'Claim',
+        description: 'Bounded long poll.',
+        method: 'POST',
+        headers: { Authorization: 'Bearer ttnode_…' },
+        body: { op: 'claim', waitMs: 20000 }
+      },
+      {
+        name: 'Report',
+        description: 'Report exact result metadata.',
+        method: 'POST',
+        headers: { Authorization: 'Bearer ttnode_…' },
+        body: {
+          op: 'report',
+          commandId: 'command-id',
+          leaseId: 'lease-secret',
+          eventId: 'journal-event-7',
+          status: 'succeeded',
+          outputRef: 'turn-10'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Command claimed.',
+        body: {
+          ok: true,
+          command: { id: 'command-id', leaseId: 'lease-secret', status: 'claimed', requiresApproval: true, approvalState: 'approved' },
+          serverTime: '2026-08-18T01:00:00.000Z'
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'devices-node-sync',
+    group: 'devices',
+    title: 'Device chat mirror sync',
+    endpoint: '/api/v1/devices/node/sync',
+    summary: 'Maps one bounded native AI batch into quota-billed relational Messenger rows.',
+    detail:
+      'Same bounded batch vocabulary as /ai/connections, but owner/device identity comes from the node credential and the connector must already be active on that device. Device and connector are included in server-hashed idempotency namespaces. Edits update existing message segments and delete stale trailing segments transactionally, so retries neither duplicate nor leak quota.',
+    auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+    methods: ['POST'],
+    steps: [
+      'Publish the connector in node/state.',
+      'Send projects, conversations, then messages.',
+      'Coalesce live deltas and retry batches unchanged.'
+    ],
+    requestExamples: [
+      {
+        name: 'Sync message',
+        description: 'Upsert one mirrored message.',
+        method: 'POST',
+        headers: { Authorization: 'Bearer ttnode_…' },
+        body: {
+          source: { provider: 'chatgpt', sourceId: 'desktop', label: 'ChatGPT', connector: 'chatgpt-desktop', mode: 'local' },
+          groups: [],
+          conversations: [{ id: 'chat-1', title: 'Thingtime', groupId: null }],
+          messages: [{ id: 'message-1', conversationId: 'chat-1', role: 'assistant', text: 'Working…' }],
+          final: false
+        }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Batch applied.', body: { ok: true, accepted: { groups: 0, conversations: 1, messages: 1, messageSegments: 1 } } }
+    ]
+  }),
+  endpoint({
+    id: 'devices-node-live-sync',
+    group: 'devices',
+    title: 'Device live AI materialization',
+    endpoint: '/api/v1/devices/node/live-sync',
+    summary: 'Materializes bounded live desktop sessions, transcript pages and monotonic visible events.',
+    detail:
+      'Node identity fixes owner and device; connector metadata and capabilities come from the active device-connector row. sessions.upsert accepts up to 100 revisioned summaries with optional opaque projectId and projectLabel but never paths. transcript.page accepts up to 100 discriminated revisioned entries: completed visible user/assistant messages are quota-billed relational mirrors, while closed safe activity labels are retained briefly as control-plane history. events.append accepts 1..100 contiguous sequence events from the closed visible vocabulary: message.queued/submitted/delta, item.started/completed, turn.started/completed/interrupted, approval.requested/responded, and connector.warning. Accepted events enter /devices/events as ai.session-event payloads shaped {connectorId,sessionId,sequence,observedAt,turnId,itemId,type,payload}; reasoning, paths and tool input/output are rejected. Deltas preserve exact whitespace and expire, while each non-empty completed visible item and every submitted user prompt must carry a matching revisioned message envelope that reconciles in the same transaction. The envelope is never projected into the event payload. Equal revisions/hashes replay, changed equal revisions and stale revisions return 409, and shorter completed revisions delete trailing segments and refund their exact quota bytes.',
+    auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+    methods: ['POST'],
+    steps: [
+      'Publish the AI connector through node/state.',
+      'Upsert revisioned session summaries.',
+      'Page discriminated visible history into transcript.page.',
+      'Append contiguous live events and include matching message envelopes on submitted/completed visible text.'
+    ],
+    requestExamples: [
+      {
+        name: 'Session summary',
+        description: 'Create or refresh one live native session.',
+        method: 'POST',
+        headers: { Authorization: 'Bearer ttnode_…' },
+        body: {
+          op: 'sessions.upsert',
+          connectorId: 'chatgpt-desktop',
+          sessions: [
+            {
+              sessionId: 'session-1',
+              revision: 4,
+              title: 'Thingtime',
+              projectId: 'project-1',
+              projectLabel: 'Thingtime',
+              state: 'running',
+              updatedAt: '2026-08-18T01:00:00.000Z'
+            }
+          ]
+        }
+      },
+      {
+        name: 'Transcript page',
+        description: 'Materialize completed visible messages and safe activity.',
+        method: 'POST',
+        headers: { Authorization: 'Bearer ttnode_…' },
+        body: {
+          op: 'transcript.page',
+          connectorId: 'chatgpt-desktop',
+          sessionId: 'session-1',
+          page: { cursor: null, nextCursor: 'older-2', hasMore: true },
+          entries: [
+            {
+              type: 'message',
+              messageId: 'message-1',
+              revision: 1,
+              role: 'assistant',
+              text: 'Working…',
+              createdAt: null,
+              completedAt: '2026-08-18T01:00:02.000Z'
+            },
+            {
+              type: 'activity',
+              activityId: 'activity-1',
+              revision: 1,
+              turnId: 'turn-1',
+              activity: 'command',
+              label: 'Command execution',
+              status: 'completed',
+              observedAt: '2026-08-18T01:00:02.000Z'
+            }
+          ]
+        }
+      },
+      {
+        name: 'Live delta',
+        description: 'Publish one exact visible assistant delta.',
+        method: 'POST',
+        headers: { Authorization: 'Bearer ttnode_…' },
+        body: {
+          op: 'events.append',
+          connectorId: 'chatgpt-desktop',
+          sessionId: 'session-1',
+          events: [
+            {
+              eventId: 'event-1',
+              sequence: 1,
+              observedAt: '2026-08-18T01:00:03.000Z',
+              turnId: 'turn-1',
+              itemId: 'message-2',
+              type: 'message.delta',
+              payload: { delta: ' Running tests…' }
+            }
+          ]
+        }
+      },
+      {
+        name: 'Submitted prompt',
+        description: 'Persist a remote user prompt while publishing its live delivery event.',
+        method: 'POST',
+        headers: { Authorization: 'Bearer ttnode_…' },
+        body: {
+          op: 'events.append',
+          connectorId: 'chatgpt-desktop',
+          sessionId: 'session-1',
+          events: [
+            {
+              eventId: 'event-2',
+              sequence: 2,
+              observedAt: '2026-08-18T01:00:04.000Z',
+              turnId: 'turn-1',
+              itemId: null,
+              type: 'message.submitted',
+              payload: { commandId: 'command-1', mode: 'queue', text: 'Run the tests' },
+              message: {
+                messageId: 'command-1',
+                revision: 1,
+                role: 'user',
+                text: 'Run the tests',
+                createdAt: '2026-08-18T01:00:04.000Z',
+                completedAt: '2026-08-18T01:00:04.000Z'
+              }
+            }
+          ]
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Events accepted.',
+        body: {
+          ok: true,
+          op: 'events.append',
+          acceptedEvents: 1,
+          replayedEvents: 0,
+          materializedMessages: 1,
+          idempotentMessages: 0,
+          messageSegments: 1,
+          lastSequence: 2
+        }
+      },
+      { status: 409, description: 'Stale or gapped sequence.', body: { ok: false, error: 'Live event sequence 2 is required before 3' } }
+    ]
+  }),
+  endpoint({
+    id: 'devices-approvals',
+    group: 'devices',
+    title: 'Device approvals',
+    endpoint: '/api/v1/devices/approvals',
+    summary: 'Lists approval requests or records one final decision.',
+    detail: 'Approvals are owner/device filtered. Repeating the same decision is a no-op; a conflicting or expired decision returns 409.',
+    auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+    methods: ['GET', 'POST'],
+    steps: ['GET pending approvals for a device.', 'POST approved or denied once.'],
+    requestExamples: [
+      { name: 'Approve', description: 'Approve one local action.', method: 'POST', body: { approvalId: 'approval-id', decision: 'approved' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Decision saved.', body: { ok: true, approval: { id: 'approval-id', status: 'approved' }, idempotent: false } }
+    ]
+  }),
+  endpoint({
+    id: 'devices-events',
+    group: 'devices',
+    title: 'Device event stream',
+    endpoint: '/api/v1/devices/events',
+    summary: 'Returns a reconnectable, cursor-ordered NDJSON device event feed.',
+    detail:
+      'The request may wait up to 20 seconds. Each response emits hello, zero or more bounded events, and the next cursor, with no-store/no-buffer headers. Reconnect using the last acknowledged cursor; no high-frequency frames or token deltas are persisted here.',
+    auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+    methods: ['GET'],
+    steps: ['Open with deviceId and optional cursor.', 'Process newline-delimited events.', 'Reconnect with the final cursor.'],
+    requestExamples: [
+      { name: 'Stream', description: 'Wait for events.', method: 'GET', query: { deviceId: 'device-id', cursor: null, waitMs: 20000, limit: 100 } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'application/x-ndjson stream.',
+        body: { type: 'cursor', cursor: 'opaque-cursor' },
+        headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'devices-screen',
+    group: 'devices',
+    title: 'Screen session lifecycle',
+    endpoint: '/api/v1/devices/screen',
+    summary: 'Lists, starts or stops safe screen-session lifecycle metadata.',
+    detail:
+      'Stores only quota-billed requested/approval/connecting/active/terminal metadata. Frames, screenshots, audio, SDP, ICE and TURN credentials are rejected and never persist through this endpoint. Starting queues an allowlisted screen.start command requiring local approval.',
+    auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+    methods: ['GET', 'POST'],
+    steps: ['POST action=start with a stable requestId.', 'Wait for local approval and screen-status events.', 'POST action=stop when done.'],
+    requestExamples: [
+      {
+        name: 'Start view-only',
+        description: 'Request local approval.',
+        method: 'POST',
+        body: { action: 'start', deviceId: 'device-id', requestId: 'screen-1', viewOnly: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Lifecycle created.',
+        body: { ok: true, session: { id: 'screen-id', status: 'requested', viewOnly: true }, command: { kind: 'screen.start', status: 'queued' } }
+      }
+    ]
+  })
 ];
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
-	endpoint({
-		id: 'capabilities',
-		group: 'platform',
-		title: 'API capabilities',
-		endpoint: '/api/v1/capabilities',
-		summary: 'Returns the origin-scoped compatibility manifest for every documented and executable Thingtime API operation.',
-		detail:
-			'Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. Additions are minor or patch changes and breaking changes receive a new major version.',
-		auth: { mode: 'none', description: 'Public deployment metadata; it contains no account, permission or environment data.' },
-		methods: ['GET'],
-		steps: ['Fetch once per origin and honour the short cache window.', 'Compare only the feature contracts a client requires.'],
-		requestExamples: [{ name: 'Discover capabilities', description: 'Read the active API contract manifest.', method: 'GET' }],
-		responseExamples: [{ status: 200, description: 'Versioned capability manifest.', body: { ok: true, schemaVersion: 1, features: { 'api.devices': '1.0.0' } } }]
-	}),
-	endpoint({
-		id: 'peers',
-		group: 'platform',
-		title: 'Deployment peer discovery',
-		endpoint: '/api/v1/peers',
-		summary: 'Streams bounded, authenticated peer leases and accepts signed deployment announcements.',
-		detail:
-			'First-party deployments authenticate with a short-lived HMAC envelope plus an Ed25519 deployment signature. The receiver pins each public key to its canonical origin; every NDJSON event is independently signed. GET returns a capped NDJSON page rather than an all-peers array; POST announces one peer or starts a bounded bootstrap-plus-gossip sync. Peer records are relational, TTL-reaped control-plane rows and contain only public deployment origins, signing public keys, and observed lease times.',
-		auth: { mode: 'bearer', description: 'Deployment-to-deployment HMAC headers using THINGTIME_PEER_DISCOVERY_SECRET plus an Ed25519 signature from THINGTIME_PEER_SIGNING_PRIVATE_KEY; browser and user tokens are not accepted.' },
-		methods: ['GET', 'POST'],
-		steps: ['Sign the exact method, path, timestamp and raw request body.', 'GET pages NDJSON peer events with a maximum of 50 rows.', 'POST { op: "announce", origin } or a self-signed { op: "sync" }.'],
-		requestExamples: [
-			{ name: 'Stream one page', description: 'A trusted deployment reads a bounded peer page.', method: 'GET', query: { limit: 25 } },
-			{ name: 'Announce this deployment', description: 'A trusted peer renews only its own lease.', method: 'POST', body: { op: 'announce', origin: 'https://pr-68.previews.dev.thingtime.com' } }
-		],
-		responseExamples: [{ status: 200, description: 'NDJSON peer events followed by a page-complete cursor.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }],
-		notes: ['Peer discovery is unavailable unless both private deployment credentials are configured. It never exposes users, data-plane endpoints, private keys, tokens, paths, or an unbounded peer list.']
-	}),
-	endpoint({
-		id: 'peers-sync',
-		group: 'platform',
-		title: 'Advance deployment peer discovery',
-		endpoint: '/api/v1/peers/sync',
-		summary: 'Trusted scheduler-only, bounded peer gossip pass.',
-		detail:
-			'Vercel Cron invokes this production bootstrap route every five minutes with CRON_SECRET. It emits the same independently Ed25519-signed NDJSON progress records as a self-signed peer sync, advances at most one cursor page for each bounded probe set, and never returns an all-peers array. Other deployments can schedule the same route with their own CRON_SECRET.',
-		auth: { mode: 'bearer', description: 'Exact CRON_SECRET bearer only; it is a deployment scheduler endpoint, not a browser or user API.' },
-		methods: ['GET'],
-		steps: [
-			'Configure CRON_SECRET, THINGTIME_PEER_DISCOVERY_SECRET, THINGTIME_PEER_SIGNING_PRIVATE_KEY, and THINGTIME_PUBLIC_ORIGIN in the deployment environment.',
-			'Let the scheduler invoke the route; do not expose its credentials to clients.'
-		],
-		requestExamples: [{ name: 'Scheduled sync', description: 'Vercel supplies the private bearer header.', method: 'GET' }],
-		responseExamples: [{ status: 200, description: 'A bounded signed NDJSON sync progression.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }],
-		notes: ['Vercel cron runs the production bootstrap. Preview and non-Vercel deployments need an equivalent trusted deploy hook or scheduler to join and keep renewing their lease.']
-	}),
-	...deviceEndpointDocs,
+  endpoint({
+    id: 'capabilities',
+    group: 'platform',
+    title: 'API capabilities',
+    endpoint: '/api/v1/capabilities',
+    summary: 'Returns the origin-scoped compatibility manifest for every documented and executable Thingtime API operation.',
+    detail:
+      'Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. Additions are minor or patch changes and breaking changes receive a new major version.',
+    auth: { mode: 'none', description: 'Public deployment metadata; it contains no account, permission or environment data.' },
+    methods: ['GET'],
+    steps: ['Fetch once per origin and honour the short cache window.', 'Compare only the feature contracts a client requires.'],
+    requestExamples: [{ name: 'Discover capabilities', description: 'Read the active API contract manifest.', method: 'GET' }],
+    responseExamples: [
+      { status: 200, description: 'Versioned capability manifest.', body: { ok: true, schemaVersion: 1, features: { 'api.devices': '1.0.0' } } }
+    ]
+  }),
+  endpoint({
+    id: 'peers',
+    group: 'platform',
+    title: 'Deployment peer discovery',
+    endpoint: '/api/v1/peers',
+    summary: 'Streams bounded, authenticated peer leases and accepts signed deployment announcements.',
+    detail:
+      'First-party deployments authenticate with a short-lived HMAC envelope plus an Ed25519 deployment signature. The receiver pins each public key to its canonical origin; every NDJSON event is independently signed. GET returns a capped NDJSON page rather than an all-peers array; POST announces one peer or starts a bounded bootstrap-plus-gossip sync. Peer records are relational, TTL-reaped control-plane rows and contain only public deployment origins, signing public keys, and observed lease times.',
+    auth: {
+      mode: 'bearer',
+      description:
+        'Deployment-to-deployment HMAC headers using THINGTIME_PEER_DISCOVERY_SECRET plus an Ed25519 signature from THINGTIME_PEER_SIGNING_PRIVATE_KEY; browser and user tokens are not accepted.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Sign the exact method, path, timestamp and raw request body.',
+      'GET pages NDJSON peer events with a maximum of 50 rows.',
+      'POST { op: "announce", origin } or a self-signed { op: "sync" }.'
+    ],
+    requestExamples: [
+      { name: 'Stream one page', description: 'A trusted deployment reads a bounded peer page.', method: 'GET', query: { limit: 25 } },
+      {
+        name: 'Announce this deployment',
+        description: 'A trusted peer renews only its own lease.',
+        method: 'POST',
+        body: { op: 'announce', origin: 'https://pr-68.previews.dev.thingtime.com' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'NDJSON peer events followed by a page-complete cursor.',
+        headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' }
+      }
+    ],
+    notes: [
+      'Peer discovery is unavailable unless both private deployment credentials are configured. It never exposes users, data-plane endpoints, private keys, tokens, paths, or an unbounded peer list.'
+    ]
+  }),
+  endpoint({
+    id: 'peers-sync',
+    group: 'platform',
+    title: 'Advance deployment peer discovery',
+    endpoint: '/api/v1/peers/sync',
+    summary: 'Trusted scheduler-only, bounded peer gossip pass.',
+    detail:
+      'Vercel Cron invokes this production bootstrap route every five minutes with CRON_SECRET. It emits the same independently Ed25519-signed NDJSON progress records as a self-signed peer sync, advances at most one cursor page for each bounded probe set, and never returns an all-peers array. Other deployments can schedule the same route with their own CRON_SECRET.',
+    auth: { mode: 'bearer', description: 'Exact CRON_SECRET bearer only; it is a deployment scheduler endpoint, not a browser or user API.' },
+    methods: ['GET'],
+    steps: [
+      'Configure CRON_SECRET, THINGTIME_PEER_DISCOVERY_SECRET, THINGTIME_PEER_SIGNING_PRIVATE_KEY, and THINGTIME_PUBLIC_ORIGIN in the deployment environment.',
+      'Let the scheduler invoke the route; do not expose its credentials to clients.'
+    ],
+    requestExamples: [{ name: 'Scheduled sync', description: 'Vercel supplies the private bearer header.', method: 'GET' }],
+    responseExamples: [
+      { status: 200, description: 'A bounded signed NDJSON sync progression.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }
+    ],
+    notes: [
+      'Vercel cron runs the production bootstrap. Preview and non-Vercel deployments need an equivalent trusted deploy hook or scheduler to join and keep renewing their lease.'
+    ]
+  }),
+  ...deviceEndpointDocs,
   endpoint({
     id: 'docs',
     group: 'docs',
@@ -655,11 +700,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Admins can request the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. Workflow names and inputs are server-allowlisted; arbitrary workflow paths and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
-		steps: [
-			'Choose an allowlisted workflow and target ref.',
-			'POST optional allowlisted inputs.',
-			'Follow the returned dispatch id in /api/v1/admin/ci.'
-		],
+    steps: [
+      'Choose an allowlisted workflow and target ref.',
+      'POST optional allowlisted inputs.',
+      'Follow the returned dispatch id in /api/v1/admin/ci.'
+    ],
     requestExamples: [
       {
         name: 'Retry conflict resolution',
@@ -674,11 +719,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'GitHub accepted the dispatch.',
         body: { ok: true, dispatchId: 'ci-example', workflowFile: 'resolve-pr-conflicts.yml', ref: 'develop', controlPlaneRef: 'github-actions' }
       },
-			{
-				status: 502,
-				description: 'GitHub could not accept the request.',
-				body: { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' }
-			}
+      {
+        status: 502,
+        description: 'GitHub could not accept the request.',
+        body: { ok: false, error: 'The workflow could not be dispatched. Check the GitHub App integration and try again.' }
+      }
     ]
   }),
   endpoint({
@@ -691,11 +736,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Stores one protected ci-automation Thing per allowlisted workflow. Vercel execution keeps the reviewed workflow definition on the protected github-actions branch and runs its Linux jobs on a short-lived Vercel Sandbox registered as a uniquely labelled GitHub self-hosted runner. Unsupported workloads remain locked to GitHub.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
-		steps: [
-			'Choose an allowlisted workflow.',
-			'Choose github-actions or vercel-sandbox.',
-			'POST the policy and inspect the resulting audit event in CI Control.'
-		],
+    steps: [
+      'Choose an allowlisted workflow.',
+      'Choose github-actions or vercel-sandbox.',
+      'POST the policy and inspect the resulting audit event in CI Control.'
+    ],
     requestExamples: [
       {
         name: 'Run the conflict resolver on Vercel',
@@ -705,16 +750,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
-			{
-				status: 200,
-				description: 'Policy updated.',
-				body: { ok: true, policy: { key: 'resolve-conflicts', executionProvider: 'vercel-sandbox', enabled: true } }
-			},
-			{
-				status: 409,
-				description: 'Provider unsupported for this workflow.',
-				body: { ok: false, error: 'This automation requires a GitHub-hosted runner' }
-			},
+      {
+        status: 200,
+        description: 'Policy updated.',
+        body: { ok: true, policy: { key: 'resolve-conflicts', executionProvider: 'vercel-sandbox', enabled: true } }
+      },
+      {
+        status: 409,
+        description: 'Provider unsupported for this workflow.',
+        body: { ok: false, error: 'This automation requires a GitHub-hosted runner' }
+      },
       {
         status: 409,
         description: 'Vercel provider setup is incomplete.',
@@ -736,32 +781,32 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'This internal endpoint never accepts arbitrary workflow paths or runners. It validates the signed raw body, freshness window, repository configuration, workflow allowlist, and stored automation policy. Vercel failures fall back to the already-waiting GitHub run and are recorded in ci-event history.',
     auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
     methods: ['POST'],
-		steps: [
-			'Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET using HMAC-SHA256.',
-			'POST within ten minutes of requestedAt.',
-			'Honor execute and executionProvider in the response.'
-		],
+    steps: [
+      'Sign the exact JSON body with THINGTIME_CI_ROUTER_SECRET using HMAC-SHA256.',
+      'POST within ten minutes of requestedAt.',
+      'Honor execute and executionProvider in the response.'
+    ],
     requestExamples: [
       {
         name: 'Route an automatic resolver trigger',
         description: 'The protected router job asks Thingtime whether this run should continue on GitHub or move to Vercel.',
         method: 'POST',
         headers: { 'X-Thingtime-CI-Signature': 'sha256=<hmac>' },
-				body: {
-					workflow: 'resolve-conflicts',
-					deliveryKey: '123:1:push',
-					actorId: 'github-actions[bot]',
-					requestedAt: '2026-08-10T01:00:00.000Z',
-					inputs: { branch: 'develop' }
-				}
+        body: {
+          workflow: 'resolve-conflicts',
+          deliveryKey: '123:1:push',
+          actorId: 'github-actions[bot]',
+          requestedAt: '2026-08-10T01:00:00.000Z',
+          inputs: { branch: 'develop' }
+        }
       }
     ],
     responseExamples: [
-			{
-				status: 202,
-				description: 'Routing decision accepted.',
-				body: { ok: true, execute: false, executionProvider: 'vercel-sandbox', dispatchId: 'ci-example' }
-			},
+      {
+        status: 202,
+        description: 'Routing decision accepted.',
+        body: { ok: true, execute: false, executionProvider: 'vercel-sandbox', dispatchId: 'ci-example' }
+      },
       { status: 403, description: 'Invalid signature.', body: { ok: false, error: 'Invalid route signature' } }
     ]
   }),
@@ -779,11 +824,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [{ name: 'Reconcile', description: 'Refresh current GitHub state.', method: 'POST', body: {} }],
     responseExamples: [
       { status: 200, description: 'Reconciliation completed.', body: { ok: true, repository: 'lopugit/thingtime', touched: 72 } },
-			{
-				status: 502,
-				description: 'GitHub could not be queried.',
-				body: { ok: false, error: 'GitHub reconciliation failed. Existing dashboard history was preserved.' }
-			}
+      {
+        status: 502,
+        description: 'GitHub could not be queried.',
+        body: { ok: false, error: 'GitHub reconciliation failed. Existing dashboard history was preserved.' }
+      }
     ]
   }),
   endpoint({
@@ -796,19 +841,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Validates X-Hub-Signature-256 against the raw body with a constant-time HMAC-SHA256 comparison, rejects oversized payloads, allowlists the configured repository, and projects only bounded operational fields into protected Things.',
     auth: { mode: 'none', description: 'Public transport endpoint; every request requires a valid GitHub webhook signature.' },
     methods: ['POST'],
-		steps: [
-			'Configure the GitHub App webhook secret.',
-			'Subscribe only to the required repository, PR, workflow, check, deployment, push, create, and delete events.',
-			'POSTs are idempotent by X-GitHub-Delivery.'
-		],
-		requestExamples: [
-			{
-				name: 'Signed GitHub delivery',
-				description: 'Sent by GitHub App webhooks with signature and delivery headers.',
-				method: 'POST',
-				body: { action: 'synchronize', repository: { full_name: 'lopugit/thingtime' } }
-			}
-		],
+    steps: [
+      'Configure the GitHub App webhook secret.',
+      'Subscribe only to the required repository, PR, workflow, check, deployment, push, create, and delete events.',
+      'POSTs are idempotent by X-GitHub-Delivery.'
+    ],
+    requestExamples: [
+      {
+        name: 'Signed GitHub delivery',
+        description: 'Sent by GitHub App webhooks with signature and delivery headers.',
+        method: 'POST',
+        body: { action: 'synchronize', repository: { full_name: 'lopugit/thingtime' } }
+      }
+    ],
     responseExamples: [
       { status: 202, description: 'Verified event accepted.', body: { ok: true, accepted: true, touched: ['ci-example'] } },
       { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
@@ -824,26 +869,82 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Validates x-vercel-signature with a constant-time HMAC-SHA1 comparison over the raw body, then stores deployment and preview projections plus relational history Things. The webhook secret is never returned by any API.',
     auth: { mode: 'none', description: 'Public transport endpoint; every request requires a valid Vercel signature.' },
     methods: ['POST'],
-		steps: [
-			'Create a project-scoped Vercel webhook.',
-			'Subscribe to deployment.created, deployment.ready, deployment.error, deployment.canceled, and deployment.deleted.',
-			'Store the one-time webhook secret in THINGTIME_VERCEL_WEBHOOK_SECRET.'
-		],
-		requestExamples: [
-			{
-				name: 'Signed Vercel delivery',
-				description: 'Sent by Vercel with x-vercel-signature.',
-				method: 'POST',
-				body: { type: 'deployment.ready', payload: { deployment: { id: 'dpl_example', url: 'preview.example.app' } } }
-			}
-		],
+    steps: [
+      'Create a project-scoped Vercel webhook.',
+      'Subscribe to deployment.created, deployment.ready, deployment.error, deployment.canceled, and deployment.deleted.',
+      'Store the one-time webhook secret in THINGTIME_VERCEL_WEBHOOK_SECRET.'
+    ],
+    requestExamples: [
+      {
+        name: 'Signed Vercel delivery',
+        description: 'Sent by Vercel with x-vercel-signature.',
+        method: 'POST',
+        body: { type: 'deployment.ready', payload: { deployment: { id: 'dpl_example', url: 'preview.example.app' } } }
+      }
+    ],
     responseExamples: [
-			{
-				status: 202,
-				description: 'Verified deployment event accepted.',
-				body: { ok: true, accepted: true, touched: ['ci-deployment', 'ci-preview'] }
-			},
+      {
+        status: 202,
+        description: 'Verified deployment event accepted.',
+        body: { ok: true, accepted: true, touched: ['ci-deployment', 'ci-preview'] }
+      },
       { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-integrations',
+    group: 'admin',
+    title: 'Admin integration vault and proxy',
+    endpoint: '/api/v1/admin/integrations',
+    summary: 'Manage write-only encrypted external credentials and endpoint read/write policies (admin only).',
+    detail:
+      'Stores external credentials as AES-256-GCM ciphertext using THINGTIME_ADMIN_VAULT_KEY. GET returns only metadata, endpoint policy, and redacted audit rows—never a credential value. The proxy accepts a saved endpoint id, not an arbitrary upstream URL. It enforces HTTPS origin/path allowlists, selected read/create-only/full-write permissions, request/response byte bounds, redirects disabled, and a fail-closed rate limit. Vercel create-only environment-variable writes reserve a short local claim and check the remote project env list before POST; they never use PATCH/upsert. This cannot make an arbitrary third-party API atomically conditional, so unsupported generic create-only endpoints are refused rather than simulated unsafely.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Provision THINGTIME_ADMIN_VAULT_KEY as a distinct 32-byte base64url server secret. Do not reuse JWT, session, peer, or cron secrets.',
+      'POST action:create-secret with a label and value. The value is write-only and never appears in a later response.',
+      'POST action:save-endpoint with a stored secret id, provider, HTTPS origin, closed path prefixes, and read/write policy.',
+      'POST action:proxy with endpointId, operation, path, and a bounded JSON body. Only Vercel supports create-only writes in this initial adapter.',
+      'Use a provider token scoped to exactly the intended external project/team. The proxy policy reduces blast radius but cannot grant a token less privilege than the provider assigned.'
+    ],
+    requestExamples: [
+      {
+        name: 'Create write-only credential',
+        description: 'Value is encrypted server-side and omitted from every response.',
+        method: 'POST',
+        body: { action: 'create-secret', label: 'Vercel project token', value: '<write-only-token>' }
+      },
+      {
+        name: 'Save Vercel create-only policy',
+        description: 'Allow listing env variables and creating new ones; do not permit PATCH/delete.',
+        method: 'POST',
+        body: {
+          action: 'save-endpoint',
+          endpoint: {
+            label: 'Thingtime Vercel env',
+            provider: 'vercel',
+            origin: 'https://api.vercel.com',
+            secretId: 'secret_example',
+            allowedPathPrefixes: ['/v9/projects', '/v10/projects'],
+            allowRead: true,
+            writeMode: 'create-only'
+          }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Vault metadata; no encrypted fields or credential values are exposed.',
+        body: {
+          ok: true,
+          vaultConfigured: true,
+          secrets: [{ id: 'secret_example', label: 'Vercel project token' }],
+          endpoints: [{ id: 'endpoint_example', writeMode: 'create-only' }]
+        }
+      },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
     ]
   }),
   endpoint({
@@ -927,13 +1028,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'The /admin Users tab: users with subscription tier, quotas, storage usage, and app/token counts (admin only).',
     detail:
       'Enriches the admin user search with everything the management dashboard shows per user: subscription ' +
-			'(tier, admin overrides, effective quotas, metered flag), canonical account storage (allowance, exact ' +
-			'logical bytes used, remaining/overage, accounting status/version/reconciliation time), and the exact ' +
-			'app-namespace subset of that same total, plus counts (registered apps, co-managed apps, owned accounts, PATs, ' +
+      '(tier, admin overrides, effective quotas, metered flag), canonical account storage (allowance, exact ' +
+      'logical bytes used, remaining/overage, accounting status/version/reconciliation time), and the exact ' +
+      'app-namespace subset of that same total, plus counts (registered apps, co-managed apps, owned accounts, PATs, ' +
       'connected apps with a live grant). ?q= searches by username/email; limit selects a bounded 1–200 row ' +
       'keyset page (default 20). When nextCursor is non-null, pass it back unchanged with the same q to continue. ' +
-			'totalCapped remains an alias for whether another page exists. Flat used-byte aliases and appNamespaceBytes ' +
-			'are null until the canonical account ledger is ready; storage.status is the authoritative readiness signal.',
+      'totalCapped remains an alias for whether another page exists. Flat used-byte aliases and appNamespaceBytes ' +
+      'are null until the canonical account ledger is ready; storage.status is the authoritative readiness signal.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: [
@@ -960,17 +1061,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               createdAt: '2026-08-05T00:00:00.000Z',
               isAdmin: false,
               accountKind: 'user',
-							storage: {
-								usedBytes: 1048576,
-								allowanceBytes: 524288000,
-								remainingBytes: 523239424,
-								overageBytes: 0,
-								status: 'ready',
-								accountingVersion: 1,
-								reconciledAt: '2026-08-05T00:00:00.000Z'
-							},
-							storageAllowanceBytes: 524288000,
-							storageUsedBytes: 1048576,
+              storage: {
+                usedBytes: 1048576,
+                allowanceBytes: 524288000,
+                remainingBytes: 523239424,
+                overageBytes: 0,
+                status: 'ready',
+                accountingVersion: 1,
+                reconciledAt: '2026-08-05T00:00:00.000Z'
+              },
+              storageAllowanceBytes: 524288000,
+              storageUsedBytes: 1048576,
               appNamespaceBytes: 1048576,
               subscription: {
                 tier: 'free',
@@ -1238,7 +1339,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             { id: 'pro', versionId: 'subscription-tier-pro-v1', version: 1, status: 'live', title: 'Pro' },
             { id: 'payg', versionId: 'subscription-tier-payg-v1', version: 1, status: 'live', title: 'Pay as you go' }
           ],
-					drafts: [{ id: 'studio-a1b2c3d4', versionId: 'subscription-tier-studio-a1b2c3d4-v1', version: 1, status: 'draft', title: 'Studio' }],
+          drafts: [{ id: 'studio-a1b2c3d4', versionId: 'subscription-tier-studio-a1b2c3d4-v1', version: 1, status: 'draft', title: 'Studio' }],
           archived: []
         }
       },
@@ -1405,17 +1506,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'through the same roster + session chokepoints as the account switcher: a hint exists exactly while ' +
       'its session on the other deployment is live, and dead pointers are pruned (the cookie is rewritten). ' +
       'Responses carry only public profile hints (username, display name, avatar) — never emails, session ' +
-      'ids, or tokens — and picking a suggestion still requires that account\'s password or passkey. ' +
-      'Same-origin only: no CORS headers, so no cross-site page can read a browser\'s suggestions.',
+      "ids, or tokens — and picking a suggestion still requires that account's password or passkey. " +
+      "Same-origin only: no CORS headers, so no cross-site page can read a browser's suggestions.",
     auth: { mode: 'none', description: 'Cookie-driven; works signed out (that is its point).' },
     methods: ['GET'],
     steps: [
       'GET with credentials (the browser sends tt_hints automatically).',
       'Render hints as "continue as" suggestions; each lists the deployments (origins) it was seen on.',
       'On pick, prefill the username for password login or call the passkey login ceremony.',
-      'Entries with alreadyHere:true are already in this origin\'s switcher — skip them in the popup.'
+      "Entries with alreadyHere:true are already in this origin's switcher — skip them in the popup."
     ],
-    requestExamples: [{ name: 'Fetch suggestions', description: 'Resolve this browser\'s cross-deployment hints.', method: 'GET' }],
+    requestExamples: [{ name: 'Fetch suggestions', description: "Resolve this browser's cross-deployment hints.", method: 'GET' }],
     responseExamples: [
       {
         status: 200,
@@ -1442,24 +1543,33 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'This deployment vouches for the hint pointers ITS origin wrote — the federated half of auto-login.',
     detail:
       'Cross-origin, credentialed, CORS-restricted to the Thingtime family (and localhost dev). Another ' +
-      'deployment\'s page calls this when its own /account-hints reported pointers it could not resolve ' +
+      "deployment's page calls this when its own /account-hints reported pointers it could not resolve " +
       '(different database): the shared tt_hints cookie arrives on the same-site fetch, and THIS deployment ' +
       'resolves only the pointers its own origin wrote, through the same live roster/session chokepoints. ' +
-      'Each environment answers only for its own sessions — the user\'s browser assembles the full picture; ' +
-      'no deployment ever holds another\'s session state. Read-only: never prunes, never sets cookies.',
+      "Each environment answers only for its own sessions — the user's browser assembles the full picture; " +
+      "no deployment ever holds another's session state. Read-only: never prunes, never sets cookies.",
     auth: { mode: 'none', description: 'Cookie-driven; answers only for pointers this origin minted.' },
     methods: ['GET'],
     steps: [
       'GET /api/v1/auth/account-hints on your own origin first.',
-      'For each origin in its `unresolved`, fetch that origin\'s /account-hints/resolve with credentials.',
+      "For each origin in its `unresolved`, fetch that origin's /account-hints/resolve with credentials.",
       'Merge the returned hints (dedupe by user id) into the "continue as" list.'
     ],
-    requestExamples: [{ name: 'Federated resolve', description: 'Asked by another deployment\'s page.', method: 'GET' }],
+    requestExamples: [{ name: 'Federated resolve', description: "Asked by another deployment's page.", method: 'GET' }],
     responseExamples: [
       {
         status: 200,
         description: 'This origin vouches for one live account.',
-        body: { ok: true, hints: [{ user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', avatarUrl: null }, origins: [{ origin: 'https://dev.thingtime.com', lastSeenAt: '2026-08-19T03:12:00.000Z' }], alreadyHere: false }] }
+        body: {
+          ok: true,
+          hints: [
+            {
+              user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', avatarUrl: null },
+              origins: [{ origin: 'https://dev.thingtime.com', lastSeenAt: '2026-08-19T03:12:00.000Z' }],
+              alreadyHere: false
+            }
+          ]
+        }
       },
       { status: 200, description: 'Nothing to vouch for.', body: { ok: true, hints: [] } }
     ]
@@ -1485,10 +1595,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'The target page POSTs it to its own /api/v1/auth/sso-session within 2 minutes.'
     ],
     requestExamples: [
-      { name: 'Mint for a preview', description: 'Sign into an immutable preview deployment.', method: 'POST', body: { origin: 'https://thingtime-abc123-lopugits-projects.vercel.app' } }
+      {
+        name: 'Mint for a preview',
+        description: 'Sign into an immutable preview deployment.',
+        method: 'POST',
+        body: { origin: 'https://thingtime-abc123-lopugits-projects.vercel.app' }
+      }
     ],
     responseExamples: [
-      { status: 200, description: 'Code minted.', body: { ok: true, code: 'eyJhbGciOi…', aud: 'https://thingtime-abc123-lopugits-projects.vercel.app', expiresAt: '2026-08-19T05:02:00.000Z' } },
+      {
+        status: 200,
+        description: 'Code minted.',
+        body: { ok: true, code: 'eyJhbGciOi…', aud: 'https://thingtime-abc123-lopugits-projects.vercel.app', expiresAt: '2026-08-19T05:02:00.000Z' }
+      },
       { status: 401, description: 'Not signed in.', body: { ok: false, error: 'Unauthorized' } }
     ]
   }),
@@ -1499,11 +1618,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/auth/sso-session',
     summary: 'Exchange a handoff code for a first-class session on THIS deployment.',
     detail:
-      'POST { code } — verifies the signature (deployments share JWT key material), requires the code\'s aud ' +
-      'to equal this deployment\'s public origin, claims it atomically exactly once (a second redemption ' +
+      "POST { code } — verifies the signature (deployments share JWT key material), requires the code's aud " +
+      "to equal this deployment's public origin, claims it atomically exactly once (a second redemption " +
       'revokes the session — theft signal), then runs the exact password-login tail: httpOnly auth cookie, ' +
       'switcher roster merge, cross-deployment hint pointer. Redemption only succeeds where this deployment ' +
-      'shares the minting environment\'s database (an immutable preview and its alias twin do) — anything ' +
+      "shares the minting environment's database (an immutable preview and its alias twin do) — anything " +
       'else fails closed with a generic error.',
     auth: { mode: 'none', description: 'The code is the credential.' },
     methods: ['POST'],
@@ -1516,7 +1635,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       { status: 200, description: 'Signed in.', body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik' } } },
       { status: 403, description: 'Code bound to a different origin.', body: { ok: false, error: 'This sign-in link belongs to a different site' } },
-      { status: 401, description: 'Expired, replayed, or different environment.', body: { ok: false, error: 'This sign-in link is no longer valid — try again' } }
+      {
+        status: 401,
+        description: 'Expired, replayed, or different environment.',
+        body: { ok: false, error: 'This sign-in link is no longer valid — try again' }
+      }
     ]
   }),
   endpoint({
@@ -1561,10 +1684,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Browser-mediated only: requires Sec-Fetch-Dest: webidentity (page JS can never set Sec-Fetch-*), so ' +
       'no embedding page can read it — the browser fetches with first-party cookies and draws the sheet ' +
-      'itself. The list is this browser\'s own switcher roster (resolveRoster, ownership-gated), never a ' +
+      "itself. The list is this browser's own switcher roster (resolveRoster, ownership-gated), never a " +
       'central registry: only sessions this roster owns can later be redeemed by an assertion. Returns 401 ' +
       'with an empty list when signed out.',
-    auth: { mode: 'none', description: 'First-party cookies via the browser\'s FedCM fetch.' },
+    auth: { mode: 'none', description: "First-party cookies via the browser's FedCM fetch." },
     methods: ['GET'],
     steps: [
       'Never call this from page JS — the browser does, during navigator.credentials.get({ identity }).',
@@ -1587,13 +1710,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'FedCM client metadata',
     endpoint: '/api/v1/fedcm/client-metadata',
     summary: 'Policy links the browser shows alongside the FedCM consent sheet.',
-    detail: 'Standard FedCM metadata endpoint; Thingtime\'s own pages and registered apps share the platform policies.',
+    detail: "Standard FedCM metadata endpoint; Thingtime's own pages and registered apps share the platform policies.",
     auth: { mode: 'none', description: 'Public metadata.' },
     methods: ['GET'],
     steps: ['Never call directly — the browser fetches it during the FedCM ceremony.'],
     requestExamples: [{ name: 'Browser fetch', description: 'Sent by the FedCM machinery.', method: 'GET', query: { client_id: 'thingtime-self' } }],
     responseExamples: [
-      { status: 200, description: 'Policy links.', body: { privacy_policy_url: 'https://thingtime.com/', terms_of_service_url: 'https://thingtime.com/' } }
+      {
+        status: 200,
+        description: 'Policy links.',
+        body: { privacy_policy_url: 'https://thingtime.com/', terms_of_service_url: 'https://thingtime.com/' }
+      }
     ]
   }),
   endpoint({
@@ -1601,15 +1728,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'FedCM assertion',
     endpoint: '/api/v1/fedcm/assertion',
-    summary: 'The browser exchanges the user\'s sheet pick for a token: a session-handoff code or an app token.',
+    summary: "The browser exchanges the user's sheet pick for a token: a session-handoff code or an app token.",
     detail:
       'Browser-mediated only (Sec-Fetch-Dest: webidentity), form-encoded { client_id, account_id, nonce? } ' +
-      'with the RP\'s Origin header. The picked account must belong to this browser\'s roster (re-checked ' +
+      "with the RP's Origin header. The picked account must belong to this browser's roster (re-checked " +
       'server-side). client_id "thingtime-self" mints a 2-minute aud-bound single-use handoff code the RP ' +
       'redeems at its own /api/v1/auth/sso-session for a full session; a registered ttapp_… client gets the ' +
       'same app-scoped Bearer token the consent popup issues, baseline profile scope only (wider grants ' +
       'still require the consent popup). Errors use the FedCM { error: { code } } shape.',
-    auth: { mode: 'none', description: 'First-party cookies via the browser\'s FedCM fetch; roster ownership enforced.' },
+    auth: { mode: 'none', description: "First-party cookies via the browser's FedCM fetch; roster ownership enforced." },
     methods: ['POST'],
     steps: [
       'Never call directly — the browser posts here after the user picks an account on the sheet.',
@@ -1617,11 +1744,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'App RPs use the returned token as a Bearer credential, exactly like a consent-popup grant.'
     ],
     requestExamples: [
-      { name: 'Browser assertion', description: 'Form-encoded by the FedCM machinery.', method: 'POST', body: { client_id: 'thingtime-self', account_id: '64f000000000000000000002' } }
+      {
+        name: 'Browser assertion',
+        description: 'Form-encoded by the FedCM machinery.',
+        method: 'POST',
+        body: { client_id: 'thingtime-self', account_id: '64f000000000000000000002' }
+      }
     ],
     responseExamples: [
       { status: 200, description: 'Token minted.', body: { token: 'eyJhbGciOi…' } },
-      { status: 401, description: 'Account not in this browser\'s roster.', body: { error: { code: 'unauthorized' } } }
+      { status: 401, description: "Account not in this browser's roster.", body: { error: { code: 'unauthorized' } } }
     ]
   }),
   endpoint({
@@ -1629,9 +1761,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'List passkeys',
     endpoint: '/api/v1/auth/passkeys',
-    summary: 'The session user\'s passkeys: provider, dates, revocation state, and linked apps.',
+    summary: "The session user's passkeys: provider, dates, revocation state, and linked apps.",
     detail:
-      'Each entry is safe metadata only (nickname, description, provider derived from the authenticator\'s ' +
+      "Each entry is safe metadata only (nickname, description, provider derived from the authenticator's " +
       'AAGUID, created/last-used dates, backup state, transports, revokedAt) plus linkedApps — the origins ' +
       'and SSO apps the passkey has authenticated, with first/last-used timestamps and usage counts. ' +
       'Credential material (credential id, public key, counter) never leaves the server.',
@@ -1663,7 +1795,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               lastUsedAt: '2026-08-19T04:00:00.000Z',
               lastUsedOrigin: 'https://thingtime.com',
               revokedAt: null,
-              linkedApps: [{ appKey: 'origin:https://thingtime.com', appName: 'thingtime.com', firstUsedAt: '2026-08-19T04:00:00.000Z', lastUsedAt: '2026-08-19T04:00:00.000Z', usageCount: 1 }]
+              linkedApps: [
+                {
+                  appKey: 'origin:https://thingtime.com',
+                  appName: 'thingtime.com',
+                  firstUsedAt: '2026-08-19T04:00:00.000Z',
+                  lastUsedAt: '2026-08-19T04:00:00.000Z',
+                  usageCount: 1
+                }
+              ]
             }
           ]
         }
@@ -1681,8 +1821,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST { password } — re-confirms the current password (adding a passkey mints a durable credential), ' +
       'then returns navigator.credentials.create options and sets a signed 10-minute challenge cookie. ' +
       'Options request a DISCOVERABLE credential (residentKey required), which is what makes usernameless ' +
-      'login and the browser\'s conditional-UI autofill (iCloud Keychain, 1Password) work. Existing ' +
-      'credentials are excluded so the same authenticator can\'t double-register. The rpID is ' +
+      "login and the browser's conditional-UI autofill (iCloud Keychain, 1Password) work. Existing " +
+      "credentials are excluded so the same authenticator can't double-register. The rpID is " +
       'thingtime.com for every *.thingtime.com deployment, so one passkey works on production, dev, and ' +
       'previews alike.',
     auth: { mode: 'session', description: 'Requires a signed-in session; the body re-confirms the password.' },
@@ -1693,12 +1833,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST the attestation to /api/v1/auth/passkeys/register within 10 minutes.',
       'Wrong password → 403; 25-passkey cap → 409.'
     ],
-    requestExamples: [{ name: 'Start registration', description: 'Confirm the password and mint options.', method: 'POST', body: { password: 'hunter22!' } }],
+    requestExamples: [
+      { name: 'Start registration', description: 'Confirm the password and mint options.', method: 'POST', body: { password: 'hunter22!' } }
+    ],
     responseExamples: [
       {
         status: 200,
         description: 'Creation options (challenge cookie set).',
-        body: { ok: true, options: { challenge: 'sYm…', rp: { name: 'Thingtime', id: 'thingtime.com' }, user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' }, authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' } } }
+        body: {
+          ok: true,
+          options: {
+            challenge: 'sYm…',
+            rp: { name: 'Thingtime', id: 'thingtime.com' },
+            user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' },
+            authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' }
+          }
+        }
       },
       { status: 403, description: 'Password mismatch.', body: { ok: false, error: 'Wrong password' } }
     ]
@@ -1714,7 +1864,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'navigator.credentials.create. Verified against the challenge cookie from /register-options ' +
       '(user verification required), then stored as a protected `passkey` thing: metadata in crystal, ' +
       'credential material in the secure blob, global credential-id uniqueness via uniqueKeys. The ' +
-      'nickname defaults to the provider name derived from the authenticator\'s AAGUID (e.g. ' +
+      "nickname defaults to the provider name derived from the authenticator's AAGUID (e.g. " +
       '"1Password", "iCloud Keychain").',
     auth: { mode: 'session', description: 'Requires the same signed-in session that started the ceremony.' },
     methods: ['POST'],
@@ -1729,11 +1879,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Finish registration',
         description: 'Store the verified credential.',
         method: 'POST',
-        body: { response: { id: 'B64URL…', rawId: 'B64URL…', type: 'public-key', response: { clientDataJSON: '…', attestationObject: '…' } }, nickname: 'MacBook Touch ID' }
+        body: {
+          response: { id: 'B64URL…', rawId: 'B64URL…', type: 'public-key', response: { clientDataJSON: '…', attestationObject: '…' } },
+          nickname: 'MacBook Touch ID'
+        }
       }
     ],
     responseExamples: [
-      { status: 200, description: 'Passkey stored.', body: { ok: true, passkey: { id: 'a1b2c3d4-…', nickname: 'MacBook Touch ID', providerName: 'iCloud Keychain', revokedAt: null } } },
+      {
+        status: 200,
+        description: 'Passkey stored.',
+        body: { ok: true, passkey: { id: 'a1b2c3d4-…', nickname: 'MacBook Touch ID', providerName: 'iCloud Keychain', revokedAt: null } }
+      },
       { status: 400, description: 'Challenge expired.', body: { ok: false, error: 'This passkey setup expired — start again' } }
     ]
   }),
@@ -1759,7 +1916,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     requestExamples: [{ name: 'Mint options', description: 'Start a passkey login.', method: 'POST' }],
     responseExamples: [
-      { status: 200, description: 'Request options (challenge cookie set).', body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'preferred' } } }
+      {
+        status: 200,
+        description: 'Request options (challenge cookie set).',
+        body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'preferred' } }
+      }
     ]
   }),
   endpoint({
@@ -1789,11 +1950,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Finish login',
         description: 'Present the assertion.',
         method: 'POST',
-        body: { response: { id: 'B64URL…', rawId: 'B64URL…', type: 'public-key', response: { clientDataJSON: '…', authenticatorData: '…', signature: '…', userHandle: 'B64URL…' } } }
+        body: {
+          response: {
+            id: 'B64URL…',
+            rawId: 'B64URL…',
+            type: 'public-key',
+            response: { clientDataJSON: '…', authenticatorData: '…', signature: '…', userHandle: 'B64URL…' }
+          }
+        }
       }
     ],
     responseExamples: [
-      { status: 200, description: 'Signed in.', body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik' }, passkeyId: 'a1b2c3d4-…' } },
+      {
+        status: 200,
+        description: 'Signed in.',
+        body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik' }, passkeyId: 'a1b2c3d4-…' }
+      },
       { status: 401, description: 'Unknown, revoked, or unverifiable credential.', body: { ok: false, error: 'This passkey is not registered here' } }
     ]
   }),
@@ -1802,15 +1974,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Rename / describe a passkey',
     endpoint: '/api/v1/auth/passkeys/update',
-    summary: 'Update a passkey\'s nickname and/or description.',
+    summary: "Update a passkey's nickname and/or description.",
     detail:
       'POST { id, nickname?, description? } — metadata only, so no password confirmation (nothing here ' +
       'changes what the credential can do). An empty description clears it; nicknames cannot be empty.',
-    auth: { mode: 'session', description: 'Requires the passkey\'s owner session.' },
+    auth: { mode: 'session', description: "Requires the passkey's owner session." },
     methods: ['POST'],
     steps: ['POST { id, nickname?, description? } with credentials.', 'Render the returned passkey.'],
     requestExamples: [
-      { name: 'Rename', description: 'Set a friendlier name.', method: 'POST', body: { id: 'a1b2c3d4-…', nickname: 'Work MacBook', description: 'Touch ID on the office laptop' } }
+      {
+        name: 'Rename',
+        description: 'Set a friendlier name.',
+        method: 'POST',
+        body: { id: 'a1b2c3d4-…', nickname: 'Work MacBook', description: 'Touch ID on the office laptop' }
+      }
     ],
     responseExamples: [
       { status: 200, description: 'Updated.', body: { ok: true, passkey: { id: 'a1b2c3d4-…', nickname: 'Work MacBook' } } },
@@ -1822,13 +1999,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Revoke a passkey',
     endpoint: '/api/v1/auth/passkeys/revoke',
-    summary: 'Password-confirmed, immediate, permanent block on a passkey\'s ability to log in.',
+    summary: "Password-confirmed, immediate, permanent block on a passkey's ability to log in.",
     detail:
       'POST { id, password } — sets revokedAt; the login endpoint rejects revoked credentials before any ' +
       'signature work. The record stays listed (audit trail) until deleted via /delete. Password ' +
       'confirmation keeps a walk-up attacker with an unlocked session from silently disabling the ' +
-      'owner\'s passkeys.',
-    auth: { mode: 'session', description: 'Requires the passkey\'s owner session; the body re-confirms the password.' },
+      "owner's passkeys.",
+    auth: { mode: 'session', description: "Requires the passkey's owner session; the body re-confirms the password." },
     methods: ['POST'],
     steps: [
       'POST { id, password } with credentials.',
@@ -1849,12 +2026,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Password-confirmed removal of a REVOKED passkey and its linked-app records.',
     detail:
       'POST { id, password } — refuses non-revoked passkeys (409), keeping "working credential" → "gone" ' +
-      'a deliberate two-step path. Deletion also removes the passkey\'s linked-app records and frees the ' +
+      "a deliberate two-step path. Deletion also removes the passkey's linked-app records and frees the " +
       'authenticator to register a fresh passkey.',
-    auth: { mode: 'session', description: 'Requires the passkey\'s owner session; the body re-confirms the password.' },
+    auth: { mode: 'session', description: "Requires the passkey's owner session; the body re-confirms the password." },
     methods: ['POST'],
     steps: ['Revoke the passkey first.', 'POST { id, password } with credentials.', 'The passkey and its linked apps are gone.'],
-    requestExamples: [{ name: 'Delete', description: 'Remove a revoked passkey.', method: 'POST', body: { id: 'a1b2c3d4-…', password: 'hunter22!' } }],
+    requestExamples: [
+      { name: 'Delete', description: 'Remove a revoked passkey.', method: 'POST', body: { id: 'a1b2c3d4-…', password: 'hunter22!' } }
+    ],
     responseExamples: [
       { status: 200, description: 'Deleted.', body: { ok: true } },
       { status: 409, description: 'Still active.', body: { ok: false, error: 'Revoke this passkey before deleting it' } }
@@ -1914,7 +2093,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       "POST userId + enabled:true + scope ('public' | 'private' | 'all') to approve that variation; enabled:false withholds it again.",
       'Read the returned user row (publicUploadsEnabled, privateUploadsEnabled, publicUploadsPending, privateUploadsPending) to update the UI.',
       'The /admin Users tab lists pending accounts — a *Pending flag is true while that scope’s approval is outstanding.',
-      "Non-admins receive 403; missing userId, a non-boolean enabled, or an unknown scope 400; unknown user 404."
+      'Non-admins receive 403; missing userId, a non-boolean enabled, or an unknown scope 400; unknown user 404.'
     ],
     requestExamples: [
       {
@@ -2360,8 +2539,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET'],
     steps: [
       'Send a GET request with credentials or an Authorization bearer token.',
-			'Read user.storage for the canonical exact account-byte usage, allowance, remaining/overage, and reconciliation status.',
-			'Treat the legacy flat used/remaining aliases as nullable compatibility fields; they are populated only when user.storage.status is ready.',
+      'Read user.storage for the canonical exact account-byte usage, allowance, remaining/overage, and reconciliation status.',
+      'Treat the legacy flat used/remaining aliases as nullable compatibility fields; they are populated only when user.storage.status is ready.',
       'If user is null, prompt for login or continue in anonymous mode.',
       'Do not expect password hashes, raw session documents, or JWTs in this response.'
     ],
@@ -2388,19 +2567,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             email: 'service@example.com',
             emailVerified: true,
             accountKind: 'service',
-						storageAllowanceBytes: 5368709120,
-						storageUsedBytes: 2941120,
-						storageRemainingBytes: 5365768000,
-						storageAccountingReady: true,
-						storage: {
-							usedBytes: 2941120,
-							allowanceBytes: 5368709120,
-							remainingBytes: 5365768000,
-							overageBytes: 0,
-							status: 'ready',
-							accountingVersion: 1,
-							reconciledAt: '2026-08-07T00:00:00.000Z'
-						}
+            storageAllowanceBytes: 5368709120,
+            storageUsedBytes: 2941120,
+            storageRemainingBytes: 5365768000,
+            storageAccountingReady: true,
+            storage: {
+              usedBytes: 2941120,
+              allowanceBytes: 5368709120,
+              remainingBytes: 5365768000,
+              overageBytes: 0,
+              status: 'ready',
+              accountingVersion: 1,
+              reconciledAt: '2026-08-07T00:00:00.000Z'
+            }
           }
         }
       }
@@ -2674,19 +2853,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           storageAllowanceBytes: 5368709120,
           user: {
             accountKind: 'service',
-						emailVerified: false,
-						storageAllowanceBytes: 5368709120,
-						storageUsedBytes: 0,
-						storageAccountingReady: true,
-						storage: {
-							usedBytes: 0,
-							allowanceBytes: 5368709120,
-							remainingBytes: 5368709120,
-							overageBytes: 0,
-							status: 'ready',
-							accountingVersion: 1,
-							reconciledAt: '2026-07-15T00:00:00.000Z'
-						}
+            emailVerified: false,
+            storageAllowanceBytes: 5368709120,
+            storageUsedBytes: 0,
+            storageAccountingReady: true,
+            storage: {
+              usedBytes: 0,
+              allowanceBytes: 5368709120,
+              remainingBytes: 5368709120,
+              overageBytes: 0,
+              status: 'ready',
+              accountingVersion: 1,
+              reconciledAt: '2026-07-15T00:00:00.000Z'
+            }
           }
         }
       },
@@ -2795,7 +2974,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'crypto',
     title: 'Crypto tools',
     endpoint: '/api/v1/crypto',
-		summary: 'Lists crypto standards and runs key generation, JWT verification, signature verification, key matching, and password hashing helpers.',
+    summary: 'Lists crypto standards and runs key generation, JWT verification, signature verification, key matching, and password hashing helpers.',
     detail:
       'Use this route for Thingtime-compatible ES256 key workflows and diagnostics. POST bodies are intent-driven. intent: hash-password additionally turns a password into the exact bcrypt hash Thingtime stores (cost 10, the auth/passwords.ts settings) and returns a paste-ready mongosh snippet that writes it into a user — the manual recovery path for a database you own when the emailed reset flow is not an option. It is a PURE computation: no database is read or written, no account is looked up, and nothing about who exists is revealed. Because bcrypt is deliberately CPU-heavy, this intent is rate-limited per IP (crypto.hashPassword).',
     auth: {
@@ -3190,7 +3369,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Thin-frontend mode: the session can point the open data plane (things, feed, search, comments, reactions, schemas, app-data) at any reachable MongoDB. Identity, auth and the protected system kinds always stay on the home Thingtime DB. The override is an httpOnly session cookie (tt_mongo) — or send an x-tt-mongo-url header per request from API clients. Activation probes the endpoint (connect + ping) before accepting it. Responses never include the URL itself, only the credentials-stripped host and db name.',
     auth: {
       mode: 'optional',
-			description: 'Works logged out for { url } and { reset }. Selecting a saved endpoint ({ savedId }) requires a signed-in session.'
+      description: 'Works logged out for { url } and { reset }. Selecting a saved endpoint ({ savedId }) requires a signed-in session.'
     },
     methods: ['GET', 'POST', 'DELETE'],
     steps: [
@@ -3530,485 +3709,485 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ]
   }),
-	endpoint({
-		id: 'attachment-uploads',
-		group: 'attachments',
-		title: 'Start attachment upload',
-		endpoint: '/api/v1/attachments/uploads',
-		summary: 'Reserves account storage and starts a private, checksummed S3 multipart upload.',
-		detail:
-			'Creates a billable pending attachment before S3 accepts any bytes, preventing concurrent uploads from oversubscribing the account storage tier. ' +
-			'A client-generated requestId makes ambiguous starts idempotent for the same owner, exact metadata, and purpose. The server derives an owner-scoped opaque attachment id, so another account using the same requestId neither collides nor learns that it exists. The object key and multipart id remain private. Request presigned URLs in bounded batches from /uploads/parts.',
-		auth: {
-			mode: 'session-or-bearer',
-			description:
-				'Requires a full revocable user session (httpOnly cookie or its Bearer session JWT); PAT, app, and service-account tokens are rejected.'
-		},
-		methods: ['POST'],
-		steps: [
-			'POST a stable random requestId, filename, browser-reported contentType, exact sizeBytes, and the surface purpose: post, comment, message, profile-avatar, profile-banner, or custom-emoji.',
-			'Split the file using partSizeBytes; the final part may be smaller.',
-			'Compute base64 SHA-256 for each part and request its signed PUT URL.',
-			'Abort unused uploads and honor deferred/retryAt while the conservative storage reservation settles.'
-		],
-		requestExamples: [
-			{
-				name: 'Reserve a video upload',
-				description: 'The MIME value is advisory; final type comes from server-side magic-byte detection.',
-				method: 'POST',
-				body: {
-					requestId: '3bda8208-625c-4f5d-941f-348020021848',
-					filename: 'launch.mp4',
-					contentType: 'video/mp4',
-					sizeBytes: 18874368
-				}
-			},
-			{
-				name: 'Reserve a profile avatar',
-				description: 'Profile media is limited to a supported raster image of at most 64 MiB.',
-				method: 'POST',
-				body: {
-					requestId: '8de83d1a-898b-45ad-b9a2-caf2a99b27e3',
-					filename: 'avatar.webp',
-					contentType: 'image/webp',
-					sizeBytes: 524288,
-					purpose: 'profile-avatar'
-				}
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Quota reserved and MPU created.',
-				body: {
-					ok: true,
-					upload: {
-						id: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e',
-						partSizeBytes: 8388608,
-						partCount: 3,
-						expiresAt: '2026-08-10T00:00:00.000Z'
-					}
-				}
-			},
-			{ status: 507, description: 'Storage tier allowance exceeded.', body: { ok: false, error: 'This would exceed the account storage allowance' } }
-		],
-		notes: [
-			'The bucket remains private. Browser uploads use short-lived presigned UploadPart URLs, not public object access.',
-			'Post, comment, message, and custom-emoji attachments are unavailable while a custom MongoDB data endpoint is active. Profile media remains home-pinned identity data and may still use the private profile purposes.',
-			'Custom emojis accept one GIF, PNG, JPEG, or WebP image up to 512 KiB. Profile media accepts one supported raster image up to 64 MiB.'
-		]
-	}),
-	endpoint({
-		id: 'attachment-upload-parts',
-		group: 'attachments',
-		title: 'Sign attachment parts',
-		endpoint: '/api/v1/attachments/uploads/parts',
-		summary: 'Issues checksum-locked presigned UploadPart URLs in bounded batches.',
-		detail:
-			'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
-		auth: {
-			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
-		},
-		methods: ['POST'],
-		steps: [
-			'Compute SHA-256 over each raw file slice and base64-encode the 32-byte digest.',
-			'Request at most 20 unique part numbers per call.',
-			'PUT each slice to its URL with only the returned checksum header; use a Blob with an empty MIME type.',
-			'Retry a failed part by requesting a fresh URL before the upload expires.'
-		],
-		requestExamples: [
-			{
-				name: 'Sign two parts',
-				description: 'Checksums are illustrative base64 SHA-256 values.',
-				method: 'POST',
-				body: {
-					uploadId: '3bda8208-625c-4f5d-941f-348020021848',
-					parts: [
-						{ partNumber: 1, checksumSha256: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
-						{ partNumber: 2, checksumSha256: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=' }
-					]
-				}
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Signed part URLs.',
-				body: {
-					ok: true,
-					parts: [
-						{
-							partNumber: 1,
-							url: 'https://example-private-bucket.s3.ap-southeast-2.amazonaws.com/objects/example?...',
-							expiresAt: '2026-08-09T00:10:00.000Z',
-							headers: { 'x-amz-checksum-sha256': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }
-						}
-					]
-				}
-			}
-		]
-	}),
-	endpoint({
-		id: 'attachment-upload-complete',
-		group: 'attachments',
-		title: 'Complete attachment upload',
-		endpoint: '/api/v1/attachments/uploads/complete',
-		summary: 'Verifies every S3 part and publishes canonical attachment metadata idempotently.',
-		detail:
-			'The server lists parts itself, requires consecutive numbers, exact expected sizes, ETags, and SHA-256 checksums, then completes and HEAD-verifies the object. ' +
-			'It reads only a small prefix to detect an inline-safe raster/video type (AVIF/GIF/JPEG/PNG/WebP images; MP4, WebM, QuickTime, M4V, Ogg, 3GPP, 3GPP2, and Matroska video). ' +
-			'Active and generic formats stay application/octet-stream downloads, with the sniffed container preserved as detectedContentType display metadata when one was recognized. Repeating a successful request is safe.',
-		auth: {
-			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
-		},
-		methods: ['POST'],
-		steps: [
-			'Wait for every direct S3 PUT to succeed.',
-			'POST the uploadId; do not send browser-trusted ETags or sizes.',
-			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata (plus detectedContentType when the object stays a generic download).',
-			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } re-sorts a post’s bound set later.'
-		],
-		requestExamples: [
-			{
-				name: 'Finalize upload',
-				description: 'The server derives the part manifest from S3.',
-				method: 'POST',
-				body: { uploadId: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e' }
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Ready attachment metadata.',
-				body: {
-					ok: true,
-					attachment: {
-						id: '3bda8208-625c-4f5d-941f-348020021848',
-						name: 'launch.mp4',
-						size: 18874368,
-						contentType: 'video/mp4',
-						mediaKind: 'video'
-					}
-				}
-			},
-			{
-				status: 409,
-				description: 'Parts are incomplete; the same MPU can be retried.',
-				body: {
-					ok: false,
-					error: 'Upload parts are incomplete',
-					code: 'upload_parts_retryable',
-					retryable: true
-				}
-			}
-		]
-	}),
-	endpoint({
-		id: 'attachment-upload-abort',
-		group: 'attachments',
-		title: 'Cancel attachment upload',
-		endpoint: '/api/v1/attachments/uploads/abort',
-		summary: 'Cancels an unattached upload and safely schedules its reserved-storage refund.',
-		detail:
-			'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Bound files must be removed through their owning post, comment, message, profile, or custom-emoji lifecycle.',
-		auth: {
-			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
-		},
-		methods: ['POST'],
-		steps: [
-			'POST either the returned upload id or the original requestId when the user removes a draft file or abandons composition; lookup remains owner-scoped.',
-			'Treat ok:true as idempotent.',
-			'When deferred is true, quota remains reserved until the cleanup job passes retryAt and completes its separated verification.'
-		],
-		requestExamples: [
-			{
-				name: 'Cancel draft',
-				description: 'Make object bytes inaccessible before refund.',
-				method: 'POST',
-				body: { uploadId: '3bda8208-625c-4f5d-941f-348020021848' }
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Cancellation recorded; quota remains reserved during safe MPU settlement.',
-				body: { ok: true, deferred: true, retryAt: '2026-08-17T00:00:00.000Z' }
-			},
-			{ status: 200, description: 'Already absent or fully refunded.', body: { ok: true, deferred: false } }
-		]
-	}),
-	endpoint({
-		id: 'attachment-annotate',
-		group: 'attachments',
-		title: 'Annotate attachment',
-		endpoint: '/api/v1/attachments/annotate',
-		summary: 'Sets or clears an owned ready attachment’s title and description.',
-		detail:
-			'Every attachment is a Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation text that page (and the post lightbox) renders: title up to 200 single-line characters, description up to 2000 characters (newlines allowed). Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched. Works on ready drafts before posting and on attachments already bound to a post, comment, or message. Crystal growth is charged to the owner’s storage quota exactly like any other Thing edit.',
-		auth: {
-			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
-		},
-		methods: ['POST'],
-		steps: [
-			'POST the canonical attachment id with title and/or description.',
-			'Omit a field to leave it unchanged; send null or an empty string to clear it.',
-			'Store the returned attachment metadata (it includes the updated title/description).',
-			'Retry a 409 after refreshing — the attachment changed or is still uploading.'
-		],
-		requestExamples: [
-			{
-				name: 'Title a photo',
-				description: 'Set presentation text on an owned ready attachment.',
-				method: 'POST',
-				body: {
-					id: '3bda8208-625c-4f5d-941f-348020021848',
-					title: 'Sunset over the bay',
-					description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
-				}
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Updated public metadata.',
-				body: {
-					ok: true,
-					attachment: {
-						id: '3bda8208-625c-4f5d-941f-348020021848',
-						name: 'sunset.jpg',
-						size: 482133,
-						contentType: 'image/jpeg',
-						mediaKind: 'image',
-						title: 'Sunset over the bay',
-						description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
-					}
-				}
-			}
-		]
-	}),
-	endpoint({
-		id: 'attachment-delete',
-		group: 'attachments',
-		title: 'Delete attachment',
-		endpoint: '/api/v1/attachments/delete',
-		summary: 'Deletes an owned attachment object before refunding its storage.',
-		detail:
-			'This explicit owner route is idempotent. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota so bucket versioning cannot retain unmetered noncurrent bytes. Post/comment cascades, message deletion, profile replacement, and custom-emoji retirement use the same object-first rule.',
-		auth: {
-			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
-		},
-		methods: ['POST'],
-		steps: [
-			'POST the canonical attachment id.',
-			'On success, remove it from local draft state.',
-			'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
-		],
-		requestExamples: [
-			{
-				name: 'Delete file',
-				description: 'Delete one owned attachment.',
-				method: 'POST',
-				body: { id: '3bda8208-625c-4f5d-941f-348020021848' }
-			}
-		],
-		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
-	}),
-	endpoint({
-		id: 'attachment-content',
-		group: 'attachments',
-		title: 'Read attachment content',
-		endpoint: '/api/v1/attachments/content',
-		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
-		detail:
-			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
-			'Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
-		auth: {
-			mode: 'optional',
-			description:
-				'Anonymous access works only for a publicly viewable post/comment or public profile slot. Messages and custom emojis require an authenticated eligible viewer.'
-		},
-		methods: ['GET'],
-		steps: [
-			'GET with id; optionally add download=1.',
-			'Follow the 302 to the short-lived private object URL.',
-			'Use the same stable endpoint again after expiry; never persist the presigned target.',
-			'Treat 404 uniformly for missing and unauthorized attachments.'
-		],
-		requestExamples: [
-			{
-				name: 'Inline-safe content',
-				description: 'Render only if the server-vetted mediaKind is image/video.',
-				method: 'GET',
-				query: { id: '3bda8208-625c-4f5d-941f-348020021848' }
-			},
-			{
-				name: 'Force download',
-				description: 'Download any file as opaque bytes.',
-				method: 'GET',
-				query: { id: '3bda8208-625c-4f5d-941f-348020021848', download: 1 }
-			}
-		],
-		responseExamples: [
-			{
-				status: 302,
-				description: 'Authorized short-lived S3 redirect.',
-				headers: {
-					'Cache-Control': 'private, no-store, max-age=0',
-					Location: 'https://example-private-bucket.s3.ap-southeast-2.amazonaws.com/objects/example?...'
-				}
-			},
-			{ status: 404, description: 'Missing or unauthorized.', body: { ok: false, error: 'Attachment not found' } }
-		]
-	}),
-	endpoint({
-		id: 'attachment-cleanup',
-		group: 'attachments',
-		title: 'Reap expired attachment drafts',
-		endpoint: '/api/v1/attachments/cleanup',
-		summary: 'Internal hourly job that deletes expired private objects before refunding reserved storage.',
-		detail:
-			'Vercel Cron calls this bounded, idempotent GET at minute 17 each hour. It scans at most 1,000 cleanup intents in expiry order with five workers and a 25-second wall-clock budget. Pending multipart cancellations that issued a part URL stay billed through an eight-day lifecycle-backed settlement window, then require two empty Abort/ListParts checks at least one hour apart before HEAD verification, exact-version deletion, and refund. MPUs with no issued part URL can refund after one empty verification. Deleting tombstones remain sweepable even after a post cascade crash. ' +
-			'There is no session, PAT, app-token, or service-account fallback.',
-		auth: {
-			mode: 'bearer',
-			description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
-		},
-		methods: ['GET'],
-		steps: [
-			'Configure CRON_SECRET only in the deployment environment.',
-			'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
-			'Monitor failed; a later invocation safely retries rows that remain conservatively charged.'
-		],
-		requestExamples: [
-			{
-				name: 'Scheduled cleanup',
-				description: 'Vercel supplies the private Authorization header automatically.',
-				method: 'GET'
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'One bounded cleanup pass.',
-				body: {
-					ok: true,
-					scanned: 12,
-					deleted: 9,
-					deferred: 1,
-					skipped: 1,
-					failed: 1,
-					hasMore: false,
-					stoppedForTimeBudget: false
-				}
-			},
-			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
-		],
-		notes: ['No response or log contains the cron secret. Mongo TTL deletion is intentionally disabled.']
-	}),
-	endpoint({
-		id: 'attachment-detection-backfill',
-		group: 'attachments',
-		title: 'Backfill sniffed attachment types',
-		endpoint: '/api/v1/attachments/backfill-detected-types',
-		summary: 'Admin-only sweep that re-runs magic-byte detection for ready attachments finalized before detection existed.',
-		detail:
-			'Ready attachments completed before server-side magic-byte sniffing keep crystal contentType application/octet-stream with no detectedContentType, so browser-playable uploads still render as opaque file cards. Each pass scans those legacy rows in shareId order and publishes exactly what completion would have: browser-playable containers flip to their inline contentType and mediaKind, other canonical sniffed types gain detectedContentType display metadata, and undetectable bytes stay untouched so a later pass under a wider detector can still claim them. Names, byte sizes, object keys, and object versions never change. ' +
-			'Every pass is bounded (at most 200 rows, five workers, a 25-second wall-clock budget) and idempotent — upgraded rows leave the candidate set, so repeated real passes converge. Follow nextCursor while hasMore is true to walk the full backlog; the cursor is required for dry runs, which write nothing and would otherwise rescan the same rows.',
-		auth: {
-			mode: 'session-or-bearer',
-			description:
-				'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403. Same-origin JSON requests only.'
-		},
-		methods: ['POST'],
-		steps: [
-			'POST { dryRun: true } first to count what one pass would change without writing.',
-			'POST {} (or { dryRun: false }) to apply one bounded pass for real.',
-			'While hasMore is true, POST again with the returned nextCursor.',
-			'Watch upgradedInline and labeledOpaque against undetected, missingObject, conflicts, and failed in each report.'
-		],
-		requestExamples: [
-			{
-				name: 'Dry-run one pass',
-				description: 'Counts the legacy rows one pass would upgrade, writing nothing.',
-				method: 'POST',
-				body: { dryRun: true }
-			},
-			{
-				name: 'Apply with a cursor',
-				description: 'Continues the sweep after a previous pass reported hasMore.',
-				method: 'POST',
-				body: { cursor: 'att_2f6b0c1d', limit: 200 }
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'One bounded backfill pass.',
-				body: {
-					ok: true,
-					dryRun: false,
-					scanned: 42,
-					upgradedInline: 17,
-					labeledOpaque: 3,
-					undetected: 21,
-					missingObject: 0,
-					conflicts: 1,
-					failed: 0,
-					hasMore: false,
-					stoppedForTimeBudget: false
-				}
-			},
-			{ status: 403, description: 'Signed-in non-admin.', body: { ok: false, error: 'Admins only' } }
-		],
-		notes: [
-			'Detection reads only the first 8 KiB of each object from private S3; nothing is re-uploaded and object-byte storage accounting is unchanged.',
-			'Unavailable while a custom MongoDB data endpoint is active — run it on the canonical deployment.'
-		]
-	}),
-	endpoint({
-		id: 'moderation-sweep',
-		group: 'admin',
-		title: 'Scheduled moderation sweep',
-		endpoint: '/api/v1/moderation/sweep',
-		summary: 'Internal hourly job that retries moderation the async kickoffs lost — unmoderated post/comment text and unanalyzed ready attachments.',
-		detail:
-			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. Failures stay unstamped and retry on the next run. There is no session, PAT, app-token, or service-account fallback.',
-		auth: {
-			mode: 'bearer',
-			description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
-		},
-		methods: ['GET'],
-		steps: [
-			'Configure CRON_SECRET only in the deployment environment.',
-			'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
-			'Monitor failed counts; later invocations safely retry anything still unstamped.'
-		],
-		requestExamples: [
-			{
-				name: 'Scheduled sweep',
-				description: 'Vercel supplies the private Authorization header automatically.',
-				method: 'GET'
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'One bounded sweep pass over both surfaces.',
-				body: {
-					ok: true,
-					text: { scanned: 3, analyzed: 3, flagged: 1, failed: 0, skippedOff: false },
-					attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 }
-				}
-			},
-			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
-		],
-		notes: ['No response or log contains the cron secret. Free omni text screening makes draining the off-era backlog costless.']
-	}),
+  endpoint({
+    id: 'attachment-uploads',
+    group: 'attachments',
+    title: 'Start attachment upload',
+    endpoint: '/api/v1/attachments/uploads',
+    summary: 'Reserves account storage and starts a private, checksummed S3 multipart upload.',
+    detail:
+      'Creates a billable pending attachment before S3 accepts any bytes, preventing concurrent uploads from oversubscribing the account storage tier. ' +
+      'A client-generated requestId makes ambiguous starts idempotent for the same owner, exact metadata, and purpose. The server derives an owner-scoped opaque attachment id, so another account using the same requestId neither collides nor learns that it exists. The object key and multipart id remain private. Request presigned URLs in bounded batches from /uploads/parts.',
+    auth: {
+      mode: 'session-or-bearer',
+      description:
+        'Requires a full revocable user session (httpOnly cookie or its Bearer session JWT); PAT, app, and service-account tokens are rejected.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST a stable random requestId, filename, browser-reported contentType, exact sizeBytes, and the surface purpose: post, comment, message, profile-avatar, profile-banner, or custom-emoji.',
+      'Split the file using partSizeBytes; the final part may be smaller.',
+      'Compute base64 SHA-256 for each part and request its signed PUT URL.',
+      'Abort unused uploads and honor deferred/retryAt while the conservative storage reservation settles.'
+    ],
+    requestExamples: [
+      {
+        name: 'Reserve a video upload',
+        description: 'The MIME value is advisory; final type comes from server-side magic-byte detection.',
+        method: 'POST',
+        body: {
+          requestId: '3bda8208-625c-4f5d-941f-348020021848',
+          filename: 'launch.mp4',
+          contentType: 'video/mp4',
+          sizeBytes: 18874368
+        }
+      },
+      {
+        name: 'Reserve a profile avatar',
+        description: 'Profile media is limited to a supported raster image of at most 64 MiB.',
+        method: 'POST',
+        body: {
+          requestId: '8de83d1a-898b-45ad-b9a2-caf2a99b27e3',
+          filename: 'avatar.webp',
+          contentType: 'image/webp',
+          sizeBytes: 524288,
+          purpose: 'profile-avatar'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Quota reserved and MPU created.',
+        body: {
+          ok: true,
+          upload: {
+            id: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e',
+            partSizeBytes: 8388608,
+            partCount: 3,
+            expiresAt: '2026-08-10T00:00:00.000Z'
+          }
+        }
+      },
+      { status: 507, description: 'Storage tier allowance exceeded.', body: { ok: false, error: 'This would exceed the account storage allowance' } }
+    ],
+    notes: [
+      'The bucket remains private. Browser uploads use short-lived presigned UploadPart URLs, not public object access.',
+      'Post, comment, message, and custom-emoji attachments are unavailable while a custom MongoDB data endpoint is active. Profile media remains home-pinned identity data and may still use the private profile purposes.',
+      'Custom emojis accept one GIF, PNG, JPEG, or WebP image up to 512 KiB. Profile media accepts one supported raster image up to 64 MiB.'
+    ]
+  }),
+  endpoint({
+    id: 'attachment-upload-parts',
+    group: 'attachments',
+    title: 'Sign attachment parts',
+    endpoint: '/api/v1/attachments/uploads/parts',
+    summary: 'Issues checksum-locked presigned UploadPart URLs in bounded batches.',
+    detail:
+      'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+    },
+    methods: ['POST'],
+    steps: [
+      'Compute SHA-256 over each raw file slice and base64-encode the 32-byte digest.',
+      'Request at most 20 unique part numbers per call.',
+      'PUT each slice to its URL with only the returned checksum header; use a Blob with an empty MIME type.',
+      'Retry a failed part by requesting a fresh URL before the upload expires.'
+    ],
+    requestExamples: [
+      {
+        name: 'Sign two parts',
+        description: 'Checksums are illustrative base64 SHA-256 values.',
+        method: 'POST',
+        body: {
+          uploadId: '3bda8208-625c-4f5d-941f-348020021848',
+          parts: [
+            { partNumber: 1, checksumSha256: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
+            { partNumber: 2, checksumSha256: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=' }
+          ]
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Signed part URLs.',
+        body: {
+          ok: true,
+          parts: [
+            {
+              partNumber: 1,
+              url: 'https://example-private-bucket.s3.ap-southeast-2.amazonaws.com/objects/example?...',
+              expiresAt: '2026-08-09T00:10:00.000Z',
+              headers: { 'x-amz-checksum-sha256': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'attachment-upload-complete',
+    group: 'attachments',
+    title: 'Complete attachment upload',
+    endpoint: '/api/v1/attachments/uploads/complete',
+    summary: 'Verifies every S3 part and publishes canonical attachment metadata idempotently.',
+    detail:
+      'The server lists parts itself, requires consecutive numbers, exact expected sizes, ETags, and SHA-256 checksums, then completes and HEAD-verifies the object. ' +
+      'It reads only a small prefix to detect an inline-safe raster/video type (AVIF/GIF/JPEG/PNG/WebP images; MP4, WebM, QuickTime, M4V, Ogg, 3GPP, 3GPP2, and Matroska video). ' +
+      'Active and generic formats stay application/octet-stream downloads, with the sniffed container preserved as detectedContentType display metadata when one was recognized. Repeating a successful request is safe.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+    },
+    methods: ['POST'],
+    steps: [
+      'Wait for every direct S3 PUT to succeed.',
+      'POST the uploadId; do not send browser-trusted ETags or sizes.',
+      'Store the returned canonical {id,name,size,contentType,mediaKind} metadata (plus detectedContentType when the object stays a generic download).',
+      'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } re-sorts a post’s bound set later.'
+    ],
+    requestExamples: [
+      {
+        name: 'Finalize upload',
+        description: 'The server derives the part manifest from S3.',
+        method: 'POST',
+        body: { uploadId: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Ready attachment metadata.',
+        body: {
+          ok: true,
+          attachment: {
+            id: '3bda8208-625c-4f5d-941f-348020021848',
+            name: 'launch.mp4',
+            size: 18874368,
+            contentType: 'video/mp4',
+            mediaKind: 'video'
+          }
+        }
+      },
+      {
+        status: 409,
+        description: 'Parts are incomplete; the same MPU can be retried.',
+        body: {
+          ok: false,
+          error: 'Upload parts are incomplete',
+          code: 'upload_parts_retryable',
+          retryable: true
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'attachment-upload-abort',
+    group: 'attachments',
+    title: 'Cancel attachment upload',
+    endpoint: '/api/v1/attachments/uploads/abort',
+    summary: 'Cancels an unattached upload and safely schedules its reserved-storage refund.',
+    detail:
+      'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Bound files must be removed through their owning post, comment, message, profile, or custom-emoji lifecycle.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST either the returned upload id or the original requestId when the user removes a draft file or abandons composition; lookup remains owner-scoped.',
+      'Treat ok:true as idempotent.',
+      'When deferred is true, quota remains reserved until the cleanup job passes retryAt and completes its separated verification.'
+    ],
+    requestExamples: [
+      {
+        name: 'Cancel draft',
+        description: 'Make object bytes inaccessible before refund.',
+        method: 'POST',
+        body: { uploadId: '3bda8208-625c-4f5d-941f-348020021848' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Cancellation recorded; quota remains reserved during safe MPU settlement.',
+        body: { ok: true, deferred: true, retryAt: '2026-08-17T00:00:00.000Z' }
+      },
+      { status: 200, description: 'Already absent or fully refunded.', body: { ok: true, deferred: false } }
+    ]
+  }),
+  endpoint({
+    id: 'attachment-annotate',
+    group: 'attachments',
+    title: 'Annotate attachment',
+    endpoint: '/api/v1/attachments/annotate',
+    summary: 'Sets or clears an owned ready attachment’s title and description.',
+    detail:
+      'Every attachment is a Thing with its own /media/:id page, comments, and reactions. This owner route edits the presentation text that page (and the post lightbox) renders: title up to 200 single-line characters, description up to 2000 characters (newlines allowed). Blank or null clears a field; binding, audience, file bytes, and the parent post are untouched. Works on ready drafts before posting and on attachments already bound to a post, comment, or message. Crystal growth is charged to the owner’s storage quota exactly like any other Thing edit.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the canonical attachment id with title and/or description.',
+      'Omit a field to leave it unchanged; send null or an empty string to clear it.',
+      'Store the returned attachment metadata (it includes the updated title/description).',
+      'Retry a 409 after refreshing — the attachment changed or is still uploading.'
+    ],
+    requestExamples: [
+      {
+        name: 'Title a photo',
+        description: 'Set presentation text on an owned ready attachment.',
+        method: 'POST',
+        body: {
+          id: '3bda8208-625c-4f5d-941f-348020021848',
+          title: 'Sunset over the bay',
+          description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated public metadata.',
+        body: {
+          ok: true,
+          attachment: {
+            id: '3bda8208-625c-4f5d-941f-348020021848',
+            name: 'sunset.jpg',
+            size: 482133,
+            contentType: 'image/jpeg',
+            mediaKind: 'image',
+            title: 'Sunset over the bay',
+            description: 'Shot on the evening walk — the sky went full watermelon. 🍉'
+          }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'attachment-delete',
+    group: 'attachments',
+    title: 'Delete attachment',
+    endpoint: '/api/v1/attachments/delete',
+    summary: 'Deletes an owned attachment object before refunding its storage.',
+    detail:
+      'This explicit owner route is idempotent. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota so bucket versioning cannot retain unmetered noncurrent bytes. Post/comment cascades, message deletion, profile replacement, and custom-emoji retirement use the same object-first rule.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the canonical attachment id.',
+      'On success, remove it from local draft state.',
+      'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
+    ],
+    requestExamples: [
+      {
+        name: 'Delete file',
+        description: 'Delete one owned attachment.',
+        method: 'POST',
+        body: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+      }
+    ],
+    responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
+  }),
+  endpoint({
+    id: 'attachment-content',
+    group: 'attachments',
+    title: 'Read attachment content',
+    endpoint: '/api/v1/attachments/content',
+    summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
+    detail:
+      'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
+      'Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
+    auth: {
+      mode: 'optional',
+      description:
+        'Anonymous access works only for a publicly viewable post/comment or public profile slot. Messages and custom emojis require an authenticated eligible viewer.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with id; optionally add download=1.',
+      'Follow the 302 to the short-lived private object URL.',
+      'Use the same stable endpoint again after expiry; never persist the presigned target.',
+      'Treat 404 uniformly for missing and unauthorized attachments.'
+    ],
+    requestExamples: [
+      {
+        name: 'Inline-safe content',
+        description: 'Render only if the server-vetted mediaKind is image/video.',
+        method: 'GET',
+        query: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+      },
+      {
+        name: 'Force download',
+        description: 'Download any file as opaque bytes.',
+        method: 'GET',
+        query: { id: '3bda8208-625c-4f5d-941f-348020021848', download: 1 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 302,
+        description: 'Authorized short-lived S3 redirect.',
+        headers: {
+          'Cache-Control': 'private, no-store, max-age=0',
+          Location: 'https://example-private-bucket.s3.ap-southeast-2.amazonaws.com/objects/example?...'
+        }
+      },
+      { status: 404, description: 'Missing or unauthorized.', body: { ok: false, error: 'Attachment not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'attachment-cleanup',
+    group: 'attachments',
+    title: 'Reap expired attachment drafts',
+    endpoint: '/api/v1/attachments/cleanup',
+    summary: 'Internal hourly job that deletes expired private objects before refunding reserved storage.',
+    detail:
+      'Vercel Cron calls this bounded, idempotent GET at minute 17 each hour. It scans at most 1,000 cleanup intents in expiry order with five workers and a 25-second wall-clock budget. Pending multipart cancellations that issued a part URL stay billed through an eight-day lifecycle-backed settlement window, then require two empty Abort/ListParts checks at least one hour apart before HEAD verification, exact-version deletion, and refund. MPUs with no issued part URL can refund after one empty verification. Deleting tombstones remain sweepable even after a post cascade crash. ' +
+      'There is no session, PAT, app-token, or service-account fallback.',
+    auth: {
+      mode: 'bearer',
+      description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Configure CRON_SECRET only in the deployment environment.',
+      'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
+      'Monitor failed; a later invocation safely retries rows that remain conservatively charged.'
+    ],
+    requestExamples: [
+      {
+        name: 'Scheduled cleanup',
+        description: 'Vercel supplies the private Authorization header automatically.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One bounded cleanup pass.',
+        body: {
+          ok: true,
+          scanned: 12,
+          deleted: 9,
+          deferred: 1,
+          skipped: 1,
+          failed: 1,
+          hasMore: false,
+          stoppedForTimeBudget: false
+        }
+      },
+      { status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
+    ],
+    notes: ['No response or log contains the cron secret. Mongo TTL deletion is intentionally disabled.']
+  }),
+  endpoint({
+    id: 'attachment-detection-backfill',
+    group: 'attachments',
+    title: 'Backfill sniffed attachment types',
+    endpoint: '/api/v1/attachments/backfill-detected-types',
+    summary: 'Admin-only sweep that re-runs magic-byte detection for ready attachments finalized before detection existed.',
+    detail:
+      'Ready attachments completed before server-side magic-byte sniffing keep crystal contentType application/octet-stream with no detectedContentType, so browser-playable uploads still render as opaque file cards. Each pass scans those legacy rows in shareId order and publishes exactly what completion would have: browser-playable containers flip to their inline contentType and mediaKind, other canonical sniffed types gain detectedContentType display metadata, and undetectable bytes stay untouched so a later pass under a wider detector can still claim them. Names, byte sizes, object keys, and object versions never change. ' +
+      'Every pass is bounded (at most 200 rows, five workers, a 25-second wall-clock budget) and idempotent — upgraded rows leave the candidate set, so repeated real passes converge. Follow nextCursor while hasMore is true to walk the full backlog; the cursor is required for dry runs, which write nothing and would otherwise rescan the same rows.',
+    auth: {
+      mode: 'session-or-bearer',
+      description:
+        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403. Same-origin JSON requests only.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { dryRun: true } first to count what one pass would change without writing.',
+      'POST {} (or { dryRun: false }) to apply one bounded pass for real.',
+      'While hasMore is true, POST again with the returned nextCursor.',
+      'Watch upgradedInline and labeledOpaque against undetected, missingObject, conflicts, and failed in each report.'
+    ],
+    requestExamples: [
+      {
+        name: 'Dry-run one pass',
+        description: 'Counts the legacy rows one pass would upgrade, writing nothing.',
+        method: 'POST',
+        body: { dryRun: true }
+      },
+      {
+        name: 'Apply with a cursor',
+        description: 'Continues the sweep after a previous pass reported hasMore.',
+        method: 'POST',
+        body: { cursor: 'att_2f6b0c1d', limit: 200 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One bounded backfill pass.',
+        body: {
+          ok: true,
+          dryRun: false,
+          scanned: 42,
+          upgradedInline: 17,
+          labeledOpaque: 3,
+          undetected: 21,
+          missingObject: 0,
+          conflicts: 1,
+          failed: 0,
+          hasMore: false,
+          stoppedForTimeBudget: false
+        }
+      },
+      { status: 403, description: 'Signed-in non-admin.', body: { ok: false, error: 'Admins only' } }
+    ],
+    notes: [
+      'Detection reads only the first 8 KiB of each object from private S3; nothing is re-uploaded and object-byte storage accounting is unchanged.',
+      'Unavailable while a custom MongoDB data endpoint is active — run it on the canonical deployment.'
+    ]
+  }),
+  endpoint({
+    id: 'moderation-sweep',
+    group: 'admin',
+    title: 'Scheduled moderation sweep',
+    endpoint: '/api/v1/moderation/sweep',
+    summary: 'Internal hourly job that retries moderation the async kickoffs lost — unmoderated post/comment text and unanalyzed ready attachments.',
+    detail:
+      'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. Failures stay unstamped and retry on the next run. There is no session, PAT, app-token, or service-account fallback.',
+    auth: {
+      mode: 'bearer',
+      description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Configure CRON_SECRET only in the deployment environment.',
+      'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
+      'Monitor failed counts; later invocations safely retry anything still unstamped.'
+    ],
+    requestExamples: [
+      {
+        name: 'Scheduled sweep',
+        description: 'Vercel supplies the private Authorization header automatically.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One bounded sweep pass over both surfaces.',
+        body: {
+          ok: true,
+          text: { scanned: 3, analyzed: 3, flagged: 1, failed: 0, skippedOff: false },
+          attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 }
+        }
+      },
+      { status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
+    ],
+    notes: ['No response or log contains the cron secret. Free omni text screening makes draining the off-era backlog costless.']
+  }),
   endpoint({
     id: 'themes',
     group: 'themes',
@@ -4576,9 +4755,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET pages a chat newest-first with cursor and limit (max 100, default 40); pass threadRootId to scope the ' +
       'page to one thread. The response bundles customEmojis (a map of id to name, image, and animated for any ' +
       'custom reaction tokens on the page), nextCursor, threadRoot, members, chat, and myMember so one request ' +
-			'can paint a conversation. POST sends optional text up to 4000 characters plus as many as 25 purpose-matched private attachments, with optional threadRootId or replyToId. ' +
-			'Attachment messages require a stable client requestId; message insertion, exact attachment binding, pending-request acceptance, preview, and read receipt commit in one home transaction. ' +
-			'Replies and thread messages use the same contract. Every projected attachment contains stable metadata and a same-origin content path, never an S3 key or presigned URL.',
+      'can paint a conversation. POST sends optional text up to 4000 characters plus as many as 25 purpose-matched private attachments, with optional threadRootId or replyToId. ' +
+      'Attachment messages require a stable client requestId; message insertion, exact attachment binding, pending-request acceptance, preview, and read receipt commit in one home transaction. ' +
+      'Replies and thread messages use the same contract. Every projected attachment contains stable metadata and a same-origin content path, never an S3 key or presigned URL.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -4587,8 +4766,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET with chatId, plus cursor and limit to page older messages newest-first.',
       'Pass threadRootId to read or post inside a single thread.',
-			'POST chatId and optional text (4000 characters max), with replyToId for inline replies.',
-			'For files, first finish purpose=message uploads, then POST their attachmentIds plus one stable requestId. An attachment-only message is valid.',
+      'POST chatId and optional text (4000 characters max), with replyToId for inline replies.',
+      'For files, first finish purpose=message uploads, then POST their attachmentIds plus one stable requestId. An attachment-only message is valid.',
       'Resolve custom:<emojiId> reaction tokens through the returned customEmojis map.',
       'Follow nextCursor until it is null to reach the start of history.'
     ],
@@ -4603,12 +4782,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Send a message',
         description: 'Post a message to the chat.',
         method: 'POST',
-				body: {
-					chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001',
-					text: 'Shipping the messenger docs today.',
-					requestId: '9f59e32b-9509-43ef-9a0f-abde27b6d79c',
-					attachmentIds: ['att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e']
-				}
+        body: {
+          chatId: 'c0ffee12-aaaa-4aaa-8aaa-000000000001',
+          text: 'Shipping the messenger docs today.',
+          requestId: '9f59e32b-9509-43ef-9a0f-abde27b6d79c',
+          attachmentIds: ['att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e']
+        }
       },
       {
         name: 'Reply in a thread',
@@ -4632,14 +4811,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               id: 'c0ffee12-bbbb-4bbb-8bbb-000000000002',
               senderId: 'c0ffee12-cccc-4ccc-8ccc-000000000003',
               text: 'See you there',
-							attachments: [],
+              attachments: [],
               createdAt: '2026-08-03T10:14:00.000Z'
             }
           ],
           customEmojis: {},
           nextCursor: null,
           threadRoot: null,
-					members: [{ user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'member' }],
+          members: [{ user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'member' }],
           chat: { id: 'c0ffee12-aaaa-4aaa-8aaa-000000000001', chatType: 'group', name: 'Weekend plans' },
           myMember: { role: 'member', muted: false }
         }
@@ -4650,11 +4829,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'Not a member of this chat' }
       }
     ],
-		notes: [
-			'Sending draws from the chats.message rate-limit bucket (120 messages per minute).',
-			'Message rows are server-managed conversation plumbing; uploaded object bytes are billed exactly once through their attachment Things and refunded only after exact-version S3 deletion.',
-			'Browser attachment sends require same-origin JSON and a full user account. Text-only session/Bearer clients retain the existing contract.'
-		]
+    notes: [
+      'Sending draws from the chats.message rate-limit bucket (120 messages per minute).',
+      'Message rows are server-managed conversation plumbing; uploaded object bytes are billed exactly once through their attachment Things and refunded only after exact-version S3 deletion.',
+      'Browser attachment sends require same-origin JSON and a full user account. Text-only session/Bearer clients retain the existing contract.'
+    ]
   }),
   endpoint({
     id: 'chats-messages-edit',
@@ -4664,7 +4843,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Edits the text of a message the caller sent.',
     detail:
       'Only the author can edit a message. The new text replaces the old and the message is stamped with ' +
-			'editedAt so clients can show an edited marker. The 4000-character limit applies just as it does on send. Text may be empty only while at least one existing attachment remains.',
+      'editedAt so clients can show an edited marker. The 4000-character limit applies just as it does on send. Text may be empty only while at least one existing attachment remains.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -4712,7 +4891,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Soft-deletes a message, leaving a placeholder in the history.',
     detail:
       'The author or a chat admin can delete a message. Deletion is soft: the row stays as a placeholder, its ' +
-			'text is cleared, and its reactions are removed, so conversation flow and reply anchors survive. Every bound object version is permanently deleted before its attachment row is removed and account quota is refunded.',
+      'text is cleared, and its reactions are removed, so conversation flow and reply anchors survive. Every bound object version is permanently deleted before its attachment row is removed and account quota is refunded.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -4721,7 +4900,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST the message id to delete.',
       'The author or a chat admin may delete; anyone else gets a 403.',
-			'Wait for exact-version attachment cleanup and quota refund before the placeholder is committed.',
+      'Wait for exact-version attachment cleanup and quota refund before the placeholder is committed.',
       'Render the surviving placeholder row as a deleted-message marker.',
       'Expect reactions on the message to be removed with it.'
     ],
@@ -5124,9 +5303,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             name: 'Thingtime HQ',
             sections: [{ id: 'c0ffee12-eeee-4eee-8eee-000000000005', name: 'Announcements' }]
           },
-					members: [{ user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'owner' }],
+          members: [{ user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' }, role: 'owner' }],
           memberCount: 12,
-					channels: [{ id: 'c0ffee12-aaaa-4aaa-8aaa-000000000002', name: 'general', memberCount: 12, joined: true }]
+          channels: [{ id: 'c0ffee12-aaaa-4aaa-8aaa-000000000002', name: 'general', memberCount: 12, joined: true }]
         }
       },
       {
@@ -5415,10 +5594,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'GET with chatId or communityId returns the emojis usable in that scope — the community set plus your ' +
       'personal set — and requires membership for community scopes. GET with ids (comma-separated emoji ids) ' +
-			'resolves specific emoji metadata with a stable same-origin content URL: message payloads reference reacted emojis as ' +
-			'{ name, animated } only, and clients fetch authorized images once by id and cache them. POST atomically binds one completed purpose=custom-emoji attachment to a name of ' +
-			'2-32 characters matching [a-z0-9_-] and an optional communityId. Images are private, quota-accounted GIF, PNG, JPEG, or WebP files up to 512 KiB; S3 identifiers never enter the emoji crystal or response. ' +
-			'Names are unique per scope, and messages react with the custom:<emoji id> token. Legacy inline data-URI rows remain read-compatible but cannot be created.',
+      'resolves specific emoji metadata with a stable same-origin content URL: message payloads reference reacted emojis as ' +
+      '{ name, animated } only, and clients fetch authorized images once by id and cache them. POST atomically binds one completed purpose=custom-emoji attachment to a name of ' +
+      '2-32 characters matching [a-z0-9_-] and an optional communityId. Images are private, quota-accounted GIF, PNG, JPEG, or WebP files up to 512 KiB; S3 identifiers never enter the emoji crystal or response. ' +
+      'Names are unique per scope, and messages react with the custom:<emoji id> token. Legacy inline data-URI rows remain read-compatible but cannot be created.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -5426,9 +5605,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with chatId or communityId to list the emojis usable there.',
-			'Complete one purpose=custom-emoji upload, then POST name, attachmentId, and optional communityId to bind it.',
+      'Complete one purpose=custom-emoji upload, then POST name, attachmentId, and optional communityId to bind it.',
       'Keep names 2-32 characters of lowercase letters, digits, underscores, and hyphens.',
-			'Use one GIF, PNG, JPEG, or WebP image no larger than 512 KiB.',
+      'Use one GIF, PNG, JPEG, or WebP image no larger than 512 KiB.',
       'React with custom:<emoji id> once the upload lands.'
     ],
     requestExamples: [
@@ -5444,7 +5623,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         method: 'POST',
         body: {
           name: 'party-blob',
-					attachmentId: 'att_8d9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e',
+          attachmentId: 'att_8d9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e',
           communityId: 'c0ffee12-dddd-4ddd-8ddd-000000000004'
         }
       }
@@ -5464,11 +5643,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'An emoji with that name already exists here' }
       }
     ],
-		notes: [
-			'Uploads draw from the emojis.write rate-limit bucket (30 uploads per hour).',
-			'The attachment reservation uses the account storage tier and is refunded only after exact-version deletion.',
-			'POST requires same-origin JSON and a full user account; custom Mongo data planes cannot bind home S3 objects.'
-		]
+    notes: [
+      'Uploads draw from the emojis.write rate-limit bucket (30 uploads per hour).',
+      'The attachment reservation uses the account storage tier and is refunded only after exact-version deletion.',
+      'POST requires same-origin JSON and a full user account; custom Mongo data planes cannot bind home S3 objects.'
+    ]
   }),
   endpoint({
     id: 'emojis-delete',
@@ -5478,7 +5657,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Deletes a custom emoji.',
     detail:
       'The uploader can always delete their own emoji, and community admins can delete any emoji in their ' +
-			'community set. The exact S3 object version is deleted before its quota reservation is refunded and the emoji row is retired. Existing custom:<emoji id> reaction tokens simply stop resolving once the emoji is gone.',
+      'community set. The exact S3 object version is deleted before its quota reservation is refunded and the emoji row is retired. Existing custom:<emoji id> reaction tokens simply stop resolving once the emoji is gone.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -5825,7 +6004,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
             storageAllowanceBytes: 26843545600,
             storageUsedBytes: 1048576,
-						storageAccountingReady: true,
+            storageAccountingReady: true,
             defaultUserStorageAllowanceBytes: 52428800,
             subscription: {
               tier: 'plus',
@@ -5842,16 +6021,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
                 selectable: true
               }
             ],
-						users: [
-							{
-								userId: '664f1c2a9d3e5b0012345678',
-								usedBytes: 1024,
-								storageAllowanceBytes: 209715200,
-								storageAccountingStatus: 'ready',
-								storageAccountingVersion: 1,
-								storageReconciledAt: '2026-08-07T00:00:00.000Z'
-							}
-						]
+            users: [
+              {
+                userId: '664f1c2a9d3e5b0012345678',
+                usedBytes: 1024,
+                storageAllowanceBytes: 209715200,
+                storageAccountingStatus: 'ready',
+                storageAccountingVersion: 1,
+                storageReconciledAt: '2026-08-07T00:00:00.000Z'
+              }
+            ]
           }
         }
       },
@@ -6662,10 +6841,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       "app's 5 GiB aggregate allowance. Updates charge only the delta and deletes refund, so both " +
       'ledgers track what is actually stored. Legacy usedBytes/budgetBytes remain aliases for the ' +
       'current user ledger; userStorage and appStorage add explicit used, allowance, and remaining ' +
-			'bytes. accountStorage is the authoritative whole-Thingtime-account ledger; the same payload bytes ' +
-			'also participate in the overlapping userStorage and appStorage sub-limits, but are never added twice ' +
-			'to accountStorage. storageAccountingReady is true only when all applicable ledgers are exact and ready. ' +
-			'Sandboxes return appStorage/accountStorage null because their aggregate protection is windowed. ' +
+      'bytes. accountStorage is the authoritative whole-Thingtime-account ledger; the same payload bytes ' +
+      'also participate in the overlapping userStorage and appStorage sub-limits, but are never added twice ' +
+      'to accountStorage. storageAccountingReady is true only when all applicable ledgers are exact and ready. ' +
+      'Sandboxes return appStorage/accountStorage null because their aggregate protection is windowed. ' +
       'Over-allowance writes fail with 507; poll this to pace the app ' +
       'instead of discovering the ceiling. Same CORS + origin binding as /api/v1/app-data.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope.' },
@@ -6673,7 +6852,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET with the token from Thingtime.login(…).',
       'Compare both userStorage.remainingBytes and appStorage.remainingBytes before large writes; a 507 identifies which allowance is spent.',
-			'Use accountStorage.status and storageAccountingReady before presenting any value as exact.',
+      'Use accountStorage.status and storageAccountingReady before presenting any value as exact.',
       'Deleting entries (or shrinking values) refunds bytes immediately.'
     ],
     requestExamples: [{ name: 'Read usage', description: 'Bytes used and the budget.', method: 'GET' }],
@@ -6688,15 +6867,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           remainingBytes: 52245596,
           userStorage: { usedBytes: 183204, allowanceBytes: 52428800, remainingBytes: 52245596 },
           appStorage: { usedBytes: 12345678, allowanceBytes: 5368709120, remainingBytes: 5356363442 },
-					accountStorage: {
-						usedBytes: 2941120,
-						allowanceBytes: 5368709120,
-						remainingBytes: 5365768000,
-						overageBytes: 0,
-						status: 'ready',
-						accountingVersion: 1,
-						reconciledAt: '2026-08-07T00:00:00.000Z'
-					},
+          accountStorage: {
+            usedBytes: 2941120,
+            allowanceBytes: 5368709120,
+            remainingBytes: 5365768000,
+            overageBytes: 0,
+            status: 'ready',
+            accountingVersion: 1,
+            reconciledAt: '2026-08-07T00:00:00.000Z'
+          },
           storageAccountingReady: true
         }
       },
@@ -7195,7 +7374,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/comment',
     summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user.',
     detail:
-			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can carry linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
+      'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can carry linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -7204,9 +7383,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST id and text for a simple comment, or id plus post fields (type, images, listing, thing, tags) for a rich comment.',
-			'For files, finish purpose=comment uploads and POST their attachmentIds with one stable shareId. The full-account browser mutation must be same-origin JSON.',
+      'For files, finish purpose=comment uploads and POST their attachmentIds with one stable shareId. The full-account browser mutation must be same-origin JSON.',
       'The target thing (post or comment) must be visible to the current user.',
-			'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount, attachments) — use it and commentCount to update the card.',
+      'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount, attachments) — use it and commentCount to update the card.',
       'Handle 401 unauthenticated, 404 not visible, and 400 invalid payload.'
     ],
     requestExamples: [
@@ -7221,18 +7400,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Comment with photos, like a full post.',
         method: 'POST',
         body: { id: 'post_123', type: 'image', text: 'Here it is!', images: ['https://example.com/photo.jpg'] }
-			},
-			{
-				name: 'Add attachment reply',
-				description: 'Reply with a private uploaded image and no text.',
-				method: 'POST',
-				body: {
-					id: 'comment_123',
-					shareId: '6db9fbc7-90ec-47ac-878d-3ead5b0ce27d',
-					type: 'text',
-					text: '',
-					attachmentIds: ['att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e']
-				}
+      },
+      {
+        name: 'Add attachment reply',
+        description: 'Reply with a private uploaded image and no text.',
+        method: 'POST',
+        body: {
+          id: 'comment_123',
+          shareId: '6db9fbc7-90ec-47ac-878d-3ead5b0ce27d',
+          type: 'text',
+          text: '',
+          attachmentIds: ['att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e']
+        }
       }
     ],
     responseExamples: [
@@ -7249,17 +7428,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             reactionCounts: {},
             viewerReactions: [],
             commentCount: 0,
-						attachments: [],
+            attachments: [],
             targetId: 'post_123'
           },
           commentCount: 1
         }
       }
-		],
-		notes: [
-			'Uploaded bytes reserve the author account storage tier and remain private behind the stable authorized content route.',
-			'Deleting a comment or any ancestor permanently deletes every descendant attachment S3 version before its quota is refunded.',
-			'Custom Mongo data planes cannot bind or authorize home S3 comment attachments.'
+    ],
+    notes: [
+      'Uploaded bytes reserve the author account storage tier and remain private behind the stable authorized content route.',
+      'Deleting a comment or any ancestor permanently deletes every descendant attachment S3 version before its quota is refunded.',
+      'Custom Mongo data planes cannot bind or authorize home S3 comment attachments.'
     ]
   }),
   endpoint({
@@ -7773,7 +7952,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
-			'GET returns a stripped public projection that never includes email or verification fields. POST updates the caller display name, bio, avatar, or banner. Avatar/banner may use either one external http(s) URL or a ready private attachment created for the exact profile slot; managed media remains in the private bucket and is served through a stable same-origin content route.',
+      'GET returns a stripped public projection that never includes email or verification fields. POST updates the caller display name, bio, avatar, or banner. Avatar/banner may use either one external http(s) URL or a ready private attachment created for the exact profile slot; managed media remains in the private bucket and is served through a stable same-origin content route.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an auth cookie or Authorization: Bearer token.'
@@ -7781,10 +7960,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with username to read a public profile and post count.',
-			'POST displayName or bio independently of profile media.',
-			'Use avatarAttachmentId or bannerAttachmentId to bind a ready owner-matched profile upload. Use avatarUrl or bannerUrl for the quota-saving external-link alternative; sending a URL clears that slot’s managed attachment.',
-			'Never send a non-null attachment id with a URL. Send both fields as null to clear a slot, or send only attachmentId:null to remove managed media while preserving its stored external fallback.',
-			'External writes accept structurally valid credential-free http(s) URLs; legacy data:image values remain read-compatible.',
+      'POST displayName or bio independently of profile media.',
+      'Use avatarAttachmentId or bannerAttachmentId to bind a ready owner-matched profile upload. Use avatarUrl or bannerUrl for the quota-saving external-link alternative; sending a URL clears that slot’s managed attachment.',
+      'Never send a non-null attachment id with a URL. Send both fields as null to clear a slot, or send only attachmentId:null to remove managed media while preserving its stored external fallback.',
+      'External writes accept structurally valid credential-free http(s) URLs; legacy data:image values remain read-compatible.',
       'Handle 400 missing username or invalid profile fields, 401 anonymous updates, and 404 unknown users.'
     ],
     requestExamples: [
@@ -7799,12 +7978,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Update the caller profile fields.',
         method: 'POST',
         body: { bio: 'Working on Thingtime.', avatarUrl: 'https://example.com/avatar.png' }
-			},
-			{
-				name: 'Use a private uploaded banner',
-				description: 'Bind a completed profile-banner upload to the current user.',
-				method: 'POST',
-				body: { bannerAttachmentId: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e' }
+      },
+      {
+        name: 'Use a private uploaded banner',
+        description: 'Bind a completed profile-banner upload to the current user.',
+        method: 'POST',
+        body: { bannerAttachmentId: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e' }
       }
     ],
     responseExamples: [
@@ -8380,7 +8559,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Vercel deployments',
     endpoint: '/api/v1/vercel/deployments',
     summary: 'Returns deployment overview data for environment pickers and dashboards.',
-    detail: 'This route is visible only when deployment status is enabled. It normalizes branch and per-branch history limits, returns one latest deployment per branch for compatibility plus bounded deploymentGroups history, and hides itself with 404 otherwise.',
+    detail:
+      'This route is visible only when deployment status is enabled. It normalizes branch and per-branch history limits, returns one latest deployment per branch for compatibility plus bounded deploymentGroups history, and hides itself with 404 otherwise.',
     auth: {
       mode: 'none',
       description: 'Public status endpoint when enabled by server-side deployment configuration.'
@@ -8685,132 +8865,132 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ]
   }),
-	endpoint({
-		id: 'admin-migrations-diagnostic',
-		group: 'admin',
-		title: 'Read migration diagnostic',
-		endpoint: '/api/v1/admin/migrations/diagnostic',
-		summary: 'Reads one short-lived, private error report created after a failed real migration run.',
-		detail:
-			'A failed real migration may create a protected, non-billable migration-diagnostic Thing after its lease is released. ' +
-			'Pass its id to read a bounded snapshot of the error name, message, stack, standard codes, labels, and cause chain. Secret, ' +
-			'credential, connection-string, and private-key patterns are irreversibly redacted. New v2 reports may also advertise value-free reveal descriptors for MongoDB ObjectIds supplied through an explicitly authored server-side error context; arbitrary error prose cannot grant reveal access. The raw values remain inside the protected envelope until the owning admin confirms their current password through /api/v1/things/reveal. Reads are pinned to Thingtime’s home database and require the same current ' +
-			'admin account that ran the migration. Dry runs never create diagnostics; failed diagnostic persistence falls back to detail ' +
-			'in the private migration response instead.',
-		auth: {
-			mode: 'session-or-bearer',
-			description: 'Requires a current admin session and exact ownership of the diagnostic. Missing or inaccessible ids return 404.'
-		},
-		methods: ['GET'],
-		steps: [
-			'Copy diagnosticThingId from a failed real migration response.',
-			'GET with id=<diagnosticThingId> as the same current admin.',
-			'Render detail as plain text only; the server captures a closed field set and redacts sensitive text patterns.',
-			'If revealables is non-empty, correlate its placeholders with detail and use the password-confirmed reveal endpoint one reference at a time.',
-			'Treat 404 as expired, removed, or inaccessible without distinguishing those cases.'
-		],
-		requestExamples: [
-			{
-				name: 'Read error report',
-				description: 'Open the durable report linked by the migration toast.',
-				method: 'GET',
-				query: { id: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90' }
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Private diagnostic returned.',
-				body: {
-					ok: true,
-					diagnostic: {
-						id: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90',
-						migrationId: 'backfill-user-storage-accounting',
-						status: 500,
-						outcome: 'unknown',
-						summary: 'Migration stopped before completion.',
-						capturedAt: '2026-08-08T00:00:00.000Z',
-						expiresAt: '2026-09-07T00:00:00.000Z',
-						detail: '{\n  "name": "MongoServerError"\n}',
-						redactions: 1,
-						truncated: false,
-						revealables: [
-							{
-								reference: 'mongodb-object-id-1',
-								kind: 'mongodb-object-id',
-								label: 'MongoDB ObjectId #1',
-								placeholder: '[redacted MongoDB ObjectId #1]'
-							}
-						]
-					}
-				}
-			},
-			{ status: 404, description: 'Expired, missing, or inaccessible.', body: { ok: false, error: 'Diagnostic not found' } }
-		]
-	}),
-	endpoint({
-		id: 'things-sensitive-reveal',
-		group: 'things',
-		title: 'Reveal one protected Thing value',
-		endpoint: '/api/v1/things/reveal',
-		summary: 'Password-confirms the current user, then reveals one allowlisted value from a protected Thing.',
-		detail:
-			'This is a closed-codec reveal boundary, not a generic secure-field reader. The caller supplies only a Thing id, an opaque reference advertised by that Thing’s dedicated reader, and the current account password. ' +
-			'Thingtime repeats live-session and password verification on every request, applies a non-configurable fail-closed attempt limit, and returns one value with private no-store headers. The first provider supports current-owner admin migration diagnostics and MongoDB ObjectIds only. ' +
-			'Passwords, authorization values, tokens, credentials, connection strings, arbitrary secure Binary fields, and ambiguous 24-hex strings are never retained for reveal. The fixed five-request window counts every confirmation request, including successful reveals.',
-		auth: {
-			mode: 'session-or-bearer',
-			description:
-				'Requires a full live account session (app, sandbox, and PAT sessions do not resolve here), the current password, and provider-specific authorization. Migration diagnostics require the same owning admin.'
-		},
-		methods: ['POST'],
-		steps: [
-			'Read the protected Thing through its dedicated endpoint and choose one returned revealables reference.',
-			'POST thingId, reference, and the current account password as same-origin application/json.',
-			'Use the returned value transiently; do not persist it in browser storage or a URL.',
-			'Repeat password confirmation for every later reveal.'
-		],
-		requestExamples: [
-			{
-				name: 'Reveal one migration ObjectId',
-				description: 'Confirm the current password for this single lookup.',
-				method: 'POST',
-				body: {
-					thingId: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90',
-					reference: 'mongodb-object-id-1',
-					password: '<current password>'
-				}
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'Exactly one approved value returned.',
-				body: {
-					ok: true,
-					reveal: { reference: 'mongodb-object-id-1', kind: 'mongodb-object-id', value: '507f1f77bcf86cd799439011' }
-				}
-			},
-			{ status: 401, description: 'No full live account session.', body: { ok: false, error: 'Unauthorized' } },
-			{ status: 401, description: 'Current-password confirmation failed.', body: { ok: false, error: 'Password confirmation failed' } },
-			{ status: 404, description: 'Missing, expired, inaccessible, or unknown reference.', body: { ok: false, error: 'Sensitive value not found' } },
-			{
-				status: 429,
-				description: 'The fixed confirmation-request ceiling was reached.',
-				body: { ok: false, error: 'Too many reveal confirmation attempts' }
-			},
-			{
-				status: 503,
-				description: 'The rate limiter, password verifier, or protected reader is temporarily unavailable.',
-				body: { ok: false, error: 'Sensitive reveal is temporarily unavailable' }
-			}
-		],
-		notes: [
-			'Content-Type must be application/json. Browser requests with a cross-origin Origin header are rejected.',
-			'No confirmation cookie, token, or grace period is issued; each reveal request includes and verifies the password again.',
-			'Every success and error response, including unsupported GET/HEAD and oversized-body errors, is private and no-store.'
-		]
-	}),
+  endpoint({
+    id: 'admin-migrations-diagnostic',
+    group: 'admin',
+    title: 'Read migration diagnostic',
+    endpoint: '/api/v1/admin/migrations/diagnostic',
+    summary: 'Reads one short-lived, private error report created after a failed real migration run.',
+    detail:
+      'A failed real migration may create a protected, non-billable migration-diagnostic Thing after its lease is released. ' +
+      'Pass its id to read a bounded snapshot of the error name, message, stack, standard codes, labels, and cause chain. Secret, ' +
+      'credential, connection-string, and private-key patterns are irreversibly redacted. New v2 reports may also advertise value-free reveal descriptors for MongoDB ObjectIds supplied through an explicitly authored server-side error context; arbitrary error prose cannot grant reveal access. The raw values remain inside the protected envelope until the owning admin confirms their current password through /api/v1/things/reveal. Reads are pinned to Thingtime’s home database and require the same current ' +
+      'admin account that ran the migration. Dry runs never create diagnostics; failed diagnostic persistence falls back to detail ' +
+      'in the private migration response instead.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires a current admin session and exact ownership of the diagnostic. Missing or inaccessible ids return 404.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Copy diagnosticThingId from a failed real migration response.',
+      'GET with id=<diagnosticThingId> as the same current admin.',
+      'Render detail as plain text only; the server captures a closed field set and redacts sensitive text patterns.',
+      'If revealables is non-empty, correlate its placeholders with detail and use the password-confirmed reveal endpoint one reference at a time.',
+      'Treat 404 as expired, removed, or inaccessible without distinguishing those cases.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read error report',
+        description: 'Open the durable report linked by the migration toast.',
+        method: 'GET',
+        query: { id: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Private diagnostic returned.',
+        body: {
+          ok: true,
+          diagnostic: {
+            id: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90',
+            migrationId: 'backfill-user-storage-accounting',
+            status: 500,
+            outcome: 'unknown',
+            summary: 'Migration stopped before completion.',
+            capturedAt: '2026-08-08T00:00:00.000Z',
+            expiresAt: '2026-09-07T00:00:00.000Z',
+            detail: '{\n  "name": "MongoServerError"\n}',
+            redactions: 1,
+            truncated: false,
+            revealables: [
+              {
+                reference: 'mongodb-object-id-1',
+                kind: 'mongodb-object-id',
+                label: 'MongoDB ObjectId #1',
+                placeholder: '[redacted MongoDB ObjectId #1]'
+              }
+            ]
+          }
+        }
+      },
+      { status: 404, description: 'Expired, missing, or inaccessible.', body: { ok: false, error: 'Diagnostic not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'things-sensitive-reveal',
+    group: 'things',
+    title: 'Reveal one protected Thing value',
+    endpoint: '/api/v1/things/reveal',
+    summary: 'Password-confirms the current user, then reveals one allowlisted value from a protected Thing.',
+    detail:
+      'This is a closed-codec reveal boundary, not a generic secure-field reader. The caller supplies only a Thing id, an opaque reference advertised by that Thing’s dedicated reader, and the current account password. ' +
+      'Thingtime repeats live-session and password verification on every request, applies a non-configurable fail-closed attempt limit, and returns one value with private no-store headers. The first provider supports current-owner admin migration diagnostics and MongoDB ObjectIds only. ' +
+      'Passwords, authorization values, tokens, credentials, connection strings, arbitrary secure Binary fields, and ambiguous 24-hex strings are never retained for reveal. The fixed five-request window counts every confirmation request, including successful reveals.',
+    auth: {
+      mode: 'session-or-bearer',
+      description:
+        'Requires a full live account session (app, sandbox, and PAT sessions do not resolve here), the current password, and provider-specific authorization. Migration diagnostics require the same owning admin.'
+    },
+    methods: ['POST'],
+    steps: [
+      'Read the protected Thing through its dedicated endpoint and choose one returned revealables reference.',
+      'POST thingId, reference, and the current account password as same-origin application/json.',
+      'Use the returned value transiently; do not persist it in browser storage or a URL.',
+      'Repeat password confirmation for every later reveal.'
+    ],
+    requestExamples: [
+      {
+        name: 'Reveal one migration ObjectId',
+        description: 'Confirm the current password for this single lookup.',
+        method: 'POST',
+        body: {
+          thingId: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90',
+          reference: 'mongodb-object-id-1',
+          password: '<current password>'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Exactly one approved value returned.',
+        body: {
+          ok: true,
+          reveal: { reference: 'mongodb-object-id-1', kind: 'mongodb-object-id', value: '507f1f77bcf86cd799439011' }
+        }
+      },
+      { status: 401, description: 'No full live account session.', body: { ok: false, error: 'Unauthorized' } },
+      { status: 401, description: 'Current-password confirmation failed.', body: { ok: false, error: 'Password confirmation failed' } },
+      { status: 404, description: 'Missing, expired, inaccessible, or unknown reference.', body: { ok: false, error: 'Sensitive value not found' } },
+      {
+        status: 429,
+        description: 'The fixed confirmation-request ceiling was reached.',
+        body: { ok: false, error: 'Too many reveal confirmation attempts' }
+      },
+      {
+        status: 503,
+        description: 'The rate limiter, password verifier, or protected reader is temporarily unavailable.',
+        body: { ok: false, error: 'Sensitive reveal is temporarily unavailable' }
+      }
+    ],
+    notes: [
+      'Content-Type must be application/json. Browser requests with a cross-origin Origin header are rejected.',
+      'No confirmation cookie, token, or grace period is issued; each reveal request includes and verifies the password again.',
+      'Every success and error response, including unsupported GET/HEAD and oversized-body errors, is private and no-store.'
+    ]
+  }),
   endpoint({
     id: 'admin-migrations-run',
     group: 'admin',
@@ -8823,9 +9003,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the ' +
       'version they already conform to. merge-legacy-collections folds leftover unversioned collections into their ' +
       'versioned successors, and drop-stale-collection-generations removes superseded physical collections — that one ' +
-			'is destructive and additionally requires confirm: true on the non-dry run. Failed real runs may return a private ' +
-			'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
-			'bounded redacted adminDetail inline.',
+      'is destructive and additionally requires confirm: true on the non-dry run. Failed real runs may return a private ' +
+      'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
+      'bounded redacted adminDetail inline.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
@@ -8836,7 +9016,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Pass dryRun: true first to see matched counts without writing.',
       'Pass confirm: true when running a destructive migration for real.',
       'Read the report for matched, migrated, created, skipped, and notes.',
-			'On failure, open diagnosticThingId as the same admin, or render adminDetail when persistence was skipped or unavailable.',
+      'On failure, open diagnosticThingId as the same admin, or render adminDetail when persistence was skipped or unavailable.',
       'Handle 401 non-admin callers and 404 unknown migration ids.'
     ],
     requestExamples: [
@@ -8863,17 +9043,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           report: { dryRun: false, matched: 24, migrated: 24, created: 28, skipped: 0, notes: [] }
         }
       },
-			{
-				status: 500,
-				description: 'Real run failed; a private diagnostic was saved after the migration lease was released.',
-				body: {
-					ok: false,
-					error:
-						'Migration backfill-user-storage-accounting stopped before completion: MongoServerError (224). Refresh migration status before retrying.',
-					outcome: 'unknown',
-					diagnosticThingId: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90'
-				}
-			},
+      {
+        status: 500,
+        description: 'Real run failed; a private diagnostic was saved after the migration lease was released.',
+        body: {
+          ok: false,
+          error:
+            'Migration backfill-user-storage-accounting stopped before completion: MongoServerError (224). Refresh migration status before retrying.',
+          outcome: 'unknown',
+          diagnosticThingId: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90'
+        }
+      },
       {
         status: 404,
         description: 'Unknown migration id.',
@@ -8925,9 +9105,7 @@ export const apiRouteCapabilityId = (routeKey: string) => `route.${routeKey.repl
  * diagnostics and future routes while they are being documented.
  */
 export const createApiCapabilitiesManifest = (routeKeys: Iterable<string> = []): ApiCapabilitiesManifest => {
-  const features: ApiCapabilitiesManifest['features'] = Object.fromEntries(
-    apiEndpointDocs.map((doc) => [`api.${doc.id}`, doc.contractVersion])
-  );
+  const features: ApiCapabilitiesManifest['features'] = Object.fromEntries(apiEndpointDocs.map((doc) => [`api.${doc.id}`, doc.contractVersion]));
 
   for (const routeKey of routeKeys) {
     features[apiRouteCapabilityId(routeKey)] ||= '1.0.0';
