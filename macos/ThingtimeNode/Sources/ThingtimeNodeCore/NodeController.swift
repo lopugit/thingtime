@@ -95,6 +95,8 @@ public actor ThingtimeNodeController {
         "system.vpn.connection.write",
         "system.power.battery.read",
         "system.power.idle-sleep-prevention.write",
+        "system.media.apple-music.read",
+        "system.media.apple-music.playback.write",
         "system.power.restart",
         "system.power.shutdown",
         "system.session.logout",
@@ -643,6 +645,12 @@ public actor ThingtimeNodeController {
                 throw ThingtimeNodeError.invalidRequest("system.power.idle-sleep-prevention.set requires enabled.")
             }
             action = SafeActionRequest(kind: .setPreventIdleSleep, parameters: ["enabled": .bool(enabled)])
+        case "system.media.apple-music.playback.set":
+            try requireOnlyKeys(input, ["operation"])
+            guard let operation = input["operation"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("system.media.apple-music.playback.set requires operation.")
+            }
+            action = SafeActionRequest(kind: .setAppleMusicPlayback, parameters: ["operation": .string(operation)])
         case "app.launch":
             try requireOnlyKeys(input, ["appId"])
             guard let appID = input["appId"]?.stringValue else {

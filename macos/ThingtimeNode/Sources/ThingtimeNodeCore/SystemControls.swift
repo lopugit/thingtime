@@ -258,13 +258,14 @@ public enum SystemVPN {
 
 public enum SystemBattery {
     public static func snapshot(isPreventingIdleSleep: Bool) -> BatteryTelemetry {
+        let isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
         guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef] else {
-            return BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: isPreventingIdleSleep)
+            return BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: isPreventingIdleSleep, isLowPowerModeEnabled: isLowPowerModeEnabled)
         }
         let values = sources.compactMap { IOPSGetPowerSourceDescription(info, $0)?.takeUnretainedValue() as? [String: Any] }
         guard !values.isEmpty else {
-            return BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: isPreventingIdleSleep)
+            return BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: isPreventingIdleSleep, isLowPowerModeEnabled: isLowPowerModeEnabled)
         }
         let level = values.compactMap { value -> Double? in
             guard let current = value[kIOPSCurrentCapacityKey] as? NSNumber,
@@ -274,7 +275,49 @@ public enum SystemBattery {
         }.first
         let charging = values.compactMap { $0[kIOPSIsChargingKey] as? Bool }.first
         let external = values.compactMap { $0[kIOPSPowerSourceStateKey] as? String }.contains(kIOPSACPowerValue)
-        return BatteryTelemetry(level: level, isCharging: charging, isExternalPower: external, isPreventingIdleSleep: isPreventingIdleSleep)
+        return BatteryTelemetry(level: level, isCharging: charging, isExternalPower: external, isPreventingIdleSleep: isPreventingIdleSleep, isLowPowerModeEnabled: isLowPowerModeEnabled)
+    }
+}
+
+/// A fixed, consent-gated Apple Events surface for the user's Apple Music
+/// application. This intentionally does not expose a generic media player,
+/// arbitrary script source, media library data, queue, title, or history.
+public enum SystemAppleMusic {
+    private static let bundleIdentifier = "com.apple.Music"
+    private static let commands: [String: String] = [
+        "play": "tell application id \"com.apple.Music\" to play",
+        "pause": "tell application id \"com.apple.Music\" to pause",
+        "next": "tell application id \"com.apple.Music\" to next track",
+        "previous": "tell application id \"com.apple.Music\" to previous track"
+    ]
+
+    public static func telemetry() -> AppleMusicTelemetry {
+        AppleMusicTelemetry(
+            isInstalled: NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil,
+            isRunning: !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
+        )
+    }
+
+    public static func perform(operation: String) throws {
+        guard let source = commands[operation] else {
+            throw ThingtimeNodeError.invalidRequest("The requested Apple Music operation is invalid.")
+        }
+        guard telemetry().isInstalled else {
+            throw ThingtimeNodeError.policyDenied("Apple Music is not installed on this Mac.")
+        }
+        guard let script = NSAppleScript(source: source) else {
+            throw ThingtimeNodeError.policyDenied("macOS could not prepare the fixed Apple Music automation event.")
+        }
+        var error: NSDictionary?
+        _ = script.executeAndReturnError(&error)
+        if let error, let message = error[NSAppleScript.errorMessage] as? String {
+            throw ThingtimeNodeError.policyDenied("Apple Music did not accept the approved operation: \(message)")
+        }
+    }
+
+    public static func isValidOperation(_ value: String?) -> Bool {
+        guard let value else { return false }
+        return commands[value] != nil
     }
 }
 

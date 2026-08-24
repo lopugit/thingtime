@@ -37,6 +37,7 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'system.bluetooth.device.connection.set',
 	'system.vpn.connection.set',
 	'system.power.idle-sleep-prevention.set',
+	'system.media.apple-music.playback.set',
 	'system.lock',
 	'system.sleep',
 	'system.restart',
@@ -72,7 +73,7 @@ export type PublicDeviceState = {
 	soundEffectsVolume?: number | null;
 	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
-	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean } | null;
+	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean; isLowPowerModeEnabled?: boolean } | null;
 	openApps: PublicDeviceOpenApp[];
 	audioDevices: Array<{
 		id: string;
@@ -89,6 +90,7 @@ export type PublicDeviceState = {
 	cameras?: Array<{ id: string; name: string; isConnected: boolean; isPreferred: boolean; authorization: 'granted' | 'denied' }>;
 	bluetoothDevices?: Array<{ id: string; name: string; isConnected: boolean }>;
 	vpnServices?: Array<{ id: string; name: string; isConnected: boolean }>;
+	appleMusic?: { isInstalled: boolean; isRunning: boolean };
 	observedAt: string;
 	updatedAt: string;
 };
@@ -124,7 +126,7 @@ export type PublicDevice = {
 	locked: boolean | null;
 	volume: number | null;
 	brightness: number | null;
-	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean } | null;
+	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean; isLowPowerModeEnabled?: boolean } | null;
 	openApps: PublicDeviceOpenApp[];
 	state: PublicDeviceState | null;
 	connectors: PublicDeviceConnector[];

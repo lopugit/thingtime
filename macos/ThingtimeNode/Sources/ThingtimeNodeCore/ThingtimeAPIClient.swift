@@ -120,7 +120,8 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             struct Camera: Encodable { let id: String; let name: String; let isConnected: Bool; let isPreferred: Bool; let authorization: String }
             struct BluetoothDevice: Encodable { let id: String; let name: String; let isConnected: Bool }
             struct VPNService: Encodable { let id: String; let name: String; let isConnected: Bool }
-            struct Battery: Encodable { let level: Double?; let charging: Bool?; let isExternalPower: Bool?; let isPreventingIdleSleep: Bool }
+            struct Battery: Encodable { let level: Double?; let charging: Bool?; let isExternalPower: Bool?; let isPreventingIdleSleep: Bool; let isLowPowerModeEnabled: Bool }
+            struct AppleMusic: Encodable { let isInstalled: Bool; let isRunning: Bool }
             let locked: Bool
             let volume: Double?
             let muted: Bool?
@@ -138,6 +139,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             let bluetoothDevices: [BluetoothDevice]
             let vpnServices: [VPNService]
             let battery: Battery
+            let appleMusic: AppleMusic
         }
         struct Connector: Encodable {
             let id: String
@@ -345,7 +347,8 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 cameras: Array(telemetry.cameras.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected, isPreferred: $0.isPreferred, authorization: $0.authorization.rawValue) },
                 bluetoothDevices: Array(telemetry.bluetoothDevices.prefix(64)).map { .init(id: String($0.id.prefix(120)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
                 vpnServices: Array(telemetry.vpnServices.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
-                battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep)
+                battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep, isLowPowerModeEnabled: telemetry.battery.isLowPowerModeEnabled),
+                appleMusic: .init(isInstalled: telemetry.appleMusic.isInstalled, isRunning: telemetry.appleMusic.isRunning)
             ),
             connectors: connectors
         )

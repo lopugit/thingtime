@@ -231,6 +231,26 @@ relational shape for later ThingtimeDB storage and platform chat views.
   paired devices, node state, command creation, and command leasing are
   bumped to `1.1.0`.
 
+### 2026-08-24 scoped Apple Music and power-status follow-up
+
+- Paired-node state now reports the public `ProcessInfo` Low Power Mode value
+  and the minimum Apple Music availability state (installed/running). Neither
+  state is remotely mutable.
+- The media surface is intentionally limited to four fixed Apple Music events:
+  play, pause, previous, and next. It admits neither generic media commands
+  nor an application id, script, queue, library, track, title, history, or any
+  other caller-controlled input. Each action has its own pairing capability,
+  always opens a new approval, requires macOS Automation consent, and records
+  `needs-review` rather than claiming an Apple Event proves external playback.
+- Focus modes, AirDrop, Bluetooth radio power, camera-privacy state, HDR
+  toggling, Low Power Mode toggling, and global media playback remain omitted:
+  current public macOS APIs do not provide a safe, scoped setter. Private
+  frameworks and UI automation are not substitutes.
+- The four paired-device capability-manifest endpoint contracts are bumped to
+  `1.2.0`. Focused device tests (51) and native node tests (106) cover the
+  closed input envelopes, mandatory approval, unpaired fail-closed behavior,
+  telemetry projection, and Apple Music's no-arbitrary-script boundary.
+
 ## Security and product boundaries
 
 MCP gives a host a standard way to invoke this server; it does not give the

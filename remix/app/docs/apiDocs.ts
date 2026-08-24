@@ -60,7 +60,7 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
 		id: 'devices',
-		contractVersion: '1.1.0',
+		contractVersion: '1.2.0',
 		group: 'devices',
 		title: 'Paired devices',
 		endpoint: '/api/v1/devices',
@@ -159,7 +159,7 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-state',
-		contractVersion: '1.1.0',
+		contractVersion: '1.2.0',
 		group: 'devices',
 		title: 'Publish device state',
 		endpoint: '/api/v1/devices/node/state',
@@ -185,7 +185,8 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 						locked: false,
 						volume: 0.5,
 						brightness: 0.8,
-						battery: null,
+						battery: { level: 0.82, charging: true, isExternalPower: true, isPreventingIdleSleep: false, isLowPowerModeEnabled: false },
+						appleMusic: { isInstalled: true, isRunning: false },
 						displays: [{ id: 42, width: 1728, height: 1117, isMain: true, isBuiltIn: true, brightness: 0.8, brightnessControlSupported: true, currentMode: { id: '1728x1117@60000:0', width: 1728, height: 1117, refreshRate: 60 }, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false }],
 						openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }]
 					},
@@ -199,13 +200,13 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-commands',
-		contractVersion: '1.1.0',
+		contractVersion: '1.2.0',
 		group: 'devices',
 		title: 'Device commands',
 		endpoint: '/api/v1/devices/commands',
 		summary: 'Lists or creates idempotent, typed commands for one device.',
 		detail:
-			'Unknown kinds and unknown input fields are rejected. The typed vocabulary includes connector.start/stop, session.list/read/create/send/interrupt, approval.respond, app.focus/launch/quit/force-quit/hide/unhide/hide-others, audio routing/mute/levels, Wi-Fi connect/disconnect/power, per-display brightness/mode/origin/mirroring, default printer and preferred camera, paired Bluetooth-device and existing VPN-service connections, keep-awake, lock/sleep, restart/shutdown/logout, and screen.start/stop. Wi-Fi connection accepts only a visible SSID and uses an already-saved local credential or an open network; passwords are never accepted or persisted. Lifecycle actions always require a new approval and resolve as needs-review after reconnect because the node can terminate before confirming the terminal OS effect. HDR is read-only; Focus, AirDrop, Bluetooth radio state and global media playback are not exposed because macOS has no supported scoped setter. No arbitrary executable input exists. The per-account/device permission mode controls whether commands queue immediately, request one approval, or are denied. Pairing, capability, freshness, locked-session and macOS privacy checks remain required in every mode.',
+			'Unknown kinds and unknown input fields are rejected. The typed vocabulary includes connector.start/stop, session.list/read/create/send/interrupt, approval.respond, app.focus/launch/quit/force-quit/hide/unhide/hide-others, audio routing/mute/levels, Wi-Fi connect/disconnect/power, per-display brightness/mode/origin/mirroring, default printer and preferred camera, paired Bluetooth-device and existing VPN-service connections, keep-awake, fixed Apple Music play/pause/previous/next controls, lock/sleep, restart/shutdown/logout, and screen.start/stop. Wi-Fi connection accepts only a visible SSID and uses an already-saved local credential or an open network; passwords are never accepted or persisted. Apple Music and lifecycle actions always require a new approval and resolve as needs-review after reconnect because an Apple Event can return before its external effect is observable. HDR and Low Power Mode are read-only; Focus, AirDrop, Bluetooth radio state, camera privacy, and global media playback are not exposed because macOS has no supported scoped setter. No arbitrary executable input exists. The per-account/device permission mode controls whether commands queue immediately, request one approval, or are denied. Pairing, capability, freshness, locked-session and macOS privacy checks remain required in every mode.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET', 'POST'],
 		steps: ['Use a stable requestId.', 'POST one closed kind-specific envelope.', 'Retry it unchanged; changed reuse returns 409.'],
@@ -248,7 +249,7 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-commands',
-		contractVersion: '1.1.0',
+		contractVersion: '1.2.0',
 		group: 'devices',
 		title: 'Device command lease channel',
 		endpoint: '/api/v1/devices/node/commands',

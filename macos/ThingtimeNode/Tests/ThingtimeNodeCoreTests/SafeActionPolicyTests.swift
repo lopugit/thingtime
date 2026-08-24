@@ -184,6 +184,26 @@ final class SafeActionPolicyTests: XCTestCase {
         }
     }
 
+    func testAppleMusicPlaybackIsFixedAndRequiresApproval() {
+        let play = SafeActionRequest(kind: .setAppleMusicPlayback, parameters: ["operation": .string("play")])
+        guard case .requireApproval = policy.evaluate(
+            action: play,
+            context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+        ) else { return XCTFail("Expected Apple Music playback to require approval") }
+
+        let arbitrary = SafeActionRequest(kind: .setAppleMusicPlayback, parameters: ["operation": .string("do shell script")])
+        guard case .deny = policy.evaluate(
+            action: arbitrary,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected arbitrary Apple Music input to be denied") }
+
+        let extra = SafeActionRequest(kind: .setAppleMusicPlayback, parameters: ["operation": .string("next"), "script": .string("tell application \"Finder\"")])
+        guard case .deny = policy.evaluate(
+            action: extra,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected unexpected Apple Music fields to be denied") }
+    }
+
     func testAudioRouteAndMuteActionsStayClosedAndRequireApproval() {
         let output = SafeActionRequest(kind: .setDefaultOutputDevice, parameters: ["deviceId": .string("BuiltInOutputDevice")])
         guard case .requireApproval = policy.evaluate(

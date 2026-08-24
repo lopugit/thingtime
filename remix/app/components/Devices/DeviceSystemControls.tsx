@@ -1,11 +1,11 @@
 import React, { memo } from 'react';
 
 import { Box, Button, Flex, Grid, Input, Menu, MenuButton, MenuList, Portal, Text } from '@chakra-ui/react';
-import { Bluetooth, Camera, ChevronDown, Monitor, Moon, Printer, Wifi } from 'lucide-react';
+import { Bluetooth, Camera, ChevronDown, Monitor, Moon, Music, Printer, Wifi } from 'lucide-react';
 
 import { DRAWER_POPUP_Z } from '~/components/Nav/Drawer/useDrawer';
 
-import type { DeviceBluetoothDevice, DeviceCamera, DeviceDisplay, DevicePrinter, DeviceVPNService } from './deviceTypes';
+import type { DeviceAppleMusic, DeviceBluetoothDevice, DeviceCamera, DeviceDisplay, DevicePrinter, DeviceVPNService } from './deviceTypes';
 import type { DeviceActionHandler, DeviceControlResolver } from './DeviceStateGrid';
 import { DevicePolicyButton, DevicePolicyMenuItem } from './DeviceStateGrid';
 
@@ -59,12 +59,13 @@ export type DeviceSystemControlsProps = {
 	cameras: DeviceCamera[];
 	bluetoothDevices: DeviceBluetoothDevice[];
 	vpnServices: DeviceVPNService[];
-	battery: { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean } | null;
+	battery: { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean; isLowPowerModeEnabled?: boolean } | null;
+	appleMusic?: DeviceAppleMusic;
 	controlFor?: DeviceControlResolver;
 	onAction?: DeviceActionHandler;
 };
 
-export const DeviceSystemControls = memo(({ deviceId, displays, printers, cameras, bluetoothDevices, vpnServices, battery, controlFor, onAction }: DeviceSystemControlsProps) => (
+export const DeviceSystemControls = memo(({ deviceId, displays, printers, cameras, bluetoothDevices, vpnServices, battery, appleMusic, controlFor, onAction }: DeviceSystemControlsProps) => (
 	<Flex direction="column" gap={3}>
 		{displays.length ? <Grid gap={2} templateColumns="repeat(auto-fit, minmax(260px, 1fr))">{displays.map((display) => <DisplayCard allDisplays={displays} controlFor={controlFor} deviceId={deviceId} display={display} key={display.id} onAction={onAction} />)}</Grid> : <Text color="var(--tt-muted, #71717a)" fontSize="12px">No display layout telemetry has been reported by this node yet.</Text>}
 		<Grid gap={2} templateColumns="repeat(auto-fit, minmax(220px, 1fr))">
@@ -72,9 +73,10 @@ export const DeviceSystemControls = memo(({ deviceId, displays, printers, camera
 			<Card icon={<Camera aria-hidden size={14} />} label="Preferred camera"><Menu><MenuButton as={Button} rightIcon={<ChevronDown size={13} />} size="xs" variant="outline">{cameras.find((camera) => camera.isPreferred)?.name || 'Choose camera'}</MenuButton><Portal><MenuList fontSize="12px" zIndex={DRAWER_POPUP_Z}>{cameras.map((camera) => <DevicePolicyMenuItem action="set-preferred-camera" controlFor={controlFor} controlKey={`camera:${camera.id}`} deviceId={deviceId} input={{ id: camera.id }} key={camera.id} label={`${camera.isPreferred ? '✓ ' : ''}${camera.name}${camera.authorization === 'denied' ? ' · access not granted' : ''}`} onAction={onAction} targetId={camera.id} />)}</MenuList></Portal></Menu></Card>
 			<Card icon={<Bluetooth aria-hidden size={14} />} label="Paired Bluetooth">{bluetoothDevices.length ? <Flex gap={1} wrap="wrap">{bluetoothDevices.map((device) => <DevicePolicyButton action="set-bluetooth-device-connected" controlFor={controlFor} controlKey={`bluetooth:${device.id}:${device.isConnected ? 'off' : 'on'}`} deviceId={deviceId} input={{ id: device.id, connected: !device.isConnected }} key={device.id} label={`${device.isConnected ? 'Disconnect' : 'Connect'} ${device.name}`} onAction={onAction} targetId={device.id} />)}</Flex> : <Text fontSize="11px">No paired devices reported.</Text>}</Card>
 			<Card icon={<Wifi aria-hidden size={14} />} label="VPN services">{vpnServices.length ? <Flex gap={1} wrap="wrap">{vpnServices.map((service) => <DevicePolicyButton action="set-vpn-connected" controlFor={controlFor} controlKey={`vpn:${service.id}:${service.isConnected ? 'off' : 'on'}`} deviceId={deviceId} input={{ id: service.id, connected: !service.isConnected }} key={service.id} label={`${service.isConnected ? 'Disconnect' : 'Connect'} ${service.name}`} onAction={onAction} targetId={service.id} />)}</Flex> : <Text fontSize="11px">No controllable service reported.</Text>}</Card>
-			<Card icon={<Moon aria-hidden size={14} />} label="Battery & sleep"><Text fontSize="11px">{battery?.level === null || !battery ? 'Battery status unavailable' : `${Math.round(battery.level * 100)}%${battery.charging ? ' · charging' : ''}`}</Text><Box marginTop={2}><DevicePolicyButton action="set-prevent-idle-sleep" controlFor={controlFor} controlKey={`idle-sleep:${battery?.isPreventingIdleSleep ? 'allow' : 'prevent'}`} deviceId={deviceId} input={{ enabled: !battery?.isPreventingIdleSleep }} label={battery?.isPreventingIdleSleep ? 'Allow idle sleep' : 'Keep awake'} onAction={onAction} targetId="idle-sleep" /></Box></Card>
+			<Card icon={<Moon aria-hidden size={14} />} label="Battery & sleep"><Text fontSize="11px">{battery?.level === null || !battery ? 'Battery status unavailable' : `${Math.round(battery.level * 100)}%${battery.charging ? ' · charging' : ''}${battery.isLowPowerModeEnabled ? ' · Low Power Mode' : ''}`}</Text><Box marginTop={2}><DevicePolicyButton action="set-prevent-idle-sleep" controlFor={controlFor} controlKey={`idle-sleep:${battery?.isPreventingIdleSleep ? 'allow' : 'prevent'}`} deviceId={deviceId} input={{ enabled: !battery?.isPreventingIdleSleep }} label={battery?.isPreventingIdleSleep ? 'Allow idle sleep' : 'Keep awake'} onAction={onAction} targetId="idle-sleep" /></Box></Card>
+			<Card icon={<Music aria-hidden size={14} />} label="Apple Music"><Text fontSize="11px">{appleMusic?.isInstalled ? appleMusic.isRunning ? 'Running · commands need Automation approval' : 'Installed · opens on play' : 'Not installed'}</Text>{appleMusic?.isInstalled ? <Flex gap={1} marginTop={2} wrap="wrap">{(['play', 'pause', 'previous', 'next'] as const).map((operation) => <DevicePolicyButton action="set-apple-music-playback" controlFor={controlFor} controlKey={`apple-music:${operation}`} deviceId={deviceId} input={{ operation }} key={operation} label={operation === 'previous' ? 'Previous' : operation[0].toUpperCase() + operation.slice(1)} onAction={onAction} targetId="apple-music" />)}</Flex> : null}</Card>
 		</Grid>
-		<Text color="var(--tt-muted, #71717a)" fontSize="10px">HDR is reported read-only. Focus, AirDrop, Bluetooth radio state, and global media playback are intentionally not exposed because macOS has no supported scoped setter for them.</Text>
+		<Text color="var(--tt-muted, #71717a)" fontSize="10px">HDR and Low Power Mode are reported read-only. Focus, AirDrop, Bluetooth radio state, camera privacy, and global media playback have no supported scoped setter; Apple Music is the deliberately limited consented media surface.</Text>
 	</Flex>
 ));
 DeviceSystemControls.displayName = 'DeviceSystemControls';

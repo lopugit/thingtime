@@ -197,6 +197,7 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 		case 'system.bluetooth.device.connection.set': return 'set-bluetooth-device-connected';
 		case 'system.vpn.connection.set': return 'set-vpn-connected';
 		case 'system.power.idle-sleep-prevention.set': return 'set-prevent-idle-sleep';
+		case 'system.media.apple-music.playback.set': return 'set-apple-music-playback';
 		case 'system.lock':
 			return 'lock';
 		case 'system.sleep':
@@ -410,11 +411,13 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 			cameras: device.state?.cameras || [],
 			bluetoothDevices: device.state?.bluetoothDevices || [],
 			vpnServices: device.state?.vpnServices || [],
+			appleMusic: device.state?.appleMusic,
 			battery: device.state?.battery
 				? {
 					...device.state.battery,
 					isExternalPower: device.state.battery.isExternalPower ?? null,
-					isPreventingIdleSleep: device.state.battery.isPreventingIdleSleep ?? false
+					isPreventingIdleSleep: device.state.battery.isPreventingIdleSleep ?? false,
+					isLowPowerModeEnabled: device.state.battery.isLowPowerModeEnabled ?? false
 				}
 				: null,
 			observedAt
@@ -640,6 +643,12 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 		}
 		case 'set-prevent-idle-sleep':
 			return typeof input.enabled === 'boolean' ? { ...base, kind: 'system.power.idle-sleep-prevention.set', input: { enabled: input.enabled } } : null;
+		case 'set-apple-music-playback': {
+			const operation = input.operation;
+			return operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous'
+				? { ...base, kind: 'system.media.apple-music.playback.set', input: { operation } }
+				: null;
+		}
 		case 'lock':
 			return { ...base, kind: 'system.lock', input: {} };
 		case 'connect-wifi': {

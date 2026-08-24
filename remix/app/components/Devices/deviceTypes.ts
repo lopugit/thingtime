@@ -126,7 +126,8 @@ export type DevicePrinter = { id: string; name: string; isDefault: boolean };
 export type DeviceCamera = { id: string; name: string; isConnected: boolean; isPreferred: boolean; authorization: 'granted' | 'denied' };
 export type DeviceBluetoothDevice = { id: string; name: string; isConnected: boolean };
 export type DeviceVPNService = { id: string; name: string; isConnected: boolean };
-export type DeviceBattery = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean };
+export type DeviceBattery = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean; isLowPowerModeEnabled?: boolean };
+export type DeviceAppleMusic = { isInstalled: boolean; isRunning: boolean };
 
 export type DeviceSystemProperties = {
 	model?: string | null;
@@ -159,6 +160,7 @@ export type DeviceObservedState = {
 	bluetoothDevices?: DeviceBluetoothDevice[];
 	vpnServices?: DeviceVPNService[];
 	battery?: DeviceBattery | null;
+	appleMusic?: DeviceAppleMusic;
 	observedAt: string;
 };
 
@@ -237,6 +239,7 @@ export type DeviceActionKind =
 	| 'set-bluetooth-device-connected'
 	| 'set-vpn-connected'
 	| 'set-prevent-idle-sleep'
+	| 'set-apple-music-playback'
 	| 'launch-app'
 	| 'quit-app'
 	| 'force-quit-app'

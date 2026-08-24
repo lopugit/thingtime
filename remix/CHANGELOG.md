@@ -30,6 +30,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md`.
   — Codex (AI), 2026-08-24
 
+- **Scoped Apple Music and power-status controls for paired Macs**: the node
+  now reports Low Power Mode and whether Apple Music is installed/running.
+  Apple Music exposes only fixed play, pause, previous, and next actions;
+  each needs a fresh approval plus macOS Automation consent, accepts no script,
+  app, queue, track, library, or history input, and remains `needs-review`
+  until the next observation. HDR and Low Power Mode remain read-only; Focus,
+  AirDrop, Bluetooth radio power, camera privacy, and global media playback
+  remain absent because macOS provides no supported scoped setter. Paired-device
+  API contracts are now `1.2.0`. Details:
+  `PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md`.
+  — Codex (AI), 2026-08-24
+
 - **Categorized safe machine controls in the paired-computer drawer**: everyday
   volume, mute, brightness, and application focus controls remain immediately
   available; advanced Audio & routing, Network & connectivity, Power,

@@ -177,12 +177,26 @@ public struct BatteryTelemetry: Codable, Equatable, Sendable {
     public let isCharging: Bool?
     public let isExternalPower: Bool?
     public let isPreventingIdleSleep: Bool
+    public let isLowPowerModeEnabled: Bool
 
-    public init(level: Double?, isCharging: Bool?, isExternalPower: Bool?, isPreventingIdleSleep: Bool) {
+    public init(level: Double?, isCharging: Bool?, isExternalPower: Bool?, isPreventingIdleSleep: Bool, isLowPowerModeEnabled: Bool = false) {
         self.level = level
         self.isCharging = isCharging
         self.isExternalPower = isExternalPower
         self.isPreventingIdleSleep = isPreventingIdleSleep
+        self.isLowPowerModeEnabled = isLowPowerModeEnabled
+    }
+}
+
+/// A deliberately minimal, privacy-preserving Apple Music presence signal.
+/// Playback title, library, queue, and listening history are never collected.
+public struct AppleMusicTelemetry: Codable, Equatable, Sendable {
+    public let isInstalled: Bool
+    public let isRunning: Bool
+
+    public init(isInstalled: Bool, isRunning: Bool) {
+        self.isInstalled = isInstalled
+        self.isRunning = isRunning
     }
 }
 
@@ -262,6 +276,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let bluetoothDevices: [BluetoothDeviceTelemetry]
     public let vpnServices: [VPNServiceTelemetry]
     public let battery: BatteryTelemetry
+    public let appleMusic: AppleMusicTelemetry
     public let collectedAt: Date
 
     public init(
@@ -287,7 +302,8 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         cameras: [CameraTelemetry] = [],
         bluetoothDevices: [BluetoothDeviceTelemetry] = [],
         vpnServices: [VPNServiceTelemetry] = [],
-        battery: BatteryTelemetry = BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: false)
+        battery: BatteryTelemetry = BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: false),
+        appleMusic: AppleMusicTelemetry = AppleMusicTelemetry(isInstalled: false, isRunning: false)
     ) {
         self.deviceName = deviceName
         self.hostName = hostName
@@ -312,6 +328,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.bluetoothDevices = bluetoothDevices
         self.vpnServices = vpnServices
         self.battery = battery
+        self.appleMusic = appleMusic
     }
 }
 
@@ -404,7 +421,8 @@ public final class DeviceTelemetryCollector {
             cameras: SystemCameras.all(),
             bluetoothDevices: SystemBluetooth.pairedDevices(),
             vpnServices: SystemVPN.services(),
-            battery: SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep)
+            battery: SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep),
+            appleMusic: SystemAppleMusic.telemetry()
         )
     }
 

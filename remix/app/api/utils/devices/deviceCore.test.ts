@@ -159,17 +159,20 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 		printers: [{ id: 'printer-1', name: 'Office printer', isDefault: true }],
 		cameras: [{ id: 'camera-1', name: 'FaceTime HD', isConnected: true, isPreferred: true, authorization: 'denied' }],
 		bluetoothDevices: [{ id: 'bt-opaque', name: 'Headphones', isConnected: true }],
-		vpnServices: [{ id: 'vpn-1', name: 'Work VPN', isConnected: false }]
+		vpnServices: [{ id: 'vpn-1', name: 'Work VPN', isConnected: false }],
+		appleMusic: { isInstalled: true, isRunning: false }
 	});
 	assert.ok(normalized);
 	assert.deepEqual(normalized?.wifi, { powerOn: true, ssid: 'Thingtime Guest' });
 	assert.equal(normalized?.displays?.[0]?.currentMode?.refreshRate, 60);
 	assert.equal(normalized?.bluetoothDevices?.[0]?.id, 'bt-opaque');
+	assert.deepEqual(normalized?.appleMusic, { isInstalled: true, isRunning: false });
 	assert.deepEqual(
 		normalizeDeviceState({ locked: false, battery: { level: 0.5, charging: true }, openApps: [] })?.battery,
-		{ level: 0.5, charging: true, isExternalPower: null, isPreventingIdleSleep: false }
+		{ level: 0.5, charging: true, isExternalPower: null, isPreventingIdleSleep: false, isLowPowerModeEnabled: false }
 	);
 	assert.equal(normalizeDeviceState({ locked: false, displays: [{ id: 1, width: 1, height: 1, isMain: true, isBuiltIn: false, brightness: null, brightnessControlSupported: false, currentMode: null, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false, path: '/private' }] }), null);
+	assert.equal(normalizeDeviceState({ locked: false, appleMusic: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);
 	assert.equal(normalizeDeviceState({ locked: false, openApps: [{ id: 'x', name: 'X', frontmost: false, path: '/Applications/X.app' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, volume: 'not-a-level', openApps: [] }), null);
 	assert.ok(
@@ -329,6 +332,7 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'system.bluetooth.device.connection.set',
 		'system.vpn.connection.set',
 		'system.power.idle-sleep-prevention.set',
+		'system.media.apple-music.playback.set',
 		'system.lock',
 		'system.sleep',
 		'system.restart',
@@ -382,6 +386,9 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	assert.equal(normalizeDeviceCommand('system.display.origin.set', { displayId: 42, x: -200, y: 0 }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.printer.default.set', { id: 'printer-1' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.bluetooth.device.connection.set', { id: 'bt-abc', connected: true }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'play' }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'toggle' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'next', script: 'do shell script' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.restart', {}).ok, true);
 	assert.equal(normalizeDeviceCommand('system.restart', { command: 'rm -rf /' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'Thingtime Guest' }).ok, true);
@@ -432,7 +439,7 @@ test('paired account execution preferences default to always allow, with reversi
 	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
 	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
 	for (const kind of DEVICE_COMMAND_KINDS) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout'].includes(kind), kind);
+		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.media.apple-music.playback.set'].includes(kind), kind);
 		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
 	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };

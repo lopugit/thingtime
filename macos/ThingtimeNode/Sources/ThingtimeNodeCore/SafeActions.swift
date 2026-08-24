@@ -29,6 +29,7 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case setBluetoothDeviceConnected = "system.bluetooth.device.connection.set"
     case setVPNConnected = "system.vpn.connection.set"
     case setPreventIdleSleep = "system.power.idle-sleep-prevention.set"
+    case setAppleMusicPlayback = "system.media.apple-music.playback.set"
     case activateApplication = "application.activate"
     case launchApplication = "application.launch"
     case terminateApplication = "application.quit"
@@ -174,6 +175,12 @@ public struct SafeActionPolicy: Sendable {
         case .setPreventIdleSleep:
             guard action.parameters.count == 1, case .bool = action.parameters["enabled"] else {
                 return "system.power.idle-sleep-prevention.set requires only a boolean enabled value."
+            }
+            return nil
+        case .setAppleMusicPlayback:
+            guard action.parameters.count == 1,
+                  SystemAppleMusic.isValidOperation(action.parameters["operation"]?.stringValue) else {
+                return "system.media.apple-music.playback.set requires only play, pause, next, or previous."
             }
             return nil
         case .activateApplication, .launchApplication, .terminateApplication, .forceTerminateApplication, .hideApplication, .unhideApplication:
@@ -372,6 +379,14 @@ public final class SafeActionExecutor {
             }
             try telemetry.setPreventIdleSleep(enabled)
             return .object(["enabled": .bool(enabled)])
+        case .setAppleMusicPlayback:
+            guard let operation = action.parameters["operation"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing Apple Music operation.")
+            }
+            try SystemAppleMusic.perform(operation: operation)
+            // Apple Events returning normally does not prove the player reached
+            // the requested state, so retain a journalled recovery boundary.
+            throw ThingtimeNodeError.commandOutcomeUncertain
         case .activateApplication:
             guard let bundleID = action.parameters["bundleIdentifier"]?.stringValue,
                   let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {

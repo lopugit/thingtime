@@ -35,6 +35,7 @@ export const DEVICE_COMMAND_KINDS = [
 	'system.bluetooth.device.connection.set',
 	'system.vpn.connection.set',
 	'system.power.idle-sleep-prevention.set',
+	'system.media.apple-music.playback.set',
 	'system.lock',
 	'system.sleep',
 	'system.restart',
@@ -61,7 +62,7 @@ export const normalizeDevicePermissionMode = (value: unknown): DevicePermissionM
 
 // Force quitting can discard unsaved work. It must always create a fresh
 // approval, even when the paired device otherwise allows routine controls.
-const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>(['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout']);
+const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>(['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.media.apple-music.playback.set']);
 
 export const deviceCommandRequiresApproval = (kind: DeviceCommandKind, callerRequiresApproval: boolean): boolean =>
 	callerRequiresApproval || ALWAYS_APPROVAL_DEVICE_COMMANDS.has(kind);
@@ -186,7 +187,8 @@ export type DevicePrinter = { id: string; name: string; isDefault: boolean };
 export type DeviceCamera = { id: string; name: string; isConnected: boolean; isPreferred: boolean; authorization: 'granted' | 'denied' };
 export type DeviceBluetoothDevice = { id: string; name: string; isConnected: boolean };
 export type DeviceVPNService = { id: string; name: string; isConnected: boolean };
-export type DeviceBatteryState = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean };
+export type DeviceBatteryState = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean; isLowPowerModeEnabled: boolean };
+export type DeviceAppleMusicState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceStateSnapshot = {
 	locked: boolean;
 	volume: number | null;
@@ -205,6 +207,7 @@ export type DeviceStateSnapshot = {
 	cameras?: DeviceCamera[];
 	bluetoothDevices?: DeviceBluetoothDevice[];
 	vpnServices?: DeviceVPNService[];
+	appleMusic?: DeviceAppleMusicState;
 };
 
 const unitInterval = (value: unknown): number | null => {
@@ -257,7 +260,7 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		!Object.keys(raw).every((key) =>
 			[
 				'locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'openApps', 'audioDevices', 'wifi',
-				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices'
+				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic'
 			].includes(key)
 		)
 	)
@@ -313,13 +316,14 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 	if (raw.battery !== undefined && raw.battery !== null) {
 		if (!raw.battery || typeof raw.battery !== 'object') return null;
 		const candidate = raw.battery as Record<string, unknown>;
-		if (!Object.keys(candidate).every((key) => ['level', 'charging', 'isExternalPower', 'isPreventingIdleSleep'].includes(key))) return null;
+		if (!Object.keys(candidate).every((key) => ['level', 'charging', 'isExternalPower', 'isPreventingIdleSleep', 'isLowPowerModeEnabled'].includes(key))) return null;
 		const level = candidate.level === null || candidate.level === undefined ? null : unitInterval(candidate.level);
 		const charging = candidate.charging === null || candidate.charging === undefined ? null : typeof candidate.charging === 'boolean' ? candidate.charging : null;
 		const isExternalPower = candidate.isExternalPower === null || candidate.isExternalPower === undefined ? null : typeof candidate.isExternalPower === 'boolean' ? candidate.isExternalPower : null;
 		const isPreventingIdleSleep = candidate.isPreventingIdleSleep ?? false;
-		if ((candidate.level !== null && candidate.level !== undefined && level === null) || (candidate.charging !== null && candidate.charging !== undefined && charging === null) || (candidate.isExternalPower !== null && candidate.isExternalPower !== undefined && isExternalPower === null) || typeof isPreventingIdleSleep !== 'boolean') return null;
-		battery = { level, charging, isExternalPower, isPreventingIdleSleep };
+		const isLowPowerModeEnabled = candidate.isLowPowerModeEnabled ?? false;
+		if ((candidate.level !== null && candidate.level !== undefined && level === null) || (candidate.charging !== null && candidate.charging !== undefined && charging === null) || (candidate.isExternalPower !== null && candidate.isExternalPower !== undefined && isExternalPower === null) || typeof isPreventingIdleSleep !== 'boolean' || typeof isLowPowerModeEnabled !== 'boolean') return null;
+		battery = { level, charging, isExternalPower, isPreventingIdleSleep, isLowPowerModeEnabled };
 	}
 	const volume = raw.volume === undefined || raw.volume === null ? null : unitInterval(raw.volume);
 	let muted: boolean | null = null;
@@ -385,6 +389,13 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		const id = bounded(service.id, 512), name = bounded(service.name, 120);
 		return id && name && typeof service.isConnected === 'boolean' ? { id, name, isConnected: service.isConnected } : null;
 	});
+	let appleMusic: DeviceAppleMusicState | undefined;
+	if (raw.appleMusic !== undefined) {
+		if (!raw.appleMusic || typeof raw.appleMusic !== 'object' || Array.isArray(raw.appleMusic)) return null;
+		const candidate = raw.appleMusic as Record<string, unknown>;
+		if (!exactKeys(candidate, ['isInstalled', 'isRunning']) || typeof candidate.isInstalled !== 'boolean' || typeof candidate.isRunning !== 'boolean') return null;
+		appleMusic = { isInstalled: candidate.isInstalled, isRunning: candidate.isRunning };
+	}
 	if (!displays || !printers || !cameras || !bluetoothDevices || !vpnServices) return null;
 	return {
 		locked: raw.locked,
@@ -403,7 +414,8 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		printers,
 		cameras,
 		bluetoothDevices,
-		vpnServices
+		vpnServices,
+		appleMusic
 	};
 };
 
@@ -613,6 +625,7 @@ export type DeviceCommandInputByKind = {
 	'system.bluetooth.device.connection.set': { id: string; connected: boolean };
 	'system.vpn.connection.set': { id: string; connected: boolean };
 	'system.power.idle-sleep-prevention.set': { enabled: boolean };
+	'system.media.apple-music.playback.set': { operation: 'play' | 'pause' | 'next' | 'previous' };
 	'system.lock': Record<string, never>;
 	'system.sleep': Record<string, never>;
 	'system.restart': Record<string, never>;
@@ -695,6 +708,7 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'system.bluetooth.device.connection.set': 'system.bluetooth.device.connection.write',
 	'system.vpn.connection.set': 'system.vpn.connection.write',
 	'system.power.idle-sleep-prevention.set': 'system.power.idle-sleep-prevention.write',
+	'system.media.apple-music.playback.set': 'system.media.apple-music.playback.write',
 	'system.lock': 'system.lock',
 	'system.sleep': 'system.power.sleep',
 	'system.restart': 'system.power.restart',
@@ -741,6 +755,7 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'system.bluetooth.device.connection.set': 'system.bluetooth.device.connection.write',
 	'system.vpn.connection.set': 'system.vpn.connection.write',
 	'system.power.idle-sleep-prevention.set': 'system.power.idle-sleep-prevention.write',
+	'system.media.apple-music.playback.set': 'system.media.apple-music.playback.write',
 	'device.lock.write': 'system.lock',
 	'system.sleep': 'system.power.sleep',
 	'system.restart': 'system.power.restart',
@@ -955,6 +970,12 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 			return typeof raw.enabled === 'boolean' && exactKeys(raw, ['enabled'])
 				? ok({ enabled: raw.enabled })
 				: deviceFail(400, 'system.power.idle-sleep-prevention.set requires only a boolean enabled value');
+		case 'system.media.apple-music.playback.set': {
+			const operation = raw.operation;
+			return (operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous') && exactKeys(raw, ['operation'])
+				? ok({ operation })
+				: deviceFail(400, 'system.media.apple-music.playback.set requires only play, pause, next, or previous');
+		}
 		case 'system.lock':
 		case 'system.sleep':
 		case 'system.restart':
