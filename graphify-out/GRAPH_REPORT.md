@@ -1,15 +1,16 @@
-# Graph Report - .  (2026-08-24)
+# Graph Report - lopu-pr-comment-autonomy  (2026-08-24)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 21 files · ~122,035 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 529 nodes · 1179 edges · 43 communities (26 shown, 17 thin omitted)
+- 513 nodes · 1169 edges · 35 communities (24 shown, 11 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.54)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2eb79e47`
+- Built from commit: `a42d5c72`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -45,17 +46,10 @@
 - [[_COMMUNITY_Graphify Rules|Graphify Rules]]
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
 - [[_COMMUNITY_Graphify Rules|Graphify Rules]]
-- [[_COMMUNITY_Fundamentals|Fundamentals]]
-- [[_COMMUNITY_CI Control Plane|CI Control Plane]]
 - [[_COMMUNITY_Graphify Rules|Graphify Rules]]
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
 - [[_COMMUNITY_AI_ALL.md canonical instructions|AI_ALL.md canonical instructions]]
-- [[_COMMUNITY_Lopu whole-PR repository review|Lopu whole-PR repository review]]
-- [[_COMMUNITY_Unverified-lineage promotion review gating|Unverified-lineage promotion review gating]]
 - [[_COMMUNITY_Fundamentals|Fundamentals]]
-- [[_COMMUNITY_Bare-tree invariant|Bare-tree invariant]]
-- [[_COMMUNITY_github-actions CI control plane README|github-actions CI control plane README]]
-- [[_COMMUNITY_Thin listener workflow-caller contract|Thin listener workflow-caller contract]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `selfTest()` - 48 edges
@@ -67,32 +61,32 @@
 7. `orphanedMergeHydrationIntegrationTest()` - 19 edges
 8. `main()` - 15 edges
 9. `repoFlag()` - 15 edges
-10. `buildMode()` - 14 edges
+10. `githubRequest()` - 14 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Commander App Release workflow` --semantically_similar_to--> `Lopu PR manager workflow`  [AMBIGUOUS] [semantically similar]
   .github/workflows/commander-release.yml → .github/workflows/resolve-pr-conflicts.yml
 - `Web CI Workflow` --references--> `Testing Checklist`  [INFERRED]
   .github/workflows/web-ci.yml → TESTING.md
-- `ai-merge-paused durable stop label` --implements--> `Lopu PR manager workflow`  [EXTRACTED]
-  CHANGELOG.md → .github/workflows/resolve-pr-conflicts.yml
-- `Deterministic delete-shaped conflict settlement` --implements--> `AI rebase conflict round action`  [EXTRACTED]
-  CHANGELOG.md → .github/actions/rebase-conflict-round/action.yml
 - `AI Rebase Conflict Round` --references--> `Prepare Round Script`  [EXTRACTED]
   .github/actions/rebase-conflict-round/action.yml → .github/scripts/rebase-stack/prepare-round.sh
+- `Build All Branch Workflow` --references--> `Build All Branch Script`  [EXTRACTED]
+  .github/workflows/all-branch.yml → .github/scripts/build-all-branch.mjs
+- `Promote Develop To Main Workflow` --references--> `Promotion PR Changelog Script`  [EXTRACTED]
+  .github/workflows/promote-develop-to-main.yml → .github/scripts/promotion-pr-changelog.mjs
 
 ## Import Cycles
 - None detected.
 
-## Communities (43 total, 17 thin omitted)
+## Communities (35 total, 11 thin omitted)
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.06
 Nodes (95): ACTIVE_STATES, assertCurrentPullRequest(), assertRepositoryDispatchSource(), assertTrustedPrincipal(), assertTrustedPullRequest(), assertTrustedPullRequestStack(), assertVercelConfiguration(), assertWildcardFallbackRuntimes() (+87 more)
 
 ### Community 1 - "promotion-pr-changelog.mjs"
-Cohesion: 0.08
-Nodes (38): anthropics/claude-code-action, ai-merge-paused durable stop label, Deterministic delete-shaped conflict settlement, Reverse and fan-out promotion lanes, AI rebase conflict round action, bootstrap: copy trusted round code, claude: resolve conflict set in scratch, prepare: validate conflicts and scratch (+30 more)
+Cohesion: 0.09
+Nodes (35): anthropics/claude-code-action, AI rebase conflict round action, bootstrap: copy trusted round code, claude: resolve conflict set in scratch, prepare: validate conflicts and scratch, verify: scratch verification and rebase continue, assert_safe_regular_text_conflict(), clear_scratch() (+27 more)
 
 ### Community 2 - "selfTest"
 Cohesion: 0.14
@@ -155,8 +149,8 @@ Cohesion: 0.33
 Nodes (6): fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM, GIT_CONFIG_SYSTEM, verify-promotion-source-authority.sh script
 
 ### Community 17 - "start.sh"
-Cohesion: 0.18
-Nodes (11): Build All Branch Script, Deploy Develop PR Preview Script, Promote Features To Main Script, Promotion PR Changelog Script, Build All Branch Workflow, Route CI Compute Provider Workflow, Workflow Control-plane CI, Develop S3 PR Preview Implementation (+3 more)
+Cohesion: 0.25
+Nodes (8): Build All Branch Script, Promote Features To Main Script, Promotion PR Changelog Script, Build All Branch Workflow, Route CI Compute Provider Workflow, Promote Develop To Main Workflow, Promote Features To Main Workflow, Sync Main Into Develop Workflow
 
 ### Community 18 - "verify-promotion-source-authority.sh"
 Cohesion: 0.83
@@ -182,18 +176,14 @@ Nodes (14): buildPromotionDispatchRequest(), closeRedundantPass(), createPromoti
 Cohesion: 0.50
 Nodes (4): assertSignedPrReleaseContract(), count(), here, workflow
 
-### Community 31 - "Fundamentals"
-Cohesion: 1.00
-Nodes (3): Develop S3 PR preview implementation, controller: publish or reconcile preview, dispatch: trusted default-branch controller
-
 ## Ambiguous Edges - Review These
 - `Commander App Release workflow` → `Lopu PR manager workflow`  [AMBIGUOUS]
   .github/workflows/commander-release.yml · relation: semantically_similar_to
 
 ## Knowledge Gaps
-- **127 isolated node(s):** `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS` (+122 more)
+- **119 isolated node(s):** `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS`, `ACTIVE_STATES`, `TERMINAL_FAILURE_STATES` (+114 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **17 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **11 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -202,12 +192,12 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: semantically_similar_to) - confidence is low._
 - **Why does `selfTest()` connect `promotion-worker-routing-contract.mjs` to `build-all-branch.mjs`, `workflow-control-plane-contract.mjs`, `refresh-promotion-graphify.sh`, `promotion-worker-contract.sh`, `Thingtime AI Instructions`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
-- **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS` to the rest of the system?**
-  _127 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS` to the rest of the system?**
+  _119 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
 - **Should `promotion-pr-changelog.mjs` be split into smaller, more focused modules?**
-  _Cohesion score 0.07692307692307693 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08571428571428572 - nodes in this community are weakly interconnected._
 - **Should `selfTest` be split into smaller, more focused modules?**
   _Cohesion score 0.14126984126984127 - nodes in this community are weakly interconnected._
 - **Should `build-all-branch.mjs` be split into smaller, more focused modules?**
