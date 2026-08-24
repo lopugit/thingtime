@@ -4150,8 +4150,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787574466.1129906,
-    "ast_hash": "b4f37d4b67057d3e54ddae8603c21e26",
+    "mtime": 1787575308.5444436,
+    "ast_hash": "7ff82470e82caaec8d17a5a9cc417d7e",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -6645,8 +6645,8 @@
     "semantic_hash": "37740ed9ab7d9a9d59372c01ecabc0f1"
   },
   "electron/scripts/build-production-app.mjs": {
-    "mtime": 1787574296.0099256,
-    "ast_hash": "b5057389865aa576f83aad52c06296d3",
+    "mtime": 1787575285.3170187,
+    "ast_hash": "19dd0461a0c27b27273fcec57cd07076",
     "semantic_hash": ""
   },
   "electron/scripts/pinned-package-manager.mjs": {
@@ -7840,8 +7840,8 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Services/GitHubReleaseCatalog.swift": {
-    "mtime": 1787574296.128723,
-    "ast_hash": "c876520cd697295e8e528be7cde0ae34",
+    "mtime": 1787575074.6578333,
+    "ast_hash": "a6a0de2d45527d2262aec7d169932f0b",
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Services/ProcessExecution.swift": {
@@ -7870,8 +7870,8 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Tests/ThingtimeRecoveryCoreTests/RecoveryCoreTests.swift": {
-    "mtime": 1787574466.1122181,
-    "ast_hash": "255c2828fd435df75d777e6de39bfb53",
+    "mtime": 1787575074.6581705,
+    "ast_hash": "1feedd4ac58ea6c9f3772326b311f12c",
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/Views/RecoveryContentView.swift": {
@@ -7885,8 +7885,8 @@
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/script/build-production-release.sh": {
-    "mtime": 1787574296.129563,
-    "ast_hash": "68752cc9704b10bae2bdc4cdf2b49d2d",
+    "mtime": 1787575308.5435,
+    "ast_hash": "306a4feeb78d878b9e136172a0d7981b",
     "semantic_hash": ""
   },
   "macos/ThingtimeRecovery/script/build_and_run.sh": {
@@ -7910,8 +7910,13 @@
     "semantic_hash": ""
   },
   "PRs/383-codex-fix-thingtime-recovery-init-fix-thingtime-recovery-swiftui-startup-crash.md": {
-    "mtime": 1787574757.247033,
-    "ast_hash": "41fb414b18109e11fe252c7ddd1130eb",
+    "mtime": 1787575567.6538882,
+    "ast_hash": "ce99f72c30adb635a8adccdf5b185ba3",
+    "semantic_hash": ""
+  },
+  "electron/scripts/verify-release-archive.mjs": {
+    "mtime": 1787575285.316674,
+    "ast_hash": "2bbc92ea24715966087881b07a5250c3",
     "semantic_hash": ""
   }
 }
