@@ -986,9 +986,15 @@ an offline database or offline conflict resolution layer.
   notarization, and nested-code verification after the main process exits and
   immediately before either a cached launch or install. This is separate from
   the explicitly opt-in unsigned native Recovery lane.
-- Verified locally with 77 Electron tests and 9 Recovery-core tests, including
+- Verified locally with 78 Electron tests and 9 Recovery-core tests, including
   a real ad-hoc app fixture that launches via the detached unsigned Recovery
   path and a regression proving a missing `isUnsigned` marker cannot downgrade
   verification. A fresh release-mode unsigned Recovery ZIP round-trip also
   passed. A live GitHub unsigned release requires the still-open protected
   control-plane PR #390 to merge before the release worker can publish one.
+- The first full Electron unsigned build also revealed that electron-builder's
+  implicit macOS target produced a DMG but no updater ZIP. `electron/package.json`
+  now explicitly requests both `dmg` and `zip`, with a contract test that locks
+  the rollback artifact in place. The final local release-mode artifacts both
+  verified independently at version
+  `0.1.0-pr.68.updater.g2048de7d6262.unsigned`.
