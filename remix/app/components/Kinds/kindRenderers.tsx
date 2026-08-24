@@ -8,6 +8,7 @@ import type { HtmlThingNode } from './HtmlThingRenderer';
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
 import { Avatar, KindBadge, KindCard, MutedMono, Sparkline, formatPrice, maybeTimeAgo, toArray, toNumberOr, toStringOr } from './kindPrimitives';
+import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '~/components/ComponentsLibrary/componentTemplate';
 import { safeCssUrl, safeUrl } from './safeUrl';
 
 // The original core kind renderers: the templates a feed/search/page can use
@@ -751,6 +752,23 @@ const ChakraKindRenderer = ({ value }: { value: ChakraThingNode; context: KindRe
 	</Box>
 );
 
+// ————— 🧩 component (arg-templated element/chakra tree) —————
+
+type ComponentKindValue = { render: unknown; values: Record<string, string | number | boolean | undefined> };
+
+const ComponentKindRenderer = ({ value }: { value: ComponentKindValue; context: KindRenderContext }) => {
+	const resolved = resolveTemplate(value.render, value.values);
+	return (
+		<Box width="100%">
+			{isChakraThingNode(resolved) ? (
+				<ChakraThingRenderer node={resolved as ChakraThingNode} />
+			) : (
+				<HtmlThingRenderer node={resolved as HtmlThingNode} />
+			)}
+		</Box>
+	);
+};
+
 // ————— registration —————
 // Wrapped in an exported function (called lazily by kindRegistry) instead of running
 // at module scope: remix/package.json sets "sideEffects": false, so a bare
@@ -1082,6 +1100,32 @@ registerKindRenderer({
 	match: (thing) => isChakraThingNode(thing),
 	adapt: (thing): ChakraThingNode | null => (isChakraThingNode(thing) ? (thing as ChakraThingNode) : null),
 	render: ChakraKindRenderer
+});
+
+registerKindRenderer({
+	kind: 'component',
+	title: 'UI component',
+	emoji: '🧩',
+	category: 'Builder',
+	description:
+		'A component thing from /components — its render template resolved against savedArgs (or arg defaults), drawn through the sanitising gates.',
+	aliases: ['ui-component'],
+	match: (thing) => {
+		const crystal = thing.crystal as Record<string, unknown> | undefined;
+		return !!crystal && typeof crystal === 'object' && 'render' in crystal && ('args' in crystal || 'componentKey' in crystal || 'library' in crystal);
+	},
+	adapt: (thing): ComponentKindValue | null => {
+		// accepts both a full component thing ({ crystal }) and a bare crystal
+		const crystal = ((thing.crystal as Record<string, unknown> | undefined) ?? thing) as Record<string, unknown>;
+		if (!crystal.render || typeof crystal.render !== 'object') return null;
+		const args = sanitizeArgSpecs(crystal.args);
+		const savedArgs =
+			crystal.savedArgs && typeof crystal.savedArgs === 'object' && !Array.isArray(crystal.savedArgs)
+				? (crystal.savedArgs as Record<string, string | number | boolean>)
+				: {};
+		return { render: crystal.render, values: { ...defaultsFromArgs(args), ...savedArgs } };
+	},
+	render: ComponentKindRenderer
 });
 
 };
