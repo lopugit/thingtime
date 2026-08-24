@@ -166,9 +166,11 @@ Two mitigations, both cheap:
   reads (session revocation checks, login) stay `primary`/`primaryPreferred`
   explicitly. On a single-node dev Mongo, `nearest` == the one node — zero
   behavior change locally (constraint §2.5 ✅).
-- Rate limiter: today every limited request does 1 Mongo write
-  ([enforce.ts](../../remix/app/api/utils/rateLimit/enforce.ts)). From a US
-  function that's a ~200ms cross-region write per request — unacceptable.
+- Rate limiter: today every limited request does two sequential Mongo writes —
+  an upsert followed by a conditional `findOneAndUpdate`, plus a third read on
+  the reject path ([enforce.ts](../../remix/app/api/utils/rateLimit/enforce.ts)).
+  From a US function that's ~400ms of cross-region round trips *before the route
+  does any work* — unacceptable.
   Options, in preference order: (a) make limit state regional-best-effort —
   an in-memory per-instance window backed by a *regionally cached* read of
   the config (limits are per-user/IP heuristics, not financial invariants;
