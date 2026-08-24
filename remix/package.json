@@ -30,7 +30,7 @@
 		"preview": "node .output/server/index.mjs",
 		"sync:nitro-template": "node scripts/sync-nitro-template.mjs",
 		"test:acl": "node --import tsx --test app/api/utils/things/aclChainCore.test.ts",
-		"test:account-hints": "node --import tsx --test app/api/utils/auth/accountHintsHeaders.test.ts app/api/utils/deployment/dataEnvironment.test.ts app/components/Account/ssoHub.test.ts",
+		"test:account-hints": "node --import tsx --test app/api/utils/auth/accountHintsHeaders.test.ts app/api/utils/deployment/dataEnvironment.test.ts app/components/Account/accountHintOrigin.test.ts app/components/Account/ssoHub.test.ts",
 		"test:attachments": "node --import tsx --test app/api/utils/attachments/*.test.ts app/api/utils/auth/publicUploads.test.ts app/api/utils/auth/users.profile.test.ts app/components/Attachments/attachmentUiCore.test.ts app/components/Media/mediaGalleryCore.test.ts app/components/Profile/profileMediaCore.test.ts app/routes/api/v1/attachments/attachmentsRoutes.test.ts app/routes/api/v1/users/profile/profileRoute.test.ts app/utils/profileMediaUrl.test.ts",
 		"test:ai-model-routing": "node scripts/ai-model-routing-contract.mjs",
 		"test:app-origins": "node --import tsx --test app/api/utils/apps/appOriginsCore.test.ts",
