@@ -451,6 +451,14 @@ jobs:
   manage_rebases:
     name: Lopu scans rebases and stack cascades
     needs: route
+    # A reusable-workflow caller may not elevate permissions for its nested
+    # jobs. Grant the rebase engine's existing detector, handoff, and worker
+    # permissions here so its internal jobs can run under this one Lopu entry.
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      issues: write
     # The public Lopu manager owns every external scan. Exact resolver and
     # promotion handoffs must not recursively launch another rebase detector.
     if: >-

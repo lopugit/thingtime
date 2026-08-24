@@ -34,6 +34,10 @@ assert.match(workflow, /^name: Lopu PR manager$/m);
 assert.match(workflow, /manage_rebases:/);
 assert.match(workflow, /uses: \.\/\.github\/workflows\/rebase-pr-stacks\.yml/);
 assert.match(workflow, /name: Lopu scans rebases and stack cascades/);
+assert.match(
+  workflow,
+  /manage_rebases:[\s\S]*?permissions:\s+actions: write\s+contents: write\s+pull-requests: write\s+issues: write/,
+);
 assert.match(workflow, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/);
 assert.match(workflow, /--dangerously-skip-permissions/);
 assert.match(workflow, /--allowedTools "Bash\(\*\),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"/);
