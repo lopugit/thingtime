@@ -1,30 +1,45 @@
 import Foundation
 
 public actor GitHubReleaseCatalog {
-    private let endpoint = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases?per_page=100")!
-    private let maximumPages = 3
+    typealias PageRequest = (URL) async throws -> (Data, HTTPURLResponse)
+
+    private let endpoint: URL
     private let maximumArchiveBytes: Int64 = 5 * 1024 * 1024 * 1024
+    private let requestPage: PageRequest
 
-    public init() {}
-
-    public func fetch(component: RecoveryComponent) async throws -> [RecoveryRelease] {
-        var url: URL? = endpoint
-        var pages = 0
-        var collected: [GitHubRelease] = []
-        while let pageURL = url, pages < maximumPages {
-            guard pageURL.scheme == "https", pageURL.host == "api.github.com" else {
-                throw RecoveryError.operationFailed("Thingtime Recovery rejected a non-GitHub release catalog URL.")
-            }
-            var request = URLRequest(url: pageURL)
+    public init() {
+        endpoint = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases?per_page=100")!
+        requestPage = { url in
+            var request = URLRequest(url: url)
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
             request.setValue("Thingtime-Recovery", forHTTPHeaderField: "User-Agent")
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 throw RecoveryError.operationFailed("GitHub releases are temporarily unavailable.")
             }
+            return (data, http)
+        }
+    }
+
+    init(endpoint: URL, requestPage: @escaping PageRequest) {
+        self.endpoint = endpoint
+        self.requestPage = requestPage
+    }
+
+    public func fetch(component: RecoveryComponent) async throws -> [RecoveryRelease] {
+        var url: URL? = endpoint
+        var visitedURLs = Set<URL>()
+        var collected: [GitHubRelease] = []
+        while let pageURL = url {
+            guard pageURL.scheme == "https", pageURL.host == "api.github.com" else {
+                throw RecoveryError.operationFailed("Thingtime Recovery rejected a non-GitHub release catalog URL.")
+            }
+            guard visitedURLs.insert(pageURL).inserted else {
+                throw RecoveryError.operationFailed("Thingtime Recovery detected a loop in GitHub's release catalog pagination.")
+            }
+            let (data, http) = try await requestPage(pageURL)
             collected += try JSONDecoder().decode([GitHubRelease].self, from: data)
             url = nextPage(from: http.value(forHTTPHeaderField: "Link"))
-            pages += 1
         }
         return collected.compactMap { release -> RecoveryRelease? in
             guard release.draft != true, let tag = release.tagName ?? release.name, !tag.isEmpty,

@@ -33,7 +33,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ThingtimeRecoveryCoreTests",
-            dependencies: ["ThingtimeRecoveryCore"],
+            dependencies: ["ThingtimeRecoveryCore", "ThingtimeRecovery"],
             path: "Tests/ThingtimeRecoveryCoreTests"
         )
     ],

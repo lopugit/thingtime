@@ -9,6 +9,8 @@ RELEASE_VERSION="${THINGTIME_RECOVERY_VERSION:?THINGTIME_RECOVERY_VERSION is req
 RELEASE_ROOT="${PACKAGE_ROOT}/release"
 NOTARY_ARCHIVE="${RELEASE_ROOT}/Thingtime-Recovery-notary-${RELEASE_VERSION}.zip"
 FINAL_ARCHIVE="${RELEASE_ROOT}/Thingtime-Recovery-App-Release-${RELEASE_VERSION}-macos-$(uname -m).zip"
+ARCHIVE_VERIFY_ROOT="$(mktemp -d "${CACHE_ROOT}/archive-verify.XXXXXX")"
+trap '/bin/rm -rf -- "${ARCHIVE_VERIFY_ROOT}"' EXIT
 
 case "${THINGTIME_RECOVERY_SIGNING_IDENTITY:-}" in
     "Developer ID Application:"*) ;;
@@ -31,5 +33,7 @@ mkdir -p "${RELEASE_ROOT}"
 /usr/bin/xcrun stapler staple "${APP_PATH}"
 "${SCRIPT_DIR}/verify-production-bundle.sh" "${APP_PATH}"
 /usr/bin/ditto -c -k --keepParent "${APP_PATH}" "${FINAL_ARCHIVE}"
+/usr/bin/ditto -x -k "${FINAL_ARCHIVE}" "${ARCHIVE_VERIFY_ROOT}"
+"${SCRIPT_DIR}/verify-production-bundle.sh" "${ARCHIVE_VERIFY_ROOT}/Thingtime Recovery.app"
 rm -f -- "${NOTARY_ARCHIVE}"
 echo "${FINAL_ARCHIVE}"

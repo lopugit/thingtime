@@ -126,3 +126,24 @@ test('local and production builders use the exact package-manager pin through Co
 		assert.doesNotMatch(source, /run\('pnpm'/u, script);
 	}
 });
+
+test('production packaging round-trips every updater ZIP through the signed-app verifier', () => {
+	const electronDir = path.resolve(__dirname, '..');
+	const builder = readFileSync(path.join(electronDir, 'scripts', 'build-production-app.mjs'), 'utf8');
+	const archiveVerifier = readFileSync(path.join(electronDir, 'scripts', 'verify-release-archive.mjs'), 'utf8');
+	assert.match(builder, /findReleaseArchives/u);
+	assert.match(builder, /verify-release-archive\.mjs/u);
+	assert.match(builder, /updater-compatible Thingtime ZIP/u);
+	assert.match(archiveVerifier, /ditto/u);
+	assert.match(archiveVerifier, /exactly one top-level Thingtime\.app/u);
+	assert.match(archiveVerifier, /verify-signed-app\.mjs/u);
+	assert.match(archiveVerifier, /finally\s*\{/u);
+});
+
+test('independent recovery release round-trips its ZIP before publication', () => {
+	const recoveryBuilder = readFileSync(path.resolve(__dirname, '..', '..', 'macos', 'ThingtimeRecovery', 'script', 'build-production-release.sh'), 'utf8');
+	assert.match(recoveryBuilder, /archive-verify/u);
+	assert.match(recoveryBuilder, /ditto -x -k/u);
+	assert.match(recoveryBuilder, /Thingtime Recovery\.app/u);
+	assert.match(recoveryBuilder, /verify-production-bundle\.sh/u);
+});
