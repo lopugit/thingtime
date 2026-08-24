@@ -303,6 +303,7 @@ describe('Commander settings deep links', () => {
     await waitFor(() => expect(screen.getByText('Full Disk Access granted')).toBeVisible());
     const fullDiskAccessCard = screen.getByRole('region', { name: 'macOS whole-volume access' });
     expect(fullDiskAccessCard).toBeVisible();
+    expect(fullDiskAccessCard.parentElement).toHaveClass('search-settings-stack');
     expect(fullDiskAccessCard.compareDocumentPosition(screen.getByText('Fuzzy and adaptive everywhere'))).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
