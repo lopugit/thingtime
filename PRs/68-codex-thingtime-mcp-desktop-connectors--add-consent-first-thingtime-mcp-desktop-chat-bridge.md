@@ -300,6 +300,15 @@ relational shape for later ThingtimeDB storage and platform chat views.
   regression coverage, and device-core validation enforce the closed envelope
   and fail-closed pairing boundary.
 
+### 2026-08-24 persistent resolution and refresh follow-up
+
+- Display mode changes now use `CGConfigureDisplayWithDisplayMode` inside the
+  existing permanent Core Graphics configuration transaction. They therefore
+  persist across a Thingtime Node restart just like display origin and
+  mirroring, while remaining limited to a current node-advertised display and
+  mode id. The paired-device manifest contracts are bumped to `1.6.0` for the
+  durable side-effect correction.
+
 ## Security and product boundaries
 
 MCP gives a host a standard way to invoke this server; it does not give the

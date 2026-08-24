@@ -52,8 +52,12 @@ public enum SystemDisplayConfiguration {
         guard let mode = (CGDisplayCopyAllDisplayModes(displayID, nil) as? [CGDisplayMode])?.first(where: { modeIdentifier($0) == modeID }) else {
             throw ThingtimeNodeError.policyDenied("That display mode is not currently available for the selected display.")
         }
-        guard CGDisplaySetDisplayMode(displayID, mode, nil) == .success else {
-            throw ThingtimeNodeError.policyDenied("macOS did not accept the selected display mode.")
+        // CGDisplaySetDisplayMode applies only while this process lives. A
+        // paired-computer setting must instead use the same permanent display
+        // configuration transaction as layout and mirroring, so it survives a
+        // Thingtime Node restart and matches the user's Displays preference.
+        try withConfiguration { configuration in
+            CGConfigureDisplayWithDisplayMode(configuration, displayID, mode, nil)
         }
     }
 

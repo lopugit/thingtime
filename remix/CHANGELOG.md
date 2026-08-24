@@ -17,6 +17,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Changed
+
+- **Paired-Mac display mode selections now persist**: resolution and refresh
+  changes use Core Graphics' permanent display-configuration transaction rather
+  than an app-lifetime mode setter, matching the existing layout and mirroring
+  persistence. The closed command shape, fresh approval boundary, and
+  advertised-mode validation are unchanged. Paired-device API contracts are
+  now `1.6.0`. — Codex (AI), 2026-08-24
+
 ### Added
 
 - **User-reviewed global availability policy proposals for paired Macs**:
