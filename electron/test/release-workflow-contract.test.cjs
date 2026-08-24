@@ -100,6 +100,11 @@ test('packaging contract ignores the complete pre-signed native app', () => {
 	);
 });
 
+test('mac packaging always emits the ZIP rollback artifact as well as the DMG', () => {
+	const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf8'));
+	assert.deepEqual(packageJson.build.mac.target, ['dmg', 'zip']);
+});
+
 test('mac packaging uses the adaptive Thingtime Icon Composer artwork', () => {
 	const electronDir = path.resolve(__dirname, '..');
 	const packageJson = JSON.parse(readFileSync(path.join(electronDir, 'package.json'), 'utf8'));
