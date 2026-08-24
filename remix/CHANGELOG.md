@@ -40,6 +40,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Independent native rollback launcher for Thingtime Desktop**: the signed
+  `Thingtime Recovery.app` now has its own SwiftUI version browser, a separately
+  signed installer helper, its own companion release ZIP, and a self-update
+  path. It shares the durable desktop cache at
+  `~/Library/Application Support/com.thingtime.desktop/release-cache` while
+  keeping recovery-launcher copies separate. It caches only verified bundle
+  identifiers and same-team signatures, closes a running desktop before an
+  atomic install, preserves the replaced bundle, and rejects a stale or
+  malformed GitHub asset without changing the installed app. The PR release
+  workflow now signs, notarizes, validates, and publishes the companion asset
+  alongside Electron after the same trusted-source gate. — Codex (AI),
+  2026-08-24
+
 - **Signed Desktop PR releases and recovery-first version switching**: an
   owner-approved, same-repository PR carrying the `desktop-release` label can
   now publish a Developer ID-signed, notarized GitHub prerelease whose SemVer

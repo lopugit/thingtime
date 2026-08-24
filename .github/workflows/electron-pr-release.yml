@@ -151,6 +151,9 @@ jobs:
           swift test --package-path macos/ThingtimeNode
           swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNode
           swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNodeBridge
+          swift test --package-path macos/ThingtimeRecovery
+          swift build --package-path macos/ThingtimeRecovery --configuration release --product ThingtimeRecovery
+          swift build --package-path macos/ThingtimeRecovery --configuration release --product ThingtimeRecoveryInstaller
           corepack pnpm --dir electron test
 
       - name: Import Developer ID and notarization credentials
@@ -199,7 +202,13 @@ jobs:
 
       - name: Build signed and notarized Electron release
         if: steps.existing_release.outputs.exists != 'true'
-        run: corepack pnpm --dir electron run dist
+        run: |
+          set -euo pipefail
+          corepack pnpm --dir electron run dist
+          THINGTIME_RECOVERY_SIGNING_IDENTITY="${THINGTIME_ELECTRON_SIGNING_IDENTITY}" \
+          THINGTIME_RECOVERY_VERSION="${THINGTIME_ELECTRON_RELEASE_VERSION}" \
+          THINGTIME_RECOVERY_BUILD_NUMBER="${GITHUB_RUN_NUMBER}" \
+          macos/ThingtimeRecovery/script/build-production-release.sh
 
       - name: Collect updater-compatible release assets
         if: steps.existing_release.outputs.exists != 'true'
@@ -209,8 +218,10 @@ jobs:
           shopt -s nullglob
           raw_assets=(electron/release/*.dmg electron/release/*.zip electron/release/*.pkg)
           zip_assets=(electron/release/*.zip)
+          recovery_assets=(macos/ThingtimeRecovery/release/Thingtime-Recovery-App-Release-*.zip)
           test "${#raw_assets[@]}" -gt 0
           test "${#zip_assets[@]}" -gt 0
+          test "${#recovery_assets[@]}" -eq 1
           asset_dir="electron/release-upload"
           rm -rf "${asset_dir}"
           mkdir -p "${asset_dir}"
@@ -221,6 +232,7 @@ jobs:
             cp "${asset}" "${destination}"
             index=$((index + 1))
           done
+          cp "${recovery_assets[0]}" "${asset_dir}/$(basename "${recovery_assets[0]}")"
 
       - name: Generate PR release notes
         if: steps.existing_release.outputs.exists != 'true'
@@ -238,7 +250,8 @@ jobs:
             echo "- Pull request: #${PR_NUMBER}"
             echo "- Branch: \`${PR_REF}\`"
             echo "- Commit: \`${PR_SHA}\`"
-            echo "- Update asset: the attached macOS ZIP is verified, cached, launchable, and installable by Thingtime's recovery updater."
+            echo "- Desktop update asset: the attached Thingtime macOS ZIP is verified, cached, launchable, and installable by Thingtime's recovery updater."
+            echo "- Recovery asset: the attached Thingtime Recovery ZIP is a separately signed, notarized native app which can update itself and restore cached desktop versions."
           } > electron-release-notes.md
 
       - name: Publish prerelease

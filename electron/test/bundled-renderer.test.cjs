@@ -74,6 +74,7 @@ test('desktop updater exposes a signed release catalog, cache recovery, and trus
 		assert.match(mainSource, new RegExp(`thingtime-desktop:${channel}`, 'u'));
 	}
 	assert.match(mainSource, /verifyProductionReleaseApp/u);
+	assert.match(mainSource, /sharedReleaseCacheRoot\(app\.getPath\('home'\)\)/u);
 	assert.match(mainSource, /ELECTRON_RUN_AS_NODE: '1'/u);
 	assert.match(mainSource, /scheduleCachedReleaseHandoff\('launch', entry\)/u);
 	assert.match(mainSource, /action, cacheRoot: updateCacheRoot\(\), format: 1/u);

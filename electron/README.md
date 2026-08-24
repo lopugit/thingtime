@@ -183,7 +183,8 @@ The same settings surface includes **Thingtime versions & recovery**. It follows
 every public GitHub Releases page returned by the API (with loop detection),
 searches by SemVer, PR, branch, or commit, and accepts only a GitHub-hosted
 macOS `.zip` asset. Before a version can be launched or installed, Thingtime
-extracts it into `~/Library/Application Support/Thingtime/release-cache/`,
+extracts it into
+`~/Library/Application Support/com.thingtime.desktop/release-cache/`,
 checks the full nested app for its Developer ID signature, hardened runtime,
 notarization staple, exact Thingtime bundle IDs, and matching signed native
 node. A failed download or verification never changes the installed app.
@@ -203,6 +204,33 @@ new remote versions waits for GitHub to return.
 Auto-check remains stored at
 `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled` and defaults to
 on; it is a notification preference, never permission to install silently.
+
+### Standalone Thingtime Recovery
+
+`macos/ThingtimeRecovery` builds **Thingtime Recovery.app**, a small native
+SwiftUI application which stays separate from every Electron app version. It
+reads the shared desktop cache above, keeps its own verified launcher copies in
+`~/Library/Application Support/com.thingtime.desktop/recovery-cache`, and uses
+a separately signed helper to wait for the current app to exit before atomically
+switching either app. Replacing Thingtime Desktop saves the current verified
+desktop bundle first; replacing Recovery saves the current launcher first.
+
+The native app queries public GitHub Releases and distinguishes
+`Thingtime-Electron-App-Release-*.zip` from
+`Thingtime-Recovery-App-Release-*.zip`; Electron will never mistake a recovery
+asset for a desktop update. Build and install the local Apple Development copy
+with:
+
+```sh
+swift test --package-path macos/ThingtimeRecovery
+macos/ThingtimeRecovery/script/build_and_run.sh --verify
+```
+
+Production CI passes its imported Developer ID identity and notarization API
+key to `macos/ThingtimeRecovery/script/build-production-release.sh`. That
+script signs the helper before the outer bundle, notarizes a ZIP, staples the
+app, then runs strict codesign, Gatekeeper, and stapler verification before it
+emits the companion release ZIP. No recovery archive is published unsigned.
 
 ## GitHub Releases
 
@@ -251,8 +279,9 @@ be same-repository, opened by the repository owner, and explicitly carry the
 `desktop-release` label; alternatively the owner may use **Run workflow** with
 the PR number. The workflow checks out that exact head commit, tests it before
 loading credentials, imports the Developer ID/notarization secrets only for the
-approved source, requires a macOS ZIP asset for recovery updates, and publishes
-a GitHub prerelease. Its version is SemVer and includes all provenance, for
+approved source, builds both the Electron ZIP and independently signed,
+notarized Recovery ZIP, and publishes a GitHub prerelease. Its version is
+SemVer and includes all provenance, for
 example `0.1.0-pr.68.codex-thingtime-mcp-desktop-connectors.gabcdef123456`.
 The PR number, normalized branch, and full commit are also recorded in the
 release notes. GitHub manual dispatch requires the workflow to exist on the

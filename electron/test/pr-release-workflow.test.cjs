@@ -21,7 +21,10 @@ test('signed PR release workflow gates signing on a maintainer-approved same-rep
 	assert.match(workflow, /npm ci --prefix MCP/u);
 	assert.doesNotMatch(workflow, /corepack pnpm --dir MCP install --frozen-lockfile/u);
 	assert.match(workflow, /corepack pnpm --dir electron run dist/u);
+	assert.match(workflow, /swift test --package-path macos\/ThingtimeRecovery/u);
+	assert.match(workflow, /macos\/ThingtimeRecovery\/script\/build-production-release\.sh/u);
 	assert.match(workflow, /test "\$\{#zip_assets\[@\]\}" -gt 0/u);
+	assert.match(workflow, /recovery_assets=\(macos\/ThingtimeRecovery\/release\/Thingtime-Recovery-App-Release-\*\.zip\)/u);
 	assert.match(workflow, /Remove ephemeral signing material/u);
 	assert.doesNotMatch(workflow, /dist:unsigned/u);
 	assert.match(productionBuilder, /THINGTIME_ELECTRON_RELEASE_VERSION/u);

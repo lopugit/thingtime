@@ -17,6 +17,7 @@ const {
 	removeCachedBundle,
 	releaseCatalog
 } = require('./lib/release-cache.cjs');
+const { migrateLegacyReleaseCache, sharedReleaseCacheRoot } = require('./lib/shared-release-cache.cjs');
 const {
 	fetchGithubReleaseCatalog: fetchAllGithubReleasePages,
 	isAllowedGithubReleaseAssetUrl,
@@ -660,7 +661,13 @@ function downloadFile(url, targetPath, options = {}, redirectCount = 0) {
 }
 
 function updateCacheRoot() {
-  return path.join(app.getPath('userData'), 'release-cache');
+	const sharedRoot = sharedReleaseCacheRoot(app.getPath('home'));
+	try {
+		migrateLegacyReleaseCache({ legacyRoot: path.join(app.getPath('userData'), 'release-cache'), sharedRoot });
+	} catch {
+		// A malformed old cache is never allowed to prevent a clean new cache.
+	}
+	return sharedRoot;
 }
 
 function publicCachedBundle(entry) {

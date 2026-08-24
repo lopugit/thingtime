@@ -921,3 +921,31 @@ an offline database or offline conflict resolution layer.
   correctly blocked before an unsigned or unnotarized artifact can be built;
   configuring those six repository secrets is the only remaining release
   prerequisite before re-dispatching the workflow.
+
+### Independent Recovery launcher follow-up (2026-08-24)
+
+- Added `macos/ThingtimeRecovery`, a native SwiftUI `Thingtime Recovery.app`
+  with stable identifier `com.thingtime.desktop.recovery`. It can query the
+  public GitHub release catalog, cache separately named Desktop and Recovery
+  ZIPs, browse the local cache without GitHub, launch an old desktop bundle,
+  atomically install a selected desktop version, and update itself without
+  loading an Electron app.
+- Desktop rollback entries are now held at the stable shared location
+  `~/Library/Application Support/com.thingtime.desktop/release-cache`; recovery
+  launcher entries live beside it in `recovery-cache`. The Electron main
+  process carries a regular legacy per-userData cache forward non-destructively
+  the first time it reaches the new shared location. Electron deliberately
+  rejects `Thingtime-Recovery-App-Release-*.zip` as a desktop update asset.
+- The signed native installer only accepts strict cache layouts, regular
+  directories, the expected bundle identifier, and the same signing team. A
+  production Recovery app adds Developer ID, Gatekeeper, and notarization-staple
+  requirements. It asks the running target app to quit, retains the replaced
+  verified bundle before atomic replacement, and leaves the target unchanged on
+  verification or handoff failure.
+- Local acceptance built the app in a clean Library/Caches stage, signed both
+  nested installer and outer app with the stable Apple Development requirement,
+  installed and re-verified `~/Applications/Thingtime Recovery.app`, inspected
+  its release/cached-recovery UI, deliberately rejected an invalid historical
+  GitHub desktop asset, and completed an actual signed Recovery self-replace /
+  relaunch. Production publication remains correctly blocked on the existing
+  Developer ID + notarization credential prerequisite.

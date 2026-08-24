@@ -18,6 +18,9 @@ follows.
    swift test --package-path macos/ThingtimeNode
    swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNode
    swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNodeBridge
+   swift test --package-path macos/ThingtimeRecovery
+   swift build --package-path macos/ThingtimeRecovery --configuration release --product ThingtimeRecovery
+   swift build --package-path macos/ThingtimeRecovery --configuration release --product ThingtimeRecoveryInstaller
    corepack pnpm --dir electron test
    ```
 
@@ -32,8 +35,15 @@ follows.
    recommended CI set is `APPLE_API_KEY`, `APPLE_API_KEY_ID`,
    `APPLE_API_ISSUER`, and `APPLE_TEAM_ID`. Keep all values in GitHub Actions
    secrets; never write certificate or key content to the repository or logs.
-7. Publish only after `dist` has completed its strict signature,
-   `spctl --assess`, and `xcrun stapler validate` checks.
+7. After Electron `dist`, run
+   `macos/ThingtimeRecovery/script/build-production-release.sh` with the same
+   imported Developer ID identity and App Store Connect API-key environment.
+   It signs the standalone recovery app/helper, notarizes a ZIP, staples the
+   app, and runs strict signature, `spctl --assess`, and `xcrun stapler
+   validate` checks before emitting its companion ZIP.
+8. Publish only after both the Electron and Recovery artifacts pass their
+   strict signature, Gatekeeper, and stapler checks. Never publish an unsigned
+   recovery fallback.
 
 ## Secret mapping
 

@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { mkdtemp, mkdir, readdir, readFile, rm, writeFile } = require('node:fs/promises');
+const { mkdtemp, mkdir, readdir, readFile, rm, symlink, writeFile } = require('node:fs/promises');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const os = require('node:os');
@@ -15,8 +15,37 @@ const {
 	releaseCatalog,
 	selectCacheableAsset
 } = require('../lib/release-cache.cjs');
+const { migrateLegacyReleaseCache, recoveryApplicationCacheRoot, sharedReleaseCacheRoot } = require('../lib/shared-release-cache.cjs');
 
 const verified = async () => undefined;
+
+test('desktop and standalone recovery use stable version-independent Application Support cache roots', () => {
+	assert.equal(
+		sharedReleaseCacheRoot('/Users/example'),
+		'/Users/example/Library/Application Support/com.thingtime.desktop/release-cache'
+	);
+	assert.equal(
+		recoveryApplicationCacheRoot('/Users/example'),
+		'/Users/example/Library/Application Support/com.thingtime.desktop/recovery-cache'
+	);
+	assert.throws(() => sharedReleaseCacheRoot('relative-home'), /absolute home directory/u);
+});
+
+test('the first shared-cache lookup non-destructively carries forward a regular legacy Electron cache', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'thingtime-legacy-release-cache-'));
+	try {
+		const legacy = path.join(root, 'legacy');
+		const shared = path.join(root, 'shared');
+		await mkdir(path.join(legacy, 'bundles', 'fixture-abcdef123456'), { recursive: true });
+		await writeFile(path.join(legacy, 'manifest.json'), '{"format":1,"entries":[]}\n');
+		assert.equal(migrateLegacyReleaseCache({ legacyRoot: legacy, sharedRoot: shared }), true);
+		assert.equal(migrateLegacyReleaseCache({ legacyRoot: legacy, sharedRoot: shared }), false);
+		assert.equal((await readFile(path.join(shared, 'manifest.json'), 'utf8')).includes('"format":1'), true);
+		assert.equal((await readdir(path.join(legacy, 'bundles'))).length, 1);
+	} finally {
+		await rm(root, { force: true, recursive: true });
+	}
+});
 
 test('release catalog preserves PR SemVer provenance and only selects GitHub-hosted macOS ZIP assets', () => {
 	const asset = selectCacheableAsset([
@@ -26,6 +55,7 @@ test('release catalog preserves PR SemVer provenance and only selects GitHub-hos
 	assert.equal(asset.name, 'Thingtime-macos-arm64.zip');
 	assert.equal(asset.size, 123);
 	assert.equal(selectCacheableAsset([{ name: 'Thingtime.zip', browser_download_url: 'https://example.test/Thingtime.zip' }]), null);
+	assert.equal(selectCacheableAsset([{ name: 'Thingtime-Recovery-App-Release-0.1.0-macos-arm64.zip', browser_download_url: 'https://github.com/lopugit/thingtime/releases/download/v1/Thingtime-Recovery-App-Release-0.1.0-macos-arm64.zip' }]), null);
 
 	const catalog = releaseCatalog(
 		[
@@ -124,6 +154,22 @@ test('stale cache metadata does not consume recovery slots and a failed cache wr
 			/injected verification failure/u
 		);
 		assert.deepEqual(await readdir(path.join(cacheRoot, 'bundles')), [cached.key]);
+	} finally {
+		await rm(root, { force: true, recursive: true });
+	}
+});
+
+test('cached bundle discovery rejects a symbolic-link bundle directory even when its final app directory looks regular', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'thingtime-release-cache-'));
+	try {
+		const cacheRoot = path.join(root, 'cache');
+		const key = 'outside-abcdef123456';
+		const outside = path.join(root, 'outside');
+		await mkdir(path.join(outside, 'Thingtime.app'), { recursive: true });
+		await mkdir(path.join(cacheRoot, 'bundles'), { recursive: true });
+		await symlink(outside, path.join(cacheRoot, 'bundles', key));
+		await writeFile(path.join(cacheRoot, 'manifest.json'), `${JSON.stringify({ format: 1, entries: [{ key, tag: 'tampered' }] })}\n`);
+		assert.equal(getCachedBundles(cacheRoot).length, 0);
 	} finally {
 		await rm(root, { force: true, recursive: true });
 	}
