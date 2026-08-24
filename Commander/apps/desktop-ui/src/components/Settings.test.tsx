@@ -23,7 +23,18 @@ vi.mock('../lib/api.js', () => ({
       kinds: [],
       commands: { count: 0 },
       automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 30 },
+      customTimeoutMs: null,
       resourceLimits: DEFAULT_INDEXING_RESOURCE_LIMITS,
+      timing: { samples: 2, averageDurationMs: 12_500, lastDurationMs: 13_000, longestDurationMs: 13_000 },
+      timeoutAttempts: [
+        {
+          id: 'timeout-1',
+          scope: 'files',
+          occurredAtMs: Date.now() - 1_000,
+          timeoutMs: 90_000,
+          message: 'Index Files timed out after 90 seconds. Increase the custom index timeout if this scan needs longer.',
+        },
+      ],
       lastRunResources: {
         effective: {
           logicalCpuCount: 8,
@@ -65,7 +76,10 @@ vi.mock('../lib/api.js', () => ({
         kinds: [],
         commands: { count: 0 },
         automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 30 },
+        customTimeoutMs: null,
         resourceLimits: DEFAULT_INDEXING_RESOURCE_LIMITS,
+        timing: { samples: 0 },
+        timeoutAttempts: [],
       },
     })),
   },
@@ -264,6 +278,10 @@ describe('Commander settings deep links', () => {
     expect(screen.getByRole('spinbutton', { name: 'Scanner threads' })).toHaveValue(2);
     expect(screen.getByRole('spinbutton', { name: 'Max CPU' })).toHaveValue(60);
     expect(screen.getByRole('spinbutton', { name: 'Maximum index entries' })).toHaveValue(null);
+    expect(screen.getByRole('textbox', { name: 'Custom index timeout in milliseconds' })).toHaveAttribute(
+      'inputmode',
+      'numeric',
+    );
     expect(screen.getByRole('checkbox', { name: 'Include hidden files' })).toBeChecked();
     await waitFor(() =>
       expect(screen.getByLabelText('Last index resource usage')).toHaveTextContent(
@@ -271,6 +289,8 @@ describe('Commander settings deep links', () => {
       ),
     );
     expect(screen.getByLabelText('Search index database size')).toHaveTextContent('Database 700 MB');
+    expect(screen.getByLabelText('Recent index timing')).toHaveTextContent(/12\.5 s average across 2 successful runs/i);
+    expect(screen.getByLabelText('Timed out index attempts')).toHaveTextContent(/index files timed out after 90 seconds/i);
 
     fireEvent.click(screen.getByRole('button', { name: 'Files' }));
     await waitFor(() => expect(api.indexNow).toHaveBeenCalledWith('files'));
@@ -302,5 +322,14 @@ describe('Commander settings deep links', () => {
     expect(commander.saveSettings).toHaveBeenCalledWith(
       expect.objectContaining({ indexing: expect.objectContaining({ maxEntries: 750_000 }) }),
     );
+
+    const timeout = screen.getByRole('textbox', { name: 'Custom index timeout in milliseconds' });
+    fireEvent.change(timeout, { target: { value: '900000' } });
+    fireEvent.blur(timeout);
+    expect(commander.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ indexing: expect.objectContaining({ customTimeoutMs: 900_000 }) }),
+    );
+    fireEvent.change(timeout, { target: { value: '900000ms' } });
+    expect(timeout).toHaveValue('900000');
   });
 });

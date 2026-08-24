@@ -151,6 +151,7 @@ describe('normalizeIndexingSettings', () => {
       ],
       refreshIntervalMinutes: 5,
       maxEntries: 99_000_000,
+      customTimeoutMs: null,
       resourceLimits: {
         maxThreads: 64,
         maxParallelism: 1,
@@ -184,6 +185,15 @@ describe('normalizeIndexingSettings', () => {
       maxCpuPercent: 42,
       maxMemoryMiB: 768,
     });
+  });
+
+  it('keeps a positive custom timeout without imposing a product cap', () => {
+    expect(normalizeIndexingSettings({ customTimeoutMs: Number.MAX_SAFE_INTEGER }).customTimeoutMs).toBe(
+      Number.MAX_SAFE_INTEGER,
+    );
+    expect(normalizeIndexingSettings({ customTimeoutMs: 900_000 }).customTimeoutMs).toBe(900_000);
+    expect(normalizeIndexingSettings({ customTimeoutMs: 0 }).customTimeoutMs).toBeNull();
+    expect(normalizeIndexingSettings({ customTimeoutMs: 2.5 }).customTimeoutMs).toBeNull();
   });
 
   it('adds the noindex default to the previous built-in ignore set', () => {

@@ -93,4 +93,5 @@ public interface INativeBridge
     Task UnlockCredentialAsync(CredentialKey key);
     Task DeleteCredentialAsync(CredentialKey key);
     Task<SystemMetricsSnapshot> GetSystemMetricsAsync();
+    Task ShowNotificationAsync(string id, string title, string body);
 }

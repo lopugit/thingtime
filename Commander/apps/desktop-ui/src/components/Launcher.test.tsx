@@ -522,7 +522,10 @@ describe('Launcher keyboard navigation', () => {
             kinds: [],
             commands: { count: 20 },
             automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 360 },
+            customTimeoutMs: null,
             resourceLimits: DEFAULT_SETTINGS.indexing.resourceLimits,
+            timing: { samples: 0 },
+            timeoutAttempts: [],
             progress: {
               scope: 'files',
               label: 'Indexing Files',

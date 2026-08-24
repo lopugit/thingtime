@@ -61,7 +61,10 @@ describe('useCommander launcher sessions', () => {
       kinds: [],
       commands: { count: 0 },
       automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 360 },
+      customTimeoutMs: null,
       resourceLimits: DEFAULT_SETTINGS.indexing.resourceLimits,
+      timing: { samples: 0 },
+      timeoutAttempts: [],
     });
     vi.mocked(api.addRecentSearch).mockImplementation(async (query, command) => ({
       recentSearches: [

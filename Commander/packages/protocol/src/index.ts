@@ -75,7 +75,7 @@ export const COMMAND_SHORTCUT_LIMIT = 256;
 export const INDEXING_ROOT_LIMIT = 32;
 export const INDEXING_IGNORE_RULE_LIMIT = 256;
 export const INDEXING_MAX_ENTRIES_LIMIT = Number.MAX_SAFE_INTEGER;
-export const INDEXING_SETTINGS_VERSION = 3 as const;
+export const INDEXING_SETTINGS_VERSION = 4 as const;
 export const INDEXING_MAX_THREADS_LIMIT = 64;
 export const INDEXING_MAX_PARALLELISM_LIMIT = 64;
 export const INDEXING_MAX_OPEN_DIRECTORIES_LIMIT = 256;
@@ -83,6 +83,8 @@ export const INDEXING_MIN_CPU_PERCENT = 5;
 export const INDEXING_MAX_CPU_PERCENT = 100;
 export const INDEXING_MIN_MEMORY_MIB = 32;
 export const INDEXING_MAX_MEMORY_MIB = 131_072;
+export const INDEXING_TIMEOUT_ATTEMPT_LIMIT = 20;
+export const INDEXING_TIMING_SAMPLE_LIMIT = 20;
 export const CALCULATOR_MIN_DECIMAL_PLACES = 0;
 export const CALCULATOR_MAX_DECIMAL_PLACES = 14;
 
@@ -174,6 +176,7 @@ export const DEFAULT_INDEXING_SETTINGS: IndexingSettings = {
   ],
   refreshIntervalMinutes: 6 * 60,
   maxEntries: null,
+  customTimeoutMs: null,
   resourceLimits: { ...DEFAULT_INDEXING_RESOURCE_LIMITS },
 };
 
@@ -690,6 +693,12 @@ export function normalizeIndexingSettings(value: unknown): IndexingSettings {
           : DEFAULT_INDEXING_SETTINGS.customIgnores.map((rule) => ({ ...rule })),
     refreshIntervalMinutes,
     maxEntries,
+    customTimeoutMs:
+      candidate.customTimeoutMs === null
+        ? null
+        : Number.isSafeInteger(candidate.customTimeoutMs) && candidate.customTimeoutMs! > 0
+          ? candidate.customTimeoutMs!
+          : DEFAULT_INDEXING_SETTINGS.customTimeoutMs,
     resourceLimits: normalizeIndexingResourceLimits(candidate.resourceLimits),
   };
 }
@@ -801,6 +810,8 @@ export interface IndexingSettings {
   customIgnores: IndexIgnoreRule[];
   refreshIntervalMinutes: number;
   maxEntries: number | null;
+  /** Blank keeps Commander’s automatic timeout; a positive safe integer is milliseconds. */
+  customTimeoutMs: number | null;
   resourceLimits: IndexingResourceLimits;
 }
 
@@ -831,6 +842,27 @@ export interface IndexingResourceUsage {
   memoryChecks: number;
 }
 
+export interface IndexRunTiming {
+  scope: IndexScope;
+  completedAtMs: number;
+  durationMs: number;
+}
+
+export interface IndexTimingSummary {
+  samples: number;
+  averageDurationMs?: number;
+  lastDurationMs?: number;
+  longestDurationMs?: number;
+}
+
+export interface IndexTimeoutAttempt {
+  id: string;
+  scope: IndexScope;
+  occurredAtMs: number;
+  timeoutMs: number;
+  message: string;
+}
+
 export interface IndexKindStatus {
   kind: IndexKind;
   count: number;
@@ -853,8 +885,11 @@ export interface IndexingStatus {
     applicationsMinutes: number;
     filesystemMinutes: number;
   };
+  customTimeoutMs: number | null;
   resourceLimits: IndexingResourceLimits;
   lastRunResources?: IndexingResourceUsage;
+  timing: IndexTimingSummary;
+  timeoutAttempts: IndexTimeoutAttempt[];
   progress?: IndexingProgress;
   message?: string;
 }
@@ -1066,6 +1101,7 @@ export interface NativeRequest<T = unknown> {
     | 'filesystem.trash'
     | 'filesystem.delete'
     | 'system.metrics'
+    | 'notification.show'
     | 'settings.open'
     | 'application.open'
     | 'application.pasteTarget'

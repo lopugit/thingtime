@@ -12,11 +12,13 @@ import {
   type IndexResourceUsage,
   type IndexStatus,
 } from '@commander/filesystem-indexer';
+import { INDEXING_TIMEOUT_ATTEMPT_LIMIT, INDEXING_TIMING_SAMPLE_LIMIT } from '@commander/protocol';
 import type {
   CommanderSettings,
   IndexScope,
   IndexingSettings,
   IndexingStatus,
+  IndexRunTiming,
   Platform,
   SearchItem,
 } from '@commander/protocol';
@@ -72,6 +74,9 @@ export class IndexingService {
   #lastFallbackApplicationsAtMs: number | undefined;
   #commandCount = 0;
   #lastRunResources: IndexResourceUsage | undefined;
+  #recentTimings: IndexRunTiming[] = [];
+  #timeoutAttempts: NonNullable<IndexingStatus['timeoutAttempts']> = [];
+  #timeoutSequence = 0;
   #lastStatus: IndexStatus | undefined;
   #lastStatusReadAtMs = 0;
   #progress: IndexingStatus['progress'];
@@ -254,8 +259,11 @@ export class IndexingService {
         applicationsMinutes: APPLICATION_REFRESH_MINUTES,
         filesystemMinutes: this.#settings.refreshIntervalMinutes,
       },
+      customTimeoutMs: this.#settings.customTimeoutMs,
       resourceLimits: structuredClone(this.#settings.resourceLimits),
       ...(this.#lastRunResources ? { lastRunResources: structuredClone(this.#lastRunResources) } : {}),
+      timing: timingSummary(this.#recentTimings),
+      timeoutAttempts: structuredClone(this.#timeoutAttempts),
       ...(this.#progress ? { progress: structuredClone(this.#progress) } : {}),
       ...(this.#message ? { message: this.#message } : {}),
     };
@@ -353,18 +361,42 @@ export class IndexingService {
   async #writeIndex(configuration: IndexConfiguration): Promise<IndexReport> {
     const writer = this.#writer;
     if (!writer) throw new Error('The bundled Rust filesystem indexer is unavailable');
+    const timeoutMs =
+      this.#settings.customTimeoutMs ??
+      indexTimeoutMs(configuration.resourceLimits?.maxCpuPercent, configuration.maxEntries == null);
     try {
       const report = await writer.index(
         configuration,
-        indexTimeoutMs(configuration.resourceLimits?.maxCpuPercent, configuration.maxEntries == null),
+        timeoutMs,
         (progress) => this.#recordProgress(progress),
       );
       this.#lastRunResources = report.resources;
+      this.#recentTimings = [
+        {
+          scope: this.#progress?.scope ?? 'all',
+          completedAtMs: report.completedAtMs,
+          durationMs: report.durationMs,
+        },
+        ...this.#recentTimings,
+      ].slice(0, INDEXING_TIMING_SAMPLE_LIMIT);
       this.#lastStatus = structuredClone(report.status);
       this.#lastStatusReadAtMs = Date.now();
       return report;
     } catch (error) {
       if (!errorMessage(error).includes('timed out')) throw error;
+      const scope = this.#progress?.scope ?? 'all';
+      const message = `Index ${indexScopeLabel(scope)} timed out after ${formatTimeout(timeoutMs)}. Increase the custom index timeout if this scan needs longer.`;
+      this.#timeoutAttempts = [
+        {
+          id: `index-timeout-${Date.now()}-${++this.#timeoutSequence}`,
+          scope,
+          occurredAtMs: Date.now(),
+          timeoutMs,
+          message,
+        },
+        ...this.#timeoutAttempts,
+      ].slice(0, INDEXING_TIMEOUT_ATTEMPT_LIMIT);
+      this.#message = message;
       if (this.#writer === writer) {
         this.#writer = undefined;
         await writer.close();
@@ -378,7 +410,7 @@ export class IndexingService {
       }
       if (this.#platform === 'macos') {
         throw new Error(
-          'Filesystem indexing was stopped after macOS blocked a folder. Grant Commander Full Disk Access or narrow the configured roots, then run Index Files or Index Folders again.',
+          `${message} If it appears stuck rather than slow, grant Commander Full Disk Access or narrow the configured roots before retrying.`,
         );
       }
       throw error;
@@ -497,6 +529,33 @@ export class IndexingService {
       }
     }
   }
+}
+
+function timingSummary(timings: readonly IndexRunTiming[]): IndexingStatus['timing'] {
+  if (!timings.length) return { samples: 0 };
+  const durations = timings.map((timing) => timing.durationMs);
+  return {
+    samples: durations.length,
+    averageDurationMs: Math.round(durations.reduce((total, value) => total + value, 0) / durations.length),
+    lastDurationMs: durations[0]!,
+    longestDurationMs: Math.max(...durations),
+  };
+}
+
+function indexScopeLabel(scope: IndexScope): string {
+  return {
+    all: 'Everything',
+    applications: 'Apps',
+    commands: 'Commands',
+    files: 'Files',
+    directories: 'Folders',
+  }[scope];
+}
+
+function formatTimeout(value: number): string {
+  if (value < 1_000) return `${value} ms`;
+  if (value < 60_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')} seconds`;
+  return `${(value / 60_000).toFixed(1).replace(/\.0$/, '')} minutes`;
 }
 
 export function indexTimeoutMs(maxCpuPercent = 100, unlimited = false): number {
