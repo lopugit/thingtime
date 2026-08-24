@@ -68,7 +68,10 @@ export const getMongoStatus = async (): Promise<MongoConnectionStatus> => {
 		await db.command({ ping: 1 });
 		const pingMs = Date.now() - start;
 
-		const collections = (await db.listCollections().toArray()).length;
+		// nameOnly: the server returns just names instead of the full metadata
+		// document per collection (options, info, idIndex spec). Only the count
+		// is used, and the cursor is already materialised with toArray().
+		const collections = (await db.listCollections({}, { nameOnly: true }).toArray()).length;
 		const hello = await db.command({ hello: 1 }).catch(() => null);
 
 		return {
