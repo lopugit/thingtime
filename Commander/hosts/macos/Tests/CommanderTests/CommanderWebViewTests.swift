@@ -5,6 +5,28 @@ import XCTest
 
 @MainActor
 final class CommanderWebViewTests: XCTestCase {
+  func testNativeOAuthCallbackOnlyAcceptsTheRegisteredCommanderRoute() {
+    XCTAssertTrue(
+      CommanderOAuthCallback.isValid(
+        URL(string: "com.thingtime.commander://oauth/callback?code=code-value&state=0123456789abcdef")!
+      )
+    )
+    XCTAssertTrue(
+      CommanderOAuthCallback.isValid(
+        URL(string: "com.thingtime.commander://oauth/callback?error=access_denied&state=0123456789abcdef")!
+      )
+    )
+    for raw in [
+      "commander://oauth/callback?code=code-value&state=0123456789abcdef",
+      "com.thingtime.commander://other/callback?code=code-value&state=0123456789abcdef",
+      "com.thingtime.commander://oauth/callback?code=code-value",
+      "com.thingtime.commander://oauth/callback?code=one&code=two&state=0123456789abcdef",
+      "com.thingtime.commander://oauth/callback?code=code-value&state=0123456789abcdef#fragment",
+    ] {
+      XCTAssertFalse(CommanderOAuthCallback.isValid(URL(string: raw)!))
+    }
+  }
+
   func testKeychainEnvironmentParserRejectsAmbiguousKeys() {
     XCTAssertEqual(
       KeychainStore.environment(from: "https://dev.thingtime.com|ttapp_development|user-1"),

@@ -1,7 +1,7 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { appAllowsOrigin, appIsRevoked, findAppByClientId } from '~/api/utils/apps/apps';
+import { appAllowsDesktopRedirect, appIsRevoked, findAppByClientId } from '~/api/utils/apps/apps';
 import { issueDesktopAuthorizationCode } from '~/api/utils/apps/desktopOAuth';
 import {
 	appendDesktopAuthorizationResult,
@@ -37,7 +37,7 @@ export const action = async ({ request }: { request: Request }) => {
 		return json(
 			{
 				ok: false,
-				error: 'redirectUri must be an HTTP 127.0.0.1 or [::1] URL with an explicit unprivileged port and no query or fragment'
+				error: 'redirectUri must be an exact loopback callback or a registered reverse-domain native callback URI'
 			},
 			{ status: 400 }
 		);
@@ -65,8 +65,8 @@ export const action = async ({ request }: { request: Request }) => {
 	const app = await findAppByClientId(clientId);
 	if (!app) return json({ ok: false, error: 'App not found' }, { status: 404 });
 	if (appIsRevoked(app)) return json({ ok: false, error: 'This app has been suspended by an administrator' }, { status: 403 });
-	if (!appAllowsOrigin(app, redirect.origin)) {
-		return json({ ok: false, error: 'This loopback origin is not on the app’s allowlist' }, { status: 403 });
+	if (!appAllowsDesktopRedirect(app, redirect)) {
+		return json({ ok: false, error: 'This desktop callback is not registered on the app' }, { status: 403 });
 	}
 
 	const issued = await issueDesktopAuthorizationCode(user.id, {

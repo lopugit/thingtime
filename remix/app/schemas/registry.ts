@@ -1741,6 +1741,7 @@ const appSchema: ThingtimeSchema = {
       max: MAX_APP_ORIGINS,
       description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}. One * wildcard is allowed in the leftmost host label for preview deploys (e.g. https://myapp-*-myteam.vercel.app); it never crosses a dot. Per the Public Suffix List: on multi-tenant hosts (vercel.app, netlify.app, …) the star label must END with your platform-appended slug, and public suffixes (co.uk, …) take no wildcard at all.`
     },
+    { name: 'nativeRedirectUris', type: 'string[]', required: false, max: MAX_APP_ORIGINS, description: 'Exact installed-app OAuth callbacks, e.g. com.example.app://oauth/callback. Separate from web origins; no wildcards.' },
     { name: 'subscriptionTier', type: 'string', required: true, description: 'Stable app storage tier id.' },
     { name: 'subscriptionTierVersionId', type: 'id', required: true, description: 'Immutable subscription-tier revision assigned to this app.' },
     { name: 'subscriptionTierVersion', type: 'number', required: true, min: 1, description: 'Revision number of the assigned tier.' },
@@ -1774,6 +1775,7 @@ const appSchema: ThingtimeSchema = {
     clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
     name: 'Rainbow Notes',
     origins: ['https://rainbownotes.example'],
+    nativeRedirectUris: ['com.rainbownotes.app://oauth/callback'],
     subscriptionTier: 'free',
     subscriptionTierVersionId: 'subscription-tier-free-v1',
     subscriptionTierVersion: 1,

@@ -82,6 +82,7 @@ build_all() {
   /usr/bin/plutil -insert LSUIElement -bool true "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert NSHighResolutionCapable -bool true "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert NSPrincipalClass -string NSApplication "$staged_bundle/Contents/Info.plist"
+  /usr/bin/plutil -insert CFBundleURLTypes -json '[{"CFBundleURLName":"com.thingtime.Commander.oauth","CFBundleURLSchemes":["com.thingtime.commander"]}]' "$staged_bundle/Contents/Info.plist"
 
   # An explicit `COMMANDER_SIGNING_IDENTITY=-` keeps local verification usable
   # when the developer identity is present but its private key is locked behind

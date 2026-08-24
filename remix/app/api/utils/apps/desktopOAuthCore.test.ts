@@ -28,6 +28,21 @@ test('desktop redirects accept explicit unprivileged IPv4 and IPv6 loopback port
 	});
 });
 
+test('desktop redirects accept only a structurally exact reverse-domain native callback', () => {
+  assert.deepEqual(normalizeDesktopRedirectUri('com.thingtime.commander://oauth/callback'), {
+    uri: 'com.thingtime.commander://oauth/callback',
+    origin: 'com.thingtime.commander://oauth/callback',
+    native: true
+  });
+  for (const value of [
+    'commander://oauth/callback',
+    'com.thingtime.commander://other/callback',
+    'com.thingtime.commander://oauth/callback?preexisting=1',
+    'com.thingtime.commander://oauth:444/callback',
+    'https://thingtime.com/oauth/callback'
+  ]) assert.equal(normalizeDesktopRedirectUri(value), null, value);
+});
+
 test('desktop redirects reject non-loopback, localhost aliases, unsafe URL parts, and privileged ports', () => {
 	const rejected = [
 		'https://127.0.0.1:45432/oauth/callback',

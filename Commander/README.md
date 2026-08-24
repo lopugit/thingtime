@@ -135,8 +135,11 @@ are deliberately configured; the release notes make that trust boundary clear.
 Commander uses the real Thingtime API; it never reads the database directly.
 
 Commander ships with its public Thingtime client registration for the exact loopback origin
-`http://127.0.0.1:47820` and callback `http://127.0.0.1:47820/oauth/callback`. The login requests
-`profile.username` and `app-data`; Advanced settings retain a client-ID override for another Thingtime deployment.
+`http://127.0.0.1:47820` and its native callback
+`com.thingtime.commander://oauth/callback`. The latter is registered as an exact native redirect URI
+(not a web origin), so the user signs in with their normal browser session and the browser hands the
+one-time PKCE response straight back to Commander. The login requests `profile.username` and
+`app-data`; Advanced settings retain a client-ID override for another Thingtime deployment.
 
 The browser login uses authorization code + PKCE. Access tokens are saved only through the native credential bridge:
 Keychain on macOS, Credential Manager on Windows, and Secret Service on Linux. Sync data is stored privately under
