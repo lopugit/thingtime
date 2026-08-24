@@ -121,8 +121,8 @@
       the default. Re-run the winning profile unchanged; verify schema 3 avoids FTS churn, keeps the result count stable,
       and finishes materially faster than a fresh build. Open a schema-2 fixture and verify it upgrades in place without
       rebuilding or losing searchable records.
-- [ ] On macOS, verify Search → Search Index reports Full Disk Access granted or not granted from the native
-      read-only TCC probe, and Recheck updates the same state. Verify Open Full Disk Access opens Privacy & Security
+- [ ] On macOS, verify the prominent macOS whole-volume access card at the top of Search reports Full Disk Access
+      granted or not granted from the native read-only TCC probe, and Recheck updates the same state. Verify Open Full Disk Access opens Privacy & Security
       → Full Disk Access without changing the toggle.
       With access withheld and a deliberately blocking root, verify the scan stops after 90 seconds, the writer recovers,
       actionable guidance appears, and the last committed index remains searchable.

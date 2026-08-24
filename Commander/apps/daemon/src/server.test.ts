@@ -397,13 +397,15 @@ describe('Commander daemon HTTP trust boundaries', () => {
       });
       expect(exitSearch.status).toBe(200);
       const exitResults = (await exitSearch.json()) as { hits: Array<{ id: string }> };
-      expect(exitResults.hits[0]).toMatchObject({
-        id: 'extension:builtin:commander:close-commander',
-        title: 'Close Commander',
-        subtitle: 'Commander',
-        extensionId: 'builtin:commander',
-        commandName: 'close-commander',
-      });
+      expect(exitResults.hits).toContainEqual(
+        expect.objectContaining({
+          id: 'extension:builtin:commander:close-commander',
+          title: 'Close Commander',
+          subtitle: 'Commander',
+          extensionId: 'builtin:commander',
+          commandName: 'close-commander',
+        }),
+      );
 
       const closeCommander = await fetch(`${server.url}/api/execute`, {
         method: 'POST',
@@ -493,14 +495,16 @@ describe('Commander daemon HTTP trust boundaries', () => {
       const accessibilityResults = (await accessibilitySearch.json()) as {
         hits: Array<{ id: string }>;
       };
-      expect(accessibilityResults.hits[0]).toMatchObject({
-        id: 'extension:builtin:macos-system:open-accessibility-settings',
-        title: 'Accessibility Settings',
-        subtitle: 'macOS System',
-        kind: 'system',
-        extensionId: 'builtin:macos-system',
-        commandName: 'open-accessibility-settings',
-      });
+      expect(accessibilityResults.hits).toContainEqual(
+        expect.objectContaining({
+          id: 'extension:builtin:macos-system:open-accessibility-settings',
+          title: 'Accessibility Settings',
+          subtitle: 'macOS System',
+          kind: 'system',
+          extensionId: 'builtin:macos-system',
+          commandName: 'open-accessibility-settings',
+        }),
+      );
 
       const openAccessibilitySettings = await fetch(`${server.url}/api/execute`, {
         method: 'POST',

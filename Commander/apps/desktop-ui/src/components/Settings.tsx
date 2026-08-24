@@ -22,7 +22,7 @@ import { ActivitySettings } from './ActivitySettings.js';
 import { CloudSyncSettings } from './CloudSyncSettings.js';
 import { ExtensionsSettings } from './ExtensionsSettings.js';
 import { GeneralSettings } from './GeneralSettings.js';
-import { IndexingSettings } from './IndexingSettings.js';
+import { FullDiskAccessCard, IndexingSettings } from './IndexingSettings.js';
 import { SearchPreferencesSettings } from './SearchPreferencesSettings.js';
 import { beginWindowDrag } from '../lib/nativeBridge.js';
 
@@ -352,6 +352,7 @@ function SearchSettings({
           <p>Control Commander’s local indexes and adaptive result ranking.</p>
         </div>
       </div>
+      <FullDiskAccessCard onError={onError} />
       <div className="search-ranking-card">
         <Search />
         <div>

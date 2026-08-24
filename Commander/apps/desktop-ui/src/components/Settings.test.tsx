@@ -301,6 +301,11 @@ describe('Commander settings deep links', () => {
       /index files timed out after 90 seconds/i,
     );
     await waitFor(() => expect(screen.getByText('Full Disk Access granted')).toBeVisible());
+    const fullDiskAccessCard = screen.getByRole('region', { name: 'macOS whole-volume access' });
+    expect(fullDiskAccessCard).toBeVisible();
+    expect(fullDiskAccessCard.compareDocumentPosition(screen.getByText('Fuzzy and adaptive everywhere'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     expect(nativeRequest).toHaveBeenCalledWith('permission.fullDiskAccess');
 
     fireEvent.click(screen.getByRole('button', { name: 'Files' }));
