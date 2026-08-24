@@ -42,6 +42,56 @@ const SkeletonCard = () => (
   </Box>
 );
 
+// One memoized row per post. PostCard is already React.memo, but the props it
+// received were built inline in the .map body — a fresh `onChanged` closure and
+// a fresh `ref` callback on every PostList render — so the memo never hit and
+// every engagement event re-rendered every mounted card. Scrolling a 100-post
+// feed fires up to 200 session-deduped view/dwell updates, making the wasted
+// work quadratic in posts loaded.
+//
+// Hooks cannot live in a .map body, so the per-post callbacks move into this
+// component, where useCallback can key them on the post id. The parent's
+// onPostChanged / onEngagement / observeView are all already useCallback-stable,
+// so these identities hold across renders and both memos actually stick. The
+// stale ref identity also stopped forcing observeView(null) + observeView(el)
+// for every wrapper on each of those re-renders.
+//
+// The j/k focus ring lives here too, as a plain boolean prop rather than the
+// focused id: only the row losing focus and the row gaining it change props,
+// so the memo still holds for every other mounted card.
+const PostRow = React.memo(function PostRow({
+  post,
+  focused,
+  onPostChanged,
+  onEngagement,
+  observeView
+}: {
+  post: PublicPost;
+  focused: boolean;
+  onPostChanged: (id: string, next: PostChange) => void;
+  onEngagement?: (event: EngagementEvent) => void;
+  observeView: (element: Element | null, thingId: string) => void;
+}) {
+  const handleChanged = React.useCallback((next: PostChange) => onPostChanged(post.id, next), [onPostChanged, post.id]);
+  const setRef = React.useCallback((element: HTMLDivElement | null) => observeView(element, post.id), [observeView, post.id]);
+
+  return (
+    <Box
+      data-thing-id={post.id}
+      ref={setRef}
+      // keyboard focus ring (j/k) — theme-aware accent outline hugging the
+      // card's radius. useFeedShortcuts scrollIntoView()s the [data-thing-id]
+      // element, so the breathing room has to be on THIS box, not a wrapper.
+      borderRadius="var(--tt-radius-lg, 16px)"
+      outline={focused ? '2px solid var(--tt-accent, hotpink)' : undefined}
+      outlineOffset="3px"
+      scrollMarginY="calc(var(--tt-nav-clearance, 54px) + 16px)"
+    >
+      <PostCard post={post} onChanged={handleChanged} onEngagement={onEngagement} />
+    </Box>
+  );
+});
+
 export const PostList = (props: PostListProps) => {
   const { posts, loading, hasMore, onLoadMore, onPostChanged, onEngagement, emptyLabel, focusedPostId } = props;
 
@@ -79,23 +129,14 @@ export const PostList = (props: PostListProps) => {
   return (
     <Flex flexDirection="column" rowGap={4} width="100%">
       {posts.map((post) => (
-        <Box
+        <PostRow
           key={post.id}
-          data-thing-id={post.id}
-          ref={(element: HTMLDivElement | null) => observeView(element, post.id)}
-          // keyboard focus ring (j/k) — theme-aware accent outline hugging the
-          // card's radius; scrollIntoView keeps a little breathing room
-          borderRadius="var(--tt-radius-lg, 16px)"
-          outline={post.id === focusedPostId ? '2px solid var(--tt-accent, hotpink)' : undefined}
-          outlineOffset="3px"
-          scrollMarginY="calc(var(--tt-nav-clearance, 54px) + 16px)"
-        >
-          <PostCard
-            post={post}
-            onChanged={(next) => onPostChanged(post.id, next)}
-            onEngagement={onEngagement}
-          />
-        </Box>
+          post={post}
+          focused={post.id === focusedPostId}
+          onPostChanged={onPostChanged}
+          onEngagement={onEngagement}
+          observeView={observeView}
+        />
       ))}
 
       {loading && (

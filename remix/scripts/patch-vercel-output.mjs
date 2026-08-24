@@ -53,6 +53,29 @@ config.routes = [
   },
   { src: '^/$', headers: appShellHeaders, dest: '/index.html' },
   { src: '^/index\\.html$', headers: appShellHeaders, dest: '/index.html' },
+  // Content-hashed build output can be cached forever. Vite gives every file
+  // under /assets/ an 8-char content hash, so a changed file is a changed URL
+  // and a cached entry can never go stale — which is exactly what `immutable`
+  // asserts (don't revalidate, not even on reload).
+  //
+  // Without this the filesystem handler below served these with no
+  // Cache-Control at all, so index.html's ~80 eagerly-referenced chunks each
+  // cost a conditional GET on every repeat visit and every reload. Multiplexed
+  // over HTTP/2 that is ~1 RTT of added blocking latency rather than 80 serial
+  // trips, but it removes the zero-network disk-cache path entirely: back /
+  // forward and reload can never restore instantly, and the app cannot paint
+  // without the network even though every byte is already on disk.
+  //
+  // Scoped to /assets/ deliberately. Files in public/ (tt-boot.js, icons, the
+  // manifest) keep their normal revalidating behaviour because their names are
+  // stable — caching those for a year would strand users on a stale boot
+  // script. Headers-only + continue, so the filesystem handler still serves
+  // the bytes.
+  {
+    src: '^/assets/(?:.*)$',
+    headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
+    continue: true
+  },
   filesystemRoute ?? { handle: 'filesystem' },
   apiRootDataRoute ?? { src: '/api/root-data', dest: '/api/root-data' },
   apiCatchAllRoute ?? { src: '/api/(?:.*)', dest: '/api/[...]' },
