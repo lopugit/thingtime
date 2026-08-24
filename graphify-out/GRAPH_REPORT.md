@@ -9,7 +9,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e440e476`
+- Built from commit: `debcacf2`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -29,11 +29,11 @@
 - [[_COMMUNITY_promotion-worker.sh|promotion-worker.sh]]
 - [[_COMMUNITY_prepare-round.sh|prepare-round.sh]]
 - [[_COMMUNITY_resolve-pr-conflicts-routing-contract.mjs|resolve-pr-conflicts-routing-contract.mjs]]
-- [[_COMMUNITY_start.sh|start.sh]]
-- [[_COMMUNITY_repoFlag|repoFlag]]
+- [[_COMMUNITY_queueTrustedPromotionWorker|queueTrustedPromotionWorker]]
 - [[_COMMUNITY_start.sh|start.sh]]
 - [[_COMMUNITY_verify-promotion-source-authority.sh|verify-promotion-source-authority.sh]]
 - [[_COMMUNITY_vercel.json|vercel.json]]
+- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
 - [[_COMMUNITY_rebase-ownership-routing-contract.sh|rebase-ownership-routing-contract.sh]]
 - [[_COMMUNITY_Graphify Rules|Graphify Rules]]
 - [[_COMMUNITY_Electron App Release Workflow|Electron App Release Workflow]]
@@ -141,11 +141,7 @@ Nodes (13): assert_safe_regular_text_conflict(), clear_scratch(), emit(), emit_p
 Cohesion: 0.24
 Nodes (13): aiRuntimeSourceFiles(), assertAdminLoader(), assertAdminModelRouting(), assertRoute(), assertWorkflowSource(), positiveDecimal(), REBASE_ACTION_URL, REBASE_WORKFLOW_URL (+5 more)
 
-### Community 15 - "start.sh"
-Cohesion: 0.17
-Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
-
-### Community 16 - "repoFlag"
+### Community 16 - "queueTrustedPromotionWorker"
 Cohesion: 0.33
 Nodes (7): buildPromotionDispatchRequest(), dispatchPromotionResolution(), exactReservationDeleteArgs(), exactReservationPushArgs(), promotionDispatchArgs(), queueTrustedPromotionWorker(), redispatchPromotionReservation()
 
@@ -160,6 +156,10 @@ Nodes (6): fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM, GI
 ### Community 19 - "vercel.json"
 Cohesion: 0.33
 Nodes (5): framework, git, deploymentEnabled, ignoreCommand, $schema
+
+### Community 20 - "Thingtime AI instructions"
+Cohesion: 0.17
+Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
 ### Community 21 - "rebase-ownership-routing-contract.sh"
 Cohesion: 0.83
@@ -177,11 +177,11 @@ Nodes (12): Added, Changed, Control-plane changelog, Fixed, [Unreleased], Fork s
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `selfTest()` connect `selfTest` to `repoFlag`, `runPromotion`, `failureDetail`, `promote-features-to-main.mjs`?**
+- **Why does `selfTest()` connect `selfTest` to `queueTrustedPromotionWorker`, `runPromotion`, `failureDetail`, `promote-features-to-main.mjs`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
 - **Why does `runPromotion()` connect `runPromotion` to `selfTest`, `failureDetail`, `promote-features-to-main.mjs`?**
   _High betweenness centrality (0.002) - this node is a cross-community bridge._
-- **Why does `failureDetail()` connect `failureDetail` to `repoFlag`, `selfTest`, `runPromotion`, `promote-features-to-main.mjs`?**
+- **Why does `failureDetail()` connect `failureDetail` to `queueTrustedPromotionWorker`, `selfTest`, `runPromotion`, `promote-features-to-main.mjs`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS` to the rest of the system?**
   _107 weakly-connected nodes found - possible documentation gaps or missing edges._
