@@ -90,6 +90,11 @@ const CAPABILITY_ALIASES: Record<string, string[]> = {
 	'system.wifi.connect': ['system.wifi.connect'],
 	'system.wifi.disconnect': ['system.wifi.disconnect'],
 	'system.wifi.power.set': ['system.wifi.power.write'],
+	'input.pointer.move': ['input.pointer.write'],
+	'input.pointer.click': ['input.pointer.write'],
+	'input.pointer.scroll': ['input.pointer.write'],
+	'input.keyboard.type': ['input.keyboard.write'],
+	'input.keyboard.shortcut': ['input.keyboard.write'],
 	'screen.start': ['screen.view'],
 	'screen.stop': ['screen.view'],
 	'screen.control': ['screen.control']
@@ -148,6 +153,11 @@ const safeRevisionFromTime = (value: string | null | undefined, rank = 0): numbe
 };
 
 const unit = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : null);
+
+const containsUnsafeInputControl = (value: string): boolean => Array.from(value).some((character) => {
+	const code = character.codePointAt(0) || 0;
+	return !(code === 0x09 || code === 0x0a || code === 0x0d || (code > 0x1f && !(code >= 0x7f && code <= 0x9f)));
+});
 
 const actionFromCommandKind = (kind: string): DeviceActionKind => {
 	switch (kind) {
@@ -208,6 +218,11 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 		case 'system.media.spotify.playback.set': return 'set-spotify-playback';
 		case 'system.media.spotify.volume.set': return 'set-spotify-volume';
 		case 'system.media.chrome-youtube.volume.set': return 'set-chrome-youtube-volume';
+		case 'input.pointer.move': return 'move-pointer';
+		case 'input.pointer.click': return 'click-pointer';
+		case 'input.pointer.scroll': return 'scroll-pointer';
+		case 'input.keyboard.type': return 'type-text';
+		case 'input.keyboard.shortcut': return 'send-shortcut';
 		case 'system.lock':
 			return 'lock';
 		case 'system.sleep':
@@ -695,6 +710,36 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 			const level = input.level;
 			return typeof level === 'number' && Number.isFinite(level) && level >= 0 && level <= 1
 				? { ...base, kind: 'system.media.chrome-youtube.volume.set', input: { level } }
+				: null;
+		}
+		case 'move-pointer': {
+			const displayId = Number(input.displayId ?? intent.targetId), x = Number(input.x), y = Number(input.y);
+			return Number.isSafeInteger(displayId) && displayId > 0 && Number.isSafeInteger(x) && x >= 0 && x <= 32_768 && Number.isSafeInteger(y) && y >= 0 && y <= 32_768
+				? { ...base, kind: 'input.pointer.move', input: { displayId, x, y } }
+				: null;
+		}
+		case 'click-pointer': {
+			const displayId = Number(input.displayId ?? intent.targetId), x = Number(input.x), y = Number(input.y), button = input.button;
+			return Number.isSafeInteger(displayId) && displayId > 0 && Number.isSafeInteger(x) && x >= 0 && x <= 32_768 && Number.isSafeInteger(y) && y >= 0 && y <= 32_768 && (button === 'left' || button === 'right' || button === 'middle')
+				? { ...base, kind: 'input.pointer.click', input: { displayId, x, y, button } }
+				: null;
+		}
+		case 'scroll-pointer': {
+			const deltaX = Number(input.deltaX), deltaY = Number(input.deltaY);
+			return Number.isSafeInteger(deltaX) && deltaX >= -5_000 && deltaX <= 5_000 && Number.isSafeInteger(deltaY) && deltaY >= -5_000 && deltaY <= 5_000 && (deltaX !== 0 || deltaY !== 0)
+				? { ...base, kind: 'input.pointer.scroll', input: { deltaX, deltaY } }
+				: null;
+		}
+		case 'type-text': {
+			const text = typeof input.text === 'string' ? input.text : '';
+			return text.length > 0 && new TextEncoder().encode(text).length <= 4_096 && !containsUnsafeInputControl(text)
+				? { ...base, kind: 'input.keyboard.type', input: { text } }
+				: null;
+		}
+		case 'send-shortcut': {
+			const key = typeof input.key === 'string' ? input.key : '', modifiers = Array.isArray(input.modifiers) ? input.modifiers : [];
+			return /^(?:[a-z0-9]|return|tab|space|delete|escape|left|right|up|down|home|end|pageup|pagedown|f(?:[1-9]|1[0-2]))$/u.test(key) && modifiers.length <= 5 && modifiers.every((modifier) => modifier === 'command' || modifier === 'control' || modifier === 'option' || modifier === 'shift' || modifier === 'function') && new Set(modifiers).size === modifiers.length
+				? { ...base, kind: 'input.keyboard.shortcut', input: { key, modifiers } }
 				: null;
 		}
 		case 'lock':

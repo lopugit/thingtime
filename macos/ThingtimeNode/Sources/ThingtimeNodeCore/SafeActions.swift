@@ -37,6 +37,11 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case setSpotifyPlayback = "system.media.spotify.playback.set"
     case setSpotifyVolume = "system.media.spotify.volume.set"
     case setChromeYouTubeVolume = "system.media.chrome-youtube.volume.set"
+    case movePointer = "input.pointer.move"
+    case clickPointer = "input.pointer.click"
+    case scrollPointer = "input.pointer.scroll"
+    case typeText = "input.keyboard.type"
+    case sendShortcut = "input.keyboard.shortcut"
     case activateApplication = "application.activate"
     case launchApplication = "application.launch"
     case terminateApplication = "application.quit"
@@ -228,6 +233,46 @@ public struct SafeActionPolicy: Sendable {
                 return "system.media.chrome-youtube.volume.set requires only a numeric level from 0 to 1."
             }
             return nil
+        case .movePointer:
+            guard action.parameters.count == 3,
+                  validDisplayID(action.parameters["displayId"]),
+                  validNonnegativeCoordinate(action.parameters["x"]),
+                  validNonnegativeCoordinate(action.parameters["y"]) else {
+                return "input.pointer.move requires a displayId and nonnegative whole-pixel x and y coordinates."
+            }
+            return nil
+        case .clickPointer:
+            guard action.parameters.count == 4,
+                  validDisplayID(action.parameters["displayId"]),
+                  validNonnegativeCoordinate(action.parameters["x"]),
+                  validNonnegativeCoordinate(action.parameters["y"]),
+                  SystemRemoteInput.isValidButton(action.parameters["button"]?.stringValue) else {
+                return "input.pointer.click requires a displayId, coordinates, and left, right, or middle button only."
+            }
+            return nil
+        case .scrollPointer:
+            guard action.parameters.count == 2,
+                  SystemRemoteInput.isValidScroll(
+                    deltaX: action.parameters["deltaX"]?.numberValue,
+                    deltaY: action.parameters["deltaY"]?.numberValue
+                  ) else {
+                return "input.pointer.scroll requires bounded whole-pixel deltaX and deltaY values."
+            }
+            return nil
+        case .typeText:
+            guard action.parameters.count == 1,
+                  SystemRemoteInput.isValidText(action.parameters["text"]?.stringValue) else {
+                return "input.keyboard.type requires bounded text without unsafe control characters."
+            }
+            return nil
+        case .sendShortcut:
+            guard action.parameters.count == 2,
+                  let key = action.parameters["key"]?.stringValue,
+                  let modifiers = action.parameters["modifiers"]?.arrayValue?.compactMap({ $0.stringValue }),
+                  SystemRemoteInput.isValidShortcut(key: key, modifiers: modifiers) else {
+                return "input.keyboard.shortcut requires one allowlisted key and unique allowlisted modifiers."
+            }
+            return nil
         case .activateApplication, .launchApplication, .terminateApplication, .forceTerminateApplication, .hideApplication, .unhideApplication:
             guard action.parameters.count == 1,
                   let bundleID = action.parameters["bundleIdentifier"]?.stringValue,
@@ -274,6 +319,11 @@ public struct SafeActionPolicy: Sendable {
     private func validCoordinate(_ value: JSONValue?) -> Bool {
         guard let value = value?.numberValue, value.isFinite, value.rounded() == value else { return false }
         return value >= -32_768 && value <= 32_768
+    }
+
+    private func validNonnegativeCoordinate(_ value: JSONValue?) -> Bool {
+        guard let value = value?.numberValue, value.isFinite, value.rounded() == value else { return false }
+        return value >= 0 && value <= 32_768
     }
 }
 
@@ -482,6 +532,45 @@ public final class SafeActionExecutor {
             // Chrome confirms the DOM property only; retain the same recovery
             // boundary as the app Apple Events rather than claiming audible
             // playback was independently observed.
+            throw ThingtimeNodeError.commandOutcomeUncertain
+        case .movePointer:
+            guard let displayID = displayID(from: action.parameters["displayId"]),
+                  let x = action.parameters["x"]?.numberValue,
+                  let y = action.parameters["y"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing pointer move parameters.")
+            }
+            try SystemRemoteInput.move(displayID: displayID, x: x, y: y)
+            // Quartz can enqueue an event but cannot prove that the intended
+            // target accepted it, so retain the journal's recovery boundary.
+            throw ThingtimeNodeError.commandOutcomeUncertain
+        case .clickPointer:
+            guard let displayID = displayID(from: action.parameters["displayId"]),
+                  let x = action.parameters["x"]?.numberValue,
+                  let y = action.parameters["y"]?.numberValue,
+                  let button = action.parameters["button"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing pointer click parameters.")
+            }
+            try SystemRemoteInput.click(displayID: displayID, x: x, y: y, button: button)
+            throw ThingtimeNodeError.commandOutcomeUncertain
+        case .scrollPointer:
+            guard let deltaX = action.parameters["deltaX"]?.numberValue,
+                  let deltaY = action.parameters["deltaY"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing pointer scroll parameters.")
+            }
+            try SystemRemoteInput.scroll(deltaX: deltaX, deltaY: deltaY)
+            throw ThingtimeNodeError.commandOutcomeUncertain
+        case .typeText:
+            guard let text = action.parameters["text"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing text input.")
+            }
+            try SystemRemoteInput.type(text: text)
+            throw ThingtimeNodeError.commandOutcomeUncertain
+        case .sendShortcut:
+            guard let key = action.parameters["key"]?.stringValue,
+                  let modifiers = action.parameters["modifiers"]?.arrayValue?.compactMap({ $0.stringValue }) else {
+                throw ThingtimeNodeError.invalidRequest("Missing keyboard shortcut parameters.")
+            }
+            try SystemRemoteInput.shortcut(key: key, modifiers: modifiers)
             throw ThingtimeNodeError.commandOutcomeUncertain
         case .activateApplication:
             guard let bundleID = action.parameters["bundleIdentifier"]?.stringValue,

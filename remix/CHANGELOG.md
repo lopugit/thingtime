@@ -29,6 +29,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Approval-gated remote pointer and keyboard controls for paired Macs**:
+  the desktop node now accepts a closed, capability-gated set of screen-relative
+  pointer moves/clicks/scrolls, bounded text entry, and allowlisted keyboard
+  shortcuts. Every command needs a fresh approval and macOS Accessibility
+  permission; the node does not request Input Monitoring, Full Disk Access,
+  root, clipboard, keylogging, event taps, shell execution, or arbitrary
+  scripting. Quartz enqueueing stays journalled as `needs-review` rather than
+  pretending that a target app accepted the input. The paired-device contract
+  is now `1.8.0`; live screen pixels remain intentionally unimplemented until a
+  privacy-preserving peer-to-peer transport is selected. — Codex (AI),
+  2026-08-24
+
 - **Consented media app and Chrome YouTube volume controls for paired Macs**:
   Apple Music and Spotify now expose their own bounded 0–100% volume settings
   alongside fixed playback controls. Chrome can set the active direct

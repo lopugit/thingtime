@@ -266,6 +266,43 @@ final class SafeActionPolicyTests: XCTestCase {
         ) else { return XCTFail("Expected Chrome script input to be denied") }
     }
 
+    func testRemoteInputIsClosedAndRequiresApproval() {
+        let requests: [SafeActionRequest] = [
+            SafeActionRequest(kind: .movePointer, parameters: ["displayId": .number(42), "x": .number(20), "y": .number(30)]),
+            SafeActionRequest(kind: .clickPointer, parameters: ["displayId": .number(42), "x": .number(20), "y": .number(30), "button": .string("left")]),
+            SafeActionRequest(kind: .scrollPointer, parameters: ["deltaX": .number(0), "deltaY": .number(-180)]),
+            SafeActionRequest(kind: .typeText, parameters: ["text": .string("Hello\\nThingtime")]),
+            SafeActionRequest(kind: .sendShortcut, parameters: ["key": .string("tab"), "modifiers": .array([.string("command")])])
+        ]
+        for request in requests {
+            guard case .requireApproval = policy.evaluate(
+                action: request,
+                context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+            ) else { return XCTFail("Expected \(request.kind.rawValue) to require approval") }
+        }
+
+        let invalidRequests: [SafeActionRequest] = [
+            SafeActionRequest(kind: .movePointer, parameters: ["displayId": .number(42), "x": .number(-1), "y": .number(0)]),
+            SafeActionRequest(kind: .clickPointer, parameters: ["displayId": .number(42), "x": .number(0), "y": .number(0), "button": .string("double")]),
+            SafeActionRequest(kind: .scrollPointer, parameters: ["deltaX": .number(0), "deltaY": .number(0)]),
+            SafeActionRequest(kind: .typeText, parameters: ["text": .string("unsafe\u{0000}text")]),
+            SafeActionRequest(kind: .sendShortcut, parameters: ["key": .string("f13"), "modifiers": .array([.string("command")])]),
+            SafeActionRequest(kind: .sendShortcut, parameters: ["key": .string("tab"), "modifiers": .array([.string("command"), .string("command")])]),
+            SafeActionRequest(kind: .typeText, parameters: ["text": .string("hello"), "script": .string("do shell script")])
+        ]
+        for request in invalidRequests {
+            guard case .deny = policy.evaluate(
+                action: request,
+                context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+            ) else { return XCTFail("Expected invalid \(request.kind.rawValue) request to be denied") }
+        }
+
+        XCTAssertTrue(SystemRemoteInput.isValidText("Hello\\nThingtime"))
+        XCTAssertFalse(SystemRemoteInput.isValidText("unsafe\u{0000}text"))
+        XCTAssertTrue(SystemRemoteInput.isValidShortcut(key: "f12", modifiers: ["command", "shift"]))
+        XCTAssertFalse(SystemRemoteInput.isValidShortcut(key: "f13", modifiers: ["command"]))
+    }
+
     func testPowerIdleTimersAreFixedAndRequireApproval() {
         let valid = SafeActionRequest(kind: .setPowerIdleTimer, parameters: [
             "scope": .string("display"), "minutes": .number(10)

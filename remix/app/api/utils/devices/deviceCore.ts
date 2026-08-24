@@ -51,6 +51,11 @@ export const DEVICE_COMMAND_KINDS = [
 	'system.wifi.connect',
 	'system.wifi.disconnect',
 	'system.wifi.power.set',
+	'input.pointer.move',
+	'input.pointer.click',
+	'input.pointer.scroll',
+	'input.keyboard.type',
+	'input.keyboard.shortcut',
 	'screen.start',
 	'screen.stop'
 ] as const;
@@ -79,6 +84,11 @@ const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>([
 	'system.media.spotify.playback.set',
 	'system.media.spotify.volume.set',
 	'system.media.chrome-youtube.volume.set',
+	'input.pointer.move',
+	'input.pointer.click',
+	'input.pointer.scroll',
+	'input.keyboard.type',
+	'input.keyboard.shortcut',
 	'system.power.idle-timer.set',
 	'system.policy.airdrop.profile.propose',
 	'system.policy.camera.profile.propose'
@@ -119,6 +129,11 @@ export type DeviceFail = { ok: false; status: number; error: string };
 export const deviceFail = (status: number, error: string): DeviceFail => ({ ok: false, status, error });
 
 const bounded = (value: unknown, max: number): string => (typeof value === 'string' ? value.trim().slice(0, max) : '');
+
+const containsUnsafeInputControl = (value: string): boolean => Array.from(value).some((character) => {
+	const code = character.codePointAt(0) || 0;
+	return !(code === 0x09 || code === 0x0a || code === 0x0d || (code > 0x1f && !(code >= 0x7f && code <= 0x9f)));
+});
 
 const normalizedScalar = (value: unknown): string | number | boolean | null => {
 	if (value === null) return null;
@@ -695,6 +710,11 @@ export type DeviceCommandInputByKind = {
 	'system.wifi.connect': { ssid: string };
 	'system.wifi.disconnect': Record<string, never>;
 	'system.wifi.power.set': { enabled: boolean };
+	'input.pointer.move': { displayId: number; x: number; y: number };
+	'input.pointer.click': { displayId: number; x: number; y: number; button: 'left' | 'right' | 'middle' };
+	'input.pointer.scroll': { deltaX: number; deltaY: number };
+	'input.keyboard.type': { text: string };
+	'input.keyboard.shortcut': { key: string; modifiers: Array<'command' | 'control' | 'option' | 'shift' | 'function'> };
 	'screen.start': { screenSessionId: string; viewOnly: boolean };
 	'screen.stop': { screenSessionId: string };
 };
@@ -785,6 +805,11 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'system.wifi.connect': 'system.wifi.connect',
 	'system.wifi.disconnect': 'system.wifi.disconnect',
 	'system.wifi.power.set': 'system.wifi.power.write',
+	'input.pointer.move': 'input.pointer.write',
+	'input.pointer.click': 'input.pointer.write',
+	'input.pointer.scroll': 'input.pointer.write',
+	'input.keyboard.type': 'input.keyboard.write',
+	'input.keyboard.shortcut': 'input.keyboard.write',
 	'screen.start': 'screen.view',
 	'screen.stop': 'screen.view'
 };
@@ -839,6 +864,11 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'system.wifi.connect': 'system.wifi.connect',
 	'system.wifi.disconnect': 'system.wifi.disconnect',
 	'system.wifi.power.set': 'system.wifi.power.write',
+	'input.pointer.move': 'input.pointer.write',
+	'input.pointer.click': 'input.pointer.write',
+	'input.pointer.scroll': 'input.pointer.write',
+	'input.keyboard.type': 'input.keyboard.write',
+	'input.keyboard.shortcut': 'input.keyboard.write',
 	'screen.start': 'screen.view',
 	'screen.stop': 'screen.view'
 };
@@ -1115,6 +1145,39 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 			return typeof raw.enabled === 'boolean' && exactKeys(raw, ['enabled'])
 				? ok({ enabled: raw.enabled })
 				: deviceFail(400, 'system.wifi.power.set requires only a boolean enabled value');
+		case 'input.pointer.move': {
+			const targetDisplayId = displayId(), x = boundedInteger(raw.x, 0, 32_768), y = boundedInteger(raw.y, 0, 32_768);
+			return targetDisplayId !== null && x !== null && y !== null && exactKeys(raw, ['displayId', 'x', 'y'])
+				? ok({ displayId: targetDisplayId, x, y })
+				: deviceFail(400, 'input.pointer.move requires displayId and whole nonnegative x and y values only');
+		}
+		case 'input.pointer.click': {
+			const targetDisplayId = displayId(), x = boundedInteger(raw.x, 0, 32_768), y = boundedInteger(raw.y, 0, 32_768), button = raw.button === 'left' || raw.button === 'right' || raw.button === 'middle' ? raw.button : null;
+			return targetDisplayId !== null && x !== null && y !== null && button && exactKeys(raw, ['displayId', 'x', 'y', 'button'])
+				? ok({ displayId: targetDisplayId, x, y, button })
+				: deviceFail(400, 'input.pointer.click requires displayId, whole coordinates, and left, right, or middle button only');
+		}
+		case 'input.pointer.scroll': {
+			const deltaX = boundedInteger(raw.deltaX, -5_000, 5_000), deltaY = boundedInteger(raw.deltaY, -5_000, 5_000);
+			return deltaX !== null && deltaY !== null && (deltaX !== 0 || deltaY !== 0) && exactKeys(raw, ['deltaX', 'deltaY'])
+				? ok({ deltaX, deltaY })
+				: deviceFail(400, 'input.pointer.scroll requires nonzero bounded whole deltaX and deltaY values only');
+		}
+		case 'input.keyboard.type': {
+			const text = typeof raw.text === 'string' ? raw.text : '';
+			return text.length > 0 && Buffer.byteLength(text, 'utf8') <= 4_096 && !containsUnsafeInputControl(text) && exactKeys(raw, ['text'])
+				? ok({ text })
+				: deviceFail(400, 'input.keyboard.type requires bounded text without unsafe control characters only');
+		}
+		case 'input.keyboard.shortcut': {
+			const key = typeof raw.key === 'string' && /^(?:[a-z0-9]|return|tab|space|delete|escape|left|right|up|down|home|end|pageup|pagedown|f(?:[1-9]|1[0-2]))$/u.test(raw.key) ? raw.key : null;
+			const modifiers = Array.isArray(raw.modifiers) && raw.modifiers.length <= 5 && raw.modifiers.every((entry) => entry === 'command' || entry === 'control' || entry === 'option' || entry === 'shift' || entry === 'function') && new Set(raw.modifiers).size === raw.modifiers.length
+				? raw.modifiers as Array<'command' | 'control' | 'option' | 'shift' | 'function'>
+				: null;
+			return key && modifiers && exactKeys(raw, ['key', 'modifiers'])
+				? ok({ key, modifiers })
+				: deviceFail(400, 'input.keyboard.shortcut requires one allowlisted key and unique allowlisted modifiers only');
+		}
 		case 'screen.start': {
 			const screenSessionId = screen();
 			return screenSessionId && typeof raw.viewOnly === 'boolean' && exactKeys(raw, ['screenSessionId', 'viewOnly'])

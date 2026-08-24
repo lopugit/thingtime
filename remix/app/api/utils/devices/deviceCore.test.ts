@@ -300,6 +300,9 @@ test('device-wide commands require the capability from the signed pairing claim'
 	assert.equal(deviceSupportsCommand('system.power.idle-timer.set', ['system.power.idle-timer.write']), true);
 	assert.equal(deviceSupportsCommand('system.policy.airdrop.profile.propose', ['system.policy.airdrop.profile.write']), true);
 	assert.equal(deviceSupportsCommand('system.policy.camera.profile.propose', ['system.policy.camera.profile.write']), true);
+	assert.equal(deviceSupportsCommand('input.pointer.click', ['input.pointer.write']), true);
+	assert.equal(deviceSupportsCommand('input.keyboard.shortcut', ['input.keyboard.write']), true);
+	assert.equal(deviceSupportsCommand('input.pointer.move', ['input.keyboard.write']), false);
 	assert.equal(deviceSupportsCommand('system.sleep', ['system.power.sleep']), true);
 	assert.equal(deviceSupportsCommand('system.sleep', ['system.lock']), false);
 	assert.equal(deviceSupportsCommand('screen.start', ['screen.view']), true);
@@ -361,6 +364,11 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'system.wifi.connect',
 		'system.wifi.disconnect',
 		'system.wifi.power.set',
+		'input.pointer.move',
+		'input.pointer.click',
+		'input.pointer.scroll',
+		'input.keyboard.type',
+		'input.keyboard.shortcut',
 		'screen.start',
 		'screen.stop'
 	]);
@@ -434,6 +442,18 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'x'.repeat(33) }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.disconnect', {}).ok, true);
 	assert.equal(normalizeDeviceCommand('system.wifi.power.set', { enabled: false }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.pointer.move', { displayId: 42, x: 20, y: 30 }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.pointer.move', { displayId: 42, x: -1, y: 30 }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.pointer.click', { displayId: 42, x: 20, y: 30, button: 'left' }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.pointer.click', { displayId: 42, x: 20, y: 30, button: 'double' }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.pointer.scroll', { deltaX: 0, deltaY: -180 }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.pointer.scroll', { deltaX: 0, deltaY: 0 }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.keyboard.type', { text: 'Hello\\nThingtime' }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.keyboard.type', { text: 'unsafe\u0000text' }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.keyboard.type', { text: 'hello', script: 'do shell script' }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.keyboard.shortcut', { key: 'tab', modifiers: ['command', 'shift'] }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.keyboard.shortcut', { key: 'f13', modifiers: ['command'] }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.keyboard.shortcut', { key: 'tab', modifiers: ['command', 'command'] }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.lock', { shell: 'shutdown' }).ok, false);
 	assert.equal(normalizeDeviceCommand('screen.start', { screenSessionId: 'screen-1', viewOnly: true, sdp: 'secret' }).ok, false);
 });
@@ -476,7 +496,7 @@ test('paired account execution preferences default to always allow, with reversi
 	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
 	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
 	for (const kind of DEVICE_COMMAND_KINDS) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.policy.airdrop.profile.propose', 'system.policy.camera.profile.propose', 'system.media.apple-music.playback.set', 'system.media.apple-music.volume.set', 'system.media.spotify.playback.set', 'system.media.spotify.volume.set', 'system.media.chrome-youtube.volume.set'].includes(kind), kind);
+		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.policy.airdrop.profile.propose', 'system.policy.camera.profile.propose', 'system.media.apple-music.playback.set', 'system.media.apple-music.volume.set', 'system.media.spotify.playback.set', 'system.media.spotify.volume.set', 'system.media.chrome-youtube.volume.set', 'input.pointer.move', 'input.pointer.click', 'input.pointer.scroll', 'input.keyboard.type', 'input.keyboard.shortcut'].includes(kind), kind);
 		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
 	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };

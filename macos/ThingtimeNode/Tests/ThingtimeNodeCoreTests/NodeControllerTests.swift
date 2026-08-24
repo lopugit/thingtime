@@ -144,6 +144,11 @@ final class NodeControllerTests: XCTestCase {
             LeasedCommand(commandID: "spotify", leaseID: "lease-spotify", method: "system.media.spotify.playback.set", parameters: .object(["operation": .string("next")]), leaseExpiresAt: .distantFuture),
 			LeasedCommand(commandID: "spotify-volume", leaseID: "lease-spotify-volume", method: "system.media.spotify.volume.set", parameters: .object(["level": .number(0.5)]), leaseExpiresAt: .distantFuture),
 			LeasedCommand(commandID: "chrome-youtube-volume", leaseID: "lease-chrome-youtube-volume", method: "system.media.chrome-youtube.volume.set", parameters: .object(["level": .number(0.5)]), leaseExpiresAt: .distantFuture),
+			LeasedCommand(commandID: "pointer-move", leaseID: "lease-pointer-move", method: "input.pointer.move", parameters: .object(["displayId": .number(42), "x": .number(20), "y": .number(30)]), leaseExpiresAt: .distantFuture),
+			LeasedCommand(commandID: "pointer-click", leaseID: "lease-pointer-click", method: "input.pointer.click", parameters: .object(["displayId": .number(42), "x": .number(20), "y": .number(30), "button": .string("left")]), leaseExpiresAt: .distantFuture),
+			LeasedCommand(commandID: "pointer-scroll", leaseID: "lease-pointer-scroll", method: "input.pointer.scroll", parameters: .object(["deltaX": .number(0), "deltaY": .number(-180)]), leaseExpiresAt: .distantFuture),
+			LeasedCommand(commandID: "keyboard-type", leaseID: "lease-keyboard-type", method: "input.keyboard.type", parameters: .object(["text": .string("harmless")]), leaseExpiresAt: .distantFuture),
+			LeasedCommand(commandID: "keyboard-shortcut", leaseID: "lease-keyboard-shortcut", method: "input.keyboard.shortcut", parameters: .object(["key": .string("tab"), "modifiers": .array([.string("command")])]), leaseExpiresAt: .distantFuture),
             LeasedCommand(commandID: "restart", leaseID: "lease-restart", method: "system.restart", parameters: .object([:]), leaseExpiresAt: .distantFuture)
         ]
 		for command in commands {

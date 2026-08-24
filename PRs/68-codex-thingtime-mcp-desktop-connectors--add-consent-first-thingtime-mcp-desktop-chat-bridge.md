@@ -223,6 +223,31 @@ relational shape for later ThingtimeDB storage and platform chat views.
 - The four paired-device API contracts are now `1.7.0`; Electron refuses to
   activate the desktop control bridge against an older manifest.
 
+### 2026-08-24 consented remote input follow-up
+
+- The node now exposes a closed, individually capability-gated remote-input
+  surface: screen-relative pointer move, left/right/middle click, bounded
+  pixel scroll, bounded text entry, and an allowlisted keyboard-shortcut set.
+  Each command creates a fresh approval even when other device controls use
+  always-allow, is denied while the session is locked, and requires macOS
+  Accessibility at execution time.
+- Input has no generic scripting escape hatch. It neither records keys nor
+  accesses the clipboard, Input Monitoring, Full Disk Access, root, shell,
+  arbitrary AppleScript, event taps, process input, or browser automation.
+  Pointer coordinates are verified against a currently online display and all
+  payloads reject unknown fields. Quartz enqueueing is journalled as
+  `needs-review` because it cannot independently prove the target app accepted
+  the event.
+- The device drawer includes a visible Remote pointer and Remote keyboard
+  panel. Text is never placed in its idempotency-control key; it is sent only
+  as the individually approved command payload.
+- The four paired-device API contracts are now `1.8.0`; Electron refuses to
+  activate the desktop control bridge against an older manifest. The existing
+  screen-session endpoint still persists only lifecycle metadata and explicitly
+  rejects frames, screenshots, audio, SDP, ICE, and TURN data. A real live
+  screen view awaits a separately selected privacy-preserving peer-to-peer
+  transport rather than storing pixels in Thingtime.
+
 ### 2026-08-24 display, hardware, and lifecycle controls
 
 - The paired-computer contract now has individually capability-gated controls

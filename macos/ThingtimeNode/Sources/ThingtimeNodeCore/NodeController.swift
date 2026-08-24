@@ -107,6 +107,9 @@ public actor ThingtimeNodeController {
         "system.media.spotify.volume.write",
         "system.media.chrome-youtube.read",
         "system.media.chrome-youtube.volume.write",
+        "screen.view",
+        "input.pointer.write",
+        "input.keyboard.write",
         "system.power.restart",
         "system.power.shutdown",
         "system.session.logout",
@@ -704,6 +707,43 @@ public actor ThingtimeNodeController {
                 throw ThingtimeNodeError.invalidRequest("system.media.chrome-youtube.volume.set requires level.")
             }
             action = SafeActionRequest(kind: .setChromeYouTubeVolume, parameters: ["level": .number(level)])
+        case "input.pointer.move":
+            try requireOnlyKeys(input, ["displayId", "x", "y"])
+            guard let displayID = input["displayId"]?.numberValue,
+                  let x = input["x"]?.numberValue,
+                  let y = input["y"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("input.pointer.move requires displayId, x, and y.")
+            }
+            action = SafeActionRequest(kind: .movePointer, parameters: ["displayId": .number(displayID), "x": .number(x), "y": .number(y)])
+        case "input.pointer.click":
+            try requireOnlyKeys(input, ["displayId", "x", "y", "button"])
+            guard let displayID = input["displayId"]?.numberValue,
+                  let x = input["x"]?.numberValue,
+                  let y = input["y"]?.numberValue,
+                  let button = input["button"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("input.pointer.click requires displayId, x, y, and button.")
+            }
+            action = SafeActionRequest(kind: .clickPointer, parameters: ["displayId": .number(displayID), "x": .number(x), "y": .number(y), "button": .string(button)])
+        case "input.pointer.scroll":
+            try requireOnlyKeys(input, ["deltaX", "deltaY"])
+            guard let deltaX = input["deltaX"]?.numberValue,
+                  let deltaY = input["deltaY"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("input.pointer.scroll requires deltaX and deltaY.")
+            }
+            action = SafeActionRequest(kind: .scrollPointer, parameters: ["deltaX": .number(deltaX), "deltaY": .number(deltaY)])
+        case "input.keyboard.type":
+            try requireOnlyKeys(input, ["text"])
+            guard let text = input["text"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("input.keyboard.type requires text.")
+            }
+            action = SafeActionRequest(kind: .typeText, parameters: ["text": .string(text)])
+        case "input.keyboard.shortcut":
+            try requireOnlyKeys(input, ["key", "modifiers"])
+            guard let key = input["key"]?.stringValue,
+                  case let .array(modifiers)? = input["modifiers"] else {
+                throw ThingtimeNodeError.invalidRequest("input.keyboard.shortcut requires key and modifiers.")
+            }
+            action = SafeActionRequest(kind: .sendShortcut, parameters: ["key": .string(key), "modifiers": .array(modifiers)])
         case "app.launch":
             try requireOnlyKeys(input, ["appId"])
             guard let appID = input["appId"]?.stringValue else {
