@@ -130,6 +130,7 @@ export type DeviceBattery = { level: number | null; charging: boolean | null; is
 export type DevicePowerTimers = { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
 export type DeviceAppleMusic = { isInstalled: boolean; isRunning: boolean };
 export type DeviceSpotify = { isInstalled: boolean; isRunning: boolean };
+export type DeviceChromeYouTube = { isInstalled: boolean; isRunning: boolean };
 
 export type DeviceSystemProperties = {
 	model?: string | null;
@@ -165,6 +166,7 @@ export type DeviceObservedState = {
 	powerTimers?: DevicePowerTimers;
 	appleMusic?: DeviceAppleMusic;
 	spotify?: DeviceSpotify;
+	chromeYouTube?: DeviceChromeYouTube;
 	observedAt: string;
 };
 
@@ -247,7 +249,10 @@ export type DeviceActionKind =
 	| 'propose-airdrop-policy-profile'
 	| 'propose-camera-policy-profile'
 	| 'set-apple-music-playback'
+	| 'set-apple-music-volume'
 	| 'set-spotify-playback'
+	| 'set-spotify-volume'
+	| 'set-chrome-youtube-volume'
 	| 'launch-app'
 	| 'quit-app'
 	| 'force-quit-app'

@@ -480,9 +480,41 @@ public enum SystemAppleMusic {
         }
     }
 
+    /// Changes only Apple Music's own documented sound-volume property. This
+    /// deliberately does not read player state, the media library, or queue.
+    public static func setVolume(level: Double) throws {
+        guard let percent = volumePercent(level) else {
+            throw ThingtimeNodeError.invalidRequest("The requested Apple Music volume is invalid.")
+        }
+        guard telemetry().isInstalled else {
+            throw ThingtimeNodeError.policyDenied("Apple Music is not installed on this Mac.")
+        }
+        guard telemetry().isRunning else {
+            throw ThingtimeNodeError.policyDenied("Apple Music must be running before its volume can be changed.")
+        }
+        guard let script = NSAppleScript(source: "tell application id \"com.apple.Music\" to set sound volume to \(percent)") else {
+            throw ThingtimeNodeError.policyDenied("macOS could not prepare the fixed Apple Music volume event.")
+        }
+        var error: NSDictionary?
+        _ = script.executeAndReturnError(&error)
+        if let error, let message = error[NSAppleScript.errorMessage] as? String {
+            throw ThingtimeNodeError.policyDenied("Apple Music did not accept the approved volume change: \(message)")
+        }
+    }
+
     public static func isValidOperation(_ value: String?) -> Bool {
         guard let value else { return false }
         return commands[value] != nil
+    }
+
+    public static func isValidVolume(_ value: Double?) -> Bool {
+        guard let value else { return false }
+        return value.isFinite && (0 ... 1).contains(value)
+    }
+
+    private static func volumePercent(_ level: Double) -> Int? {
+        guard isValidVolume(level) else { return nil }
+        return Int((level * 100).rounded())
     }
 }
 
@@ -523,9 +555,111 @@ public enum SystemSpotify {
         }
     }
 
+    /// Changes only Spotify's own documented sound-volume property. This
+    /// deliberately does not expose player metadata, queue, or library data.
+    public static func setVolume(level: Double) throws {
+        guard let percent = volumePercent(level) else {
+            throw ThingtimeNodeError.invalidRequest("The requested Spotify volume is invalid.")
+        }
+        guard telemetry().isInstalled else {
+            throw ThingtimeNodeError.policyDenied("Spotify is not installed on this Mac.")
+        }
+        guard telemetry().isRunning else {
+            throw ThingtimeNodeError.policyDenied("Spotify must be running before its volume can be changed.")
+        }
+        guard let script = NSAppleScript(source: "tell application id \"com.spotify.client\" to set sound volume to \(percent)") else {
+            throw ThingtimeNodeError.policyDenied("macOS could not prepare the fixed Spotify volume event.")
+        }
+        var error: NSDictionary?
+        _ = script.executeAndReturnError(&error)
+        if let error, let message = error[NSAppleScript.errorMessage] as? String {
+            throw ThingtimeNodeError.policyDenied("Spotify did not accept the approved volume change: \(message)")
+        }
+    }
+
     public static func isValidOperation(_ value: String?) -> Bool {
         guard let value else { return false }
         return commands[value] != nil
+    }
+
+    public static func isValidVolume(_ value: Double?) -> Bool {
+        guard let value else { return false }
+        return value.isFinite && (0 ... 1).contains(value)
+    }
+
+    private static func volumePercent(_ level: Double) -> Int? {
+        guard isValidVolume(level) else { return nil }
+        return Int((level * 100).rounded())
+    }
+}
+
+/// A fixed Apple Events bridge for only the active Chrome YouTube or YouTube
+/// Music tab. It never receives a URL, script, selector, browser profile, or
+/// arbitrary page target from a remote caller. Chrome itself requires the Mac
+/// user to enable "Allow JavaScript from Apple Events" before it will accept
+/// this documented AppleScript command.
+public enum SystemChromeYouTube {
+    private static let bundleIdentifier = "com.google.Chrome"
+
+    public static func telemetry() -> ChromeYouTubeTelemetry {
+        ChromeYouTubeTelemetry(
+            isInstalled: NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil,
+            isRunning: !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
+        )
+    }
+
+    public static func setVolume(level: Double) throws {
+        guard let percent = volumePercent(level) else {
+            throw ThingtimeNodeError.invalidRequest("The requested Chrome YouTube volume is invalid.")
+        }
+        guard telemetry().isInstalled else {
+            throw ThingtimeNodeError.policyDenied("Google Chrome is not installed on this Mac.")
+        }
+        guard telemetry().isRunning else {
+            throw ThingtimeNodeError.policyDenied("Google Chrome must be running before its active YouTube player can be changed.")
+        }
+        guard let script = NSAppleScript(source: source(volumePercent: percent)) else {
+            throw ThingtimeNodeError.policyDenied("macOS could not prepare the fixed Chrome YouTube volume event.")
+        }
+        var error: NSDictionary?
+        let result = script.executeAndReturnError(&error)
+        // Do not surface Chrome's raw Apple Event error: it can contain the
+        // active tab's private URL or page detail. The actionable consent
+        // guidance is stable without leaking browser data.
+        if error != nil {
+            throw ThingtimeNodeError.policyDenied("Chrome rejected the approved YouTube volume change. Confirm Automation access and Chrome's Allow JavaScript from Apple Events setting.")
+        }
+        switch result.stringValue {
+        case "ok":
+            return
+        case "wrong-host":
+            throw ThingtimeNodeError.policyDenied("Chrome's active tab must be a YouTube or YouTube Music player.")
+        case "no-player":
+            throw ThingtimeNodeError.policyDenied("Chrome's active YouTube tab has no controllable audio or video player.")
+        default:
+            throw ThingtimeNodeError.policyDenied("Chrome could not confirm the approved YouTube volume change.")
+        }
+    }
+
+    public static func isValidVolume(_ value: Double?) -> Bool {
+        guard let value else { return false }
+        return value.isFinite && (0 ... 1).contains(value)
+    }
+
+    static func source(volumePercent: Int) -> String {
+        let javascript = "(() => { const host = window.location.hostname; if (host !== 'www.youtube.com' && host !== 'music.youtube.com' && host !== 'm.youtube.com' && host !== 'www.youtube-nocookie.com') return 'wrong-host'; const media = document.querySelector('video, audio'); if (!(media instanceof HTMLMediaElement)) return 'no-player'; media.volume = \(volumePercent) / 100; return Math.round(media.volume * 100) === \(volumePercent) ? 'ok' : 'failed'; })()"
+        return """
+        tell application id "com.google.Chrome"
+            tell active tab of front window
+                return execute javascript "\(javascript)"
+            end tell
+        end tell
+        """
+    }
+
+    private static func volumePercent(_ level: Double) -> Int? {
+        guard isValidVolume(level) else { return nil }
+        return Int((level * 100).rounded())
     }
 }
 

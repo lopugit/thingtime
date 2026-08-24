@@ -39,7 +39,10 @@ export const DEVICE_COMMAND_KINDS = [
 	'system.policy.airdrop.profile.propose',
 	'system.policy.camera.profile.propose',
 	'system.media.apple-music.playback.set',
+	'system.media.apple-music.volume.set',
 	'system.media.spotify.playback.set',
+	'system.media.spotify.volume.set',
+	'system.media.chrome-youtube.volume.set',
 	'system.lock',
 	'system.sleep',
 	'system.restart',
@@ -72,7 +75,10 @@ const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>([
 	'system.shutdown',
 	'system.logout',
 	'system.media.apple-music.playback.set',
+	'system.media.apple-music.volume.set',
 	'system.media.spotify.playback.set',
+	'system.media.spotify.volume.set',
+	'system.media.chrome-youtube.volume.set',
 	'system.power.idle-timer.set',
 	'system.policy.airdrop.profile.propose',
 	'system.policy.camera.profile.propose'
@@ -205,6 +211,7 @@ export type DeviceBatteryState = { level: number | null; charging: boolean | nul
 export type DevicePowerTimersState = { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
 export type DeviceAppleMusicState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceSpotifyState = { isInstalled: boolean; isRunning: boolean };
+export type DeviceChromeYouTubeState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceStateSnapshot = {
 	locked: boolean;
 	volume: number | null;
@@ -226,6 +233,7 @@ export type DeviceStateSnapshot = {
 	vpnServices?: DeviceVPNService[];
 	appleMusic?: DeviceAppleMusicState;
 	spotify?: DeviceSpotifyState;
+	chromeYouTube?: DeviceChromeYouTubeState;
 };
 
 const unitInterval = (value: unknown): number | null => {
@@ -278,7 +286,7 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		!Object.keys(raw).every((key) =>
 			[
 				'locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'powerTimers', 'openApps', 'audioDevices', 'wifi',
-				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic', 'spotify'
+				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic', 'spotify', 'chromeYouTube'
 			].includes(key)
 		)
 	)
@@ -432,6 +440,13 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		if (!exactKeys(candidate, ['isInstalled', 'isRunning']) || typeof candidate.isInstalled !== 'boolean' || typeof candidate.isRunning !== 'boolean') return null;
 		spotify = { isInstalled: candidate.isInstalled, isRunning: candidate.isRunning };
 	}
+	let chromeYouTube: DeviceChromeYouTubeState | undefined;
+	if (raw.chromeYouTube !== undefined) {
+		if (!raw.chromeYouTube || typeof raw.chromeYouTube !== 'object' || Array.isArray(raw.chromeYouTube)) return null;
+		const candidate = raw.chromeYouTube as Record<string, unknown>;
+		if (!exactKeys(candidate, ['isInstalled', 'isRunning']) || typeof candidate.isInstalled !== 'boolean' || typeof candidate.isRunning !== 'boolean') return null;
+		chromeYouTube = { isInstalled: candidate.isInstalled, isRunning: candidate.isRunning };
+	}
 	if (!displays || !printers || !cameras || !bluetoothDevices || !vpnServices) return null;
 	return {
 		locked: raw.locked,
@@ -453,7 +468,8 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		bluetoothDevices,
 		vpnServices,
 		appleMusic,
-		spotify
+		spotify,
+		chromeYouTube
 	};
 };
 
@@ -667,7 +683,10 @@ export type DeviceCommandInputByKind = {
 	'system.policy.airdrop.profile.propose': { enabled: boolean };
 	'system.policy.camera.profile.propose': { enabled: boolean };
 	'system.media.apple-music.playback.set': { operation: 'play' | 'pause' | 'next' | 'previous' };
+	'system.media.apple-music.volume.set': { level: number };
 	'system.media.spotify.playback.set': { operation: 'play' | 'pause' | 'next' | 'previous' };
+	'system.media.spotify.volume.set': { level: number };
+	'system.media.chrome-youtube.volume.set': { level: number };
 	'system.lock': Record<string, never>;
 	'system.sleep': Record<string, never>;
 	'system.restart': Record<string, never>;
@@ -754,7 +773,10 @@ const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'system.policy.airdrop.profile.propose': 'system.policy.airdrop.profile.write',
 	'system.policy.camera.profile.propose': 'system.policy.camera.profile.write',
 	'system.media.apple-music.playback.set': 'system.media.apple-music.playback.write',
+	'system.media.apple-music.volume.set': 'system.media.apple-music.volume.write',
 	'system.media.spotify.playback.set': 'system.media.spotify.playback.write',
+	'system.media.spotify.volume.set': 'system.media.spotify.volume.write',
+	'system.media.chrome-youtube.volume.set': 'system.media.chrome-youtube.volume.write',
 	'system.lock': 'system.lock',
 	'system.sleep': 'system.power.sleep',
 	'system.restart': 'system.power.restart',
@@ -805,7 +827,10 @@ const DEVICE_CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
 	'system.policy.airdrop.profile.propose': 'system.policy.airdrop.profile.write',
 	'system.policy.camera.profile.propose': 'system.policy.camera.profile.write',
 	'system.media.apple-music.playback.set': 'system.media.apple-music.playback.write',
+	'system.media.apple-music.volume.set': 'system.media.apple-music.volume.write',
 	'system.media.spotify.playback.set': 'system.media.spotify.playback.write',
+	'system.media.spotify.volume.set': 'system.media.spotify.volume.write',
+	'system.media.chrome-youtube.volume.set': 'system.media.chrome-youtube.volume.write',
 	'device.lock.write': 'system.lock',
 	'system.sleep': 'system.power.sleep',
 	'system.restart': 'system.power.restart',
@@ -970,6 +995,14 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 		case 'system.audio.input.volume.set':
 		case 'system.audio.sound-effects.volume.set':
 		case 'system.brightness.set': {
+			const level = Number(raw.level);
+			return Number.isFinite(level) && level >= 0 && level <= 1 && exactKeys(raw, ['level'])
+				? ok({ level })
+				: deviceFail(400, `${kind} requires only level from 0 to 1`);
+		}
+		case 'system.media.apple-music.volume.set':
+		case 'system.media.spotify.volume.set':
+		case 'system.media.chrome-youtube.volume.set': {
 			const level = Number(raw.level);
 			return Number.isFinite(level) && level >= 0 && level <= 1 && exactKeys(raw, ['level'])
 				? ok({ level })

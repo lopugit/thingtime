@@ -124,6 +124,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             struct PowerTimers: Encodable { let displayIdleMinutes: Int?; let systemSleepMinutes: Int?; let diskIdleMinutes: Int? }
             struct AppleMusic: Encodable { let isInstalled: Bool; let isRunning: Bool }
             struct Spotify: Encodable { let isInstalled: Bool; let isRunning: Bool }
+            struct ChromeYouTube: Encodable { let isInstalled: Bool; let isRunning: Bool }
             let locked: Bool
             let volume: Double?
             let muted: Bool?
@@ -144,6 +145,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             let powerTimers: PowerTimers
             let appleMusic: AppleMusic
             let spotify: Spotify
+            let chromeYouTube: ChromeYouTube
         }
         struct Connector: Encodable {
             let id: String
@@ -354,7 +356,8 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep, isLowPowerModeEnabled: telemetry.battery.isLowPowerModeEnabled),
                 powerTimers: .init(displayIdleMinutes: telemetry.powerTimers.displayIdleMinutes, systemSleepMinutes: telemetry.powerTimers.systemSleepMinutes, diskIdleMinutes: telemetry.powerTimers.diskIdleMinutes),
                 appleMusic: .init(isInstalled: telemetry.appleMusic.isInstalled, isRunning: telemetry.appleMusic.isRunning),
-                spotify: .init(isInstalled: telemetry.spotify.isInstalled, isRunning: telemetry.spotify.isRunning)
+				spotify: .init(isInstalled: telemetry.spotify.isInstalled, isRunning: telemetry.spotify.isRunning),
+				chromeYouTube: .init(isInstalled: telemetry.chromeYouTube.isInstalled, isRunning: telemetry.chromeYouTube.isRunning)
             ),
             connectors: connectors
         )

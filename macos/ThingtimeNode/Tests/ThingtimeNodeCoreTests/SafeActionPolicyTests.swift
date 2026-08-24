@@ -238,6 +238,34 @@ final class SafeActionPolicyTests: XCTestCase {
         ) else { return XCTFail("Expected unexpected Spotify fields to be denied") }
     }
 
+    func testMediaVolumeControlsAreBoundedAndAlwaysRequireApproval() {
+        let requests: [SafeActionRequest] = [
+            SafeActionRequest(kind: .setAppleMusicVolume, parameters: ["level": .number(0.25)]),
+            SafeActionRequest(kind: .setSpotifyVolume, parameters: ["level": .number(0.5)]),
+            SafeActionRequest(kind: .setChromeYouTubeVolume, parameters: ["level": .number(0.75)])
+        ]
+        for request in requests {
+            guard case .requireApproval = policy.evaluate(
+                action: request,
+                context: SafeActionContext(origin: .remoteAccount, sessionLocked: false, userApproved: false)
+            ) else { return XCTFail("Expected \(request.kind.rawValue) to require approval") }
+        }
+
+        let invalid = SafeActionRequest(kind: .setAppleMusicVolume, parameters: ["level": .number(.infinity)])
+        guard case .deny = policy.evaluate(
+            action: invalid,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected non-finite media volume to be denied") }
+
+        let chromeInput = SafeActionRequest(kind: .setChromeYouTubeVolume, parameters: [
+            "level": .number(0.5), "script": .string("do shell script")
+        ])
+        guard case .deny = policy.evaluate(
+            action: chromeInput,
+            context: SafeActionContext(origin: .localUser, sessionLocked: false, userApproved: true)
+        ) else { return XCTFail("Expected Chrome script input to be denied") }
+    }
+
     func testPowerIdleTimersAreFixedAndRequireApproval() {
         let valid = SafeActionRequest(kind: .setPowerIdleTimer, parameters: [
             "scope": .string("display"), "minutes": .number(10)

@@ -162,7 +162,8 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 		vpnServices: [{ id: 'vpn-1', name: 'Work VPN', isConnected: false }],
 		powerTimers: { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0 },
 		appleMusic: { isInstalled: true, isRunning: false },
-		spotify: { isInstalled: true, isRunning: false }
+		spotify: { isInstalled: true, isRunning: false },
+		chromeYouTube: { isInstalled: true, isRunning: false }
 	});
 	assert.ok(normalized);
 	assert.deepEqual(normalized?.wifi, { powerOn: true, ssid: 'Thingtime Guest' });
@@ -171,6 +172,7 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 	assert.deepEqual(normalized?.powerTimers, { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0 });
 	assert.deepEqual(normalized?.appleMusic, { isInstalled: true, isRunning: false });
 	assert.deepEqual(normalized?.spotify, { isInstalled: true, isRunning: false });
+	assert.deepEqual(normalized?.chromeYouTube, { isInstalled: true, isRunning: false });
 	assert.deepEqual(
 		normalizeDeviceState({ locked: false, battery: { level: 0.5, charging: true }, openApps: [] })?.battery,
 		{ level: 0.5, charging: true, isExternalPower: null, isPreventingIdleSleep: false, isLowPowerModeEnabled: false }
@@ -178,6 +180,7 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 	assert.equal(normalizeDeviceState({ locked: false, displays: [{ id: 1, width: 1, height: 1, isMain: true, isBuiltIn: false, brightness: null, brightnessControlSupported: false, currentMode: null, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false, path: '/private' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, appleMusic: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);
 	assert.equal(normalizeDeviceState({ locked: false, spotify: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);
+	assert.equal(normalizeDeviceState({ locked: false, chromeYouTube: { isInstalled: true, isRunning: false, activeTab: 'private' } }), null);
 	assert.equal(normalizeDeviceState({ locked: false, powerTimers: { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0, profile: 'private' }, openApps: [] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, powerTimers: { displayIdleMinutes: 10.5, systemSleepMinutes: 30, diskIdleMinutes: 0 }, openApps: [] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, openApps: [{ id: 'x', name: 'X', frontmost: false, path: '/Applications/X.app' }] }), null);
@@ -346,7 +349,10 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'system.policy.airdrop.profile.propose',
 		'system.policy.camera.profile.propose',
 		'system.media.apple-music.playback.set',
+		'system.media.apple-music.volume.set',
 		'system.media.spotify.playback.set',
+		'system.media.spotify.volume.set',
+		'system.media.chrome-youtube.volume.set',
 		'system.lock',
 		'system.sleep',
 		'system.restart',
@@ -410,9 +416,16 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'play' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'toggle' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'next', script: 'do shell script' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.volume.set', { level: 0.35 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.volume.set', { level: 1.1 }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.volume.set', { level: 0.35, script: 'do shell script' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.media.spotify.playback.set', { operation: 'play' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.media.spotify.playback.set', { operation: 'toggle' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.media.spotify.playback.set', { operation: 'next', script: 'do shell script' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.spotify.volume.set', { level: 0.35 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.media.spotify.volume.set', { level: -0.1 }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.chrome-youtube.volume.set', { level: 0.35 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.media.chrome-youtube.volume.set', { level: 0.35, url: 'https://private.example' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.restart', {}).ok, true);
 	assert.equal(normalizeDeviceCommand('system.restart', { command: 'rm -rf /' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'Thingtime Guest' }).ok, true);
@@ -463,7 +476,7 @@ test('paired account execution preferences default to always allow, with reversi
 	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
 	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
 	for (const kind of DEVICE_COMMAND_KINDS) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.policy.airdrop.profile.propose', 'system.policy.camera.profile.propose', 'system.media.apple-music.playback.set', 'system.media.spotify.playback.set'].includes(kind), kind);
+		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.policy.airdrop.profile.propose', 'system.policy.camera.profile.propose', 'system.media.apple-music.playback.set', 'system.media.apple-music.volume.set', 'system.media.spotify.playback.set', 'system.media.spotify.volume.set', 'system.media.chrome-youtube.volume.set'].includes(kind), kind);
 		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
 	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };

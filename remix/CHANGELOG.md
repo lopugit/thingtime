@@ -29,6 +29,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Consented media app and Chrome YouTube volume controls for paired Macs**:
+  Apple Music and Spotify now expose their own bounded 0–100% volume settings
+  alongside fixed playback controls. Chrome can set the active direct
+  YouTube/YouTube Music audio/video element volume through one fixed Apple
+  Event after the Mac user grants Automation and enables Chrome’s **Allow
+  JavaScript from Apple Events** setting. These commands always require fresh
+  approval, reject scripts, URLs, selectors, browser/profile data and unknown
+  input, and do not collect media metadata or page data. Cross-origin embeds
+  and generic browser media remain intentionally unavailable. Paired-device
+  API contracts are now `1.7.0`. — Codex (AI), 2026-08-24
+
 - **User-reviewed global availability policy proposals for paired Macs**:
   AirDrop and camera availability now have separate capability-gated commands
   that accept only a boolean and always require a fresh approval. Each command

@@ -227,6 +227,18 @@ public struct SpotifyTelemetry: Codable, Equatable, Sendable {
     }
 }
 
+/// A deliberately minimal Chrome capability signal. The node never reports a
+/// tab URL, title, playback state, page contents, or browser history.
+public struct ChromeYouTubeTelemetry: Codable, Equatable, Sendable {
+    public let isInstalled: Bool
+    public let isRunning: Bool
+
+    public init(isInstalled: Bool, isRunning: Bool) {
+        self.isInstalled = isInstalled
+        self.isRunning = isRunning
+    }
+}
+
 public struct SessionTelemetry: Codable, Equatable, Sendable {
     public let isLocked: Bool
     public let isOnConsole: Bool
@@ -306,6 +318,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let powerTimers: PowerTimerTelemetry
     public let appleMusic: AppleMusicTelemetry
     public let spotify: SpotifyTelemetry
+    public let chromeYouTube: ChromeYouTubeTelemetry
     public let collectedAt: Date
 
     public init(
@@ -334,7 +347,8 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         battery: BatteryTelemetry = BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: false),
         powerTimers: PowerTimerTelemetry = PowerTimerTelemetry(displayIdleMinutes: nil, systemSleepMinutes: nil, diskIdleMinutes: nil),
         appleMusic: AppleMusicTelemetry = AppleMusicTelemetry(isInstalled: false, isRunning: false),
-        spotify: SpotifyTelemetry = SpotifyTelemetry(isInstalled: false, isRunning: false)
+        spotify: SpotifyTelemetry = SpotifyTelemetry(isInstalled: false, isRunning: false),
+        chromeYouTube: ChromeYouTubeTelemetry = ChromeYouTubeTelemetry(isInstalled: false, isRunning: false)
     ) {
         self.deviceName = deviceName
         self.hostName = hostName
@@ -362,6 +376,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.powerTimers = powerTimers
         self.appleMusic = appleMusic
         self.spotify = spotify
+        self.chromeYouTube = chromeYouTube
     }
 }
 
@@ -457,7 +472,8 @@ public final class DeviceTelemetryCollector {
             battery: SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep),
             powerTimers: SystemPowerTimers.snapshot(),
             appleMusic: SystemAppleMusic.telemetry(),
-            spotify: SystemSpotify.telemetry()
+            spotify: SystemSpotify.telemetry(),
+            chromeYouTube: SystemChromeYouTube.telemetry()
         )
     }
 

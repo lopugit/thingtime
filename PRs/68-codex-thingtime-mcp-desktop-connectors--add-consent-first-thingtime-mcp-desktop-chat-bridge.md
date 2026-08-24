@@ -200,6 +200,29 @@ relational shape for later ThingtimeDB storage and platform chat views.
   system-power action offered is approval-gated Sleep. Restart and shutdown
   remain intentionally unavailable without shell or AppleScript execution.
 
+### 2026-08-24 consented media-volume follow-up
+
+- Apple Music and Spotify now have distinct, capability-gated app-volume
+  commands in addition to their existing fixed play/pause/previous/next
+  controls. The only accepted volume input is a finite numeric level from 0
+  through 1; the native node converts it to each app's documented 0–100 sound
+  volume property. The player must already be running, and every operation
+  requires both a fresh Thingtime approval and macOS Automation consent.
+- Chrome now has one separate, capability-gated active-tab volume command for
+  direct YouTube and YouTube Music pages. It runs one fixed local JavaScript
+  expression through Chrome's documented AppleScript command, with no remote
+  script, selector, URL, tab ID, browser profile, title, history, media
+  metadata, or page content accepted or reported. Chrome must be running, the
+  Mac user must enable **Allow JavaScript from Apple Events**, and an active
+  tab without a direct media element fails closed. Cross-origin embeds and
+  generic browser-player control remain out of scope.
+- The node reports only installed/running availability for these three media
+  surfaces; it never performs Automation requests while publishing telemetry.
+  All three volume effects retain the journalled `needs-review` boundary after
+  an Apple Event, rather than claiming the audible result was observed.
+- The four paired-device API contracts are now `1.7.0`; Electron refuses to
+  activate the desktop control bridge against an older manifest.
+
 ### 2026-08-24 display, hardware, and lifecycle controls
 
 - The paired-computer contract now has individually capability-gated controls

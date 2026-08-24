@@ -204,7 +204,10 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 		case 'system.policy.airdrop.profile.propose': return 'propose-airdrop-policy-profile';
 		case 'system.policy.camera.profile.propose': return 'propose-camera-policy-profile';
 		case 'system.media.apple-music.playback.set': return 'set-apple-music-playback';
+		case 'system.media.apple-music.volume.set': return 'set-apple-music-volume';
 		case 'system.media.spotify.playback.set': return 'set-spotify-playback';
+		case 'system.media.spotify.volume.set': return 'set-spotify-volume';
+		case 'system.media.chrome-youtube.volume.set': return 'set-chrome-youtube-volume';
 		case 'system.lock':
 			return 'lock';
 		case 'system.sleep':
@@ -420,6 +423,7 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 			vpnServices: device.state?.vpnServices || [],
 			appleMusic: device.state?.appleMusic,
 			spotify: device.state?.spotify,
+			chromeYouTube: device.state?.chromeYouTube,
 			powerTimers: device.state?.powerTimers,
 			battery: device.state?.battery
 				? {
@@ -669,10 +673,28 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 				? { ...base, kind: 'system.media.apple-music.playback.set', input: { operation } }
 				: null;
 		}
+		case 'set-apple-music-volume': {
+			const level = input.level;
+			return typeof level === 'number' && Number.isFinite(level) && level >= 0 && level <= 1
+				? { ...base, kind: 'system.media.apple-music.volume.set', input: { level } }
+				: null;
+		}
 		case 'set-spotify-playback': {
 			const operation = input.operation;
 			return operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous'
 				? { ...base, kind: 'system.media.spotify.playback.set', input: { operation } }
+				: null;
+		}
+		case 'set-spotify-volume': {
+			const level = input.level;
+			return typeof level === 'number' && Number.isFinite(level) && level >= 0 && level <= 1
+				? { ...base, kind: 'system.media.spotify.volume.set', input: { level } }
+				: null;
+		}
+		case 'set-chrome-youtube-volume': {
+			const level = input.level;
+			return typeof level === 'number' && Number.isFinite(level) && level >= 0 && level <= 1
+				? { ...base, kind: 'system.media.chrome-youtube.volume.set', input: { level } }
 				: null;
 		}
 		case 'lock':

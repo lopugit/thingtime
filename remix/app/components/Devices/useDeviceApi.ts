@@ -41,7 +41,10 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'system.policy.airdrop.profile.propose',
 	'system.policy.camera.profile.propose',
 	'system.media.apple-music.playback.set',
+	'system.media.apple-music.volume.set',
 	'system.media.spotify.playback.set',
+	'system.media.spotify.volume.set',
+	'system.media.chrome-youtube.volume.set',
 	'system.lock',
 	'system.sleep',
 	'system.restart',
@@ -97,6 +100,7 @@ export type PublicDeviceState = {
 	vpnServices?: Array<{ id: string; name: string; isConnected: boolean }>;
 	appleMusic?: { isInstalled: boolean; isRunning: boolean };
 	spotify?: { isInstalled: boolean; isRunning: boolean };
+	chromeYouTube?: { isInstalled: boolean; isRunning: boolean };
 	observedAt: string;
 	updatedAt: string;
 };

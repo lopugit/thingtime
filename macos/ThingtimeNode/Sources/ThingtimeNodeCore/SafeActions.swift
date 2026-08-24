@@ -33,7 +33,10 @@ public enum SafeActionKind: String, Codable, Equatable, Sendable {
     case proposeAirDropPolicy = "system.policy.airdrop.profile.propose"
     case proposeCameraPolicy = "system.policy.camera.profile.propose"
     case setAppleMusicPlayback = "system.media.apple-music.playback.set"
+    case setAppleMusicVolume = "system.media.apple-music.volume.set"
     case setSpotifyPlayback = "system.media.spotify.playback.set"
+    case setSpotifyVolume = "system.media.spotify.volume.set"
+    case setChromeYouTubeVolume = "system.media.chrome-youtube.volume.set"
     case activateApplication = "application.activate"
     case launchApplication = "application.launch"
     case terminateApplication = "application.quit"
@@ -201,10 +204,28 @@ public struct SafeActionPolicy: Sendable {
                 return "system.media.apple-music.playback.set requires only play, pause, next, or previous."
             }
             return nil
+        case .setAppleMusicVolume:
+            guard action.parameters.count == 1,
+                  SystemAppleMusic.isValidVolume(action.parameters["level"]?.numberValue) else {
+                return "system.media.apple-music.volume.set requires only a numeric level from 0 to 1."
+            }
+            return nil
         case .setSpotifyPlayback:
             guard action.parameters.count == 1,
                   SystemSpotify.isValidOperation(action.parameters["operation"]?.stringValue) else {
                 return "system.media.spotify.playback.set requires only play, pause, next, or previous."
+            }
+            return nil
+        case .setSpotifyVolume:
+            guard action.parameters.count == 1,
+                  SystemSpotify.isValidVolume(action.parameters["level"]?.numberValue) else {
+                return "system.media.spotify.volume.set requires only a numeric level from 0 to 1."
+            }
+            return nil
+        case .setChromeYouTubeVolume:
+            guard action.parameters.count == 1,
+                  SystemChromeYouTube.isValidVolume(action.parameters["level"]?.numberValue) else {
+                return "system.media.chrome-youtube.volume.set requires only a numeric level from 0 to 1."
             }
             return nil
         case .activateApplication, .launchApplication, .terminateApplication, .forceTerminateApplication, .hideApplication, .unhideApplication:
@@ -433,6 +454,12 @@ public final class SafeActionExecutor {
             // Apple Events returning normally does not prove the player reached
             // the requested state, so retain a journalled recovery boundary.
             throw ThingtimeNodeError.commandOutcomeUncertain
+        case .setAppleMusicVolume:
+            guard let level = action.parameters["level"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing Apple Music volume.")
+            }
+            try SystemAppleMusic.setVolume(level: level)
+            throw ThingtimeNodeError.commandOutcomeUncertain
         case .setSpotifyPlayback:
             guard let operation = action.parameters["operation"]?.stringValue else {
                 throw ThingtimeNodeError.invalidRequest("Missing Spotify operation.")
@@ -440,6 +467,21 @@ public final class SafeActionExecutor {
             try SystemSpotify.perform(operation: operation)
             // A normally returned Apple Event cannot prove the external player
             // reached its state; resolve through the journalled recovery path.
+            throw ThingtimeNodeError.commandOutcomeUncertain
+        case .setSpotifyVolume:
+            guard let level = action.parameters["level"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing Spotify volume.")
+            }
+            try SystemSpotify.setVolume(level: level)
+            throw ThingtimeNodeError.commandOutcomeUncertain
+        case .setChromeYouTubeVolume:
+            guard let level = action.parameters["level"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("Missing Chrome YouTube volume.")
+            }
+            try SystemChromeYouTube.setVolume(level: level)
+            // Chrome confirms the DOM property only; retain the same recovery
+            // boundary as the app Apple Events rather than claiming audible
+            // playback was independently observed.
             throw ThingtimeNodeError.commandOutcomeUncertain
         case .activateApplication:
             guard let bundleID = action.parameters["bundleIdentifier"]?.stringValue,

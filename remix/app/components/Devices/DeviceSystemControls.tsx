@@ -1,11 +1,11 @@
 import React, { memo } from 'react';
 
-import { Box, Button, Flex, Grid, Input, Menu, MenuButton, MenuList, Portal, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Grid, Input, Menu, MenuButton, MenuList, Portal, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
 import { Bluetooth, Camera, ChevronDown, Monitor, Moon, Music, Printer, Shield, Wifi } from 'lucide-react';
 
 import { DRAWER_POPUP_Z } from '~/components/Nav/Drawer/useDrawer';
 
-import type { DeviceAppleMusic, DeviceBluetoothDevice, DeviceCamera, DeviceDisplay, DevicePowerTimers, DevicePrinter, DeviceSpotify, DeviceVPNService } from './deviceTypes';
+import type { DeviceAppleMusic, DeviceBluetoothDevice, DeviceCamera, DeviceChromeYouTube, DeviceDisplay, DevicePowerTimers, DevicePrinter, DeviceSpotify, DeviceVPNService } from './deviceTypes';
 import type { DeviceActionHandler, DeviceControlResolver } from './DeviceStateGrid';
 import { DevicePolicyButton, DevicePolicyMenuItem } from './DeviceStateGrid';
 
@@ -52,6 +52,38 @@ const DisplayCard = ({ deviceId, display, allDisplays, controlFor, onAction }: {
 	);
 };
 
+const MediaVolumeControl = ({
+	action,
+	deviceId,
+	disabledReason,
+	label,
+	targetId,
+	controlFor,
+	onAction
+}: {
+	action: 'set-apple-music-volume' | 'set-spotify-volume' | 'set-chrome-youtube-volume';
+	deviceId: string;
+	disabledReason?: string | null;
+	label: string;
+	targetId: string;
+	controlFor?: DeviceControlResolver;
+	onAction?: DeviceActionHandler;
+}) => {
+	const [percent, setPercent] = React.useState(50);
+	return (
+		<Box marginTop={2}>
+			<Slider aria-label={`${label} target volume`} isDisabled={Boolean(disabledReason)} max={100} min={0} onChange={setPercent} step={1} value={percent}>
+				<SliderTrack background="var(--tt-surface-alt, #eeeeef)"><SliderFilledTrack background="var(--tt-accent, #f472b6)" /></SliderTrack>
+				<SliderThumb boxShadow="0 1px 3px rgba(0, 0, 0, 0.24)" />
+			</Slider>
+			<Flex alignItems="center" gap={2} marginTop={1.5} wrap="wrap">
+				<Text color="var(--tt-muted, #71717a)" fontSize="10px">Target {percent}%</Text>
+				<DevicePolicyButton action={action} controlFor={controlFor} controlKey={`${targetId}:volume:${percent}`} deviceId={deviceId} disabledReason={disabledReason} input={{ level: percent / 100 }} label="Set volume" onAction={onAction} targetId={targetId} />
+			</Flex>
+		</Box>
+	);
+};
+
 export type DeviceSystemControlsProps = {
 	deviceId: string;
 	displays: DeviceDisplay[];
@@ -63,11 +95,12 @@ export type DeviceSystemControlsProps = {
 	powerTimers?: DevicePowerTimers;
 	appleMusic?: DeviceAppleMusic;
 	spotify?: DeviceSpotify;
+	chromeYouTube?: DeviceChromeYouTube;
 	controlFor?: DeviceControlResolver;
 	onAction?: DeviceActionHandler;
 };
 
-export const DeviceSystemControls = memo(({ deviceId, displays, printers, cameras, bluetoothDevices, vpnServices, battery, powerTimers, appleMusic, spotify, controlFor, onAction }: DeviceSystemControlsProps) => (
+export const DeviceSystemControls = memo(({ deviceId, displays, printers, cameras, bluetoothDevices, vpnServices, battery, powerTimers, appleMusic, spotify, chromeYouTube, controlFor, onAction }: DeviceSystemControlsProps) => (
 	<Flex direction="column" gap={3}>
 		{displays.length ? <Grid gap={2} templateColumns="repeat(auto-fit, minmax(260px, 1fr))">{displays.map((display) => <DisplayCard allDisplays={displays} controlFor={controlFor} deviceId={deviceId} display={display} key={display.id} onAction={onAction} />)}</Grid> : <Text color="var(--tt-muted, #71717a)" fontSize="12px">No display layout telemetry has been reported by this node yet.</Text>}
 		<Grid gap={2} templateColumns="repeat(auto-fit, minmax(220px, 1fr))">
@@ -77,10 +110,11 @@ export const DeviceSystemControls = memo(({ deviceId, displays, printers, camera
 			<Card icon={<Wifi aria-hidden size={14} />} label="VPN services">{vpnServices.length ? <Flex gap={1} wrap="wrap">{vpnServices.map((service) => <DevicePolicyButton action="set-vpn-connected" controlFor={controlFor} controlKey={`vpn:${service.id}:${service.isConnected ? 'off' : 'on'}`} deviceId={deviceId} input={{ id: service.id, connected: !service.isConnected }} key={service.id} label={`${service.isConnected ? 'Disconnect' : 'Connect'} ${service.name}`} onAction={onAction} targetId={service.id} />)}</Flex> : <Text fontSize="11px">No controllable service reported.</Text>}</Card>
 			<Card icon={<Moon aria-hidden size={14} />} label="Battery & sleep"><Text fontSize="11px">{battery?.level === null || !battery ? 'Battery status unavailable' : `${Math.round(battery.level * 100)}%${battery.charging ? ' · charging' : ''}${battery.isLowPowerModeEnabled ? ' · Low Power Mode' : ''}`}</Text><Box marginTop={2}><DevicePolicyButton action="set-prevent-idle-sleep" controlFor={controlFor} controlKey={`idle-sleep:${battery?.isPreventingIdleSleep ? 'allow' : 'prevent'}`} deviceId={deviceId} input={{ enabled: !battery?.isPreventingIdleSleep }} label={battery?.isPreventingIdleSleep ? 'Allow idle sleep' : 'Keep awake'} onAction={onAction} targetId="idle-sleep" /></Box><Flex gap={1} marginTop={2} wrap="wrap">{([{ scope: 'display', label: 'Display idle', minutes: powerTimers?.displayIdleMinutes }, { scope: 'system', label: 'System sleep', minutes: powerTimers?.systemSleepMinutes }, { scope: 'disk', label: 'Disk idle', minutes: powerTimers?.diskIdleMinutes }] as const).map((timer) => <Menu key={timer.scope} placement="bottom-start"><MenuButton as={Button} rightIcon={<ChevronDown size={13} />} size="xs" variant="outline">{`${timer.label}: ${timer.minutes === null || timer.minutes === undefined ? 'Unavailable' : timer.minutes === 0 ? 'Never' : `${timer.minutes}m`}`}</MenuButton><Portal><MenuList fontSize="12px" zIndex={DRAWER_POPUP_Z}>{[0, 1, 2, 5, 10, 15, 30, 60, 120, 180].map((minutes) => <DevicePolicyMenuItem action="set-power-idle-timer" controlFor={controlFor} controlKey={`power-idle:${timer.scope}:${minutes}`} deviceId={deviceId} input={{ scope: timer.scope, minutes }} key={minutes} label={`${timer.minutes === minutes ? '✓ ' : ''}${minutes === 0 ? 'Never' : `${minutes} minutes`}`} onAction={onAction} targetId={timer.scope} />)}</MenuList></Portal></Menu>)}</Flex></Card>
 			<Card icon={<Shield aria-hidden size={14} />} label="Global availability policy"><Text fontSize="11px">Creates a fixed profile proposal and opens macOS review. Installation is required; this is global availability, not a per-app privacy grant.</Text><Flex gap={1} marginTop={2} wrap="wrap"><DevicePolicyButton action="propose-airdrop-policy-profile" controlFor={controlFor} controlKey="airdrop:restrict" deviceId={deviceId} input={{ enabled: false }} label="Restrict AirDrop" onAction={onAction} targetId="airdrop" /><DevicePolicyButton action="propose-airdrop-policy-profile" controlFor={controlFor} controlKey="airdrop:allow" deviceId={deviceId} input={{ enabled: true }} label="Allow AirDrop" onAction={onAction} targetId="airdrop" /><DevicePolicyButton action="propose-camera-policy-profile" controlFor={controlFor} controlKey="camera:restrict" deviceId={deviceId} input={{ enabled: false }} label="Restrict camera" onAction={onAction} targetId="camera" /><DevicePolicyButton action="propose-camera-policy-profile" controlFor={controlFor} controlKey="camera:allow" deviceId={deviceId} input={{ enabled: true }} label="Allow camera" onAction={onAction} targetId="camera" /></Flex></Card>
-			<Card icon={<Music aria-hidden size={14} />} label="Apple Music"><Text fontSize="11px">{appleMusic?.isInstalled ? appleMusic.isRunning ? 'Running · commands need Automation approval' : 'Installed · opens on play' : 'Not installed'}</Text>{appleMusic?.isInstalled ? <Flex gap={1} marginTop={2} wrap="wrap">{(['play', 'pause', 'previous', 'next'] as const).map((operation) => <DevicePolicyButton action="set-apple-music-playback" controlFor={controlFor} controlKey={`apple-music:${operation}`} deviceId={deviceId} input={{ operation }} key={operation} label={operation === 'previous' ? 'Previous' : operation[0].toUpperCase() + operation.slice(1)} onAction={onAction} targetId="apple-music" />)}</Flex> : null}</Card>
-			<Card icon={<Music aria-hidden size={14} />} label="Spotify"><Text fontSize="11px">{spotify?.isInstalled ? spotify.isRunning ? 'Running · commands need Automation approval' : 'Installed · opens on play' : 'Not installed'}</Text>{spotify?.isInstalled ? <Flex gap={1} marginTop={2} wrap="wrap">{(['play', 'pause', 'previous', 'next'] as const).map((operation) => <DevicePolicyButton action="set-spotify-playback" controlFor={controlFor} controlKey={`spotify:${operation}`} deviceId={deviceId} input={{ operation }} key={operation} label={operation === 'previous' ? 'Previous' : operation[0].toUpperCase() + operation.slice(1)} onAction={onAction} targetId="spotify" />)}</Flex> : null}</Card>
+			<Card icon={<Music aria-hidden size={14} />} label="Apple Music"><Text fontSize="11px">{appleMusic?.isInstalled ? appleMusic.isRunning ? 'Running · controls need Automation approval' : 'Installed · playback opens it; volume needs it running' : 'Not installed'}</Text>{appleMusic?.isInstalled ? <><Flex gap={1} marginTop={2} wrap="wrap">{(['play', 'pause', 'previous', 'next'] as const).map((operation) => <DevicePolicyButton action="set-apple-music-playback" controlFor={controlFor} controlKey={`apple-music:${operation}`} deviceId={deviceId} input={{ operation }} key={operation} label={operation === 'previous' ? 'Previous' : operation[0].toUpperCase() + operation.slice(1)} onAction={onAction} targetId="apple-music" />)}</Flex><MediaVolumeControl action="set-apple-music-volume" controlFor={controlFor} deviceId={deviceId} disabledReason={appleMusic.isRunning ? null : 'Open Apple Music before changing its app volume.'} label="Apple Music" onAction={onAction} targetId="apple-music" /></> : null}</Card>
+			<Card icon={<Music aria-hidden size={14} />} label="Spotify"><Text fontSize="11px">{spotify?.isInstalled ? spotify.isRunning ? 'Running · controls need Automation approval' : 'Installed · playback opens it; volume needs it running' : 'Not installed'}</Text>{spotify?.isInstalled ? <><Flex gap={1} marginTop={2} wrap="wrap">{(['play', 'pause', 'previous', 'next'] as const).map((operation) => <DevicePolicyButton action="set-spotify-playback" controlFor={controlFor} controlKey={`spotify:${operation}`} deviceId={deviceId} input={{ operation }} key={operation} label={operation === 'previous' ? 'Previous' : operation[0].toUpperCase() + operation.slice(1)} onAction={onAction} targetId="spotify" />)}</Flex><MediaVolumeControl action="set-spotify-volume" controlFor={controlFor} deviceId={deviceId} disabledReason={spotify.isRunning ? null : 'Open Spotify before changing its app volume.'} label="Spotify" onAction={onAction} targetId="spotify" /></> : null}</Card>
+			<Card icon={<Music aria-hidden size={14} />} label="Chrome YouTube"><Text fontSize="11px">{chromeYouTube?.isInstalled ? chromeYouTube.isRunning ? 'Active YouTube or YouTube Music tab only · needs Automation approval' : 'Installed · open Chrome on YouTube first' : 'Chrome not installed'}</Text>{chromeYouTube?.isInstalled ? <><MediaVolumeControl action="set-chrome-youtube-volume" controlFor={controlFor} deviceId={deviceId} disabledReason={chromeYouTube.isRunning ? null : 'Open Chrome on a YouTube or YouTube Music player first.'} label="Chrome YouTube" onAction={onAction} targetId="chrome-youtube" /><Text color="var(--tt-muted, #71717a)" fontSize="10px" marginTop={1}>Requires Chrome’s user-enabled Allow JavaScript from Apple Events setting. No tab URL, title, history, or page data is read.</Text></> : null}</Card>
 		</Grid>
-		<Text color="var(--tt-muted, #71717a)" fontSize="10px">Idle timers and policy proposals always require approval. AirDrop and camera availability proposals are fixed local profiles requiring a separate macOS installation review; they do not change per-app camera TCC. HDR, Low Power Mode, Focus, Bluetooth radio state, per-app camera privacy, and global media playback remain unavailable as scoped user-agent setters; Apple Music and Spotify are deliberately limited consented media surfaces.</Text>
+		<Text color="var(--tt-muted, #71717a)" fontSize="10px">Idle timers and policy proposals always require approval. AirDrop and camera availability proposals are fixed local profiles requiring a separate macOS installation review; they do not change per-app camera TCC. Apple Music and Spotify are fixed app-specific media surfaces. Chrome is restricted to the active YouTube or YouTube Music tab; arbitrary websites, cross-origin embeds, browser-player metadata, and generic global media playback remain unavailable.</Text>
 	</Flex>
 ));
 DeviceSystemControls.displayName = 'DeviceSystemControls';
