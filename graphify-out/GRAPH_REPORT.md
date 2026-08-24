@@ -1,16 +1,15 @@
-# Graph Report - thingtime  (2026-08-24)
+# Graph Report - .  (2026-08-24)
 
 ## Corpus Check
-- 21 files · ~122,035 words
-- Verdict: corpus is large enough that graph structure adds value.
+- cluster-only mode — file stats not available
 
 ## Summary
-- 520 nodes · 1173 edges · 40 communities (27 shown, 13 thin omitted)
+- 519 nodes · 1173 edges · 39 communities (27 shown, 12 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 10 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `62086421`
+- Built from commit: `9b4bb323`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -37,14 +36,13 @@
 - [[_COMMUNITY_Build All Branch Script|Build All Branch Script]]
 - [[_COMMUNITY_controller publish or reconcile preview|controller: publish or reconcile preview]]
 - [[_COMMUNITY_Web CI Workflow|Web CI Workflow]]
-- [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
+- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
 - [[_COMMUNITY_Electron App Release Workflow|Electron App Release Workflow]]
 - [[_COMMUNITY_Graphify Rules|Graphify Rules]]
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
 - [[_COMMUNITY_Graphify Rules|Graphify Rules]]
 - [[_COMMUNITY_`github-actions` — the CI control plane|`github-actions` — the CI control plane]]
 - [[_COMMUNITY_repoFlag|repoFlag]]
-- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
 - [[_COMMUNITY_vercel.json|vercel.json]]
 - [[_COMMUNITY_electron-pr-release-contract.mjs|electron-pr-release-contract.mjs]]
 - [[_COMMUNITY_AI_ALL.md canonical instructions|AI_ALL.md canonical instructions]]
@@ -89,7 +87,7 @@
 - **Isolated AI rebase conflict round flow** — github_actions_rebase_conflict_round_action_bootstrap, github_actions_rebase_conflict_round_action_prepare, github_actions_rebase_conflict_round_action_claude, github_actions_rebase_conflict_round_action_verify, github_scripts_rebase_stack_prepare_round [EXTRACTED 0.90]
 - **Canonical AI Instruction Files** — agents_thingtime_ai_instructions, ai_all_thingtime_ai_instructions, claude_thingtime_ai_instructions [EXTRACTED 0.95]
 
-## Communities (40 total, 13 thin omitted)
+## Communities (39 total, 12 thin omitted)
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.06
@@ -175,6 +173,10 @@ Nodes (3): Build All Branch Script, Build All Branch Workflow, Workflow Control-
 Cohesion: 1.00
 Nodes (3): Develop S3 PR preview implementation, controller: publish or reconcile preview, dispatch: trusted default-branch controller
 
+### Community 22 - "Thingtime AI instructions"
+Cohesion: 0.17
+Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
+
 ### Community 27 - "`github-actions` — the CI control plane"
 Cohesion: 0.13
 Nodes (13): Added, Changed, Control-plane changelog, Fixed, [Unreleased], Fork setup: Vercel develop previews, `github-actions` — the CI control plane, Known trade-off (+5 more)
@@ -183,26 +185,22 @@ Nodes (13): Added, Changed, Control-plane changelog, Fixed, [Unreleased], Fork s
 Cohesion: 0.27
 Nodes (14): buildPromotionDispatchRequest(), closeRedundantPass(), createPromotionPr(), dispatchPromotionResolution(), ensurePromotionLabel(), ensureSourceLineageReviewLabel(), promotionDispatchArgs(), queueTrustedPromotionWorker() (+6 more)
 
-### Community 29 - "Thingtime AI instructions"
-Cohesion: 0.17
-Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
-
 ### Community 30 - "vercel.json"
 Cohesion: 0.33
 Nodes (5): framework, git, deploymentEnabled, ignoreCommand, $schema
 
 ### Community 31 - "electron-pr-release-contract.mjs"
 Cohesion: 0.50
-Nodes (4): assertSignedPrReleaseContract(), count(), here, workflow
+Nodes (4): assertPrReleaseContract(), count(), here, workflow
 
 ## Ambiguous Edges - Review These
 - `Commander App Release workflow` → `Lopu PR manager workflow`  [AMBIGUOUS]
   .github/workflows/commander-release.yml · relation: semantically_similar_to
 
 ## Knowledge Gaps
-- **122 isolated node(s):** `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS` (+117 more)
+- **121 isolated node(s):** `here`, `workflow`, `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS` (+116 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **13 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **12 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -211,8 +209,8 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: semantically_similar_to) - confidence is low._
 - **Why does `selfTest()` connect `selfTest` to `failureDetail`, `promote-features-to-main.mjs`, `runPromotion`, `recoverPromotionReviewCheckpoint`, `repoFlag`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
-- **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS` to the rest of the system?**
-  _122 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `here`, `workflow`, `BASE_BRANCHES` to the rest of the system?**
+  _121 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
 - **Should `prepare-round.sh` be split into smaller, more focused modules?**
