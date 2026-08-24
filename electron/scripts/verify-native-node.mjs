@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const { verifySignedArtifacts } = require('../lib/thingtime-node-bridge.cjs');
+const { verifySignedArtifacts, verifyUnsignedArtifacts } = require('../lib/thingtime-node-bridge.cjs');
 
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const nativeRoot = path.join(electronDir, 'dist', 'native');
@@ -16,6 +16,7 @@ const helperInfoPlist = path.join(helperApp, 'Contents', 'Info.plist');
 const runtimePath = path.join(electronDir, 'dist', 'ai', 'thingtime-node-runtime.mjs');
 const manifestPath = path.join(nativeRoot, 'manifest.json');
 const nestedLaunchAgentPath = path.join(helperApp, 'Contents', 'Library', 'LaunchAgents', 'com.thingtime.desktop.node.plist');
+const signingMode = String(process.env.THINGTIME_NODE_SIGNING_MODE || 'signed').trim();
 
 async function assertSelfContained(root) {
 	const pending = [root];
@@ -46,22 +47,25 @@ if (
 ) {
 	throw new Error('Thingtime Node staging manifest does not match the packaging contract.');
 }
+if (!['signed', 'unsigned'].includes(signingMode)) throw new Error('THINGTIME_NODE_SIGNING_MODE must be signed or unsigned.');
 try {
 	await access(nestedLaunchAgentPath);
 	throw new Error('Embedded Thingtime Node must not carry a second SMAppService login-agent registration.');
 } catch (error) {
 	if (error?.code !== 'ENOENT') throw error;
 }
-const signature = await verifySignedArtifacts(
+const signaturePaths =
 	{
 		bridgeExecutable,
 		helperApp,
 		helperExecutable,
 		outerApp: null,
 		runtimePath
-	},
-	undefined,
-	{ requireExactLeafCertificate: true }
-);
+	};
+const signature = signingMode === 'unsigned'
+	? await verifyUnsignedArtifacts(signaturePaths)
+	: await verifySignedArtifacts(signaturePaths, undefined, { requireExactLeafCertificate: true });
 
-console.log(`Thingtime Node resources verified (team ${signature.teamIdentifier}).`);
+console.log(signingMode === 'unsigned'
+	? 'Thingtime Node unsigned resources verified.'
+	: `Thingtime Node resources verified (team ${signature.teamIdentifier}).`);

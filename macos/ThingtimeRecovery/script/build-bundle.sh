@@ -10,6 +10,7 @@ APP_PATH="${STAGE_ROOT}/Thingtime Recovery.app"
 CONTENTS_PATH="${APP_PATH}/Contents"
 VERSION="${THINGTIME_RECOVERY_VERSION:-0.1.0}"
 BUILD_NUMBER="${THINGTIME_RECOVERY_BUILD_NUMBER:-1}"
+SIGNING_MODE="${THINGTIME_RECOVERY_SIGNING_MODE:-signed}"
 
 case "${CACHE_ROOT}" in
     "${HOME}/Library/Caches/com.thingtime.desktop.recovery"*) ;;
@@ -57,19 +58,36 @@ ICON_SIZES
 /usr/bin/plutil -replace CFBundleVersion -string "${BUILD_NUMBER}" "${CONTENTS_PATH}/Info.plist"
 /usr/bin/xattr -cr "${APP_PATH}"
 
-SIGNING_IDENTITY="${THINGTIME_RECOVERY_SIGNING_IDENTITY:-${THINGTIME_ELECTRON_SIGNING_IDENTITY:-}}"
-if [[ -z "${SIGNING_IDENTITY}" ]]; then
-    SIGNING_IDENTITY="$(security find-identity -v -p codesigning | awk -F '"' '/Apple Development:/ { print $2; exit }')"
-fi
-case "${SIGNING_IDENTITY}" in
-    "Apple Development:"*) TIMESTAMP_ARGUMENT="--timestamp=none" ;;
-    "Developer ID Application:"*) TIMESTAMP_ARGUMENT="--timestamp" ;;
-    "") echo "No Apple Development identity is available. Set THINGTIME_RECOVERY_SIGNING_IDENTITY." >&2; exit 3 ;;
-    *) echo "THINGTIME_RECOVERY_SIGNING_IDENTITY must be Apple Development or Developer ID Application." >&2; exit 3 ;;
+case "${SIGNING_MODE}" in
+    signed)
+        SIGNING_IDENTITY="${THINGTIME_RECOVERY_SIGNING_IDENTITY:-${THINGTIME_ELECTRON_SIGNING_IDENTITY:-}}"
+        if [[ -z "${SIGNING_IDENTITY}" ]]; then
+            SIGNING_IDENTITY="$(security find-identity -v -p codesigning | awk -F '"' '/Apple Development:/ { print $2; exit }')"
+        fi
+        case "${SIGNING_IDENTITY}" in
+            "Apple Development:"*) TIMESTAMP_ARGUMENT="--timestamp=none" ;;
+            "Developer ID Application:"*) TIMESTAMP_ARGUMENT="--timestamp" ;;
+            "") echo "No Apple Development identity is available. Set THINGTIME_RECOVERY_SIGNING_IDENTITY." >&2; exit 3 ;;
+            *) echo "THINGTIME_RECOVERY_SIGNING_IDENTITY must be Apple Development or Developer ID Application." >&2; exit 3 ;;
+        esac
+        /usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --identifier com.thingtime.desktop.recovery.installer --options runtime "${TIMESTAMP_ARGUMENT}" "${CONTENTS_PATH}/Helpers/ThingtimeRecoveryInstaller"
+        /usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --identifier com.thingtime.desktop.recovery --options runtime "${TIMESTAMP_ARGUMENT}" --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeRecovery.entitlements" "${APP_PATH}"
+        ;;
+    unsigned)
+        if [[ -n "${THINGTIME_RECOVERY_SIGNING_IDENTITY:-}" || -n "${THINGTIME_ELECTRON_SIGNING_IDENTITY:-}" ]]; then
+            echo "Unsigned recovery builds must not receive an Apple signing identity." >&2
+            exit 3
+        fi
+        # Ad-hoc signatures keep nested macOS code structurally executable but
+        # provide no Developer ID identity, notarization, or updater trust.
+        /usr/bin/codesign --force --sign - --identifier com.thingtime.desktop.recovery.installer --options runtime --timestamp=none "${CONTENTS_PATH}/Helpers/ThingtimeRecoveryInstaller"
+        /usr/bin/codesign --force --sign - --identifier com.thingtime.desktop.recovery --options runtime --timestamp=none --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeRecovery.entitlements" "${APP_PATH}"
+        ;;
+    *)
+        echo "THINGTIME_RECOVERY_SIGNING_MODE must be signed or unsigned." >&2
+        exit 3
+        ;;
 esac
-
-/usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --identifier com.thingtime.desktop.recovery.installer --options runtime "${TIMESTAMP_ARGUMENT}" "${CONTENTS_PATH}/Helpers/ThingtimeRecoveryInstaller"
-/usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --identifier com.thingtime.desktop.recovery --options runtime "${TIMESTAMP_ARGUMENT}" --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeRecovery.entitlements" "${APP_PATH}"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
 /usr/bin/codesign -dr - "${APP_PATH}" 2>&1
 echo "${APP_PATH}"

@@ -17,12 +17,14 @@
 		"build:web": "node scripts/build-web.mjs",
 		"dev": "node scripts/build-web.mjs && node scripts/verify-web-build.mjs && electron .",
 		"dist": "node scripts/build-production-app.mjs",
+		"dist:unsigned": "node scripts/build-unsigned-release.mjs",
 		"install:local": "node scripts/install-local-app.mjs",
 		"start": "electron .",
 		"test": "node --test test/**/*.test.cjs",
 		"verify:native": "node scripts/verify-native-node.mjs",
 		"verify:release-shim": "node scripts/release-workflow-contract.cjs shim ../.github/workflows/electron-release.yml",
 		"verify:signed": "node scripts/verify-signed-app.mjs",
+		"verify:unsigned": "node scripts/verify-unsigned-app.mjs",
 		"verify:web": "node scripts/verify-web-build.mjs"
 	},
 	"build": {

@@ -53,7 +53,15 @@ function validateControlPlane(source) {
 			'Developer ID Application:',
 			'security import',
 			'APPLE_API_KEY',
+			'Select release distribution',
+			'Incomplete signing configuration',
 			'corepack pnpm --dir electron run dist',
+			'corepack pnpm --dir electron run dist:unsigned',
+			'build-unsigned-release.sh',
+			'.unsigned',
+			'Thingtime-Electron-App-UNSIGNED-Release',
+			'Thingtime-Recovery-App-UNSIGNED-Release',
+			'Open Anyway',
 			'security delete-keychain',
 			'if: always()',
 			'gh release create'
@@ -61,12 +69,9 @@ function validateControlPlane(source) {
 		'Electron release control plane'
 	);
 	for (const forbidden of [
-		/dist:unsigned/iu,
 		/identity\s*=\s*null/iu,
 		/continue-on-error\s*:\s*true/iu,
-		/CSC_IDENTITY_AUTO_DISCOVERY\s*:\s*["']?false/iu,
-		/^\s*push:/mu,
-		/^\s*workflow_dispatch:/mu
+		/^\s*push:/mu
 	]) {
 		if (forbidden.test(source)) throw new Error(`Electron release control plane contains forbidden behavior: ${forbidden}`);
 	}
@@ -74,8 +79,10 @@ function validateControlPlane(source) {
 		source,
 		[
 			'corepack pnpm --dir MCP run typecheck',
+			'Select release distribution',
 			'security import',
 			'corepack pnpm --dir electron run dist',
+			'corepack pnpm --dir electron run dist:unsigned',
 			'gh release create'
 		],
 		'Electron release control plane'

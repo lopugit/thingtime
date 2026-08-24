@@ -61,6 +61,40 @@ func recoveryCatalogFollowsEveryPage() async throws {
     }
 }
 
+@Test("recovery catalog separates unsigned release assets from verified release assets")
+func recoveryCatalogLabelsUnsignedAssets() async throws {
+    let endpoint = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases?per_page=100")!
+    let data = try JSONSerialization.data(withJSONObject: [[
+        "assets": [
+            [
+                "browser_download_url": "https://github.com/lopugit/thingtime/releases/download/electron-v0.1.0-pr.68.example.gabcdef123456.unsigned/Thingtime-Electron-App-UNSIGNED-Release-0.1.0-pr.68.example.gabcdef123456.unsigned-macos-arm64.zip",
+                "name": "Thingtime-Electron-App-UNSIGNED-Release-0.1.0-pr.68.example.gabcdef123456.unsigned-macos-arm64.zip",
+                "size": 1024
+            ],
+            [
+                "browser_download_url": "https://github.com/lopugit/thingtime/releases/download/electron-v0.1.0-pr.68.example.gabcdef123456.unsigned/Thingtime-Electron-App-Release-0.1.0-pr.68.example.gabcdef123456.unsigned-macos-arm64.zip",
+                "name": "Thingtime-Electron-App-Release-0.1.0-pr.68.example.gabcdef123456.unsigned-macos-arm64.zip",
+                "size": 1024
+            ]
+        ],
+        "draft": false,
+        "html_url": "https://github.com/lopugit/thingtime/releases/tag/electron-v0.1.0-pr.68.example.gabcdef123456.unsigned",
+        "id": 68,
+        "name": "Thingtime Desktop UNSIGNED 0.1.0-pr.68.example.gabcdef123456.unsigned",
+        "prerelease": true,
+        "published_at": "2026-08-24T00:00:00Z",
+        "tag_name": "electron-v0.1.0-pr.68.example.gabcdef123456.unsigned"
+    ]])
+    let response = HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+    let catalog = GitHubReleaseCatalog(endpoint: endpoint) { _ in (data, response) }
+
+    let releases = try await catalog.fetch(component: .desktop)
+    #expect(releases.count == 1)
+    #expect(releases[0].isUnsigned)
+    #expect(releases[0].asset.name.contains("UNSIGNED"))
+    #expect(CacheReleaseDescriptor(release: releases[0]).isUnsigned)
+}
+
 @Test("shared desktop cache and independent recovery cache are stable under Application Support")
 func stableCacheLocations() {
     let paths = RecoveryPaths(homeDirectory: URL(fileURLWithPath: "/Users/example"))

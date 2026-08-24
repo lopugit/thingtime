@@ -71,6 +71,7 @@ public final class RecoveryCache {
                 releaseUrl: descriptor.releaseURL,
                 sourceSha256: nil,
                 tag: descriptor.tag,
+                isUnsigned: descriptor.isUnsigned,
                 version: descriptor.version
             )
             var manifest = try readManifest()

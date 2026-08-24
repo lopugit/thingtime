@@ -23,11 +23,13 @@ struct RecoveryContentView: View {
                 }
                 Section("Available releases") {
                     ForEach(store.desktopReleases) { release in
-                        Label(release.version ?? release.tag, systemImage: "arrow.down.circle")
+                        Label(release.isUnsigned ? "UNSIGNED \(release.version ?? release.tag)" : release.version ?? release.tag, systemImage: release.isUnsigned ? "exclamationmark.triangle.fill" : "arrow.down.circle")
+                            .foregroundStyle(release.isUnsigned ? .orange : .primary)
                             .tag(RecoverySelection.desktopRelease(release.id))
                     }
                     ForEach(store.recoveryReleases) { release in
-                        Label("Recovery \(release.version ?? release.tag)", systemImage: "cross.case.fill")
+                        Label(release.isUnsigned ? "UNSIGNED Recovery \(release.version ?? release.tag)" : "Recovery \(release.version ?? release.tag)", systemImage: release.isUnsigned ? "exclamationmark.triangle.fill" : "cross.case.fill")
+                            .foregroundStyle(release.isUnsigned ? .orange : .primary)
                             .tag(RecoverySelection.recoveryRelease(release.id))
                     }
                 }
@@ -94,6 +96,11 @@ private struct CacheListView: View {
                         VStack(alignment: .leading) {
                             Text(bundle.displayName).fontWeight(.medium)
                             Text(bundle.entry.cachedAt ?? "Cached date unavailable").font(.caption).foregroundStyle(.secondary)
+                            if bundle.entry.isUnsigned == true {
+                                Text("UNSIGNED — manually approved, not verified by Apple")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.orange)
+                            }
                         }
                         Spacer()
                         if component == .desktop {
@@ -135,6 +142,7 @@ private struct ReleaseDetailView: View {
     let component: RecoveryComponent
     let release: RecoveryRelease
     @ObservedObject var store: RecoveryStore
+    @State private var showingUnsignedAcknowledgement = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -143,22 +151,45 @@ private struct ReleaseDetailView: View {
             Text(release.version ?? release.tag).font(.title3.monospaced())
             Text("\(release.asset.name)\(release.isPrerelease ? " · prerelease" : "")")
                 .foregroundStyle(.secondary)
+            if release.isUnsigned {
+                Label("UNSIGNED — no Developer ID certificate or notarization", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .font(.headline)
+                Text("You can cache, launch, or install this release after acknowledging that macOS may require Privacy & Security → Open Anyway before its first launch. It is never shown as a verified update.")
+                    .foregroundStyle(.secondary)
+            }
             if let published = release.publishedAt {
                 Text(published, style: .date).font(.caption).foregroundStyle(.secondary)
             }
             HStack {
-                Button("Cache verified bundle") { Task { await store.cache(release, component: component) } }
+                Button(release.isUnsigned ? "Cache unsigned bundle" : "Cache verified bundle") {
+                    if release.isUnsigned {
+                        showingUnsignedAcknowledgement = true
+                    } else {
+                        Task { await store.cache(release, component: component) }
+                    }
+                }
                     .buttonStyle(.borderedProminent)
                     .disabled(store.isRefreshing)
                 if let releaseURL = release.releaseURL {
                     Link("Open on GitHub", destination: releaseURL)
                 }
             }
-            Text(component == .desktop ? "The archive is checked for the stable Thingtime bundle ID, team signature, and—on production builds—Developer ID notarization before it enters the shared cache." : "A cached Recovery release can replace this app through its signed helper, so the recovery UI remains independently updateable.")
+            Text(release.isUnsigned
+                ? "Unsigned archives receive only bundle-ID and ad-hoc integrity checks. They remain visibly marked UNSIGNED in the cache and are available for manual launch or installation."
+                : (component == .desktop ? "The archive is checked for the stable Thingtime bundle ID, team signature, and—on production builds—Developer ID notarization before it enters the shared cache." : "A cached Recovery release can replace this app through its signed helper, so the recovery UI remains independently updateable."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Spacer()
         }
         .padding(28)
+        .alert("Cache unsigned release?", isPresented: $showingUnsignedAcknowledgement) {
+            Button("Cache unsigned bundle", role: .destructive) {
+                Task { await store.cache(release, component: component) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This build has no Developer ID certificate or notarization. It can be launched or installed from Recovery, but macOS may require Privacy & Security → Open Anyway before it can run.")
+        }
     }
 }

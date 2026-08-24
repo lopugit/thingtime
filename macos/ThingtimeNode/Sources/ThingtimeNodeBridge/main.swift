@@ -17,6 +17,10 @@ private struct DirectParentAuthenticator {
             return false
         }
 
+        if ProcessInfo.processInfo.environment["THINGTIME_NODE_UNSIGNED_DISTRIBUTION"] == "1" {
+            return acceptsUnsigned(bridgeCode: bridgeCode, parentCode: parentCode, initialParentProcessIdentifier: initialParentProcessIdentifier)
+        }
+
         let bridgeIdentity = codeIdentity(for: bridgeCode)
         let parentIdentity = codeIdentity(for: parentCode)
         let finalParentProcessIdentifier = getppid()
@@ -27,6 +31,23 @@ private struct DirectParentAuthenticator {
             bridgeIdentity: bridgeIdentity,
             parentIdentity: parentIdentity
         ))
+    }
+
+    private func acceptsUnsigned(bridgeCode: SecCode, parentCode: SecCode, initialParentProcessIdentifier: pid_t) -> Bool {
+        // Unsigned distribution builds deliberately have no Apple team
+        // identity. The temporary explicit environment marker is supplied only
+        // by the packaged Electron integration, and we still require valid
+        // ad-hoc code signatures plus the exact direct parent identifiers.
+        guard getppid() == initialParentProcessIdentifier,
+              satisfiesAnyCodeSignature(bridgeCode),
+              satisfiesAnyCodeSignature(parentCode),
+              let bridgeIdentity = unsignedCodeIdentity(for: bridgeCode),
+              let parentIdentity = unsignedCodeIdentity(for: parentCode),
+              bridgeIdentity == ThingtimeNodeBridgeParentPolicy.bridgeIdentifier,
+              parentIdentity == ThingtimeNodeBridgeParentPolicy.parentIdentifier else {
+            return false
+        }
+        return true
     }
 
     private func copyCurrentCode() -> SecCode? {
@@ -87,6 +108,28 @@ private struct DirectParentAuthenticator {
             SecCSFlags(rawValue: kSecCSStrictValidate),
             requirement
         ) == errSecSuccess
+    }
+
+    private func satisfiesAnyCodeSignature(_ code: SecCode) -> Bool {
+        SecCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSStrictValidate), nil) == errSecSuccess
+    }
+
+    private func unsignedCodeIdentity(for code: SecCode) -> String? {
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess,
+              let staticCode else {
+            return nil
+        }
+        var information: CFDictionary?
+        guard SecCodeCopySigningInformation(
+            staticCode,
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &information
+        ) == errSecSuccess,
+        let dictionary = information as? [String: Any] else {
+            return nil
+        }
+        return dictionary[kSecCodeInfoIdentifier as String] as? String
     }
 }
 

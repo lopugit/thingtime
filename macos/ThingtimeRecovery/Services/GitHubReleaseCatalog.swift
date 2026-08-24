@@ -42,12 +42,14 @@ public actor GitHubReleaseCatalog {
             url = nextPage(from: http.value(forHTTPHeaderField: "Link"))
         }
         return collected.compactMap { release -> RecoveryRelease? in
-            guard release.draft != true, let tag = release.tagName ?? release.name, !tag.isEmpty,
-                  let asset = selectAsset(release.assets, component: component) else { return nil }
+            guard release.draft != true, let tag = release.tagName ?? release.name, !tag.isEmpty else { return nil }
+            let isUnsigned = tag.hasSuffix(".unsigned")
+            guard let asset = selectAsset(release.assets, component: component, isUnsigned: isUnsigned) else { return nil }
             return RecoveryRelease(
                 asset: asset,
                 id: release.id.map(String.init) ?? tag,
                 isPrerelease: release.prerelease == true,
+                isUnsigned: isUnsigned,
                 name: release.name ?? tag,
                 publishedAt: release.publishedAt.flatMap(ISO8601DateFormatter().date(from:)),
                 releaseURL: release.htmlURL.flatMap(URL.init(string:)),
@@ -81,11 +83,16 @@ public actor GitHubReleaseCatalog {
         return destination
     }
 
-    private func selectAsset(_ assets: [GitHubAsset]?, component: RecoveryComponent) -> RecoveryReleaseAsset? {
+    private func selectAsset(_ assets: [GitHubAsset]?, component: RecoveryComponent, isUnsigned: Bool) -> RecoveryReleaseAsset? {
         (assets ?? [])
             .compactMap { asset -> RecoveryReleaseAsset? in
                 guard let name = asset.name, let rawURL = asset.browserDownloadURL, let url = URL(string: rawURL), isAllowedAssetURL(url) else { return nil }
-                let prefix: String = component == .desktop ? "Thingtime-Electron-App-Release-" : "Thingtime-Recovery-App-Release-"
+                let prefix: String
+                if component == .desktop {
+                    prefix = isUnsigned ? "Thingtime-Electron-App-UNSIGNED-Release-" : "Thingtime-Electron-App-Release-"
+                } else {
+                    prefix = isUnsigned ? "Thingtime-Recovery-App-UNSIGNED-Release-" : "Thingtime-Recovery-App-Release-"
+                }
                 guard name.hasPrefix(prefix), name.lowercased().hasSuffix(".zip") else { return nil }
                 return RecoveryReleaseAsset(downloadURL: url, name: name, size: asset.size)
             }

@@ -49,6 +49,7 @@ public struct CacheManifestEntry: Codable, Hashable, Identifiable {
     public let releaseUrl: String?
     public let sourceSha256: String?
     public let tag: String?
+    public let isUnsigned: Bool?
     public let version: String?
 
     public var id: String { key }
@@ -64,6 +65,7 @@ public struct CacheManifestEntry: Codable, Hashable, Identifiable {
         releaseUrl: String? = nil,
         sourceSha256: String? = nil,
         tag: String? = nil,
+        isUnsigned: Bool? = nil,
         version: String? = nil
     ) {
         self.assetName = assetName
@@ -76,6 +78,7 @@ public struct CacheManifestEntry: Codable, Hashable, Identifiable {
         self.releaseUrl = releaseUrl
         self.sourceSha256 = sourceSha256
         self.tag = tag
+        self.isUnsigned = isUnsigned
         self.version = version
     }
 }
@@ -93,16 +96,18 @@ public struct RecoveryRelease: Hashable, Identifiable {
     public let asset: RecoveryReleaseAsset
     public let id: String
     public let isPrerelease: Bool
+    public let isUnsigned: Bool
     public let name: String
     public let publishedAt: Date?
     public let releaseURL: URL?
     public let tag: String
     public let version: String?
 
-    public init(asset: RecoveryReleaseAsset, id: String, isPrerelease: Bool, name: String, publishedAt: Date?, releaseURL: URL?, tag: String, version: String?) {
+    public init(asset: RecoveryReleaseAsset, id: String, isPrerelease: Bool, isUnsigned: Bool = false, name: String, publishedAt: Date?, releaseURL: URL?, tag: String, version: String?) {
         self.asset = asset
         self.id = id
         self.isPrerelease = isPrerelease
+        self.isUnsigned = isUnsigned
         self.name = name
         self.publishedAt = publishedAt
         self.releaseURL = releaseURL
@@ -132,9 +137,10 @@ public struct CacheReleaseDescriptor: Hashable {
     public let pullRequestNumber: Int?
     public let releaseURL: String?
     public let tag: String
+    public let isUnsigned: Bool
     public let version: String?
 
-    public init(assetName: String? = nil, branch: String? = nil, commit: String? = nil, id: String, name: String? = nil, pullRequestNumber: Int? = nil, releaseURL: String? = nil, tag: String, version: String? = nil) {
+    public init(assetName: String? = nil, branch: String? = nil, commit: String? = nil, id: String, name: String? = nil, pullRequestNumber: Int? = nil, releaseURL: String? = nil, tag: String, isUnsigned: Bool = false, version: String? = nil) {
         self.assetName = assetName
         self.branch = branch
         self.commit = commit
@@ -143,6 +149,7 @@ public struct CacheReleaseDescriptor: Hashable {
         self.pullRequestNumber = pullRequestNumber
         self.releaseURL = releaseURL
         self.tag = tag
+        self.isUnsigned = isUnsigned
         self.version = version
     }
 
@@ -153,6 +160,7 @@ public struct CacheReleaseDescriptor: Hashable {
             name: release.name,
             releaseURL: release.releaseURL?.absoluteString,
             tag: release.tag,
+            isUnsigned: release.isUnsigned,
             version: release.version
         )
     }

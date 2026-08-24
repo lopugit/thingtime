@@ -52,14 +52,24 @@ final class RecoveryStore: ObservableObject {
             defer { try? FileManager.default.removeItem(at: archive) }
             let staging = try extractArchive(archive, component: component, cacheRoot: cache.root)
             defer { try? FileManager.default.removeItem(at: staging.deletingLastPathComponent()) }
-            let context = try BundleVerifier.signingContext(for: Bundle.main.bundleURL)
-            _ = try cache.cacheBundle(
-                sourceApp: staging,
-                descriptor: CacheReleaseDescriptor(release: release),
-                verify: { try BundleVerifier.verify($0, component: component, signingContext: context) }
-            )
+            if release.isUnsigned {
+                _ = try cache.cacheBundle(
+                    sourceApp: staging,
+                    descriptor: CacheReleaseDescriptor(release: release),
+                    verify: { try BundleVerifier.verifyUnsigned($0, component: component) }
+                )
+            } else {
+                let context = try BundleVerifier.signingContext(for: Bundle.main.bundleURL)
+                _ = try cache.cacheBundle(
+                    sourceApp: staging,
+                    descriptor: CacheReleaseDescriptor(release: release),
+                    verify: { try BundleVerifier.verify($0, component: component, signingContext: context) }
+                )
+            }
             reloadCaches()
-            notice = "Cached verified \(component.title) \(release.version ?? release.tag)."
+            notice = release.isUnsigned
+                ? "Cached UNSIGNED \(component.title) \(release.version ?? release.tag). macOS may require Open Anyway before first launch."
+                : "Cached verified \(component.title) \(release.version ?? release.tag)."
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -2139,6 +2139,15 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       signed-app, Gatekeeper, and notarization checks used for the unpacked
       artifact. A malformed ZIP must block release creation rather than
       becoming a broken recovery option.
+- [ ] With all six Developer ID/notarization secrets absent, run the
+      owner-approved PR worker and confirm it produces only a SemVer suffix of
+      `.unsigned`, `UNSIGNED` desktop and Recovery asset names, and release
+      notes that direct people to **Privacy & Security → Open Anyway**. With a
+      partial secret set, it must stop before publishing. In Thingtime Recovery,
+      verify the UNSIGNED badge, explicit cache acknowledgement, cache entry,
+      launch, and atomic install path; it must never appear as a verified
+      update. With all six secrets present, repeat the strict signed/notarized
+      ZIP round-trip instead.
 - [ ] Run the Swift tests and release-build both `ThingtimeNode` products; run
       MCP typecheck, tests, and `build:desktop`; then run the Electron tests.
       Cancellation/timeout cases must terminate the connector child and mark

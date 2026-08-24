@@ -6,7 +6,8 @@ It does not duplicate the web source. The deterministic resource build stages:
 
 - the Vite client and Nitro server under `electron/dist/web`;
 - `ai-connectors.mjs` and `thingtime-node-runtime.mjs` under `electron/dist/ai`;
-- the signed `Thingtime Node.app` under `electron/dist/native`.
+- the signed local/production or ad-hoc UNSIGNED `Thingtime Node.app` under
+  `electron/dist/native`.
 
 `electron-builder` places the node at
 `Thingtime.app/Contents/Helpers/Thingtime Node.app` and the runtime under
@@ -32,6 +33,7 @@ corepack pnpm@10.12.1 --dir electron verify:native
 corepack pnpm@10.12.1 --dir electron test
 corepack pnpm@10.12.1 --dir electron dev
 corepack pnpm@10.12.1 --dir electron dist
+corepack pnpm@10.12.1 --dir electron dist:unsigned
 corepack pnpm@10.12.1 --dir electron install:local
 ```
 
@@ -230,7 +232,11 @@ Production CI passes its imported Developer ID identity and notarization API
 key to `macos/ThingtimeRecovery/script/build-production-release.sh`. That
 script signs the helper before the outer bundle, notarizes a ZIP, staples the
 app, then runs strict codesign, Gatekeeper, and stapler verification before it
-emits the companion release ZIP. No recovery archive is published unsigned.
+emits the companion release ZIP. While those credentials are absent, the
+owner-approved PR workflow can call
+`macos/ThingtimeRecovery/script/build-unsigned-release.sh`: its output is
+ad-hoc signed only, carries `UNSIGNED` in both asset name and SemVer suffix,
+and needs explicit macOS approval before first launch.
 
 ## GitHub Releases
 
@@ -244,17 +250,21 @@ run the Electron bridge tests before packaging. It creates a tag like
 `.pkg` assets to a GitHub Release titled `Thingtime Electron App Release
 0.1.0+build.10423`.
 
-Production publication is intentionally blocked until the protected workflow
-has a **Developer ID Application** certificate and notarization credentials.
-Apple Development is correct for stable local TCC testing, and Apple
-Distribution is for App Store workflows; neither substitutes for Developer ID
-direct distribution; Gatekeeper rejection is expected for the local Apple
-Development build. `pnpm --dir electron dist` requires an imported Developer
-ID Application identity plus one complete electron-builder notarization set
-(App Store Connect API key, Apple ID app-specific password, or a keychain
-profile). It enables Hardened Runtime and `mac.notarize`, then requires strict
-signature, Gatekeeper, and stapling validation. There is no unsigned/ad-hoc
-release command.
+The trusted production lane is intentionally blocked until the protected
+workflow has a **Developer ID Application** certificate and notarization
+credentials. Apple Development is correct for stable local TCC testing, and
+Apple Distribution is for App Store workflows; neither substitutes for
+Developer ID direct distribution. `pnpm --dir electron dist` requires an
+imported Developer ID Application identity plus one complete electron-builder
+notarization set. It enables Hardened Runtime and `mac.notarize`, then requires
+strict signature, Gatekeeper, and stapling validation.
+
+`pnpm --dir electron dist:unsigned` is a separate temporary PR-release command
+which requires a version ending in `.unsigned`. It deliberately uses ad-hoc
+signatures, no Apple team identity, and no notarization. It must never be
+described as a verified update. Thingtime Recovery shows those releases with an
+UNSIGNED badge and requires acknowledgement before caching, launching, or
+installing one; macOS may still require **Privacy & Security → Open Anyway**.
 
 The protected workflow currently lives on another ref and remains stale, so its
 signing change must be made there before publication can resume. The required

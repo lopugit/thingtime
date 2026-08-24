@@ -37,6 +37,24 @@ public enum BundleVerifier {
         }
     }
 
+    /// Temporary distribution releases have no Apple team certificate or
+    /// notarization. They are ad-hoc signed only so macOS can execute their
+    /// nested code. Recovery keeps them in a visibly unsigned cache path and
+    /// never treats this structural check as trusted provenance.
+    public static func verifyUnsigned(_ appURL: URL, component: RecoveryComponent) throws {
+        try ProcessExecution.run("/usr/bin/codesign", arguments: ["--verify", "--deep", "--strict", "--verbose=2", appURL.path], label: "Unsigned \(component.title) integrity verification")
+        let details = try ProcessExecution.run("/usr/bin/codesign", arguments: ["--display", "--verbose=4", appURL.path], label: "Unsigned \(component.title) signing inspection")
+        guard value(named: "Identifier", in: details) == component.bundleIdentifier else {
+            throw RecoveryError.operationFailed("The selected bundle does not have the expected \(component.bundleIdentifier) identifier.")
+        }
+        guard value(named: "TeamIdentifier", in: details) == "not set" else {
+            throw RecoveryError.operationFailed("A signed bundle was incorrectly published as unsigned.")
+        }
+        guard !details.contains("Authority=Apple Development:"), !details.contains("Authority=Developer ID Application:") else {
+            throw RecoveryError.operationFailed("A trusted Apple-signed bundle was incorrectly published as unsigned.")
+        }
+    }
+
     private static func value(named name: String, in details: String) -> String? {
         details
             .split(whereSeparator: \.isNewline)

@@ -218,6 +218,22 @@ relational shape for later ThingtimeDB storage and platform chat views.
   generic browser-player control remain out of scope.
 - The node reports only installed/running availability for these three media
   surfaces; it never performs Automation requests while publishing telemetry.
+
+### 2026-08-24 unsigned PR-release fallback
+
+- The protected `github-actions` release worker now chooses a trusted
+  Developer ID/notarized lane only when its full six-secret configuration is
+  present. When all six are absent it publishes an explicit `.unsigned` PR
+  SemVer and `UNSIGNED` Electron/Recovery ZIP names; a partial configuration
+  fails before publication.
+- The fallback uses ad-hoc signatures solely to keep nested macOS executables
+  functioning. It has no Apple team identity or notarization and the release
+  notes instruct the user to approve the first launch via **Privacy & Security
+  → Open Anyway**.
+- Thingtime Recovery recognizes the marker plus asset name, maintains a
+  separate UNSIGNED cache status, requires a deliberate acknowledgement, then
+  allows cache, launch, and atomic install. The normal signed cache remains
+  strict and never presents an unsigned build as verified.
   All three volume effects retain the journalled `needs-review` boundary after
   an Apple Event, rather than claiming the audible result was observed.
 - The four paired-device API contracts are now `1.7.0`; Electron refuses to

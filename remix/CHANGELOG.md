@@ -29,6 +29,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Explicit UNSIGNED desktop-release fallback**: the owner-approved PR release
+  worker now publishes an ad-hoc-only Electron and Recovery pair when all six
+  Developer ID/notarization secrets are absent. Their SemVer, asset names,
+  GitHub title, and notes all say UNSIGNED; a partial secret configuration
+  stops the build. Recovery visibly separates them from verified releases and,
+  after acknowledgement, can cache, launch, or atomically install one while
+  warning that macOS may require Privacy & Security → Open Anyway. — Codex
+  (AI), 2026-08-24
+
 - **Admin deployment peer explorer**: **Dev → Deployment peers** now presents
   locally known signed mesh leases in grid, card, and list views, with a
   property-aware search selector and deliberate cursor paging. The browser
