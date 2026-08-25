@@ -1877,6 +1877,11 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      # The model may inspect CodeQL evidence but cannot dismiss alerts. A
+      # separate credential-free job below owns the narrow write permission.
+      security-events: read
+    outputs:
+      codeql_dispositions_b64: ${{ steps.codeql_handoff.outputs.dispositions_b64 }}
     concurrency:
       group: lopu-agent-fleet-${{ github.repository }}
       cancel-in-progress: false
@@ -1929,9 +1934,15 @@ jobs:
 
           review_root="$RUNNER_TEMP/lopu-review-worktrees"
           manifest="$RUNNER_TEMP/lopu-review-manifest.json"
+          codeql_authority="$RUNNER_TEMP/lopu-codeql-authority.json"
           rm -rf "$review_root"
-          mkdir -p "$review_root" "$RUNNER_TEMP/lopu-review-reports"
+          mkdir -p \
+            "$review_root" \
+            "$RUNNER_TEMP/lopu-review-reports" \
+            "$RUNNER_TEMP/lopu-codeql-alerts" \
+            "$RUNNER_TEMP/lopu-codeql-dispositions"
           printf '[]\n' >"$manifest"
+          printf '[]\n' >"$codeql_authority"
 
           open="$(gh pr list --repo "$REPO" --state open --limit 500 \
             --json number,headRefName,baseRefName,headRefOid,baseRefOid,isCrossRepository,isDraft,mergeable,mergeStateStatus,labels)"
@@ -1994,6 +2005,63 @@ jobs:
             head_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$head^{commit}")"
             worktree="$review_root/$number"
             git -C "$GITHUB_WORKSPACE/trusted" worktree add --detach --quiet "$worktree" "$head_sha"
+
+            # Capture the exact open CodeQL alert set before the model runs.
+            # Keep the full rule help out of the model context; the rule id,
+            # message, classifications, location, and immutable PR-head SHA are
+            # sufficient evidence for a fix-or-dismiss decision.
+            alerts="$RUNNER_TEMP/lopu-codeql-alerts/$number.json"
+            alerts_raw="$RUNNER_TEMP/lopu-codeql-alerts/$number.raw.json"
+            dispositions="$RUNNER_TEMP/lopu-codeql-dispositions/$number.json"
+            if gh api --paginate --slurp \
+                "repos/$REPO/code-scanning/alerts?state=open&tool_name=CodeQL&pr=$number&per_page=100" \
+                >"$alerts_raw"; then
+              jq -c --arg sha "$head_sha" '
+                add // []
+                | map(select(.most_recent_instance.commit_sha == $sha))
+                | map({
+                    number,
+                    state,
+                    html_url,
+                    rule: {
+                      id: .rule.id,
+                      name: .rule.name,
+                      description: .rule.description,
+                      severity: .rule.severity,
+                      security_severity_level: .rule.security_severity_level,
+                      tags: (.rule.tags // [])
+                    },
+                    instance: {
+                      ref: .most_recent_instance.ref,
+                      commit_sha: .most_recent_instance.commit_sha,
+                      classifications: (.most_recent_instance.classifications // []),
+                      message: .most_recent_instance.message,
+                      location: .most_recent_instance.location
+                    }
+                  })
+              ' "$alerts_raw" >"$alerts"
+            else
+              echo "::warning::Could not read CodeQL alerts for PR #$number; Lopu will still review its checks and code."
+              printf '[]\n' >"$alerts"
+            fi
+            rm -f "$alerts_raw"
+            printf '[]\n' >"$dispositions"
+            jq -c \
+              --argjson pr_number "$number" \
+              --arg reviewed_head_sha "$head_sha" \
+              '[.[] | {
+                pr_number:$pr_number,
+                alert_number:.number,
+                state:.state,
+                ref:.instance.ref,
+                commit_sha:.instance.commit_sha,
+                reviewed_head_sha:$reviewed_head_sha
+              }]' "$alerts" >"$codeql_authority.additions"
+            jq -cs '.[0] + .[1]' \
+              "$codeql_authority" "$codeql_authority.additions" \
+              >"$codeql_authority.next"
+            mv "$codeql_authority.next" "$codeql_authority"
+            rm -f "$codeql_authority.additions"
             record="$(jq -cn \
               --argjson number "$number" \
               --arg head "$head" \
@@ -2001,19 +2069,37 @@ jobs:
               --arg head_sha "$head_sha" \
               --arg base_sha "$base_sha" \
               --arg path "$worktree" \
-              '{number:$number,head:$head,base:$base,head_sha:$head_sha,base_sha:$base_sha,path:$path}')"
+              --arg codeql_alerts_path "$alerts" \
+              --arg codeql_dispositions_path "$dispositions" \
+              '{
+                number:$number,
+                head:$head,
+                base:$base,
+                head_sha:$head_sha,
+                base_sha:$base_sha,
+                path:$path,
+                codeql_alerts_path:$codeql_alerts_path,
+                codeql_dispositions_path:$codeql_dispositions_path
+              }')"
             jq -c --argjson record "$record" '. + [$record]' "$manifest" >"$manifest.next"
             mv "$manifest.next" "$manifest"
           done < <(jq -r '.[] | @base64' <<<"$candidates")
           unset basic FETCH_TOKEN
 
           count="$(jq 'length' "$manifest")"
+          authority_count="$(jq 'length' "$codeql_authority")"
+          if [ "$authority_count" -gt 500 ]; then
+            echo '::warning::More than 500 open CodeQL alerts matched this review batch; only the first 500 are eligible for a disposition handoff this pass.'
+            jq -c '.[:500]' "$codeql_authority" >"$codeql_authority.next"
+            mv "$codeql_authority.next" "$codeql_authority"
+          fi
           echo "Lopu prepared $count complete PR worktree(s) for one repository review session."
           jq -r '.[] | "  #\(.number) \(.head) -> \(.base): \(.path)"' "$manifest"
           {
             echo 'any=true'
             echo "count=$count"
             echo "manifest=$manifest"
+            printf 'codeql_authority_b64=%s\n' "$(base64 -w0 "$codeql_authority")"
           } >>"$GITHUB_OUTPUT"
 
       - name: Require an AI credential
@@ -2074,6 +2160,21 @@ jobs:
             follow its details URL/run logs as needed. Distinguish a real,
             reproducible defect from an external outage, stale result, or
             cancellation before changing anything.
+
+            CodeQL is an explicit fix-or-disposition responsibility. Each
+            manifest record names `codeql_alerts_path`, a trusted snapshot of
+            the open alerts on that exact PR head, and
+            `codeql_dispositions_path`, initialized to `[]`. Inspect every
+            alert and its cited code. For a real finding, fix the implementation
+            in the PR worktree and leave the alert open: the next CodeQL scan
+            will mark it fixed. Never dismiss a real issue merely to green a
+            check. Only when the finding is demonstrably not applicable may you
+            replace the disposition file with a JSON array containing
+            `{ "alert_number": <integer>, "reason": "false positive" | "used in tests", "comment": "Lopu evidence: <specific auditable justification>" }`.
+            Do not use `won't fix`, do not include an alert absent from the
+            trusted snapshot, and do not PATCH CodeQL alert state yourself. A
+            later isolated trusted job validates and applies only those exact
+            evidence-backed dispositions with narrow write permission.
 
             Lopu owns the decision: make only changes that are genuinely justified
             by that understanding, but do make those changes directly in the PR
@@ -2187,6 +2288,17 @@ jobs:
             `lopu-review:check-run:<CHECK_RUN_ID>:` first retrieve exactly that
             check with `gh api repos/$REPO/check-runs/<CHECK_RUN_ID>`. Distinguish
             reproducible defects from outages, stale results, and cancellations.
+            Each manifest record also names a trusted `codeql_alerts_path` and an
+            initially empty `codeql_dispositions_path`. Inspect every listed
+            CodeQL finding. Fix real findings in the PR worktree and leave them
+            open so the next scan marks them fixed. Only a demonstrably
+            inapplicable finding may be proposed for dismissal by writing a JSON
+            array of `{ "alert_number": <integer>, "reason": "false positive" |
+            "used in tests", "comment": "Lopu evidence: <specific auditable
+            justification>" }` to that disposition path. Never use `won't fix`,
+            never propose an alert absent from the snapshot, and never PATCH
+            CodeQL state directly; an isolated trusted job validates and applies
+            the proposal later.
             If the failure belongs to the PR, repair the PR worktree. If it belongs
             to the protected controller (`.github/workflows/**`,
             `.github/actions/**`, or `.github/scripts/**`), edit only that path
@@ -2352,6 +2464,131 @@ jobs:
           unset basic PUSH_TOKEN
           echo "results=$results" >>"$GITHUB_OUTPUT"
 
+      - name: Validate Lopu's CodeQL dispositions for isolated handoff
+        id: codeql_handoff
+        if: always() && steps.prepare.outputs.any == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANIFEST: ${{ steps.prepare.outputs.manifest }}
+          RESULTS: ${{ steps.publish.outputs.results }}
+          CODEQL_AUTHORITY_B64: ${{ steps.prepare.outputs.codeql_authority_b64 }}
+        run: |
+          set -euo pipefail
+
+          canonical="$RUNNER_TEMP/lopu-codeql-dispositions.json"
+          trusted_authority="$RUNNER_TEMP/lopu-codeql-authority-trusted.json"
+          printf '[]\n' >"$canonical"
+          printf '%s' "$CODEQL_AUTHORITY_B64" | base64 --decode >"$trusted_authority"
+          printf 'dispositions_b64=\n' >>"$GITHUB_OUTPUT"
+          [ -s "${MANIFEST:-}" ] || exit 0
+          [ -s "${RESULTS:-}" ] || {
+            echo '::warning::Lopu publication results are unavailable; no CodeQL disposition can be handed off safely.'
+            exit 0
+          }
+
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            record="$(base64 --decode <<<"$encoded")"
+            number="$(jq -r '.number' <<<"$record")"
+            reviewed_head="$(jq -r '.head_sha' <<<"$record")"
+            head_ref="$(jq -r '.head' <<<"$record")"
+            proposals="$(jq -r '.codeql_dispositions_path' <<<"$record")"
+            [ -s "$proposals" ] || continue
+
+            jq -e '
+              type == "array"
+              and length <= 100
+              and all(.[ ];
+                type == "object"
+                and (keys | sort) == ["alert_number", "comment", "reason"]
+                and (.alert_number | type == "number" and . > 0 and floor == .)
+                and (.reason == "false positive" or .reason == "used in tests")
+                and (.comment | type == "string"
+                     and startswith("Lopu evidence: ")
+                     and length >= 40 and length <= 1000))
+            ' "$proposals" >/dev/null || {
+              echo "::error::Lopu proposed an invalid CodeQL disposition schema for PR #$number."
+              exit 1
+            }
+
+            result="$(jq -c --argjson number "$number" '.[] | select(.number == $number)' "$RESULTS" | tail -1)"
+            outcome="$(jq -r '.outcome // "missing"' <<<"${result:-{}}")"
+            case "$outcome" in
+              no-change|pushed|already-published) ;;
+              *)
+                echo "::warning::Skipping CodeQL dispositions for PR #$number because its publication outcome is $outcome."
+                continue
+                ;;
+            esac
+            current_head="$(gh api "repos/$REPO/git/ref/heads/$(jq -rn --arg value "$head_ref" '$value | @uri')" --jq '.object.sha')"
+            [[ "$current_head" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::PR #$number returned an invalid live head while validating CodeQL dispositions."
+              exit 1
+            }
+            if [ "$current_head" != "$reviewed_head" ]; then
+              echo "::warning::Skipping CodeQL dispositions for PR #$number because its head changed after the reviewed evidence snapshot; a fresh scan and Lopu pass will decide them."
+              continue
+            fi
+
+            while IFS= read -r proposal_b64; do
+              [ -n "$proposal_b64" ] || continue
+              proposal="$(base64 --decode <<<"$proposal_b64")"
+              alert_number="$(jq -r '.alert_number' <<<"$proposal")"
+              if jq -e --argjson alert_number "$alert_number" \
+                   'any(.[]; .alert_number == $alert_number)' "$canonical" >/dev/null; then
+                echo "::error::CodeQL alert #$alert_number was proposed more than once in this Lopu session."
+                exit 1
+              fi
+              alert="$(jq -c \
+                --argjson pr_number "$number" \
+                --argjson alert_number "$alert_number" \
+                --arg reviewed_head_sha "$reviewed_head" \
+                '.[] | select(
+                  .pr_number == $pr_number
+                  and .alert_number == $alert_number
+                  and .reviewed_head_sha == $reviewed_head_sha
+                )' "$trusted_authority" | tail -1)"
+              [ -n "$alert" ] || {
+                echo "::error::Lopu proposed CodeQL alert #$alert_number, but it was absent from PR #$number's immutable pre-model authority snapshot."
+                exit 1
+              }
+              [ "$(jq -r '.state' <<<"$alert")" = open ] \
+                && [ "$(jq -r '.ref' <<<"$alert")" = "refs/pull/$number/head" ] \
+                && [ "$(jq -r '.commit_sha' <<<"$alert")" = "$reviewed_head" ] || {
+                  echo "::error::CodeQL alert #$alert_number is not bound to PR #$number's reviewed head."
+                  exit 1
+                }
+
+              entry="$(jq -cn \
+                --argjson pr_number "$number" \
+                --argjson alert_number "$alert_number" \
+                --arg reason "$(jq -r '.reason' <<<"$proposal")" \
+                --arg comment "$(jq -r '.comment' <<<"$proposal")" \
+                --arg reviewed_head_sha "$reviewed_head" \
+                --arg expected_head_sha "$current_head" \
+                '{
+                  pr_number:$pr_number,
+                  alert_number:$alert_number,
+                  reason:$reason,
+                  comment:$comment,
+                  reviewed_head_sha:$reviewed_head_sha,
+                  expected_head_sha:$expected_head_sha
+                }')"
+              jq -c --argjson entry "$entry" '. + [$entry]' "$canonical" >"$canonical.next"
+              mv "$canonical.next" "$canonical"
+              [ "$(jq 'length' "$canonical")" -le 100 ] || {
+                echo '::error::Lopu proposed more than the 100-disposition handoff ceiling.'
+                exit 1
+              }
+            done < <(jq -r '.[] | @base64' "$proposals")
+          done < <(jq -r '.[] | @base64' "$MANIFEST")
+
+          count="$(jq 'length' "$canonical")"
+          [ "$count" -gt 0 ] || exit 0
+          echo "Validated $count evidence-backed CodeQL disposition(s) for the isolated writer job."
+          printf 'dispositions_b64=%s\n' "$(base64 -w0 "$canonical")" >>"$GITHUB_OUTPUT"
+
       - name: Publish Lopu's controller/workflow fix as a PR
         id: workflow_fix
         if: always() && steps.prepare.outputs.any == 'true'
@@ -2495,6 +2732,144 @@ jobs:
               gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
             fi
           done < <(jq -r ".[] | @base64" "$MANIFEST")
+
+  codeql_dispositions:
+    name: Apply Lopu CodeQL dispositions
+    needs: [review]
+    if: >-
+      always()
+      && needs.review.result == 'success'
+      && needs.review.outputs.codeql_dispositions_b64 != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+      security-events: write
+    env:
+      REPO: ${{ github.repository }}
+      DISPOSITIONS_B64: ${{ needs.review.outputs.codeql_dispositions_b64 }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Apply evidence-backed CodeQL dispositions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          dispositions="$RUNNER_TEMP/lopu-codeql-dispositions.json"
+          reports="$RUNNER_TEMP/lopu-codeql-reports.json"
+          printf '%s' "$DISPOSITIONS_B64" | base64 --decode >"$dispositions"
+          printf '{}\n' >"$reports"
+
+          jq -e '
+            type == "array"
+            and length > 0 and length <= 100
+            and all(.[ ];
+              type == "object"
+              and (keys | sort) == [
+                "alert_number",
+                "comment",
+                "expected_head_sha",
+                "pr_number",
+                "reason",
+                "reviewed_head_sha"
+              ]
+              and (.pr_number | type == "number" and . > 0 and floor == .)
+              and (.alert_number | type == "number" and . > 0 and floor == .)
+              and (.reason == "false positive" or .reason == "used in tests")
+              and (.comment | type == "string"
+                   and startswith("Lopu evidence: ")
+                   and length >= 40 and length <= 1000)
+              and (.reviewed_head_sha | type == "string" and test("^[0-9a-f]{40}$"))
+              and (.expected_head_sha | type == "string" and test("^[0-9a-f]{40}$")))
+          ' "$dispositions" >/dev/null || {
+            echo '::error::The isolated CodeQL writer received an invalid disposition handoff.'
+            exit 1
+          }
+
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            entry="$(base64 --decode <<<"$encoded")"
+            pr_number="$(jq -r '.pr_number' <<<"$entry")"
+            alert_number="$(jq -r '.alert_number' <<<"$entry")"
+            reason="$(jq -r '.reason' <<<"$entry")"
+            comment="$(jq -r '.comment' <<<"$entry")"
+            reviewed_head="$(jq -r '.reviewed_head_sha' <<<"$entry")"
+            expected_head="$(jq -r '.expected_head_sha' <<<"$entry")"
+
+            pr="$(gh api "repos/$REPO/pulls/$pr_number")"
+            live_head="$(jq -r '.head.sha' <<<"$pr")"
+            live_repo="$(jq -r '.head.repo.full_name // empty' <<<"$pr")"
+            if [ "$(jq -r '.state' <<<"$pr")" != open ] \
+               || [ "$live_repo" != "$REPO" ] \
+               || [ "$live_head" != "$expected_head" ]; then
+              echo "::warning::Skipping CodeQL alert #$alert_number because PR #$pr_number no longer matches Lopu's trusted handoff."
+              continue
+            fi
+
+            alert="$(gh api "repos/$REPO/code-scanning/alerts/$alert_number")"
+            alert_ref="$(jq -r '.most_recent_instance.ref' <<<"$alert")"
+            alert_sha="$(jq -r '.most_recent_instance.commit_sha' <<<"$alert")"
+            if [ "$(jq -r '.state' <<<"$alert")" != open ] \
+               || [ "$alert_ref" != "refs/pull/$pr_number/head" ] \
+               || [ "$alert_sha" != "$reviewed_head" ]; then
+              echo "::warning::Skipping CodeQL alert #$alert_number because its live state or immutable PR-head evidence changed."
+              continue
+            fi
+
+            updated="$(gh api --method PATCH \
+              "repos/$REPO/code-scanning/alerts/$alert_number" \
+              -f state=dismissed \
+              -f dismissed_reason="$reason" \
+              -f dismissed_comment="$comment")"
+            [ "$(jq -r '.state' <<<"$updated")" = dismissed ] \
+              && [ "$(jq -r '.dismissed_reason' <<<"$updated")" = "$reason" ] || {
+                echo "::error::GitHub did not confirm CodeQL alert #$alert_number's validated disposition."
+                exit 1
+              }
+
+            alert_url="$(jq -r '.html_url' <<<"$updated")"
+            report_entry="$(jq -cn \
+              --argjson alert_number "$alert_number" \
+              --arg reason "$reason" \
+              --arg comment "$comment" \
+              --arg url "$alert_url" \
+              '{alert_number:$alert_number,reason:$reason,comment:$comment,url:$url}')"
+            jq -c \
+              --arg pr "$pr_number" \
+              --argjson entry "$report_entry" \
+              '.[$pr] = ((.[$pr] // []) + [$entry])' \
+              "$reports" >"$reports.next"
+            mv "$reports.next" "$reports"
+          done < <(jq -r '.[] | @base64' "$dispositions")
+
+          marker='<!-- thingtime-lopu-codeql:v1 -->'
+          while IFS= read -r pr_number; do
+            body="$RUNNER_TEMP/lopu-codeql-comment-$pr_number.md"
+            {
+              echo '## Lopu CodeQL triage'
+              echo
+              echo 'Lopu dismissed only findings that were proven inapplicable against the exact reviewed PR head:'
+              echo
+              jq -r --arg pr "$pr_number" \
+                '.[$pr][] | "- [CodeQL alert #\(.alert_number)](\(.url)) — **\(.reason)**\n  - \(.comment)"' \
+                "$reports"
+              echo
+              echo 'Real findings are never dismissed: Lopu fixes their implementation and lets the next CodeQL scan mark them fixed.'
+              echo
+              printf '[View Lopu workflow run](%s)\n\n%s\n' "$RUN_URL" "$marker"
+            } >"$body"
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$pr_number/comments?per_page=100" --slurp \
+              | jq -r 'add // [] | [.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("thingtime-lopu-codeql:v1")) | .id] | last // empty')"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$pr_number/comments" -F "body=@$body" >/dev/null
+            fi
+          done < <(jq -r 'keys[]' "$reports")
 
   resolve_promotion:
     name: "Resolve promotion for source PR #${{ inputs.promotion_source_pr }}"

@@ -131,6 +131,10 @@ function assertWorkflowSource() {
     source.indexOf("\n  review:"),
     source.indexOf("\n  resolve_promotion:"),
   );
+  const codeqlDispositionBlock = source.slice(
+    source.indexOf("\n  codeql_dispositions:"),
+    source.indexOf("\n  resolve_promotion:"),
+  );
   const reviewHandoffBlock = source.slice(
     source.indexOf("\n  review_handoff:"),
     source.indexOf("\n  model_config:"),
@@ -337,6 +341,50 @@ function assertWorkflowSource() {
   assert.match(reviewBlock, /Publish Lopu's controller\/workflow fix as a PR/u, "controller failures have a dedicated Lopu PR publisher");
   assert.match(reviewBlock, /--base github-actions/u, "controller fixes target the protected controller branch");
   assert.match(reviewBlock, /Never push or merge `github-actions`, `main`, or any target\/default/u, "model may not directly publish protected branches");
+  assert.match(reviewBlock, /security-events: read/u, "the model receives read-only CodeQL evidence access");
+  assert.doesNotMatch(
+    source.slice(source.indexOf("\n  review:"), source.indexOf("\n  codeql_dispositions:")),
+    /security-events: write/u,
+    "the model-bearing review job cannot mutate CodeQL alert state",
+  );
+  assert.match(reviewBlock, /codeql_alerts_path/u, "each reviewed PR carries exact CodeQL evidence");
+  assert.match(reviewBlock, /codeql_dispositions_path/u, "the model has a structured disposition channel");
+  assert.match(reviewBlock, /codeql_authority_b64/u, "pre-model CodeQL authority crosses an immutable step output");
+  assert.match(
+    reviewBlock,
+    /immutable pre-model authority snapshot/u,
+    "model proposals must match the trusted pre-model CodeQL snapshot",
+  );
+  assert.match(reviewBlock, /the next CodeQL scan\n\s+will mark it fixed/u, "real findings are fixed through code and a fresh scan");
+  assert.match(reviewBlock, /Never dismiss a real issue/u, "real CodeQL findings cannot be greenwashed");
+  assert.match(reviewBlock, /Do not use `won't fix`/u, "Lopu never chooses the won't-fix disposition");
+  assert.match(
+    reviewBlock,
+    /\[ "\$current_head" != "\$reviewed_head" \]/u,
+    "dispositions wait for a fresh scan whenever the reviewed PR head changed",
+  );
+  assert.match(
+    reviewBlock,
+    /"false positive" \| "used in tests"/u,
+    "model proposals use the two evidence-backed disposition reasons",
+  );
+  assert.match(codeqlDispositionBlock, /security-events: write/u, "only the isolated writer can dismiss CodeQL alerts");
+  assert.doesNotMatch(
+    codeqlDispositionBlock,
+    /ANTHROPIC_API_KEY|OPENAI_API_KEY|claude-code-action|codex-action/u,
+    "the CodeQL writer is credential-free apart from GitHub's scoped token",
+  );
+  assert.match(codeqlDispositionBlock, /\.head\.sha/u, "writer revalidates the live PR head");
+  assert.match(codeqlDispositionBlock, /refs\/pull\/\$pr_number\/head/u, "writer revalidates the alert's PR ref");
+  assert.match(codeqlDispositionBlock, /most_recent_instance\.commit_sha/u, "writer revalidates the alert's reviewed commit");
+  assert.match(codeqlDispositionBlock, /\.state' <<<"\$alert"\)" != open/u, "writer only changes open alerts");
+  assert.match(
+    codeqlDispositionBlock,
+    /\.reason == "false positive" or \.reason == "used in tests"/u,
+    "writer independently restricts disposition reasons",
+  );
+  assert.match(codeqlDispositionBlock, /code-scanning\/alerts\/\$alert_number/u, "writer uses the exact alert endpoint");
+  assert.match(codeqlDispositionBlock, /thingtime-lopu-codeql:v1/u, "each applied disposition is audited on its PR");
 
   assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock);
 }

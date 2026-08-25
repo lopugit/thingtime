@@ -21,6 +21,15 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu now owns evidence-backed CodeQL triage for reviewed PRs**: each review
+  receives the exact open CodeQL findings bound to the immutable PR head. Real
+  findings are repaired in the PR branch and left open for the next scan to
+  mark fixed; only demonstrably inapplicable findings can be proposed as
+  `false positive` or `used in tests`. A separate model-free job revalidates
+  the live PR head, alert ref, commit, and state before applying a dismissal,
+  then records the evidence and disposition on the PR. Lopu never selects
+  `won't fix`, and the model itself has read-only code-scanning access. — Codex
+  (AI), 2026-08-25
 - **Lopu now updates clean-but-behind PR branches before reviewing them**:
   the shared detector treats GitHub's `BEHIND` state as a base-merge request,
   snapshots both refs, and merges the PR target into an eligible same-repo
