@@ -108,11 +108,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       },
       openNewLauncherWindow: { [weak self] in
         guard let self else { throw CommanderHostError.launcherUnavailable }
-        return try self.createLauncher(
-          show: true,
-          screen: self.activeScreen(),
-          pinnedOverride: true
-        ).statePayload
+        return try self.createLauncher(show: true, screen: self.activeScreen()).statePayload
       },
       commandHotKeyReady: { [weak self] itemID in
         self?.launcher(id: launcherID)?.commandHotKeyReady(itemID: itemID)
@@ -146,8 +142,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
 
   private func createLauncher(
     show: Bool,
-    screen: NSScreen? = nil,
-    pinnedOverride: Bool? = nil
+    screen: NSScreen? = nil
   ) throws -> LauncherPanelController {
     guard let ready = daemonReady else { throw CommanderHostError.launcherUnavailable }
     let id = UUID()
@@ -155,10 +150,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       id: id,
       ready: ready,
       bridge: makeBridge(ready: ready, launcherID: id),
-      pinned: Self.initialPinnedState(
-        defaultPinned: defaultPinned,
-        pinnedOverride: pinnedOverride
-      ),
+      pinned: Self.initialPinnedState(defaultPinned: defaultPinned),
       pinningEnabled: pinningEnabled
     )
     controller.setWindowMode(windowMode)
@@ -169,8 +161,8 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     return controller
   }
 
-  static func initialPinnedState(defaultPinned: Bool, pinnedOverride: Bool?) -> Bool {
-    pinnedOverride ?? defaultPinned
+  static func initialPinnedState(defaultPinned: Bool) -> Bool {
+    defaultPinned
   }
 
   private func launcher(id: UUID?) -> LauncherPanelController? {
