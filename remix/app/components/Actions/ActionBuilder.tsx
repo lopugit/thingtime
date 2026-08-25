@@ -8,7 +8,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { CARD_STYLES } from '~/theme/card';
 import { ACTION_INPUT_TYPES, ACTION_STEP_OPS } from '~/schemas/registry';
 import { ActionChip } from './ActionChip';
-import { coerceValueText, deriveRequiredCapabilities, displayRef } from './actionInspect';
+import { coerceInputDefault, coerceValueText, deriveRequiredCapabilities, displayRef } from './actionInspect';
 
 // Form-driven action authoring. The design rule that matters: capabilities
 // are DERIVED from the steps (deriveRequiredCapabilities) and shown for
@@ -148,7 +148,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 					name: row.name.trim(),
 					type: row.type,
 					...(row.required ? { required: true } : {}),
-					...(row.default.trim() ? { default: coerceValueText(row.default) } : {})
+					...(row.default.trim() ? { default: coerceInputDefault(row.default, row.type) } : {})
 				}));
 			if (inputDescriptors.length) crystal.inputs = inputDescriptors;
 			crystal.steps = builtSteps;

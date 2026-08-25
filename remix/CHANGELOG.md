@@ -27,11 +27,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   panel on the inspector, seven Lopu-review fixes across review rounds, unit
   suites test:actions (23) + actionGrammar (15), and the v2
   external-capabilities design (PRs/action-thing-v2-external-capabilities.md).
-  Details: PRs/387-*.md. CI green; batteries 63/63 + 30/30. A functional
+  Details: PRs/387-*.md. CI green; batteries 65/65 + 30/30. A functional
   multi-review pass (correctness / UX-consistency / docs-accuracy) then
   landed: optimistic cached paint on /actions/:key, ActionChip overflow
-  guards at 375px, family-consistent pink CTAs, and design-doc
-  reconciliation with the shipped grammar/executor.
+  guards at 375px, family-consistent pink CTAs, design-doc reconciliation
+  with the shipped grammar/executor, input-default/type congruence
+  (save-time refusal + type-aware builder coercion), the ⚡ kind renderer
+  wired into /things tiles, inspector state reset on cross-action
+  navigation, and latest-revision resolution for duplicate actionKeys
+  (executor + inspector agree; test:actions 25, test:schemas 82).
 
 ### 2026-08-24 — Action Thing v1 (declarative, capability-bounded programs)
 

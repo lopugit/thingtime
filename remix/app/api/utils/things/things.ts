@@ -718,8 +718,9 @@ export const SCHEMA_RESERVED_ID_PREFIX = 'schema-';
 // reserve the prefix so a client can't pre-claim (and impersonate) a seeded
 // library component.
 export const COMPONENT_RESERVED_ID_PREFIX = 'component-';
-// Action seeds mint shareId `action-<slug>` the same way (and the executor
-// mints `action-run-<uuid>` run records under the same prefix).
+// The action- prefix is reserved for system use the same way: user creates
+// refuse it, and the executor mints `action-run-<uuid>` run-record ids
+// under it.
 export const ACTION_RESERVED_ID_PREFIX = 'action-';
 // Subscription tier revisions and user assignments use deterministic ids so
 // historical links stay stable. They are protected control-plane destinations

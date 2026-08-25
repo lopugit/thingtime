@@ -3714,7 +3714,25 @@ const sanitizeActionInputs = (input: unknown): Fail | { ok: true; inputs: Record
 		if (raw.default !== undefined) {
 			const fallback = sanitizeComponentArgScalar(raw.default, MAX_COMPONENT_ARG_DEFAULT_CHARS);
 			if (fallback === null && raw.default !== null) return fail(400, `Input ${name} default must be a string, number, or boolean`);
-			if (fallback !== null) descriptor.default = fallback;
+			if (fallback !== null) {
+				// Defaults must be congruent with the declared type: the executor
+				// substitutes them verbatim when the input is omitted, so an
+				// incongruent default would make every default-using run fail
+				// input validation instead of failing here, at save time.
+				if ((type === 'string' || type === 'text') && typeof fallback !== 'string') {
+					return fail(400, `Input ${name} default must be text to match its ${type} type`);
+				}
+				if (type === 'number' && typeof fallback !== 'number') {
+					return fail(400, `Input ${name} default must be a number to match its number type`);
+				}
+				if (type === 'boolean' && typeof fallback !== 'boolean') {
+					return fail(400, `Input ${name} default must be true or false to match its boolean type`);
+				}
+				if (type === 'enum' && (typeof fallback !== 'string' || !(descriptor.values as string[]).includes(fallback))) {
+					return fail(400, `Input ${name} default must be one of its enum values`);
+				}
+				descriptor.default = fallback;
+			}
 		}
 		if (typeof raw.min === 'number' && Number.isFinite(raw.min)) descriptor.min = raw.min;
 		if (typeof raw.max === 'number' && Number.isFinite(raw.max)) descriptor.max = raw.max;

@@ -138,6 +138,47 @@ export const coerceValueText = (raw: string): unknown => {
 	return raw;
 };
 
+// Type-aware default coercion for input descriptors: the grammar refuses
+// defaults that don't match the declared type (the executor substitutes them
+// verbatim when the input is omitted), so coerce only toward the type the
+// author picked — a number input's '42' becomes 42, while a string input's
+// '42' (or 'true') stays text. Incongruent leftovers (e.g. 'abc' on a number
+// input) pass through as text so the save fails with the grammar's message
+// instead of silently mislabeling.
+export const coerceInputDefault = (raw: string, type: string): string | number | boolean => {
+	const text = raw.trim();
+	if (type === 'number') {
+		const coerced = coerceValueText(text);
+		return typeof coerced === 'number' ? coerced : text;
+	}
+	if (type === 'boolean') {
+		if (text === 'true') return true;
+		if (text === 'false') return false;
+		return text;
+	}
+	return text;
+};
+
+// Selects the action a route key refers to from a list: an exact id match
+// wins; otherwise the LATEST revision among actionKey matches (highest
+// crystal.version — mirroring the executor's resolution order) so the
+// inspector shows the same program the executor would run when keys
+// collide across saved revisions.
+export const selectActionByKey = <T extends { id?: string; crystal?: Record<string, unknown> }>(
+	list: T[],
+	key: string
+): T | null => {
+	const byId = list.find((entry) => entry?.id === key);
+	if (byId) return byId;
+	const matches = list.filter((entry) => entry?.crystal?.actionKey === key);
+	if (!matches.length) return null;
+	return matches.reduce((best, entry) => {
+		const bestVersion = typeof best?.crystal?.version === 'number' ? (best.crystal.version as number) : 0;
+		const version = typeof entry?.crystal?.version === 'number' ? (entry.crystal.version as number) : 0;
+		return version > bestVersion ? entry : best;
+	});
+};
+
 // Does a component's render template bind this action via ttAction? A static
 // scan over the serialized template catches literal bindings (the common
 // case); {arg}-driven dynamic keys resolve per-instance and are out of scope

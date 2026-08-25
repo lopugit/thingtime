@@ -61,10 +61,16 @@ const ThingPreviewBox = ({
       <HtmlThingRenderer node={node as HtmlThingNode} />
     );
   } else {
-    // component things pass WHOLE — the component kind renderer resolves the
-    // template against savedArgs/defaults (raw crystal.render would draw
-    // unresolved {tokens} and skip the ttAction fold)
-    const source = thing.thingtime.includes('component') ? (thing as unknown as Record<string, unknown>) : previewSourceOf(thing);
+    // component and action things pass WHOLE — the component kind renderer
+    // resolves the template against savedArgs/defaults (raw crystal.render
+    // would draw unresolved {tokens} and skip the ttAction fold), and the
+    // action kind renderer matches on the whole-thing shape (a bare action
+    // crystal has no kind/render key, so it would fall through to the
+    // native tree instead of the ⚡ card)
+    const source =
+      thing.thingtime.includes('component') || thing.thingtime.includes('action')
+        ? (thing as unknown as Record<string, unknown>)
+        : previewSourceOf(thing);
     body = <RenderThing context={{ size: 'compact' }} fallback={fallback} thing={source} />;
   }
   return (
