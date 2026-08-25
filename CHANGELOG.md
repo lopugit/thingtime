@@ -21,6 +21,18 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu now closes historical CodeQL coverage gaps across every open PR**:
+  each existing repository-maintenance cadence inventories current merge/head
+  snapshots, both required CodeQL languages, and already-active analysis runs,
+  then dispatches at most two recent missing snapshots through the protected
+  unprivileged analyzer. A manual `backfill-codeql` operation may process up to
+  twelve. Every dispatch is bound to the PR's current head SHA, stale merge
+  snapshots are rejected, completed or active work is skipped, transient
+  GitHub API failures receive bounded retries, and no AI credential or PR code
+  enters the inventory job. The lane is part of **Lopu PR manager**, shares its
+  existing schedules, serializes without cancelling active work, and resumes
+  idempotently from live CodeQL state on the next pass. — Codex (AI),
+  2026-08-26
 - **Conflict resolution now recovers from incomplete partial-clone object
   hydration**: ordinary resolver checkouts remain blobless for cost and speed,
   but a GitHub promisor-object rejection now aborts the partial merge, refetches

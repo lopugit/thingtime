@@ -404,7 +404,7 @@ on:
         required: false
         default: "manage-prs"
         type: choice
-        options: [manage-prs, promote-develop, promote-features, sync-main-develop, build-all]
+        options: [manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql]
       promotion_dry_run:
         description: "Plan feature promotion only — do not create or update branches, PRs, comments, or labels"
         required: false
@@ -795,6 +795,48 @@ jobs:
       runner_label: ${{ inputs.runner_label || '' }}
       control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
     secrets: inherit
+
+  maintain_codeql_backfill:
+    name: Lopu backfills current CodeQL snapshots for open PRs
+    # Every existing manager cadence can make bounded progress, so public-run
+    # coalescing cannot starve this lane by replacing one pending schedule with
+    # another. No separate trigger is exposed. Each pass is intentionally
+    # small; manual recovery may process a larger batch.
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && (github.event_name == 'schedule'
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.maintenance_operation == 'backfill-codeql'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+      security-events: read
+    concurrency:
+      group: lopu-codeql-open-pr-backfill-${{ github.repository }}
+      # Preserve an active inventory/dispatch pass. A later scheduled signal
+      # may coalesce while the script re-derives all state when it starts.
+      cancel-in-progress: false
+    steps:
+      - name: Check out the trusted Lopu inventory helper
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github/scripts/codeql-open-pr-backfill.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Dispatch a bounded exact-snapshot backfill
+        env:
+          ADVANCED_ENABLED: ${{ vars.CODEQL_ADVANCED_ENABLED }}
+          CENTRAL_PR_ENABLED: ${{ vars.CODEQL_CENTRAL_PR_ENABLED }}
+          GH_TOKEN: ${{ github.token }}
+          MAX_DISPATCHES: ${{ github.event_name == 'workflow_dispatch' && '12' || '2' }}
+        run: node .github/scripts/codeql-open-pr-backfill.mjs
 
   maintain_main_develop_sync:
     name: Lopu synchronizes main into develop
