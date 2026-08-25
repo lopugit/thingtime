@@ -925,6 +925,11 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
+- [ ] On `develop`, push a normal feature merge and open or update a PR.
+      Confirm each `Lopu PR manager` run compiles and creates its controller
+      jobs instead of failing at workflow startup with a nested
+      `security-events: none` permission error. Confirm CodeQL alert mutations
+      occur only in the controller's separately fenced disposition writer.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
       while a clean PR, a fork PR, a protected head, and the default branch

@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Lopu's product-branch listener can start every repository-manager lane**:
+  the thin reusable-workflow caller now grants the maximum `security-events`
+  permission required by its isolated CodeQL reader/writer jobs. GitHub no
+  longer rejects branch pushes or PR events before any job is created, while
+  the model review job remains read-only and alert dispositions stay in the
+  separately fenced writer. — Codex (AI), 2026-08-25
 - **PR #299 Messenger membership durability**: unordered batched member writes
   now treat duplicate-key failures as benign only when the Mongo driver reports
   no accompanying write-concern failure. The check covers the current driver's
