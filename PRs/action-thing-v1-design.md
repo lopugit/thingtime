@@ -32,6 +32,16 @@ vocabulary deliberately does not define one.
    can reach `fetch`, env vars, or MongoDB directly. External integrations
    arrive later as Connection-owned capabilities (`mailgun.send-email`
    style), keeping credentials on the Connection, never in the Action.
+6. **Data-ops touch Data Things only.** All four data-ops share one kind
+   boundary: `things.create` mints `thingtime: ['data']`, `things.search`
+   filters `thingtime: 'data'`, and `things.get`/`things.update` require the
+   resolved target to be a data thing (`isDataThing`). A capability scope
+   constrains *by schema*, and non-data kinds (`action`, `schema`, `post`,
+   `component`, `folder`) carry no schema, so the schema check alone can't
+   hold this line — the kind guard does. An Action therefore operates on Data
+   Things and never on the program's own definition or other kinds, so
+   editing an Action stays an explicit `/things` action, never a side effect
+   of running one.
 
 ## The `action` crystal grammar (schemas/registry.ts)
 
@@ -154,6 +164,7 @@ run record land.
 | Secret/network reach | no op exists that touches fetch/env/Mongo; vocabulary is closed both at save and run |
 | Run-record forgery | action-run blocked from direct generic-route writes |
 | Foreign action invocation | actions.invoke goes through ACL read check + optional allowlist |
+| Cross-kind reach (data-op → non-data thing) | all four data-ops pin the `data` kind; get/update require `isDataThing(target)` so an unscoped read/update can't resolve to an action/schema/post/component/folder |
 
 ## Future (explicitly out of v1)
 
