@@ -24,10 +24,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   capability), ttAction component-render bindings (data-tt-action /
   data-tt-action-inputs, the only allowlisted data-* attributes; /things
   PreviewModal is the interactive surface), the Used-by back-reference
-  panel on the inspector, six Lopu-review fixes across two rounds, unit
-  suites test:actions (21) + actionGrammar (15), and the v2
+  panel on the inspector, seven Lopu-review fixes across review rounds, unit
+  suites test:actions (23) + actionGrammar (15), and the v2
   external-capabilities design (PRs/action-thing-v2-external-capabilities.md).
-  Details: PRs/387-*.md. CI green; batteries 56/56 + 30/30.
+  Details: PRs/387-*.md. CI green; batteries 63/63 + 30/30. A functional
+  multi-review pass (correctness / UX-consistency / docs-accuracy) then
+  landed: optimistic cached paint on /actions/:key, ActionChip overflow
+  guards at 375px, family-consistent pink CTAs, and design-doc
+  reconciliation with the shipped grammar/executor.
 
 ### 2026-08-24 — Action Thing v1 (declarative, capability-bounded programs)
 

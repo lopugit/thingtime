@@ -16,6 +16,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { readLocalCache } from '~/hooks/localCache';
 import { CARD_STYLES } from '~/theme/card';
 import { ActionChip } from './ActionChip';
 import { opChipTone } from './ActionsPage';
@@ -132,7 +133,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 		<Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
 			<Flex align="center" justify="space-between" mb={3}>
 				<Text {...monoLabel}>Run</Text>
-				<Button colorScheme="purple" isLoading={running} leftIcon={<Play size={14} />} onClick={run} size="sm">
+				<Button colorScheme="pink" isLoading={running} leftIcon={<Play size={14} />} onClick={run} size="sm">
 					Run action
 				</Button>
 			</Flex>
@@ -223,7 +224,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 									</Text>
 									{entry.target ? (
 										<Button as={Link} rightIcon={<ExternalLink size={11} />} size="xs" to={`/thing/${encodeURIComponent(entry.target)}`} variant="ghost">
-											{entry.target.slice(0, 18)}…
+											{entry.target.length > 18 ? `${entry.target.slice(0, 18)}…` : entry.target}
 										</Button>
 									) : null}
 									{entry.note ? (
@@ -267,8 +268,16 @@ export const ActionDetailPage = () => {
 		const history = await apiRef.current.v1.actions.runs({ action: actionId, limit: 20 }).catch(() => null);
 		if (history?.runs) setRuns(history.runs as RunRecord[]);
 	}, [actionId]);
-	const requestKey = `${key || ''} ${user?.id || 'anonymous'}`;
-	const visible = state.key === requestKey ? state : { key: requestKey, action: null, missing: false };
+	const requestKey = `${key || ''} ${user?.id || 'anonymous'}`;
+	// Optimistic first paint (house rule): the /actions list caches full action
+	// crystals, so navigating from it can render the inspector instantly from
+	// that cache while the authoritative fetch reconciles in the background.
+	const cachedAction = React.useMemo(() => {
+		if (!key) return null;
+		const cache = readLocalCache<{ actions?: ActionThing[] }>(`tt-actions-${user?.id || 'anon'}`);
+		return (cache?.actions || []).find((entry) => entry?.id === key || entry?.crystal?.actionKey === key) || null;
+	}, [key, user?.id]);
+	const visible = state.key === requestKey ? state : { key: requestKey, action: cachedAction, missing: false };
 
 	React.useEffect(() => {
 		if (!key) return;
@@ -379,7 +388,7 @@ export const ActionDetailPage = () => {
 										{typeof crystal.version === 'number' ? <ActionChip dot={false} size="sm">v{crystal.version}</ActionChip> : null}
 										{action.visibility ? <ActionChip dot={false} size="sm">{action.visibility}</ActionChip> : null}
 									</Flex>
-									<Text {...monoLabel} mt={2}>
+									<Text {...monoLabel} mt={2} overflowWrap="anywhere">
 										{crystal.actionKey ? `${crystal.actionKey} · ` : ''}
 										{action.id}
 									</Text>

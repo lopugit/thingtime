@@ -45,13 +45,23 @@ export const ActionChip = ({
 			borderRadius="var(--tt-radius-pill, 999px)"
 			display="inline-flex"
 			gap="6px"
+			maxWidth="100%"
+			minWidth={0}
 			paddingX={sizing.paddingX}
 			paddingY={sizing.paddingY}
 			width="fit-content"
 			{...rest}
 		>
 			{dot ? <Flex background={TONE_DOTS[tone]} borderRadius="full" flexShrink={0} height={sizing.dot} width={sizing.dot} /> : null}
-			<Text color="var(--tt-text, #33333c)" fontSize={sizing.fontSize} fontWeight="500" lineHeight="1.3" whiteSpace="nowrap">
+			<Text
+				color="var(--tt-text, #33333c)"
+				fontSize={sizing.fontSize}
+				fontWeight="500"
+				lineHeight="1.3"
+				overflow="hidden"
+				textOverflow="ellipsis"
+				whiteSpace="nowrap"
+			>
 				{children}
 			</Text>
 		</Flex>
