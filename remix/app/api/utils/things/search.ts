@@ -14,6 +14,7 @@ import {
   appShapeProjections,
   appVisiblePage,
   asViewer,
+  batchedThingLookup,
   canViewInherited,
   chronoCursorClause,
   fail,
@@ -213,6 +214,13 @@ const sanitizeOrdered = (field: string, op: string, value: unknown): string | nu
 };
 
 const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
+  // Non-object entries reach here from buildGroup's isGroup() dispatch: strings
+  // and numbers fall through to sanitizeFieldPath(undefined) and 400 on their
+  // own, but null/undefined would throw on the .field read and escape the route
+  // as a 500 instead. Reject every non-object shape up front.
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return fail(400, 'Each condition must be an object');
+  }
   const field = sanitizeFieldPath(input.field);
   if (isFail(field)) return field;
 
@@ -374,7 +382,13 @@ const projectVisiblePage = async (
     await appShapeProjections(app, visible, things);
     return { things, posts: {} };
   }
-  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
+  // One shared batched lookup for the whole page, matching listThings: a page
+  // of attached things (comments, reactions, shares — anything carrying
+  // tt:inherit) then costs one round trip per chain LEVEL instead of one per
+  // doc. Unbatched, a 50-result page of depth-1 comments issued 50 findOnes
+  // against a 10-connection pool, draining as 5 serial pool waves.
+  const lookup = batchedThingLookup();
+  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
   const visible = page.filter((_, index) => verdicts[index]);
   const things = await toPublicThings(visible, viewer);
   const postDocs = visible.filter((doc) => isPostThing(doc));

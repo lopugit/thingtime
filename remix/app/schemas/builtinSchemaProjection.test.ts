@@ -19,6 +19,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // a new registry field should appear (or be knowingly dropped as a record/
 // reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
+  attachment: ['name', 'size', 'contentType', 'mediaKind', 'detectedContentType'],
   post: ['type', 'text', 'images', 'listing'], // thing: record → dropped
   comment: ['text'],
   reaction: ['emoji'],
@@ -26,6 +27,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   data: [], // '*' is a record; 'schema' is a reserved top-level name
   schema: ['name', 'description', 'forkOf'], // fields + render: records → dropped
   save: [], // marker schema
+  folder: ['name', 'icon', 'description'],
   app: [
     'clientId',
     'name',
@@ -76,7 +78,30 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
 	'service-quota': ['quotaKind', 'quotaVersion', 'key', 'dayKey', 'dailyUsed', 'permitIds', 'releasedIds'], // policy + state records → dropped
 	'migration-diagnostic': ['diagnosticVersion', 'migrationId', 'mode', 'status', 'outcome', 'summary', 'capturedAt'],
+  'ci-repository': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-automation': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-feature': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-branch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-pull-request': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-workflow-run': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-deployment': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-preview': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-dispatch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
+  friend: ['status', 'friendKey'],
+  notification: ['type', 'actorId', 'actorName', 'postId', 'preview'],
+  passkey: ['nickname', 'description', 'providerName', 'aaguid', 'deviceType', 'backedUp', 'transports', 'lastUsedAt', 'lastUsedOrigin', 'revokedAt'],
+  'passkey-app-link': ['appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
+  community: ['name', 'description'],
+  'community-member': ['memberKey', 'role'],
+  'community-invite': ['inviteCode', 'uses', 'maxUses', 'expiresAt', 'revoked'],
+  'chat-section': ['name', 'order'],
+  chat: ['name', 'topic', 'chatType', 'communityId', 'sectionId', 'channelVisibility', 'dmKey'],
+  'chat-member': ['memberKey', 'role', 'nickname', 'state', 'requestOrigin', 'lastReadMessageId', 'lastReadAt', 'muted'],
+  'chat-message': ['text', 'threadRootId', 'replyToId', 'editedAt', 'deletedAt', 'systemType'],
+  'custom-emoji': ['name', 'emojiKey', 'image', 'animated'],
+  follow: ['followKey'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
   'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt'], // weights: record → dropped
@@ -87,12 +112,111 @@ test('the builtin crystal-schema set matches the pinned projection table', () =>
   assert.deepEqual(crystalSchemas.map((schema) => schema.id).sort(), Object.keys(EXPECTED_PROJECTED_FIELDS).sort());
 });
 
-test('registered app control Things are protected from generic Thing CRUD', () => {
+test('registered server-owned Things are protected from generic Thing CRUD', () => {
+	assert.ok(PROTECTED_THINGTIME.includes('attachment'));
 	assert.ok(PROTECTED_THINGTIME.includes('app'));
 	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
+	assert.ok(PROTECTED_THINGTIME.includes('moderationFlag'));
+	assert.ok(PROTECTED_THINGTIME.includes('ci-pull-request'));
+	assert.ok(PROTECTED_THINGTIME.includes('ci-event'));
 	assert.equal(isProtectedThingtime(['app']), true);
+	assert.equal(isProtectedThingtime(['attachment']), true);
 	assert.equal(isProtectedThingtime(['migration-diagnostic']), true);
+	assert.equal(isProtectedThingtime(['moderationFlag']), true);
+	assert.equal(isProtectedThingtime(['ci-workflow-run']), true);
 	assert.equal(isProtectedThingtime(['data', 'app']), true);
+	assert.equal(isProtectedThingtime(['user']), true);
+});
+
+test('managed attachment, moderation, user, and emoji fields are closed server-owned root fields', () => {
+	const root = thingtimeSchemas.find((schema) => schema.id === 'thing')!;
+	const fields = new Map(root.fields.map((field) => [field.name, field]));
+	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'moderation', 'avatarAttachmentId', 'bannerAttachmentId', 'emojiAttachmentId']) {
+		assert.equal(fields.get(name)?.system, true, name);
+		assert.equal(fields.get(name)?.required, false, name);
+	}
+	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji']);
+	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
+});
+
+test('attachment metadata is normalized but its Thingtime kind remains protected from generic CRUD', () => {
+	const validated = validateThingtimeCrystal(['attachment'], {
+		name: '  clip.MP4 ',
+		size: 123,
+		contentType: 'VIDEO/MP4',
+		mediaKind: 'file'
+	});
+	assert.equal(validated.ok, true);
+	if (validated.ok !== true) return;
+	assert.deepEqual(validated.crystal, {
+		name: 'clip.MP4',
+		size: 123,
+		contentType: 'video/mp4',
+		mediaKind: 'video'
+	});
+	assert.equal(isProtectedThingtime(validated.thingtime), true);
+});
+
+test('post attachment preflight allows attachment-only posts without weakening ordinary post validation', () => {
+  const emptyText = { type: 'text', text: '', images: [], listing: null, thing: null };
+  assert.equal(validateThingtimeCrystal(['post'], emptyText).ok, false);
+  assert.equal(
+    validateThingtimeCrystal(['post'], emptyText, {
+      postAttachments: { hasAny: true, hasVisual: false }
+    }).ok,
+    true
+  );
+
+  const emptyImage = { type: 'image', text: '', images: [], listing: null, thing: null };
+  assert.equal(
+    validateThingtimeCrystal(['post'], emptyImage, {
+      postAttachments: { hasAny: true, hasVisual: false }
+    }).ok,
+    false
+  );
+  assert.equal(
+    validateThingtimeCrystal(['post'], emptyImage, {
+      postAttachments: { hasAny: true, hasVisual: true }
+    }).ok,
+    true
+  );
+});
+
+test('server attachment preflight enables attachment-only rich comments', () => {
+  const emptyComment = { type: 'text', text: '', images: [], listing: null, thing: null };
+  assert.equal(
+    validateThingtimeCrystal(['post', 'comment'], emptyComment, {
+      postAttachments: { hasAny: true, hasVisual: true }
+    }).ok,
+		true
+  );
+});
+
+test('post image URLs require parsed credential-free absolute http(s) URLs', () => {
+	const validateImage = (url: string) =>
+		validateThingtimeCrystal(['post'], {
+			type: 'image',
+			text: '',
+			images: [url],
+			listing: null,
+			thing: null
+		});
+	assert.equal(validateImage('https://images.example/photo.jpg').ok, true);
+	assert.equal(validateImage('http://localhost:9999/photo.jpg').ok, true);
+	for (const unsafe of [
+		'https://user:secret@images.example/photo.jpg',
+		'https://images.example/a b.jpg',
+		'https://images.example/a\u202Eb.jpg',
+		'https:\\images.example\\photo.jpg',
+		'https://',
+		'//images.example/photo.jpg',
+		'data:image/png;base64,AAAA',
+		['java', 'script:alert(1)'].join('')
+	]) {
+		const result = validateImage(unsafe);
+		assert.equal(result.ok, false, unsafe);
+		if (!result.ok) assert.equal(result.error, 'Images must be http(s) URLs');
+	}
 });
 
 for (const schema of crystalSchemas) {

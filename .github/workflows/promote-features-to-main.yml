@@ -1,0 +1,31 @@
+name: Promote features to main
+
+on:
+  push:
+    branches: [develop]
+  schedule:
+    - cron: "43 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Plan only — no branches, PRs, comments, closes, or retargets"
+        type: boolean
+        default: false
+      lookback:
+        description: "How many recently merged develop PRs to scan (max 100)"
+        required: false
+        default: "50"
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/promote-features-to-main.yml@github-actions
+    with:
+      dry_run: ${{ inputs.dry_run || false }}
+      lookback: ${{ inputs.lookback || '50' }}
+    secrets: inherit

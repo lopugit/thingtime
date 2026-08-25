@@ -1,0 +1,36 @@
+# Stable event listener only. The wildcard `all` branch builder (PR discovery,
+# stack ordering, merge/conflict policy, and push handling) is versioned on the
+# protected github-actions branch; this caller carries triggers, permissions,
+# and concurrency only.
+
+name: Build all branch
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request_target:
+    # Any open-PR lifecycle change can alter what belongs on `all`: content
+    # (synchronize), membership (opened/reopened/closed/drafts), and stack
+    # topology or base retargets (edited).
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed]
+  schedule:
+    - cron: "53 * * * *"
+  workflow_dispatch:
+
+permissions:
+  # The protected implementation dispatches a supported-event worker from its
+  # push handoff. Reusable workflows cannot elevate beyond this listener.
+  actions: write
+  contents: write
+  pull-requests: read
+
+# Rebuilds are idempotent full rebuilds; a superseded run has nothing worth
+# finishing, so bursts collapse to the newest trigger.
+concurrency:
+  group: all-branch-rebuild
+  cancel-in-progress: true
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/all-branch.yml@github-actions
+    secrets: inherit

@@ -1,0 +1,15 @@
+name: Promote develop to main
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/promote-develop-to-main.yml@github-actions
+    secrets: inherit

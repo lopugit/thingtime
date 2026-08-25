@@ -1,0 +1,38 @@
+name: Develop S3 PR preview
+
+# Stable event listener only. The secret-bearing implementation and controller
+# script are versioned on the protected github-actions branch. The reusable
+# workflow still executes in this caller's event context, and Vercel builds only
+# the exact allowlisted SHA.
+
+on:
+  pull_request_target:
+    # Do not filter by base branch here: edited/closed events must still remove
+    # resources after a PR is retargeted away from develop.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Existing open PR targeting develop
+        required: true
+        type: number
+  repository_dispatch:
+    types: [develop-pr-preview-controller]
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  actions: read
+  contents: write
+  deployments: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/develop-pr-preview.yml@github-actions
+    with:
+      # workflow_dispatch values arrive as strings, while workflow_call enforces
+      # the reusable workflow's declared number type before creating any jobs.
+      pr_number: ${{ fromJSON(inputs.pr_number || '0') }}
+    secrets: inherit
