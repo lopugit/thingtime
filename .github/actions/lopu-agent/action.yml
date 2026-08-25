@@ -1,0 +1,147 @@
+name: Lopu agent
+description: Run Thingtime's principal repository agent through a validated Claude or Codex backend.
+
+inputs:
+  backend:
+    description: "Closed provider selector: claude or codex."
+    required: false
+    default: claude
+  prompt:
+    description: Complete Lopu task prompt.
+    required: true
+  anthropic-api-key:
+    description: Anthropic API key when the Claude backend uses API authentication.
+    required: false
+  claude-code-oauth-token:
+    description: Claude Code OAuth token when the Claude backend uses OAuth authentication.
+    required: false
+  openai-api-key:
+    description: OpenAI Platform project key when the Codex backend is selected.
+    required: false
+  github-token:
+    description: Repository-scoped GitHub token available to the selected backend.
+    required: true
+  allowed-bots:
+    description: Bot actor allowlist passed to claude-code-action.
+    required: false
+    default: github-actions
+  claude-args:
+    description: Trusted, caller-validated Claude CLI arguments.
+    required: false
+    default: ""
+  codex-model:
+    description: Closed Codex model selector.
+    required: false
+    default: gpt-5.6-terra
+  codex-reasoning-effort:
+    description: Closed Codex reasoning-effort selector.
+    required: false
+    default: xhigh
+  working-directory:
+    description: Working directory passed to codex-action.
+    required: false
+    default: .
+  sandbox:
+    description: Codex filesystem sandbox mode.
+    required: false
+    default: danger-full-access
+  safety-strategy:
+    description: Codex runner hardening strategy.
+    required: false
+    default: drop-sudo
+
+outputs:
+  backend:
+    description: Validated backend that ran.
+    value: ${{ steps.config.outputs.backend }}
+  backend-label:
+    description: Human-readable provider and model label.
+    value: ${{ steps.config.outputs.backend_label }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate the Lopu backend
+      id: config
+      shell: bash
+      env:
+        BACKEND: ${{ inputs.backend }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        CODEX_MODEL: ${{ inputs.codex-model }}
+        CODEX_REASONING_EFFORT: ${{ inputs.codex-reasoning-effort }}
+        CODEX_SANDBOX: ${{ inputs.sandbox }}
+        CODEX_SAFETY_STRATEGY: ${{ inputs.safety-strategy }}
+      run: |
+        set -euo pipefail
+        case "$BACKEND" in
+          claude)
+            if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+              echo "::error::Lopu's Claude backend requires ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN."
+              exit 1
+            fi
+            backend_label="Claude Code"
+            ;;
+          codex)
+            [ -n "${OPENAI_API_KEY:-}" ] || {
+              echo "::error::Lopu's Codex backend requires an OpenAI Platform project key in OPENAI_API_KEY."
+              exit 1
+            }
+            case "$CODEX_MODEL" in
+              gpt-5.6-terra) model_label="GPT-5.6 Terra" ;;
+              gpt-5.6-sol) model_label="GPT-5.6 Sol" ;;
+              *) echo "::error::Unsupported Lopu Codex model: $CODEX_MODEL"; exit 1 ;;
+            esac
+            case "$CODEX_REASONING_EFFORT" in
+              medium) effort_label="Medium" ;;
+              high) effort_label="High" ;;
+              xhigh) effort_label="Extra High" ;;
+              max) effort_label="Maximum" ;;
+              *) echo "::error::Unsupported Lopu Codex reasoning effort: $CODEX_REASONING_EFFORT"; exit 1 ;;
+            esac
+            case "$CODEX_SANDBOX" in
+              read-only|workspace-write|danger-full-access) ;;
+              *) echo "::error::Unsupported Lopu Codex sandbox: $CODEX_SANDBOX"; exit 1 ;;
+            esac
+            [ "$CODEX_SAFETY_STRATEGY" = drop-sudo ] || {
+              echo "::error::Lopu Codex must use the drop-sudo runner strategy."
+              exit 1
+            }
+            backend_label="OpenAI API $model_label $effort_label"
+            ;;
+          *)
+            echo "::error::Unsupported Lopu backend: $BACKEND"
+            exit 1
+            ;;
+        esac
+        echo "Lopu backend: $BACKEND ($backend_label)"
+        echo "backend=$BACKEND" >>"$GITHUB_OUTPUT"
+        echo "backend_label=$backend_label" >>"$GITHUB_OUTPUT"
+
+    - name: Run Lopu with Claude
+      if: steps.config.outputs.backend == 'claude'
+      uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+      with:
+        anthropic_api_key: ${{ inputs.anthropic-api-key }}
+        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token }}
+        github_token: ${{ inputs.github-token }}
+        allowed_bots: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ inputs.claude-args }}
+
+    - name: Run Lopu with Codex
+      if: steps.config.outputs.backend == 'codex'
+      uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      with:
+        openai-api-key: ${{ inputs.openai-api-key }}
+        working-directory: ${{ inputs.working-directory }}
+        sandbox: ${{ inputs.sandbox }}
+        safety-strategy: ${{ inputs.safety-strategy }}
+        model: ${{ inputs.codex-model }}
+        effort: ${{ inputs.codex-reasoning-effort }}
+        allow-bots: true
+        allow-bot-users: ${{ inputs.allowed-bots }}
+        prompt: ${{ inputs.prompt }}

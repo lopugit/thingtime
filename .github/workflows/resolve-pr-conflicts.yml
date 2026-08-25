@@ -56,11 +56,14 @@
 # and the merge commit pushed back to the PR branch.
 #
 # Secrets:
-# - ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (one required): powers the
-#   resolution agent (OAuth token via `/install-github-app` in the claude CLI),
-#   and, when present, LLM semantic extraction in the post-merge graphify
-#   refresh (ANTHROPIC_API_KEY selects graphify's claude API backend;
-#   CLAUDE_CODE_OAUTH_TOKEN its claude-cli backend).
+# - ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (one required for Claude):
+#   powers the Claude resolution agent (OAuth token via `/install-github-app`
+#   in the claude CLI) and can power LLM semantic extraction in the post-merge
+#   Graphify refresh.
+# - OPENAI_API_KEY (required when Lopu's review backend is Codex): powers the
+#   pinned Codex Action and the same post-merge Graphify semantic refresh. The
+#   configured review backend chooses which available provider Graphify tries
+#   first, with the other provider retained as a credential-backed fallback.
 # - CONFLICT_RESOLVER_PAT (optional): a PAT with repo + workflow scope. Without
 #   it, pushes use GITHUB_TOKEN, which GitHub rejects whenever the merge brings
 #   ANY change under .github/workflows/ (workflow runs are then skipped early,
@@ -133,11 +136,12 @@
 # staged graphify-out subtree still equals the base side, so refreshing
 # earlier would fail its own check.
 #
-# The refresh includes LLM SEMANTIC extraction when a Claude credential
-# exists: `graphify extract` + `graphify cluster-only` with whichever backend
-# the repo's secret supports (ANTHROPIC_API_KEY → claude API backend;
-# CLAUDE_CODE_OAUTH_TOKEN → claude-cli backend, the same credential the
-# resolver itself runs on). extract is manifest-incremental, and unchanged
+# The refresh includes LLM SEMANTIC extraction when a configured Lopu provider
+# credential exists: `graphify extract` + `graphify cluster-only` through
+# OPENAI_API_KEY, ANTHROPIC_API_KEY, or CLAUDE_CODE_OAUTH_TOKEN. The configured
+# review backend is preferred, so Terra/Sol-based Lopu review and Graphify use
+# the same OpenAI project credential while Claude remains a fallback. Extract
+# is manifest-incremental, and unchanged
 # content is served from the tracked content-addressed semantic cache
 # (graphify-out/cache/semantic/), so only content genuinely new to the merge
 # reaches the LLM — a typical conflict merge costs a handful of calls, often
@@ -147,8 +151,8 @@
 # result whose node count halved is refused before staging.
 # With no credential, or when extraction fails, the step falls back to the
 # old AST-only `graphify update`. Handing this step a credential exposes it
-# to the pinned graphifyy package and the claude CLI (no NEW principals —
-# the resolve step already runs on the same secret); in exchange, the staged
+# to the pinned graphifyy package and the selected provider client (no NEW
+# principals — the review/resolve path already runs on the same secret); in exchange, the staged
 # refresh outputs get the same best-effort secret scan as resolved files
 # before committing, and the step still runs only after verification, on a
 # tree the model never influenced.
@@ -157,6 +161,9 @@ name: Lopu PR manager
 
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
+      && inputs.maintenance_operation != 'manage-prs'
+      && format('Lopu runs repository maintenance: {0}', inputs.maintenance_operation)
+      || github.event_name == 'workflow_dispatch'
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && inputs.promotion_source_pr != ''
@@ -237,6 +244,41 @@ on:
         required: false
         default: ""
         type: string
+      maintenance_operation:
+        description: "Public Lopu operation; automatic branch events select their own maintenance lanes"
+        required: false
+        default: "manage-prs"
+        type: string
+      promotion_dry_run:
+        description: "Plan a feature-promotion operation without mutating repository state"
+        required: false
+        default: false
+        type: boolean
+      promotion_lookback:
+        description: "Recently merged source PRs to inspect during feature promotion (max 100)"
+        required: false
+        default: "50"
+        type: string
+      promotion_source_branch:
+        description: "Optional feature-promotion source branch (default develop)"
+        required: false
+        default: ""
+        type: string
+      promotion_target_branch:
+        description: "Optional feature-promotion target branch (default main)"
+        required: false
+        default: ""
+        type: string
+      promotion_path_prefix:
+        description: "Optional comma-separated allowed path prefixes for a feature-promotion lane"
+        required: false
+        default: ""
+        type: string
+      rebase_cascade:
+        description: "Continue through PRs stacked on an updated branch"
+        required: false
+        default: true
+        type: boolean
       detector_handoff:
         description: "Internal: exact-PR handoff to the github-actions resolver control plane (leave false)"
         required: false
@@ -328,6 +370,9 @@ on:
     # It is offset from the rebase-only sweep to keep API and runner bursts
     # separate while preserving deterministic merge-vs-rebase ownership.
     - cron: "2,32 * * * *"
+    # Feature-promotion maintenance used to own a separate scheduled workflow.
+    # Keep its cadence while routing it through this one public Lopu entry.
+    - cron: "43 */6 * * *"
   workflow_dispatch:
     inputs:
       pr_number:
@@ -340,6 +385,42 @@ on:
         required: false
         default: ""
         type: string
+      maintenance_operation:
+        description: "Choose PR management or one explicit repository-maintenance operation"
+        required: false
+        default: "manage-prs"
+        type: choice
+        options: [manage-prs, promote-develop, promote-features, sync-main-develop]
+      promotion_dry_run:
+        description: "Plan feature promotion only — do not create or update branches, PRs, comments, or labels"
+        required: false
+        default: false
+        type: boolean
+      promotion_lookback:
+        description: "Recently merged source PRs to inspect during feature promotion (max 100)"
+        required: false
+        default: "50"
+        type: string
+      promotion_source_branch:
+        description: "Optional feature-promotion source branch (default develop)"
+        required: false
+        default: ""
+        type: string
+      promotion_target_branch:
+        description: "Optional feature-promotion target branch (default main)"
+        required: false
+        default: ""
+        type: string
+      promotion_path_prefix:
+        description: "Optional comma-separated allowed path prefixes for a feature-promotion lane"
+        required: false
+        default: ""
+        type: string
+      rebase_cascade:
+        description: "Continue through PRs stacked on an updated branch"
+        required: false
+        default: true
+        type: boolean
       detector_handoff:
         description: "Internal: exact-PR handoff to the github-actions resolver control plane (leave false)"
         required: false
@@ -392,10 +473,13 @@ on:
         default: ""
         type: string
   repository_dispatch:
-    types: [resolve-conflicts-cascade]
+    # Legacy exact stack workers now enter through this same public Lopu
+    # workflow instead of a second rebase-specific product listener.
+    types: [resolve-conflicts-cascade, rebase-pr-stack-ai]
 
-# Detector runs are disposable; internal per-PR workers are not. A detector and
-# the worker it spawns must never share a cancellation namespace.
+# Detector and worker runs are both durable. A detector and the worker it
+# spawns never share a namespace, and queue:max preserves every pending run
+# instead of silently replacing an earlier repository signal.
 concurrency:
   # Distinct namespaces are load-bearing:
   #   resolve-detect-*   external/event/API-only detectors
@@ -404,6 +488,10 @@ concurrency:
   # A human exact-PR detector therefore cannot cancel the worker it creates.
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
+        && inputs.maintenance_operation != ''
+        && inputs.maintenance_operation != 'manage-prs'
+        && format('lopu-maintenance-{0}', inputs.maintenance_operation)
+        || github.event_name == 'workflow_dispatch'
         && github.actor == 'github-actions[bot]'
         && (github.ref_name == 'github-actions'
            || github.workflow_ref
@@ -468,31 +556,12 @@ concurrency:
              github.event.client_payload.branch || github.run_id)
         || format('resolve-detect-{0}-{1}',
              github.event_name, github.ref_name || github.run_id) }}
-  # Every external detector is safe to supersede. A validated internal worker
-  # must finish or fail coherently; never cancel it halfway through a merge.
-  cancel-in-progress: >-
-    ${{ !(github.event_name == 'workflow_dispatch'
-          && (github.ref_name == 'github-actions'
-             || github.workflow_ref
-             == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
-             || github.workflow_ref
-             == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
-          && (((github.actor == 'github-actions[bot]')
-               && inputs.promotion_source_pr != ''
-               && inputs.promotion_plan_b64 != ''
-               && inputs.detector_handoff != true
-               && inputs.manual_retry != true
-               && inputs.depth == '0'
-               && inputs.pr_number == ''
-               && inputs.branch == '')
-              || (github.actor == 'github-actions[bot]'
-                  && inputs.promotion_source_pr == ''
-                  && inputs.promotion_plan_b64 == ''
-                  && inputs.detector_handoff == true
-                  && ((startsWith(inputs.control_dispatch_id, 'lopu-review:'))
-                      || (!startsWith(inputs.control_dispatch_id, 'lopu-review:')
-                          && inputs.pr_number != ''
-                          && inputs.branch == ''))))) }}
+  queue: max
+  # GitHub rejects queue:max whenever cancel-in-progress can evaluate true.
+  # More importantly, replacing an older detector can lose a distinct PR,
+  # comment, check, or branch signal. Let each bounded detector revalidate live
+  # state when it reaches the front of its namespace instead.
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -502,6 +571,8 @@ jobs:
     if: >-
       inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
+      && (inputs.maintenance_operation == ''
+          || inputs.maintenance_operation == 'manage-prs')
       && (github.event_name != 'issue_comment'
           || (github.event.issue.pull_request
               && github.event.comment.user.type == 'User'))
@@ -515,21 +586,27 @@ jobs:
                   || github.event.check_run.conclusion == 'action_required')))
     uses: ./.github/workflows/ci-provider-router.yml
     with:
-      workflow: resolve-conflicts
+      workflow: >-
+        ${{ github.event_name == 'repository_dispatch'
+            && github.event.action == 'rebase-pr-stack-ai'
+            && 'rebase-stack'
+            || 'resolve-conflicts' }}
       execution_provider: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
       runner_label: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
       control_dispatch_id: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
       routing_proof: ${{ inputs.routing_proof || github.event.client_payload.routing_proof || '' }}
       routing_proof_issued_at: ${{ inputs.routing_proof_issued_at || github.event.client_payload.routing_proof_issued_at || '' }}
       internal_worker: >-
-        ${{ github.event_name == 'workflow_dispatch'
-            && inputs.detector_handoff == true
-            && ((startsWith(inputs.control_dispatch_id, 'lopu-review:'))
-                || (!startsWith(inputs.control_dispatch_id, 'lopu-review:')
-                    && inputs.pr_number != ''
-                    && inputs.branch == ''))
-            && inputs.promotion_source_pr == ''
-            && inputs.promotion_plan_b64 == '' }}
+        ${{ (github.event_name == 'repository_dispatch'
+             && github.event.action == 'rebase-pr-stack-ai')
+            || (github.event_name == 'workflow_dispatch'
+                && inputs.detector_handoff == true
+                && ((startsWith(inputs.control_dispatch_id, 'lopu-review:'))
+                    || (!startsWith(inputs.control_dispatch_id, 'lopu-review:')
+                        && inputs.pr_number != ''
+                        && inputs.branch == ''))
+                && inputs.promotion_source_pr == ''
+                && inputs.promotion_plan_b64 == '') }}
       pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.issue.number || github.event.pull_request.number || github.event.check_run.pull_requests[0].number || '' }}
       branch: ${{ inputs.branch || (github.event_name == 'push' && github.ref_name) || '' }}
     secrets: inherit
@@ -562,12 +639,87 @@ jobs:
     with:
       pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.pull_request.number || '' }}
       branch: ${{ inputs.branch || github.event.client_payload.branch || (github.event_name == 'push' && github.ref_name) || github.event.pull_request.base.ref || '' }}
-      cascade: true
+      cascade: ${{ github.event_name != 'workflow_dispatch' || inputs.rebase_cascade }}
       execution_provider: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
       runner_label: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
       control_dispatch_id: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
       routing_proof: ${{ inputs.routing_proof || github.event.client_payload.routing_proof || '' }}
       routing_proof_issued_at: ${{ inputs.routing_proof_issued_at || github.event.client_payload.routing_proof_issued_at || '' }}
+    secrets: inherit
+
+  maintain_develop_promotion:
+    name: Lopu maintains the standing develop to main promotion
+    # This job replaces the former public push/manual entry on
+    # promote-develop-to-main.yml. It intentionally does not depend on the
+    # PR-scanner router: the internal component owns its existing provider
+    # route, and a Vercel-offloaded scanner must not suppress maintenance.
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && ((github.event_name == 'push'
+           && github.ref_name == 'develop'
+           && github.event.deleted == false)
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.maintenance_operation == 'promote-develop'))
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/promote-develop-to-main.yml
+    with:
+      execution_provider: ${{ inputs.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
+    secrets: inherit
+
+  maintain_feature_promotions:
+    name: Lopu maintains per-feature promotions
+    # Push and scheduled ownership used to live on a second public workflow.
+    # The implementation remains reusable, but Lopu is now its only entry.
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && ((github.event_name == 'push'
+           && github.ref_name == 'develop'
+           && github.event.deleted == false)
+          || (github.event_name == 'schedule'
+              && github.event.schedule == '43 */6 * * *')
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.maintenance_operation == 'promote-features'))
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      issues: write
+    uses: ./.github/workflows/promote-features-to-main.yml
+    with:
+      dry_run: ${{ inputs.promotion_dry_run || false }}
+      lookback: ${{ inputs.promotion_lookback || '50' }}
+      source_branch: ${{ inputs.promotion_source_branch || '' }}
+      target_branch: ${{ inputs.promotion_target_branch || '' }}
+      require_path_prefix: ${{ inputs.promotion_path_prefix || '' }}
+      execution_provider: ${{ inputs.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
+    secrets: inherit
+
+  maintain_main_develop_sync:
+    name: Lopu synchronizes main into develop
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && ((github.event_name == 'push'
+           && github.ref_name == 'main'
+           && github.event.deleted == false)
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.maintenance_operation == 'sync-main-develop'))
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/sync-main-into-develop.yml
+    with:
+      execution_provider: ${{ inputs.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
     secrets: inherit
 
   detect:
@@ -1689,6 +1841,8 @@ jobs:
       model_args: ${{ steps.waterfall.outputs.model_args }}
       primary_model: ${{ steps.waterfall.outputs.primary_model }}
       backend_label: ${{ steps.waterfall.outputs.backend_label }}
+      agent_backend: ${{ steps.waterfall.outputs.agent_backend }}
+      agent_backend_label: ${{ steps.waterfall.outputs.agent_backend_label }}
       review_backend: ${{ steps.waterfall.outputs.review_backend }}
       review_backend_label: ${{ steps.waterfall.outputs.review_backend_label }}
       codex_model: ${{ steps.waterfall.outputs.codex_model }}
@@ -1698,9 +1852,9 @@ jobs:
         id: waterfall
         shell: bash
         env:
-          # The resolver/promotion waterfall remains Claude-configured. This
-          # opt-in provider only selects Lopu's autonomous PR-review worker.
-          LOPU_REVIEW_BACKEND: ${{ vars.LOPU_REVIEW_BACKEND || 'claude' }}
+          # One provider selection governs every model-backed Lopu lane. Keep
+          # LOPU_REVIEW_BACKEND as a compatibility fallback for existing repos.
+          LOPU_AGENT_BACKEND: ${{ vars.LOPU_AGENT_BACKEND || vars.LOPU_REVIEW_BACKEND || 'claude' }}
           LOPU_CODEX_MODEL: ${{ vars.LOPU_CODEX_MODEL || 'gpt-5.6-terra' }}
           LOPU_CODEX_REASONING_EFFORT: ${{ vars.LOPU_CODEX_REASONING_EFFORT || 'xhigh' }}
         run: |
@@ -1798,10 +1952,10 @@ jobs:
           echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
           echo "backend_label=$backend_label" >> "$GITHUB_OUTPUT"
 
-          review_backend="${LOPU_REVIEW_BACKEND:-claude}"
-          case "$review_backend" in
+          agent_backend="${LOPU_AGENT_BACKEND:-claude}"
+          case "$agent_backend" in
             claude)
-              review_backend_label="$backend_label"
+              agent_backend_label="$backend_label"
               codex_model=""
               codex_reasoning_effort=""
               ;;
@@ -1828,19 +1982,22 @@ jobs:
                   effort_label="Extra High"
                   ;;
               esac
-              review_backend_label="OpenAI API $model_name $effort_label"
+              agent_backend_label="OpenAI API $model_name $effort_label"
               ;;
             *)
-              echo "::warning::Unsupported LOPU_REVIEW_BACKEND '$review_backend'; using claude."
-              review_backend="claude"
-              review_backend_label="$backend_label"
+              echo "::warning::Unsupported LOPU_AGENT_BACKEND '$agent_backend'; using claude."
+              agent_backend="claude"
+              agent_backend_label="$backend_label"
               codex_model=""
               codex_reasoning_effort=""
               ;;
           esac
-          echo "Lopu review backend: $review_backend ($review_backend_label)"
-          echo "review_backend=$review_backend" >> "$GITHUB_OUTPUT"
-          echo "review_backend_label=$review_backend_label" >> "$GITHUB_OUTPUT"
+          echo "Lopu agent backend: $agent_backend ($agent_backend_label)"
+          echo "agent_backend=$agent_backend" >> "$GITHUB_OUTPUT"
+          echo "agent_backend_label=$agent_backend_label" >> "$GITHUB_OUTPUT"
+          # Compatibility outputs for the already-published review contract.
+          echo "review_backend=$agent_backend" >> "$GITHUB_OUTPUT"
+          echo "review_backend_label=$agent_backend_label" >> "$GITHUB_OUTPUT"
           echo "codex_model=$codex_model" >> "$GITHUB_OUTPUT"
           echo "codex_reasoning_effort=$codex_reasoning_effort" >> "$GITHUB_OUTPUT"
 
@@ -1877,8 +2034,17 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      # The model may inspect CodeQL evidence but cannot dismiss alerts. A
+      # separate credential-free job below owns the narrow write permission.
+      security-events: read
+    outputs:
+      codeql_dispositions_b64: ${{ steps.codeql_handoff.outputs.dispositions_b64 }}
     concurrency:
       group: lopu-agent-fleet-${{ github.repository }}
+      # GitHub's default concurrency queue retains only one pending job and
+      # replaces it when another arrives. Keep the whole repository burst so
+      # one live Lopu session can drain reviews without dropping older work.
+      queue: max
       cancel-in-progress: false
     env:
       REPO: ${{ github.repository }}
@@ -1929,9 +2095,15 @@ jobs:
 
           review_root="$RUNNER_TEMP/lopu-review-worktrees"
           manifest="$RUNNER_TEMP/lopu-review-manifest.json"
+          codeql_authority="$RUNNER_TEMP/lopu-codeql-authority.json"
           rm -rf "$review_root"
-          mkdir -p "$review_root" "$RUNNER_TEMP/lopu-review-reports"
+          mkdir -p \
+            "$review_root" \
+            "$RUNNER_TEMP/lopu-review-reports" \
+            "$RUNNER_TEMP/lopu-codeql-alerts" \
+            "$RUNNER_TEMP/lopu-codeql-dispositions"
           printf '[]\n' >"$manifest"
+          printf '[]\n' >"$codeql_authority"
 
           open="$(gh pr list --repo "$REPO" --state open --limit 500 \
             --json number,headRefName,baseRefName,headRefOid,baseRefOid,isCrossRepository,isDraft,mergeable,mergeStateStatus,labels)"
@@ -1992,39 +2164,134 @@ jobs:
             fetch_ref "$head"
             base_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$base^{commit}")"
             head_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$head^{commit}")"
+            merge_sha="$(gh api "repos/$REPO/git/ref/pull/$number/merge" --jq '.object.sha' 2>/dev/null || true)"
+            if [ -n "$merge_sha" ] && ! [[ "$merge_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::PR #$number returned an invalid merge-ref SHA."
+              exit 1
+            fi
             worktree="$review_root/$number"
             git -C "$GITHUB_WORKSPACE/trusted" worktree add --detach --quiet "$worktree" "$head_sha"
+
+            # Capture the exact open CodeQL alert set before the model runs.
+            # Keep the full rule help out of the model context; the rule id,
+            # message, classifications, location, and immutable PR analysis
+            # SHA are sufficient evidence for a fix-or-dismiss decision.
+            alerts="$RUNNER_TEMP/lopu-codeql-alerts/$number.json"
+            alerts_raw="$RUNNER_TEMP/lopu-codeql-alerts/$number.raw.json"
+            dispositions="$RUNNER_TEMP/lopu-codeql-dispositions/$number.json"
+            if gh api --paginate --slurp \
+                "repos/$REPO/code-scanning/alerts?state=open&tool_name=CodeQL&pr=$number&per_page=100" \
+                >"$alerts_raw"; then
+              jq -c \
+                --arg head_ref "refs/pull/$number/head" \
+                --arg head_sha "$head_sha" \
+                --arg merge_ref "refs/pull/$number/merge" \
+                --arg merge_sha "$merge_sha" '
+                add // []
+                | map(select(
+                    (.most_recent_instance.ref == $head_ref
+                     and .most_recent_instance.commit_sha == $head_sha)
+                    or
+                    ($merge_sha != ""
+                     and .most_recent_instance.ref == $merge_ref
+                     and .most_recent_instance.commit_sha == $merge_sha)
+                  ))
+                | map({
+                    number,
+                    state,
+                    html_url,
+                    rule: {
+                      id: .rule.id,
+                      name: .rule.name,
+                      description: .rule.description,
+                      severity: .rule.severity,
+                      security_severity_level: .rule.security_severity_level,
+                      tags: (.rule.tags // [])
+                    },
+                    instance: {
+                      ref: .most_recent_instance.ref,
+                      commit_sha: .most_recent_instance.commit_sha,
+                      classifications: (.most_recent_instance.classifications // []),
+                      message: .most_recent_instance.message,
+                      location: .most_recent_instance.location
+                    }
+                  })
+              ' "$alerts_raw" >"$alerts"
+            else
+              echo "::warning::Could not read CodeQL alerts for PR #$number; Lopu will still review its checks and code."
+              printf '[]\n' >"$alerts"
+            fi
+            rm -f "$alerts_raw"
+            printf '[]\n' >"$dispositions"
+            jq -c \
+              --argjson pr_number "$number" \
+              --arg reviewed_head_sha "$head_sha" \
+              --arg reviewed_base_sha "$base_sha" \
+              '[.[] | {
+                pr_number:$pr_number,
+                alert_number:.number,
+                state:.state,
+                ref:.instance.ref,
+                commit_sha:.instance.commit_sha,
+                reviewed_head_sha:$reviewed_head_sha,
+                reviewed_base_sha:$reviewed_base_sha
+              }]' "$alerts" >"$codeql_authority.additions"
+            jq -cs '.[0] + .[1]' \
+              "$codeql_authority" "$codeql_authority.additions" \
+              >"$codeql_authority.next"
+            mv "$codeql_authority.next" "$codeql_authority"
+            rm -f "$codeql_authority.additions"
             record="$(jq -cn \
               --argjson number "$number" \
               --arg head "$head" \
               --arg base "$base" \
               --arg head_sha "$head_sha" \
               --arg base_sha "$base_sha" \
+              --arg merge_sha "$merge_sha" \
               --arg path "$worktree" \
-              '{number:$number,head:$head,base:$base,head_sha:$head_sha,base_sha:$base_sha,path:$path}')"
+              --arg codeql_alerts_path "$alerts" \
+              --arg codeql_dispositions_path "$dispositions" \
+              '{
+                number:$number,
+                head:$head,
+                base:$base,
+                head_sha:$head_sha,
+                base_sha:$base_sha,
+                merge_sha:$merge_sha,
+                path:$path,
+                codeql_alerts_path:$codeql_alerts_path,
+                codeql_dispositions_path:$codeql_dispositions_path
+              }')"
             jq -c --argjson record "$record" '. + [$record]' "$manifest" >"$manifest.next"
             mv "$manifest.next" "$manifest"
           done < <(jq -r '.[] | @base64' <<<"$candidates")
           unset basic FETCH_TOKEN
 
           count="$(jq 'length' "$manifest")"
+          authority_count="$(jq 'length' "$codeql_authority")"
+          if [ "$authority_count" -gt 500 ]; then
+            echo '::warning::More than 500 open CodeQL alerts matched this review batch; only the first 500 are eligible for a disposition handoff this pass.'
+            jq -c '.[:500]' "$codeql_authority" >"$codeql_authority.next"
+            mv "$codeql_authority.next" "$codeql_authority"
+          fi
           echo "Lopu prepared $count complete PR worktree(s) for one repository review session."
           jq -r '.[] | "  #\(.number) \(.head) -> \(.base): \(.path)"' "$manifest"
           {
             echo 'any=true'
             echo "count=$count"
             echo "manifest=$manifest"
+            printf 'codeql_authority_b64=%s\n' "$(base64 -w0 "$codeql_authority")"
           } >>"$GITHUB_OUTPUT"
 
       - name: Require an AI credential
         if: steps.prepare.outputs.any == 'true'
         env:
-          REVIEW_BACKEND: ${{ needs.model_config.outputs.review_backend }}
+          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
           HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
           set -euo pipefail
-          case "$REVIEW_BACKEND" in
+          case "$AGENT_BACKEND" in
             claude)
               [ "$HAS_CLAUDE_CREDENTIAL" = true ] \
                 || { echo "::error::Add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN to enable Lopu's configured Claude review backend."; exit 1; }
@@ -2034,21 +2301,28 @@ jobs:
                 || { echo "::error::Add an OpenAI Platform project key as the OPENAI_API_KEY Actions secret to enable Lopu's Codex review backend."; exit 1; }
               ;;
             *)
-              echo "::error::Lopu review backend '$REVIEW_BACKEND' is not in the closed provider allowlist."
+              echo "::error::Lopu agent backend '$AGENT_BACKEND' is not in the closed provider allowlist."
               exit 1
               ;;
           esac
 
       - name: Review the repository and improve selected PRs as Lopu
         id: lopu_review
-        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.review_backend == 'claude'
+        if: steps.prepare.outputs.any == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        uses: ./trusted/.github/actions/lopu-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ github.token }}
-          allowed_bots: "github-actions"
+          backend: ${{ needs.model_config.outputs.agent_backend }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ github.token }}
+          allowed-bots: "github-actions"
+          codex-model: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
+          codex-reasoning-effort: ${{ needs.model_config.outputs.codex_reasoning_effort || 'xhigh' }}
+          working-directory: .
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
           prompt: |
             You are Lopu, Thingtime's principal developer, PR manager, and
             repository steward. You have full repository, shell, GitHub, and
@@ -2074,6 +2348,21 @@ jobs:
             follow its details URL/run logs as needed. Distinguish a real,
             reproducible defect from an external outage, stale result, or
             cancellation before changing anything.
+
+            CodeQL is an explicit fix-or-disposition responsibility. Each
+            manifest record names `codeql_alerts_path`, a trusted snapshot of
+            the open alerts on that exact PR head, and
+            `codeql_dispositions_path`, initialized to `[]`. Inspect every
+            alert and its cited code. For a real finding, fix the implementation
+            in the PR worktree and leave the alert open: the next CodeQL scan
+            will mark it fixed. Never dismiss a real issue merely to green a
+            check. Only when the finding is demonstrably not applicable may you
+            replace the disposition file with a JSON array containing
+            `{ "alert_number": <integer>, "reason": "false positive" | "used in tests", "comment": "Lopu evidence: <specific auditable justification>" }`.
+            Do not use `won't fix`, do not include an alert absent from the
+            trusted snapshot, and do not PATCH CodeQL alert state yourself. A
+            later isolated trusted job validates and applies only those exact
+            evidence-backed dispositions with narrow write permission.
 
             Lopu owns the decision: make only changes that are genuinely justified
             by that understanding, but do make those changes directly in the PR
@@ -2136,7 +2425,7 @@ jobs:
             edit another actor's comment or Lopu's deterministic resolver/status
             comments. Add that hidden marker to every new free-form Lopu
             conversational comment, alongside clear visible Lopu attribution.
-          claude_args: |
+          claude-args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
             --max-turns 500
@@ -2148,83 +2437,8 @@ jobs:
           # to its own repository comments and review replies.
           GH_TOKEN: ${{ github.token }}
 
-      - name: Review the repository and improve selected PRs as Lopu with Codex
-        id: lopu_review_codex
-        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.review_backend == 'codex'
-        continue-on-error: true
-        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          working-directory: .
-          # Lopu needs to run repository tests and GitHub CLI commands in the
-          # externally isolated Actions runner. It still drops sudo before the
-          # agent starts so no post-checkout root privilege is available.
-          sandbox: danger-full-access
-          safety-strategy: drop-sudo
-          codex-args: >-
-            --model ${{ needs.model_config.outputs.codex_model }}
-            --config 'model_reasoning_effort="${{ needs.model_config.outputs.codex_reasoning_effort }}"'
-          prompt: |
-            You are Lopu, Thingtime's principal developer, PR manager, and
-            repository steward, using ${{ needs.model_config.outputs.review_backend_label }}.
-            Complete a thoughtful engineering review for every candidate in
-            `$RUNNER_TEMP/lopu-review-manifest.json`.
-
-            For each candidate, work in its complete directory under
-            `$RUNNER_TEMP/lopu-review-worktrees`, compare its immutable head
-            against its base, and inspect relevant architecture, repository
-            direction, project docs, Graphify output when useful, related GitHub
-            history/PRs, tests, and operational conventions. Review correctness,
-            security, crashes, performance, data/API compatibility, test coverage,
-            and maintainability before style. Make only genuinely justified
-            changes, but make those changes directly in the PR worktree and run
-            focused validation. Leave desired PR fixes uncommitted: the following
-            trusted step lease-checks and pushes only to that exact PR head.
-
-            Treat failing PR checks as first-class review findings. For every
-            candidate inspect `gh pr checks` and the relevant check-run/Actions
-            logs. When `REVIEW_DISPATCH_ID` begins
-            `lopu-review:check-run:<CHECK_RUN_ID>:` first retrieve exactly that
-            check with `gh api repos/$REPO/check-runs/<CHECK_RUN_ID>`. Distinguish
-            reproducible defects from outages, stale results, and cancellations.
-            If the failure belongs to the PR, repair the PR worktree. If it belongs
-            to the protected controller (`.github/workflows/**`,
-            `.github/actions/**`, or `.github/scripts/**`), edit only that path
-            under `$GITHUB_WORKSPACE/trusted`, write diagnosis and validation to
-            `$RUNNER_TEMP/lopu-workflow-fix.md`, and do not commit or push it. A
-            trusted follow-up will make a dedicated PR against `github-actions`.
-            Never push or merge `github-actions`, `main`, or any target/default
-            branch yourself.
-
-            PR conversation is a first-class responsibility. You have no comment
-            quota, template, or topic restriction: use the GitHub CLI/API to post
-            as many relevant, useful Markdown comments as you judge appropriate
-            on same-repository PRs. When the dispatch id names an issue comment,
-            fetch it from `repos/$REPO/issues/comments/<COMMENT_ID>` and reply on
-            `repos/$REPO/issues/<PR_NUMBER>/comments` when useful. When it names
-            an inline review comment, fetch it from
-            `repos/$REPO/pulls/comments/<COMMENT_ID>` and reply through
-            `repos/$REPO/pulls/<PR_NUMBER>/comments/<COMMENT_ID>/replies` when
-            that is clearest. You may edit an earlier Lopu conversational comment
-            only after fetching it and verifying it is authored by
-            `github-actions[bot]` and contains
-            `<!-- thingtime-lopu-conversation:v1 -->`; never edit another actor's
-            comment or deterministic resolver/status comments. Add that marker and
-            visible Lopu attribution to every new free-form Lopu comment.
-
-            Do not merge, rebase, delete branches, or change files outside a
-            reviewed PR worktree except for the narrowly allowed controller fix.
-            For every reviewed PR, write a concise Markdown report to
-            `$RUNNER_TEMP/lopu-review-reports/<PR_NUMBER>.md` covering comparison,
-            findings, changes or why none were needed, and validation results.
-            Do not include secrets, tokens, or private values in reports/comments.
-        env:
-          # The Codex action receives the repository-scoped GitHub token for
-          # direct Lopu conversation/check inspection, never a push credential.
-          GH_TOKEN: ${{ github.token }}
-
       - name: Continue the exact Lopu repository-review session until it finishes
-        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.review_backend == 'claude' && steps.lopu_review.outcome == 'failure'
+        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.agent_backend == 'claude' && steps.lopu_review.outcome == 'failure'
         continue-on-error: true
         shell: bash
         env:
@@ -2351,6 +2565,159 @@ jobs:
           done < <(jq -r '.[] | @base64' "$MANIFEST")
           unset basic PUSH_TOKEN
           echo "results=$results" >>"$GITHUB_OUTPUT"
+
+      - name: Validate Lopu's CodeQL dispositions for isolated handoff
+        id: codeql_handoff
+        if: always() && steps.prepare.outputs.any == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANIFEST: ${{ steps.prepare.outputs.manifest }}
+          RESULTS: ${{ steps.publish.outputs.results }}
+          CODEQL_AUTHORITY_B64: ${{ steps.prepare.outputs.codeql_authority_b64 }}
+        run: |
+          set -euo pipefail
+
+          canonical="$RUNNER_TEMP/lopu-codeql-dispositions.json"
+          trusted_authority="$RUNNER_TEMP/lopu-codeql-authority-trusted.json"
+          printf '[]\n' >"$canonical"
+          printf '%s' "$CODEQL_AUTHORITY_B64" | base64 --decode >"$trusted_authority"
+          printf 'dispositions_b64=\n' >>"$GITHUB_OUTPUT"
+          [ -s "${MANIFEST:-}" ] || exit 0
+          [ -s "${RESULTS:-}" ] || {
+            echo '::warning::Lopu publication results are unavailable; no CodeQL disposition can be handed off safely.'
+            exit 0
+          }
+
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            record="$(base64 --decode <<<"$encoded")"
+            number="$(jq -r '.number' <<<"$record")"
+            reviewed_head="$(jq -r '.head_sha' <<<"$record")"
+            reviewed_base="$(jq -r '.base_sha' <<<"$record")"
+            proposals="$(jq -r '.codeql_dispositions_path' <<<"$record")"
+            [ -s "$proposals" ] || continue
+
+            jq -e '
+              type == "array"
+              and length <= 100
+              and all(.[ ];
+                type == "object"
+                and (keys | sort) == ["alert_number", "comment", "reason"]
+                and (.alert_number | type == "number" and . > 0 and floor == .)
+                and (.reason == "false positive" or .reason == "used in tests")
+                and (.comment | type == "string"
+                     and startswith("Lopu evidence: ")
+                     and length >= 40 and length <= 1000))
+            ' "$proposals" >/dev/null || {
+              echo "::error::Lopu proposed an invalid CodeQL disposition schema for PR #$number."
+              exit 1
+            }
+            # `prepare` seeds every disposition file with `[]`, so an untouched
+            # file is still non-empty. Stop here once the schema is trusted and
+            # Lopu proposed nothing, rather than spending a live head lookup
+            # whose transient failure would fail this whole review.
+            jq -e 'length > 0' "$proposals" >/dev/null || continue
+
+            result="$(jq -c --argjson number "$number" '.[] | select(.number == $number)' "$RESULTS" | tail -1)"
+            outcome="$(jq -r '.outcome // "missing"' <<<"${result:-null}")"
+            case "$outcome" in
+              no-change|pushed|already-published) ;;
+              *)
+                echo "::warning::Skipping CodeQL dispositions for PR #$number because its publication outcome is $outcome."
+                continue
+                ;;
+            esac
+            live_pr="$(gh api "repos/$REPO/pulls/$number")"
+            current_head="$(jq -r '.head.sha' <<<"$live_pr")"
+            current_base="$(jq -r '.base.sha' <<<"$live_pr")"
+            current_repo="$(jq -r '.head.repo.full_name // empty' <<<"$live_pr")"
+            [[ "$current_head" =~ ^[0-9a-f]{40}$ && "$current_base" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::PR #$number returned invalid live revisions while validating CodeQL dispositions."
+              exit 1
+            }
+            if [ "$(jq -r '.state' <<<"$live_pr")" != open ] \
+               || [ "$current_repo" != "$REPO" ] \
+               || [ "$current_head" != "$reviewed_head" ] \
+               || [ "$current_base" != "$reviewed_base" ]; then
+              echo "::warning::Skipping CodeQL dispositions for PR #$number because its head, base, repository, or state changed after the reviewed evidence snapshot; a fresh scan and Lopu pass will decide them."
+              continue
+            fi
+
+            while IFS= read -r proposal_b64; do
+              [ -n "$proposal_b64" ] || continue
+              proposal="$(base64 --decode <<<"$proposal_b64")"
+              alert_number="$(jq -r '.alert_number' <<<"$proposal")"
+              if jq -e --argjson alert_number "$alert_number" \
+                   'any(.[]; .alert_number == $alert_number)' "$canonical" >/dev/null; then
+                echo "::error::CodeQL alert #$alert_number was proposed more than once in this Lopu session."
+                exit 1
+              fi
+              alert="$(jq -c \
+                --argjson pr_number "$number" \
+                --argjson alert_number "$alert_number" \
+                --arg reviewed_head_sha "$reviewed_head" \
+                --arg reviewed_base_sha "$reviewed_base" \
+                '.[] | select(
+                  .pr_number == $pr_number
+                  and .alert_number == $alert_number
+                  and .reviewed_head_sha == $reviewed_head_sha
+                  and .reviewed_base_sha == $reviewed_base_sha
+                )' "$trusted_authority" | tail -1)"
+              [ -n "$alert" ] || {
+                echo "::warning::Skipping CodeQL alert #$alert_number because it was outside PR #$number's bounded immutable authority snapshot."
+                continue
+              }
+              analysis_ref="$(jq -r '.ref' <<<"$alert")"
+              analysis_sha="$(jq -r '.commit_sha' <<<"$alert")"
+              if [ "$analysis_ref" = "refs/pull/$number/head" ]; then
+                expected_analysis_sha="$reviewed_head"
+              elif [ "$analysis_ref" = "refs/pull/$number/merge" ]; then
+                expected_analysis_sha="$(jq -r '.merge_sha' <<<"$record")"
+              else
+                expected_analysis_sha=''
+              fi
+              [ "$(jq -r '.state' <<<"$alert")" = open ] \
+                && [ -n "$expected_analysis_sha" ] \
+                && [ "$analysis_sha" = "$expected_analysis_sha" ] || {
+                  echo "::error::CodeQL alert #$alert_number is not bound to PR #$number's reviewed head-or-merge analysis."
+                  exit 1
+                }
+
+              entry="$(jq -cn \
+                --argjson pr_number "$number" \
+                --argjson alert_number "$alert_number" \
+                --arg reason "$(jq -r '.reason' <<<"$proposal")" \
+                --arg comment "$(jq -r '.comment' <<<"$proposal")" \
+                --arg reviewed_head_sha "$reviewed_head" \
+                --arg reviewed_base_sha "$reviewed_base" \
+                --arg expected_head_sha "$current_head" \
+                --arg analysis_ref "$analysis_ref" \
+                --arg analysis_sha "$analysis_sha" \
+                '{
+                  pr_number:$pr_number,
+                  alert_number:$alert_number,
+                  reason:$reason,
+                  comment:$comment,
+                  reviewed_head_sha:$reviewed_head_sha,
+                  reviewed_base_sha:$reviewed_base_sha,
+                  analysis_ref:$analysis_ref,
+                  analysis_sha:$analysis_sha,
+                  expected_head_sha:$expected_head_sha
+                }')"
+              jq -c --argjson entry "$entry" '. + [$entry]' "$canonical" >"$canonical.next"
+              mv "$canonical.next" "$canonical"
+              [ "$(jq 'length' "$canonical")" -le 100 ] || {
+                echo '::error::Lopu proposed more than the 100-disposition handoff ceiling.'
+                exit 1
+              }
+            done < <(jq -r '.[] | @base64' "$proposals")
+          done < <(jq -r '.[] | @base64' "$MANIFEST")
+
+          count="$(jq 'length' "$canonical")"
+          [ "$count" -gt 0 ] || exit 0
+          echo "Validated $count evidence-backed CodeQL disposition(s) for the isolated writer job."
+          printf 'dispositions_b64=%s\n' "$(base64 -w0 "$canonical")" >>"$GITHUB_OUTPUT"
 
       - name: Publish Lopu's controller/workflow fix as a PR
         id: workflow_fix
@@ -2496,6 +2863,156 @@ jobs:
             fi
           done < <(jq -r ".[] | @base64" "$MANIFEST")
 
+  codeql_dispositions:
+    name: Apply Lopu CodeQL dispositions
+    needs: [review]
+    if: >-
+      always()
+      && needs.review.result == 'success'
+      && needs.review.outputs.codeql_dispositions_b64 != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+      security-events: write
+    env:
+      REPO: ${{ github.repository }}
+      DISPOSITIONS_B64: ${{ needs.review.outputs.codeql_dispositions_b64 }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Apply evidence-backed CodeQL dispositions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          dispositions="$RUNNER_TEMP/lopu-codeql-dispositions.json"
+          reports="$RUNNER_TEMP/lopu-codeql-reports.json"
+          printf '%s' "$DISPOSITIONS_B64" | base64 --decode >"$dispositions"
+          printf '{}\n' >"$reports"
+
+          jq -e '
+            type == "array"
+            and length > 0 and length <= 100
+            and all(.[ ];
+              type == "object"
+              and (keys | sort) == [
+                "alert_number",
+                "analysis_ref",
+                "analysis_sha",
+                "comment",
+                "expected_head_sha",
+                "pr_number",
+                "reason",
+                "reviewed_base_sha",
+                "reviewed_head_sha"
+              ]
+              and (.pr_number | type == "number" and . > 0 and floor == .)
+              and (.alert_number | type == "number" and . > 0 and floor == .)
+              and (.reason == "false positive" or .reason == "used in tests")
+              and (.comment | type == "string"
+                   and startswith("Lopu evidence: ")
+                   and length >= 40 and length <= 1000)
+              and (.analysis_ref | type == "string" and test("^refs/pull/[1-9][0-9]*/(head|merge)$"))
+              and (.analysis_sha | type == "string" and test("^[0-9a-f]{40}$"))
+              and (.reviewed_base_sha | type == "string" and test("^[0-9a-f]{40}$"))
+              and (.reviewed_head_sha | type == "string" and test("^[0-9a-f]{40}$"))
+              and (.expected_head_sha | type == "string" and test("^[0-9a-f]{40}$")))
+          ' "$dispositions" >/dev/null || {
+            echo '::error::The isolated CodeQL writer received an invalid disposition handoff.'
+            exit 1
+          }
+
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            entry="$(base64 --decode <<<"$encoded")"
+            pr_number="$(jq -r '.pr_number' <<<"$entry")"
+            alert_number="$(jq -r '.alert_number' <<<"$entry")"
+            reason="$(jq -r '.reason' <<<"$entry")"
+            comment="$(jq -r '.comment' <<<"$entry")"
+            analysis_ref="$(jq -r '.analysis_ref' <<<"$entry")"
+            analysis_sha="$(jq -r '.analysis_sha' <<<"$entry")"
+            reviewed_base="$(jq -r '.reviewed_base_sha' <<<"$entry")"
+            reviewed_head="$(jq -r '.reviewed_head_sha' <<<"$entry")"
+            expected_head="$(jq -r '.expected_head_sha' <<<"$entry")"
+
+            pr="$(gh api "repos/$REPO/pulls/$pr_number")"
+            live_head="$(jq -r '.head.sha' <<<"$pr")"
+            live_base="$(jq -r '.base.sha' <<<"$pr")"
+            live_repo="$(jq -r '.head.repo.full_name // empty' <<<"$pr")"
+            if [ "$(jq -r '.state' <<<"$pr")" != open ] \
+               || [ "$live_repo" != "$REPO" ] \
+               || [ "$live_head" != "$expected_head" ] \
+               || [ "$live_head" != "$reviewed_head" ] \
+               || [ "$live_base" != "$reviewed_base" ]; then
+              echo "::warning::Skipping CodeQL alert #$alert_number because PR #$pr_number no longer matches Lopu's trusted handoff."
+              continue
+            fi
+
+            alert="$(gh api "repos/$REPO/code-scanning/alerts/$alert_number")"
+            alert_ref="$(jq -r '.most_recent_instance.ref' <<<"$alert")"
+            alert_sha="$(jq -r '.most_recent_instance.commit_sha' <<<"$alert")"
+            if [ "$(jq -r '.state' <<<"$alert")" != open ] \
+               || [ "$alert_ref" != "$analysis_ref" ] \
+               || [ "$alert_sha" != "$analysis_sha" ]; then
+              echo "::warning::Skipping CodeQL alert #$alert_number because its live state or immutable PR-analysis evidence changed."
+              continue
+            fi
+
+            updated="$(gh api --method PATCH \
+              "repos/$REPO/code-scanning/alerts/$alert_number" \
+              -f state=dismissed \
+              -f dismissed_reason="$reason" \
+              -f dismissed_comment="$comment")"
+            [ "$(jq -r '.state' <<<"$updated")" = dismissed ] \
+              && [ "$(jq -r '.dismissed_reason' <<<"$updated")" = "$reason" ] || {
+                echo "::error::GitHub did not confirm CodeQL alert #$alert_number's validated disposition."
+                exit 1
+              }
+
+            alert_url="$(jq -r '.html_url' <<<"$updated")"
+            report_entry="$(jq -cn \
+              --argjson alert_number "$alert_number" \
+              --arg reason "$reason" \
+              --arg comment "$comment" \
+              --arg url "$alert_url" \
+              '{alert_number:$alert_number,reason:$reason,comment:$comment,url:$url}')"
+            jq -c \
+              --arg pr "$pr_number" \
+              --argjson entry "$report_entry" \
+              '.[$pr] = ((.[$pr] // []) + [$entry])' \
+              "$reports" >"$reports.next"
+            mv "$reports.next" "$reports"
+          done < <(jq -r '.[] | @base64' "$dispositions")
+
+          marker='<!-- thingtime-lopu-codeql:v1 -->'
+          while IFS= read -r pr_number; do
+            body="$RUNNER_TEMP/lopu-codeql-comment-$pr_number.md"
+            {
+              echo '## Lopu CodeQL triage'
+              echo
+              echo 'Lopu dismissed only findings that were proven inapplicable against the exact reviewed PR head:'
+              echo
+              jq -r --arg pr "$pr_number" \
+                '.[$pr][] | "- [CodeQL alert #\(.alert_number)](\(.url)) — **\(.reason)**\n  - \(.comment)"' \
+                "$reports"
+              echo
+              echo 'Real findings are never dismissed: Lopu fixes their implementation and lets the next CodeQL scan mark them fixed.'
+              echo
+              printf '[View Lopu workflow run](%s)\n\n%s\n' "$RUN_URL" "$marker"
+            } >"$body"
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$pr_number/comments?per_page=100" --slurp \
+              | jq -r 'add // [] | [.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("thingtime-lopu-codeql:v1")) | .id] | last // empty')"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$pr_number/comments" -F "body=@$body" >/dev/null
+            fi
+          done < <(jq -r 'keys[]' "$reports")
+
   resolve_promotion:
     name: "Resolve promotion for source PR #${{ inputs.promotion_source_pr }}"
     needs: [promotion_validate, model_config]
@@ -2533,6 +3050,7 @@ jobs:
     # while the next model-backed repair waits for the active operation to end.
     concurrency:
       group: lopu-agent-fleet-${{ github.repository }}
+      queue: max
       cancel-in-progress: false
     env:
       REPO: ${{ github.repository }}
@@ -2712,6 +3230,7 @@ jobs:
         if: steps.prepare_promotion.outputs.conflicted == 'true'
         uses: &thingtime_promotion_conflict_round_action ./trusted/.github/actions/rebase-conflict-round
         with: &thingtime_promotion_conflict_round_inputs
+          backend: ${{ needs.model_config.outputs.agent_backend }}
           repo-path: ${{ steps.repo.outputs.repo_path }}
           deterministic-conflict-paths: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
           pr-number: ${{ inputs.promotion_source_pr }}
@@ -2722,9 +3241,12 @@ jobs:
           allow-unresolved: "true"
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: github-actions
           model-args: ${{ needs.model_config.outputs.model_args }}
+          codex-model: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
+          codex-reasoning-effort: ${{ needs.model_config.outputs.codex_reasoning_effort || 'xhigh' }}
 
       - &thingtime_promotion_conflict_retry
         name: Continue synthetic promotion conflict resolution (up to round 500)
@@ -3257,8 +3779,11 @@ jobs:
         shell: bash
         env:
           GRAPHIFY_VERSION: "0.9.4"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GRAPHIFY_BACKEND_PREFERENCE: ${{ needs.model_config.outputs.agent_backend }}
+          LOPU_OPENAI_MODEL: ${{ needs.model_config.outputs.codex_model }}
           PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
         run: |
           set -euo pipefail
@@ -3296,7 +3821,7 @@ jobs:
           (( ${#MODEL_ARGS} <= 2048 )) && [[ ! "$MODEL_ARGS" =~ [[:cntrl:]] ]] \
             || fail "Validated model audit context is oversized or contains control characters."
           case "$GRAPHIFY_MODE" in true|nochange|failed) ;; *) fail "Invalid Graphify refresh audit mode." ;; esac
-          case "$GRAPHIFY_SEMANTIC" in claude|claude-cli|failed|none|unavailable) ;; *) fail "Invalid Graphify semantic audit mode." ;; esac
+          case "$GRAPHIFY_SEMANTIC" in openai|claude|claude-cli|failed|none|unavailable) ;; *) fail "Invalid Graphify semantic audit mode." ;; esac
           case "$AI_STARTED" in true|false) ;; *) fail "Invalid promotion AI-participation classification." ;; esac
           upsert_comment() {
             local number="$1" marker="$2" body_file="$3" comment_id
@@ -3580,12 +4105,19 @@ jobs:
         id: release_analysis
         if: steps.release_analysis_inputs.outputs.ready == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79
+        uses: ./trusted/.github/actions/lopu-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ github.token }}
-          allowed_bots: github-actions
+          backend: ${{ needs.model_config.outputs.agent_backend }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ github.token }}
+          allowed-bots: github-actions
+          codex-model: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
+          codex-reasoning-effort: ${{ needs.model_config.outputs.codex_reasoning_effort || 'xhigh' }}
+          working-directory: .
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
           prompt: |
             You are writing an ADVISORY release analysis for promotion PR
             #${{ steps.publish_promotion.outputs.promotion_pr }} (source PR
@@ -3614,7 +4146,7 @@ jobs:
 
             Write ONLY to `release-analysis/out/analysis.md`. Do not create,
             rename or delete any other file. Keep it under 300 lines.
-          claude_args: |
+          claude-args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
             --max-turns 500
@@ -3622,7 +4154,7 @@ jobs:
             --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 
       - name: Continue the exact release-analysis session until it finishes
-        if: steps.release_analysis_inputs.outputs.ready == 'true' && steps.release_analysis.outcome == 'failure'
+        if: steps.release_analysis_inputs.outputs.ready == 'true' && needs.model_config.outputs.agent_backend == 'claude' && steps.release_analysis.outcome == 'failure'
         continue-on-error: true
         shell: bash
         env:
@@ -3731,6 +4263,7 @@ jobs:
           ANALYSIS_DIR: ${{ steps.release_analysis_inputs.outputs.dir }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
           analysis="$ANALYSIS_DIR/out/analysis.md"
@@ -3744,7 +4277,7 @@ jobs:
           fi
           needles="$RUNNER_TEMP/analysis-needles"
           : >"$needles"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${GH_TOKEN:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}" "${GH_TOKEN:-}"; do
             [[ -n "$secret" ]] || continue
             printf '%s\n' "$secret" >>"$needles"
             printf '%s' "$secret" | base64 | tr -d '\n' >>"$needles"; printf '\n' >>"$needles"
@@ -4053,6 +4586,7 @@ jobs:
     # cannot create a parallel fleet of Lopu model sessions.
     concurrency:
       group: lopu-agent-fleet-${{ github.repository }}
+      queue: max
       cancel-in-progress: false
     strategy:
       fail-fast: false
@@ -4104,6 +4638,81 @@ jobs:
             echo "paused=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # A detector snapshots every selected head/base before dispatch, but a
+      # durable repository queue can legitimately hold that exact worker while
+      # an older Lopu session finishes. Re-prove the immutable snapshot only
+      # after this job is admitted to the single agent slot, before checkout,
+      # AI, or Graphify spend. A moved ref is ordinary superseded work: the
+      # branch event/scheduled sweep owns the fresh replacement, so this run
+      # exits successfully without publishing or posting a misleading start
+      # comment.
+      - name: Revalidate queued PR snapshot before expensive work
+        id: admission
+        if: steps.user_merge_pause.outputs.paused != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
+          live_ref_sha() {
+            gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+
+          current=false
+          reason=pr-unavailable
+          if pr="$(gh api "repos/$REPO/pulls/$PR_NUMBER" 2>/dev/null)"; then
+            state="$(jq -r '.state' <<<"$pr")"
+            head_repo="$(jq -r '.head.repo.full_name // ""' <<<"$pr")"
+            base_repo="$(jq -r '.base.repo.full_name // ""' <<<"$pr")"
+            live_head_ref="$(jq -r '.head.ref // ""' <<<"$pr")"
+            live_base_ref="$(jq -r '.base.ref // ""' <<<"$pr")"
+            labels="$(jq -c '[.labels[].name]' <<<"$pr")"
+
+            if [ "$state" != open ]; then
+              reason=pr-closed
+            elif [ "$head_repo" != "$REPO" ] || [ "$base_repo" != "$REPO" ]; then
+              reason=repository-changed
+            elif [ "$live_head_ref" != "$HEAD_REF" ] || [ "$live_base_ref" != "$BASE_REF" ]; then
+              reason=ref-changed
+            elif jq -e 'any(. == "ai-merge-paused" or . == "no-ai-merge")' \
+                 >/dev/null <<<"$labels"; then
+              reason=merge-ownership-paused
+            elif jq -e 'index("ai-rebase-in-progress") != null' \
+                 >/dev/null <<<"$labels"; then
+              reason=rebase-ownership-active
+            elif [ "$RECOVER_REBASE_PAUSE" != true ] \
+                 && jq -e 'index("ai-rebase-paused") != null' \
+                    >/dev/null <<<"$labels"; then
+              reason=rebase-ownership-paused
+            elif ! live_head_sha="$(live_ref_sha "$HEAD_REF" 2>/dev/null)" \
+                 || ! live_base_sha="$(live_ref_sha "$BASE_REF" 2>/dev/null)"; then
+              reason=live-ref-unavailable
+            elif [ "$live_head_sha" != "$EXPECTED_HEAD_SHA" ]; then
+              reason=head-moved
+            elif [ "$live_base_sha" != "$EXPECTED_BASE_SHA" ]; then
+              reason=base-moved
+            else
+              current=true
+              reason=exact-snapshot-current
+            fi
+          fi
+
+          {
+            echo "current=$current"
+            echo "reason=$reason"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$current" = true ]; then
+            echo "::notice::Admitted exact PR #$PR_NUMBER snapshot $EXPECTED_HEAD_SHA onto base $EXPECTED_BASE_SHA."
+          else
+            echo "::notice::Skipping superseded PR #$PR_NUMBER worker before checkout ($reason); a current branch event or scheduled sweep owns the replacement."
+            {
+              echo "## Superseded queued Lopu worker"
+              echo
+              echo "PR #$PR_NUMBER was revalidated after entering the serialized agent slot."
+              echo "Its queued snapshot is no longer actionable ($reason), so checkout, AI, Graphify, and publication were skipped."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       # Reviewers who open a conflicted PR mid-resolution see GitHub's bare
       # conflict banner plus this workflow's (by design, always-skipped)
       # push-run check stubs — which reads as "the resolver is broken"
@@ -4115,7 +4724,9 @@ jobs:
       # same run and its terminal success/failure step update only that entry.
       # A comment failure never blocks the resolution itself.
       - name: Comment on PR (resolution starting)
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -4153,13 +4764,19 @@ jobs:
           upsert_start_comment || echo "::warning::Could not post the resolution-start comment; continuing with the resolution."
 
       - name: Check out PR head
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ matrix.pr.head_sha }}
           # Fetch every branch so the exact snapshotted base commit is local;
           # no authenticated fetch is needed later.
           fetch-depth: 0
+          # This repository has multi-gigabyte history. Keep the complete
+          # commit graph required by merge-base/merge-tree, but fetch blobs
+          # lazily instead of downloading every historical file for each PR.
+          filter: blob:none
           # Keep the token out of .git/config: the model has Read access to
           # the workspace, and the push step supplies its own auth.
           persist-credentials: false
@@ -4172,6 +4789,7 @@ jobs:
       - name: Clear deliberately retried rebase ownership pauses
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
           && env.RECOVER_REBASE_PAUSE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -4257,7 +4875,9 @@ jobs:
 
       - name: Merge base into head
         id: merge
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -4348,32 +4968,48 @@ jobs:
           # model to tamper with. conflicted.txt above is informational only.
 
       - name: Require an AI credential
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.conflicted == 'true'
         env:
-          HAS_AI_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
           set -euo pipefail
-          if [ "$HAS_AI_CREDENTIAL" != "true" ]; then
-            echo "::error::Add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN to enable Lopu's configured Claude backend (claude CLI: /install-github-app)."
-            exit 1
-          fi
+          case "$AGENT_BACKEND" in
+            claude) [ "$HAS_CLAUDE_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Claude backend needs ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN."; exit 1; } ;;
+            codex) [ "$HAS_OPENAI_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Codex backend needs OPENAI_API_KEY."; exit 1; } ;;
+            *) echo "::error::Unknown Lopu agent backend: $AGENT_BACKEND"; exit 1 ;;
+          esac
 
-      - name: Resolve conflicts with Claude
+      - name: Resolve conflicts with Lopu
         id: resolve_conflicts
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.conflicted == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        uses: ./trusted/.github/actions/lopu-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ github.token }}
+          backend: ${{ needs.model_config.outputs.agent_backend }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ github.token }}
           # The trusted Actions workflow dispatch uses GITHUB_TOKEN, so its
           # github-actions worker is attributed to github-actions[bot]. The action
           # refuses non-human actors by default ("Workflow initiated by non-human
           # actor: github-actions (type: Bot)"), which silently broke the whole
           # push -> handoff -> dispatch -> resolve chain: only runs a human
           # dispatched ever reached the model. Allow exactly this bot, not '*'.
-          allowed_bots: "github-actions"
+          allowed-bots: "github-actions"
+          codex-model: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
+          codex-reasoning-effort: ${{ needs.model_config.outputs.codex_reasoning_effort || 'xhigh' }}
+          working-directory: .
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
           prompt: |
             You are Lopu, Thingtime's principal PR and repository manager. Resolve
             this merge conflict with full repository, shell, GitHub, and web-tool
@@ -4436,7 +5072,7 @@ jobs:
           # The first admin-ordered model is primary; the rest are Claude
           # Code's native availability fallbacks. This does not retry a
           # completed-but-unresolved edit with another model.
-          claude_args: |
+          claude-args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
             --max-turns 500
@@ -4444,7 +5080,12 @@ jobs:
             --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 
       - name: Continue the exact conflict-resolution session until it finishes
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true' && steps.resolve_conflicts.outcome == 'failure'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.conflicted == 'true'
+          && needs.model_config.outputs.agent_backend == 'claude'
+          && steps.resolve_conflicts.outcome == 'failure'
         shell: bash
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -4541,7 +5182,10 @@ jobs:
           done
 
       - name: Regenerate a lone pinned pnpm lockfile without credentials
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.conflicted == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -4733,10 +5377,14 @@ jobs:
           echo "::notice::Regenerated $lockfile with credential-free pinned pnpm@10.12.1; the normal verifier will stage and commit it."
 
       - name: Verify resolution and commit
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.conflicted == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
         run: |
           set -euo pipefail
@@ -4870,7 +5518,7 @@ jobs:
           # not a boundary (see header).
           keyfile="$RUNNER_TEMP/scan-needles.txt"
           : > "$keyfile"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             printf '%s\n' "$secret" >> "$keyfile"
             printf '%s' "$secret" | base64 -w0 >> "$keyfile"
@@ -4907,7 +5555,7 @@ jobs:
             -m "Merge $BASE_REF into $HEAD_REF (AI-resolved conflicts)" \
             -m "Conflicted paths: $conflicted_list" \
             -m "Resolved by the resolve-pr-conflicts workflow: $RUN_URL" \
-            -m "Co-Authored-By: Claude <noreply@anthropic.com>"
+            -m "Co-Authored-By: Lopu <github-actions[bot]@users.noreply.github.com>"
 
       # Runs ONLY after the base-into-head merge has completed (and any conflict
       # resolution has been verified and committed). Structural extraction is
@@ -4916,7 +5564,9 @@ jobs:
       # unstaged can never end up indexed here.
       - name: Rebuild Graphify structure, then LLM semantics
         id: graphify
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         # This refresh is a nicety, never worth losing a verified resolution:
         # any failure here must not skip the push step below, which is what
         # actually publishes the merge commit.
@@ -4935,6 +5585,9 @@ jobs:
           # claude CLI it shells out to.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
+          CODEX_MODEL: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
           # Keep the post-resolution semantic refresh on the same trusted,
           # administrator-selected primary model as the conflict edit itself.
           PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
@@ -4944,6 +5597,7 @@ jobs:
           # not necessarily to child processes (the claude CLI); normalize.
           [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
           [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
+          [ -n "${OPENAI_API_KEY:-}" ] || unset OPENAI_API_KEY
 
           # `default` deliberately leaves each Graphify backend on its own
           # default. Every named value is a literal emitted by model_config's
@@ -4986,23 +5640,48 @@ jobs:
           fi
           export PATH="$HOME/.local/bin:$PATH"
 
-          # Pick a semantic backend from whichever Claude credential exists.
+          select_claude_backend() {
+            if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+              printf 'claude\n'
+            elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+              printf 'claude-cli\n'
+            fi
+          }
           backend=""
-          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-            backend="claude"
-          elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+          case "${AGENT_BACKEND:-claude}" in
+            codex)
+              if [ -n "${OPENAI_API_KEY:-}" ]; then backend=openai; else backend="$(select_claude_backend)"; fi
+              ;;
+            claude)
+              backend="$(select_claude_backend)"
+              if [ -z "$backend" ] && [ -n "${OPENAI_API_KEY:-}" ]; then backend=openai; fi
+              ;;
+            *) echo "::warning::Unexpected Lopu backend; choosing an available Graphify credential."; backend="$(select_claude_backend)" ;;
+          esac
+          if [ "$backend" = "claude-cli" ]; then
             # graphify's claude-cli backend shells out to `claude -p`, which
             # authenticates from CLAUDE_CODE_OAUTH_TOKEN — the same mechanism
             # claude-code-action uses. The resolve step may have left the CLI
             # installed already; install it if not.
             if command -v claude >/dev/null 2>&1; then
-              backend="claude-cli"
+              :
             elif npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 \
                  && command -v claude >/dev/null 2>&1; then
-              backend="claude-cli"
+              :
             else
               echo "::warning::claude CLI unavailable and could not be installed — semantic extraction skipped (AST-only refresh)."
+              backend=""
             fi
+          fi
+          if [ "$backend" = openai ]; then
+            unset GRAPHIFY_CLAUDE_CLI_MODEL
+            case "${CODEX_MODEL:-gpt-5.6-terra}" in
+              gpt-5.6-terra|gpt-5.6-sol)
+                graphify_model_args=(--model "$CODEX_MODEL")
+                export GRAPHIFY_OPENAI_MODEL="$CODEX_MODEL"
+                ;;
+              *) echo "::warning::Unexpected Lopu Codex model; Graphify will use its OpenAI default."; unset GRAPHIFY_OPENAI_MODEL ;;
+            esac
           fi
 
           # Mechanical guard for graph collapse. `graphify update` has its own
@@ -5087,7 +5766,7 @@ jobs:
           # them. Best-effort backstop, not a boundary (see header).
           keyfile="$RUNNER_TEMP/graphify-needles.txt"
           : > "$keyfile"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             printf '%s\n' "$secret" >> "$keyfile"
             printf '%s' "$secret" | base64 -w0 >> "$keyfile"
@@ -5131,7 +5810,9 @@ jobs:
           fi
 
       - name: Push merge commit
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         id: push
         env:
           PUSH_PAT: ${{ secrets.CONFLICT_RESOLVER_PAT }}
@@ -5285,7 +5966,9 @@ jobs:
           exit 1
 
       - name: Comment on PR (resolved)
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
@@ -5362,7 +6045,9 @@ jobs:
           upsert_run_comment "$body"
 
       - name: Cascade to PRs stacked on this head
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         # Always dispatch exact child PR selections, even when a PAT-backed
         # push also creates a detector run. Duplicate discovery is harmless:
         # trusted workers serialize per PR without cancellation and re-detect
@@ -5427,7 +6112,11 @@ jobs:
           done <<<"$children"
 
       - name: Collect residual conflicts for failure reporting
-        if: steps.user_merge_pause.outputs.paused != 'true' && failure() && steps.merge.outputs.conflicted == 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && failure()
+          && steps.merge.outputs.conflicted == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -5456,7 +6145,10 @@ jobs:
           sort -u -o "$residual" "$residual"
 
       - name: Comment on PR (needs attention)
-        if: steps.user_merge_pause.outputs.paused != 'true' && failure()
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && failure()
         env:
           GH_TOKEN: ${{ github.token }}
           PUSH_OUTCOME: ${{ steps.push.outcome }}

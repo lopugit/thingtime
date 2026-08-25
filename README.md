@@ -58,6 +58,65 @@ syntax-checks every script, runs each `--self-test`, and asserts this branch's
 shape (see below). Web CI does not run — its path filters are `remix/**`, which
 cannot exist here.
 
+## Lopu principal repository manager
+
+Lopu is the repository-facing identity for every model-backed automation in
+this control plane. PR review and failing-check repair, CodeQL triage, merge
+conflict resolution, promotion replay, stale-branch updates, rebases and stack
+cascades, release analysis, and the wildcard `all`-branch build doctor all call
+the same protected `.github/actions/lopu-agent` interface. Post-merge Graphify
+refreshes follow the same configured provider when a matching semantic
+credential is available.
+
+Lopu is also the one public repository-maintenance entrypoint. A `develop`
+push starts the standing and per-feature promotion components as jobs inside
+the same **Lopu PR manager** run; a `main` push starts the main→develop sync
+component there; and the six-hour feature-promotion backstop is another Lopu
+schedule. The three deterministic implementations remain protected reusable
+components, but have no push, schedule, repository-dispatch, or manual trigger
+of their own. Manual recovery uses **Actions → Lopu PR manager → Run workflow**
+and its `maintenance_operation` choice. Their concurrency queues never cancel
+an in-flight promotion or synchronization.
+
+The public manager itself also uses GitHub's durable `queue: max` mode with
+`cancel-in-progress: false`. Distinct PR, comment, failed-check, branch, and
+scheduled signals wait behind the active run in their bounded namespace and
+revalidate live state when they start; none is replaced before Lopu sees it.
+
+The stack rebase/cascade implementation is internal in the same way. Existing
+`rebase-pr-stack-ai` exact-worker events enter through **Lopu PR manager**, keep
+their `rebase-stack` provider policy and immutable snapshot payload, and are
+then handed to the reusable rebase engine. No product branch exposes a second
+rebase workflow.
+
+Conflict and stale-branch workers retain the complete commit graph needed to
+merge the exact snapshotted base, but use Git partial-clone blob filtering so
+Lopu does not download the repository's multi-gigabyte historical file corpus
+for every PR. Required working-tree and merge blobs are fetched lazily.
+
+The default backend is Claude. To use Codex through the OpenAI Platform API,
+configure these repository settings (all names and values are examples; never
+commit a real key):
+
+```text
+Repository variable: LOPU_AGENT_BACKEND=codex
+Repository variable: LOPU_CODEX_MODEL=gpt-5.6-terra
+Repository variable: LOPU_CODEX_REASONING_EFFORT=xhigh
+Actions secret:      OPENAI_API_KEY=<OpenAI-Platform-project-key>
+```
+
+`LOPU_CODEX_MODEL` accepts `gpt-5.6-terra` or `gpt-5.6-sol`, and reasoning
+effort accepts `medium`, `high`, `xhigh`, or `max`. Runs are visibly attributed
+as Lopu and report a label such as `OpenAI API GPT-5.6 Terra Extra High`.
+`LOPU_REVIEW_BACKEND` remains a compatibility fallback, but
+`LOPU_AGENT_BACKEND` is the canonical single selector for the whole agent.
+
+For Claude instead, set `LOPU_AGENT_BACKEND=claude` (or omit it) and configure
+`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`. GitHub-hosted automation does
+not accept an OpenAI account username/password or browser session. A Codex run
+uses the OpenAI Platform project associated with `OPENAI_API_KEY`; it does not
+consume a ChatGPT Pro weekly allowance.
+
 ## The bare-tree invariant
 
 `.github/scripts/workflow-control-plane-contract.mjs` asserts that no path
@@ -124,6 +183,13 @@ installed.
 `.github/scripts/deploy-develop-pr-preview.mjs` runs from this branch and needs
 Vercel project settings it cannot infer. Supply them from your own Vercel
 account — every value below is a placeholder:
+
+PR-event handoffs and deployment workers use separate, non-cancelling per-PR
+queues. A repository dispatch therefore cannot cancel the metadata-only run
+that created it, and a newer synchronize/edited event waits instead of
+interrupting an active deployment. Every queued worker revalidates the live PR
+head and lifecycle before changing Vercel state, so superseded requests exit
+without publishing stale code.
 
 ```sh
 VERCEL_API_TOKEN="<vercel-rest-api-token>"

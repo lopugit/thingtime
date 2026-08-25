@@ -119,9 +119,6 @@ on:
         required: false
         default: false
         type: boolean
-  repository_dispatch:
-    types: [rebase-pr-stack-ai]
-
 permissions:
   contents: read
 
@@ -894,6 +891,9 @@ jobs:
     # repository's queue one model-backed operation at a time.
     concurrency:
       group: lopu-agent-fleet-${{ github.repository }}
+      # Preserve every pending stack operation while the repository's one
+      # live Lopu worker finishes the current review/resolve/promotion task.
+      queue: max
       cancel-in-progress: false
     env:
       REPO: ${{ github.repository }}
@@ -1173,6 +1173,7 @@ jobs:
           [ "$trusted_sha" = "$trusted_ref_sha" ] \
             || { echo "::error::Trusted checkout does not match origin/github-actions."; exit 1; }
           for path in \
+            .github/actions/lopu-agent/action.yml \
             .github/actions/rebase-conflict-round/action.yml \
             .github/scripts/rebase-stack/start.sh \
             .github/scripts/rebase-stack/prepare-round.sh; do
@@ -1279,6 +1280,7 @@ jobs:
         if: steps.context.outputs.skip == 'false' && steps.start.outputs.complete != 'true'
         uses: &thingtime_rebase_conflict_round_action ./trusted/.github/actions/rebase-conflict-round
         with: &thingtime_rebase_conflict_round_inputs
+          backend: ${{ vars.LOPU_AGENT_BACKEND || vars.LOPU_REVIEW_BACKEND || 'claude' }}
           repo-path: ${{ env.REBASE_REPO }}
           pr-number: ${{ env.PR_NUMBER }}
           base-ref: ${{ steps.context.outputs.base_ref }}
@@ -1288,8 +1290,11 @@ jobs:
           allow-unresolved: "true"
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           model-args: ${{ steps.models.outputs.model_args }}
+          codex-model: ${{ vars.LOPU_CODEX_MODEL || 'gpt-5.6-terra' }}
+          codex-reasoning-effort: ${{ vars.LOPU_CODEX_REASONING_EFFORT || 'xhigh' }}
 
       - &thingtime_rebase_conflict_retry
         name: Continue replay conflict resolution (up to round 500)
@@ -1903,6 +1908,9 @@ jobs:
           GRAPHIFY_VERSION: "0.9.4"
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AGENT_BACKEND: ${{ vars.LOPU_AGENT_BACKEND || vars.LOPU_REVIEW_BACKEND || 'claude' }}
+          CODEX_MODEL: ${{ vars.LOPU_CODEX_MODEL || 'gpt-5.6-terra' }}
           PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}
           PIP_CONFIG_FILE: /dev/null
           PIP_INDEX_URL: https://pypi.org/simple
@@ -1914,6 +1922,7 @@ jobs:
           cd -- "$REBASE_REPO"
           [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
           [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
+          [ -n "${OPENAI_API_KEY:-}" ] || unset OPENAI_API_KEY
 
           graphify_model_args=()
           case "${PREFERRED_MODEL:-default}" in
@@ -1956,17 +1965,39 @@ jobs:
           fi
           export PATH="$HOME/.local/bin:$PATH"
 
+          select_claude_backend() {
+            if [ -n "${ANTHROPIC_API_KEY:-}" ]; then printf 'claude\n'; fi
+          }
           backend=''
-          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-            backend=claude
+          case "${AGENT_BACKEND:-claude}" in
+            codex)
+              if [ -n "${OPENAI_API_KEY:-}" ]; then backend=openai; else backend="$(select_claude_backend)"; fi
+              ;;
+            claude)
+              backend="$(select_claude_backend)"
+              if [ -z "$backend" ] && [ -n "${OPENAI_API_KEY:-}" ]; then backend=openai; fi
+              ;;
+            *) echo "::warning::Unexpected Lopu backend; choosing an available Graphify credential."; backend="$(select_claude_backend)" ;;
+          esac
+          if [ "$backend" = claude ]; then
             # The API backend does not need the separate OAuth credential.
             unset CLAUDE_CODE_OAUTH_TOKEN
-          elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+          elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ -z "$backend" ]; then
             # graphify's claude-cli backend would launch Claude from the PR
             # checkout, where project settings/hooks are untrusted. Keep OAuth
             # runs AST-only; the API backend does not consume project config.
             echo "::warning::OAuth-only run: using AST/text-only graphify update."
             unset CLAUDE_CODE_OAUTH_TOKEN
+          fi
+          if [ "$backend" = openai ]; then
+            unset GRAPHIFY_CLAUDE_CLI_MODEL
+            case "${CODEX_MODEL:-gpt-5.6-terra}" in
+              gpt-5.6-terra|gpt-5.6-sol)
+                graphify_model_args=(--model "$CODEX_MODEL")
+                export GRAPHIFY_OPENAI_MODEL="$CODEX_MODEL"
+                ;;
+              *) echo "::warning::Unexpected Lopu Codex model; Graphify will use its OpenAI default."; unset GRAPHIFY_OPENAI_MODEL ;;
+            esac
           fi
 
           graph_not_collapsed() {
@@ -2024,7 +2055,7 @@ jobs:
           # backstop. The security boundary remains review on the PR branch.
           needles="$RUNNER_TEMP/graphify-secret-needles.txt"
           : > "$needles"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             {
               printf '%s\n' "$secret"
