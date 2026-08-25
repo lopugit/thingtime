@@ -40,6 +40,53 @@ branch runs its own control-plane contract CI. Updating the implementation no
 longer requires separately merging the same behavior into `develop` and `main`;
 the thin listeners on both branches call the same reviewed revision immediately.
 
+### CodeQL coverage for every PR target and branch
+
+Thingtime uses CodeQL advanced setup so analysis is not limited to GitHub's
+default-setup branch scope. The thin `.github/workflows/codeql-analysis.yml`
+listener has an unfiltered `pull_request` trigger and a `push` trigger for
+`"**"`; therefore every PR whose target carries the listener and every direct
+branch push receives analysis. A default-branch `pull_request_target` listener
+also covers PRs whose target branch predates the listener. That privileged run
+checks out no code and receives no AI credential: the protected worker forwards
+only the PR number and immutable event head SHA into a separate
+`workflow_dispatch` run, which revalidates live state and analyzes the exact PR
+merge ref—or the head ref while a conflict prevents GitHub from creating one.
+Lopu validates both merge parents against the live base and head before using
+that ref, because GitHub can retain an obsolete merge ref after a conflict.
+`main` and `develop` carry the normal listener,
+while the protected implementation directly handles PRs targeting and pushes
+to `github-actions`; the central handoff closes the remaining arbitrary-target
+gap. A PR whose target already carries the listener keeps its normal
+`pull_request` run as owner, preserving branch-protection check contexts. When
+the selected ref already has both language snapshots, Lopu exits before CodeQL
+initialization instead of paying for a duplicate scan.
+
+The first rollout has one ordered repository-administration step. Do not turn
+off default setup until this listener has reached the default branch, because
+GitHub rejects advanced-workflow result uploads while default setup remains
+configured and disabling it early would create a coverage gap. Once the
+listener is present on the default branch, an administrator with repository
+Administration write access should run:
+
+```sh
+gh variable set CODEQL_CENTRAL_PR_ENABLED --repo OWNER/REPOSITORY --body true
+gh api --method PATCH repos/OWNER/REPOSITORY/code-scanning/default-setup \
+  -f state=not-configured
+gh variable set CODEQL_ADVANCED_ENABLED --repo OWNER/REPOSITORY --body true
+```
+
+The absent/false variable deliberately makes the staged advanced jobs skip
+cleanly instead of failing every PR while default setup still owns uploads.
+After setting them, manually run **Lopu CodeQL all branches**, confirm both
+language jobs upload results, and verify the repository reports default setup
+as `not-configured`. Then update a PR targeting an older feature/stack branch
+that does not contain the listener and confirm its metadata-only target event
+creates a separate exact-head scan.
+After activation, an empty Lopu CodeQL snapshot means no current matching
+head-or-merge findings (or a failed/unavailable analysis), not merely that the
+PR targets `develop` or `github-actions`.
+
 The Admin → CI Control dashboard adds the external observation/operation layer:
 signed GitHub and Vercel webhooks project repositories, features/stacks,
 branches, pull requests, Actions runs, deployments, previews, audited dispatches,
@@ -135,41 +182,38 @@ https://www.gofundme.com/f/thingtime
 
 ### Force Push ? 👉👈
 
-Thingtime has two deliberately separate conflict workflows:
+Thingtime has one automatic principal repository workflow: **Lopu PR
+manager**. It reviews failing checks and CodeQL findings, merges stale bases
+into PR heads, resolves merge conflicts, and owns rebases plus stack cascades
+for every same-repository PR regardless of its target branch. Push, PR,
+conversation, failed-check, and scheduled signals all enter through that one
+manager; a branch push never starts a second standalone rebase, promotion, or
+branch-synchronization workflow.
 
-- **Resolve PR conflicts (AI)** merges a PR's base branch into its head branch.
-- **Rebase PRs and stacks (AI)** rebases the PR head and, when the PR is part
-  of a stack, continues from the stack root toward its leaves.
+Inside Lopu, merge and rebase ownership remains deliberately disjoint.
+Standalone merge conflicts and clean-but-behind branches go to the base-merge
+lane. Genuine stack members whose history needs replay go to the rebase lane;
+adding `no-ai-rebase` opts a merge-conflicting stack member back into the
+merge-based lane. The protected rebase engine still accepts the manager's
+exact `repository_dispatch` worker handoff, but its thin product listener has
+no push, PR, schedule, or manual trigger of its own.
 
-Both workflows cover every same-repository PR regardless of its base branch.
-The merge workflow listens to pushes on `"**"` and checks open PRs both
-targeting and originating from the pushed branch. A staggered twice-hourly
-all-PR sweep catches conflicts whose original event was missed or ran from an
-older branch without the latest workflow. Their ownership is intentionally
-disjoint: standalone merge conflicts go to the merge workflow; standalone PRs
-that merge cleanly but cannot rebase, plus stack members whose current history
-needs a merge or rebase update, go to the rebase workflow. Adding
-`no-ai-rebase` opts a merge-conflicting stack member back into the merge-based
-resolver instead.
+The rebase lane covers the case GitHub reports as `mergeable: true` but
+`rebaseable: false`: a plain merge needs no help, yet replaying stacked commits
+onto their base may stop at a conflict. A detected stack is rebased
+root-to-leaf, so each child is replayed onto the rewritten parent rather than
+onto the parent's old SHA.
 
-The rebase workflow covers the case GitHub reports as `mergeable: true` but
-`rebaseable: false`: a plain merge needs no help, yet replaying the branch's
-commits onto its base stops at a conflict. It automatically scans same-repo
-PRs after branch pushes and PR `opened`/`reopened` events, with a scheduled
-all-PR scan as a backstop because GitHub emits no dedicated event when its
-**Rebase stack** button fails. A standalone PR is replayed onto its base; a
-detected stack is rebased root-to-leaf, so each child is replayed onto the
-rewritten parent rather than onto the parent's old SHA.
+For manual recovery, open **Actions → Lopu PR manager → Run workflow** on the
+default branch. Enter an exact PR number, a base/head branch selector, or leave
+both blank for a repository scan. The same entry point deliberately retries a
+reviewed paused merge/rebase snapshot; the internal rebase handoff is not a
+second user-facing workflow. The `maintenance_operation` choice also exposes
+the standing develop promotion, per-feature promotion (including dry-run and
+reverse-lane options), and main→develop synchronization without restoring
+separate Actions entries.
 
-To run it directly, open **Actions → Rebase PRs and stacks (AI) → Run
-workflow** on the default branch, enter the PR number, and leave cascading
-enabled when the PR has children. Leaving the number blank scans all open
-same-repository PRs. Manual dispatch is also the recovery path after reviewing
-a paused run.
-
-**Resolve PR conflicts (AI)** has the same manual convention: enter a base
-branch to scan only that base, or leave it blank to scan every open eligible
-PR. Broad scans are API-only detectors; they hand off one trusted
+Broad scans are API-only detectors; they hand off one trusted
 default-branch run per conflicted base, so unrelated bases do not share one AI
 job. If a run fails while the same eligible snapshot is still live, it adds
 `ai-merge-paused` so the scheduled sweep cannot repeatedly spend AI budget.
@@ -1057,11 +1101,12 @@ the preset fallback responses instead of calling an AI provider.
 
 ## Branch automation: develop → main promotion
 
-`develop` is the integration branch; `main` is the release branch. Four
-workflows keep them flowing without manual branch surgery, giving two
-complementary ways to ship:
+`develop` is the integration branch; `main` is the release branch. One public
+**Lopu PR manager** workflow owns the branch events and invokes three protected
+non-cancelling components, giving two complementary ways to ship:
 
-- **Promote features to main** (`.github/workflows/promote-features-to-main.yml`)
+- **Lopu's per-feature promotion component** (protected implementation
+  `github-actions:.github/workflows/promote-features-to-main.yml`)
   scans PRs merged into `develop` and opens one promotion PR per feature
   against `main` (cherry-picked `promote/pr-<n>-<slug>` branches), so every
   change can get a second, release-focused review on its own. PRs that share a
@@ -1071,15 +1116,28 @@ complementary ways to ship:
   review and merge bottom-up, deleting each branch on merge. Label a develop
   PR `no-promote` to keep it out of the train; close a promotion PR to reject
   that change for `main` permanently.
-- **Promote develop to main** (`.github/workflows/promote-develop-to-main.yml`)
+- **Lopu's standing develop promotion component** (protected implementation
+  `github-actions:.github/workflows/promote-develop-to-main.yml`)
   keeps one standing all-or-nothing PR open (head `develop`, base `main`).
   When everything on `develop` is deemed mergeable, merge it instead of
   merging every feature individually. The two trains never fight: after an
   omnibus merge the per-feature workflow sees the content already on `main`,
   skips it, and automatically closes any open promotion PRs whose diff has
   become empty.
-- **Sync main into develop** back-merges `main` after promotions land.
-- The AI conflict/rebase workflows keep promotion PRs and stacks mergeable.
+- **Lopu's main→develop synchronization component** back-merges `main` after
+  promotions land.
+- Lopu's conflict/rebase lanes keep promotion PRs and stacks mergeable.
+
+A `develop` push starts both promotion components inside its single Lopu run;
+a `main` push starts synchronization there; and the six-hour maintenance
+schedule enters through Lopu too. The old product-branch promotion/sync
+workflow files are removed, so none can compete with or cancel Lopu. Use the
+manager's `maintenance_operation` input for explicit recovery.
+
+The default-branch `all`-builder listener is also deliberately concurrency-free.
+Its protected implementation owns the durable `queue: max` namespace; putting
+`cancel-in-progress` on the thin caller would cancel the entire reusable call
+before that worker queue can retain it.
 
 Fork setup: everything runs with the default `GITHUB_TOKEN`, but promotion
 PRs it creates will not trigger CI, and promotion branches touching
