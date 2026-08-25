@@ -57,6 +57,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Commander launch and verification remain responsive when Launch Services stalls**:
+  application launches now submit asynchronously instead of blocking the native UI
+  thread, and the signed build verifier terminates only its own stuck launch helper
+  after the installed Commander host is confirmed running. — Codex (AI), 2026-08-25
+
 - **Storage-accounting migrations retain protected attachment fields**: the
   pending census and real whole-account backfill now project the complete
   attachment object envelope before calculating canonical bytes, preventing
