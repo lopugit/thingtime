@@ -44,7 +44,7 @@
 # CLAUDE_CODE_OAUTH_TOKEN (the resolver's credential) enables the doctor;
 # without one the union is pushed unhealed, exactly as before.
 
-name: Build all branch
+name: Lopu all-branch integration
 
 on:
   push:
@@ -56,13 +56,15 @@ permissions:
   contents: write
   pull-requests: read
 
-# Standalone dispatches on the github-actions ref dedupe against themselves;
-# called runs dedupe through the caller listener's identical group.
+# Preserve every requested rebuild. Each worker re-derives the complete live
+# union and exits cheaply when its inputs are already represented, so queued
+# duplicates are safe while cancellation could interrupt a Lopu doctor round.
 concurrency:
   # Keep the tiny push handoff separate from the worker it dispatches so the
   # worker cannot cancel its own caller before the caller reports success.
   group: all-branch-${{ github.event_name == 'push' && 'handoff' || 'worker' }}
-  cancel-in-progress: true
+  queue: max
+  cancel-in-progress: false
 
 jobs:
   handoff:
@@ -85,9 +87,18 @@ jobs:
                 --input -
 
   rebuild:
+    name: Lopu builds and repairs the all branch
     if: github.repository == 'lopugit/thingtime' && github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # The deterministic union build and its optional model-backed doctor stay
+    # in one job because they share an exact working tree. Put that whole job
+    # in Lopu's durable repository fleet so no doctor overlaps a PR review,
+    # promotion, conflict resolution, rebase, or stack cascade.
+    concurrency:
+      group: lopu-agent-fleet-${{ github.repository }}
+      queue: max
+      cancel-in-progress: false
     env:
       # The `secrets` context is not available in step `if:` expressions;
       # step conditions read this job-level flag instead (same pattern as the
@@ -220,7 +231,7 @@ jobs:
           echo "Build-doctor model waterfall: $(IFS=,; echo "${models[*]}")"
           echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
 
-      - name: Build doctor round 1
+      - name: Lopu build doctor round 1
         id: doctor1
         if: steps.models.outcome == 'success'
         continue-on-error: true
@@ -231,7 +242,8 @@ jobs:
           github_token: ${{ github.token }}
           allowed_bots: "github-actions"
           prompt: |
-            You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
+            You are Lopu, Thingtime's principal PR and repository manager. You are
+            fixing a BUILD FAILURE on the generated `all` wildcard branch by
             EDITING FILES ONLY. You have NO shell and NO git access — that is
             intentional. A later deterministic step verifies the build, commits, and
             pushes whatever you leave in the working tree.
@@ -293,7 +305,7 @@ jobs:
         if: steps.commit1.outputs.committed == 'true'
         run: node control-plane/.github/scripts/build-all-branch.mjs check
 
-      - name: Build doctor round 2
+      - name: Lopu build doctor round 2
         id: doctor2
         if: >-
           steps.models.outcome == 'success'
@@ -307,7 +319,8 @@ jobs:
           github_token: ${{ github.token }}
           allowed_bots: "github-actions"
           prompt: |
-            You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
+            You are Lopu, Thingtime's principal PR and repository manager. You are
+            fixing a BUILD FAILURE on the generated `all` wildcard branch by
             EDITING FILES ONLY — no shell, no git. This is a FOLLOW-UP repair round:
             an earlier round either did not finish or did not fix the build (later
             build stages often reveal new collisions once earlier ones are fixed).
@@ -345,7 +358,7 @@ jobs:
         if: steps.commit2.outputs.committed == 'true'
         run: node control-plane/.github/scripts/build-all-branch.mjs check
 
-      - name: Build doctor round 3
+      - name: Lopu build doctor round 3
         id: doctor3
         if: >-
           steps.models.outcome == 'success'
@@ -361,7 +374,8 @@ jobs:
           github_token: ${{ github.token }}
           allowed_bots: "github-actions"
           prompt: |
-            You are fixing a BUILD FAILURE on the generated `all` wildcard branch by
+            You are Lopu, Thingtime's principal PR and repository manager. You are
+            fixing a BUILD FAILURE on the generated `all` wildcard branch by
             EDITING FILES ONLY — no shell, no git. This is a FOLLOW-UP repair round:
             an earlier round either did not finish or did not fix the build (later
             build stages often reveal new collisions once earlier ones are fixed).

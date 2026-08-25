@@ -13,6 +13,10 @@ const rebaseWorkflow = readFileSync(
   new URL("../workflows/rebase-pr-stacks.yml", import.meta.url),
   "utf8",
 );
+const allBranchWorkflow = readFileSync(
+  new URL("../workflows/all-branch.yml", import.meta.url),
+  "utf8",
+);
 const action = readFileSync(
   new URL("../actions/rebase-conflict-round/action.yml", import.meta.url),
   "utf8",
@@ -68,6 +72,13 @@ assert.equal(
   [...rebaseWorkflow.matchAll(durableFleetQueue)].length,
   1,
   "the rebase and stack worker shares the durable single-Lopu queue",
+);
+
+assert.match(allBranchWorkflow, /^name: Lopu all-branch integration$/m);
+assert.equal(
+  [...allBranchWorkflow.matchAll(durableFleetQueue)].length,
+  1,
+  "the all-branch build doctor shares the durable single-Lopu queue",
 );
 
 assert.match(action, /You are Lopu, Thingtime's principal PR and repository manager/);
