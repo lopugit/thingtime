@@ -2591,13 +2591,15 @@ const backfillRelationshipUniqueKeys: Migration = {
 	collection: 'things',
 	fromVersion: THINGS_VERSION,
 	toVersion: THINGS_VERSION,
-	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend/vote)',
+	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend/vote/passkey link)',
 	description:
 		'Stamps the server-only root uniqueKeys dedupe entry (`<field>:<key>` BinData) onto legacy relationship ' +
 		'things whose uniqueness previously rode kind-blind crystal-path unique indexes (retired to lookup ' +
 		'indexes by the boot-time ensure). Idempotent: stamps are deterministic and only docs without ' +
 		'uniqueKeys are touched. Also counts — never modifies — free-form data things carrying a relationship ' +
-		'name at the crystal root: operator census only, because phase 2 makes those names valid ordinary data.',
+		'name at the crystal root: operator census only, because phase 2 makes those names valid ordinary data. ' +
+		'Targets are read from the relationship map, so a family that joins later (passkey-app-link, which ' +
+		'shipped mid-migration with its own crystal-path unique index) is covered by re-running this.',
 	pending: async () => {
 		const things = await getCollection('things');
 		let total = 0;
