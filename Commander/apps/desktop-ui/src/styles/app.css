@@ -2388,8 +2388,10 @@
   gap: 4px;
 }
 .full-disk-access-title-row {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 .full-disk-access-card strong {
   font-size: 0.86rem;
@@ -2410,7 +2412,9 @@
   white-space: nowrap;
 }
 .full-disk-access-status.is-granted {
-  color: #268650;
+  border: 1px solid #b9e8c7;
+  background: #e5f7ea;
+  color: #398b56;
 }
 .full-disk-access-status.is-not-granted,
 .full-disk-access-status.is-unavailable {
