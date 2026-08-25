@@ -3485,9 +3485,9 @@
     "semantic_hash": "a894af74f987634e63bb335d24e928a0"
   },
   "AI_ALL.md": {
-    "mtime": 1787316653.7384582,
-    "ast_hash": "b0d24eb3e4786472cecbf96a928171d0",
-    "semantic_hash": "b0d24eb3e4786472cecbf96a928171d0"
+    "mtime": 1787646825.697929,
+    "ast_hash": "00231ff1a159a35e5d7b9a6c655f2a0a",
+    "semantic_hash": ""
   },
   "PRs/162-codex-fix-pr159-index-retry-docs--fix-index-bootstrap-retries-after-prs-159-and-161.md": {
     "mtime": 1786536620.609777,
@@ -6390,9 +6390,9 @@
     "semantic_hash": "c22ab7d26d7e1eb3818cef99711f7a45"
   },
   "Commander/script/build_and_run.sh": {
-    "mtime": 1787631538.217629,
-    "ast_hash": "b39947d2a7a55b0b8512e809017ef7f9",
-    "semantic_hash": "b39947d2a7a55b0b8512e809017ef7f9"
+    "mtime": 1787646825.6970987,
+    "ast_hash": "cc3272a94d0171af390337c2711ab0b1",
+    "semantic_hash": ""
   },
   "Commander/script/release-version.mjs": {
     "mtime": 1787468053.6593475,
@@ -6935,8 +6935,8 @@
     "semantic_hash": "5a3628c64c892a09c8e3b9d67de906a1"
   },
   "Commander/README.md": {
-    "mtime": 1787555612.9919524,
-    "ast_hash": "0791d08d1bd6b142c98b4631bf0b1948",
+    "mtime": 1787646825.6975398,
+    "ast_hash": "2e4216ebbcbfec58d639a61e5fccecb0",
     "semantic_hash": ""
   },
   "Commander/THIRD_PARTY_NOTICES.md": {
