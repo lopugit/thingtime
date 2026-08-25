@@ -5740,8 +5740,8 @@
     "semantic_hash": "7fd5b1f2ec140e48629b97876dd9e992"
   },
   "Commander/apps/desktop-ui/src/components/ActivitySettings.tsx": {
-    "mtime": 1787646065.987037,
-    "ast_hash": "9dd33cf22df92ab347e31b5c64499a48",
+    "mtime": 1787656627.8724532,
+    "ast_hash": "6ab5ea7131ba8a018ae44a374adc6569",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/CloudSyncSettings.tsx": {
@@ -5820,8 +5820,8 @@
     "semantic_hash": "3aaae03456faab7f3b26e75252399afe"
   },
   "Commander/apps/desktop-ui/src/components/Settings.test.tsx": {
-    "mtime": 1787646066.0199451,
-    "ast_hash": "c40fc990c2f64ceb1619ac3d23f24cb4",
+    "mtime": 1787656627.8733792,
+    "ast_hash": "0d21ca2984ae7bff8beaad8ef2a8d849",
     "semantic_hash": ""
   },
   "Commander/apps/desktop-ui/src/components/Settings.tsx": {
@@ -6230,8 +6230,8 @@
     "semantic_hash": "da2c71601940452f196e3f93f3b751c3"
   },
   "Commander/hosts/macos/Sources/Commander/Services/SystemMetricsService.swift": {
-    "mtime": 1787645816.270327,
-    "ast_hash": "ae926917bf1d9406f99fe305768d8df6",
+    "mtime": 1787656627.8760195,
+    "ast_hash": "dd29b6dae3b78667317a553b89282283",
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Windows/CommanderWebView.swift": {
@@ -6265,8 +6265,8 @@
     "semantic_hash": "4215c20a5ebe4c44d4e0b44550204fca"
   },
   "Commander/hosts/macos/Tests/CommanderTests/SystemMetricsServiceTests.swift": {
-    "mtime": 1787645816.2726097,
-    "ast_hash": "0ef96b6faca505a811c790be87c512ed",
+    "mtime": 1787656627.8768816,
+    "ast_hash": "c6399e908ba5873649dd089286e3de59",
     "semantic_hash": ""
   },
   "Commander/hosts/windows/Commander.Host.csproj": {
@@ -6320,8 +6320,8 @@
     "semantic_hash": "d0b9eaf8271903be3460d335a12f0bf4"
   },
   "Commander/packages/protocol/src/index.ts": {
-    "mtime": 1787654944.9270515,
-    "ast_hash": "8ff6db2dcf807235f8980b32c409dca1",
+    "mtime": 1787656627.8772857,
+    "ast_hash": "0aaa058d018f9d08146a9471e7b18137",
     "semantic_hash": ""
   },
   "Commander/packages/protocol/tsconfig.json": {
@@ -6980,8 +6980,8 @@
     "semantic_hash": "acb578d05997728808c9a6c795cbad62"
   },
   "Commander/docs/TESTING.md": {
-    "mtime": 1787656286.402339,
-    "ast_hash": "b20bf2f65455f764cf4f7e6318b20375",
+    "mtime": 1787656627.8744543,
+    "ast_hash": "662845f2f6e66a7e8d4a6f5631298299",
     "semantic_hash": ""
   },
   "Commander/extensions/README.md": {
@@ -7705,8 +7705,8 @@
     "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
   },
   "Commander/hosts/macos/Sources/Commander/Services/ApplicationResponsivenessService.swift": {
-    "mtime": 1787645857.3045158,
-    "ast_hash": "0e44f0b3c81632565427f407d74f8d4a",
+    "mtime": 1787656627.8752434,
+    "ast_hash": "775f59fef38f18322585490f3efaf6c7",
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Services/LoopbackPortInspector.swift": {
