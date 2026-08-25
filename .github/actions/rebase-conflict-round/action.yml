@@ -36,6 +36,12 @@ inputs:
   claude-code-oauth-token:
     description: Claude Code OAuth token, when OAuth authentication is configured.
     required: false
+  anthropic-api-key-fallback:
+    description: Secondary Anthropic API key for account-capacity failover.
+    required: false
+  claude-code-oauth-token-fallback:
+    description: Secondary Claude Code OAuth token for account-capacity failover.
+    required: false
   openai-api-key:
     description: OpenAI Platform project key when the Codex backend is selected.
     required: false
@@ -243,12 +249,12 @@ runs:
       shell: bash
       env:
         BACKEND: ${{ inputs.backend }}
-        HAS_CLAUDE_CREDENTIAL: ${{ inputs.anthropic-api-key != '' || inputs.claude-code-oauth-token != '' }}
+        HAS_CLAUDE_CREDENTIAL: ${{ inputs.anthropic-api-key != '' || inputs.claude-code-oauth-token != '' || inputs.anthropic-api-key-fallback != '' || inputs.claude-code-oauth-token-fallback != '' }}
         HAS_OPENAI_CREDENTIAL: ${{ inputs.openai-api-key != '' }}
       run: |
         set -euo pipefail
         case "$BACKEND" in
-          claude) [[ "$HAS_CLAUDE_CREDENTIAL" == true ]] || { echo "::error::Lopu's Claude backend needs ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN."; exit 1; } ;;
+          claude) [[ "$HAS_CLAUDE_CREDENTIAL" == true ]] || { echo "::error::Lopu's Claude backend needs a primary or fallback Anthropic/Claude Code credential."; exit 1; } ;;
           codex) [[ "$HAS_OPENAI_CREDENTIAL" == true ]] || { echo "::error::Lopu's Codex backend needs OPENAI_API_KEY."; exit 1; } ;;
           *) echo "::error::Unknown Lopu backend: $BACKEND"; exit 1 ;;
         esac
@@ -270,6 +276,8 @@ runs:
         backend: ${{ inputs.backend }}
         anthropic-api-key: ${{ inputs.anthropic-api-key }}
         claude-code-oauth-token: ${{ inputs.claude-code-oauth-token }}
+        anthropic-api-key-fallback: ${{ inputs.anthropic-api-key-fallback }}
+        claude-code-oauth-token-fallback: ${{ inputs.claude-code-oauth-token-fallback }}
         openai-api-key: ${{ inputs.openai-api-key }}
         github-token: ${{ inputs.github-token }}
         allowed-bots: ${{ inputs.allowed-bots }}
@@ -322,12 +330,29 @@ runs:
       if: steps.prepare.outputs.needs_ai == 'true' && inputs.backend == 'claude' && steps.lopu.outcome == 'failure'
       shell: bash
       env:
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
-        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        PRIMARY_ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        FALLBACK_ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key-fallback }}
+        FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token-fallback }}
         MODEL_ARGS: ${{ inputs.model-args }}
       run: |
         set -euo pipefail
         IFS=$'\n\t'
+
+        credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+        case "$credential_slot" in
+          primary)
+            export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+            export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+            ;;
+          fallback)
+            export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+            export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+            ;;
+          *) echo "::error::Invalid Lopu Claude credential slot."; exit 1 ;;
+        esac
+        [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
+        [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
         classify_output() {
           node - "$1" <<'NODE'
@@ -444,6 +469,8 @@ runs:
         GRAPHIFY_RESET: ${{ steps.prepare.outputs.graphify_reset }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        ANTHROPIC_API_KEY_FALLBACK: ${{ inputs.anthropic-api-key-fallback }}
+        CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ inputs.claude-code-oauth-token-fallback }}
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
         ACTION_GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
@@ -680,7 +707,9 @@ runs:
 
         needles="$temp_dir/secret-needles"
         : >"$needles"
-        for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}" "${ACTION_GITHUB_TOKEN:-}"; do
+        for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" \
+          "${ANTHROPIC_API_KEY_FALLBACK:-}" "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" \
+          "${OPENAI_API_KEY:-}" "${ACTION_GITHUB_TOKEN:-}"; do
           [[ -n "$secret" ]] || continue
           {
             printf '%s\n' "$secret"

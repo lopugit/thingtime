@@ -60,6 +60,11 @@ assert.match(workflow, /maintain_main_develop_sync:/);
 assert.match(workflow, /uses: \.\/\.github\/workflows\/promote-develop-to-main\.yml/);
 assert.match(workflow, /uses: \.\/\.github\/workflows\/promote-features-to-main\.yml/);
 assert.match(workflow, /uses: \.\/\.github\/workflows\/sync-main-into-develop\.yml/);
+assert.match(mainDevelopSyncWorkflow, /SYNC_BRANCH: sync\/main-into-develop/);
+assert.match(mainDevelopSyncWorkflow, /--force-with-lease="refs\/heads\/\$SYNC_BRANCH:\$remote_sha"/);
+assert.match(mainDevelopSyncWorkflow, /git ls-remote --heads origin refs\/heads\/main refs\/heads\/develop/);
+assert.match(mainDevelopSyncWorkflow, /git merge-base --is-ancestor "\$EXPECTED_MAIN_SHA" "\$remote_sha"/);
+assert.doesNotMatch(mainDevelopSyncWorkflow, /-f head=(?:"[^"\n]*:)?main"?(?:\s|$)/);
 assert.match(workflow, /github\.event\.schedule == '43 \*\/6 \* \* \*'/);
 assert.match(workflow, /review_detect:/);
 assert.match(workflow, /review_handoff:/);
@@ -94,6 +99,11 @@ assert.doesNotMatch(rebaseWorkflow, /^  push:$/m);
 assert.doesNotMatch(rebaseWorkflow, /^  pull_request_target:$/m);
 assert.doesNotMatch(rebaseWorkflow, /^  schedule:$/m);
 assert.doesNotMatch(rebaseWorkflow, /^  workflow_dispatch:$/m);
+assert.match(rebaseWorkflow, /event_type:"rebase-pr-stack-ai"/);
+assert.equal(rebaseWorkflow.match(/event_type:"rebase-pr-stack-ai"/g)?.length, 2);
+assert.equal(rebaseWorkflow.match(/worker:\{/g)?.length, 2);
+assert.doesNotMatch(rebaseWorkflow, /actions\/workflows\/rebase-pr-stacks\.yml\/dispatches/);
+assert.match(rebaseWorkflow, /handoff:[\s\S]*?permissions:[\s\S]*?contents: write[\s\S]*?repos\/\$REPO\/dispatches/);
 assert.match(rebaseWorkflow, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/);
 assert.equal(
   [...rebaseWorkflow.matchAll(durableFleetQueue)].length,
@@ -131,7 +141,13 @@ for (const input of ["source_branch", "target_branch", "require_path_prefix"]) {
   );
 }
 
-assert.match(allBranchWorkflow, /^name: Lopu all-branch integration$/m);
+assert.match(allBranchWorkflow, /^name: Lopu internal all-branch integration$/m);
+assert.match(allBranchWorkflow, /^  workflow_call:$/m);
+assert.doesNotMatch(
+  allBranchWorkflow,
+  /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch|repository_dispatch):/m,
+  "the all-branch doctor remains an internal Lopu component",
+);
 assert.equal(
   [...allBranchWorkflow.matchAll(durableFleetQueue)].length,
   1,
