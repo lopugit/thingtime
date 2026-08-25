@@ -10,12 +10,25 @@ import {
 
 test('admin diagnostics keep useful error context while scrubbing common secrets', () => {
 	let getterReads = 0;
+	const mongoUsernameFixture = 'redaction-fixture-user';
+	const mongoPasswordFixture = 'redaction-fixture-password';
+	const mongoCredentialUrlFixture = [
+		'mongodb',
+		'+srv',
+		'://',
+		mongoUsernameFixture,
+		':',
+		mongoPasswordFixture,
+		'@',
+		'example.invalid',
+		'/thingtime'
+	].join('');
 	const cause = Object.assign(new Error('Bearer cause-token at https://user:pass@example.invalid/path'), {
 		apiKey: 'api-key-value'
 	});
 	const error = Object.assign(
 		new Error(
-			'Mongo failed at mongodb+srv://db-user:db-pass@example.invalid/thingtime ' +
+			`Mongo failed at ${mongoCredentialUrlFixture} ` +
 				'THINGTIME_SERVICE_TOKEN=service-token JWT_SECRET=jwt-secret ' +
 				'"password": "value with spaces" ownerId=507f1f77bcf86cd799439011 ' +
 				'email=person@example.invalid eyJhbGciOiJIUzI1NiJ9.payload.signature ' +
@@ -45,7 +58,24 @@ test('admin diagnostics keep useful error context while scrubbing common secrets
 	assert.match(diagnostic.detail, /\[redacted/);
 	assert.doesNotMatch(
 		diagnostic.detail,
-		/db-user|db-pass|cause-token|user:pass|service-token|jwt-secret|value with spaces|507f1f77bcf86cd799439011|person@example\.invalid|private-material|plain-password|api-key-value|refresh-value|getter-secret/
+		new RegExp(
+			[
+				mongoUsernameFixture,
+				mongoPasswordFixture,
+				'cause-token',
+				'user:pass',
+				'service-token',
+				'jwt-secret',
+				'value with spaces',
+				'507f1f77bcf86cd799439011',
+				'person@example\\.invalid',
+				'private-material',
+				'plain-password',
+				'api-key-value',
+				'refresh-value',
+				'getter-secret'
+			].join('|')
+		)
 	);
 	assert.ok(diagnostic.redactions >= 5);
 	assert.deepEqual(diagnostic.revealables, [], 'arbitrary error prose cannot authorize a reveal');

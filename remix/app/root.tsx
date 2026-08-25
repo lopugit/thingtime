@@ -7,7 +7,6 @@ import { GlobalStyles } from './globals/GlobalStyles';
 import { Main } from './components/Layout/Main';
 import { Nav } from './components/Nav/Nav';
 import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
-import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { DevKit } from './components/DevKit/DevKit';
@@ -17,6 +16,8 @@ import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHo
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
+import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
+import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
 import { rememberAuthReturnTo } from './utils/authReturn';
 
 const setThingtime = (glob: any) => {
@@ -83,13 +84,17 @@ export default function App() {
           ? `${baseTitle} docs`
           : pathname === '/feed'
             ? `${baseTitle} - Feed`
-            : pathname.startsWith('/profile')
+            : pathname === '/messages'
+              ? `${baseTitle} - Messages`
+              : pathname.startsWith('/profile')
               ? `${baseTitle} - Profile`
               : pathname === '/settings'
                 ? `${baseTitle} - Settings`
                 : pathname === '/admin'
                   ? `${baseTitle} - Admin`
-                  : baseTitle;
+                  : pathname === '/things'
+                    ? `${baseTitle} - Things`
+                    : baseTitle;
 
       document.title = routeTitle;
     }
@@ -104,7 +109,6 @@ export default function App() {
     return () => window.removeEventListener('thingtime:root-data-refresh', refreshRootData);
   }, [revalidator]);
 
-  useIcons();
 
   return (
     <ChakraWrapper>
@@ -127,6 +131,11 @@ export default function App() {
           </Main>
         )}
         {isAuthorizePopup ? null : <DrawerSystem />}
+        {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
+        {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
+        {/* Signed out here but signed in on another Thingtime deployment →
+            "continue as" suggestions (cross-deployment auto-login). */}
+        {mounted && !isAuthorizePopup ? <AutoLoginPopup /> : null}
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
         <ConfettiCanvas />
         {mounted ? <EasterEggs /> : null}

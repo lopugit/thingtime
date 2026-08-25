@@ -10,8 +10,11 @@ import {
   Input,
   Menu,
   MenuButton,
+  MenuDivider,
   MenuItem,
+  MenuItemOption,
   MenuList,
+  MenuOptionGroup,
   Popover,
   PopoverAnchor,
   PopoverContent,
@@ -24,7 +27,7 @@ import {
 } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { Link } from 'react-router';
-import { ArrowLeft, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
+import { ArrowLeft, Eye, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
@@ -34,37 +37,29 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
-import { sanitizeReactionToken, splitEmojis } from '~/utils/reactionTokens';
+import { PostAttachments } from '~/components/Attachments/PostAttachments';
+import { mediaPageUrl } from '~/components/Attachments/attachmentUiCore';
+import { sanitizeReactionToken } from '~/utils/reactionTokens';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
 import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
 import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
 import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, warmAvatars } from './threadCache';
-import {
-  CIRCLE_META,
-  MARKETPLACE_CATEGORY_META,
-  REACTION_EMOJIS,
-  timeAgo
-} from './feedTypes';
+import { CIRCLE_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, timeAgo } from './feedTypes';
 import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost } from './feedTypes';
 
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
 // reflects it). Used for optimistic paint + revert against the FRESHEST post, so
 // a concurrent reaction on a different token is never clobbered.
-const applyReactionToggle = <T extends Pick<PublicPost, 'reactionCounts' | 'viewerReactions'>>(
-  prev: T,
-  token: string,
-  adding: boolean
-): T => {
+const applyReactionToggle = <T extends Pick<PublicPost, 'reactionCounts' | 'viewerReactions'>>(prev: T, token: string, adding: boolean): T => {
   const has = prev.viewerReactions.includes(token);
   if (adding === has) return prev;
   const reactionCounts = { ...prev.reactionCounts };
   reactionCounts[token] = (reactionCounts[token] || 0) + (adding ? 1 : -1);
   if (reactionCounts[token] <= 0) delete reactionCounts[token];
-  const viewerReactions = adding
-    ? [...prev.viewerReactions, token]
-    : prev.viewerReactions.filter((entry) => entry !== token);
+	const viewerReactions = adding ? [...prev.viewerReactions, token] : prev.viewerReactions.filter((entry) => entry !== token);
   return { ...prev, reactionCounts, viewerReactions };
 };
 
@@ -90,10 +85,7 @@ const reconcileReactionToken = <T extends Pick<PublicPost, 'reactionCounts' | 'v
 
 type ReactionTruth = Pick<PublicPost, 'id' | 'reactionCounts' | 'viewerReactions'>;
 
-const fetchReactionTruth = async (
-  api: ReturnType<typeof useApi>,
-  id: string
-): Promise<ReactionTruth | null> => {
+const fetchReactionTruth = async (api: ReturnType<typeof useApi>, id: string): Promise<ReactionTruth | null> => {
   // This is called only after a completed HTTP response, so a fetch started
   // here cannot overtake that mutation. reactionOverlay still protects any
   // newer concurrent tap while the fetch is in flight.
@@ -106,26 +98,19 @@ const fetchReactionTruth = async (
 
 type CommentChange = PostComment | ((current: PostComment) => PostComment);
 
-const applyCommentChange = (current: PostComment, change: CommentChange): PostComment =>
-  typeof change === 'function' ? change(current) : change;
+const applyCommentChange = (current: PostComment, change: CommentChange): PostComment => (typeof change === 'function' ? change(current) : change);
 
 // Compact everyone's-reactions summary for the merged react button: EVERY
 // token the viewer reacted with (your full set always shows), then the
 // crowd's top remaining tokens by count, capped at maxOthers. FB/X-style —
-// the button IS the counts, so one lead glyph per token keeps it tight
-// however wild the custom tokens get.
-// Joined with a zero-width space so adjacent leads can't shape into one glyph
-// (two lone regional indicators would otherwise merge into a flag).
-const reactionDisplayEmojis = (
-  entries: Array<[string, number]>,
-  viewerSet: Set<string>,
-  maxOthers: number
-) =>
-  [
-    ...entries.filter(([token]) => viewerSet.has(token)),
-    ...entries.filter(([token]) => !viewerSet.has(token)).slice(0, maxOthers),
-  ]
-    .map(([token]) => splitEmojis(token)[0] || token)
+// the button IS the counts. Each token renders in FULL — a multi-emoji token
+// like 🤣🤣🙌 is ONE reaction and must read as one (truncating to a lead
+// glyph made multi-emoji reactions look like single-emoji ones).
+// Joined with a zero-width space so adjacent tokens can't shape into one
+// glyph (two lone regional indicators would otherwise merge into a flag).
+const reactionDisplayEmojis = (entries: Array<[string, number]>, viewerSet: Set<string>, maxOthers: number) =>
+	[...entries.filter(([token]) => viewerSet.has(token)), ...entries.filter(([token]) => !viewerSet.has(token)).slice(0, maxOthers)]
+    .map(([token]) => token)
     .join('​');
 
 // The typed post renderer for the feed / profile columns. Renders text,
@@ -143,12 +128,15 @@ const ACCENT = 'var(--tt-accent, #7c5cff)';
 
 // X-style action button: icon + count, NO text label (`label` is a11y/tooltip
 // only). forwardRef so it can also serve as a Chakra MenuButton via `as`.
-const ActionIcon = React.forwardRef<HTMLButtonElement, {
+const ActionIcon = React.forwardRef<
+	HTMLButtonElement,
+	{
   icon: React.ReactNode;
   label: string;
   count?: number;
   active?: boolean;
-} & Record<string, any>>((props, ref) => {
+	} & Record<string, any>
+>((props, ref) => {
   const { icon, label, count, active, ...rest } = props;
   return (
     <Flex
@@ -184,15 +172,32 @@ export type PostCardProps = {
   onEngagement?: (event: EngagementEvent) => void;
   // the /post/:id page opens with the conversation expanded
   defaultCommentsOpen?: boolean;
+	// the /media/:id page projects a protected attachment Thing as this card:
+	// interactions stay live, but the owner menu drops edit/privacy/delete
+	// (title/description edit via annotate; lifecycle belongs to the parent post)
+	mediaThing?: boolean;
 };
 
-const authorName = (author: FeedAuthor | null) =>
-  author?.displayName || author?.username || 'Anonymous 👻';
+const authorName = (author: FeedAuthor | null) => (author ? getUserDisplayName(author) : 'Anonymous 👻');
+
+// 1234 → "1.2k" — view counts stay one glyph-cluster wide however popular a
+// post gets (the other counters stay raw; they cap out far lower)
+const formatCompactCount = (count: number): string => {
+  if (count < 1000) return String(count);
+  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0).replace(/\.0$/, '')}k`;
+  return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+};
+
+const formatDwell = (ms: number): string => {
+  if (ms < 1000) return `${Math.round(ms / 100) / 10}s`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  return `${Math.round(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+};
 
 // Every post/comment timestamp is a permalink to its /post/:id page, the way
 // timestamps work on every major platform.
-const TimestampLink = ({ id, createdAt, fontSize = 'xs' }: { id: string; createdAt: string; fontSize?: string }) => (
-  <Link to={`/post/${id}`} title={new Date(createdAt).toLocaleString()}>
+const TimestampLink = ({ id, createdAt, fontSize = 'xs', to }: { id: string; createdAt: string; fontSize?: string; to?: string }) => (
+  <Link to={to || `/post/${id}`} title={new Date(createdAt).toLocaleString()}>
     <Text as="span" fontSize={fontSize} color={MUTED} _hover={{ textDecoration: 'underline', color: INK }}>
       {timeAgo(createdAt)}
     </Text>
@@ -202,7 +207,7 @@ const TimestampLink = ({ id, createdAt, fontSize = 'xs' }: { id: string; created
 export const AuthorAvatar = (props: { author: FeedAuthor | null; size?: string; fontSize?: string }) => {
   const { author, size = '36px', fontSize = 'sm' } = props;
 
-  const initial = (author?.displayName || author?.username || '?').trim().charAt(0).toUpperCase();
+  const initial = author ? getUserDisplayName(author).trim().charAt(0).toUpperCase() : '?';
 
   const circle = author?.avatarUrl ? (
     <Image
@@ -253,6 +258,7 @@ const ImageGrid = ({ images, alt }: { images: string[]; alt: string }) => {
         src={images[0]}
         alt={alt}
         loading="lazy"
+				referrerPolicy="no-referrer"
         width="100%"
         maxHeight="480px"
         objectFit="cover"
@@ -277,6 +283,7 @@ const ImageGrid = ({ images, alt }: { images: string[]; alt: string }) => {
               src={src}
               alt={`${alt} — photo ${index + 1}`}
               loading="lazy"
+							referrerPolicy="no-referrer"
               width="100%"
               height={spansBoth ? '260px' : '180px'}
               objectFit="cover"
@@ -316,6 +323,7 @@ const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | '
           src={post.images[0]}
           alt={listing.title}
           loading="lazy"
+					referrerPolicy="no-referrer"
           width="100%"
           maxHeight="340px"
           objectFit="cover"
@@ -360,8 +368,8 @@ const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | '
 
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing'>;
-const PostBody = ({ post, compact }: { post: PostBodyShape; compact?: boolean }) => (
+type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing' | 'mediaLayout'>;
+const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact?: boolean; attachments?: PublicPost['attachments'] }) => (
   <Flex flexDirection="column" rowGap={compact ? 2 : 3}>
     {post.text && (
       <Text fontSize={compact ? 'sm' : 'md'} color={TEXT} whiteSpace="normal">
@@ -376,10 +384,9 @@ const PostBody = ({ post, compact }: { post: PostBodyShape; compact?: boolean })
     (sandboxed — see ThingView), rendered through its kind renderer when one
     resolves, with a corner icon flipping between the two views. */}
     {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} />}
-    {post.type === 'thingtime' && !!post.images?.length && (
-      <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />
-    )}
+		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
+    <PostAttachments attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} />
   </Flex>
 );
 
@@ -398,17 +405,13 @@ const SharedPostCard = ({ post }: { post: PublicPost }) => (
         <TimestampLink id={post.id} createdAt={post.createdAt} />
       </Box>
     </Flex>
-    <PostBody post={post} compact />
+    <PostBody post={post} compact attachments={post.attachments} />
   </Box>
 );
 
 // The quick-reaction strip inside the picker popover — the standard emojis
 // plus a ＋ opening the full custom picker (when the host provides one).
-const QuickReactionRow = (props: {
-  viewerSet: Set<string>;
-  onPick: (emoji: string) => void;
-  onMore?: () => void;
-}) => {
+const QuickReactionRow = (props: { viewerSet: Set<string>; onPick: (emoji: string) => void; onMore?: () => void }) => {
   const { viewerSet, onPick, onMore } = props;
   return (
     <Flex columnGap={0.5} padding={1.5} alignItems="center">
@@ -485,9 +488,7 @@ const AnchoredEmojiPicker = (props: {
 // Only one EMPTY reply input is open at a time across a card's comment tree:
 // opening a reply announces itself here and rows whose draft is empty close
 // themselves. Rows with a typed draft stay open — never lose user text.
-const ReplyFocusContext = React.createContext<{ openId: string | null; requestOpen: (id: string) => void } | null>(
-  null
-);
+const ReplyFocusContext = React.createContext<{ openId: string | null; requestOpen: (id: string) => void } | null>(null);
 
 // Thread depth is UNBOUNDED, but only this many levels ever indent at once.
 // Opening replies at the cap REFOCUSES the panel on that comment: it slides in
@@ -532,6 +533,8 @@ const buildPendingComment = (user: any, targetId: string, text: string): PostCom
   type: 'text',
   text,
   images: [],
+	attachments: [],
+	mediaLayout: null,
   listing: null,
   thing: null,
   tags: [],
@@ -611,10 +614,7 @@ const CommentRow = (props: {
   const [richReplyOpen, setRichReplyOpen] = React.useState(false);
   const [repliesLoading, setRepliesLoading] = React.useState(false);
   // reply text persists as a per-user draft — leave and pick it up later
-  const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated } = useCommentDraft(
-    user?.id,
-    comment.id
-  );
+	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated } = useCommentDraft(user?.id, comment.id);
   const pending = isPendingComment(comment);
 
   // ＋ in the quick row opens the full custom picker (same as posts)
@@ -738,9 +738,7 @@ const CommentRow = (props: {
           setReplies((prev) => {
             // keep optimistic sends that raced the fetch, drop ones the
             // server copy now covers
-            const pendings = (prev || []).filter(
-              (reply) => isPendingComment(reply) && !fetched.some((entry) => entry.id === reply.id)
-            );
+						const pendings = (prev || []).filter((reply) => isPendingComment(reply) && !fetched.some((entry) => entry.id === reply.id));
             // defensive: never render the same reply twice whatever the payload
             const merged = [...fetched, ...pendings];
             return merged.filter((reply, index) => merged.findIndex((entry) => entry.id === reply.id) === index);
@@ -824,7 +822,10 @@ const CommentRow = (props: {
       setReplies((prev) => {
         const mapped = (prev || []).map((reply) => (reply.id === pendingReply.id ? resp.comment : reply));
         const deduped = mapped.filter((reply, index) => mapped.findIndex((entry) => entry.id === reply.id) === index);
-        setCachedThread(comment.id, deduped.filter((reply) => !isPendingComment(reply)));
+				setCachedThread(
+					comment.id,
+					deduped.filter((reply) => !isPendingComment(reply))
+				);
         return deduped;
       });
     } catch (err: any) {
@@ -840,7 +841,10 @@ const CommentRow = (props: {
   const handleRichReplied = (reply: PostComment) => {
     setReplies((prev) => {
       const next = [...(prev || []), reply];
-      setCachedThread(comment.id, next.filter((entry) => !isPendingComment(entry)));
+			setCachedThread(
+				comment.id,
+				next.filter((entry) => !isPendingComment(entry))
+			);
       return next;
     });
     setRepliesOpen(true);
@@ -935,7 +939,7 @@ const CommentRow = (props: {
                   <TimestampLink id={comment.id} createdAt={comment.createdAt} fontSize="10px" />
                 </Box>
               </Flex>
-              <PostBody post={comment} compact />
+							<PostBody post={comment} compact attachments={comment.attachments} />
             </Box>
             {/* icon-only actions (no labels): reply toggles the inline input,
             and the merged react control sits right beside it */}
@@ -984,14 +988,10 @@ const CommentRow = (props: {
           <Flex flexDirection="column" rowGap={2} paddingTop={2}>
             {repliesLoading && replies === null && <ReplySkeleton />}
             {repliesOpen &&
-              (replies || []).slice(-visibleReplies).map((reply) => (
-                <CommentRow
-                  key={reply.id}
-                  comment={reply}
-                  onChanged={handleReplyChanged}
-                  onEngagement={onEngagement}
-                  depth={depth + 1}
-                />
+							(replies || [])
+								.slice(-visibleReplies)
+								.map((reply) => (
+									<CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} depth={depth + 1} />
               ))}
             {repliesOpen &&
               !(repliesLoading && replies === null) &&
@@ -1052,11 +1052,7 @@ const CommentRow = (props: {
                     />
                   </Flex>
                   {richReplyOpen && (
-                    <PostComposer
-                      parentId={comment.id}
-                      onPosted={handleRichReplied as any}
-                      onClose={() => setRichReplyOpen(false)}
-                    />
+										<PostComposer parentId={comment.id} onPosted={handleRichReplied as any} onClose={() => setRichReplyOpen(false)} />
                   )}
                 </Flex>
               ) : (
@@ -1074,7 +1070,8 @@ const CommentRow = (props: {
 // memoised: engagement telemetry re-renders the feed page frequently, and an
 // unchanged post reference should never re-render its card
 export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
-  const { post, onChanged, onEngagement, defaultCommentsOpen } = props;
+  const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing } = props;
+	const permalinkPath = mediaThing ? mediaPageUrl(post.id) : `/post/${post.id}`;
 
   const api = useApi();
   const user = useCurrentUser();
@@ -1130,7 +1127,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
 
   const isOwner = !!user && !!post.author && user.id === post.author.id;
-  const circle = CIRCLE_META[post.visibility] || CIRCLE_META.public;
+	const circle = mediaThing
+		? { emoji: '🔗', label: 'Inherited audience', hint: 'This media follows the privacy of the Thing it belongs to' }
+		: CIRCLE_META[post.visibility] || CIRCLE_META.public;
 
   // Every reaction token on the post, most-used first — feeds the merged
   // react button (top emojis + total count).
@@ -1148,6 +1147,76 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       onChanged?.(null);
     } catch (err: any) {
       lopu({ title: err?.error || 'Could not delete that post 😞', status: 'error' });
+    }
+  };
+
+  // Owner edit: the card body swaps to a textarea (media/original stay put
+  // below it). Saving is optimistic — the new text paints immediately and the
+  // editor closes; a failed write restores the old text and reopens the
+  // editor with the draft.
+  const [editing, setEditing] = React.useState(false);
+  const [editText, setEditText] = React.useState('');
+
+  const handleEditStart = () => {
+    setEditText(post.text);
+    setEditing(true);
+  };
+
+  // text is the whole body of a plain text post — only media-bearing types
+  // (and share captions) may save it away to empty
+  const canSaveEdit =
+    !!editText.trim() || post.isShare || post.type === 'image' || post.type === 'marketplace' || post.type === 'thingtime';
+
+  const handleEditSave = async () => {
+    const text = editText.trim();
+    const prevText = post.text;
+    if (text === prevText) {
+      setEditing(false);
+      return;
+    }
+    setEditing(false);
+    onChanged?.((prev) => ({ ...prev, text }));
+    try {
+      await api.v1.things.update({ id: post.id, crystal: { text } });
+      lopu({ title: 'Post updated ✏️', status: 'success', duration: 4000 });
+    } catch (err: any) {
+      onChanged?.((prev) => ({ ...prev, text: prevText }));
+      setEditText(text); // give the draft back
+      setEditing(true);
+      lopu({ title: err?.error || 'Could not save that edit 😞', status: 'error' });
+    }
+  };
+
+  // Change privacy from the post menu. Optimistic: the circle badge flips
+  // immediately; the server response reconciles the derived acl, and a
+  // failure flips it back.
+  const handleVisibilityChange = async (next: PostVisibility) => {
+    if (next === post.visibility) return;
+    const prevVisibility = post.visibility;
+    const prevAcl = post.acl;
+    onChanged?.((prev) => ({ ...prev, visibility: next }));
+    try {
+      const resp = await api.v1.things.update({ id: post.id, visibility: next });
+      if (resp?.post) {
+        onChanged?.((prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl }));
+      }
+      const meta = CIRCLE_META[next];
+      lopu({ title: `Privacy set to ${meta.label} ${meta.emoji}`, status: 'success', duration: 4000 });
+    } catch (err: any) {
+      onChanged?.((prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
+      lopu({ title: err?.error || 'Could not change privacy 😞', status: 'error' });
+    }
+  };
+
+  // menu copy-link: always the clipboard (the share icon owns the native sheet)
+  const handleCopyLink = async () => {
+		const url = `${window.location.origin}${permalinkPath}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      lopu({ title: 'Link copied 🔗', status: 'success', duration: 4000 });
+    } catch {
+      // clipboard unavailable (http origin) — hand the link over anyway
+      lopu({ title: `Copy this link: ${url}`, status: 'info', duration: 10000 });
     }
   };
 
@@ -1249,10 +1318,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     setFocusStack((stack) => stack.slice(0, -1));
   };
 
-  const threadFocusValue = React.useMemo(
-    () => ({ maxDepth: MAX_VISUAL_DEPTH, focusThread }),
-    [focusThread]
-  );
+	const threadFocusValue = React.useMemo(() => ({ maxDepth: MAX_VISUAL_DEPTH, focusThread }), [focusThread]);
 
   // reactions etc. on the focused row update the top-of-stack snapshot
   const handleFocusedChanged = (id: string, change: CommentChange) => {
@@ -1356,7 +1422,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // The share icon is OUTWARD share: the native share sheet where the
   // platform has one, copy-link everywhere else. Works logged out too.
   const handleShareLink = async () => {
-    const url = `${window.location.origin}/post/${post.id}`;
+		const url = `${window.location.origin}${permalinkPath}`;
     try {
       if (typeof navigator !== 'undefined' && (navigator as any).share) {
         await (navigator as any).share({ url });
@@ -1431,9 +1497,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 </Text>
               )}
               <Text as="span" fontSize="xs" color={MUTED}>
-                {post.author?.username ? `@${post.author.username} · ` : ''}
+                {post.author ? `${getUserIdentityDetail(post.author)} · ` : ''}
               </Text>
-              <TimestampLink id={post.id} createdAt={post.createdAt} />
+							<TimestampLink id={post.id} createdAt={post.createdAt} to={mediaThing ? permalinkPath : undefined} />
               <Tooltip label={`${circle.label} — ${circle.hint}`} fontSize="xs" borderRadius="8px" hasArrow>
                 <Text as="span" fontSize="xs" cursor="default">
                   {circle.emoji}
@@ -1445,30 +1511,103 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             <Menu placement="bottom-end" autoSelect={false}>
               <MenuButton
                 as={IconButton}
-                aria-label="Post options"
+				aria-label={mediaThing ? 'Media options' : 'Post options'}
                 icon={<MoreHorizontal size={16} />}
                 size="xs"
                 variant="ghost"
                 color={MUTED}
                 borderRadius="8px"
               />
-              <MenuList minWidth="160px" borderRadius={RADIUS_MD} zIndex={10}>
-                <MenuItem fontSize="sm" color="var(--tt-danger, #e5484d)" onClick={handleDelete}>
-                  Delete 🗑️
+              <MenuList minWidth="190px" borderRadius={RADIUS_MD} zIndex={10}>
+                {!mediaThing && (
+                  <MenuItem fontSize="sm" onClick={handleEditStart}>
+                    Edit ✏️
+                  </MenuItem>
+                )}
+                <MenuItem fontSize="sm" onClick={handleCopyLink}>
+                  Copy link 🔗
                 </MenuItem>
+                {!mediaThing && (
+                  <>
+                    <MenuDivider />
+                    <MenuOptionGroup
+                      title="Privacy"
+                      type="radio"
+                      value={post.visibility}
+                      onChange={(value) => handleVisibilityChange(value as PostVisibility)}
+                    >
+                      {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
+                        <MenuItemOption key={key} value={key} fontSize="sm">
+                          {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+                        </MenuItemOption>
+                      ))}
+                    </MenuOptionGroup>
+                    <MenuDivider />
+                    <MenuItem fontSize="sm" color="var(--tt-danger, #e5484d)" onClick={handleDelete}>
+                      Delete 🗑️
+                    </MenuItem>
+                  </>
+                )}
               </MenuList>
             </Menu>
           )}
         </Flex>
 
-        {/* body — shares render caption + nested original */}
-        {post.isShare ? (
+        {/* body — shares render caption + nested original; the owner's edit
+        mode mounts the FULL composer (type tabs, photos, listing, thing,
+        tags, circle, attachment order) pre-filled from the post. Shares edit
+        their caption only — the shared original is the body. */}
+        {editing && !post.isShare ? (
+          <PostComposer
+            editPost={post}
+            onPosted={(updated) => {
+              onChanged?.(updated);
+              setEditing(false);
+            }}
+            onClose={() => setEditing(false)}
+          />
+        ) : editing ? (
+          <Flex flexDirection="column" rowGap={3}>
+            <Textarea
+              size="sm"
+              rows={3}
+              resize="vertical"
+              borderRadius="var(--tt-radius-sm, 9px)"
+              placeholder="Say something… ✨"
+              autoFocus
+              value={editText}
+              onChange={(event) => setEditText(event.target.value)}
+            />
+            <Flex alignItems="center" columnGap={2}>
+              <Button
+                size="xs"
+                color="white"
+                fontFamily="heading"
+                fontWeight={600}
+                background={RAINBOW}
+                backgroundSize="calc(100px + 200%)"
+                sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
+                _hover={{ opacity: 0.9 }}
+                borderRadius={RADIUS_MD}
+                isDisabled={!canSaveEdit}
+                onClick={handleEditSave}
+              >
+                Save ✨
+              </Button>
+              <Button size="xs" variant="ghost" borderRadius={RADIUS_MD} onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </Flex>
+            {post.shareOf && <SharedPostCard post={post.shareOf} />}
+          </Flex>
+        ) : post.isShare ? (
           <Flex flexDirection="column" rowGap={3}>
             {post.text && (
               <Text fontSize="md" color={TEXT} whiteSpace="normal">
                 {post.text}
               </Text>
             )}
+            <PostAttachments attachments={post.attachments} mediaLayout={post.mediaLayout} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
             ) : (
@@ -1486,7 +1625,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             )}
           </Flex>
         ) : (
-          <PostBody post={post} />
+          <PostBody post={post} attachments={post.attachments} />
         )}
 
         {/* action row — icons + counts only (X-style, no labels); the merged
@@ -1536,24 +1675,14 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               />
             </Box>
           ) : (
-            <ReactionControl
-              enabled={false}
-              trigger={reactButton}
-              onQuickTap={() => handleReact('👍')}
-              content={() => null}
-            />
+							<ReactionControl enabled={false} trigger={reactButton} onQuickTap={() => handleReact('👍')} content={() => null} />
           )}
 
           {/* repost: instant repost OR quote (caption + circle) */}
-          {user ? (
+			{!mediaThing && (user ? (
             <Box position="relative" display="flex">
               <Menu placement="top" autoSelect={false}>
-                <MenuButton
-                  as={ActionIcon}
-                  icon={<Repeat2 size={18} strokeWidth={2.2} />}
-                  count={post.shareCount}
-                  label="Repost"
-                />
+									<MenuButton as={ActionIcon} icon={<Repeat2 size={18} strokeWidth={2.2} />} count={post.shareCount} label="Repost" />
                 <MenuList minWidth="170px" borderRadius={RADIUS_MD} zIndex={10}>
                   <MenuItem fontSize="sm" onClick={handleRepost}>
                     Repost 🔁
@@ -1578,14 +1707,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   zIndex={10}
                 >
                   <Flex flexDirection="column" rowGap={2} padding={3}>
-                    <Text
-                      fontFamily="mono"
-                      fontSize="10px"
-                      fontWeight={600}
-                      letterSpacing="0.08em"
-                      textTransform="uppercase"
-                      color={MUTED}
-                    >
+											<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
                       Quote this post ✏️
                     </Text>
                     <Textarea
@@ -1635,10 +1757,38 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               label="Repost"
               onClick={() => lopu({ title: 'Log in to repost 🔁', status: 'info', duration: 6000 })}
             />
-          )}
+			))}
 
           {/* outward share: native sheet / copy link */}
           <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
+
+          {/* public view stats (X-style, right edge): count = unique viewers;
+          the tooltip carries impressions + average time on screen */}
+          <Tooltip
+            label={`${post.viewCount || 0} unique ${(post.viewCount || 0) === 1 ? 'viewer' : 'viewers'} · ${
+              post.viewStats?.impressions || 0
+            } impressions · avg ${formatDwell(post.viewStats?.avgDwellMs || 0)} on screen`}
+            fontSize="xs"
+            borderRadius="8px"
+            hasArrow
+          >
+            <Flex
+              alignItems="center"
+              columnGap={1.5}
+              paddingX={2}
+              height="32px"
+              marginLeft="auto"
+              borderRadius="999px"
+              fontSize="sm"
+              fontWeight={600}
+              color={MUTED}
+              cursor="default"
+              aria-label={`${post.viewCount || 0} views`}
+            >
+              <Eye size={18} strokeWidth={2.2} />
+              <Text as="span">{formatCompactCount(post.viewCount || 0)}</Text>
+            </Flex>
+          </Tooltip>
         </Flex>
 
         {/* comments — the post's conversation, or a FOCUSED thread panel:
@@ -1672,22 +1822,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   Thread 🧵
                 </Text>
               </Flex>
-              <CommentRow
-                comment={focusedComment}
-                onChanged={handleFocusedChanged}
-                onEngagement={onEngagement}
-                defaultOpen
-              />
+								<CommentRow comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} defaultOpen />
             </Flex>
           </ThreadFocusContext.Provider>
         )}
         {commentsOpen && !focusedComment && (
           <ThreadFocusContext.Provider value={threadFocusValue}>
-          <Flex
-            flexDirection="column"
-            rowGap={3}
-            sx={threadNavCount > 0 ? { animation: `${SLIDE_IN_LEFT} 0.22s ease-out` } : undefined}
-          >
+							<Flex flexDirection="column" rowGap={3} sx={threadNavCount > 0 ? { animation: `${SLIDE_IN_LEFT} 0.22s ease-out` } : undefined}>
             {post.comments.slice(-visibleComments).map((comment) => (
               <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
             ))}

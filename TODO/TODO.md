@@ -55,6 +55,10 @@ readers, 3 finder tracks each adversarially verified, 3 idea lenses). Every item
 below was confirmed by reading the cited code — file/line refs are load-bearing._
 
 7. **🔒 URGENT SECURITY: lock down the unauthenticated admin/data endpoints.**
+   _✅ Done 2026-07-21: raw-results and populate became admin-only + rate-limited
+   fail-closed in earlier PRs; service-account provisioning (public by design)
+   is now rate-limited fail-closed per IP, body-capped, and field-whitelisted —
+   see `claude-todo/09-security-hardening.md` §A._
 
    Three live, prod-registered endpoints have **no auth, no rate limit, no env
    gate**:
@@ -80,41 +84,36 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
    L32–33), and add visibility filtering to any that stay.
    Full spec: `claude-todo/09-security-hardening.md`.
 
-8. **🔒 SECURITY: add brute-force + abuse rate limiting to the auth endpoints.**
+8. **✅ FIXED — 🔒 SECURITY: brute-force + abuse rate limiting on auth endpoints.**
 
-   `POST /api/v1/login` (`_login.tsx` → `loginUser.ts`) has zero throttling and
-   the Nitro dispatcher adds no middleware, so credentials can be brute-forced at
-   full speed. Same for `POST /api/v1/auth/register` and
-   `POST /api/v1/auth/resend-verification` (unlimited verification-token minting),
-   and `register` also has no body-size cap and stores caller-controlled `meta`
-   verbatim (`registerUser.ts` L72). Reuse the existing Mongo-backed quota pattern
-   (`consumeJoinQuota` in `waitlist.ts`, `consumeLopuMusingQuota` in
-   `lopu/rateLimit.ts`, the `lopuMusingRateLimits` TTL collection) to 429 after N
-   failures per IP/username window; cap body size; whitelist/bound `meta`.
-   Full spec: `claude-todo/09-security-hardening.md`.
+   Login and resend-verification use the shared, admin-tunable IP limiter and
+   size-capped body reader. PR #167 added the canonical `auth.register` rule at
+   10 attempts per 15 minutes per IP; PR #99 leaves that rule unchanged and adds
+   the remaining 16 KiB streaming registration body cap. Public registration
+   continues to whitelist accepted fields rather than forwarding caller `meta`.
+   Full rationale and the earlier §A closure: `claude-todo/09-security-hardening.md`.
 
-9. **🐛 DATA CORRUPTION: the persist reviver turns ordinary strings into Dates.**
+9. **✅ FIXED IN PR #99 — 🐛 persisted strings no longer corrupt into Dates.**
 
-   `ThingtimeProvider` (`remix/app/Providers/ThingtimeProvider.tsx` L30–34, used
-   at L89 / L379–382) revives **any** string that passes V8's lenient
-   `Date.parse` into a `Date` when rehydrating from localforage. Everyday values
-   like `"Post 1"`, `"1"`, `"2024"`, `"March 2024"`, `"5 April"` become `Date`
-   objects on reload; the replacer (L71–75) then rewrites them as ISO strings —
-   **permanently corrupting user data after one save/reload cycle**, and Dates can
-   reach React render paths. Fix: only revive a strict ISO-8601 pattern, or tag
-   Dates in the replacer (mirror the existing `ttype:'function'` scheme:
-   `{ttype:'date', iso}`) and revive only tagged values.
+   The active persistence serializer tags real Dates and never infers a Date
+   from an untagged string. Ambiguous legacy ISO values remain text rather than
+   risking user-data corruption; known date fields can migrate schema-aware.
+   This keeps Dates and identical-looking user text distinct across new repeated
+   save/reload cycles. Malformed tag-looking user objects are preserved,
+   functions are dropped, and the real flatted codec is covered by focused
+   regression tests.
 
-10. **🔒 SECURITY: persisted-state `eval` = arbitrary code execution on load; add a CSP.**
+10. **✅ FIXED IN PR #99 — 🔒 persisted-state code execution removed; strict CSP added.**
 
-    Same provider revives `{ttype:'function'}` values by `eval(value.code)`
-    (L39) plus a scoped `eval` (L53); the replacer serialises every function this
-    way (L71–87) and the whole tree persists to IndexedDB every change (L435–438),
-    revived on every load. With no CSP anywhere in the repo (`unsafe-eval`
-    effectively allowed), anything that can write same-origin storage (an XSS, an
-    extension, another tab) plants a payload that runs on every subsequent load.
-    Stop `eval`-based function revival (drop function persistence or use a
-    sandboxed/signed representation) **and** add a CSP without `unsafe-eval`.
+    Persisted functions are no longer serialized, legacy `ttype:'function'`
+    payloads are dropped without execution, and the application policy omits
+    both inline script execution and `unsafe-eval`. Pre-paint boot code now comes
+    from same-origin `/tt-boot.js`; only repository-controlled design bundles get
+    a path-scoped runtime-compiler exception inside an opaque-origin sandbox.
+    Commander assignments now parse data literals without `eval`. Unused
+    smarts dynamic-code modes remain blocked by CSP; any future executable
+    command design must use an explicit safe registry or isolated sandbox rather
+    than weakening the whole application policy.
     Full spec: `claude-todo/09-security-hardening.md`.
 
 11. **🐛 Feed shows duplicate posts in ranked mode.**

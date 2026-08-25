@@ -1,5 +1,4 @@
 import React from 'react';
-import ClickAwayListener from 'react-click-away-listener';
 import { Center, Flex, Input } from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router';
 import Fuse from 'fuse.js';
@@ -11,8 +10,9 @@ import { useLopu } from '../Lopu/useLopu';
 
 import { sanitise } from '~/functions/sanitise';
 import { usePath } from '~/hooks/usePath';
-import { getParentPath } from '~/smarts';
 import { SECRET_WORDS, partyMode, rainbowFlash, pickSparkle } from '~/eggs/eggs';
+import { CommanderClickAwayBoundary } from './commanderClickAway';
+import { parseCommanderLiteral } from './commanderLiteral';
 
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
@@ -48,9 +48,10 @@ export const CommanderV2 = (props) => {
 	const [showContext, setShowContextState] = React.useState(false);
 
 	// mobile chrome allowance: 52px for the fixed drawer trigger on the left
-	// plus the original 108px reserved for the right-side nav icons
+	// plus 148px reserved for the right-side nav icons (the notifications bell
+	// joined the username + logo there — 108px started clipping under the pill)
 	const mobileVW = React.useMemo(() => {
-		return 'calc(100vw - 160px)';
+		return 'calc(100vw - 200px)';
 	}, []);
 
 	const rainbowRepeats = 2;
@@ -78,7 +79,9 @@ export const CommanderV2 = (props) => {
 		if (commanderActive) {
 			inputRef?.current?.focus?.();
 		} else {
-			document.activeElement.blur();
+			// Closing Commander after an outside focus must not blur the input the
+			// user just reached. Only release Commander's own input.
+			if (document.activeElement === inputRef.current) inputRef.current?.blur?.();
 
 			if (thingtimeRef?.current?.settings?.commander?.[commanderId]?.clearCommanderOnToggle) {
 				setInputValue('');
@@ -138,21 +141,6 @@ export const CommanderV2 = (props) => {
 	const commandValue = React.useMemo(() => {
 		return command?.[1];
 	}, [command]);
-
-	const validQuotations = React.useMemo(() => {
-		return ['"', "'"];
-	}, []);
-
-	const escapedCommandValue = React.useMemo(() => {
-		// replace quotations with escaped quoations except for first and last quotation
-		const startingQuotation = commandValue?.[0];
-		const endingQuotation = commandValue?.[commandValue?.length - 1];
-		const isQuoted = validQuotations?.includes(startingQuotation) && validQuotations?.includes(endingQuotation);
-		const restOfCommandValue = isQuoted ? commandValue?.slice(1, commandValue?.length - 1) : commandValue;
-		const escaped = restOfCommandValue?.replace(/"/g, '\\"')?.replace(/'/g, "\\'");
-		const ret = `"${escaped}"`;
-		return ret;
-	}, [commandValue, validQuotations]);
 
 	const commandIsAction = React.useMemo(() => {
 		return commandPath && commandValue;
@@ -245,17 +233,10 @@ export const CommanderV2 = (props) => {
 
 	const closeCommander = React.useCallback(
 		(e?: any) => {
-			console.log('Closing commander if conditions met');
-			if (!e?.defaultPrevented) {
-				console.log('Event default not prevented, closing commander. commanderId:', commanderId);
-				setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
-				// if (thingtime?.settings?.commander?.[commanderId]?.commanderActive) {
-				// }
-			} else {
-				console.log('Event default prevented, not closing commander');
-			}
+			if (e?.defaultPrevented || !commanderActive) return;
+			setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
 		},
-		[setThingtime, commanderId, commanderSettings?.commanderActive, thingtime?.settings?.commander]
+		[setThingtime, commanderId, commanderActive]
 	);
 
 	const toggleCommander = React.useCallback(() => {
@@ -304,37 +285,9 @@ export const CommanderV2 = (props) => {
 		if (commanderActive) {
 			try {
 				if (commandIsAction) {
-					// nothing
-					const prevVal = getThingtime(commandPath);
-					const parentPath = getParentPath(commandPath) || 'thingtime';
-					try {
-						// first try to execute literal javscript
-						const fn = `() => { return ${commandValue} }`;
-						const tt = thingtime;
-						const evalFn = eval(fn);
-						const realVal = evalFn();
-						setThingtime(commandPath, realVal, {
-							namespace: 'user'
-						});
-					} catch (err) {
-						console.log('Caught error after trying to execute literal javascript', err);
-
-						// likely literaly javascript wasn't valid
-						try {
-							const fn = `() => { return ${escapedCommandValue} }`;
-							const tt = thingtime;
-							const evalFn = eval(fn);
-							const realVal = evalFn();
-							const prevVal = getThingtime(commandPath);
-							const parentPath = getParentPath(commandPath);
-							setThingtime(commandPath, realVal, {
-								namespace: 'user'
-							});
-						} catch {
-							// something very bad went wrong
-							console.log('Caught error after trying to execute escaped literal javascript', err);
-						}
-					}
+					setThingtime(commandPath, parseCommanderLiteral(commandValue), {
+						namespace: 'user'
+					});
 					// if (!prevVal) {
 					setContextPath(commandPath);
 					setShowContext(true, 'commandIsAction check');
@@ -365,15 +318,11 @@ export const CommanderV2 = (props) => {
 	}, [
 		hoveredSuggestion,
 		selectSuggestion,
-		mode,
 		changePath,
 		commanderActive,
 		commandIsAction,
 		commandPath,
-		thingtime,
 		commandValue,
-		escapedCommandValue,
-		getThingtime,
 		setThingtime,
 		setContextPath,
 		setShowContext,
@@ -437,7 +386,18 @@ export const CommanderV2 = (props) => {
 				}
 			}
 		},
-		[closeCommander, toggleCommander, hoveredSuggestion, suggestions, suggestionRowCount, showSuggestions, thingtime, thingtimeRef, commanderActive, executeCommand]
+		[
+			closeCommander,
+			toggleCommander,
+			hoveredSuggestion,
+			suggestions,
+			suggestionRowCount,
+			showSuggestions,
+			thingtime,
+			thingtimeRef,
+			commanderActive,
+			executeCommand
+		]
 	);
 
 	React.useEffect(() => {
@@ -481,7 +441,7 @@ export const CommanderV2 = (props) => {
 	);
 
 	return (
-		<ClickAwayListener onClickAway={closeCommander}>
+		<CommanderClickAwayBoundary onClickAway={closeCommander}>
 			<Flex
 				className="commanderHost"
 				data-commander-active={commanderActive ? 'true' : 'false'}
@@ -707,6 +667,6 @@ export const CommanderV2 = (props) => {
 					)}
 				</Center>
 			</Flex>
-		</ClickAwayListener>
+		</CommanderClickAwayBoundary>
 	);
 };
