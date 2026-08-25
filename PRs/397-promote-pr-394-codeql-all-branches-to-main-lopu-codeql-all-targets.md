@@ -43,3 +43,16 @@ metadata-only and that checkout/CodeQL steps are excluded from that event. The
 product caller contract must prove that all target lifecycle events reach the
 single protected reusable implementation and that only the two bounded inputs
 are forwarded.
+
+## Default-branch listener compiler fix
+
+Live `check_run`, comment, push, and scheduled events exposed a reusable-
+workflow permission boundary that static controller tests could not exercise:
+GitHub rejected the entire call before creating a job because the protected
+controller's CodeQL reader/writer jobs request `security-events`, while the
+thin product caller granted none. The listener now grants
+`security-events: write`, which is only the caller's maximum delegation. The
+controller continues to give its model-backed review job read-only access and
+keeps any alert disposition in a separate fenced writer. The product caller
+contract asserts this permission so a future thin-listener cleanup cannot
+silently restore the startup failure.

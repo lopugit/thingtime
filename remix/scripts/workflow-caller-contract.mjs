@@ -74,6 +74,26 @@ assert.match(
   'CodeQL caller must bind a central scan to the event head SHA'
 );
 
+const resolverCaller = readFileSync(
+  resolve(workflowsRoot, 'resolve-pr-conflicts.yml'),
+  'utf8'
+);
+const resolverPermissionsStart = resolverCaller.indexOf('\npermissions:\n');
+const resolverJobsStart = resolverCaller.indexOf('\njobs:\n');
+assert.ok(
+  resolverPermissionsStart >= 0 && resolverJobsStart > resolverPermissionsStart,
+  'resolve-pr-conflicts.yml must retain a top-level permissions block'
+);
+const resolverPermissions = resolverCaller.slice(
+  resolverPermissionsStart,
+  resolverJobsStart
+);
+assert.match(
+  resolverPermissions,
+  /^  security-events: write$/m,
+  'resolve-pr-conflicts.yml must permit the protected controller to inspect and disposition CodeQL alerts'
+);
+
 const developPreviewCaller = readFileSync(
   resolve(workflowsRoot, 'develop-pr-preview.yml'),
   'utf8'
