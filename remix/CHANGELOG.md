@@ -57,6 +57,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **CodeQL promotion remains valid when release-listener work overlaps**: the
+  main promotion now keeps one Electron release-listener contract block rather
+  than combining two independently valid additions into duplicate JavaScript
+  declarations. — Codex (AI), 2026-08-25
 - **Build all branch listener can dispatch its control-plane worker**: the
   reusable workflow's push handoff requires `actions: write`; the main listener
   now grants that inherited permission instead of failing at workflow startup.

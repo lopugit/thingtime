@@ -978,6 +978,11 @@ is fixed, and cite the checklist you ran in the PR description.
       must fail closed. A legitimate derived Graphify commit must be exactly
       one direct child of the already-verified source head and may change only
       the approved Graphify output paths.
+- [ ] Promote two independently green features that add the same workflow
+      caller contract at different source offsets. The combined promotion must
+      keep one declaration/assertion block, and
+      `node remix/scripts/workflow-caller-contract.mjs` must pass before the
+      promotion is considered release-clean.
 - [ ] Set `conflict-marker-size=10` for a planned text path and leave real
       10-character start/base/end markers after the model round; verification
       must reject them. A standalone Markdown `=======` divider must remain
