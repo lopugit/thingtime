@@ -68,6 +68,21 @@ the same protected `.github/actions/lopu-agent` interface. Post-merge Graphify
 refreshes follow the same configured provider when a matching semantic
 credential is available.
 
+When advanced CodeQL is first activated, an older open PR may predate the
+normal listener now present on its target branch. Backfill that immutable live
+snapshot without touching the PR branch by dispatching the protected analyzer:
+
+```bash
+gh workflow run codeql-analysis.yml --ref github-actions \
+  -f pr_number=<PR_NUMBER> \
+  -f expected_head_sha=<LIVE_HEAD_SHA> \
+  -f backfill_listener_owned=true
+```
+
+The worker revalidates the open PR and exact head/base/merge snapshot, skips
+already-complete CodeQL categories, and has no AI credential or repository
+write permission.
+
 Lopu is also the one public repository-maintenance entrypoint. A `develop`
 push starts the standing and per-feature promotion components as jobs inside
 the same **Lopu PR manager** run; a `main` push starts the main→develop sync

@@ -646,6 +646,21 @@ export function assertControlPlaneContract() {
   assert.match(codeql, /ADVANCED_ENABLED: \$\{\{ vars\.CODEQL_ADVANCED_ENABLED \}\}/u);
   assert.match(
     codeql,
+    /backfill_listener_owned:[\s\S]*type: boolean/u,
+    "a trusted manual activation can backfill PRs that predate their target's listener",
+  );
+  assert.match(
+    codeql,
+    /BACKFILL_LISTENER_OWNED: \$\{\{ inputs\.backfill_listener_owned \}\}/u,
+    "the activation-backfill choice reaches only the unprivileged analyzer scope",
+  );
+  assert.match(
+    codeql,
+    /base_has_pr_listener[\s\S]*BACKFILL_LISTENER_OWNED[\s\S]*analysis_ref="\$merge_ref"/u,
+    "listener-owned historical PRs can be centrally backfilled without changing their branch",
+  );
+  assert.match(
+    codeql,
     /\[ "\$ADVANCED_ENABLED" != true \][\s\S]*analyze=false/u,
     "advanced uploads remain cleanly inactive until the ordered default-setup transition completes",
   );
