@@ -2003,22 +2003,38 @@ jobs:
             fetch_ref "$head"
             base_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$base^{commit}")"
             head_sha="$(git -C "$GITHUB_WORKSPACE/trusted" rev-parse "refs/remotes/origin/$head^{commit}")"
+            merge_sha="$(gh api "repos/$REPO/git/ref/pull/$number/merge" --jq '.object.sha' 2>/dev/null || true)"
+            if [ -n "$merge_sha" ] && ! [[ "$merge_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::PR #$number returned an invalid merge-ref SHA."
+              exit 1
+            fi
             worktree="$review_root/$number"
             git -C "$GITHUB_WORKSPACE/trusted" worktree add --detach --quiet "$worktree" "$head_sha"
 
             # Capture the exact open CodeQL alert set before the model runs.
             # Keep the full rule help out of the model context; the rule id,
-            # message, classifications, location, and immutable PR-head SHA are
-            # sufficient evidence for a fix-or-dismiss decision.
+            # message, classifications, location, and immutable PR analysis
+            # SHA are sufficient evidence for a fix-or-dismiss decision.
             alerts="$RUNNER_TEMP/lopu-codeql-alerts/$number.json"
             alerts_raw="$RUNNER_TEMP/lopu-codeql-alerts/$number.raw.json"
             dispositions="$RUNNER_TEMP/lopu-codeql-dispositions/$number.json"
             if gh api --paginate --slurp \
                 "repos/$REPO/code-scanning/alerts?state=open&tool_name=CodeQL&pr=$number&per_page=100" \
                 >"$alerts_raw"; then
-              jq -c --arg sha "$head_sha" '
+              jq -c \
+                --arg head_ref "refs/pull/$number/head" \
+                --arg head_sha "$head_sha" \
+                --arg merge_ref "refs/pull/$number/merge" \
+                --arg merge_sha "$merge_sha" '
                 add // []
-                | map(select(.most_recent_instance.commit_sha == $sha))
+                | map(select(
+                    (.most_recent_instance.ref == $head_ref
+                     and .most_recent_instance.commit_sha == $head_sha)
+                    or
+                    ($merge_sha != ""
+                     and .most_recent_instance.ref == $merge_ref
+                     and .most_recent_instance.commit_sha == $merge_sha)
+                  ))
                 | map({
                     number,
                     state,
@@ -2049,13 +2065,15 @@ jobs:
             jq -c \
               --argjson pr_number "$number" \
               --arg reviewed_head_sha "$head_sha" \
+              --arg reviewed_base_sha "$base_sha" \
               '[.[] | {
                 pr_number:$pr_number,
                 alert_number:.number,
                 state:.state,
                 ref:.instance.ref,
                 commit_sha:.instance.commit_sha,
-                reviewed_head_sha:$reviewed_head_sha
+                reviewed_head_sha:$reviewed_head_sha,
+                reviewed_base_sha:$reviewed_base_sha
               }]' "$alerts" >"$codeql_authority.additions"
             jq -cs '.[0] + .[1]' \
               "$codeql_authority" "$codeql_authority.additions" \
@@ -2068,6 +2086,7 @@ jobs:
               --arg base "$base" \
               --arg head_sha "$head_sha" \
               --arg base_sha "$base_sha" \
+              --arg merge_sha "$merge_sha" \
               --arg path "$worktree" \
               --arg codeql_alerts_path "$alerts" \
               --arg codeql_dispositions_path "$dispositions" \
@@ -2077,6 +2096,7 @@ jobs:
                 base:$base,
                 head_sha:$head_sha,
                 base_sha:$base_sha,
+                merge_sha:$merge_sha,
                 path:$path,
                 codeql_alerts_path:$codeql_alerts_path,
                 codeql_dispositions_path:$codeql_dispositions_path
@@ -2492,7 +2512,7 @@ jobs:
             record="$(base64 --decode <<<"$encoded")"
             number="$(jq -r '.number' <<<"$record")"
             reviewed_head="$(jq -r '.head_sha' <<<"$record")"
-            head_ref="$(jq -r '.head' <<<"$record")"
+            reviewed_base="$(jq -r '.base_sha' <<<"$record")"
             proposals="$(jq -r '.codeql_dispositions_path' <<<"$record")"
             [ -s "$proposals" ] || continue
 
@@ -2526,13 +2546,19 @@ jobs:
                 continue
                 ;;
             esac
-            current_head="$(gh api "repos/$REPO/git/ref/heads/$(jq -rn --arg value "$head_ref" '$value | @uri')" --jq '.object.sha')"
-            [[ "$current_head" =~ ^[0-9a-f]{40}$ ]] || {
-              echo "::error::PR #$number returned an invalid live head while validating CodeQL dispositions."
+            live_pr="$(gh api "repos/$REPO/pulls/$number")"
+            current_head="$(jq -r '.head.sha' <<<"$live_pr")"
+            current_base="$(jq -r '.base.sha' <<<"$live_pr")"
+            current_repo="$(jq -r '.head.repo.full_name // empty' <<<"$live_pr")"
+            [[ "$current_head" =~ ^[0-9a-f]{40}$ && "$current_base" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::PR #$number returned invalid live revisions while validating CodeQL dispositions."
               exit 1
             }
-            if [ "$current_head" != "$reviewed_head" ]; then
-              echo "::warning::Skipping CodeQL dispositions for PR #$number because its head changed after the reviewed evidence snapshot; a fresh scan and Lopu pass will decide them."
+            if [ "$(jq -r '.state' <<<"$live_pr")" != open ] \
+               || [ "$current_repo" != "$REPO" ] \
+               || [ "$current_head" != "$reviewed_head" ] \
+               || [ "$current_base" != "$reviewed_base" ]; then
+              echo "::warning::Skipping CodeQL dispositions for PR #$number because its head, base, repository, or state changed after the reviewed evidence snapshot; a fresh scan and Lopu pass will decide them."
               continue
             fi
 
@@ -2549,19 +2575,30 @@ jobs:
                 --argjson pr_number "$number" \
                 --argjson alert_number "$alert_number" \
                 --arg reviewed_head_sha "$reviewed_head" \
+                --arg reviewed_base_sha "$reviewed_base" \
                 '.[] | select(
                   .pr_number == $pr_number
                   and .alert_number == $alert_number
                   and .reviewed_head_sha == $reviewed_head_sha
+                  and .reviewed_base_sha == $reviewed_base_sha
                 )' "$trusted_authority" | tail -1)"
               [ -n "$alert" ] || {
-                echo "::error::Lopu proposed CodeQL alert #$alert_number, but it was absent from PR #$number's immutable pre-model authority snapshot."
-                exit 1
+                echo "::warning::Skipping CodeQL alert #$alert_number because it was outside PR #$number's bounded immutable authority snapshot."
+                continue
               }
+              analysis_ref="$(jq -r '.ref' <<<"$alert")"
+              analysis_sha="$(jq -r '.commit_sha' <<<"$alert")"
+              if [ "$analysis_ref" = "refs/pull/$number/head" ]; then
+                expected_analysis_sha="$reviewed_head"
+              elif [ "$analysis_ref" = "refs/pull/$number/merge" ]; then
+                expected_analysis_sha="$(jq -r '.merge_sha' <<<"$record")"
+              else
+                expected_analysis_sha=''
+              fi
               [ "$(jq -r '.state' <<<"$alert")" = open ] \
-                && [ "$(jq -r '.ref' <<<"$alert")" = "refs/pull/$number/head" ] \
-                && [ "$(jq -r '.commit_sha' <<<"$alert")" = "$reviewed_head" ] || {
-                  echo "::error::CodeQL alert #$alert_number is not bound to PR #$number's reviewed head."
+                && [ -n "$expected_analysis_sha" ] \
+                && [ "$analysis_sha" = "$expected_analysis_sha" ] || {
+                  echo "::error::CodeQL alert #$alert_number is not bound to PR #$number's reviewed head-or-merge analysis."
                   exit 1
                 }
 
@@ -2571,13 +2608,19 @@ jobs:
                 --arg reason "$(jq -r '.reason' <<<"$proposal")" \
                 --arg comment "$(jq -r '.comment' <<<"$proposal")" \
                 --arg reviewed_head_sha "$reviewed_head" \
+                --arg reviewed_base_sha "$reviewed_base" \
                 --arg expected_head_sha "$current_head" \
+                --arg analysis_ref "$analysis_ref" \
+                --arg analysis_sha "$analysis_sha" \
                 '{
                   pr_number:$pr_number,
                   alert_number:$alert_number,
                   reason:$reason,
                   comment:$comment,
                   reviewed_head_sha:$reviewed_head_sha,
+                  reviewed_base_sha:$reviewed_base_sha,
+                  analysis_ref:$analysis_ref,
+                  analysis_sha:$analysis_sha,
                   expected_head_sha:$expected_head_sha
                 }')"
               jq -c --argjson entry "$entry" '. + [$entry]' "$canonical" >"$canonical.next"
@@ -2776,10 +2819,13 @@ jobs:
               type == "object"
               and (keys | sort) == [
                 "alert_number",
+                "analysis_ref",
+                "analysis_sha",
                 "comment",
                 "expected_head_sha",
                 "pr_number",
                 "reason",
+                "reviewed_base_sha",
                 "reviewed_head_sha"
               ]
               and (.pr_number | type == "number" and . > 0 and floor == .)
@@ -2788,6 +2834,9 @@ jobs:
               and (.comment | type == "string"
                    and startswith("Lopu evidence: ")
                    and length >= 40 and length <= 1000)
+              and (.analysis_ref | type == "string" and test("^refs/pull/[1-9][0-9]*/(head|merge)$"))
+              and (.analysis_sha | type == "string" and test("^[0-9a-f]{40}$"))
+              and (.reviewed_base_sha | type == "string" and test("^[0-9a-f]{40}$"))
               and (.reviewed_head_sha | type == "string" and test("^[0-9a-f]{40}$"))
               and (.expected_head_sha | type == "string" and test("^[0-9a-f]{40}$")))
           ' "$dispositions" >/dev/null || {
@@ -2802,15 +2851,21 @@ jobs:
             alert_number="$(jq -r '.alert_number' <<<"$entry")"
             reason="$(jq -r '.reason' <<<"$entry")"
             comment="$(jq -r '.comment' <<<"$entry")"
+            analysis_ref="$(jq -r '.analysis_ref' <<<"$entry")"
+            analysis_sha="$(jq -r '.analysis_sha' <<<"$entry")"
+            reviewed_base="$(jq -r '.reviewed_base_sha' <<<"$entry")"
             reviewed_head="$(jq -r '.reviewed_head_sha' <<<"$entry")"
             expected_head="$(jq -r '.expected_head_sha' <<<"$entry")"
 
             pr="$(gh api "repos/$REPO/pulls/$pr_number")"
             live_head="$(jq -r '.head.sha' <<<"$pr")"
+            live_base="$(jq -r '.base.sha' <<<"$pr")"
             live_repo="$(jq -r '.head.repo.full_name // empty' <<<"$pr")"
             if [ "$(jq -r '.state' <<<"$pr")" != open ] \
                || [ "$live_repo" != "$REPO" ] \
-               || [ "$live_head" != "$expected_head" ]; then
+               || [ "$live_head" != "$expected_head" ] \
+               || [ "$live_head" != "$reviewed_head" ] \
+               || [ "$live_base" != "$reviewed_base" ]; then
               echo "::warning::Skipping CodeQL alert #$alert_number because PR #$pr_number no longer matches Lopu's trusted handoff."
               continue
             fi
@@ -2819,9 +2874,9 @@ jobs:
             alert_ref="$(jq -r '.most_recent_instance.ref' <<<"$alert")"
             alert_sha="$(jq -r '.most_recent_instance.commit_sha' <<<"$alert")"
             if [ "$(jq -r '.state' <<<"$alert")" != open ] \
-               || [ "$alert_ref" != "refs/pull/$pr_number/head" ] \
-               || [ "$alert_sha" != "$reviewed_head" ]; then
-              echo "::warning::Skipping CodeQL alert #$alert_number because its live state or immutable PR-head evidence changed."
+               || [ "$alert_ref" != "$analysis_ref" ] \
+               || [ "$alert_sha" != "$analysis_sha" ]; then
+              echo "::warning::Skipping CodeQL alert #$alert_number because its live state or immutable PR-analysis evidence changed."
               continue
             fi
 

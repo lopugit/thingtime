@@ -21,8 +21,18 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **CodeQL now has a protected advanced-setup implementation for every PR
+  target and branch**: a thin product listener calls the canonical
+  `github-actions` workflow for unfiltered `pull_request` and all-branch
+  `push` events. Open PR heads use their PR analysis as the single owner rather
+  than paying for a duplicate push scan; direct `github-actions` pushes are
+  scanned by the protected implementation itself. The workflow analyzes
+  Actions and JavaScript/TypeScript without persisted checkout credentials or
+  any AI secret. — Codex (AI), 2026-08-25
 - **Lopu now owns evidence-backed CodeQL triage for reviewed PRs**: each review
-  receives the exact open CodeQL findings bound to the immutable PR head. Real
+  receives the exact open CodeQL findings bound to the immutable PR head or
+  advanced-setup merge analysis. The isolated handoff revalidates the reviewed
+  head and base revisions plus the exact analysis ref and SHA. Real
   findings are repaired in the PR branch and left open for the next scan to
   mark fixed; only demonstrably inapplicable findings can be proposed as
   `false positive` or `used in tests`. A separate model-free job revalidates

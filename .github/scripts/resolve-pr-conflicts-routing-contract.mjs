@@ -352,7 +352,7 @@ function assertWorkflowSource() {
   assert.match(reviewBlock, /codeql_authority_b64/u, "pre-model CodeQL authority crosses an immutable step output");
   assert.match(
     reviewBlock,
-    /immutable pre-model authority snapshot/u,
+    /bounded immutable authority snapshot/u,
     "model proposals must match the trusted pre-model CodeQL snapshot",
   );
   assert.match(reviewBlock, /the next CodeQL scan\n\s+will mark it fixed/u, "real findings are fixed through code and a fresh scan");
@@ -360,9 +360,13 @@ function assertWorkflowSource() {
   assert.match(reviewBlock, /Do not use `won't fix`/u, "Lopu never chooses the won't-fix disposition");
   assert.match(
     reviewBlock,
-    /\[ "\$current_head" != "\$reviewed_head" \]/u,
-    "dispositions wait for a fresh scan whenever the reviewed PR head changed",
+    /\[ "\$current_head" != "\$reviewed_head" \][\s\S]*\[ "\$current_base" != "\$reviewed_base" \]/u,
+    "dispositions wait for a fresh scan whenever the reviewed PR head or base changed",
   );
+  assert.match(reviewBlock, /refs\/pull\/\$number\/head/u, "snapshot accepts default-setup PR-head analyses");
+  assert.match(reviewBlock, /refs\/pull\/\$number\/merge/u, "snapshot accepts advanced-setup PR-merge analyses");
+  assert.match(reviewBlock, /\.reviewed_base_sha == \$reviewed_base_sha/u, "authority binds the reviewed base revision");
+  assert.match(reviewBlock, /\.merge_sha' <<<"\$record"/u, "merge-ref alerts bind the captured merge SHA");
   assert.match(
     reviewBlock,
     /"false positive" \| "used in tests"/u,
@@ -375,7 +379,9 @@ function assertWorkflowSource() {
     "the CodeQL writer is credential-free apart from GitHub's scoped token",
   );
   assert.match(codeqlDispositionBlock, /\.head\.sha/u, "writer revalidates the live PR head");
-  assert.match(codeqlDispositionBlock, /refs\/pull\/\$pr_number\/head/u, "writer revalidates the alert's PR ref");
+  assert.match(codeqlDispositionBlock, /\.base\.sha/u, "writer revalidates the live PR base");
+  assert.match(codeqlDispositionBlock, /\$alert_ref" != "\$analysis_ref/u, "writer revalidates the exact head-or-merge analysis ref");
+  assert.match(codeqlDispositionBlock, /\$alert_sha" != "\$analysis_sha/u, "writer revalidates the exact analysis SHA");
   assert.match(codeqlDispositionBlock, /most_recent_instance\.commit_sha/u, "writer revalidates the alert's reviewed commit");
   assert.match(codeqlDispositionBlock, /\.state' <<<"\$alert"\)" != open/u, "writer only changes open alerts");
   assert.match(

@@ -14,6 +14,7 @@ const actions = resolve(githubRoot, "actions");
 const scripts = resolve(githubRoot, "scripts");
 
 const IMPLEMENTATIONS = [
+  "codeql-analysis.yml",
   "develop-pr-preview.yml",
   "electron-release.yml",
   "electron-pr-release.yml",
@@ -572,6 +573,33 @@ export function assertControlPlaneContract() {
     assert.match(source, /\non:\n(?:[\s\S]*?\n)?  workflow_call:/, `${name}: exposes workflow_call`);
     assert.match(source, /\njobs:\n/, `${name}: contains implementation jobs`);
   }
+
+  const codeql = readWorkflow("codeql-analysis.yml");
+  assert.match(
+    codeql,
+    /^  pull_request:$/mu,
+    "PRs targeting the protected branch receive a direct CodeQL analysis",
+  );
+  assert.match(
+    codeql,
+    /^  push:\n    branches: \[github-actions\]$/mu,
+    "the protected branch scans its own direct pushes",
+  );
+  assert.match(codeql, /github\/codeql-action\/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827/u);
+  assert.match(codeql, /github\/codeql-action\/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827/u);
+  assert.match(codeql, /language: \[actions, javascript-typescript\]/u);
+  assert.match(codeql, /^      security-events: write$/mu);
+  assert.match(
+    codeql,
+    /any\(\.\[\]; \.headRefOid == \$sha\)/u,
+    "an open PR owns one analysis instead of duplicating its branch push",
+  );
+  assert.match(codeql, /persist-credentials: false/u);
+  assert.doesNotMatch(
+    codeql,
+    /pull_request_target|ANTHROPIC_API_KEY|OPENAI_API_KEY|secrets\./u,
+    "CodeQL never executes PR code in a privileged target or AI-secret context",
+  );
 
   const developPreview = readWorkflow("develop-pr-preview.yml");
   assert.doesNotMatch(
