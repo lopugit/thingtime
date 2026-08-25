@@ -158,6 +158,13 @@ installed.
 Vercel project settings it cannot infer. Supply them from your own Vercel
 account — every value below is a placeholder:
 
+PR-event handoffs and deployment workers use separate, non-cancelling per-PR
+queues. A repository dispatch therefore cannot cancel the metadata-only run
+that created it, and a newer synchronize/edited event waits instead of
+interrupting an active deployment. Every queued worker revalidates the live PR
+head and lifecycle before changing Vercel state, so superseded requests exit
+without publishing stale code.
+
 ```sh
 VERCEL_API_TOKEN="<vercel-rest-api-token>"
 VERCEL_PROJECT_ID="prj_<project-id>"

@@ -662,6 +662,16 @@ export function assertControlPlaneContract() {
   assert.match(codeql, /sha: \$\{\{ needs\.scope\.outputs\.analysis_sha \}\}/u);
 
   const developPreview = readWorkflow("develop-pr-preview.yml");
+  assert.match(
+    developPreview,
+    /group: develop-pr-preview-\$\{\{ github\.event_name == 'pull_request_target' && 'handoff' \|\| 'worker' \}\}-/u,
+    "develop preview keeps its metadata handoff separate from the dispatched worker",
+  );
+  assert.match(
+    developPreview,
+    /group: develop-pr-preview-[^\n]+\n\s*queue: max\n\s*cancel-in-progress: false/u,
+    "develop preview queues per-PR requests without cancelling an active handoff or deployment",
+  );
   assert.doesNotMatch(
     developPreview,
     /^  (?:pull_request_target|repository_dispatch|schedule|workflow_dispatch):/mu,

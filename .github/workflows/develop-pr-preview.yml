@@ -12,9 +12,15 @@ on:
 permissions:
   contents: read
 
+# The PR event run is a metadata-only handoff that starts a repository-dispatch
+# worker. Keep those two phases in different per-PR groups so the worker cannot
+# cancel its own caller. Queue subsequent events instead of interrupting an
+# active deployment; the controller revalidates live PR state before mutation,
+# so stale queued requests exit safely.
 concurrency:
-  group: develop-pr-preview-${{ github.event.pull_request.number || github.event.client_payload.pr_number || inputs.pr_number || 'reconcile' }}
-  cancel-in-progress: true
+  group: develop-pr-preview-${{ github.event_name == 'pull_request_target' && 'handoff' || 'worker' }}-${{ github.event.pull_request.number || github.event.client_payload.pr_number || inputs.pr_number || 'reconcile' }}
+  queue: max
+  cancel-in-progress: false
 
 jobs:
   dispatch:
