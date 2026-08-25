@@ -1,0 +1,18 @@
+{
+  "name": "thingtime-chatgpt",
+  "version": "1.0.0",
+  "description": "Secure multi-account Thingtime tools for ChatGPT and Codex.",
+  "author": {
+    "name": "Thingtime"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Thingtime",
+    "shortDescription": "Use selected Thingtime accounts securely in ChatGPT.",
+    "longDescription": "Connect one or more Thingtime accounts with scoped, revocable tokens. Read, search, create, update, comment, react, save, share, and switch accounts without exposing a token in chat.",
+    "developerName": "Thingtime",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Use my selected Thingtime account to help with my Things. Ask for confirmation before any write."
+  }
+}

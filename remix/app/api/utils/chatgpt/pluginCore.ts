@@ -1,0 +1,197 @@
+import { normalizeDesktopState, normalizePkceChallenge } from '../apps/desktopOAuthRedirect';
+
+export const CHATGPT_MCP_PATH = '/api/v1/integrations/chatgpt/mcp';
+export const CHATGPT_AUTHORIZE_PATH = '/api/v1/integrations/chatgpt/oauth/authorize';
+export const CHATGPT_TOKEN_PATH = '/api/v1/integrations/chatgpt/oauth/token';
+export const CHATGPT_PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource';
+export const CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-authorization-server';
+export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
+
+export const CHATGPT_PLUGIN_FEATURES = {
+  'chatgpt.mcp': '1.0.0',
+  'chatgpt.oauth': '1.0.0',
+  'chatgpt.connections': '1.0.0',
+  'chatgpt.things.read': '1.0.0',
+  'chatgpt.things.write': '1.0.0'
+} as const;
+
+export const CHATGPT_PLUGIN_ROUTES = [
+  { method: 'POST', path: CHATGPT_MCP_PATH, feature: 'chatgpt.mcp' },
+  { method: 'GET', path: CHATGPT_AUTHORIZE_PATH, feature: 'chatgpt.oauth' },
+  { method: 'POST', path: CHATGPT_AUTHORIZE_PATH, feature: 'chatgpt.oauth' },
+  { method: 'POST', path: CHATGPT_TOKEN_PATH, feature: 'chatgpt.oauth' },
+  { method: 'GET', path: CHATGPT_PROTECTED_RESOURCE_METADATA_PATH, feature: 'chatgpt.oauth' },
+  { method: 'GET', path: CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH, feature: 'chatgpt.oauth' },
+  { method: 'GET', path: CHATGPT_CAPABILITY_MANIFEST_PATH, feature: 'chatgpt.mcp' }
+] as const;
+
+export type ChatGptOAuthRequest = {
+  clientId: string;
+  redirectUri: string;
+  state: string;
+  codeChallenge: string;
+  resource: string;
+  scope: string[];
+};
+
+export type ChatGptConnection = {
+  id: string;
+  label: string;
+  endpoint: string;
+  token: string;
+  user: { id: string; username: string; displayName: string | null };
+  scopes: string[];
+  connectedAt: string;
+};
+
+export type ChatGptCredentialBundle = {
+  version: 1;
+  defaultConnectionId: string;
+  connections: ChatGptConnection[];
+};
+
+const DEFAULT_ALLOWED_ENDPOINTS = ['https://thingtime.com'];
+const CHATGPT_REDIRECT_URIS = new Set([
+  'https://chatgpt.com/connector_platform_oauth_redirect',
+  'https://chat.openai.com/connector_platform_oauth_redirect'
+]);
+
+const cleanOrigin = (value: unknown): string | null => {
+  if (typeof value !== 'string' || !value.trim() || value.length > 2048) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.username || url.password || url.pathname !== '/' || url.search || url.hash) return null;
+    if (url.protocol !== 'https:' && !(process.env.NODE_ENV !== 'production' && url.protocol === 'http:')) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+};
+
+export const allowedThingtimeEndpoints = (): string[] => {
+  const configured = process.env.THINGTIME_CHATGPT_ALLOWED_ENDPOINTS;
+  const candidates = configured ? configured.split(',') : DEFAULT_ALLOWED_ENDPOINTS;
+  return [...new Set(candidates.map(cleanOrigin).filter((value): value is string => Boolean(value)))];
+};
+
+export const normalizeThingtimeEndpoint = (value: unknown): string | null => {
+  const normalized = cleanOrigin(value);
+  return normalized && allowedThingtimeEndpoints().includes(normalized) ? normalized : null;
+};
+
+export const allowedChatGptClientIds = (): string[] => {
+  const configured = process.env.THINGTIME_CHATGPT_OAUTH_CLIENT_IDS;
+  const candidates = configured ? configured.split(',') : ['https://chatgpt.com'];
+  return [...new Set(candidates.map((value) => value.trim()).filter(Boolean))];
+};
+
+const normalizeChatGptRedirectUri = (value: unknown): string | null => {
+  if (typeof value !== 'string' || value.length > 2048) return null;
+  return CHATGPT_REDIRECT_URIS.has(value) ? value : null;
+};
+
+const normalizeResource = (value: unknown, origin: string): string | null => {
+  if (typeof value !== 'string' || value.length > 2048) return null;
+  const expected = `${origin}${CHATGPT_MCP_PATH}`;
+  return value === expected ? value : null;
+};
+
+export const parseChatGptAuthorizationRequest = (
+  params: URLSearchParams,
+  origin: string
+): { ok: true; request: ChatGptOAuthRequest } | { ok: false; error: string } => {
+  if (params.get('response_type') !== 'code') return { ok: false, error: 'response_type must be code' };
+
+  const clientId = params.get('client_id')?.trim() || '';
+  if (!allowedChatGptClientIds().includes(clientId)) return { ok: false, error: 'Unknown OAuth client' };
+
+  const redirectUri = normalizeChatGptRedirectUri(params.get('redirect_uri'));
+  if (!redirectUri) return { ok: false, error: 'redirect_uri is not a supported ChatGPT callback' };
+
+  const state = normalizeDesktopState(params.get('state'));
+  if (!state) return { ok: false, error: 'state must be a random string of 16-512 characters' };
+
+  const codeChallenge = normalizePkceChallenge(params.get('code_challenge'), params.get('code_challenge_method'));
+  if (!codeChallenge) return { ok: false, error: 'code_challenge_method must be S256 with a valid code_challenge' };
+
+  const resource = normalizeResource(params.get('resource'), origin);
+  if (!resource) return { ok: false, error: 'resource must be this Thingtime MCP endpoint' };
+
+  const scope = (params.get('scope') || 'thingtime')
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!scope.includes('thingtime') || scope.length > 16) return { ok: false, error: 'scope must include thingtime' };
+
+  return { ok: true, request: { clientId, redirectUri, state, codeChallenge, resource, scope } };
+};
+
+export const parseCredentialBundle = (value: unknown): ChatGptCredentialBundle | null => {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<ChatGptCredentialBundle>;
+  if (candidate.version !== 1 || !Array.isArray(candidate.connections) || candidate.connections.length === 0 || candidate.connections.length > 20) {
+    return null;
+  }
+
+  const connections = candidate.connections.filter((connection): connection is ChatGptConnection => {
+    if (!connection || typeof connection !== 'object') return false;
+    const item = connection as Partial<ChatGptConnection>;
+    return (
+      typeof item.id === 'string' &&
+      typeof item.label === 'string' &&
+      Boolean(normalizeThingtimeEndpoint(item.endpoint)) &&
+      typeof item.token === 'string' &&
+      item.token.length > 20 &&
+      item.user !== null &&
+      typeof item.user === 'object' &&
+      typeof item.user?.id === 'string' &&
+      typeof item.user?.username === 'string' &&
+      Array.isArray(item.scopes) &&
+      typeof item.connectedAt === 'string'
+    );
+  });
+  if (connections.length !== candidate.connections.length) return null;
+
+  const defaultConnectionId =
+    typeof candidate.defaultConnectionId === 'string' && connections.some((connection) => connection.id === candidate.defaultConnectionId)
+      ? candidate.defaultConnectionId
+      : connections[0].id;
+  return { version: 1, defaultConnectionId, connections };
+};
+
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
+
+export const renderConnectionPage = (requestToken: string, allowedEndpoints: string[]) => {
+  const options = allowedEndpoints.map((endpoint) => `<option value="${escapeHtml(endpoint)}">${escapeHtml(endpoint)}</option>`).join('');
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connect Thingtime to ChatGPT</title>
+<style>body{margin:0;background:#f5f5f5;color:#161616;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{box-sizing:border-box;max-width:680px;margin:32px auto;padding:30px;background:#fff;border:1px solid #ddd;border-radius:16px}h1{margin:0 0 8px;font-size:27px}p{color:#545454}fieldset{border:1px solid #d8d8d8;border-radius:12px;padding:16px;margin:16px 0}legend{padding:0 6px;font-weight:600}label{display:block;font-weight:600;margin-top:12px}input,select,button{font:inherit;box-sizing:border-box;width:100%;padding:10px;margin-top:5px;border:1px solid #aaa;border-radius:8px}button{cursor:pointer;background:#111;color:#fff;border-color:#111;font-weight:650;margin-top:18px}.secondary{background:#fff;color:#111}.hint{font-size:14px}.warn{border-left:3px solid #111;padding-left:12px}@media(max-width:720px){.card{margin:0;border:0;border-radius:0;min-height:100vh;padding:22px}}</style></head>
+<body><main class="card"><h1>Connect Thingtime</h1><p>Choose one or more Thingtime accounts. Each connection uses a scoped, revocable personal access token.</p><p class="warn">Tokens are encrypted by Thingtime and are never returned to ChatGPT or placed in a chat.</p><form method="post" autocomplete="off"><input type="hidden" name="request" value="${escapeHtml(requestToken)}"><div id="accounts"><fieldset><legend>Thingtime account</legend><label>Account label<input name="label" maxlength="80" placeholder="Personal" required></label><label>Thingtime API endpoint<select name="endpoint" required>${options}</select></label><label>Personal access token<input type="password" name="token" minlength="24" maxlength="8192" spellcheck="false" required></label><p class="hint">Create a least-privilege token in Thingtime Settings → Token minter. It must include at least <code>things.read</code>.</p></fieldset></div><button class="secondary" type="button" id="add">Add another account</button><button type="submit">Connect accounts</button></form></main><script>const a=document.getElementById('add'),c=document.getElementById('accounts');a.addEventListener('click',()=>{const f=c.firstElementChild.cloneNode(true);f.querySelectorAll('input').forEach(i=>i.value='');c.appendChild(f);});</script></body></html>`;
+};
+
+export const pluginDiscovery = (origin: string) => ({
+  protectedResource: {
+    resource: `${origin}${CHATGPT_MCP_PATH}`,
+    authorization_servers: [origin],
+    bearer_methods_supported: ['header'],
+    scopes_supported: ['thingtime']
+  },
+  authorizationServer: {
+    issuer: origin,
+    authorization_endpoint: `${origin}${CHATGPT_AUTHORIZE_PATH}`,
+    token_endpoint: `${origin}${CHATGPT_TOKEN_PATH}`,
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code'],
+    code_challenge_methods_supported: ['S256'],
+    token_endpoint_auth_methods_supported: ['none'],
+    scopes_supported: ['thingtime'],
+    authorization_response_iss_parameter_supported: true
+  },
+  capabilityManifest: {
+    schemaVersion: '1.0.0',
+    origin,
+    features: CHATGPT_PLUGIN_FEATURES,
+    routes: CHATGPT_PLUGIN_ROUTES
+  }
+});

@@ -11,7 +11,7 @@ export type SessionDoc = {
   expiresAt: Date | null;
   revokedAt: Date | null;
   type: 'tt.session';
-  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'oauth-code';
+  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-mcp';
   meta?: Record<string, any>;
 };
 

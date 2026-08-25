@@ -17,6 +17,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **Thingtime ChatGPT/Codex MCP connector.** A public OAuth 2.1 + S256 PKCE
+  streamable-HTTP MCP gateway now connects multiple named, allowlisted
+  Thingtime API endpoints through encrypted, scoped and revocable PATs. The
+  bridge token cannot act as a Thingtime account session; tools are restricted
+  to account management plus Things reads and explicitly confirmed writes.
+  Protected-resource/auth-server discovery, an origin-scoped capability
+  manifest, API docs, and the distributable plugin package live together so
+  clients can negotiate the contract rather than route-probing. — Codex (AI),
+  2026-08-25
+
 ### Security
 
 - **Passkey app links join the relationship-uniqueness family.** `passkey-app-link`

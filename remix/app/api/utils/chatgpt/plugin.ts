@@ -1,0 +1,665 @@
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+
+import { json, redirect } from '~/api/http';
+import { signJwt, signPurposeToken, verifyJwt, verifyPurposeToken } from '~/api/utils/auth/jwt';
+import { createSession, getLiveSession, revokeSession } from '~/api/utils/auth/sessions';
+import type { SessionDoc } from '~/api/utils/auth/sessions';
+import { getSessionsCollection } from '~/api/utils/mongodb/collections';
+import { normalizePkceVerifier, pkceVerifierMatches } from '~/api/utils/apps/desktopOAuthCore';
+
+import {
+  CHATGPT_AUTHORIZE_PATH,
+  CHATGPT_PROTECTED_RESOURCE_METADATA_PATH,
+  CHATGPT_MCP_PATH,
+  CHATGPT_PLUGIN_FEATURES,
+  allowedThingtimeEndpoints,
+  normalizeThingtimeEndpoint,
+  parseChatGptAuthorizationRequest,
+  parseCredentialBundle,
+  pluginDiscovery,
+  renderConnectionPage
+} from './pluginCore';
+import type { ChatGptConnection, ChatGptCredentialBundle, ChatGptOAuthRequest } from './pluginCore';
+
+const OAUTH_REQUEST_PURPOSE = 'chatgpt-oauth-request';
+const OAUTH_CODE_PURPOSE = 'chatgpt-oauth-code';
+const MCP_SESSION_PURPOSE = 'chatgpt-mcp';
+const OAUTH_CODE_TTL_MS = 5 * 60 * 1000;
+const MCP_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+const MAX_REQUEST_BYTES = 64 * 1024;
+const MAX_UPSTREAM_RESPONSE_BYTES = 512 * 1024;
+
+type Failure = { ok: false; status: number; error: string };
+type Success<T> = { ok: true; value: T };
+type Result<T> = Failure | Success<T>;
+
+const noStoreHeaders = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
+
+const requestOrigin = (request: Request) => new URL(request.url).origin;
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
+
+const configuredCipherKey = (): Buffer | null => {
+  const encoded = process.env.THINGTIME_CHATGPT_CREDENTIAL_KEY?.trim();
+  if (!encoded) return null;
+  try {
+    const key = Buffer.from(encoded, 'base64');
+    return key.length === 32 ? key : null;
+  } catch {
+    return null;
+  }
+};
+
+const encryptBundle = (bundle: ChatGptCredentialBundle): Result<string> => {
+  const key = configuredCipherKey();
+  if (!key) return { ok: false, status: 503, error: 'ChatGPT credential storage is not configured on this Thingtime endpoint' };
+
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const plaintext = Buffer.from(JSON.stringify(bundle), 'utf8');
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return { ok: true, value: `${iv.toString('base64url')}.${tag.toString('base64url')}.${ciphertext.toString('base64url')}` };
+};
+
+const decryptBundle = (ciphertext: unknown): Result<ChatGptCredentialBundle> => {
+  const key = configuredCipherKey();
+  if (!key) return { ok: false, status: 503, error: 'ChatGPT credential storage is not configured on this Thingtime endpoint' };
+  if (typeof ciphertext !== 'string') return { ok: false, status: 401, error: 'ChatGPT connection is invalid' };
+
+  const parts = ciphertext.split('.');
+  if (parts.length !== 3) return { ok: false, status: 401, error: 'ChatGPT connection is invalid' };
+  try {
+    const iv = Buffer.from(parts[0], 'base64url');
+    const tag = Buffer.from(parts[1], 'base64url');
+    const encrypted = Buffer.from(parts[2], 'base64url');
+    if (iv.length !== 12 || tag.length !== 16 || encrypted.length === 0) throw new Error('invalid cipher envelope');
+    const decipher = createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    const plain = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    const bundle = parseCredentialBundle(JSON.parse(plain.toString('utf8')));
+    if (!bundle) throw new Error('invalid bundle');
+    return { ok: true, value: bundle };
+  } catch {
+    return { ok: false, status: 401, error: 'ChatGPT connection is invalid' };
+  }
+};
+
+const limitRequestBody = async (request: Request, maxBytes = MAX_REQUEST_BYTES): Promise<Result<string>> => {
+  const length = Number(request.headers.get('content-length') || 0);
+  if (Number.isFinite(length) && length > maxBytes) return { ok: false, status: 413, error: 'Request body too large' };
+  const reader = request.body?.getReader();
+  if (!reader) return { ok: true, value: '' };
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    received += value.byteLength;
+    if (received > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return { ok: false, status: 413, error: 'Request body too large' };
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, value: new TextDecoder().decode(merged) };
+};
+
+const formBody = async (request: Request): Promise<Result<URLSearchParams>> => {
+  const body = await limitRequestBody(request);
+  if (body.ok === false) return { ok: false, status: body.status, error: body.error };
+  const contentType = request.headers.get('content-type') || '';
+  if (!contentType.includes('application/x-www-form-urlencoded')) {
+    return { ok: false, status: 415, error: 'Content-Type must be application/x-www-form-urlencoded' };
+  }
+  return { ok: true, value: new URLSearchParams(body.value) };
+};
+
+const oauthErrorPage = (status: number, message: string) =>
+  new Response(`<!doctype html><meta charset="utf-8"><title>Thingtime connection</title><main><h1>Thingtime connection could not continue</h1><p>${escapeHtml(message)}</p></main>`, {
+    status,
+    headers: { ...noStoreHeaders, 'Content-Type': 'text/html; charset=utf-8' }
+  });
+
+const clientRequestFromClaims = (claims: Record<string, unknown>): ChatGptOAuthRequest | null => {
+  const clientId = typeof claims.clientId === 'string' ? claims.clientId : '';
+  const redirectUri = typeof claims.redirectUri === 'string' ? claims.redirectUri : '';
+  const state = typeof claims.state === 'string' ? claims.state : '';
+  const codeChallenge = typeof claims.codeChallenge === 'string' ? claims.codeChallenge : '';
+  const resource = typeof claims.resource === 'string' ? claims.resource : '';
+  const scope = Array.isArray(claims.scope) ? claims.scope.filter((value): value is string => typeof value === 'string') : [];
+  if (!clientId || !redirectUri || !state || !codeChallenge || !resource || !scope.includes('thingtime')) return null;
+  return { clientId, redirectUri, state, codeChallenge, resource, scope };
+};
+
+type PatIntrospection = {
+  ok: boolean;
+  token?: { scopes?: unknown; status?: unknown };
+  user?: { id?: unknown; username?: unknown; displayName?: unknown };
+  error?: unknown;
+};
+
+const boundedResponseText = async (response: Response): Promise<Result<string>> => {
+  const declared = Number(response.headers.get('content-length') || 0);
+  if (Number.isFinite(declared) && declared > MAX_UPSTREAM_RESPONSE_BYTES) {
+    return { ok: false, status: 502, error: 'Thingtime endpoint response is too large' };
+  }
+  const reader = response.body?.getReader();
+  if (!reader) return { ok: true, value: '' };
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    received += value.byteLength;
+    if (received > MAX_UPSTREAM_RESPONSE_BYTES) {
+      await reader.cancel().catch(() => {});
+      return { ok: false, status: 502, error: 'Thingtime endpoint response is too large' };
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, value: new TextDecoder().decode(merged) };
+};
+
+const endpointRequest = async (
+  endpoint: string,
+  token: string,
+  path: string,
+  init: { method?: string; query?: Record<string, string | number | undefined>; body?: unknown } = {}
+): Promise<Result<unknown>> => {
+  const normalizedEndpoint = normalizeThingtimeEndpoint(endpoint);
+  if (!normalizedEndpoint) return { ok: false, status: 403, error: 'This Thingtime endpoint is no longer allowed by the gateway' };
+
+  const url = new URL(path, normalizedEndpoint);
+  for (const [key, value] of Object.entries(init.query || {})) {
+    if (value !== undefined && value !== '') url.searchParams.set(key, String(value));
+  }
+  try {
+    const response = await fetch(url, {
+      method: init.method || 'GET',
+      redirect: 'error',
+      signal: AbortSignal.timeout(15_000),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+        ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' })
+      },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body)
+    });
+    const text = await boundedResponseText(response);
+    if (!text.ok) return text;
+    let payload: unknown;
+    try {
+      payload = text.value ? JSON.parse(text.value) : null;
+    } catch {
+      return { ok: false, status: 502, error: 'Thingtime endpoint returned invalid JSON' };
+    }
+    if (!response.ok || (payload && typeof payload === 'object' && (payload as { ok?: unknown }).ok === false)) {
+      const error = payload && typeof payload === 'object' && typeof (payload as { error?: unknown }).error === 'string'
+        ? (payload as { error: string }).error.slice(0, 1024)
+        : `Thingtime endpoint returned HTTP ${response.status}`;
+      return { ok: false, status: response.status || 502, error };
+    }
+    return { ok: true, value: payload };
+  } catch {
+    return { ok: false, status: 502, error: 'Thingtime endpoint could not be reached' };
+  }
+};
+
+const validateCredential = async (endpoint: string, token: string): Promise<Result<Omit<ChatGptConnection, 'id' | 'label' | 'endpoint' | 'token' | 'connectedAt'>>> => {
+  const response = await endpointRequest(endpoint, token, '/api/v1/tokens/self');
+  if (response.ok === false) return { ok: false, status: response.status, error: response.error };
+  const payload = response.value as PatIntrospection;
+  const user = payload?.user;
+  if (!payload?.ok || payload.token?.status !== 'active' || !user || typeof user.id !== 'string' || typeof user.username !== 'string') {
+    return { ok: false, status: 401, error: 'That credential is not a live Thingtime personal access token' };
+  }
+  const scopes = Array.isArray(payload.token?.scopes) ? payload.token.scopes.filter((value): value is string => typeof value === 'string') : [];
+  if (!scopes.some((scope) => scope === 'things' || scope === 'things.read')) {
+    return { ok: false, status: 403, error: 'That personal access token needs at least the things.read scope' };
+  }
+  return {
+    ok: true,
+    value: {
+      user: { id: user.id, username: user.username, displayName: typeof user.displayName === 'string' ? user.displayName : null },
+      scopes
+    }
+  };
+};
+
+const requestClaimsToken = async (request: ChatGptOAuthRequest) =>
+  signPurposeToken(OAUTH_REQUEST_PURPOSE, request, '10m');
+
+export const beginChatGptAuthorization = async ({ request }: { request: Request }) => {
+  const parsed = parseChatGptAuthorizationRequest(new URL(request.url).searchParams, requestOrigin(request));
+  if (parsed.ok === false) return oauthErrorPage(400, parsed.error);
+  const allowed = allowedThingtimeEndpoints();
+  if (!allowed.length) return oauthErrorPage(503, 'No Thingtime API endpoints have been configured for ChatGPT connections.');
+  if (!configuredCipherKey()) return oauthErrorPage(503, 'This Thingtime endpoint has not configured encrypted ChatGPT credential storage.');
+
+  const requestToken = await requestClaimsToken(parsed.request);
+  return new Response(renderConnectionPage(requestToken, allowed), {
+    headers: {
+      ...noStoreHeaders,
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors https://chatgpt.com",
+      'Referrer-Policy': 'no-referrer'
+    }
+  });
+};
+
+export const submitChatGptAuthorization = async ({ request }: { request: Request }) => {
+  const form = await formBody(request);
+  if (form.ok === false) return oauthErrorPage(form.status, form.error);
+
+  const signedRequest = form.value.get('request');
+  const claims = typeof signedRequest === 'string' ? await verifyPurposeToken(signedRequest, OAUTH_REQUEST_PURPOSE) : null;
+  const oauthRequest = claims ? clientRequestFromClaims(claims) : null;
+  if (!oauthRequest) return oauthErrorPage(400, 'This connection request has expired or is invalid. Return to ChatGPT and try again.');
+
+  const labels = form.value.getAll('label');
+  const endpoints = form.value.getAll('endpoint');
+  const tokens = form.value.getAll('token');
+  if (!labels.length || labels.length !== endpoints.length || labels.length !== tokens.length || labels.length > 20) {
+    return oauthErrorPage(400, 'Add between one and twenty complete Thingtime accounts.');
+  }
+
+  const connections: ChatGptConnection[] = [];
+  for (let index = 0; index < labels.length; index += 1) {
+    const endpoint = normalizeThingtimeEndpoint(endpoints[index]);
+    const label = typeof labels[index] === 'string' ? labels[index].trim().slice(0, 80) : '';
+    const token = typeof tokens[index] === 'string' ? tokens[index].trim() : '';
+    if (!endpoint || !label || token.length < 24 || token.length > 8192) {
+      return oauthErrorPage(400, 'Every account needs a label, an allowed endpoint, and a valid personal access token.');
+    }
+    const inspected = await validateCredential(endpoint, token);
+    if (inspected.ok === false) return oauthErrorPage(inspected.status, `Could not connect “${label}”: ${inspected.error}`);
+    connections.push({
+      id: crypto.randomUUID(),
+      label,
+      endpoint,
+      token,
+      user: inspected.value.user,
+      scopes: inspected.value.scopes,
+      connectedAt: new Date().toISOString()
+    });
+  }
+
+  const encrypted = encryptBundle({ version: 1, defaultConnectionId: connections[0].id, connections });
+  if (encrypted.ok === false) return oauthErrorPage(encrypted.status, encrypted.error);
+  const expiresAt = new Date(Date.now() + OAUTH_CODE_TTL_MS);
+  const codeSession = await createSession(connections[0].user.id, {
+    purpose: OAUTH_CODE_PURPOSE,
+    expiresAt,
+    meta: {
+      clientId: oauthRequest.clientId,
+      redirectUri: oauthRequest.redirectUri,
+      state: oauthRequest.state,
+      codeChallenge: oauthRequest.codeChallenge,
+      codeChallengeMethod: 'S256',
+      resource: oauthRequest.resource,
+      ciphertext: encrypted.value
+    }
+  });
+  const code = await signJwt({ sub: connections[0].user.id, jti: codeSession.jti, expiresIn: '5m' });
+  const callback = new URL(oauthRequest.redirectUri);
+  callback.searchParams.set('code', code);
+  callback.searchParams.set('state', oauthRequest.state);
+  callback.searchParams.set('iss', requestOrigin(request));
+  return redirect(callback.toString(), { status: 302, headers: noStoreHeaders });
+};
+
+const invalidGrant = () => json({ error: 'invalid_grant', error_description: 'Authorization code is invalid, expired, already used, or does not match this request' }, { status: 400, headers: noStoreHeaders });
+
+export const exchangeChatGptAuthorizationCode = async ({ request }: { request: Request }) => {
+  const form = await formBody(request);
+  if (form.ok === false) return json({ error: 'invalid_request', error_description: form.error }, { status: form.status, headers: noStoreHeaders });
+  const params = form.value;
+  if (params.get('grant_type') !== 'authorization_code') {
+    return json({ error: 'unsupported_grant_type', error_description: 'grant_type must be authorization_code' }, { status: 400, headers: noStoreHeaders });
+  }
+  const code = params.get('code')?.trim() || '';
+  const verifier = normalizePkceVerifier(params.get('code_verifier'));
+  const clientId = params.get('client_id')?.trim() || '';
+  const redirectUri = params.get('redirect_uri')?.trim() || '';
+  const resource = params.get('resource')?.trim() || '';
+  if (!code || !verifier || !clientId || !redirectUri || !resource) return invalidGrant();
+
+  const claims = await verifyJwt(code);
+  if (!claims) return invalidGrant();
+  const sessions = await getSessionsCollection();
+  const now = new Date();
+  const consumed = await sessions.findOneAndUpdate(
+    {
+      jti: claims.jti,
+      userId: claims.sub,
+      purpose: OAUTH_CODE_PURPOSE,
+      revokedAt: null,
+      expiresAt: { $gt: now },
+      'meta.clientId': clientId,
+      'meta.redirectUri': redirectUri,
+      'meta.resource': resource,
+      'meta.codeChallengeMethod': 'S256'
+    },
+    { $set: { revokedAt: now, 'meta.consumedAt': now } },
+    { returnDocument: 'before' }
+  );
+  if (!consumed || !pkceVerifierMatches(verifier, consumed.meta?.codeChallenge)) return invalidGrant();
+
+  const bundle = decryptBundle(consumed.meta?.ciphertext);
+  if (bundle.ok === false) return json({ error: 'server_error', error_description: bundle.error }, { status: bundle.status, headers: noStoreHeaders });
+  const expiresAt = new Date(Date.now() + MCP_SESSION_TTL_MS);
+  const session = await createSession(claims.sub, {
+    purpose: MCP_SESSION_PURPOSE,
+    expiresAt,
+    meta: { ciphertext: consumed.meta?.ciphertext, resource }
+  });
+  const accessToken = await signJwt({ sub: claims.sub, jti: session.jti, expiresIn: '30d' });
+  return json(
+    {
+      access_token: accessToken,
+      token_type: 'Bearer',
+      expires_in: Math.floor(MCP_SESSION_TTL_MS / 1000),
+      scope: 'thingtime'
+    },
+    { headers: noStoreHeaders }
+  );
+};
+
+type McpSession = { session: SessionDoc; bundle: ChatGptCredentialBundle };
+
+const resolveMcpSession = async (request: Request): Promise<Result<McpSession>> => {
+  const header = request.headers.get('authorization');
+  const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!token) return { ok: false, status: 401, error: 'Authentication required' };
+  const claims = await verifyJwt(token);
+  if (!claims) return { ok: false, status: 401, error: 'Authentication required' };
+  const session = await getLiveSession(claims.jti);
+  if (!session || session.purpose !== MCP_SESSION_PURPOSE || String(session.userId) !== claims.sub) {
+    return { ok: false, status: 401, error: 'Authentication required' };
+  }
+  const decrypted = decryptBundle(session.meta?.ciphertext);
+  if (decrypted.ok === false) return { ok: false, status: decrypted.status, error: decrypted.error };
+  return { ok: true, value: { session, bundle: decrypted.value } };
+};
+
+const publicConnection = (connection: ChatGptConnection) => ({
+  id: connection.id,
+  label: connection.label,
+  endpoint: connection.endpoint,
+  username: connection.user.username,
+  displayName: connection.user.displayName,
+  scopes: connection.scopes,
+  connectedAt: connection.connectedAt
+});
+
+const accountFor = (bundle: ChatGptCredentialBundle, accountId: unknown): ChatGptConnection | null => {
+  const selected = typeof accountId === 'string' && accountId ? accountId : bundle.defaultConnectionId;
+  return bundle.connections.find((connection) => connection.id === selected) || null;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null => (value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null);
+const stringValue = (value: unknown, max = 2048) => (typeof value === 'string' && value.trim() && value.trim().length <= max ? value.trim() : null);
+const boundedLimit = (value: unknown) => {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? Math.min(number, 100) : undefined;
+};
+
+const toolDefinitions = [
+  {
+    name: 'list_thingtime_accounts',
+    description: 'List the Thingtime accounts connected to this ChatGPT connection. No token values are returned.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: 'select_thingtime_account',
+    description: 'Make one connected Thingtime account the default for later tool calls.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['accountId'], properties: { accountId: { type: 'string', description: 'An id returned by list_thingtime_accounts.' } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: 'remove_thingtime_account',
+    description: 'Disconnect one Thingtime account from ChatGPT. The original Thingtime personal access token remains revocable in Thingtime Settings.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['accountId'], properties: { accountId: { type: 'string' } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+  },
+  {
+    name: 'get_thingtime_profile',
+    description: 'Read the selected connection’s Thingtime token identity and granted scopes.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' } } },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: 'list_thingtime_things',
+    description: 'List Things visible to the selected Thingtime account.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' }, thingtime: { type: 'string' }, folder: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 100 } } },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: 'search_thingtime_things',
+    description: 'Search Things visible to the selected account by text and optional Thingtime kind.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' }, query: { type: 'string' }, thingtime: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 100 } } },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  },
+  {
+    name: 'create_thingtime_thing',
+    description: 'Create a Thing using the selected account. Use only after the user confirms the intended content.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['thing'], properties: { accountId: { type: 'string' }, thing: { type: 'object', description: 'Thingtime /api/v1/things create payload.' } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+  },
+  {
+    name: 'update_thingtime_thing',
+    description: 'Update one owned Thing. Use only after the user confirms the change.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['thing'], properties: { accountId: { type: 'string' }, thing: { type: 'object', description: 'Thingtime /api/v1/things/update payload including id.' } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+  },
+  {
+    name: 'delete_thingtime_thing',
+    description: 'Delete one owned Thing. Use only after the user confirms deletion.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { accountId: { type: 'string' }, id: { type: 'string' } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+  },
+  {
+    name: 'comment_on_thingtime_thing',
+    description: 'Add a comment to a Thing after the user confirms its text.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['comment'], properties: { accountId: { type: 'string' }, comment: { type: 'object', description: 'Thingtime /api/v1/things/comment payload.' } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+  },
+  {
+    name: 'react_to_thingtime_thing',
+    description: 'Toggle a reaction on a Thing after the user confirms it.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['reaction'], properties: { accountId: { type: 'string' }, reaction: { type: 'object', description: 'Thingtime /api/v1/things/react payload.' } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+  },
+  {
+    name: 'save_thingtime_thing',
+    description: 'Toggle a Thing in the selected account’s saved library.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { accountId: { type: 'string' }, id: { type: 'string' } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+  },
+  {
+    name: 'share_thingtime_thing',
+    description: 'Share a post through the selected Thingtime account after user confirmation.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['share'], properties: { accountId: { type: 'string' }, share: { type: 'object', description: 'Thingtime /api/v1/things/share payload.' } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+  }
+];
+
+const mcpToolResult = (value: unknown, isError = false) => ({
+  content: [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+  structuredContent: value,
+  ...(isError ? { isError: true } : {})
+});
+
+const callThingtimeTool = async (name: string, args: Record<string, unknown>, context: McpSession): Promise<unknown> => {
+  if (name === 'list_thingtime_accounts') {
+    return { defaultAccountId: context.bundle.defaultConnectionId, accounts: context.bundle.connections.map(publicConnection) };
+  }
+  if (name === 'select_thingtime_account') {
+    const accountId = stringValue(args.accountId);
+    if (!accountId || !context.bundle.connections.some((connection) => connection.id === accountId)) return { error: 'Unknown Thingtime account id' };
+    context.bundle.defaultConnectionId = accountId;
+    const encrypted = encryptBundle(context.bundle);
+    if (encrypted.ok === false) return { error: encrypted.error };
+    await (await getSessionsCollection()).updateOne(
+      { jti: context.session.jti, purpose: MCP_SESSION_PURPOSE, revokedAt: null },
+      { $set: { 'meta.ciphertext': encrypted.value, 'meta.updatedAt': new Date() } }
+    );
+    return { ok: true, defaultAccountId: accountId };
+  }
+  if (name === 'remove_thingtime_account') {
+    const accountId = stringValue(args.accountId);
+    const connections = context.bundle.connections.filter((connection) => connection.id !== accountId);
+    if (connections.length === context.bundle.connections.length) return { error: 'Unknown Thingtime account id' };
+    if (!connections.length) {
+      await revokeSession(context.session.jti);
+      return { ok: true, disconnected: true, message: 'All accounts removed; this ChatGPT connection is now revoked.' };
+    }
+    context.bundle.connections = connections;
+    if (!connections.some((connection) => connection.id === context.bundle.defaultConnectionId)) context.bundle.defaultConnectionId = connections[0].id;
+    const encrypted = encryptBundle(context.bundle);
+    if (encrypted.ok === false) return { error: encrypted.error };
+    await (await getSessionsCollection()).updateOne(
+      { jti: context.session.jti, purpose: MCP_SESSION_PURPOSE, revokedAt: null },
+      { $set: { 'meta.ciphertext': encrypted.value, 'meta.updatedAt': new Date() } }
+    );
+    return { ok: true, defaultAccountId: context.bundle.defaultConnectionId, accounts: connections.map(publicConnection) };
+  }
+
+  const account = accountFor(context.bundle, args.accountId);
+  if (!account) return { error: 'Unknown Thingtime account id' };
+  let upstream: Result<unknown>;
+  switch (name) {
+    case 'get_thingtime_profile':
+      upstream = await endpointRequest(account.endpoint, account.token, '/api/v1/tokens/self');
+      break;
+    case 'list_thingtime_things':
+      upstream = await endpointRequest(account.endpoint, account.token, '/api/v1/things', {
+        query: { thingtime: stringValue(args.thingtime), folder: stringValue(args.folder), limit: boundedLimit(args.limit) }
+      });
+      break;
+    case 'search_thingtime_things':
+      upstream = await endpointRequest(account.endpoint, account.token, '/api/v1/things/search', {
+        query: { q: stringValue(args.query), thingtime: stringValue(args.thingtime), limit: boundedLimit(args.limit) }
+      });
+      break;
+    case 'create_thingtime_thing': {
+      const thing = asRecord(args.thing);
+      upstream = thing ? await endpointRequest(account.endpoint, account.token, '/api/v1/things', { method: 'POST', body: thing }) : { ok: false, status: 400, error: 'thing must be an object' };
+      break;
+    }
+    case 'update_thingtime_thing': {
+      const thing = asRecord(args.thing);
+      upstream = thing ? await endpointRequest(account.endpoint, account.token, '/api/v1/things/update', { method: 'POST', body: thing }) : { ok: false, status: 400, error: 'thing must be an object' };
+      break;
+    }
+    case 'delete_thingtime_thing': {
+      const id = stringValue(args.id);
+      upstream = id ? await endpointRequest(account.endpoint, account.token, '/api/v1/things/delete', { method: 'POST', body: { id } }) : { ok: false, status: 400, error: 'id is required' };
+      break;
+    }
+    case 'comment_on_thingtime_thing': {
+      const comment = asRecord(args.comment);
+      upstream = comment ? await endpointRequest(account.endpoint, account.token, '/api/v1/things/comment', { method: 'POST', body: comment }) : { ok: false, status: 400, error: 'comment must be an object' };
+      break;
+    }
+    case 'react_to_thingtime_thing': {
+      const reaction = asRecord(args.reaction);
+      upstream = reaction ? await endpointRequest(account.endpoint, account.token, '/api/v1/things/react', { method: 'POST', body: reaction }) : { ok: false, status: 400, error: 'reaction must be an object' };
+      break;
+    }
+    case 'save_thingtime_thing': {
+      const id = stringValue(args.id);
+      upstream = id ? await endpointRequest(account.endpoint, account.token, '/api/v1/things/save', { method: 'POST', body: { id } }) : { ok: false, status: 400, error: 'id is required' };
+      break;
+    }
+    case 'share_thingtime_thing': {
+      const share = asRecord(args.share);
+      upstream = share ? await endpointRequest(account.endpoint, account.token, '/api/v1/things/share', { method: 'POST', body: share }) : { ok: false, status: 400, error: 'share must be an object' };
+      break;
+    }
+    default:
+      return { error: 'Unknown Thingtime tool' };
+  }
+  if (upstream.ok === false) return { error: upstream.error, status: upstream.status };
+  return { account: publicConnection(account), result: upstream.value };
+};
+
+const jsonRpcResponse = (id: unknown, result?: unknown, error?: { code: number; message: string; data?: unknown }) => ({
+  jsonrpc: '2.0',
+  id: id ?? null,
+  ...(error ? { error } : { result })
+});
+
+const authChallenge = (origin: string) => `Bearer resource_metadata="${origin}${CHATGPT_PROTECTED_RESOURCE_METADATA_PATH}"`;
+
+export const handleChatGptMcp = async ({ request }: { request: Request }) => {
+  if (request.method.toUpperCase() !== 'POST') {
+    return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
+  }
+  const body = await limitRequestBody(request, MAX_REQUEST_BYTES);
+  if (body.ok === false) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: body.error } }, { status: body.status });
+  let message: any;
+  try {
+    message = JSON.parse(body.value);
+  } catch {
+    return json(jsonRpcResponse(null, undefined, { code: -32700, message: 'Parse error' }), { status: 400 });
+  }
+  if (!message || message.jsonrpc !== '2.0' || typeof message.method !== 'string') {
+    return json(jsonRpcResponse(message?.id, undefined, { code: -32600, message: 'Invalid Request' }), { status: 400 });
+  }
+  const id = message.id;
+  const notification = id === undefined || id === null;
+  if (message.method === 'notifications/initialized') return new Response(null, { status: 202 });
+  if (message.method === 'initialize') {
+    return json(jsonRpcResponse(id, {
+      protocolVersion: message.params?.protocolVersion || '2025-06-18',
+      capabilities: { tools: {} },
+      serverInfo: { name: 'thingtime-chatgpt', version: CHATGPT_PLUGIN_FEATURES['chatgpt.mcp'] }
+    }));
+  }
+  if (message.method === 'ping') return notification ? new Response(null, { status: 202 }) : json(jsonRpcResponse(id, {}));
+  if (message.method !== 'tools/list' && message.method !== 'tools/call') {
+    return json(jsonRpcResponse(id, undefined, { code: -32601, message: 'Method not found' }), { status: 404 });
+  }
+
+  const context = await resolveMcpSession(request);
+  if (context.ok === false) {
+    const challenge = authChallenge(requestOrigin(request));
+    const denied = {
+      ...mcpToolResult({ error: context.error }, true),
+      _meta: { 'mcp/www_authenticate': challenge }
+    };
+    return json(
+      jsonRpcResponse(id, denied),
+      { status: context.status, headers: { 'WWW-Authenticate': challenge, ...noStoreHeaders } }
+    );
+  }
+  if (message.method === 'tools/list') {
+    return notification ? new Response(null, { status: 202 }) : json(jsonRpcResponse(id, { tools: toolDefinitions }));
+  }
+  const name = typeof message.params?.name === 'string' ? message.params.name : '';
+  const args = asRecord(message.params?.arguments) || {};
+  if (!toolDefinitions.some((tool) => tool.name === name)) {
+    return json(jsonRpcResponse(id, mcpToolResult({ error: 'Unknown Thingtime tool' }, true)));
+  }
+  const result = await callThingtimeTool(name, args, context.value);
+  const isError = Boolean(result && typeof result === 'object' && 'error' in result);
+  return notification ? new Response(null, { status: 202 }) : json(jsonRpcResponse(id, mcpToolResult(result, isError)));
+};
+
+export const chatGptPluginDiscoveryResponse = ({ request }: { request: Request }) => pluginDiscovery(requestOrigin(request));

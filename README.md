@@ -397,6 +397,44 @@ Node.js, Python, and Ruby snippets. The browser reference lives at
 `/docs/api`, and the docs smoke tests live in the `/tests` page under the
 `Docs` group.
 
+## ChatGPT / Codex plugin
+
+Thingtime exposes a public HTTPS, OAuth 2.1 + S256 PKCE MCP endpoint at
+`/api/v1/integrations/chatgpt/mcp`. It is packaged at
+[`integrations/ChatGPT/plugin/thingtime-chatgpt`](integrations/ChatGPT/plugin/thingtime-chatgpt)
+for ChatGPT/Codex distribution. The plugin connection page can securely attach
+several named Thingtime accounts and explicitly allowlisted Thingtime API
+origins. It accepts only scoped Personal Access Tokens (PATs), validates them
+with `/api/v1/tokens/self`, encrypts them before server-side persistence, and
+gives ChatGPT only a revocable MCP-only bridge token. Do not paste a PAT into a
+chat.
+
+Set these sensitive server-side deployment variables (for example in Vercel)
+before enabling the connector. Values below are placeholders only:
+
+```sh
+# Exactly 32 random bytes, base64 encoded. Generate/store as a deployment secret.
+THINGTIME_CHATGPT_CREDENTIAL_KEY="<base64-encoded-32-byte-key>"
+
+# Optional. Exact comma-separated HTTPS origins only; no wildcard or paths.
+# Defaults to https://thingtime.com when unset.
+THINGTIME_CHATGPT_ALLOWED_ENDPOINTS="https://thingtime.com,https://dev.thingtime.com"
+
+# Optional. Defaults to https://chatgpt.com. Set only if a ChatGPT plugin
+# registration provides a different OAuth client id.
+THINGTIME_CHATGPT_OAUTH_CLIENT_IDS="https://chatgpt.com"
+```
+
+The MCP protected-resource and authorization-server discovery documents are at
+`/.well-known/oauth-protected-resource` and
+`/.well-known/oauth-authorization-server`; its origin-scoped feature manifest
+is `/.well-known/thingtime-chatgpt-capabilities.json`. In ChatGPT Developer
+mode add the public MCP URL, complete the account form in the browser, and
+then use the generated ChatGPT app registration identifier when publishing the
+plugin package. The connection page is mobile-safe; whether a particular iOS
+ChatGPT account exposes developer plugins remains a ChatGPT product-surface
+availability check.
+
 ## Extensible data — `extended` + schema-less crystals
 
 Schemas are optional scaffolding, not a cage. Two open surfaces on every thing:
