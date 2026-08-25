@@ -6185,9 +6185,9 @@
     "semantic_hash": "3288e1e31eb0816e07e10463852324f8"
   },
   "Commander/hosts/macos/Sources/Commander/App/CommanderAppDelegate.swift": {
-    "mtime": 1787555554.6488788,
-    "ast_hash": "e06c76520a7bfea09a8a607d895e2a48",
-    "semantic_hash": "e06c76520a7bfea09a8a607d895e2a48"
+    "mtime": 1787653523.498001,
+    "ast_hash": "bb897597f6b591bfcc28885c12e63c9e",
+    "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/App/CommanderApplicationMenu.swift": {
     "mtime": 1787470227.2390182,
@@ -6210,9 +6210,9 @@
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Services/DaemonSupervisor.swift": {
-    "mtime": 1787130859.6184244,
-    "ast_hash": "f0f18a1d76be6d026d23bbc22dbabb9d",
-    "semantic_hash": "f0f18a1d76be6d026d23bbc22dbabb9d"
+    "mtime": 1787653451.5474122,
+    "ast_hash": "1d42ec4b4a8f71959816e795f0eee71d",
+    "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Services/GlobalHotKey.swift": {
     "mtime": 1787130859.6131697,
@@ -6390,8 +6390,8 @@
     "semantic_hash": "c22ab7d26d7e1eb3818cef99711f7a45"
   },
   "Commander/script/build_and_run.sh": {
-    "mtime": 1787652727.3496742,
-    "ast_hash": "cd76ddc9ba11eaae7a16c5cbe39aab38",
+    "mtime": 1787653344.4211483,
+    "ast_hash": "0a899413ac34fd0005f9dd2f5bc8cdea",
     "semantic_hash": ""
   },
   "Commander/script/release-version.mjs": {
@@ -7707,6 +7707,16 @@
   "Commander/hosts/macos/Sources/Commander/Services/ApplicationResponsivenessService.swift": {
     "mtime": 1787645857.3045158,
     "ast_hash": "0e44f0b3c81632565427f407d74f8d4a",
+    "semantic_hash": ""
+  },
+  "Commander/hosts/macos/Sources/Commander/Services/LoopbackPortInspector.swift": {
+    "mtime": 1787653535.869302,
+    "ast_hash": "1dcaa6660a8325beb4742ed8f2b3e25e",
+    "semantic_hash": ""
+  },
+  "Commander/hosts/macos/Tests/CommanderTests/LoopbackPortInspectorTests.swift": {
+    "mtime": 1787653535.8699658,
+    "ast_hash": "bc2698e9d9a8dbe93f409038b595dce3",
     "semantic_hash": ""
   }
 }
