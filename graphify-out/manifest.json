@@ -1515,9 +1515,9 @@
     "semantic_hash": "23cf886c9906c68bf4d7c8179b707749"
   },
   "README.md": {
-    "mtime": 1787653760.0412982,
-    "ast_hash": "e769626d2fec6c7851da3c446fd42da4",
-    "semantic_hash": "e769626d2fec6c7851da3c446fd42da4"
+    "mtime": 1787655979.9046679,
+    "ast_hash": "5bfc23089bbb321b4e58feb069f8f7af",
+    "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1787653760.0455835,
@@ -1740,8 +1740,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1787655627.4564545,
-    "ast_hash": "be2451e5146770be3c1b00b5b6ca5230",
+    "mtime": 1787655979.9056854,
+    "ast_hash": "6b53f7e37b06e98274277b3018712237",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -4145,9 +4145,9 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787654859.5548365,
-    "ast_hash": "f8e7975b062f876dfbf4493b9b670823",
-    "semantic_hash": "f8e7975b062f876dfbf4493b9b670823"
+    "mtime": 1787655979.9051285,
+    "ast_hash": "123e874414d82ae74d4e151cc5a0b3bf",
+    "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1787653760.0457091,
@@ -4232,7 +4232,7 @@
   ".github/workflows/resolve-pr-conflicts.yml": {
     "mtime": 1787655627.4556243,
     "ast_hash": "94b0c8fb69d0c970ac2a7506c0947f9e",
-    "semantic_hash": ""
+    "semantic_hash": "94b0c8fb69d0c970ac2a7506c0947f9e"
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/canopy.svg": {
     "mtime": 1787653760.220979,
@@ -4413,11 +4413,6 @@
     "mtime": 1787653760.4100173,
     "ast_hash": "77009e8bbbaa2c98f5e39a71003e80bb",
     "semantic_hash": "77009e8bbbaa2c98f5e39a71003e80bb"
-  },
-  ".github/workflows/sync-main-into-develop.yml": {
-    "mtime": 1787653760.0297277,
-    "ast_hash": "ea436e272dfc6de9ff5fbbff186dc369",
-    "semantic_hash": "ea436e272dfc6de9ff5fbbff186dc369"
   },
   "PRs/164-claude-crypto-password-hasher-7c31e9--password-hasher-mongosh-rotate-snippet.md": {
     "mtime": 1787653760.032911,
@@ -4850,9 +4845,9 @@
     "semantic_hash": "21c290e907d4b49a899a7e3c033c71b8"
   },
   ".github/workflows/rebase-pr-stacks.yml": {
-    "mtime": 1787653760.0295997,
-    "ast_hash": "54466d8ef0390062e03aa0506b3fa57e",
-    "semantic_hash": "54466d8ef0390062e03aa0506b3fa57e"
+    "mtime": 1787655953.5365324,
+    "ast_hash": "0c9d5621e8ef24460b2b7d1acc338868",
+    "semantic_hash": ""
   },
   "PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md": {
     "mtime": 1787653760.0339522,
@@ -4989,16 +4984,6 @@
     "ast_hash": "be9308bcce603862df58891adc0f724a",
     "semantic_hash": "be9308bcce603862df58891adc0f724a"
   },
-  ".github/workflows/promote-develop-to-main.yml": {
-    "mtime": 1787653760.029486,
-    "ast_hash": "c892228cbce2cfda87a2df773cedc9b5",
-    "semantic_hash": "c892228cbce2cfda87a2df773cedc9b5"
-  },
-  ".github/workflows/promote-features-to-main.yml": {
-    "mtime": 1787653760.02954,
-    "ast_hash": "d512f645ebef69275bd6e3aff47c2ca7",
-    "semantic_hash": "d512f645ebef69275bd6e3aff47c2ca7"
-  },
   "PRs/190-claude-github-action-pr-promotion-c65173-per-feature-develop-main-promotion-prs-with-stacks.md": {
     "mtime": 1787653760.0340393,
     "ast_hash": "911718847139851c594ed8cc2abd5178",
@@ -5115,9 +5100,9 @@
     "semantic_hash": "f00dc683e09599adc409429dbe777d68"
   },
   "remix/scripts/workflow-caller-contract.mjs": {
-    "mtime": 1787655627.4559455,
-    "ast_hash": "addfe10cc2c6c8e68e13586fce3e6ff9",
-    "semantic_hash": "addfe10cc2c6c8e68e13586fce3e6ff9"
+    "mtime": 1787655994.3246868,
+    "ast_hash": "6fa7066e6db79e7c59fea86f13e5ec62",
+    "semantic_hash": "6fa7066e6db79e7c59fea86f13e5ec62"
   },
   "PRs/211-codex-ci-control-plane-dashboard--centralize-actions-and-add-ci-control-dashboard.md": {
     "mtime": 1787653760.0348828,
