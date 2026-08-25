@@ -894,6 +894,9 @@ jobs:
     # repository's queue one model-backed operation at a time.
     concurrency:
       group: lopu-agent-fleet-${{ github.repository }}
+      # Preserve every pending stack operation while the repository's one
+      # live Lopu worker finishes the current review/resolve/promotion task.
+      queue: max
       cancel-in-progress: false
     env:
       REPO: ${{ github.repository }}

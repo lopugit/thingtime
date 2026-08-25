@@ -1884,6 +1884,10 @@ jobs:
       codeql_dispositions_b64: ${{ steps.codeql_handoff.outputs.dispositions_b64 }}
     concurrency:
       group: lopu-agent-fleet-${{ github.repository }}
+      # GitHub's default concurrency queue retains only one pending job and
+      # replaces it when another arrives. Keep the whole repository burst so
+      # one live Lopu session can drain reviews without dropping older work.
+      queue: max
       cancel-in-progress: false
     env:
       REPO: ${{ github.repository }}
@@ -2968,6 +2972,7 @@ jobs:
     # while the next model-backed repair waits for the active operation to end.
     concurrency:
       group: lopu-agent-fleet-${{ github.repository }}
+      queue: max
       cancel-in-progress: false
     env:
       REPO: ${{ github.repository }}
@@ -4488,6 +4493,7 @@ jobs:
     # cannot create a parallel fleet of Lopu model sessions.
     concurrency:
       group: lopu-agent-fleet-${{ github.repository }}
+      queue: max
       cancel-in-progress: false
     strategy:
       fail-fast: false

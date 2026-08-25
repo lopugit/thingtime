@@ -44,6 +44,13 @@ assert.match(
   /manage_rebases:[\s\S]*?permissions:\s+actions: write\s+contents: write\s+pull-requests: write\s+issues: write/,
 );
 assert.match(workflow, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/);
+const durableFleetQueue =
+  /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n(?:\s*#.*\n)*\s*queue: max\s+cancel-in-progress: false/g;
+assert.equal(
+  [...workflow.matchAll(durableFleetQueue)].length,
+  3,
+  "every review, promotion, and conflict worker uses the durable single-Lopu queue",
+);
 assert.match(workflow, /--dangerously-skip-permissions/);
 assert.match(workflow, /--allowedTools "Bash\(\*\),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"/);
 assert.doesNotMatch(workflow, /DISALLOWED_TOOLS/);
@@ -57,6 +64,11 @@ assert.doesNotMatch(rebaseWorkflow, /^  pull_request_target:$/m);
 assert.doesNotMatch(rebaseWorkflow, /^  schedule:$/m);
 assert.doesNotMatch(rebaseWorkflow, /^  workflow_dispatch:$/m);
 assert.match(rebaseWorkflow, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/);
+assert.equal(
+  [...rebaseWorkflow.matchAll(durableFleetQueue)].length,
+  1,
+  "the rebase and stack worker shares the durable single-Lopu queue",
+);
 
 assert.match(action, /You are Lopu, Thingtime's principal PR and repository manager/);
 assert.match(action, /--dangerously-skip-permissions/);

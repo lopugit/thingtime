@@ -76,6 +76,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Lopu's single-agent fleet now keeps the full pending queue instead of
+  replacing older work during bursts**: PR reviews and check fixes, merge
+  conflict resolution, promotion replay, and rebase/stack operations still
+  allow only one live model-backed Lopu session per repository, while GitHub's
+  durable concurrency queue retains up to 100 waiting jobs in FIFO order. A
+  new develop or controller commit can therefore enqueue the affected PRs
+  without cancelling a previously validated promotion or repair. — Codex
+  (AI), 2026-08-25
 - **Preview wildcard fallbacks are environment-locked and stack-aware**:
   `*.previews.dev.thingtime.com` must bind to `develop`, while the Vercel
   production fallback for `*.previews.thingtime.com` must stay detached and
