@@ -105,6 +105,19 @@ occupied by an orphaned service.
 
 The Codex Run button is wired through `.codex/environments/environment.toml` to the same script.
 
+### macOS signing policy
+
+Normal Commander builds are direct-distribution builds. The script automatically selects an installed
+`Developer ID Application` identity and uses a secure timestamp. It deliberately fails before touching the
+currently installed app when that identity is unavailable: `Apple Development` is for local/TCC testing and
+`Apple Distribution` is for App Store delivery; neither is a substitute for Developer ID distribution.
+
+For an explicitly local-only iteration, use `COMMANDER_SIGNING_MODE=development ./script/build_and_run.sh --verify`.
+That path is not a distributable Gatekeeper build. `COMMANDER_SIGNING_IDENTITY` may select a specific identity,
+but distribution mode accepts only a `Developer ID Application` identity. Public downloads additionally need
+Apple notarization credentials configured outside this repository; a valid Developer ID signature alone is not
+a notarization ticket.
+
 ## GitHub Releases
 
 `.github/workflows/commander-release.yml` follows the native Electron release

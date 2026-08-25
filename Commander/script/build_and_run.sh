@@ -5,7 +5,13 @@ MODE="${1:-run}"
 APP_NAME="Commander"
 BUNDLE_ID="com.thingtime.Commander"
 MIN_SYSTEM_VERSION="14.0"
-SIGNING_IDENTITY="${COMMANDER_SIGNING_IDENTITY:-Apple Development: lopudesigns@gmail.com (9BTZ4XB356)}"
+# Direct-distribution builds must use a Developer ID Application identity.  Do
+# not silently substitute an Apple Development or Apple Distribution identity:
+# neither gives users the Gatekeeper trust contract of a notarized Developer ID
+# app.  Local development is available as an explicit opt-in below.
+SIGNING_MODE="${COMMANDER_SIGNING_MODE:-distribution}"
+SIGNING_IDENTITY="${COMMANDER_SIGNING_IDENTITY:-}"
+SIGNING_TIMESTAMP_ARGS=()
 NODE_VERSION="22.23.2"
 NODE_SHA256_ARM64="61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"
 NODE_SHA256_X64="58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026"
@@ -28,6 +34,56 @@ if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || [[ "$BUILD_NUMBER" == "0" ]]; then
   echo "COMMANDER_BUILD_NUMBER must be a positive integer: $BUILD_NUMBER" >&2
   exit 1
 fi
+
+available_signing_identity() {
+  /usr/bin/security find-identity -v -p codesigning | /usr/bin/grep -F "\"$1\"" >/dev/null
+}
+
+default_developer_id_identity() {
+  /usr/bin/security find-identity -v -p codesigning \
+    | /usr/bin/sed -nE 's/.*"(Developer ID Application: [^"]+)".*/\1/p' \
+    | /usr/bin/head -n 1
+}
+
+resolve_signing_configuration() {
+  case "$SIGNING_MODE" in
+    distribution)
+      if [[ -z "$SIGNING_IDENTITY" ]]; then
+        SIGNING_IDENTITY="$(default_developer_id_identity)"
+      fi
+      if [[ -z "$SIGNING_IDENTITY" ]]; then
+        echo "Commander distribution builds require an installed Developer ID Application identity." >&2
+        echo "Install a Developer ID Application certificate with its private key, then retry." >&2
+        echo "For explicitly local-only development, use COMMANDER_SIGNING_MODE=development." >&2
+        exit 1
+      fi
+      if [[ "$SIGNING_IDENTITY" != Developer\ ID\ Application:* ]]; then
+        echo "Commander distribution builds require a Developer ID Application identity, not: $SIGNING_IDENTITY" >&2
+        exit 1
+      fi
+      SIGNING_TIMESTAMP_ARGS=(--timestamp)
+      ;;
+    development)
+      if [[ -z "$SIGNING_IDENTITY" ]]; then
+        SIGNING_IDENTITY="Apple Development: lopudesigns@gmail.com (9BTZ4XB356)"
+      fi
+      SIGNING_TIMESTAMP_ARGS=(--timestamp=none)
+      ;;
+    *)
+      echo "COMMANDER_SIGNING_MODE must be distribution or development: $SIGNING_MODE" >&2
+      exit 1
+      ;;
+  esac
+
+  if [[ "$SIGNING_IDENTITY" != "-" ]] && ! available_signing_identity "$SIGNING_IDENTITY"; then
+    echo "Commander signing identity is unavailable: $SIGNING_IDENTITY" >&2
+    exit 1
+  fi
+  if [[ "$SIGNING_MODE" == "distribution" && "$SIGNING_IDENTITY" == "-" ]]; then
+    echo "Ad-hoc signing is not allowed for Commander distribution builds." >&2
+    exit 1
+  fi
+}
 
 build_all() {
   corepack pnpm --dir "$ROOT_DIR" install --frozen-lockfile
@@ -84,25 +140,17 @@ build_all() {
   /usr/bin/plutil -insert NSPrincipalClass -string NSApplication "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert CFBundleURLTypes -json '[{"CFBundleURLName":"com.thingtime.Commander.oauth","CFBundleURLSchemes":["com.thingtime.commander"]}]' "$staged_bundle/Contents/Info.plist"
 
-  # An explicit `COMMANDER_SIGNING_IDENTITY=-` keeps local verification usable
-  # when the developer identity is present but its private key is locked behind
-  # an interactive SecurityAgent prompt. Release/default builds still require
-  # the configured Apple Development identity.
-  if [[ "$SIGNING_IDENTITY" != "-" ]] && ! /usr/bin/security find-identity -v -p codesigning | /usr/bin/grep -F "$SIGNING_IDENTITY" >/dev/null; then
-    echo "Commander signing identity is unavailable: $SIGNING_IDENTITY" >&2
-    exit 1
-  fi
   /usr/bin/xattr -cr "$staged_bundle"
   # Preserve Node.js Foundation's hardened-runtime signature and JIT entitlements.
   /usr/bin/codesign --verify --strict "$staged_bundle/Contents/Resources/node/bin/node"
   if [[ -x "$staged_bundle/Contents/Resources/commander-core" ]]; then
-    /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/Resources/commander-core"
+    /usr/bin/codesign --force --options runtime "${SIGNING_TIMESTAMP_ARGS[@]}" --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/Resources/commander-core"
   fi
   if [[ -x "$staged_bundle/Contents/Resources/commander-indexer" ]]; then
-    /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/Resources/commander-indexer"
+    /usr/bin/codesign --force --options runtime "${SIGNING_TIMESTAMP_ARGS[@]}" --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/Resources/commander-indexer"
   fi
-  /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/MacOS/$APP_NAME"
-  /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle"
+  /usr/bin/codesign --force --options runtime "${SIGNING_TIMESTAMP_ARGS[@]}" --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/MacOS/$APP_NAME"
+  /usr/bin/codesign --force --options runtime "${SIGNING_TIMESTAMP_ARGS[@]}" --sign "$SIGNING_IDENTITY" "$staged_bundle"
   /usr/bin/codesign --verify --deep --strict "$staged_bundle"
 
   mkdir -p "$DIST_DIR"
@@ -236,6 +284,7 @@ stop_installed_runtime() {
   fi
 }
 
+resolve_signing_configuration
 stop_installed_runtime
 build_all
 
