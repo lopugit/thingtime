@@ -192,6 +192,11 @@ export function assertAllBranchWorkflowContract(workflowText) {
     /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n\s*queue: max\n\s*cancel-in-progress: false/,
     "the union doctor must share Lopu's durable single-agent fleet"
   );
+  assert.match(
+    rebuildBlock,
+    /name: Check out develop working tree[\s\S]*fetch-depth: 0[\s\S]*filter: blob:none[\s\S]*persist-credentials: false/,
+    "the union checkout keeps exact ancestry without eagerly downloading historical blobs"
+  );
   assert.equal(
     [...rebuildBlock.matchAll(/You are Lopu, Thingtime's principal PR and repository manager\./g)].length,
     3,

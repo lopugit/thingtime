@@ -1,5 +1,13 @@
 name: Lopu CodeQL all branches
 
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+      && inputs.pr_number != ''
+      && format('Lopu CodeQL PR #{0} @ {1}', inputs.pr_number, inputs.expected_head_sha)
+      || github.event_name == 'pull_request'
+      && format('Lopu CodeQL PR #{0} @ {1}', github.event.pull_request.number, github.event.pull_request.head.sha)
+      || format('Lopu CodeQL {0} @ {1}', github.ref_name, github.sha) }}
+
 # Canonical unprivileged advanced CodeQL implementation. Product branches call
 # this workflow for analysis events and call codeql-pr-handoff.yml only for the
 # metadata-only pull_request_target hop. Keeping those permission ceilings in
