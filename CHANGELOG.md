@@ -21,6 +21,21 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu's public queue now preserves every repository signal**: the unified
+  manager pairs `queue: max` with a constant `cancel-in-progress: false`, the
+  only GitHub-valid durable configuration. Comment, check, branch, schedule,
+  promotion, and exact-worker runs now queue and revalidate live state instead
+  of failing before job creation or replacing in-flight work. CodeQL's
+  `pull_request_target` metadata bridge is also isolated in its own protected
+  reusable workflow, so normal read-capped PR analysis retains its check
+  contexts without trying to inherit `actions: write`. — Codex (AI),
+  2026-08-25
+- **The last rebase-specific public entrypoint is folded into Lopu**: legacy
+  `rebase-pr-stack-ai` exact-worker events now enter through **Lopu PR
+  manager**, retain their rebase compute-provider policy and snapshot payload,
+  and invoke the reusable stack engine internally. The engine itself exposes
+  only `workflow_call`, so product branches no longer need a second rebase
+  listener. — Codex (AI), 2026-08-25
 - **Lopu is now the sole automatic promotion and branch-synchronization
   entrypoint too**: the standing develop→main promotion, per-feature promotion
   train, six-hour promotion backstop, and main→develop synchronization run as

@@ -1,4 +1,4 @@
-name: Signed Electron PR Release
+name: Thingtime Electron PR Release
 
 # This is the trusted implementation. Product branches only carry a tiny
 # pull_request_target/workflow_dispatch caller, which invokes this file at the
@@ -34,12 +34,11 @@ concurrency:
 
 jobs:
   release:
-    name: Build and publish signed PR release
-    # A signed binary is a high-trust artifact. Automatic runs require a
-    # same-repository owner PR and a maintainer-applied label. Manual runs
-    # require the repository owner. Forks, members, and unlabelled PRs never
-    # receive signing credentials. The API validation below repeats these
-    # checks immediately before the immutable source checkout.
+    name: Build and publish approved PR release
+    # Publication always requires an owner-controlled same-repository PR and
+    # maintainer label. A complete Developer ID/notarization secret set yields
+    # the trusted lane; an entirely absent set yields a clearly labelled,
+    # manually approved UNSIGNED lane. Partial configuration fails closed.
     if: >-
       github.repository == 'lopugit/thingtime' && (
         (github.event_name == 'workflow_dispatch' &&
@@ -54,8 +53,6 @@ jobs:
              contains(github.event.pull_request.labels.*.name, 'desktop-release'))))
       )
     runs-on: macos-latest
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: "true"
     steps:
       - name: Resolve and validate PR source
         id: source
@@ -122,10 +119,69 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.12.1 --activate
 
+      - name: Install release dependencies
+        run: |
+          set -euo pipefail
+          corepack pnpm --dir remix install --frozen-lockfile
+          # MCP is deliberately npm-managed and commits package-lock.json rather
+          # than a pnpm lockfile. Keep this deterministic so PR release builds
+          # cannot fail before their unsigned source checks or signing gate.
+          npm ci --prefix MCP
+          corepack pnpm --dir electron install --frozen-lockfile
+
+      - name: Test unsigned source before accessing signing credentials
+        run: |
+          set -euo pipefail
+          corepack pnpm --dir MCP run typecheck
+          corepack pnpm --dir MCP test
+          corepack pnpm --dir MCP run build:desktop
+          swift test --package-path macos/ThingtimeNode
+          swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNode
+          swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNodeBridge
+          swift test --package-path macos/ThingtimeRecovery
+          swift build --package-path macos/ThingtimeRecovery --configuration release --product ThingtimeRecovery
+          swift build --package-path macos/ThingtimeRecovery --configuration release --product ThingtimeRecoveryInstaller
+          corepack pnpm --dir electron test
+
+      - name: Select release distribution
+        id: distribution
+        shell: bash
+        # This static control-plane step sees secrets only after the immutable
+        # PR source has completed its checks. It exports no secret material.
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          values=(
+            "${MAC_CSC_LINK}"
+            "${MAC_CSC_KEY_PASSWORD}"
+            "${APPLE_API_KEY_BASE64}"
+            "${APPLE_API_KEY_ID}"
+            "${APPLE_API_ISSUER}"
+            "${APPLE_TEAM_ID}"
+          )
+          populated=0
+          for value in "${values[@]}"; do
+            if [ -n "${value}" ]; then populated=$((populated + 1)); fi
+          done
+          case "${populated}" in
+            0) distribution="unsigned" ;;
+            6) distribution="signed" ;;
+            *) echo "::error::Incomplete signing configuration: configure all six credentials or none for the temporary UNSIGNED lane."; exit 1 ;;
+          esac
+          echo "distribution=${distribution}" >> "${GITHUB_OUTPUT}"
+          echo "::notice::Publishing ${distribution} PR release artifacts."
+
       - name: Derive SemVer PR release identity
         id: version
         shell: bash
         env:
+          DISTRIBUTION: ${{ steps.distribution.outputs.distribution }}
           PR_NUMBER: ${{ steps.source.outputs.pr_number }}
           PR_REF: ${{ steps.source.outputs.head_ref }}
           PR_SHA: ${{ steps.source.outputs.head_sha }}
@@ -137,13 +193,20 @@ jobs:
           test -n "${branch_slug}"
           short_sha="${PR_SHA:0:12}"
           release_version="${base_version}-pr.${PR_NUMBER}.${branch_slug}.g${short_sha}"
+          release_title="Thingtime Desktop ${release_version}"
+          if [ "${DISTRIBUTION}" = "unsigned" ]; then
+            release_version="${release_version}.unsigned"
+            release_title="Thingtime Desktop UNSIGNED ${release_version}"
+          fi
           release_tag="electron-v${release_version}"
           node -e 'const value = process.argv[1]; if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value)) process.exit(1)' "${release_version}"
 
           {
             echo "THINGTIME_ELECTRON_BASE_VERSION=${base_version}"
+            echo "THINGTIME_ELECTRON_RELEASE_DISTRIBUTION=${DISTRIBUTION}"
             echo "THINGTIME_ELECTRON_RELEASE_VERSION=${release_version}"
             echo "THINGTIME_ELECTRON_RELEASE_TAG=${release_tag}"
+            echo "THINGTIME_ELECTRON_RELEASE_TITLE=${release_title}"
           } >> "${GITHUB_ENV}"
           {
             echo "release_version=${release_version}"
@@ -164,34 +227,8 @@ jobs:
             echo "exists=false" >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Install release dependencies
-        if: steps.existing_release.outputs.exists != 'true'
-        run: |
-          set -euo pipefail
-          corepack pnpm --dir remix install --frozen-lockfile
-          # MCP is deliberately npm-managed and commits package-lock.json rather
-          # than a pnpm lockfile. Keep this deterministic so PR release builds
-          # cannot fail before their unsigned source checks or signing gate.
-          npm ci --prefix MCP
-          corepack pnpm --dir electron install --frozen-lockfile
-
-      - name: Test unsigned source before accessing signing credentials
-        if: steps.existing_release.outputs.exists != 'true'
-        run: |
-          set -euo pipefail
-          corepack pnpm --dir MCP run typecheck
-          corepack pnpm --dir MCP test
-          corepack pnpm --dir MCP run build:desktop
-          swift test --package-path macos/ThingtimeNode
-          swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNode
-          swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNodeBridge
-          swift test --package-path macos/ThingtimeRecovery
-          swift build --package-path macos/ThingtimeRecovery --configuration release --product ThingtimeRecovery
-          swift build --package-path macos/ThingtimeRecovery --configuration release --product ThingtimeRecoveryInstaller
-          corepack pnpm --dir electron test
-
       - name: Import Developer ID and notarization credentials
-        if: steps.existing_release.outputs.exists != 'true'
+        if: steps.existing_release.outputs.exists != 'true' && steps.distribution.outputs.distribution == 'signed'
         shell: bash
         env:
           MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -235,7 +272,7 @@ jobs:
           } >> "${GITHUB_ENV}"
 
       - name: Build signed and notarized Electron release
-        if: steps.existing_release.outputs.exists != 'true'
+        if: steps.existing_release.outputs.exists != 'true' && steps.distribution.outputs.distribution == 'signed'
         run: |
           set -euo pipefail
           corepack pnpm --dir electron run dist
@@ -243,6 +280,15 @@ jobs:
           THINGTIME_RECOVERY_VERSION="${THINGTIME_ELECTRON_RELEASE_VERSION}" \
           THINGTIME_RECOVERY_BUILD_NUMBER="${GITHUB_RUN_NUMBER}" \
           macos/ThingtimeRecovery/script/build-production-release.sh
+
+      - name: Build unsigned Electron release
+        if: steps.existing_release.outputs.exists != 'true' && steps.distribution.outputs.distribution == 'unsigned'
+        run: |
+          set -euo pipefail
+          corepack pnpm --dir electron run dist:unsigned
+          THINGTIME_RECOVERY_VERSION="${THINGTIME_ELECTRON_RELEASE_VERSION}" \
+          THINGTIME_RECOVERY_BUILD_NUMBER="${GITHUB_RUN_NUMBER}" \
+          macos/ThingtimeRecovery/script/build-unsigned-release.sh
 
       - name: Collect updater-compatible release assets
         if: steps.existing_release.outputs.exists != 'true'
@@ -252,7 +298,13 @@ jobs:
           shopt -s nullglob
           raw_assets=(electron/release/*.dmg electron/release/*.zip electron/release/*.pkg)
           zip_assets=(electron/release/*.zip)
-          recovery_assets=(macos/ThingtimeRecovery/release/Thingtime-Recovery-App-Release-*.zip)
+          if [ "${THINGTIME_ELECTRON_RELEASE_DISTRIBUTION}" = "unsigned" ]; then
+            desktop_prefix="Thingtime-Electron-App-UNSIGNED-Release"
+            recovery_assets=(macos/ThingtimeRecovery/release/Thingtime-Recovery-App-UNSIGNED-Release-*.zip)
+          else
+            desktop_prefix="Thingtime-Electron-App-Release"
+            recovery_assets=(macos/ThingtimeRecovery/release/Thingtime-Recovery-App-Release-*.zip)
+          fi
           test "${#raw_assets[@]}" -gt 0
           test "${#zip_assets[@]}" -gt 0
           test "${#recovery_assets[@]}" -eq 1
@@ -262,7 +314,7 @@ jobs:
           index=0
           for asset in "${raw_assets[@]}"; do
             ext="${asset##*.}"
-            destination="${asset_dir}/Thingtime-Electron-App-Release-${THINGTIME_ELECTRON_RELEASE_VERSION}-macos-$(uname -m)-${index}.${ext}"
+            destination="${asset_dir}/${desktop_prefix}-${THINGTIME_ELECTRON_RELEASE_VERSION}-macos-$(uname -m)-${index}.${ext}"
             cp "${asset}" "${destination}"
             index=$((index + 1))
           done
@@ -278,14 +330,24 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## Signed Thingtime Desktop PR release"
+            if [ "${THINGTIME_ELECTRON_RELEASE_DISTRIBUTION}" = "unsigned" ]; then
+              echo "## ⚠️ UNSIGNED Thingtime Desktop PR release"
+            else
+              echo "## Signed Thingtime Desktop PR release"
+            fi
             echo
             echo "- Version: \`${THINGTIME_ELECTRON_RELEASE_VERSION}\`"
             echo "- Pull request: #${PR_NUMBER}"
             echo "- Branch: \`${PR_REF}\`"
             echo "- Commit: \`${PR_SHA}\`"
-            echo "- Desktop update asset: the attached Thingtime macOS ZIP is verified, cached, launchable, and installable by Thingtime's recovery updater."
-            echo "- Recovery asset: the attached Thingtime Recovery ZIP is a separately signed, notarized native app which can update itself and restore cached desktop versions."
+            if [ "${THINGTIME_ELECTRON_RELEASE_DISTRIBUTION}" = "unsigned" ]; then
+              echo "- Trust: **UNSIGNED**. These apps have no Developer ID certificate and are not notarized. They use ad-hoc code signatures only so nested macOS processes can run."
+              echo "- First launch: macOS may block the app. Open it deliberately, then use System Settings → Privacy & Security → Open Anyway when macOS offers it."
+              echo "- Recovery: releases ending in \`.unsigned\` appear with an UNSIGNED badge. After explicit acknowledgement, Thingtime Recovery can cache, launch, and atomically install them; they are never presented as verified updates."
+            else
+              echo "- Desktop update asset: the attached Thingtime macOS ZIP is verified, cached, launchable, and installable by Thingtime's recovery updater."
+              echo "- Recovery asset: the attached Thingtime Recovery ZIP is a separately signed, notarized native app which can update itself and restore cached desktop versions."
+            fi
           } > electron-release-notes.md
 
       - name: Publish prerelease
@@ -298,7 +360,7 @@ jobs:
           set -euo pipefail
           gh release create "${THINGTIME_ELECTRON_RELEASE_TAG}" electron/release-upload/* \
             --target "${PR_SHA}" \
-            --title "Thingtime Desktop ${THINGTIME_ELECTRON_RELEASE_VERSION}" \
+            --title "${THINGTIME_ELECTRON_RELEASE_TITLE}" \
             --notes-file electron-release-notes.md \
             --prerelease
 
