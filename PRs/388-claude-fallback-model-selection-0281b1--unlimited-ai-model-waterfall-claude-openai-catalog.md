@@ -123,3 +123,41 @@
 - The Browser pane's mobile preset swallows wheel scrolls (touch translation);
   `scroll_to` a ref instead. Tall viewports (1500px) confuse the pane's
   screenshot compositor on this app's inner scroll container.
+
+## Review round 1 — musing output budget (Lopu, 2026-08-24)
+
+Opening the catalog to reasoning models exposed the musing call's output cap
+as a second, unwidened constant. Two defects, both reproduced against the PR
+head with stubbed provider endpoints before fixing:
+
+1. **`max_tokens` is incompatible with OpenAI's reasoning models.** The OpenAI
+   SDK marks it deprecated and "not compatible with o-series models"; GPT-5 and
+   o-series reject the request outright. `streamOpenAI` sent it in *both* the
+   decorated attempt and the bare retry, so the retry could not rescue it —
+   selecting any OpenAI reasoning model as the first entry silently removed
+   ChatGPT from the musing waterfall. Fixed by sending `max_completion_tokens`,
+   which every current Chat Completions model accepts.
+2. **200 output tokens starves a reasoning entry.** Both providers bill
+   internal reasoning against this same budget (Anthropic counts thinking
+   tokens inside `max_tokens`, OpenAI counts reasoning tokens inside
+   `max_completion_tokens`), so an entry that pins an effort tier spends the
+   whole cap thinking and streams no text. The provider loop then committed to
+   that empty attempt and emitted `meta` + `done` with zero deltas — a blank
+   musing rather than a fallback. Fixed with one shared
+   `MUSING_MAX_OUTPUT_TOKENS = 4096` ceiling on both providers, plus a
+   fall-through when an attempt finishes without a single text delta so a
+   starved provider degrades to the next provider and then the canned library.
+
+`ai-model-routing-contract.mjs` now pins all three invariants (the shared
+constant, `max_completion_tokens` on the OpenAI call, and no numeric
+`max_tokens:` literal anywhere in the musing path).
+
+Reproduction/validation harness: a scratch copy of `remix/app` with the
+Mongo-backed settings module stubbed, the real `streamLopuMusing` driven
+against local HTTP stubs speaking Anthropic SSE and OpenAI SSE, with the
+OpenAI stub returning the real `unsupported_parameter` 400 for `max_tokens`.
+Before the fix: two rejected OpenAI attempts and `source: 'claude'` for
+scenario 1, `["meta:claude","done"]` with empty text for scenario 2. After:
+18/18 checks pass, including that Claude still carries
+`output_config.effort` + `speed: 'fast'`, OpenAI carries `reasoning_effort` +
+`service_tier: 'priority'`, and `ultra` still clamps to `max`.

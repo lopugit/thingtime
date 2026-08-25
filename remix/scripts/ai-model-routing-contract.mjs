@@ -54,6 +54,18 @@ assert.match(musing, /streamOpenAI\(SYSTEM_PROMPT, user, choices\.openai\)/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_CLAUDE_MODEL/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_OPENAI_MODEL/);
 
+// An admin entry can pin a reasoning model or an explicit effort tier, and
+// both providers bill that reasoning against the request's output budget:
+// Anthropic counts thinking tokens inside `max_tokens`, OpenAI counts
+// reasoning tokens inside `max_completion_tokens`. `max_tokens` is also
+// deprecated and outright incompatible with OpenAI's reasoning models, so the
+// OpenAI call must never use it. One shared ceiling keeps the visible musing
+// from being starved by the reasoning it now pays for.
+assert.match(musing, /const MUSING_MAX_OUTPUT_TOKENS = \d{4,}/);
+assert.match(musing, /max_tokens: MUSING_MAX_OUTPUT_TOKENS/);
+assert.match(musing, /max_completion_tokens: MUSING_MAX_OUTPUT_TOKENS/);
+assert.doesNotMatch(musing, /max_tokens:\s*\d/);
+
 // This developer-only helper intentionally targets the local Codex proxy. It
 // is not a Thingtime runtime and cannot consume Claude model aliases; pin the
 // exception so it cannot silently become an ungoverned production entrypoint.
