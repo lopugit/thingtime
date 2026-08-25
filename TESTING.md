@@ -2677,3 +2677,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       {field} templates (the sent invoice shows "— sent" + sentAt).
 - [ ] Mobile (375px): /actions and the inspector have no horizontal scroll;
       chips wrap; the run panel stays inside its card.
+- [ ] Builder: "⚡ New action" on /actions derives CAN ACCESS chips LIVE from
+      the steps (scoped when every step carries a literal schema, unscoped the
+      moment one step lacks one); saving lands on the new action's inspector;
+      a narrowed scope that no longer covers a step surfaces the registry
+      refusal verbatim in the Lopu toast.
+- [ ] ttAction: a component render node with ttAction/ttActionInputs draws as
+      data-tt-action/data-tt-action-inputs (the ONLY data-* attributes the
+      renderer allowlists) and the tt keys never survive as node keys; in the
+      /things PreviewModal clicking the control runs the action AS the viewer
+      (toast with ms · ops + Inspect link) and the target data thing mutates;
+      grid tiles stay pointerEvents:none (clicks select, never run).
+- [ ] /things component previews render RESOLVED templates (savedArgs over
+      defaults) via the kind renderer — never raw {token} text.
+- [ ] Used by: /actions/:key lists the viewer's components binding the action
+      via ttAction as clickable 🧩 chips; exact-token matching (an action key
+      that prefixes another never cross-matches).
