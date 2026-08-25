@@ -3277,7 +3277,7 @@
   "TESTING.md": {
     "mtime": 1787578809.8652716,
     "ast_hash": "913ecf345095096af4a57fdb3d522027",
-    "semantic_hash": ""
+    "semantic_hash": "913ecf345095096af4a57fdb3d522027"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1787576000.3927681,
@@ -5792,7 +5792,7 @@
   "Commander/apps/desktop-ui/src/components/Launcher.test.tsx": {
     "mtime": 1787579093.4129777,
     "ast_hash": "4e61ccdefd3d231ed07b0ea93a993c8b",
-    "semantic_hash": ""
+    "semantic_hash": "4e61ccdefd3d231ed07b0ea93a993c8b"
   },
   "Commander/apps/desktop-ui/src/components/Launcher.tsx": {
     "mtime": 1787578456.7484503,
@@ -6205,9 +6205,9 @@
     "semantic_hash": "eccbec619ae5dd913af481b28cd1884a"
   },
   "Commander/hosts/macos/Sources/Commander/Bridge/CommanderNativeBridge.swift": {
-    "mtime": 1787578673.757864,
-    "ast_hash": "116be3f371b5be483c5483f0bc83f2ba",
-    "semantic_hash": "116be3f371b5be483c5483f0bc83f2ba"
+    "mtime": 1787625222.531,
+    "ast_hash": "8646244b8efd3c3c72dcd5000ad870ee",
+    "semantic_hash": "8646244b8efd3c3c72dcd5000ad870ee"
   },
   "Commander/hosts/macos/Sources/Commander/Services/DaemonSupervisor.swift": {
     "mtime": 1787576000.375884,
@@ -6255,9 +6255,9 @@
     "semantic_hash": "ce464763205feb83fa2b51a3271f5e12"
   },
   "Commander/hosts/macos/Tests/CommanderTests/CommanderWebViewTests.swift": {
-    "mtime": 1787578693.4499028,
-    "ast_hash": "be02ef878d04ed76ded0e888308fefb4",
-    "semantic_hash": "be02ef878d04ed76ded0e888308fefb4"
+    "mtime": 1787625196.0919147,
+    "ast_hash": "17a030fd1c205977060c57aee17e82da",
+    "semantic_hash": "17a030fd1c205977060c57aee17e82da"
   },
   "Commander/hosts/macos/Tests/CommanderTests/GlobalHotKeyTests.swift": {
     "mtime": 1787576000.377516,
@@ -6390,9 +6390,9 @@
     "semantic_hash": "c22ab7d26d7e1eb3818cef99711f7a45"
   },
   "Commander/script/build_and_run.sh": {
-    "mtime": 1787576000.381114,
-    "ast_hash": "a34e5098682c9b5aa871096e489d8700",
-    "semantic_hash": "a34e5098682c9b5aa871096e489d8700"
+    "mtime": 1787625744.8499658,
+    "ast_hash": "b39947d2a7a55b0b8512e809017ef7f9",
+    "semantic_hash": ""
   },
   "Commander/script/release-version.mjs": {
     "mtime": 1787576000.3812146,
@@ -6975,8 +6975,8 @@
     "semantic_hash": "acb578d05997728808c9a6c795cbad62"
   },
   "Commander/docs/TESTING.md": {
-    "mtime": 1787578544.0303829,
-    "ast_hash": "cd96dcbe54b5c370cf640877aa64159b",
+    "mtime": 1787625196.0921419,
+    "ast_hash": "ea536bf835272fca779ddaf005a49655",
     "semantic_hash": ""
   },
   "Commander/extensions/README.md": {
@@ -7680,12 +7680,12 @@
     "semantic_hash": "3310fd078377d009dbe8fbe6a9aaae3e"
   },
   "Commander/hosts/macos/.build/debug/Commander.swiftmodule/arm64-apple-macos.abi.json": {
-    "mtime": 1787578683.8352575,
+    "mtime": 1787625232.8561974,
     "ast_hash": "0a4af882c2c2f56d36e8540ae8c40bbf",
     "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
   },
   "Commander/hosts/macos/.build/debug/CommanderTests.swiftmodule/arm64-apple-macos.abi.json": {
-    "mtime": 1787578698.795787,
+    "mtime": 1787625233.285088,
     "ast_hash": "0a4af882c2c2f56d36e8540ae8c40bbf",
     "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
   },
@@ -7703,5 +7703,10 @@
     "mtime": 1787579195.2282956,
     "ast_hash": "0ced1992dc459aff5b6f35e3234aa19c",
     "semantic_hash": ""
+  },
+  "Commander/hosts/macos/.build/release/Commander.dSYM/Contents/Resources/Relocations/aarch64/Commander.yml": {
+    "mtime": 1787578849.0606124,
+    "ast_hash": "6cd0066d316b442ac7b5ded71e6a9082",
+    "semantic_hash": "6cd0066d316b442ac7b5ded71e6a9082"
   }
 }
