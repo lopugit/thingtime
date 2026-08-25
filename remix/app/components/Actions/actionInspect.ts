@@ -72,6 +72,36 @@ export const describeActionStep = (step: Record<string, unknown>, names?: Record
 	return op;
 };
 
+// Derive the MINIMAL capability set a step list needs — the builder prefixes
+// authoring with this so a UI-authored action's declaration is true by
+// construction (the save-time coverage check in registry.ts stays the real
+// gate). Literal step schemas seed the scopes; get/update steps (id-based)
+// leave their capability unscoped until the author narrows it.
+export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): ActionCapabilityEntry[] => {
+	const scopes = new Map<string, Set<string>>();
+	const invoked = new Set<string>();
+	const need = (capability: string, schema?: string | null) => {
+		if (!scopes.has(capability)) scopes.set(capability, new Set());
+		if (schema) scopes.get(capability)!.add(schema);
+	};
+	for (const step of steps) {
+		if (!step || typeof step !== 'object') continue;
+		const schema = typeof step.schema === 'string' ? step.schema : null;
+		if (step.op === 'things.create') need('things.create', schema);
+		if (step.op === 'things.get' || step.op === 'things.search') need('things.read', schema);
+		if (step.op === 'things.update') need('things.update');
+		if (step.op === 'actions.invoke') {
+			need('actions.invoke');
+			if (typeof step.action === 'string' && step.action) invoked.add(step.action);
+		}
+	}
+	return [...scopes.entries()].map(([capability, schemaSet]) => ({
+		capability,
+		...(schemaSet.size ? { schemas: [...schemaSet] } : {}),
+		...(capability === 'actions.invoke' && invoked.size ? { actions: [...invoked] } : {})
+	}));
+};
+
 // Collect every schema ref an action mentions (steps + capability scopes) so
 // pages can resolve them to display names in one pass.
 export const collectSchemaRefs = (crystal: ActionCrystal | null | undefined): string[] => {
