@@ -273,7 +273,7 @@ describe('Commander settings deep links', () => {
     expect(screen.getByText(/nothing here leaves this device/i)).toBeVisible();
   });
 
-  it('labels responsiveness evidence and only offers controls for a confirmed UI timeout', async () => {
+  it('labels responsiveness evidence and offers deliberate controls for every listed process', async () => {
     window.history.replaceState({}, '', '/settings.html?tab=activity');
     render(<Settings state={state()} />);
 
@@ -286,12 +286,16 @@ describe('Commander settings deep links', () => {
     expect(screen.getByText('Thingtime Agent')).toBeVisible();
     expect(screen.getByText('Agent')).toBeVisible();
     expect(screen.getByText('AX probe inconclusive')).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Quit' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Quit' })[0]!);
     await waitFor(() =>
       expect(nativeRequest).toHaveBeenCalledWith('application.control', { pid: 101, action: 'quit' }),
     );
-    expect(screen.getByRole('button', { name: 'Force quit' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Quit & restart' })).toBeVisible();
+    expect(screen.getAllByRole('button', { name: 'Force quit' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Quit & restart' })).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Quit' })[1]!);
+    await waitFor(() =>
+      expect(nativeRequest).toHaveBeenCalledWith('application.control', { pid: 102, action: 'quit' }),
+    );
   });
 
   it('shows indexing roots and ignore rules and can request a scoped refresh', async () => {

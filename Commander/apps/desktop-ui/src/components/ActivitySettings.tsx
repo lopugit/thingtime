@@ -357,8 +357,8 @@ function UnresponsiveApplications({
         </span>
       </div>
       <p className="activity-unresponsive-note">
-        Commander only enables app controls for a confirmed UI timeout. An accessibility result from an agent
-        or service is diagnostic context, not evidence that the process is frozen.
+        Controls are available for every listed process so you can manage it deliberately. An accessibility
+        result from an agent or service is diagnostic context, not evidence that the process is frozen.
       </p>
       <div className="activity-unresponsive-list">
         {applications.map((application) => {
@@ -396,34 +396,32 @@ function UnresponsiveApplications({
                   </small>
                 </div>
               </div>
-              {!confirmed ? null : (
-                <div className="activity-unresponsive-actions">
-                  <button
-                    type="button"
-                    className="activity-unresponsive-action"
-                    disabled={pending}
-                    onClick={() => void control(application.pid, 'quit')}
-                  >
-                    <Power /> {pending ? 'Working…' : 'Quit'}
-                  </button>
-                  <button
-                    type="button"
-                    className="activity-unresponsive-action force-quit"
-                    disabled={pending}
-                    onClick={() => void control(application.pid, 'forceQuit')}
-                  >
-                    <AlertTriangle /> Force quit
-                  </button>
-                  <button
-                    type="button"
-                    className="activity-unresponsive-action"
-                    disabled={pending}
-                    onClick={() => void control(application.pid, 'restart')}
-                  >
-                    <RotateCcw /> Quit & restart
-                  </button>
-                </div>
-              )}
+              <div className="activity-unresponsive-actions">
+                <button
+                  type="button"
+                  className="activity-unresponsive-action"
+                  disabled={pending}
+                  onClick={() => void control(application.pid, 'quit')}
+                >
+                  <Power /> {pending ? 'Working…' : 'Quit'}
+                </button>
+                <button
+                  type="button"
+                  className="activity-unresponsive-action force-quit"
+                  disabled={pending}
+                  onClick={() => void control(application.pid, 'forceQuit')}
+                >
+                  <AlertTriangle /> Force quit
+                </button>
+                <button
+                  type="button"
+                  className="activity-unresponsive-action"
+                  disabled={pending}
+                  onClick={() => void control(application.pid, 'restart')}
+                >
+                  <RotateCcw /> Quit & restart
+                </button>
+              </div>
             </div>
           );
         })}
