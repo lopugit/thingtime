@@ -160,8 +160,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/commander-release.yml": {
-    "mtime": 1787647034.7575934,
-    "ast_hash": "8ff85b8a354e08e094050702da133374",
+    "mtime": 1787652731.2953014,
+    "ast_hash": "ee52960c91ddafb051eb57b2b021f6dd",
     "semantic_hash": ""
   },
   ".github/scripts/electron-pr-release-contract.mjs": {

@@ -1,15 +1,16 @@
-# Graph Report - .  (2026-08-25)
+# Graph Report - commander-release-developer-id  (2026-08-25)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 21 files · ~129,622 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 571 nodes · 1204 edges · 50 communities (28 shown, 22 thin omitted)
+- 570 nodes · 1204 edges · 49 communities (28 shown, 21 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 13 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `75031659`
+- Built from commit: `7a4353b0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -51,7 +52,6 @@
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
 - [[_COMMUNITY_Fundamentals|Fundamentals]]
 - [[_COMMUNITY_CI provider router workflow|CI provider router workflow]]
-- [[_COMMUNITY_Commander App Release workflow|Commander App Release workflow]]
 - [[_COMMUNITY_pr-conflict-resolver.yml (superseded)|pr-conflict-resolver.yml (superseded)]]
 - [[_COMMUNITY_Lopu Internal Feature Promotion Workflow|Lopu Internal Feature Promotion Workflow]]
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
@@ -103,7 +103,7 @@
 - **Provider Routed CI Workflows** — _github_workflows_ci_provider_router_route_ci_compute_provider, _github_workflows_promote_develop_to_main_promote_develop_to_main, _github_workflows_promote_features_to_main_promote_features_to_main, _github_workflows_rebase_pr_stacks_rebase_prs_and_stacks, _github_workflows_resolve_pr_conflicts_resolve_pr_conflicts, _github_workflows_sync_main_into_develop_sync_main_into_develop [EXTRACTED 0.90]
 - **Canonical AI Instruction Files** — agents_thingtime_ai_instructions, ai_all_thingtime_ai_instructions, claude_thingtime_ai_instructions [EXTRACTED 0.95]
 
-## Communities (50 total, 22 thin omitted)
+## Communities (49 total, 21 thin omitted)
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.06
@@ -218,9 +218,9 @@ Cohesion: 0.17
 Nodes (12): ci-provider-router.yml, promotion-pr-changelog.mjs, promotion-pr Job, route Job, Lopu Internal Develop Promotion Workflow, ci-provider-router.yml, lanes Job, promote-features-to-main.mjs (+4 more)
 
 ## Knowledge Gaps
-- **168 isolated node(s):** `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS` (+163 more)
+- **167 isolated node(s):** `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS` (+162 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **22 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **21 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -230,7 +230,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `runPromotion()` connect `runPromotion` to `selfTest`, `promote-features-to-main.mjs`, `failureDetail`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `TRUSTED_ASSOCIATIONS` to the rest of the system?**
-  _168 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _167 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
 - **Should `Lopu PR Manager Workflow` be split into smaller, more focused modules?**
