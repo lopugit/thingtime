@@ -879,6 +879,16 @@ export function assertControlPlaneContract() {
   );
   assert.match(promotions, /^  actions: write$/m);
   assert.match(promotions, /ACTIONS_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.doesNotMatch(
+    promotions,
+    /actions\/workflows\/promote-features-to-main\.yml\/dispatches/u,
+    "the private feature-promotion implementation never dispatches itself as a public workflow",
+  );
+  assert.match(
+    promotions,
+    /maintenance_operation:"promote-features"[\s\S]*promotion_source_branch:\$source[\s\S]*promotion_target_branch:\$target[\s\S]*promotion_path_prefix:"\.github\/"[\s\S]*actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/u,
+    "custom CI promotion lanes re-enter the one public Lopu manager",
+  );
   const promoter = readFileSync(
     resolve(scripts, "promote-features-to-main.mjs"),
     "utf8",
@@ -913,6 +923,11 @@ export function assertControlPlaneContract() {
   );
   assert.match(omnibus, /ref: github-actions/);
   assert.match(omnibus, /workflow-control\/\.github\/scripts\/promotion-pr-changelog\.mjs/);
+  assert.match(
+    omnibus,
+    /promotion-pr:[\s\S]*timeout-minutes: 30[\s\S]*name: Check out develop with full history[\s\S]*fetch-depth: 0[\s\S]*filter: blob:none[\s\S]*persist-credentials: false/u,
+    "standing promotion keeps complete history without downloading every historical blob or retaining checkout credentials",
+  );
 
   const mainDevelopSync = readWorkflow("sync-main-into-develop.yml");
   assert.match(mainDevelopSync, /^name: Lopu internal main\/develop synchronization$/m);
@@ -1020,6 +1035,16 @@ export function assertControlPlaneContract() {
   assert.match(resolver, /maintain_feature_promotions:/);
   assert.match(resolver, /maintain_main_develop_sync:/);
   assert.match(resolver, /maintain_codeql_backfill:/);
+  assert.doesNotMatch(
+    resolver,
+    /actions\/workflows\/promote-features-to-main\.yml\/dispatches/u,
+    "promotion recovery never calls the private implementation as a public workflow",
+  );
+  assert.equal(
+    resolver.match(/maintenance_operation:"promote-features"[\s\S]{0,180}promotion_dry_run:false[\s\S]{0,180}promotion_lookback:"100"[\s\S]{0,220}actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/gu)?.length,
+    2,
+    "both successful-stack continuation and recoverable promotion retry re-enter Lopu",
+  );
   assert.match(resolver, /github\.event\.schedule == '43 \*\/6 \* \* \*'/);
   assert.match(
     resolver,

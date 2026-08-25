@@ -235,11 +235,13 @@ jobs:
             read -r source target <<<"$lane"
             jq -n --arg source "$source" --arg target "$target" --argjson dry "$DRY_RUN" '
               {ref:"github-actions", inputs:{
-                dry_run:$dry, lookback:"50",
-                source_branch:$source, target_branch:$target,
-                require_path_prefix:".github/"}}' \
+                maintenance_operation:"promote-features",
+                promotion_dry_run:$dry, promotion_lookback:"50",
+                promotion_source_branch:$source,
+                promotion_target_branch:$target,
+                promotion_path_prefix:".github/"}}' \
               | gh api --method POST \
-                  "repos/$REPO/actions/workflows/promote-features-to-main.yml/dispatches" \
+                  "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
                   --input -
             echo "Dispatched the $source -> $target lane."
           done
