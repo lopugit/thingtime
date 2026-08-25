@@ -17,6 +17,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-08-25 — Action Thing v1: builder, ttAction closure, Used-by, v2 design
+
+- "⚡ New action" builder on /actions with LIVE-DERIVED capabilities
+  (declaration always covers behavior — one unscoped step unscopes the
+  capability), ttAction component-render bindings (data-tt-action /
+  data-tt-action-inputs, the only allowlisted data-* attributes; /things
+  PreviewModal is the interactive surface), the Used-by back-reference
+  panel on the inspector, six Lopu-review fixes across two rounds, unit
+  suites test:actions (21) + actionGrammar (15), and the v2
+  external-capabilities design (PRs/action-thing-v2-external-capabilities.md).
+  Details: PRs/387-*.md. CI green; batteries 56/56 + 30/30.
+
 ### 2026-08-24 — Action Thing v1 (declarative, capability-bounded programs)
 
 - New `action` + protected `action-run` kinds, executor
