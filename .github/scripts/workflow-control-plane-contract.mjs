@@ -842,6 +842,12 @@ export function assertControlPlaneContract() {
   );
 
   const rebase = readWorkflow("rebase-pr-stacks.yml");
+  const rebaseTriggers = rebase.slice(0, rebase.indexOf("\npermissions:\n"));
+  assert.doesNotMatch(
+    rebaseTriggers,
+    /^  (?:push|pull_request|pull_request_target|repository_dispatch|schedule|workflow_dispatch):/mu,
+    "the rebase implementation is reachable only through the unified Lopu manager",
+  );
   assert.match(rebase, /ref: github-actions/);
   assert.match(rebase, /origin\/github-actions/);
   assert.doesNotMatch(rebase, /ref: \$\{\{ github\.sha \}\}/);
@@ -890,6 +896,16 @@ export function assertControlPlaneContract() {
   assert.match(resolver, /maintain_feature_promotions:/);
   assert.match(resolver, /maintain_main_develop_sync:/);
   assert.match(resolver, /github\.event\.schedule == '43 \*\/6 \* \* \*'/);
+  assert.match(
+    resolver,
+    /types: \[resolve-conflicts-cascade, rebase-pr-stack-ai\]/u,
+    "the single Lopu entrypoint accepts legacy exact stack-worker events",
+  );
+  assert.match(
+    resolver,
+    /github\.event\.action == 'rebase-pr-stack-ai'[\s\S]*&& 'rebase-stack'[\s\S]*\|\| 'resolve-conflicts'/u,
+    "legacy exact stack workers preserve their CI-provider policy through Lopu",
+  );
   assert.match(resolver, /^\s+queue: max$/m);
   assert.match(
     resolver,
@@ -903,6 +919,7 @@ export function assertControlPlaneContract() {
     "promotion_source_branch",
     "promotion_target_branch",
     "promotion_path_prefix",
+    "rebase_cascade",
     "promotion_source_pr",
     "promotion_plan_b64",
     "routing_proof",

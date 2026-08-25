@@ -78,6 +78,12 @@ of their own. Manual recovery uses **Actions → Lopu PR manager → Run workflo
 and its `maintenance_operation` choice. Their concurrency queues never cancel
 an in-flight promotion or synchronization.
 
+The stack rebase/cascade implementation is internal in the same way. Existing
+`rebase-pr-stack-ai` exact-worker events enter through **Lopu PR manager**, keep
+their `rebase-stack` provider policy and immutable snapshot payload, and are
+then handed to the reusable rebase engine. No product branch exposes a second
+rebase workflow.
+
 Conflict and stale-branch workers retain the complete commit graph needed to
 merge the exact snapshotted base, but use Git partial-clone blob filtering so
 Lopu does not download the repository's multi-gigabyte historical file corpus

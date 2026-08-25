@@ -21,6 +21,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **The last rebase-specific public entrypoint is folded into Lopu**: legacy
+  `rebase-pr-stack-ai` exact-worker events now enter through **Lopu PR
+  manager**, retain their rebase compute-provider policy and snapshot payload,
+  and invoke the reusable stack engine internally. The engine itself exposes
+  only `workflow_call`, so product branches no longer need a second rebase
+  listener. — Codex (AI), 2026-08-25
 - **Lopu is now the sole automatic promotion and branch-synchronization
   entrypoint too**: the standing develop→main promotion, per-feature promotion
   train, six-hour promotion backstop, and main→develop synchronization run as
