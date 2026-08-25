@@ -2511,9 +2511,14 @@ jobs:
               echo "::error::Lopu proposed an invalid CodeQL disposition schema for PR #$number."
               exit 1
             }
+            # `prepare` seeds every disposition file with `[]`, so an untouched
+            # file is still non-empty. Stop here once the schema is trusted and
+            # Lopu proposed nothing, rather than spending a live head lookup
+            # whose transient failure would fail this whole review.
+            jq -e 'length > 0' "$proposals" >/dev/null || continue
 
             result="$(jq -c --argjson number "$number" '.[] | select(.number == $number)' "$RESULTS" | tail -1)"
-            outcome="$(jq -r '.outcome // "missing"' <<<"${result:-{}}")"
+            outcome="$(jq -r '.outcome // "missing"' <<<"${result:-null}")"
             case "$outcome" in
               no-change|pushed|already-published) ;;
               *)

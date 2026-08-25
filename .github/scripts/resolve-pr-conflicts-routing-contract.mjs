@@ -385,6 +385,27 @@ function assertWorkflowSource() {
   );
   assert.match(codeqlDispositionBlock, /code-scanning\/alerts\/\$alert_number/u, "writer uses the exact alert endpoint");
   assert.match(codeqlDispositionBlock, /thingtime-lopu-codeql:v1/u, "each applied disposition is audited on its PR");
+  assert.match(
+    reviewBlock,
+    /jq -e 'length > 0' "\$proposals"/u,
+    "an untouched `[]` disposition file short-circuits before the live head lookup",
+  );
+
+  // `${x:-{}}` does not mean "default to an empty object": bash closes the
+  // expansion at the first `}`, so the default is `{` and the trailing `}` is
+  // appended to whatever the variable held. A populated variable therefore
+  // becomes `<value>}`, which fails every downstream `jq` under `set -e`.
+  for (const [name, controllerSource] of [
+    ["resolve-pr-conflicts.yml", source],
+    ["rebase-pr-stacks.yml", rebaseSource],
+    ["rebase-conflict-round/action.yml", rebaseActionSource],
+  ]) {
+    assert.doesNotMatch(
+      controllerSource,
+      /:-\{\}\}/u,
+      `${name} must not use the \${x:-{}} brace-default expansion, which appends a stray brace`,
+    );
+  }
 
   assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock);
 }
