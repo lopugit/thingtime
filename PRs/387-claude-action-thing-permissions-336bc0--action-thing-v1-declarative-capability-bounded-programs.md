@@ -276,3 +276,42 @@ Also: the `things.ts` reserved-prefix comment no longer describes an
 Validation: verify-actions.mjs **65/65** (63 + the 2 duplicate-key checks) ·
 test:actions **25/25** · test:schemas **82/82** · targeted lint clean ·
 build:client clean · /things ⚡ tiles verified in the browser.
+
+## Round 6 — defensive security review + fixes (2026-08-25)
+
+Full report: [SECURITY-REPORTS/2026-08-25-action-thing-v1-security-review.md](../SECURITY-REPORTS/2026-08-25-action-thing-v1-security-review.md).
+
+Six scoped review lenses over the branch, each finding then verified by two
+independent skeptics (keep only if both rate ≥8/10). Three findings, all fixed:
+
+1. **Action-created things were public** (HIGH). `things.create` passed no
+   `acl`, so `createThing`'s standalone-content default (`ACL_ALL`) applied —
+   the demo's own invoices were world-readable, and audience appeared nowhere
+   in the consent surface. Actions now mint `acl: [ACL_OWNER]`.
+2. **Foreign components fired actions as the viewer** (HIGH in chain).
+   `PreviewModal` rendered ANY readable thing through the firing wrapper.
+   Ownership is now the trust boundary (`untrusted` computed inside the modal).
+3. **Foreign action programs resolved by id** (MEDIUM). The delegated path
+   (`source: 'component'`) is now owner-pinned like the actionKey branch;
+   the deliberate `/actions` path still resolves readable foreign actions.
+
+Chained, 1–3 were a data-exfiltration path: attacker markup → victim's click →
+attacker's program under the victim's session → `search` results copied into a
+`create` → minted public → attacker reads it. Two review agents disagreed about
+step 3's audience; the one claiming "owner-private" was wrong, and adjudicating
+that by hand is what raised this from integrity-only to a confidentiality
+breach.
+
+**Deliberately reverted:** a strict child-capability envelope (the below-bar
+4th candidate). It broke the canonical composition shape — the parent declares
+only `actions.invoke` and children do the work, exactly as `onboard-customer`
+does — and no privilege boundary rode on it, since every op runs as the invoker
+regardless. The real defect was disclosure, so `actionCannotAccess` now refuses
+to assert absolute negatives for a composing action. The run-time
+`things.create` / `actions.invoke` gates added during that work were kept.
+
+Validation: verify-actions **73/73** (65 + 8 security regressions) ·
+test:actions **27/27** · test:schemas **82/82** · lint clean · build clean.
+Live: foreign component renders but is inert, owned one still fires
+(draft→sent), onboard-customer's invoice is `["tt:user"]`, stranger and
+anonymous reads refused.

@@ -39,7 +39,11 @@ export const useTtActionClicks = () => {
 		busyRef.current = true;
 		(async () => {
 			try {
-				const response = await apiRef.current.v1.actions.run({ action, inputs });
+				// source: 'component' NARROWS server-side resolution to actions
+				// this viewer owns. Markup can name any id, so the delegated
+				// path must never hand the viewer's authority to a stranger's
+				// program (execute.ts resolveActionProgram, ownedOnly).
+				const response = await apiRef.current.v1.actions.run({ action, inputs, source: 'component' });
 				if (response?.status === 'ok') {
 					lopuRef.current({
 						title: `⚡ Action ran ✓`,
