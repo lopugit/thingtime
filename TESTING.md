@@ -8,6 +8,19 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Passkeys + cross-deployment auto-login
 
+- [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
+      unique index: `node scripts/verify-passkeys.mjs` covers it (two data
+      things may share one `crystal.linkKey`; the real link still dedupes to
+      one row and keeps counting). After deploying, re-run the
+      `backfill-relationship-unique-keys` migration from /admin so legacy
+      `passkey-app-link` rows get stamped — until then they dedupe through the
+      crystal-path fallback in the upsert filter.
+- [ ] `things_passkey_link_key_unique` is gone from the `things` collection
+      after a boot (`db.things_v2.getIndexes()`). On a dev machine running
+      several worktrees against ONE local mongod, a sibling checkout still on
+      pre-fix code re-creates it at its next boot — drop it again and update
+      that worktree; it is not a code regression.
+
 - [ ] Settings → Security → "Add a passkey ✨": wrong password → error toast,
       no platform sheet; correct password → the browser/1Password/iCloud sheet
       opens and the saved passkey appears in the list with provider name,
