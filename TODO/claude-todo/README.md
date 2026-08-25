@@ -26,6 +26,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 14 | Editor.js block drag/drop reordering (desktop pointer, mobile long-press, keyboard alternative, autosave/undo-safe) | 🔴 Not started | [14-editorjs-block-drag-drop.md](./14-editorjs-block-drag-drop.md) |
 | 18 | Unique account invite links with optional username/profile prefill | 🔴 Not started | [18-account-invite-links.md](./18-account-invite-links.md) |
 | 19 | Group chats with per-participant anonymity, including the creator | 🔴 Not started | [19-anonymous-group-chats.md](./19-anonymous-group-chats.md) |
+| 20 | Index budget — reconcile the `things` indexes under MongoDB's 64-per-collection cap (49 in use, ~5 dead legacy ones to reclaim, budget guard) | 🔴 Not started · no rush, headroom exists | [20-index-budget-consolidation.md](./20-index-budget-consolidation.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 
