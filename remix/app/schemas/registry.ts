@@ -3909,7 +3909,9 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 		const schema = typeof step.schema === 'string' ? step.schema : null;
 		if (step.op === 'things.create' && schema && !effects.creates.includes(schema)) effects.creates.push(schema);
 		if ((step.op === 'things.get' || step.op === 'things.search') && schema && !effects.reads.includes(schema)) effects.reads.push(schema);
-		if (step.op === 'things.get' && !schema && !effects.reads.includes('*')) effects.reads.push('*');
+		// an UNSCOPED get or search is the broadest read in the vocabulary —
+		// it must surface as the '*' ("reads things") effect, never as nothing
+		if ((step.op === 'things.get' || step.op === 'things.search') && !schema && !effects.reads.includes('*')) effects.reads.push('*');
 		if (step.op === 'things.update') effects.updates = true;
 		if (step.op === 'actions.invoke' && typeof step.action === 'string' && !effects.invokes.includes(step.action)) {
 			effects.invokes.push(step.action);

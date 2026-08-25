@@ -405,6 +405,63 @@ const run = async () => {
 	const bellaPublic = await runAction(bella.cookie, { action: createCustomerId, inputs: { name: 'Bella Own' } });
 	check('public action runs AS the invoker (their data, their ACL)', bellaPublic.status === 200 && bellaPublic.body?.status === 'ok');
 
+	// ---- scoped read constrains a BARE search (Lopu review finding 1) --------
+	const bareSearch = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: {
+			name: 'Scoped bare search',
+			actionKey: `bare-search-${suffix}`,
+			steps: [
+				{ op: 'things.search', limit: 50 },
+				{ op: 'return', value: '$step.1' }
+			],
+			capabilities: [{ capability: 'things.read', schemas: [CUSTOMER_ID] }]
+		}
+	});
+	check('bare search saves under a scoped read (run-time gap scenario)', bareSearch.status === 200);
+	const bareRun = await runAction(alice.cookie, { action: `bare-search-${suffix}` });
+	const bareResults = Array.isArray(bareRun.body?.result) ? bareRun.body.result : [];
+	check(
+		'scoped read constrains a bare search to its schemas',
+		bareRun.status === 200 &&
+			bareRun.body?.status === 'ok' &&
+			bareResults.length > 0 &&
+			bareResults.every((entry) => entry?.crystal?.schemaId === CUSTOMER_ID || entry?.crystal?.schema === CUSTOMER),
+		JSON.stringify(bareResults.map((entry) => entry?.crystal?.schema)).slice(0, 200)
+	);
+
+	// ---- update cannot relabel provenance (Lopu review finding 3) ------------
+	const relabel = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: {
+			name: 'Relabel attempt',
+			actionKey: `relabel-${suffix}`,
+			inputs: [{ name: 'id', type: 'string', required: true }],
+			steps: [
+				{ op: 'things.get', id: '$input.id' },
+				{ op: 'things.update', id: '$input.id', values: { status: 'draft', schema: 'not-invoice', schemaId: 'fake-schema-id' } },
+				{ op: 'return', value: '$step.2' }
+			],
+			capabilities: [
+				{ capability: 'things.read', schemas: [INVOICE] },
+				{ capability: 'things.update', schemas: [INVOICE] }
+			]
+		}
+	});
+	check('relabel-attempt action saves', relabel.status === 200);
+	const relabelRun = await runAction(alice.cookie, { action: `relabel-${suffix}`, inputs: { id: invoiceId } });
+	const relabeled = await api(`/api/v1/things?id=${encodeURIComponent(invoiceId || 'missing')}`, { cookie: alice.cookie });
+	const relabeledCrystal = relabeled.body?.thing?.crystal || {};
+	check(
+		'update re-stamps schema provenance from the current doc',
+		relabelRun.status === 200 &&
+			relabelRun.body?.status === 'ok' &&
+			relabeledCrystal.schema === INVOICE &&
+			relabeledCrystal.schemaId !== 'fake-schema-id' &&
+			relabeledCrystal.status === 'draft',
+		`schema=${relabeledCrystal.schema} schemaId=${String(relabeledCrystal.schemaId).slice(0, 20)}`
+	);
+
 	// ---- docs twins ----------------------------------------------------------
 	const runDocs = await api('/api/v1/actions/run-docs');
 	const runsDocs = await api('/api/v1/actions/runs-docs');

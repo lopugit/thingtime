@@ -370,17 +370,30 @@ const executeProgram = async (
 				// Own-docs-only keeps ACL trivially correct without dragging the
 				// full search pipeline into the executor.
 				const limit = typeof step.limit === 'number' ? step.limit : Math.min(20, MAX_ACTION_SEARCH_LIMIT);
-				const filter: Record<string, unknown> = { ownerId: viewer!.id, thingtime: 'data' };
+				const clauses: Record<string, unknown>[] = [];
 				if (typeof step.schema === 'string') {
 					const schema = await resolveSchemaRef(viewer, step.schema);
-					filter.$or = [{ 'crystal.schemaId': schema.id }, { 'crystal.schema': schema.name }];
+					clauses.push({ $or: [{ 'crystal.schemaId': schema.id }, { 'crystal.schema': schema.name }] });
 				}
+				// A scoped things.read capability constrains the QUERY too — a bare
+				// search step must not read outside the declared scope while the
+				// inspector shows the narrow one (things.get closes this same gap
+				// via schemaScopeAllows below; search needs both halves).
+				const readScope = capabilityOf(program, 'things.read');
+				if (readScope?.schemas?.length) {
+					clauses.push({
+						$or: readScope.schemas.flatMap((ref) => [{ 'crystal.schemaId': ref }, { 'crystal.schema': ref }])
+					});
+				}
+				const filter: Record<string, unknown> = { ownerId: viewer!.id, thingtime: 'data', ...(clauses.length ? { $and: clauses } : {}) };
 				const things = await getThingsCollection();
-				const docs = await things
-					.find(filter as any)
-					.sort({ createdAt: -1, shareId: 1 })
-					.limit(limit)
-					.toArray();
+				const docs = (
+					await things
+						.find(filter as any)
+						.sort({ createdAt: -1, shareId: 1 })
+						.limit(limit)
+						.toArray()
+				).filter((doc: any) => schemaScopeAllows(readScope, schemaIdentityOf(doc.crystal)));
 				note = `${docs.length} match${docs.length === 1 ? '' : 'es'}`;
 				scope.steps[index] = docs.map((doc: any) => ({ id: doc.shareId, crystal: doc.crystal || {}, createdAt: doc.createdAt }));
 			} else if (step.op === 'things.update') {
@@ -395,7 +408,18 @@ const executeProgram = async (
 				}
 				const values = resolveValue(step.values, scope);
 				if (!values || typeof values !== 'object' || Array.isArray(values)) runError(`Step ${label} values resolved to non-object data`);
-				const updated = await updateThing(viewer, String(id), { crystal: values });
+				// Re-stamp provenance from the CURRENT doc: updateThing merges the
+				// crystal, so a resolved value named schema/schemaId would relabel
+				// the thing into a different schema and out of the scope check on
+				// every later step and run (things.create guards this by spreading
+				// its stamps last — this is the update-path equivalent).
+				const patch = values as Record<string, unknown>;
+				const currentCrystal = (currentThing.crystal || {}) as Record<string, unknown>;
+				if (typeof currentCrystal.schema === 'string') patch.schema = currentCrystal.schema;
+				else delete patch.schema;
+				if (typeof currentCrystal.schemaId === 'string') patch.schemaId = currentCrystal.schemaId;
+				else delete patch.schemaId;
+				const updated = await updateThing(viewer, String(id), { crystal: patch });
 				if (isFail(updated)) runError(`Step ${label} update failed: ${updated.error}`);
 				const thing = (updated as { ok: true; thing: { id: string; crystal: unknown } }).thing;
 				target = thing.id;
@@ -469,9 +493,16 @@ export const runAction = async (
 	if (isFail(program)) return program;
 
 	const declaredLimits = (program.crystal.limits || {}) as Record<string, number>;
-	const limits = { ...ACTION_LIMIT_DEFAULTS, ...declaredLimits };
-	for (const key of Object.keys(limits) as (keyof typeof ACTION_LIMIT_CEILINGS)[]) {
-		limits[key] = Math.min(limits[key], ACTION_LIMIT_CEILINGS[key]);
+	// Walk the CEILINGS, never the merged object: an unrecognised declared key
+	// has no ceiling (Math.min(value, undefined) → NaN in the budget), and the
+	// executor must not depend on the sanitizer having refused it upstream.
+	const limits: Record<keyof typeof ACTION_LIMIT_CEILINGS, number> = { ...ACTION_LIMIT_DEFAULTS };
+	for (const key of Object.keys(ACTION_LIMIT_CEILINGS) as (keyof typeof ACTION_LIMIT_CEILINGS)[]) {
+		const declared = declaredLimits[key];
+		limits[key] = Math.min(
+			typeof declared === 'number' && Number.isFinite(declared) ? declared : ACTION_LIMIT_DEFAULTS[key],
+			ACTION_LIMIT_CEILINGS[key]
+		);
 	}
 
 	if (jsonBytes(request.inputs ?? {}) > limits.maxInputBytes) {
