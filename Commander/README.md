@@ -116,7 +116,10 @@ For an explicitly local-only iteration, use `COMMANDER_SIGNING_MODE=development 
 That path is not a distributable Gatekeeper build. `COMMANDER_SIGNING_IDENTITY` may select a specific identity,
 but distribution mode accepts only a `Developer ID Application` identity. Public downloads additionally need
 Apple notarization credentials configured outside this repository; a valid Developer ID signature alone is not
-a notarization ticket.
+a notarization ticket. Local distribution builds use the Keychain profile named `Commander Notarization` by default,
+submit a ZIP with `notarytool`, staple the accepted ticket, and only then replace `~/Applications/Commander.app`.
+Set `COMMANDER_NOTARY_PROFILE` to use another Keychain profile. The GitHub release workflow uses
+`COMMANDER_NOTARIZATION_MODE=external` because it submits with its short-lived CI API-key credentials instead.
 
 ## GitHub Releases
 

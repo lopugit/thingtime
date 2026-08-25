@@ -12,6 +12,8 @@ MIN_SYSTEM_VERSION="14.0"
 SIGNING_MODE="${COMMANDER_SIGNING_MODE:-distribution}"
 SIGNING_IDENTITY="${COMMANDER_SIGNING_IDENTITY:-}"
 SIGNING_TIMESTAMP_ARGS=()
+NOTARIZATION_MODE="${COMMANDER_NOTARIZATION_MODE:-local}"
+NOTARY_PROFILE="${COMMANDER_NOTARY_PROFILE:-Commander Notarization}"
 NODE_VERSION="22.23.2"
 NODE_SHA256_ARM64="61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"
 NODE_SHA256_X64="58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026"
@@ -61,6 +63,10 @@ resolve_signing_configuration() {
         echo "Commander distribution builds require a Developer ID Application identity, not: $SIGNING_IDENTITY" >&2
         exit 1
       fi
+      if [[ "$NOTARIZATION_MODE" != "local" && "$NOTARIZATION_MODE" != "external" ]]; then
+        echo "COMMANDER_NOTARIZATION_MODE must be local or external: $NOTARIZATION_MODE" >&2
+        exit 1
+      fi
       SIGNING_TIMESTAMP_ARGS=(--timestamp)
       ;;
     development)
@@ -83,6 +89,23 @@ resolve_signing_configuration() {
     echo "Ad-hoc signing is not allowed for Commander distribution builds." >&2
     exit 1
   fi
+}
+
+notarize_distribution_bundle() {
+  [[ "$SIGNING_MODE" == "distribution" ]] || return 0
+  [[ "$NOTARIZATION_MODE" == "local" ]] || return 0
+
+  local archive_root archive
+  archive_root="$(mktemp -d "$HOME/Library/Caches/$BUNDLE_ID/Commander-notarization.XXXXXX")"
+  archive="$archive_root/$APP_NAME.zip"
+  trap '/bin/rm -rf "'"$archive_root"'"' RETURN
+  /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$archive"
+  /usr/bin/xcrun notarytool submit "$archive" --wait --keychain-profile "$NOTARY_PROFILE"
+  /usr/bin/xcrun stapler staple "$APP_BUNDLE"
+  /usr/bin/xcrun stapler validate "$APP_BUNDLE"
+  /usr/sbin/spctl -a -vv --type execute "$APP_BUNDLE"
+  trap - RETURN
+  /bin/rm -rf "$archive_root"
 }
 
 build_all() {
@@ -287,6 +310,7 @@ stop_installed_runtime() {
 resolve_signing_configuration
 stop_installed_runtime
 build_all
+notarize_distribution_bundle
 
 case "$MODE" in
   --build-only|build)
