@@ -325,7 +325,11 @@ final class DaemonSupervisor: @unchecked Sendable {
 
     guard !expected else { return }
     let error: DaemonError
-    if !ready, !startupHadResolved, Self.isPortInUse(details) {
+    // Pipe delivery can race process termination. Confirm the listener as well
+    // as reading Node's EADDRINUSE diagnostic, so this stays actionable even
+    // when stderr is drained just after the child exits.
+    if !ready, !startupHadResolved,
+       (Self.isPortInUse(details) || LoopbackPortInspector().listener(on: port) != nil) {
       error = .portInUse(port: port, details: details)
     } else {
       error = .stopped(status: terminatedProcess.terminationStatus, details: details)
