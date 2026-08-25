@@ -176,3 +176,57 @@ is and isn't reachable today:
 - **Open product decision (raised on the PR):** whether the `/components` tester
   should also fire ttAction behind a "this will run the action" confirm, or stay
   inert (the current safe default — no side-effectful runs while authoring).
+
+## Round 5 — functional multi-review pass (2026-08-25, post-completion directive)
+
+Three independent functional review lenses over the full diff (correctness,
+UX/design-consistency, docs-accuracy — review scope deliberately excluded
+security/adversarial framing per the owner's directive), then fixes:
+
+- **Optimistic cached paint on `/actions/:key`** (house-rule gap): the
+  inspector now seeds instantly from the `/actions` list's `tt-actions-<user>`
+  localCache (matched by id OR actionKey) while the authoritative fetch
+  reconciles — no more blank 200px flash when navigating from the
+  already-painted list.
+- **ActionChip overflow guards**: chips cap at `maxWidth 100%` and ellipsize
+  their label instead of pushing past the card edge at 375px (long actionKeys
+  and multi-schema capability chips were the risk); the `actionKey · id` mono
+  line wraps with `overflowWrap: anywhere`.
+- **Family-consistent CTAs**: the three primary buttons (New action / Create
+  action / Run action) moved `purple` → `pink`, matching the
+  schemas/components builder family (`ComponentsBrowsePage`, `SchemaBuilder`).
+  Tone dots and ⚡ accents stay purple — the action identity color is
+  unchanged; only the CTA hue joins the family.
+- **Trace polish**: run-trace target ids only get an ellipsis when actually
+  truncated (previously unconditional).
+- **Invisible NUL byte** found and removed inside the `requestKey` template
+  literal in ActionDetailPage.tsx (runtime-harmless — both comparisons used
+  the same expression — but it made grep classify the file as binary and
+  broke exact-match tooling). Worth remembering as a debugging pattern:
+  "grep says binary but the file looks like source" ⇒ scan for `\x00`.
+- **Design-doc reconciliation** (drafted pre-implementation, never fully
+  re-synced): input descriptors use `name` not `key`; `things.search` has no
+  `filter` grammar in v1; run records link via `targetId` not `parentId`;
+  there is no `GET /api/v1/actions/browse` (browse rides the unified things
+  path); no `action-run` /things renderer (protected kind — runs render in
+  the inspector); actionKey is owner-scoped-resolved, not index-unique, and
+  no seed mints `action-<slug>` shareIds (the reserved prefix refuses user
+  creates; the executor mints `action-run-<uuid>`); the limits grammar lists
+  `maxInputBytes`; the invariants table now names the real mechanisms
+  (hasOwnProperty-gated path resolution; `data`-kind crystal validation with
+  schema provenance stamps).
+
+### Validation (tip, this round)
+
+- verify-actions.mjs **63/63** · verify-components.mjs **30/30** (needs the
+  explicit base-url arg: `node scripts/verify-components.mjs
+  http://127.0.0.1:<nitro-port>` — its default is another checkout's port).
+- test:actions **23/23** · test:schemas **81/81** · test:things **7/7** ·
+  builtinSchemaProjection **58/58** · targeted lint 0 errors ·
+  `build:client` clean.
+- Browser (desktop + 375px): ran Tag customer from the inspector
+  (ok · 21ms · 2 ops, per-step trace, zero-padded phone survives as string,
+  Last runs onRan-refresh); reset the demo invoice to draft and re-fired the
+  PreviewModal Send pill (🧩→⚡→📦: draft→sent + fresh `sentAt`); inspector
+  and browse pages show zero horizontal overflow at 375px with schema-name
+  chips resolved.

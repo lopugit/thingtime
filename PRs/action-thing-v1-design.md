@@ -48,18 +48,22 @@ vocabulary deliberately does not define one.
 ```
 name          string (required)
 description   text
-actionKey     slug (unique per owner; system seeds use shareId action-<slug>,
-              prefix reserved in sanitizeShareId like component-)
+actionKey     slug (resolved owner-scoped at invoke time — first match;
+              per-owner uniqueness is not yet index-enforced. The action-
+              shareId prefix is reserved in sanitizeShareId like component-:
+              user creates refuse it, and the executor mints run-record ids
+              as action-run-<uuid>)
 version       int
 forkOf        optional source reference
-inputs        ≤16 typed descriptors: { key, type: string|text|number|boolean|enum,
+inputs        ≤16 typed descriptors: { name, type: string|text|number|boolean|enum,
               required?, default?, values? (enum) } — same bounded-descriptor
               posture as component args
 steps         1..20 ordered ops (closed vocabulary, see below)
 capabilities  declared list (see below)
 limits        { timeoutMs ≤10000, maxOperations ≤50, maxDepth ≤8,
-              maxResultBytes ≤256KB, maxChildActions ≤20 } — author may
-              lower, server caps are the ceiling
+              maxResultBytes ≤256KB, maxChildActions ≤20,
+              maxInputBytes ≤64KB } — author may lower, server caps are
+              the ceiling
 ```
 
 ### Steps
@@ -67,7 +71,7 @@ limits        { timeoutMs ≤10000, maxOperations ≤50, maxDepth ≤8,
 ```
 { op: 'things.create', schema: 'customer', values: { name: '$input.name', ... } }
 { op: 'things.get',    id: '$input.invoiceId' }
-{ op: 'things.search', schema: 'invoice', filter: {...bounded...}, limit: ≤50 }
+{ op: 'things.search', schema: 'invoice', limit: ≤50 }   // no filter grammar in v1
 { op: 'things.update', id: '$step.1.id', values: { status: 'sent', sentAt: '$now' } }
 { op: 'actions.invoke', action: '<actionKey|id>', inputs: {...} }
 { op: 'return',        value: '$step.1' }
@@ -108,7 +112,7 @@ out of v1 entirely — the vocabulary simply doesn't have it yet.
   invoke actions you can read), pushes onto an invocation stack (fast cycle
   diagnostics), decrements depth + childActions, and recurses with the SAME
   budget object.
-- Always write an `action-run` child thing (parentId = action id): status,
+- Always write an `action-run` child thing (targetId = action id): status,
   timings, ops/depth used, size-capped inputs echo, size-capped result,
   error, trace. Run records are executor-written only — the kind is blocked
   from direct create/update via the generic things routes (moderation-stamp
@@ -118,8 +122,9 @@ out of v1 entirely — the vocabulary simply doesn't have it yet.
 ## API family (all three registration places, themes-family conventions)
 
 - `POST /api/v1/actions/run` — execute (auth; rate-limited).
-- `GET  /api/v1/actions/browse` — mirror of components/browse for `action`
-  kind: filters, cursors, decorations (lastRun summary, runCount).
+- `/actions` browse rides the unified things path (`things.list` on the
+  `action` kind) — no dedicated browse endpoint in v1; a decorated
+  `GET /api/v1/actions/browse` (lastRun summary, runCount) is future work.
 - `GET  /api/v1/actions/runs?action=<id>` — run history (batch child
   aggregation, one query, never N+1).
 - Actions are created/edited through the unified `POST /api/v1/things`
@@ -133,8 +138,10 @@ out of v1 entirely — the vocabulary simply doesn't have it yet.
   secrets, kinds outside scope), the limits envelope, the numbered step list,
   a Run panel (typed input form → result + per-step trace + budget used),
   and run history.
-- `/things`: kind renderers for `action` (capability/effect badges) and
-  `action-run` (status + duration + link to parent).
+- `/things`: kind renderer for `action` (capability/effect badges).
+  `action-run` needs no /things renderer — the kind is protected and
+  excluded from generic reads; runs render in the inspector's Last runs
+  panel via its own read model.
 - Component glue for the working-app proof: a component render node may
   declare `ttAction: '<actionKey>'` on a button; the renderer wires it to the
   run endpoint (viewer-invoked, same bounded machinery). This is the
@@ -158,8 +165,8 @@ run record land.
 | Privilege escalation | executor delegates to things utils under the invoker's identity; capabilities only narrow |
 | Undeclared effects | save-time capability-coverage check + run-time re-check per op |
 | Perpetual recursion (A→B→A) | shared budget + depth cap + child-action cap + invocation stack |
-| Prototype pollution via refs | rooted path grammar, forbidden segments, null-prototype step map |
-| Injection via values | refs are whole-value substitution; created/updated crystals pass validateThingtimeCrystal for the target schema |
+| Prototype pollution via refs | rooted path grammar, forbidden segments, hasOwnProperty-gated path resolution |
+| Injection via values | refs are whole-value substitution; created/updated crystals pass validateThingtimeCrystal for the bounded `data` kind (schema/schemaId are provenance stamps — field-level schema gating is future work) |
 | Resource exhaustion | deadline, op budget, input/result byte caps, steps ≤20, trace capped, rate limit on run |
 | Secret/network reach | no op exists that touches fetch/env/Mongo; vocabulary is closed both at save and run |
 | Run-record forgery | action-run blocked from direct generic-route writes |

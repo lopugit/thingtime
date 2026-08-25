@@ -462,7 +462,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 					<Button onClick={onClose} size="sm" variant="ghost">
 						Cancel
 					</Button>
-					<Button colorScheme="purple" isDisabled={!name.trim() || !builtSteps.length} isLoading={saving} onClick={save} size="sm">
+					<Button colorScheme="pink" isDisabled={!name.trim() || !builtSteps.length} isLoading={saving} onClick={save} size="sm">
 						Create action
 					</Button>
 				</Flex>
