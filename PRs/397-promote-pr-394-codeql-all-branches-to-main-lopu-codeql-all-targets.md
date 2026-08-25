@@ -60,12 +60,11 @@ silently restore the startup failure.
 ## Single automatic Lopu entry point
 
 The unified manager already owns merge, stale-branch, rebase, and stack
-detection. Its former standalone rebase listener is retained only for the
-exact internal `rebase-pr-stack-ai` worker handoff; it has no push, PR,
-schedule, or manual trigger. This prevents one branch update from launching
-two overlapping model-management workflows and avoids the legacy rebase run
-being cancelled when Lopu's embedded rebase lane starts. Manual recovery now
-uses **Lopu PR manager** with an exact PR or branch selector.
+detection. The former product `rebase-pr-stacks.yml` listener is removed too:
+exact `rebase-pr-stack-ai` workers now enter through **Lopu PR manager**, and
+the protected rebase engine is `workflow_call`-only. This prevents one branch
+update from launching two overlapping model-management workflows. Manual
+recovery uses **Lopu PR manager** with an exact PR or branch selector.
 
 The final consolidation also removes the three product-branch promotion/sync
 workflow files. Their protected implementations now run only as reusable jobs
@@ -74,6 +73,12 @@ pushes own main→develop synchronization, and the six-hour promoter sweep plus
 manual maintenance choices enter through Lopu. This makes the earlier
 "single public workflow" claim true for repository management rather than only
 for model-backed merge/rebase work.
+
+CI Control keeps its stable operation keys (`rebase-stack`, both promotion
+lanes, and `sync-main`) but now translates them into typed Lopu manager inputs.
+That fixes the otherwise-broken admin/Vercel dispatch path after the old
+workflow files are removed, including preservation of rebase cascade and
+promotion dry-run/lookback choices.
 
 The live #399 check exposed one final default-listener mismatch: `main` still
 had a caller-level `cancel-in-progress: true` group around the all-branch
