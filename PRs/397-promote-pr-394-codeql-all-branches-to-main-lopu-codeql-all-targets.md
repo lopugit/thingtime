@@ -66,3 +66,11 @@ schedule, or manual trigger. This prevents one branch update from launching
 two overlapping model-management workflows and avoids the legacy rebase run
 being cancelled when Lopu's embedded rebase lane starts. Manual recovery now
 uses **Lopu PR manager** with an exact PR or branch selector.
+
+The final consolidation also removes the three product-branch promotion/sync
+workflow files. Their protected implementations now run only as reusable jobs
+inside **Lopu PR manager**: develop pushes own both promotion lanes, main
+pushes own main→develop synchronization, and the six-hour promoter sweep plus
+manual maintenance choices enter through Lopu. This makes the earlier
+"single public workflow" claim true for repository management rather than only
+for model-backed merge/rebase work.
