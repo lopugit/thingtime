@@ -430,7 +430,8 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     col.createIndex({ shareId: 1 }, { unique: true, sparse: true }),
     // generalized uniqueness for system kinds (username:<u>, hashed email
     // keys, schema:<id>, …) AND relationship dedupe (followKey:<a>:<b>,
-    // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey: — stamped by
+    // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey:,
+    // linkKey: — stamped by
     // messenger/shared.ts relationshipUniqueKeys): multikey unique — each
     // element unique across the collection; sparse so ordinary things skip
     // the index entirely. Root field + BinData = no user input can ever
@@ -754,12 +755,19 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
       ['things_vote_key_unique']
     ),
-    // One passkey app link per (passkey, app/origin) — the per-login upsert's
-    // update→insert race resolves through this index (auth/passkeys.ts).
-    col.createIndex(
-      { 'crystal.linkKey': 1 },
-      { name: 'things_passkey_link_key_unique', unique: true, partialFilterExpression: { 'crystal.linkKey': { $type: 'string' } } }
-    ),
+    // One passkey app link per (passkey, app/origin): dedupe AND the
+    // per-login upsert's read both ride root uniqueKeys
+    // (`linkKey:<passkeyId>:<appKey>`, stamped in auth/passkeys.ts and served
+    // by the uniqueKeys_1 index above), so this family needs no crystal-path
+    // index at all. PR #323 briefly gave it a kind-blind unique index here —
+    // the squat class retired above, and one a free-form data crystal could
+    // duplicate to fail this whole battery on E11000. Retired outright rather
+    // than swapped to a lookup index like its siblings: those exist because
+    // their kinds are READ by crystal path, while this one's only read is the
+    // dedupe itself, which now matches the stamped root value. One less index
+    // on the collection with the most of them (MongoDB caps a collection at
+    // 64) and one less write to amplify on every login.
+    dropIndexRetrying(col, 'things_passkey_link_key_unique'),
     // Thread replies list under their root message (main chat pages ride the
     // shared { targetId, thingtime, createdAt, shareId } index above).
     col.createIndex(
