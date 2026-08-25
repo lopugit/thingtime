@@ -4,47 +4,50 @@
   "graph": {
     "hyperedges": [
       {
-        "id": "lopu_control_plane_management_flow",
-        "label": "Lopu Control-plane Management Flow",
+        "id": "lopu_repository_maintenance_flows",
+        "label": "Lopu Repository Maintenance Flows",
         "nodes": [
           "changelog_lopu_pr_manager",
+          "changelog_promotion_components",
+          "changelog_codeql_triage",
+          "changelog_graphify_refresh",
           "readme_lopu_principal_repository_manager",
-          "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow"
-        ],
-        "relation": "form",
-        "confidence": "EXTRACTED",
-        "confidence_score": 0.9,
-        "source_file": "README.md"
-      },
-      {
-        "id": "workflow_event_entrypoints",
-        "label": "Workflow Event Entrypoints",
-        "nodes": [
-          "_github_workflows_resolve_pr_conflicts_workflow_call",
-          "_github_workflows_resolve_pr_conflicts_push_trigger",
-          "_github_workflows_resolve_pr_conflicts_pull_request_target_trigger",
-          "_github_workflows_resolve_pr_conflicts_issue_comment_trigger",
-          "_github_workflows_resolve_pr_conflicts_check_run_trigger",
-          "_github_workflows_resolve_pr_conflicts_schedule_trigger"
+          "_github_workflows_resolve_pr_conflicts_lopu_pr_manager"
         ],
         "relation": "participate_in",
         "confidence": "EXTRACTED",
-        "confidence_score": 0.95,
-        "source_file": ".github/workflows/resolve-pr-conflicts.yml"
+        "confidence_score": 0.9,
+        "source_file": "CHANGELOG.md"
       },
       {
-        "id": "ci_branch_maintenance_concepts",
-        "label": "CI Branch Maintenance Concepts",
+        "id": "rebase_stack_detection_flow",
+        "label": "Rebase Stack Detection Flow",
         "nodes": [
-          "changelog_promotion_lanes",
-          "changelog_thin_listeners",
-          "readme_bare_tree_invariant",
-          "readme_vercel_kill_switch"
+          "_github_workflows_rebase_pr_stacks_lopu_rebase_engine",
+          "_github_workflows_rebase_pr_stacks_route_job",
+          "_github_workflows_rebase_pr_stacks_detect_job",
+          "_github_workflows_rebase_pr_stacks_stack_member_jq",
+          "_github_workflows_rebase_pr_stacks_rebase_owner_jq"
         ],
         "relation": "form",
-        "confidence": "INFERRED",
-        "confidence_score": 0.8,
-        "source_file": "CHANGELOG.md"
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.85,
+        "source_file": ".github/workflows/rebase-pr-stacks.yml"
+      },
+      {
+        "id": "conflict_resolution_control_plane_flow",
+        "label": "Conflict Resolution Control Plane Flow",
+        "nodes": [
+          "_github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+          "_github_workflows_resolve_pr_conflicts_thin_listener_contract",
+          "_github_workflows_resolve_pr_conflicts_detector_handoff",
+          "_github_workflows_resolve_pr_conflicts_lopu_worker",
+          "_github_workflows_resolve_pr_conflicts_graphify_refresh"
+        ],
+        "relation": "form",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.88,
+        "source_file": ".github/workflows/resolve-pr-conflicts.yml"
       },
       {
         "id": "develop_pr_preview_controller_flow",
@@ -145,10 +148,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "promotion-worker-routing-contract.mjs",
-      "id": "github_scripts_promotion_worker_routing_contract",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract"
     },
     {
       "label": "workflow",
@@ -156,10 +159,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L8",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "workflow",
-      "id": "github_scripts_promotion_worker_routing_contract_workflow",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_workflow"
     },
     {
       "label": "rebaseWorkflow",
@@ -167,10 +170,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L12",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "rebaseworkflow",
-      "id": "github_scripts_promotion_worker_routing_contract_rebaseworkflow",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_rebaseworkflow"
     },
     {
       "label": "allBranchWorkflow",
@@ -178,10 +181,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L16",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "allbranchworkflow",
-      "id": "github_scripts_promotion_worker_routing_contract_allbranchworkflow",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_allbranchworkflow"
     },
     {
       "label": "developPromotionWorkflow",
@@ -189,10 +192,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L20",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "developpromotionworkflow",
-      "id": "github_scripts_promotion_worker_routing_contract_developpromotionworkflow",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_developpromotionworkflow"
     },
     {
       "label": "featurePromotionWorkflow",
@@ -200,10 +203,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L24",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "featurepromotionworkflow",
-      "id": "github_scripts_promotion_worker_routing_contract_featurepromotionworkflow",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_featurepromotionworkflow"
     },
     {
       "label": "mainDevelopSyncWorkflow",
@@ -211,10 +214,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L28",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "maindevelopsyncworkflow",
-      "id": "github_scripts_promotion_worker_routing_contract_maindevelopsyncworkflow",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_maindevelopsyncworkflow"
     },
     {
       "label": "action",
@@ -222,10 +225,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L32",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "action",
-      "id": "github_scripts_promotion_worker_routing_contract_action",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_action"
     },
     {
       "label": "lopuAgent",
@@ -233,10 +236,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L36",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "lopuagent",
-      "id": "github_scripts_promotion_worker_routing_contract_lopuagent",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_lopuagent"
     },
     {
       "label": "worker",
@@ -244,10 +247,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L40",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "worker",
-      "id": "github_scripts_promotion_worker_routing_contract_worker",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_worker"
     },
     {
       "label": "graphify",
@@ -255,10 +258,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L44",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "graphify",
-      "id": "github_scripts_promotion_worker_routing_contract_graphify",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_graphify"
     },
     {
       "label": "promoter",
@@ -266,10 +269,10 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L48",
       "_origin": "ast",
-      "community": 17,
+      "community": 16,
       "norm_label": "promoter",
-      "id": "github_scripts_promotion_worker_routing_contract_promoter",
-      "community_name": "CodeQL All Branches Workflow"
+      "community_name": "Thingtime AI instructions",
+      "id": "github_scripts_promotion_worker_routing_contract_promoter"
     },
     {
       "label": "build-all-branch.mjs",
@@ -1707,9 +1710,9 @@
       "source_file": ".github/scripts/electron-pr-release-contract.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "electron-pr-release-contract.mjs",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "vercel.json",
       "id": "github_scripts_electron_pr_release_contract"
     },
     {
@@ -1718,9 +1721,9 @@
       "source_file": ".github/scripts/electron-pr-release-contract.mjs",
       "source_location": "L8",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "here",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "vercel.json",
       "id": "github_scripts_electron_pr_release_contract_here"
     },
     {
@@ -1729,9 +1732,9 @@
       "source_file": ".github/scripts/electron-pr-release-contract.mjs",
       "source_location": "L9",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "workflow",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "vercel.json",
       "id": "github_scripts_electron_pr_release_contract_workflow"
     },
     {
@@ -1740,9 +1743,9 @@
       "source_file": ".github/scripts/electron-pr-release-contract.mjs",
       "source_location": "L14",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "count()",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "vercel.json",
       "id": "github_scripts_electron_pr_release_contract_count"
     },
     {
@@ -1751,9 +1754,9 @@
       "source_file": ".github/scripts/electron-pr-release-contract.mjs",
       "source_location": "L18",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "assertsignedprreleasecontract()",
-      "community_name": "verify-promotion-source-authority.sh",
+      "community_name": "vercel.json",
       "id": "github_scripts_electron_pr_release_contract_assertsignedprreleasecontract"
     },
     {
@@ -1982,9 +1985,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L506",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "slugify()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_slugify"
     },
     {
@@ -2004,9 +2007,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L518",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "promotionbranchslug()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_promotionbranchslug"
     },
     {
@@ -2015,9 +2018,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L531",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "promotionbranchfor()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_promotionbranchfor"
     },
     {
@@ -2026,9 +2029,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L538",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "legacypromotionbranchfor()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_legacypromotionbranchfor"
     },
     {
@@ -2037,9 +2040,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L542",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "promotionbranchmatches()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_promotionbranchmatches"
     },
     {
@@ -2048,9 +2051,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L552",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "promotionbelongstopass()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_promotionbelongstopass"
     },
     {
@@ -2059,9 +2062,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L564",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "promotiontargets()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_promotiontargets"
     },
     {
@@ -2070,9 +2073,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L578",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "parsepromotionof()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_parsepromotionof"
     },
     {
@@ -2081,9 +2084,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L583",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "parsepromotiongroupmarker()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_parsepromotiongroupmarker"
     },
     {
@@ -2092,9 +2095,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L589",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "promotionsourcenumber()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_promotionsourcenumber"
     },
     {
@@ -2103,9 +2106,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L596",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "groupkeyfor()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_groupkeyfor"
     },
     {
@@ -2114,9 +2117,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L625",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "promotiontitlefor()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_promotiontitlefor"
     },
     {
@@ -2125,9 +2128,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L630",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "setsequal()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_setsequal"
     },
     {
@@ -2235,9 +2238,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L704",
       "_origin": "ast",
-      "community": 39,
+      "community": 5,
       "norm_label": "isobjectid()",
-      "community_name": "Community 39",
+      "community_name": "prepare-round.sh",
       "id": "github_scripts_promote_features_to_main_isobjectid"
     },
     {
@@ -2334,9 +2337,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L971",
       "_origin": "ast",
-      "community": 39,
+      "community": 2,
       "norm_label": "parsepromotionresolutionattestations()",
-      "community_name": "Community 39",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_parsepromotionresolutionattestations"
     },
     {
@@ -2345,9 +2348,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L987",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "parsepromotionretirements()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_parsepromotionretirements"
     },
     {
@@ -2356,9 +2359,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1002",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "botcommentsbylatestevent()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_botcommentsbylatestevent"
     },
     {
@@ -2367,9 +2370,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1028",
       "_origin": "ast",
-      "community": 39,
+      "community": 2,
       "norm_label": "latestbotpromotionattestationevents()",
-      "community_name": "Community 39",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_latestbotpromotionattestationevents"
     },
     {
@@ -2378,9 +2381,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1047",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "promotionretirementmarker()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_promotionretirementmarker"
     },
     {
@@ -2389,9 +2392,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1053",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "findbotpromotionretirement()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_findbotpromotionretirement"
     },
     {
@@ -2400,9 +2403,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1080",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "retiredbranchcleanupdisposition()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_retiredbranchcleanupdisposition"
     },
     {
@@ -2455,9 +2458,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1118",
       "_origin": "ast",
-      "community": 39,
+      "community": 5,
       "norm_label": "attestationmatches()",
-      "community_name": "Community 39",
+      "community_name": "prepare-round.sh",
       "id": "github_scripts_promote_features_to_main_attestationmatches"
     },
     {
@@ -2466,9 +2469,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1138",
       "_origin": "ast",
-      "community": 39,
+      "community": 5,
       "norm_label": "inspectpromotionreviewcheckpoint()",
-      "community_name": "Community 39",
+      "community_name": "prepare-round.sh",
       "id": "github_scripts_promote_features_to_main_inspectpromotionreviewcheckpoint"
     },
     {
@@ -2477,9 +2480,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1185",
       "_origin": "ast",
-      "community": 39,
+      "community": 7,
       "norm_label": "validateairesolvedpromotionbranch()",
-      "community_name": "Community 39",
+      "community_name": "workflow-control-plane-contract.mjs",
       "id": "github_scripts_promote_features_to_main_validateairesolvedpromotionbranch"
     },
     {
@@ -2488,9 +2491,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1291",
       "_origin": "ast",
-      "community": 39,
+      "community": 7,
       "norm_label": "validatestalependingaipromotionbranch()",
-      "community_name": "Community 39",
+      "community_name": "workflow-control-plane-contract.mjs",
       "id": "github_scripts_promote_features_to_main_validatestalependingaipromotionbranch"
     },
     {
@@ -2499,9 +2502,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1365",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "buildpromotiondispatchrequest()",
-      "community_name": "start.sh",
+      "community_name": "Build And Publish Signed PR Release Job",
       "id": "github_scripts_promote_features_to_main_buildpromotiondispatchrequest"
     },
     {
@@ -2510,9 +2513,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1419",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "promotiondispatchargs()",
-      "community_name": "start.sh",
+      "community_name": "Build And Publish Signed PR Release Job",
       "id": "github_scripts_promote_features_to_main_promotiondispatchargs"
     },
     {
@@ -2521,9 +2524,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1423",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "dispatchpromotionresolution()",
-      "community_name": "start.sh",
+      "community_name": "Build And Publish Signed PR Release Job",
       "id": "github_scripts_promote_features_to_main_dispatchpromotionresolution"
     },
     {
@@ -2532,9 +2535,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1443",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "exactreservationdeleteargs()",
-      "community_name": "start.sh",
+      "community_name": "Build And Publish Signed PR Release Job",
       "id": "github_scripts_promote_features_to_main_exactreservationdeleteargs"
     },
     {
@@ -2543,9 +2546,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1452",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "exactreservationpushargs()",
-      "community_name": "start.sh",
+      "community_name": "Build And Publish Signed PR Release Job",
       "id": "github_scripts_promote_features_to_main_exactreservationpushargs"
     },
     {
@@ -2554,9 +2557,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1461",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "queuetrustedpromotionworker()",
-      "community_name": "start.sh",
+      "community_name": "Build And Publish Signed PR Release Job",
       "id": "github_scripts_promote_features_to_main_queuetrustedpromotionworker"
     },
     {
@@ -2565,9 +2568,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1543",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "redispatchpromotionreservation()",
-      "community_name": "start.sh",
+      "community_name": "Build And Publish Signed PR Release Job",
       "id": "github_scripts_promote_features_to_main_redispatchpromotionreservation"
     },
     {
@@ -2598,9 +2601,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1616",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "notesourcestandaside()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_notesourcestandaside"
     },
     {
@@ -2609,9 +2612,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1653",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "clearsourcestandaside()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_clearsourcestandaside"
     },
     {
@@ -2631,9 +2634,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1683",
       "_origin": "ast",
-      "community": 39,
+      "community": 5,
       "norm_label": "liverefshawithactionstoken()",
-      "community_name": "Community 39",
+      "community_name": "prepare-round.sh",
       "id": "github_scripts_promote_features_to_main_liverefshawithactionstoken"
     },
     {
@@ -2653,9 +2656,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1708",
       "_origin": "ast",
-      "community": 39,
+      "community": 5,
       "norm_label": "createpromotionreviewcheckpoint()",
-      "community_name": "Community 39",
+      "community_name": "prepare-round.sh",
       "id": "github_scripts_promote_features_to_main_createpromotionreviewcheckpoint"
     },
     {
@@ -2664,9 +2667,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1733",
       "_origin": "ast",
-      "community": 39,
+      "community": 5,
       "norm_label": "exactcheckpointpush()",
-      "community_name": "Community 39",
+      "community_name": "prepare-round.sh",
       "id": "github_scripts_promote_features_to_main_exactcheckpointpush"
     },
     {
@@ -2686,9 +2689,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1822",
       "_origin": "ast",
-      "community": 39,
+      "community": 5,
       "norm_label": "revalidatecheckpointrefs()",
-      "community_name": "Community 39",
+      "community_name": "prepare-round.sh",
       "id": "github_scripts_promote_features_to_main_revalidatecheckpointrefs"
     },
     {
@@ -2719,9 +2722,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1868",
       "_origin": "ast",
-      "community": 39,
+      "community": 5,
       "norm_label": "recoverpromotionreviewcheckpoint()",
-      "community_name": "Community 39",
+      "community_name": "prepare-round.sh",
       "id": "github_scripts_promote_features_to_main_recoverpromotionreviewcheckpoint"
     },
     {
@@ -2796,9 +2799,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L3058",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "selftest()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_selftest"
     },
     {
@@ -2884,9 +2887,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L3901",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "indexpromotionsbysource()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_indexpromotionsbysource"
     },
     {
@@ -2961,9 +2964,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L4333",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "computepicks()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_computepicks"
     },
     {
@@ -2983,9 +2986,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L4550",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "dependentmembersafter()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_dependentmembersafter"
     },
     {
@@ -2994,9 +2997,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L4554",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "groupfailuremessages()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_groupfailuremessages"
     },
     {
@@ -3005,9 +3008,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L4567",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "validategroupchronology()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_validategroupchronology"
     },
     {
@@ -3016,9 +3019,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L4588",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "processgroupsindependently()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_processgroupsindependently"
     },
     {
@@ -3027,9 +3030,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L4598",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "sortpromotioncandidates()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_sortpromotioncandidates"
     },
     {
@@ -3038,9 +3041,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L4604",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "externalstackpromotionstate()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_externalstackpromotionstate"
     },
     {
@@ -3148,9 +3151,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L6316",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "runwithsummary()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_runwithsummary"
     },
     {
@@ -3159,9 +3162,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L6339",
       "_origin": "ast",
-      "community": 3,
+      "community": 2,
       "norm_label": "main()",
-      "community_name": "failureDetail",
+      "community_name": "build-all-branch.mjs",
       "id": "github_scripts_promote_features_to_main_main"
     },
     {
@@ -3170,9 +3173,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "promotion-pr-changelog.mjs",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog"
     },
     {
@@ -3181,9 +3184,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L80",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "env()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_env"
     },
     {
@@ -3192,9 +3195,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L84",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "flag()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_flag"
     },
     {
@@ -3203,9 +3206,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L89",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "cfg",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_cfg"
     },
     {
@@ -3214,9 +3217,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L118",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "exec_opts",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_exec_opts"
     },
     {
@@ -3225,9 +3228,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L120",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "run()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_run"
     },
     {
@@ -3236,9 +3239,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L123",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "git()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_git"
     },
     {
@@ -3247,9 +3250,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L124",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "gh()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_gh"
     },
     {
@@ -3258,9 +3261,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L125",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "ghjson()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_ghjson"
     },
     {
@@ -3269,9 +3272,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L127",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "summary()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_summary"
     },
     {
@@ -3280,9 +3283,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L134",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "bodyfile()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_bodyfile"
     },
     {
@@ -3291,9 +3294,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L145",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "parseprnumberfromsubject()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_parseprnumberfromsubject"
     },
     {
@@ -3302,9 +3305,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L153",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "normalizesubject()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_normalizesubject"
     },
     {
@@ -3313,9 +3316,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L157",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "escapecell()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_escapecell"
     },
     {
@@ -3324,9 +3327,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L163",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "fmtdate()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_fmtdate"
     },
     {
@@ -3335,9 +3338,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L165",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "buildsection()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_buildsection"
     },
     {
@@ -3346,9 +3349,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L233",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "splicesection()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_splicesection"
     },
     {
@@ -3357,9 +3360,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L245",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "parseprset()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_parseprset"
     },
     {
@@ -3368,9 +3371,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L253",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "computemissinglabels()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_computemissinglabels"
     },
     {
@@ -3379,9 +3382,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L258",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "computedelta()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_computedelta"
     },
     {
@@ -3390,9 +3393,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L264",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "buildcomment()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_buildcomment"
     },
     {
@@ -3401,9 +3404,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L309",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "toprmeta()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_toprmeta"
     },
     {
@@ -3412,9 +3415,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L327",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "verifyflags()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_verifyflags"
     },
     {
@@ -3423,9 +3426,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L340",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "prcache",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_prcache"
     },
     {
@@ -3434,9 +3437,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L341",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "fetchpr()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_fetchpr"
     },
     {
@@ -3445,9 +3448,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L357",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "contentindex",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_contentindex"
     },
     {
@@ -3456,9 +3459,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L359",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "loadcontentindex()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_loadcontentindex"
     },
     {
@@ -3467,9 +3470,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L393",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "loadsubjectindex()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_loadsubjectindex"
     },
     {
@@ -3478,9 +3481,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L411",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "contentmatchedpr()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_contentmatchedpr"
     },
     {
@@ -3489,9 +3492,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L426",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "label_specs",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_label_specs"
     },
     {
@@ -3500,9 +3503,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L433",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "ensuredlabels",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_ensuredlabels"
     },
     {
@@ -3511,9 +3514,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L434",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "ensurelabelexists()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_ensurelabelexists"
     },
     {
@@ -3522,9 +3525,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L455",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "syncprlabels()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_syncprlabels"
     },
     {
@@ -3533,9 +3536,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L479",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "associatedpr()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_associatedpr"
     },
     {
@@ -3544,9 +3547,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L501",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "selftest()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_selftest"
     },
     {
@@ -3555,9 +3558,9 @@
       "source_file": ".github/scripts/promotion-pr-changelog.mjs",
       "source_location": "L577",
       "_origin": "ast",
-      "community": 2,
+      "community": 1,
       "norm_label": "main()",
-      "community_name": "build-all-branch.mjs",
+      "community_name": "promotion-pr-changelog.mjs",
       "id": "github_scripts_promotion_pr_changelog_main"
     },
     {
@@ -3840,9 +3843,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "rebase-ownership-routing-contract.sh",
-      "community_name": "electron-pr-release-contract.mjs",
+      "community_name": "Route CI Compute Provider Workflow",
       "id": "github_scripts_rebase_ownership_routing_contract"
     },
     {
@@ -3855,9 +3858,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "rebase-ownership-routing-contract.sh script",
-      "community_name": "electron-pr-release-contract.mjs",
+      "community_name": "Route CI Compute Provider Workflow",
       "id": "github_scripts_rebase_ownership_routing_contract_sh__entry"
     },
     {
@@ -3870,9 +3873,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "assert_owner()",
-      "community_name": "electron-pr-release-contract.mjs",
+      "community_name": "Route CI Compute Provider Workflow",
       "id": "github_scripts_rebase_ownership_routing_contract_assert_owner"
     },
     {
@@ -3885,9 +3888,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "assert_stack()",
-      "community_name": "electron-pr-release-contract.mjs",
+      "community_name": "Route CI Compute Provider Workflow",
       "id": "github_scripts_rebase_ownership_routing_contract_assert_stack"
     },
     {
@@ -3900,9 +3903,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "prepare-round.sh",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round"
     },
     {
@@ -3915,9 +3918,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "prepare-round.sh script",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_sh__entry"
     },
     {
@@ -3930,9 +3933,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "emit()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_emit"
     },
     {
@@ -3945,9 +3948,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "emit_paths()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_emit_paths"
     },
     {
@@ -3960,9 +3963,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "secure_git_environment()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_secure_git_environment"
     },
     {
@@ -3975,9 +3978,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "rebase_in_progress()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_rebase_in_progress"
     },
     {
@@ -3990,9 +3993,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "unsafe_path_syntax()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_unsafe_path_syntax"
     },
     {
@@ -4005,9 +4008,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "has_coherent_zdiff3_markers()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_has_coherent_zdiff3_markers"
     },
     {
@@ -4020,9 +4023,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "assert_safe_regular_text_conflict()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_assert_safe_regular_text_conflict"
     },
     {
@@ -4035,9 +4038,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "sha256_file()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_sha256_file"
     },
     {
@@ -4050,9 +4053,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "sha256_stdin()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_sha256_stdin"
     },
     {
@@ -4065,9 +4068,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "hash_rebase_state()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_hash_rebase_state"
     },
     {
@@ -4080,9 +4083,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "write_unmerged_paths()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_write_unmerged_paths"
     },
     {
@@ -4095,9 +4098,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 14,
+      "community": 13,
       "norm_label": "clear_scratch()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
+      "community_name": "repoFlag",
       "id": "github_scripts_rebase_stack_prepare_round_clear_scratch"
     },
     {
@@ -4710,9 +4713,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "start.sh",
-      "community_name": "analyze Job",
+      "community_name": "`github-actions` \u2014 the CI control plane",
       "id": "github_scripts_rebase_stack_start"
     },
     {
@@ -4725,9 +4728,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "start.sh script",
-      "community_name": "analyze Job",
+      "community_name": "`github-actions` \u2014 the CI control plane",
       "id": "github_scripts_rebase_stack_start_sh__entry"
     },
     {
@@ -4740,9 +4743,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "usage()",
-      "community_name": "analyze Job",
+      "community_name": "`github-actions` \u2014 the CI control plane",
       "id": "github_scripts_rebase_stack_start_usage"
     },
     {
@@ -4755,9 +4758,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "emit()",
-      "community_name": "analyze Job",
+      "community_name": "`github-actions` \u2014 the CI control plane",
       "id": "github_scripts_rebase_stack_start_emit"
     },
     {
@@ -4770,9 +4773,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "emit_paths()",
-      "community_name": "analyze Job",
+      "community_name": "`github-actions` \u2014 the CI control plane",
       "id": "github_scripts_rebase_stack_start_emit_paths"
     },
     {
@@ -4785,9 +4788,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "secure_git_environment()",
-      "community_name": "analyze Job",
+      "community_name": "`github-actions` \u2014 the CI control plane",
       "id": "github_scripts_rebase_stack_start_secure_git_environment"
     },
     {
@@ -4800,9 +4803,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "rebase_in_progress()",
-      "community_name": "analyze Job",
+      "community_name": "`github-actions` \u2014 the CI control plane",
       "id": "github_scripts_rebase_stack_start_rebase_in_progress"
     },
     {
@@ -4815,9 +4818,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "write_conflicts()",
-      "community_name": "analyze Job",
+      "community_name": "`github-actions` \u2014 the CI control plane",
       "id": "github_scripts_rebase_stack_start_write_conflicts"
     },
     {
@@ -4830,9 +4833,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "verify-promotion-source-authority.sh",
-      "community_name": "Build And Publish Signed PR Release Job",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority"
     },
     {
@@ -4845,9 +4848,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "verify-promotion-source-authority.sh script",
-      "community_name": "Build And Publish Signed PR Release Job",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_sh__entry"
     },
     {
@@ -4860,9 +4863,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "fail()",
-      "community_name": "Build And Publish Signed PR Release Job",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_fail"
     },
     {
@@ -4875,9 +4878,9 @@
         "kind": "code"
       },
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "git_config_global",
-      "community_name": "Build And Publish Signed PR Release Job",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_git_config_global"
     },
     {
@@ -4890,9 +4893,9 @@
         "kind": "code"
       },
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "git_config_system",
-      "community_name": "Build And Publish Signed PR Release Job",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_git_config_system"
     },
     {
@@ -4905,9 +4908,9 @@
         "kind": "code"
       },
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "git_config_nosystem",
-      "community_name": "Build And Publish Signed PR Release Job",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_git_config_nosystem"
     },
     {
@@ -4920,9 +4923,9 @@
         "kind": "code"
       },
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "git_attr_nosystem",
-      "community_name": "Build And Publish Signed PR Release Job",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_verify_promotion_source_authority_git_attr_nosystem"
     },
     {
@@ -5096,9 +5099,9 @@
       "source_file": "vercel.json",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "vercel.json",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "vercel"
     },
     {
@@ -5107,9 +5110,9 @@
       "source_file": "vercel.json",
       "source_location": "L2",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "$schema",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "vercel_schema"
     },
     {
@@ -5118,9 +5121,9 @@
       "source_file": "vercel.json",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "framework",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "vercel_framework"
     },
     {
@@ -5129,9 +5132,9 @@
       "source_file": "vercel.json",
       "source_location": "L4",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "ignorecommand",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "vercel_ignorecommand"
     },
     {
@@ -5140,9 +5143,9 @@
       "source_file": "vercel.json",
       "source_location": "L5",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "git",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "vercel_git"
     },
     {
@@ -5151,9 +5154,9 @@
       "source_file": "vercel.json",
       "source_location": "L6",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "deploymentenabled",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "verify-promotion-source-authority.sh",
       "id": "vercel_git_deploymentenabled"
     },
     {
@@ -5162,9 +5165,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "agents.md",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "agents"
     },
     {
@@ -5173,9 +5176,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "canonical instruction file",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "users_lopu_codex_worktrees_lopu_durable_agent_queue_agents_canonical_instruction_file"
     },
     {
@@ -5184,9 +5187,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L19",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "fundamentals (read first)",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "users_lopu_codex_worktrees_lopu_durable_agent_queue_agents_fundamentals_read_first"
     },
     {
@@ -5195,9 +5198,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L60",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "local development and worktrees",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "users_lopu_codex_worktrees_lopu_durable_agent_queue_agents_local_development_and_worktrees"
     },
     {
@@ -5206,9 +5209,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L123",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "browser and ui validation",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "users_lopu_codex_worktrees_lopu_durable_agent_queue_agents_browser_and_ui_validation"
     },
     {
@@ -5217,9 +5220,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L145",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "data and api conventions",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "users_lopu_codex_worktrees_lopu_durable_agent_queue_agents_data_and_api_conventions"
     },
     {
@@ -5228,9 +5231,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L180",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "github push and pr publishing",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "users_lopu_codex_worktrees_lopu_durable_agent_queue_agents_github_push_and_pr_publishing"
     },
     {
@@ -5239,9 +5242,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L220",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "linting, type checks, and package managers",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "users_lopu_codex_worktrees_lopu_durable_agent_queue_agents_linting_type_checks_and_package_managers"
     },
     {
@@ -5250,9 +5253,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L244",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "ios development and releases",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "users_lopu_codex_worktrees_lopu_durable_agent_queue_agents_ios_development_and_releases"
     },
     {
@@ -5261,9 +5264,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L276",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "graphify",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "users_lopu_codex_worktrees_lopu_durable_agent_queue_agents_graphify"
     },
     {
@@ -5272,9 +5275,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L298",
       "_origin": "ast",
-      "community": 16,
+      "community": 15,
       "norm_label": "delivery messaging",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "users_lopu_codex_worktrees_lopu_durable_agent_queue_agents_delivery_messaging"
     },
     {
@@ -5286,9 +5289,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 16,
+      "community": 15,
       "norm_label": "thingtime ai instructions",
-      "community_name": "Thingtime AI instructions",
+      "community_name": "run_contract Shell Function",
       "id": "agents_thingtime_ai_instructions"
     },
     {
@@ -5300,9 +5303,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 31,
+      "community": 35,
       "norm_label": "graphify rules",
-      "community_name": "Web CI Workflow",
+      "community_name": "Graphify Rules",
       "id": "agents_graphify_rules"
     },
     {
@@ -5314,9 +5317,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 28,
+      "community": 32,
       "norm_label": "promotion pr changelog script",
-      "community_name": "rebase-ownership-routing-contract.sh",
+      "community_name": "Electron App Release Workflow",
       "id": "_github_scripts_promotion_pr_changelog_mjs"
     },
     {
@@ -5328,9 +5331,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 35,
+      "community": 41,
       "norm_label": "fundamentals",
-      "community_name": "Graphify Rules",
+      "community_name": "Community 41",
       "id": "fundamentals_fundamentals"
     },
     {
@@ -5342,9 +5345,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 27,
+      "community": 28,
       "norm_label": "testing checklist",
-      "community_name": "Route CI Compute Provider Workflow",
+      "community_name": "rebase-ownership-routing-contract.sh",
       "id": "testing_testing"
     },
     {
@@ -5356,9 +5359,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 29,
+      "community": 33,
       "norm_label": "route ci compute provider workflow",
-      "community_name": "controller: publish or reconcile preview",
+      "community_name": "Web CI Workflow",
       "id": "_github_workflows_ci_provider_router_route_ci_compute_provider"
     },
     {
@@ -5370,9 +5373,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 30,
+      "community": 34,
       "norm_label": "electron app release workflow",
-      "community_name": "Build All Branch Script",
+      "community_name": "AI_ALL.md canonical instructions",
       "id": "_github_workflows_electron_release_electron_app_release"
     },
     {
@@ -5384,9 +5387,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 27,
+      "community": 28,
       "norm_label": "web ci workflow",
-      "community_name": "Route CI Compute Provider Workflow",
+      "community_name": "rebase-ownership-routing-contract.sh",
       "id": "_github_workflows_web_ci_web_ci"
     },
     {
@@ -5398,9 +5401,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 34,
+      "community": 40,
       "norm_label": "thingtime ai instructions",
-      "community_name": "AI_ALL.md canonical instructions",
+      "community_name": "Community 40",
       "id": "claude_thingtime_ai_instructions"
     },
     {
@@ -5412,9 +5415,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 33,
+      "community": 39,
       "norm_label": "graphify rules",
-      "community_name": "Web CI Workflow",
+      "community_name": "`github-actions` \u2014 the CI control plane",
       "id": "claude_graphify_rules"
     },
     {
@@ -5426,9 +5429,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 36,
+      "community": 42,
       "norm_label": "ci provider router workflow",
-      "community_name": "Thingtime AI Instructions",
+      "community_name": "Community 42",
       "id": "github_workflows_ci_provider_router"
     },
     {
@@ -5440,9 +5443,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 38,
+      "community": 44,
       "norm_label": "pr-conflict-resolver.yml (superseded)",
-      "community_name": "Community 38",
+      "community_name": "Community 44",
       "id": "github_workflows_pr_conflict_resolver"
     },
     {
@@ -5454,9 +5457,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 37,
+      "community": 43,
       "norm_label": "commander app release workflow",
-      "community_name": "Commander App Release workflow",
+      "community_name": "Community 43",
       "id": "github_workflows_commander_release"
     },
     {
@@ -5468,9 +5471,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "workflow control-plane ci workflow",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_workflow"
     },
     {
@@ -5482,9 +5485,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "verify job",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_verify_job"
     },
     {
@@ -5496,9 +5499,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "contract-advisories job",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_contract_advisories_job"
     },
     {
@@ -5510,9 +5513,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "comment-contract-advisories job",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_comment_contract_advisories_job"
     },
     {
@@ -5524,9 +5527,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "run_contract shell function",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_run_contract"
     },
     {
@@ -5538,9 +5541,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "actions/checkout",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_actions_checkout"
     },
     {
@@ -5552,9 +5555,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "actions/github-script",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_github_script"
     },
     {
@@ -5566,9 +5569,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "build-all-branch.mjs",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_build_all_branch"
     },
     {
@@ -5580,9 +5583,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "electron-pr-release-contract.mjs",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_electron_release_contract"
     },
     {
@@ -5594,9 +5597,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "workflow-control-plane-contract.mjs",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_workflow_control_contract"
     },
     {
@@ -5608,9 +5611,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "deploy-develop-pr-preview.mjs",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_deploy_develop_preview"
     },
     {
@@ -5622,9 +5625,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 15,
+      "community": 14,
       "norm_label": "resolve-pr-conflicts-routing-contract.mjs",
-      "community_name": "run_contract Shell Function",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
       "id": "_github_workflows_control_plane_ci_resolve_routing_contract"
     },
     {
@@ -5636,9 +5639,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 20,
+      "community": 21,
       "norm_label": "signed electron pr release workflow",
-      "community_name": "`github-actions` \u2014 the CI control plane",
+      "community_name": "start.sh",
       "id": "_github_workflows_electron_pr_release_workflow"
     },
     {
@@ -5650,9 +5653,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 20,
+      "community": 21,
       "norm_label": "build and publish signed pr release job",
-      "community_name": "`github-actions` \u2014 the CI control plane",
+      "community_name": "start.sh",
       "id": "_github_workflows_electron_pr_release_release_job"
     },
     {
@@ -5664,9 +5667,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 20,
+      "community": 21,
       "norm_label": "resolve and validate pr source step",
-      "community_name": "`github-actions` \u2014 the CI control plane",
+      "community_name": "start.sh",
       "id": "_github_workflows_electron_pr_release_resolve_validate_source"
     },
     {
@@ -5678,9 +5681,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 20,
+      "community": 21,
       "norm_label": "derive semver pr release identity step",
-      "community_name": "`github-actions` \u2014 the CI control plane",
+      "community_name": "start.sh",
       "id": "_github_workflows_electron_pr_release_derive_semver_identity"
     },
     {
@@ -5692,9 +5695,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 20,
+      "community": 21,
       "norm_label": "import developer id and notarization credentials step",
-      "community_name": "`github-actions` \u2014 the CI control plane",
+      "community_name": "start.sh",
       "id": "_github_workflows_electron_pr_release_import_credentials"
     },
     {
@@ -5706,9 +5709,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 20,
+      "community": 21,
       "norm_label": "build signed and notarized electron release step",
-      "community_name": "`github-actions` \u2014 the CI control plane",
+      "community_name": "start.sh",
       "id": "_github_workflows_electron_pr_release_build_signed_release"
     },
     {
@@ -5720,9 +5723,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 20,
+      "community": 21,
       "norm_label": "publish prerelease step",
-      "community_name": "`github-actions` \u2014 the CI control plane",
+      "community_name": "start.sh",
       "id": "_github_workflows_electron_pr_release_publish_prerelease"
     },
     {
@@ -5734,9 +5737,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 18,
       "norm_label": "lopu agent composite action",
-      "community_name": "repoFlag",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "_github_actions_lopu_agent_action_lopu_agent"
     },
     {
@@ -5748,9 +5751,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 18,
       "norm_label": "validate the lopu backend step",
-      "community_name": "repoFlag",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "_github_actions_lopu_agent_action_validate_lopu_backend"
     },
     {
@@ -5762,9 +5765,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 18,
       "norm_label": "anthropics/claude-code-action",
-      "community_name": "repoFlag",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "_github_actions_lopu_agent_action_claude_code_action"
     },
     {
@@ -5776,9 +5779,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 18,
       "norm_label": "openai/codex-action",
-      "community_name": "repoFlag",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "_github_actions_lopu_agent_action_codex_action"
     },
     {
@@ -5790,9 +5793,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 18,
       "norm_label": "lopu rebase conflict round action",
-      "community_name": "repoFlag",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "_github_actions_rebase_conflict_round_action_rebase_conflict_round"
     },
     {
@@ -5804,9 +5807,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 18,
       "norm_label": "prepare-round.sh",
-      "community_name": "repoFlag",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "_github_actions_rebase_conflict_round_action_prepare_round_script"
     },
     {
@@ -5818,9 +5821,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 18,
       "norm_label": "lopu agent reference in rebase round",
-      "community_name": "repoFlag",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "_github_actions_rebase_conflict_round_action_lopu_agent_reference"
     },
     {
@@ -5832,9 +5835,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 18,
       "norm_label": "lopu all-branch integration workflow",
-      "community_name": "repoFlag",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "_github_workflows_all_branch_all_branch_workflow"
     },
     {
@@ -5846,9 +5849,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 18,
       "norm_label": "build-all-branch.mjs",
-      "community_name": "repoFlag",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "_github_workflows_all_branch_build_all_branch_script"
     },
     {
@@ -5860,66 +5863,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 18,
       "norm_label": "lopu build doctor",
-      "community_name": "repoFlag",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "_github_workflows_all_branch_lopu_build_doctor"
-    },
-    {
-      "label": "Lopu Rebase Engine",
-      "file_type": "code",
-      "source_file": ".github/workflows/rebase-pr-stacks.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 13,
-      "norm_label": "lopu rebase engine",
-      "community_name": "repoFlag",
-      "id": "_github_workflows_rebase_pr_stacks_rebase_engine"
-    },
-    {
-      "label": "ci-provider-router Workflow",
-      "file_type": "code",
-      "source_file": ".github/workflows/rebase-pr-stacks.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 13,
-      "norm_label": "ci-provider-router workflow",
-      "community_name": "repoFlag",
-      "id": "_github_workflows_rebase_pr_stacks_ci_provider_router"
-    },
-    {
-      "label": "STACK_MEMBER_JQ",
-      "file_type": "code",
-      "source_file": ".github/workflows/rebase-pr-stacks.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 13,
-      "norm_label": "stack_member_jq",
-      "community_name": "repoFlag",
-      "id": "_github_workflows_rebase_pr_stacks_stack_member_jq"
-    },
-    {
-      "label": "REBASE_OWNER_JQ",
-      "file_type": "code",
-      "source_file": ".github/workflows/rebase-pr-stacks.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 13,
-      "norm_label": "rebase_owner_jq",
-      "community_name": "repoFlag",
-      "id": "_github_workflows_rebase_pr_stacks_rebase_owner_jq"
     },
     {
       "label": "Develop S3 PR preview implementation workflow",
@@ -5930,9 +5877,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 18,
+      "community": 19,
       "norm_label": "develop s3 pr preview implementation workflow",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "analyze Job",
       "id": "github_workflows_develop_pr_preview_workflow"
     },
     {
@@ -5944,9 +5891,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 18,
+      "community": 19,
       "norm_label": "dispatch trusted default-branch controller job",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "analyze Job",
       "id": "github_workflows_develop_pr_preview_dispatch_job"
     },
     {
@@ -5958,9 +5905,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 18,
+      "community": 19,
       "norm_label": "publish or reconcile develop s3 preview job",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "analyze Job",
       "id": "github_workflows_develop_pr_preview_controller_job"
     },
     {
@@ -5972,9 +5919,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 18,
+      "community": 19,
       "norm_label": "github repository dispatch api",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "analyze Job",
       "id": "github_workflows_develop_pr_preview_repository_dispatch"
     },
     {
@@ -5986,9 +5933,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 18,
+      "community": 19,
       "norm_label": "develop-pr-preview-controller event",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "analyze Job",
       "id": "github_workflows_develop_pr_preview_controller_event"
     },
     {
@@ -6000,9 +5947,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 18,
+      "community": 19,
       "norm_label": "actions/checkout v4.4.0",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "analyze Job",
       "id": "github_workflows_develop_pr_preview_actions_checkout"
     },
     {
@@ -6014,9 +5961,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 18,
+      "community": 19,
       "norm_label": ".github/scripts/deploy-develop-pr-preview.mjs",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "analyze Job",
       "id": "github_workflows_develop_pr_preview_deploy_script"
     },
     {
@@ -6028,9 +5975,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 18,
+      "community": 19,
       "norm_label": "vercel-develop-pr-control environment",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "analyze Job",
       "id": "github_workflows_develop_pr_preview_vercel_develop_pr_control"
     },
     {
@@ -6042,9 +5989,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 18,
+      "community": 19,
       "norm_label": "vercel project variables",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "analyze Job",
       "id": "github_workflows_develop_pr_preview_vercel_project_vars"
     },
     {
@@ -6056,10 +6003,220 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 18,
+      "community": 19,
       "norm_label": "vercel_develop_deploy_token",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "analyze Job",
       "id": "github_workflows_develop_pr_preview_vercel_deploy_token"
+    },
+    {
+      "label": "Lopu Internal Develop Promotion Workflow",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-develop-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "lopu internal develop promotion workflow",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_develop_to_main_workflow"
+    },
+    {
+      "label": "route Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-develop-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "route job",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_develop_to_main_route_job"
+    },
+    {
+      "label": "promotion-pr Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-develop-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "promotion-pr job",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_develop_to_main_promotion_pr_job"
+    },
+    {
+      "label": "ci-provider-router.yml",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-develop-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "ci-provider-router.yml",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_develop_to_main_ci_provider_router"
+    },
+    {
+      "label": "promotion-pr-changelog.mjs",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-develop-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "promotion-pr-changelog.mjs",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_develop_to_main_promotion_pr_changelog_script"
+    },
+    {
+      "label": "Lopu Internal Feature Promotion Workflow",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "lopu internal feature promotion workflow",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_features_to_main_workflow"
+    },
+    {
+      "label": "route Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "route job",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_features_to_main_route_job"
+    },
+    {
+      "label": "promote Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "promote job",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_features_to_main_promote_job"
+    },
+    {
+      "label": "lanes Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "lanes job",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_features_to_main_lanes_job"
+    },
+    {
+      "label": "ci-provider-router.yml",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "ci-provider-router.yml",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_features_to_main_ci_provider_router"
+    },
+    {
+      "label": "promote-features-to-main.mjs",
+      "file_type": "code",
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 17,
+      "norm_label": "promote-features-to-main.mjs",
+      "community_name": "CodeQL All Branches Workflow",
+      "id": "_github_workflows_promote_features_to_main_promote_features_script"
+    },
+    {
+      "label": "Lopu Internal Main Develop Synchronization Workflow",
+      "file_type": "code",
+      "source_file": ".github/workflows/sync-main-into-develop.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 26,
+      "norm_label": "lopu internal main develop synchronization workflow",
+      "community_name": "electron-pr-release-contract.mjs",
+      "id": "_github_workflows_sync_main_into_develop_workflow"
+    },
+    {
+      "label": "route Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/sync-main-into-develop.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 26,
+      "norm_label": "route job",
+      "community_name": "electron-pr-release-contract.mjs",
+      "id": "_github_workflows_sync_main_into_develop_route_job"
+    },
+    {
+      "label": "sync Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/sync-main-into-develop.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 26,
+      "norm_label": "sync job",
+      "community_name": "electron-pr-release-contract.mjs",
+      "id": "_github_workflows_sync_main_into_develop_sync_job"
+    },
+    {
+      "label": "ci-provider-router.yml",
+      "file_type": "code",
+      "source_file": ".github/workflows/sync-main-into-develop.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 26,
+      "norm_label": "ci-provider-router.yml",
+      "community_name": "electron-pr-release-contract.mjs",
+      "id": "_github_workflows_sync_main_into_develop_ci_provider_router"
     },
     {
       "label": "workflow-control-plane-contract.mjs",
@@ -6318,7 +6475,7 @@
       "label": "CONTROL_PLANE_ROOTS",
       "file_type": "code",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L984",
+      "source_location": "L1001",
       "_origin": "ast",
       "community": 8,
       "norm_label": "control_plane_roots",
@@ -6329,7 +6486,7 @@
       "label": "assertBareControlPlaneTree()",
       "file_type": "code",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L1003",
+      "source_location": "L1020",
       "_origin": "ast",
       "community": 8,
       "norm_label": "assertbarecontrolplanetree()",
@@ -6340,222 +6497,12 @@
       "label": "assertControlPlaneVercelConfig()",
       "file_type": "code",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L1027",
+      "source_location": "L1044",
       "_origin": "ast",
       "community": 8,
       "norm_label": "assertcontrolplanevercelconfig()",
       "id": "github_scripts_workflow_control_plane_contract_assertcontrolplanevercelconfig",
       "community_name": "refresh-promotion-graphify.sh"
-    },
-    {
-      "label": "Lopu Internal Develop Promotion Workflow",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-develop-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "lopu internal develop promotion workflow",
-      "id": "_github_workflows_promote_develop_to_main_workflow",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "route Job",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-develop-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "route job",
-      "id": "_github_workflows_promote_develop_to_main_route_job",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "promotion-pr Job",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-develop-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "promotion-pr job",
-      "id": "_github_workflows_promote_develop_to_main_promotion_pr_job",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "ci-provider-router.yml",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-develop-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "ci-provider-router.yml",
-      "id": "_github_workflows_promote_develop_to_main_ci_provider_router",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "promotion-pr-changelog.mjs",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-develop-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "promotion-pr-changelog.mjs",
-      "id": "_github_workflows_promote_develop_to_main_promotion_pr_changelog_script",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "Lopu Internal Feature Promotion Workflow",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "lopu internal feature promotion workflow",
-      "id": "_github_workflows_promote_features_to_main_workflow",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "route Job",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "route job",
-      "id": "_github_workflows_promote_features_to_main_route_job",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "promote Job",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "promote job",
-      "id": "_github_workflows_promote_features_to_main_promote_job",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "lanes Job",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "lanes job",
-      "id": "_github_workflows_promote_features_to_main_lanes_job",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "ci-provider-router.yml",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "ci-provider-router.yml",
-      "id": "_github_workflows_promote_features_to_main_ci_provider_router",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "promote-features-to-main.mjs",
-      "file_type": "code",
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "promote-features-to-main.mjs",
-      "id": "_github_workflows_promote_features_to_main_promote_features_script",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "Lopu Internal Main Develop Synchronization Workflow",
-      "file_type": "code",
-      "source_file": ".github/workflows/sync-main-into-develop.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 25,
-      "norm_label": "lopu internal main develop synchronization workflow",
-      "id": "_github_workflows_sync_main_into_develop_workflow",
-      "community_name": "vercel.json"
-    },
-    {
-      "label": "route Job",
-      "file_type": "code",
-      "source_file": ".github/workflows/sync-main-into-develop.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 25,
-      "norm_label": "route job",
-      "id": "_github_workflows_sync_main_into_develop_route_job",
-      "community_name": "vercel.json"
-    },
-    {
-      "label": "sync Job",
-      "file_type": "code",
-      "source_file": ".github/workflows/sync-main-into-develop.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 25,
-      "norm_label": "sync job",
-      "id": "_github_workflows_sync_main_into_develop_sync_job",
-      "community_name": "vercel.json"
-    },
-    {
-      "label": "ci-provider-router.yml",
-      "file_type": "code",
-      "source_file": ".github/workflows/sync-main-into-develop.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 25,
-      "norm_label": "ci-provider-router.yml",
-      "id": "_github_workflows_sync_main_into_develop_ci_provider_router",
-      "community_name": "vercel.json"
     },
     {
       "label": "AI_ALL.md canonical instructions",
@@ -6566,13 +6513,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 32,
+      "community": 36,
       "norm_label": "ai_all.md canonical instructions",
       "id": "ai_all",
-      "community_name": "Electron App Release Workflow"
+      "community_name": "Thingtime AI Instructions"
     },
     {
-      "label": "Control-plane Changelog",
+      "label": "Control Plane Changelog",
       "file_type": "document",
       "source_file": "CHANGELOG.md",
       "source_location": null,
@@ -6580,10 +6527,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "control-plane changelog",
+      "community": 3,
+      "norm_label": "control plane changelog",
       "id": "changelog_control_plane_changelog",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community_name": "failureDetail"
     },
     {
       "label": "Lopu PR Manager",
@@ -6594,13 +6541,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
+      "community": 3,
       "norm_label": "lopu pr manager",
       "id": "changelog_lopu_pr_manager",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community_name": "failureDetail"
     },
     {
-      "label": "Lopu Agent Action",
+      "label": "rebase-pr-stack-ai Exact Worker Events",
       "file_type": "concept",
       "source_file": "CHANGELOG.md",
       "source_location": null,
@@ -6608,13 +6555,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "lopu agent action",
-      "id": "changelog_lopu_agent",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community": 3,
+      "norm_label": "rebase-pr-stack-ai exact worker events",
+      "id": "changelog_rebase_pr_stack_ai",
+      "community_name": "failureDetail"
     },
     {
-      "label": "CodeQL Triage",
+      "label": "Reusable Stack Engine",
       "file_type": "concept",
       "source_file": "CHANGELOG.md",
       "source_location": null,
@@ -6622,13 +6569,69 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "codeql triage",
+      "community": 3,
+      "norm_label": "reusable stack engine",
+      "id": "changelog_reusable_stack_engine",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "Promotion And Branch Synchronization Components",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "promotion and branch synchronization components",
+      "id": "changelog_promotion_components",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "LOPU_AGENT_BACKEND Selector",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "lopu_agent_backend selector",
+      "id": "changelog_lopu_agent_backend",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "Protected Lopu Agent Action",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "protected lopu agent action",
+      "id": "changelog_lopu_agent_action",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "Lopu CodeQL Triage",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 29,
+      "norm_label": "lopu codeql triage",
       "id": "changelog_codeql_triage",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community_name": "controller: publish or reconcile preview"
     },
     {
-      "label": "Post-merge Graphify Refresh",
+      "label": "Pull Request Target CodeQL Handoff",
       "file_type": "concept",
       "source_file": "CHANGELOG.md",
       "source_location": null,
@@ -6636,10 +6639,66 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "post-merge graphify refresh",
+      "community": 29,
+      "norm_label": "pull request target codeql handoff",
+      "id": "changelog_pull_request_target_handoff",
+      "community_name": "controller: publish or reconcile preview"
+    },
+    {
+      "label": "Post Merge Graphify Refresh",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "post merge graphify refresh",
       "id": "changelog_graphify_refresh",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "Signed Desktop PR Release",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 37,
+      "norm_label": "signed desktop pr release",
+      "id": "changelog_desktop_pr_release",
+      "community_name": "Commander App Release workflow"
+    },
+    {
+      "label": "ai-merge-paused Label",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "ai-merge-paused label",
+      "id": "changelog_ai_merge_paused",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "no-ai-merge Label",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 38,
+      "norm_label": "no-ai-merge label",
+      "id": "changelog_no_ai_merge",
+      "community_name": "pr-conflict-resolver.yml (superseded)"
     },
     {
       "label": "CI Promotion Lanes",
@@ -6650,13 +6709,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
+      "community": 30,
       "norm_label": "ci promotion lanes",
       "id": "changelog_promotion_lanes",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community_name": "Build All Branch Script"
     },
     {
-      "label": "Thin Product Branch Listeners",
+      "label": "Model Authored Release Analysis",
       "file_type": "concept",
       "source_file": "CHANGELOG.md",
       "source_location": null,
@@ -6664,13 +6723,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "thin product branch listeners",
-      "id": "changelog_thin_listeners",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community": 30,
+      "norm_label": "model authored release analysis",
+      "id": "changelog_release_analysis",
+      "community_name": "Build All Branch Script"
     },
     {
-      "label": "github-actions Branch",
+      "label": "github-actions CI Control Plane",
       "file_type": "document",
       "source_file": "README.md",
       "source_location": null,
@@ -6678,13 +6737,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "github-actions branch",
-      "id": "readme_github_actions_branch",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community": 3,
+      "norm_label": "github-actions ci control plane",
+      "id": "readme_ci_control_plane",
+      "community_name": "failureDetail"
     },
     {
-      "label": "CI Control Plane",
+      "label": "Thin Product Branch Listeners",
       "file_type": "concept",
       "source_file": "README.md",
       "source_location": null,
@@ -6692,10 +6751,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "ci control plane",
-      "id": "readme_control_plane_ci",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community": 3,
+      "norm_label": "thin product branch listeners",
+      "id": "readme_thin_listeners",
+      "community_name": "failureDetail"
     },
     {
       "label": "Lopu Principal Repository Manager",
@@ -6706,10 +6765,24 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
+      "community": 3,
       "norm_label": "lopu principal repository manager",
       "id": "readme_lopu_principal_repository_manager",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community_name": "failureDetail"
+    },
+    {
+      "label": ".github/actions/lopu-agent Interface",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": ".github/actions/lopu-agent interface",
+      "id": "readme_lopu_agent_interface",
+      "community_name": "failureDetail"
     },
     {
       "label": "LOPU_AGENT_BACKEND",
@@ -6720,13 +6793,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
+      "community": 3,
       "norm_label": "lopu_agent_backend",
       "id": "readme_lopu_agent_backend",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community_name": "failureDetail"
     },
     {
-      "label": "Bare-tree Invariant",
+      "label": "Post Merge Graphify Refreshes",
       "file_type": "concept",
       "source_file": "README.md",
       "source_location": null,
@@ -6734,52 +6807,192 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "bare-tree invariant",
+      "community": 3,
+      "norm_label": "post merge graphify refreshes",
+      "id": "readme_graphify_refresh",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "Bare Tree Invariant",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 31,
+      "norm_label": "bare tree invariant",
       "id": "readme_bare_tree_invariant",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community_name": "Web CI Workflow"
     },
     {
-      "label": "Vercel Git-deployment Kill-switch",
-      "file_type": "concept",
+      "label": "workflow-control-plane-contract.mjs",
+      "file_type": "code",
       "source_file": "README.md",
       "source_location": null,
       "source_url": null,
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "vercel git-deployment kill-switch",
-      "id": "readme_vercel_kill_switch",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community": 31,
+      "norm_label": "workflow-control-plane-contract.mjs",
+      "id": "readme_workflow_control_plane_contract",
+      "community_name": "Web CI Workflow"
     },
     {
-      "label": "Signed Desktop PR Releases",
-      "file_type": "concept",
+      "label": "electron-pr-release.yml",
+      "file_type": "code",
       "source_file": "README.md",
       "source_location": null,
       "source_url": null,
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "signed desktop pr releases",
-      "id": "readme_signed_desktop_pr_releases",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community": 3,
+      "norm_label": "electron-pr-release.yml",
+      "id": "readme_electron_pr_release_workflow",
+      "community_name": "failureDetail"
     },
     {
-      "label": "Develop PR Preview Controller",
-      "file_type": "concept",
+      "label": "deploy-develop-pr-preview.mjs",
+      "file_type": "code",
       "source_file": "README.md",
       "source_location": null,
       "source_url": null,
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "develop pr preview controller",
-      "id": "readme_develop_pr_preview_controller",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community": 3,
+      "norm_label": "deploy-develop-pr-preview.mjs",
+      "id": "readme_develop_preview_controller",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "Lopu Rebase Engine Workflow",
+      "file_type": "code",
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "lopu rebase engine workflow",
+      "id": "_github_workflows_rebase_pr_stacks_lopu_rebase_engine",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "route Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "route job",
+      "id": "_github_workflows_rebase_pr_stacks_route_job",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "detect Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "detect job",
+      "id": "_github_workflows_rebase_pr_stacks_detect_job",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "ci-provider-router.yml",
+      "file_type": "code",
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "ci-provider-router.yml",
+      "id": "_github_workflows_rebase_pr_stacks_ci_provider_router",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "STACK_MEMBER_JQ",
+      "file_type": "code",
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "stack_member_jq",
+      "id": "_github_workflows_rebase_pr_stacks_stack_member_jq",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "REBASE_OWNER_JQ",
+      "file_type": "code",
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "rebase_owner_jq",
+      "id": "_github_workflows_rebase_pr_stacks_rebase_owner_jq",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "live_ref_sha",
+      "file_type": "code",
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "live_ref_sha",
+      "id": "_github_workflows_rebase_pr_stacks_live_ref_sha",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "branch_protected",
+      "file_type": "code",
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "branch_protected",
+      "id": "_github_workflows_rebase_pr_stacks_branch_protected",
+      "community_name": "failureDetail"
+    },
+    {
+      "label": "remove_label_verified",
+      "file_type": "code",
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 3,
+      "norm_label": "remove_label_verified",
+      "id": "_github_workflows_rebase_pr_stacks_remove_label_verified",
+      "community_name": "failureDetail"
     },
     {
       "label": "Lopu PR Manager Workflow",
@@ -6790,94 +7003,52 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
+      "community": 3,
       "norm_label": "lopu pr manager workflow",
-      "id": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
-      "community_name": "promotion-pr-changelog.mjs"
+      "id": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "community_name": "failureDetail"
     },
     {
-      "label": "workflow_call Trigger",
-      "file_type": "code",
+      "label": "Thin Listener Contract",
+      "file_type": "concept",
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "source_url": null,
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "workflow_call trigger",
-      "id": "_github_workflows_resolve_pr_conflicts_workflow_call",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community": 3,
+      "norm_label": "thin listener contract",
+      "id": "_github_workflows_resolve_pr_conflicts_thin_listener_contract",
+      "community_name": "failureDetail"
     },
     {
-      "label": "push Trigger",
-      "file_type": "code",
+      "label": "Detector Handoff",
+      "file_type": "concept",
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "source_url": null,
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "push trigger",
-      "id": "_github_workflows_resolve_pr_conflicts_push_trigger",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community": 3,
+      "norm_label": "detector handoff",
+      "id": "_github_workflows_resolve_pr_conflicts_detector_handoff",
+      "community_name": "failureDetail"
     },
     {
-      "label": "pull_request_target Trigger",
-      "file_type": "code",
+      "label": "Lopu Conflict Worker",
+      "file_type": "concept",
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "source_url": null,
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "pull_request_target trigger",
-      "id": "_github_workflows_resolve_pr_conflicts_pull_request_target_trigger",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "issue_comment Trigger",
-      "file_type": "code",
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "issue_comment trigger",
-      "id": "_github_workflows_resolve_pr_conflicts_issue_comment_trigger",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "check_run Trigger",
-      "file_type": "code",
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "check_run trigger",
-      "id": "_github_workflows_resolve_pr_conflicts_check_run_trigger",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "schedule Trigger",
-      "file_type": "code",
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "schedule trigger",
-      "id": "_github_workflows_resolve_pr_conflicts_schedule_trigger",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community": 3,
+      "norm_label": "lopu conflict worker",
+      "id": "_github_workflows_resolve_pr_conflicts_lopu_worker",
+      "community_name": "failureDetail"
     },
     {
       "label": "Graphify Refresh Step",
@@ -6888,13 +7059,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
+      "community": 3,
       "norm_label": "graphify refresh step",
       "id": "_github_workflows_resolve_pr_conflicts_graphify_refresh",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community_name": "failureDetail"
     },
     {
-      "label": "ai-merge-paused Label",
+      "label": "no-ai-merge Opt Out Label",
       "file_type": "concept",
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
@@ -6902,24 +7073,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 1,
-      "norm_label": "ai-merge-paused label",
-      "id": "_github_workflows_resolve_pr_conflicts_ai_merge_paused",
-      "community_name": "promotion-pr-changelog.mjs"
-    },
-    {
-      "label": "no-ai-merge Label",
-      "file_type": "concept",
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "no-ai-merge label",
+      "community": 3,
+      "norm_label": "no-ai-merge opt out label",
       "id": "_github_workflows_resolve_pr_conflicts_no_ai_merge",
-      "community_name": "promotion-pr-changelog.mjs"
+      "community_name": "failureDetail"
     }
   ],
   "links": [
@@ -18647,16 +18804,6 @@
       "target": "_github_actions_rebase_conflict_round_action_prepare_round_script"
     },
     {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/rebase-pr-stacks.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_rebase_pr_stacks_rebase_engine",
-      "target": "_github_actions_rebase_conflict_round_action_rebase_conflict_round"
-    },
-    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -18675,36 +18822,6 @@
       "weight": 1.0,
       "source": "_github_workflows_all_branch_all_branch_workflow",
       "target": "_github_workflows_all_branch_lopu_build_doctor"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/rebase-pr-stacks.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_rebase_pr_stacks_rebase_engine",
-      "target": "_github_workflows_rebase_pr_stacks_ci_provider_router"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/rebase-pr-stacks.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_rebase_pr_stacks_rebase_engine",
-      "target": "_github_workflows_rebase_pr_stacks_rebase_owner_jq"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/rebase-pr-stacks.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_rebase_pr_stacks_rebase_engine",
-      "target": "_github_workflows_rebase_pr_stacks_stack_member_jq"
     },
     {
       "relation": "references",
@@ -18797,6 +18914,136 @@
       "target": "github_workflows_develop_pr_preview_vercel_project_vars"
     },
     {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/promote-develop-to-main.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_promote_develop_to_main_workflow",
+      "target": "_github_workflows_promote_develop_to_main_promotion_pr_job"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/promote-develop-to-main.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_promote_develop_to_main_workflow",
+      "target": "_github_workflows_promote_develop_to_main_route_job"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_promote_features_to_main_workflow",
+      "target": "_github_workflows_promote_develop_to_main_workflow"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/promote-develop-to-main.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_promote_develop_to_main_route_job",
+      "target": "_github_workflows_promote_develop_to_main_ci_provider_router"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/promote-develop-to-main.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_promote_develop_to_main_promotion_pr_job",
+      "target": "_github_workflows_promote_develop_to_main_promotion_pr_changelog_script"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_promote_features_to_main_workflow",
+      "target": "_github_workflows_promote_features_to_main_lanes_job"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_promote_features_to_main_workflow",
+      "target": "_github_workflows_promote_features_to_main_promote_job"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_promote_features_to_main_workflow",
+      "target": "_github_workflows_promote_features_to_main_route_job"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_promote_features_to_main_route_job",
+      "target": "_github_workflows_promote_features_to_main_ci_provider_router"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/promote-features-to-main.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_promote_features_to_main_promote_job",
+      "target": "_github_workflows_promote_features_to_main_promote_features_script"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/sync-main-into-develop.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_sync_main_into_develop_workflow",
+      "target": "_github_workflows_sync_main_into_develop_route_job"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/sync-main-into-develop.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_sync_main_into_develop_workflow",
+      "target": "_github_workflows_sync_main_into_develop_sync_job"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/sync-main-into-develop.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_sync_main_into_develop_route_job",
+      "target": "_github_workflows_sync_main_into_develop_ci_provider_router"
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
@@ -18870,7 +19117,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L1003",
+      "source_location": "L1020",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_workflow_control_plane_contract",
@@ -18890,7 +19137,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L1027",
+      "source_location": "L1044",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_workflow_control_plane_contract",
@@ -18940,7 +19187,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L984",
+      "source_location": "L1001",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_workflow_control_plane_contract",
@@ -19172,7 +19419,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L919",
+      "source_location": "L936",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_workflow_control_plane_contract_assertcontrolplanecontract",
@@ -19183,7 +19430,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L921",
+      "source_location": "L938",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_workflow_control_plane_contract_assertcontrolplanecontract",
@@ -19194,7 +19441,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L918",
+      "source_location": "L935",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_workflow_control_plane_contract_assertcontrolplanecontract",
@@ -19205,7 +19452,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L920",
+      "source_location": "L937",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_workflow_control_plane_contract_assertcontrolplanecontract",
@@ -19216,7 +19463,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L922",
+      "source_location": "L939",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_workflow_control_plane_contract_assertcontrolplanecontract",
@@ -19227,151 +19474,11 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/workflow-control-plane-contract.mjs",
-      "source_location": "L923",
+      "source_location": "L940",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "github_scripts_workflow_control_plane_contract_assertcontrolplanecontract",
       "target": "github_scripts_workflow_control_plane_contract_assertcontrolplanevercelconfig"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/promote-develop-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_develop_to_main_workflow",
-      "target": "_github_workflows_promote_develop_to_main_promotion_pr_job"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/promote-develop-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_develop_to_main_workflow",
-      "target": "_github_workflows_promote_develop_to_main_route_job"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_features_to_main_workflow",
-      "target": "_github_workflows_promote_develop_to_main_workflow"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/promote-develop-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_develop_to_main_route_job",
-      "target": "_github_workflows_promote_develop_to_main_ci_provider_router"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/promote-develop-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_develop_to_main_promotion_pr_job",
-      "target": "_github_workflows_promote_develop_to_main_promotion_pr_changelog_script"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_features_to_main_workflow",
-      "target": "_github_workflows_promote_features_to_main_lanes_job"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_features_to_main_workflow",
-      "target": "_github_workflows_promote_features_to_main_promote_job"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_features_to_main_workflow",
-      "target": "_github_workflows_promote_features_to_main_route_job"
-    },
-    {
-      "relation": "conceptually_related_to",
-      "confidence": "INFERRED",
-      "confidence_score": 0.9,
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_features_to_main_workflow",
-      "target": "changelog_promotion_lanes"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_features_to_main_route_job",
-      "target": "_github_workflows_promote_features_to_main_ci_provider_router"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/promote-features-to-main.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_promote_features_to_main_promote_job",
-      "target": "_github_workflows_promote_features_to_main_promote_features_script"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/sync-main-into-develop.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_sync_main_into_develop_workflow",
-      "target": "_github_workflows_sync_main_into_develop_route_job"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/sync-main-into-develop.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_sync_main_into_develop_workflow",
-      "target": "_github_workflows_sync_main_into_develop_sync_job"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/sync-main-into-develop.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_sync_main_into_develop_route_job",
-      "target": "_github_workflows_sync_main_into_develop_ci_provider_router"
     },
     {
       "relation": "references",
@@ -19391,7 +19498,7 @@
       "source_location": null,
       "weight": 1.0,
       "source": "changelog_lopu_pr_manager",
-      "target": "changelog_graphify_refresh"
+      "target": "changelog_promotion_components"
     },
     {
       "relation": "references",
@@ -19401,7 +19508,7 @@
       "source_location": null,
       "weight": 1.0,
       "source": "changelog_lopu_pr_manager",
-      "target": "changelog_lopu_agent"
+      "target": "changelog_reusable_stack_engine"
     },
     {
       "relation": "references",
@@ -19410,17 +19517,7 @@
       "source_file": "CHANGELOG.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "changelog_lopu_pr_manager",
-      "target": "changelog_promotion_lanes"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "CHANGELOG.md",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "changelog_thin_listeners",
+      "source": "changelog_rebase_pr_stack_ai",
       "target": "changelog_lopu_pr_manager"
     },
     {
@@ -19434,23 +19531,53 @@
       "target": "changelog_lopu_pr_manager"
     },
     {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.78,
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_rebase_pr_stacks_lopu_rebase_engine",
+      "target": "changelog_reusable_stack_engine"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "CHANGELOG.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "changelog_lopu_agent",
-      "target": "changelog_codeql_triage"
+      "source": "changelog_graphify_refresh",
+      "target": "changelog_lopu_agent_backend"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "changelog_lopu_agent_action",
+      "target": "changelog_lopu_agent_backend"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "changelog_codeql_triage",
+      "target": "changelog_pull_request_target_handoff"
     },
     {
       "relation": "semantically_similar_to",
       "confidence": "INFERRED",
-      "confidence_score": 0.9,
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "confidence_score": 0.83,
+      "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_graphify_refresh",
+      "source": "readme_graphify_refresh",
       "target": "changelog_graphify_refresh"
     },
     {
@@ -19460,8 +19587,18 @@
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_workflow_call",
-      "target": "changelog_thin_listeners"
+      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "target": "changelog_ai_merge_paused"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "changelog_promotion_lanes",
+      "target": "changelog_release_analysis"
     },
     {
       "relation": "references",
@@ -19470,8 +19607,8 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "readme_github_actions_branch",
-      "target": "readme_control_plane_ci"
+      "source": "readme_ci_control_plane",
+      "target": "readme_develop_preview_controller"
     },
     {
       "relation": "references",
@@ -19480,8 +19617,8 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "readme_control_plane_ci",
-      "target": "readme_bare_tree_invariant"
+      "source": "readme_ci_control_plane",
+      "target": "readme_electron_pr_release_workflow"
     },
     {
       "relation": "references",
@@ -19490,17 +19627,7 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "readme_control_plane_ci",
-      "target": "readme_develop_pr_preview_controller"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "readme_control_plane_ci",
+      "source": "readme_ci_control_plane",
       "target": "readme_lopu_principal_repository_manager"
     },
     {
@@ -19510,27 +19637,17 @@
       "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "readme_control_plane_ci",
-      "target": "readme_signed_desktop_pr_releases"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "readme_control_plane_ci",
-      "target": "readme_vercel_kill_switch"
+      "source": "readme_ci_control_plane",
+      "target": "readme_thin_listeners"
     },
     {
       "relation": "semantically_similar_to",
       "confidence": "INFERRED",
-      "confidence_score": 0.92,
+      "confidence_score": 0.82,
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
+      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager",
       "target": "readme_lopu_principal_repository_manager"
     },
     {
@@ -19541,17 +19658,117 @@
       "source_location": null,
       "weight": 1.0,
       "source": "readme_lopu_principal_repository_manager",
+      "target": "readme_graphify_refresh"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "readme_lopu_principal_repository_manager",
+      "target": "readme_lopu_agent_interface"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "readme_lopu_agent_interface",
       "target": "readme_lopu_agent_backend"
     },
     {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_file": "README.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
-      "target": "_github_workflows_resolve_pr_conflicts_ai_merge_paused"
+      "source": "readme_bare_tree_invariant",
+      "target": "readme_workflow_control_plane_contract"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_rebase_pr_stacks_lopu_rebase_engine",
+      "target": "_github_workflows_rebase_pr_stacks_detect_job"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_rebase_pr_stacks_lopu_rebase_engine",
+      "target": "_github_workflows_rebase_pr_stacks_route_job"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_rebase_pr_stacks_route_job",
+      "target": "_github_workflows_rebase_pr_stacks_ci_provider_router"
+    },
+    {
+      "relation": "calls",
+      "confidence": "AMBIGUOUS",
+      "confidence_score": 0.6,
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_rebase_pr_stacks_detect_job",
+      "target": "_github_workflows_rebase_pr_stacks_branch_protected"
+    },
+    {
+      "relation": "calls",
+      "confidence": "AMBIGUOUS",
+      "confidence_score": 0.6,
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_rebase_pr_stacks_detect_job",
+      "target": "_github_workflows_rebase_pr_stacks_live_ref_sha"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_rebase_pr_stacks_detect_job",
+      "target": "_github_workflows_rebase_pr_stacks_rebase_owner_jq"
+    },
+    {
+      "relation": "calls",
+      "confidence": "AMBIGUOUS",
+      "confidence_score": 0.6,
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_rebase_pr_stacks_detect_job",
+      "target": "_github_workflows_rebase_pr_stacks_remove_label_verified"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/rebase-pr-stacks.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "_github_workflows_rebase_pr_stacks_detect_job",
+      "target": "_github_workflows_rebase_pr_stacks_stack_member_jq"
     },
     {
       "relation": "references",
@@ -19560,8 +19777,8 @@
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
-      "target": "_github_workflows_resolve_pr_conflicts_check_run_trigger"
+      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "target": "_github_workflows_resolve_pr_conflicts_detector_handoff"
     },
     {
       "relation": "references",
@@ -19570,27 +19787,7 @@
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
-      "target": "_github_workflows_resolve_pr_conflicts_graphify_refresh"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
-      "target": "_github_workflows_resolve_pr_conflicts_issue_comment_trigger"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
+      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager",
       "target": "_github_workflows_resolve_pr_conflicts_no_ai_merge"
     },
     {
@@ -19600,8 +19797,8 @@
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
-      "target": "_github_workflows_resolve_pr_conflicts_pull_request_target_trigger"
+      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "target": "_github_workflows_resolve_pr_conflicts_thin_listener_contract"
     },
     {
       "relation": "references",
@@ -19610,8 +19807,8 @@
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
-      "target": "_github_workflows_resolve_pr_conflicts_push_trigger"
+      "source": "_github_workflows_resolve_pr_conflicts_detector_handoff",
+      "target": "_github_workflows_resolve_pr_conflicts_lopu_worker"
     },
     {
       "relation": "references",
@@ -19620,63 +19817,56 @@
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
-      "target": "_github_workflows_resolve_pr_conflicts_schedule_trigger"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow",
-      "target": "_github_workflows_resolve_pr_conflicts_workflow_call"
+      "source": "_github_workflows_resolve_pr_conflicts_lopu_worker",
+      "target": "_github_workflows_resolve_pr_conflicts_graphify_refresh"
     }
   ],
   "hyperedges": [
     {
-      "id": "lopu_control_plane_management_flow",
-      "label": "Lopu Control-plane Management Flow",
+      "id": "lopu_repository_maintenance_flows",
+      "label": "Lopu Repository Maintenance Flows",
       "nodes": [
         "changelog_lopu_pr_manager",
+        "changelog_promotion_components",
+        "changelog_codeql_triage",
+        "changelog_graphify_refresh",
         "readme_lopu_principal_repository_manager",
-        "_github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow"
-      ],
-      "relation": "form",
-      "confidence": "EXTRACTED",
-      "confidence_score": 0.9,
-      "source_file": "README.md"
-    },
-    {
-      "id": "workflow_event_entrypoints",
-      "label": "Workflow Event Entrypoints",
-      "nodes": [
-        "_github_workflows_resolve_pr_conflicts_workflow_call",
-        "_github_workflows_resolve_pr_conflicts_push_trigger",
-        "_github_workflows_resolve_pr_conflicts_pull_request_target_trigger",
-        "_github_workflows_resolve_pr_conflicts_issue_comment_trigger",
-        "_github_workflows_resolve_pr_conflicts_check_run_trigger",
-        "_github_workflows_resolve_pr_conflicts_schedule_trigger"
+        "_github_workflows_resolve_pr_conflicts_lopu_pr_manager"
       ],
       "relation": "participate_in",
       "confidence": "EXTRACTED",
-      "confidence_score": 0.95,
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml"
+      "confidence_score": 0.9,
+      "source_file": "CHANGELOG.md"
     },
     {
-      "id": "ci_branch_maintenance_concepts",
-      "label": "CI Branch Maintenance Concepts",
+      "id": "rebase_stack_detection_flow",
+      "label": "Rebase Stack Detection Flow",
       "nodes": [
-        "changelog_promotion_lanes",
-        "changelog_thin_listeners",
-        "readme_bare_tree_invariant",
-        "readme_vercel_kill_switch"
+        "_github_workflows_rebase_pr_stacks_lopu_rebase_engine",
+        "_github_workflows_rebase_pr_stacks_route_job",
+        "_github_workflows_rebase_pr_stacks_detect_job",
+        "_github_workflows_rebase_pr_stacks_stack_member_jq",
+        "_github_workflows_rebase_pr_stacks_rebase_owner_jq"
       ],
       "relation": "form",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "CHANGELOG.md"
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.85,
+      "source_file": ".github/workflows/rebase-pr-stacks.yml"
+    },
+    {
+      "id": "conflict_resolution_control_plane_flow",
+      "label": "Conflict Resolution Control Plane Flow",
+      "nodes": [
+        "_github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+        "_github_workflows_resolve_pr_conflicts_thin_listener_contract",
+        "_github_workflows_resolve_pr_conflicts_detector_handoff",
+        "_github_workflows_resolve_pr_conflicts_lopu_worker",
+        "_github_workflows_resolve_pr_conflicts_graphify_refresh"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.88,
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml"
     },
     {
       "id": "develop_pr_preview_controller_flow",
@@ -19769,5 +19959,5 @@
       "source_file": "AGENTS.md"
     }
   ],
-  "built_at_commit": "bb5390acc2c102f03b5c5db036196b3e6583e10b"
+  "built_at_commit": "c01e9444cd7471959eff58e9d3738d4046c4cb62"
 }
