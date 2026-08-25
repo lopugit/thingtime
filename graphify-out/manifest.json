@@ -6210,8 +6210,8 @@
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Services/DaemonSupervisor.swift": {
-    "mtime": 1787653451.5474122,
-    "ast_hash": "1d42ec4b4a8f71959816e795f0eee71d",
+    "mtime": 1787653803.1083963,
+    "ast_hash": "06dd53a129a79740505e33eee05bf33c",
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Services/GlobalHotKey.swift": {
