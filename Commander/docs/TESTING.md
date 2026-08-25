@@ -93,6 +93,10 @@
       verify Filesystem includes the macOS purgeable-capacity estimate. Sort the full-width process table by every
       available header, enable Group by parent, and confirm CPU, memory, and disk rows update without crashing the
       native host. GPU and network process columns must remain unavailable rather than showing fabricated values.
+- [ ] In Activity → Responsiveness signals, verify a UI app is only actionable after two timed-out accessibility probes.
+      Verify agents and services remain visible with their type and an “AX probe inconclusive” badge, show that their
+      process is alive but generically unprobeable, and never receive Quit, Force quit, or Restart controls solely from
+      that diagnostic signal.
 - [ ] In Activity → Thingtime network, verify a 15-second uncached latency refresh splits request/send, response/receive,
       and round-trip times. Run the explicit test and confirm its five fixed packet sizes (56 KiB, 500 KiB, 2 MiB, 5 MiB,
       and 10 MiB) produce download/upload rates. Turn on periodic testing, verify the saved cadence survives relaunch,

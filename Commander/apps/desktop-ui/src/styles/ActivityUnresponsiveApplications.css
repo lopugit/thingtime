@@ -1,7 +1,7 @@
-.activity-unresponsive-applications {
+.activity-unresponsive-applications.has-confirmed-timeout {
   border-color: color-mix(in srgb, #d55757 42%, var(--line));
 }
-.activity-unresponsive-applications .activity-section-heading > span {
+.activity-unresponsive-applications.has-confirmed-timeout .activity-section-heading > span {
   color: #c53c3c;
   font-size: 0.78rem;
   font-weight: 650;
@@ -36,6 +36,9 @@
   flex: 0 0 auto;
   width: 17px;
   height: 17px;
+  color: var(--muted);
+}
+.activity-unresponsive-row.confirmed .activity-unresponsive-app-name svg {
   color: #c53c3c;
 }
 .activity-unresponsive-app-name strong,
@@ -51,6 +54,33 @@
   margin-top: 2px;
   color: var(--muted);
   font-size: 0.7rem;
+  line-height: 1.35;
+}
+.activity-unresponsive-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+.activity-unresponsive-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.activity-unresponsive-badge.kind {
+  background: var(--surface-raised);
+}
+.activity-unresponsive-badge.signal.confirmed {
+  border-color: color-mix(in srgb, #d55757 42%, var(--line));
+  color: #c53c3c;
 }
 .activity-unresponsive-actions {
   display: flex;
