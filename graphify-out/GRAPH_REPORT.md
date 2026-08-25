@@ -9,7 +9,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8f1135db`
+- Built from commit: `f34ed20b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -44,7 +44,7 @@
 - [[_COMMUNITY_rebase-ownership-routing-contract.sh|rebase-ownership-routing-contract.sh]]
 - [[_COMMUNITY_vercel.json|vercel.json]]
 - [[_COMMUNITY_electron-pr-release-contract.mjs|electron-pr-release-contract.mjs]]
-- [[_COMMUNITY_Lopu Internal Main Develop Synchronization Workflow|Lopu Internal Main Develop Synchronization Workflow]]
+- [[_COMMUNITY_Community 30|Community 30]]
 - [[_COMMUNITY_rebase-ownership-routing-contract.sh|rebase-ownership-routing-contract.sh]]
 - [[_COMMUNITY_Route CI Compute Provider Workflow|Route CI Compute Provider Workflow]]
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
@@ -86,11 +86,11 @@
 - None detected.
 
 ## Hyperedges (group relationships)
+- **Lopu Backend Selection and Credential Failover** — github_actions_lopu_agent_action_validate_backend, github_actions_lopu_agent_action_claude_primary, github_actions_lopu_agent_action_claude_fallback, github_actions_lopu_agent_action_codex_runner [EXTRACTED 0.95]
+- **Rebase Conflict Resolution Flow** — github_workflows_rebase_pr_stacks_rebase_engine, github_actions_rebase_conflict_round_action_rebase_conflict_round, github_actions_rebase_conflict_round_action_prepare_round_script, github_actions_rebase_conflict_round_action_resolve_conflict_with_lopu, github_actions_lopu_agent_action_lopu_agent [EXTRACTED 0.88]
+- **CI Control Plane Workflow Set** — readme_ci_control_plane, github_workflows_all_branch_all_branch_workflow, github_workflows_codeql_analysis_codeql_workflow, github_workflows_control_plane_ci_control_plane_ci_workflow, github_workflows_electron_pr_release_electron_release_workflow, github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow [EXTRACTED 0.90]
 - **Central CodeQL PR Scan Flow** — changelog_codeql_pr_handoff, github_workflows_codeql_pr_handoff_lopu_codeql_pr_handoff, github_workflows_codeql_analysis_lopu_codeql_all_branches, github_workflows_codeql_analysis_codeql_analyze [EXTRACTED 0.92]
 - **Graphify Semantic Refresh Flow** — changelog_post_merge_graphify, readme_post_merge_graphify, github_workflows_resolve_pr_conflicts_graphify_refresh, changelog_lopu_agent_backend [EXTRACTED 0.86]
-- **Lopu Backend Selection and Credential Failover** — github_actions_lopu_agent_action_validate_backend, github_actions_lopu_agent_action_claude_primary, github_actions_lopu_agent_action_claude_fallback, github_actions_lopu_agent_action_codex_runner [EXTRACTED 0.95]
-- **CI Control Plane Workflow Set** — readme_ci_control_plane, github_workflows_all_branch_all_branch_workflow, github_workflows_codeql_analysis_codeql_workflow, github_workflows_control_plane_ci_control_plane_ci_workflow, github_workflows_electron_pr_release_electron_release_workflow, github_workflows_resolve_pr_conflicts_lopu_pr_manager_workflow [EXTRACTED 0.90]
-- **Rebase Conflict Resolution Flow** — github_workflows_rebase_pr_stacks_rebase_engine, github_actions_rebase_conflict_round_action_rebase_conflict_round, github_actions_rebase_conflict_round_action_prepare_round_script, github_actions_rebase_conflict_round_action_resolve_conflict_with_lopu, github_actions_lopu_agent_action_lopu_agent [EXTRACTED 0.88]
 - **Develop PR Preview Controller Flow** — github_workflows_develop_pr_preview_workflow, github_workflows_develop_pr_preview_dispatch_job, github_workflows_develop_pr_preview_repository_dispatch, github_workflows_develop_pr_preview_controller_event, github_workflows_develop_pr_preview_controller_job, github_workflows_develop_pr_preview_deploy_script [EXTRACTED 0.95]
 - **Provider Routed CI Workflows** — _github_workflows_ci_provider_router_route_ci_compute_provider, _github_workflows_promote_develop_to_main_promote_develop_to_main, _github_workflows_promote_features_to_main_promote_features_to_main, _github_workflows_rebase_pr_stacks_rebase_prs_and_stacks, _github_workflows_resolve_pr_conflicts_resolve_pr_conflicts, _github_workflows_sync_main_into_develop_sync_main_into_develop [EXTRACTED 0.90]
 - **Canonical AI Instruction Files** — agents_thingtime_ai_instructions, ai_all_thingtime_ai_instructions, claude_thingtime_ai_instructions [EXTRACTED 0.95]
@@ -210,7 +210,7 @@ Cohesion: 0.67
 Nodes (3): CI Control Plane Branch, github-actions Branch, Vercel No-deploy Configuration
 
 ## Knowledge Gaps
-- **136 isolated node(s):** `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS`, `ACTIVE_STATES`, `TERMINAL_FAILURE_STATES` (+131 more)
+- **136 isolated node(s):** `here`, `workflow`, `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS` (+131 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -221,7 +221,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
 - **Why does `runPromotion()` connect `failureDetail` to `build-all-branch.mjs`, `runPromotion`, `workflow-control-plane-contract.mjs`?**
   _High betweenness centrality (0.002) - this node is a cross-community bridge._
-- **What connects `TRUSTED_ASSOCIATIONS`, `TRUSTED_PERMISSIONS`, `PR_EVENT_ACTIONS` to the rest of the system?**
+- **What connects `here`, `workflow`, `TRUSTED_ASSOCIATIONS` to the rest of the system?**
   _136 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
