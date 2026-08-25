@@ -28,7 +28,9 @@ every entry is attributed the same way the app changelog attributes them.
   than paying for a duplicate push scan; direct `github-actions` pushes are
   scanned by the protected implementation itself. The workflow analyzes
   Actions and JavaScript/TypeScript without persisted checkout credentials or
-  any AI secret. — Codex (AI), 2026-08-25
+  any AI secret. A repository variable keeps uploads cleanly inactive until
+  the listener reaches the default branch and default setup is disabled.
+  — Codex (AI), 2026-08-25
 - **Lopu now owns evidence-backed CodeQL triage for reviewed PRs**: each review
   receives the exact open CodeQL findings bound to the immutable PR head or
   advanced-setup merge analysis. The isolated handoff revalidates the reviewed

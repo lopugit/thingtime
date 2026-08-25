@@ -594,6 +594,12 @@ export function assertControlPlaneContract() {
     /any\(\.\[\]; \.headRefOid == \$sha\)/u,
     "an open PR owns one analysis instead of duplicating its branch push",
   );
+  assert.match(codeql, /ADVANCED_ENABLED: \$\{\{ vars\.CODEQL_ADVANCED_ENABLED \}\}/u);
+  assert.match(
+    codeql,
+    /\[ "\$ADVANCED_ENABLED" != true \][\s\S]*analyze=false/u,
+    "advanced uploads remain cleanly inactive until the ordered default-setup transition completes",
+  );
   assert.match(codeql, /persist-credentials: false/u);
   assert.doesNotMatch(
     codeql,

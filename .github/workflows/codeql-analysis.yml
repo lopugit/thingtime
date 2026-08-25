@@ -29,13 +29,17 @@ jobs:
         id: scope
         shell: bash
         env:
+          ADVANCED_ENABLED: ${{ vars.CODEQL_ADVANCED_ENABLED }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
           analyze=true
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
+          if [ "$ADVANCED_ENABLED" != true ]; then
+            analyze=false
+            echo '::notice::Advanced CodeQL is staged but inactive. Promote the listener to the default branch, disable default setup, then set CODEQL_ADVANCED_ENABLED=true.'
+          elif [ "$GITHUB_EVENT_NAME" = push ]; then
             open_prs="$(gh pr list --repo "$REPO" --state open \
               --head "$GITHUB_REF_NAME" --limit 100 \
               --json headRefOid)"
