@@ -881,6 +881,36 @@ export function assertControlPlaneContract() {
     /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch|repository_dispatch):/m,
     "main/develop synchronization is reachable only through Lopu",
   );
+  assert.match(
+    mainDevelopSync,
+    /SYNC_BRANCH: sync\/main-into-develop/u,
+    "main/develop conflicts use an automation-owned PR branch",
+  );
+  assert.match(
+    mainDevelopSync,
+    /--force-with-lease="refs\/heads\/\$SYNC_BRANCH:\$remote_sha"/u,
+    "the standing sync branch can move only from its exact observed remote SHA",
+  );
+  assert.match(
+    mainDevelopSync,
+    /-f head="\$SYNC_BRANCH"/u,
+    "the safe sync PR never uses the protected main branch as its writable head",
+  );
+  assert.doesNotMatch(
+    mainDevelopSync,
+    /-f head=(?:"[^"\n]*:)?main"?(?:\s|$)/u,
+    "main is never used as the writable head of a synchronization PR",
+  );
+  assert.match(
+    mainDevelopSync,
+    /git ls-remote --heads origin refs\/heads\/main refs\/heads\/develop/u,
+    "safe sync publication revalidates both immutable branch endpoints against the remote",
+  );
+  assert.match(
+    mainDevelopSync,
+    /git merge-base --is-ancestor "\$EXPECTED_MAIN_SHA" "\$remote_sha"/u,
+    "an already-resolved safe head containing current main is preserved",
+  );
 
   const rebase = readWorkflow("rebase-pr-stacks.yml");
   const rebaseTriggers = rebase.slice(0, rebase.indexOf("\npermissions:\n"));

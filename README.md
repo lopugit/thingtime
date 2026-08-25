@@ -93,6 +93,13 @@ of their own. Manual recovery uses **Actions → Lopu PR manager → Run workflo
 and its `maintenance_operation` choice. Their concurrency queues never cancel
 an in-flight promotion or synchronization.
 
+When `main` cannot be pushed cleanly into `develop`, Lopu publishes the fenced
+candidate to the automation-owned `sync/main-into-develop` branch and opens or
+refreshes a PR from that branch. It never uses protected `main` as the writable
+PR head. The ordinary Lopu conflict lane can therefore merge `develop` into
+the safe head, resolve it, rebuild Graphify, and publish without rewriting
+either primary branch.
+
 The public manager itself also uses GitHub's durable `queue: max` mode with
 `cancel-in-progress: false`. Distinct PR, comment, failed-check, branch, and
 scheduled signals wait behind the active run in their bounded namespace and
