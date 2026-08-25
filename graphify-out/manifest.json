@@ -1515,9 +1515,9 @@
     "semantic_hash": "23cf886c9906c68bf4d7c8179b707749"
   },
   "README.md": {
-    "mtime": 1787630300.8031435,
-    "ast_hash": "0a1beb57d9c0741e19d175f85d3b4bf3",
-    "semantic_hash": "0a1beb57d9c0741e19d175f85d3b4bf3"
+    "mtime": 1787631183.5389664,
+    "ast_hash": "e769626d2fec6c7851da3c446fd42da4",
+    "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1787629962.4753017,
@@ -1740,9 +1740,9 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1787630292.5336082,
-    "ast_hash": "da840094670e5e3ba5a4a05b94a596e7",
-    "semantic_hash": "da840094670e5e3ba5a4a05b94a596e7"
+    "mtime": 1787631183.539738,
+    "ast_hash": "4e7be545043ce024c2898e869ff9f6e7",
+    "semantic_hash": ""
   },
   "remix/README.md": {
     "mtime": 1787629962.7224238,
