@@ -65,9 +65,9 @@
     "semantic_hash": "fe22a001a1b54cdf6ea442876507c15b"
   },
   ".github/scripts/workflow-control-plane-contract.mjs": {
-    "mtime": 1787654088.8877494,
-    "ast_hash": "a5fd1995d66a87645db58f6a8749055e",
-    "semantic_hash": "a5fd1995d66a87645db58f6a8749055e"
+    "mtime": 1787654839.3015206,
+    "ast_hash": "20729faab0f1c247bf49d7e3cedef558",
+    "semantic_hash": "20729faab0f1c247bf49d7e3cedef558"
   },
   "vercel.json": {
     "mtime": 1787651144.2871103,
@@ -127,7 +127,7 @@
   ".github/workflows/sync-main-into-develop.yml": {
     "mtime": 1787654088.8871036,
     "ast_hash": "125a08cd898c9c17162e9efaff23f6c4",
-    "semantic_hash": ""
+    "semantic_hash": "125a08cd898c9c17162e9efaff23f6c4"
   },
   ".github/workflows/web-ci.yml": {
     "mtime": 1787651144.2780285,
@@ -155,8 +155,8 @@
     "semantic_hash": "14d35af8428488f574b554e2da5c0445"
   },
   "README.md": {
-    "mtime": 1787653909.5259612,
-    "ast_hash": "28365d777458460fb2d0d48d813d3211",
+    "mtime": 1787654839.3018873,
+    "ast_hash": "788638f14b5abe9c88223b6ce8b293b4",
     "semantic_hash": ""
   },
   ".github/workflows/commander-release.yml": {
@@ -175,9 +175,9 @@
     "semantic_hash": "d8ef4a3c0b25604f5d8365eeccef965b"
   },
   ".github/workflows/codeql-analysis.yml": {
-    "mtime": 1787653468.3831072,
-    "ast_hash": "29aaee47efd6028d689ea37e80d5bda7",
-    "semantic_hash": "29aaee47efd6028d689ea37e80d5bda7"
+    "mtime": 1787654839.3010721,
+    "ast_hash": "46b8851c258e61542976bf53be66569b",
+    "semantic_hash": ""
   },
   ".github/actions/lopu-agent/action.yml": {
     "mtime": 1787652609.8469777,
