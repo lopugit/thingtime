@@ -160,12 +160,24 @@ env:
     )
 
 concurrency:
+  # The detect namespace also keys on the CALLING workflow file. This engine has
+  # two push-triggered callers — the dedicated rebase listener and the nested
+  # call in resolve-pr-conflicts.yml — and `event_name + ref` alone put both in
+  # one group. The two runs are created in the same second by the same push, so
+  # `cancel-in-progress` had the later one cancel the dedicated detector on
+  # every push, leaving a permanent red check on the PR that no code change
+  # could clear. github.workflow_ref is the caller's file@ref (the same
+  # discriminator resolve-pr-conflicts.yml already keys its own group on), so
+  # sibling callers now supersede only themselves.
+  # The `ai-rebase-pr-<N>` worker namespace is deliberately NOT caller-keyed:
+  # one history rewrite per PR, whoever dispatched it.
   group: >-
     ${{ (github.event_name == 'repository_dispatch'
           || (github.event_name == 'workflow_dispatch' && inputs.worker_handoff == true))
         && format('ai-rebase-pr-{0}', github.event.client_payload.pr_number || inputs.pr_number)
-        || format('ai-rebase-detect-{0}-{1}', github.event_name,
-             github.event.pull_request.number || github.ref_name || github.run_id) }}
+        || format('ai-rebase-detect-{0}-{1}-{2}', github.event_name,
+             github.event.pull_request.number || github.ref_name || github.run_id,
+             github.workflow_ref) }}
   # Never cancel a history rewrite. Detector runs are safe to supersede.
   cancel-in-progress: >-
     ${{ github.event_name != 'repository_dispatch'
