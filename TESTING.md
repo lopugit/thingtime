@@ -172,6 +172,16 @@ is fixed, and cite the checklist you ran in the PR description.
       must set `git.deploymentEnabled` to `false` and retain `ignoreCommand` as
       a second fail-safe.
 
+## Lopu CodeQL all-branch listener
+
+- [ ] Open or update PRs targeting `main`, `develop`, `github-actions`, and an
+      older feature branch without the current listener. Confirm normal
+      `pull_request` runs own targets that carry the listener, while the
+      default-branch `pull_request_target` run performs only the protected
+      metadata handoff for missing listeners. Confirm no target-context job
+      checks out PR code, no redundant analyzer cancels an in-flight scan, and
+      both language contexts finish green for the latest immutable snapshot.
+
 ## Develop-target Vercel PR previews
 
 - [ ] Confirm `.github/workflows/develop-pr-preview.yml` and its controller

@@ -37,6 +37,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Lopu CodeQL target events now use the metadata-only handoff they describe**:
+  the default-branch listener sends PR number and exact head SHA through the
+  protected handoff, while only the separate unprivileged dispatch invokes the
+  analyzer. This prevents duplicate target-context base scans and the red
+  cancelled analyzer checks they could leave behind. — Codex (AI), 2026-08-25
 - **Lopu now receives every PR-head lifecycle update from the default branch**:
   `pull_request_target` includes synchronize, ready-for-review, and edited
   events, so old PR branches and non-default targets no longer depend on

@@ -9,7 +9,6 @@ const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
   'all-branch.yml',
-  'codeql-analysis.yml',
   'develop-pr-preview.yml',
   'electron-release.yml',
   'electron-pr-release.yml',
@@ -39,6 +38,19 @@ const codeqlCaller = readFileSync(
 const codeqlTriggersEnd = codeqlCaller.indexOf('\npermissions:\n');
 assert.ok(codeqlTriggersEnd > 0, 'codeql-analysis.yml must retain its trigger block');
 const codeqlTriggers = codeqlCaller.slice(0, codeqlTriggersEnd);
+assert.doesNotMatch(codeqlCaller, /^\s+runs-on:|^\s+steps:|^\s+run:/m, 'CodeQL listener must remain executable-code-free');
+assert.doesNotMatch(codeqlCaller, /\.github\/(?:actions|scripts)\//, 'CodeQL listener must not reference product-branch behavior files');
+assert.equal((codeqlCaller.match(/^\s+uses:/gm) ?? []).length, 2, 'CodeQL listener must contain exactly the analyzer and target-handoff calls');
+assert.match(
+  codeqlCaller,
+  /^\s{4}uses: lopugit\/thingtime\/\.github\/workflows\/codeql-pr-handoff\.yml@github-actions$/m,
+  'pull_request_target must call the protected metadata-only handoff'
+);
+assert.match(
+  codeqlCaller,
+  /^\s{4}uses: lopugit\/thingtime\/\.github\/workflows\/codeql-analysis\.yml@github-actions$/m,
+  'unprivileged analysis events must call the protected analyzer'
+);
 assert.match(
   codeqlTriggers,
   /^  pull_request:$/m,
@@ -49,6 +61,11 @@ assert.match(
   /^  push:\n    branches: \["\*\*"\]$/m,
   'codeql-analysis.yml must scan direct pushes to every branch'
 );
+assert.match(
+  codeqlTriggers,
+  /^  pull_request_target:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, ready_for_review, edited\]$/m,
+  'the default branch must hand off every PR-head lifecycle update'
+);
 assert.match(codeqlTriggers, /^  schedule:$/m, 'codeql-analysis.yml must retain its scheduled backstop');
 assert.match(codeqlTriggers, /^  workflow_dispatch:$/m, 'codeql-analysis.yml must support manual recovery');
 const codeqlPermissions = codeqlCaller.slice(
@@ -57,6 +74,12 @@ const codeqlPermissions = codeqlCaller.slice(
 );
 assert.match(codeqlPermissions, /^  security-events: write$/m, 'CodeQL caller must permit SARIF upload');
 assert.match(codeqlPermissions, /^  pull-requests: read$/m, 'CodeQL caller must permit duplicate-run ownership checks');
+assert.match(codeqlPermissions, /^  actions: write$/m, 'CodeQL caller must permit only the target handoff to dispatch an unprivileged scan');
+assert.match(
+  codeqlCaller,
+  /^  target-handoff:\n    if: github\.event_name == 'pull_request_target'[\s\S]*?^  control-plane:\n    if: github\.event_name != 'pull_request_target'/m,
+  'the target-event token must never reach the analyzer job'
+);
 
 const resolverCaller = readFileSync(
   resolve(workflowsRoot, 'resolve-pr-conflicts.yml'),
