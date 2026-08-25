@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+	ACL_OWNER,
 	ACTION_LIMIT_CEILINGS,
 	ACTION_LIMIT_DEFAULTS,
 	MAX_ACTION_RUN_ERROR_CHARS,
@@ -64,6 +65,9 @@ type ActionBudget = {
 	childActionsUsed: number;
 	trace: ActionRunTraceEntry[];
 	stack: string[]; // action shareIds currently executing (cycle refusal)
+	// delegated run (a ttAction click): every action resolved anywhere in this
+	// invocation tree must be one the invoker owns
+	ownedOnly: boolean;
 };
 
 type ActionProgram = {
@@ -110,22 +114,40 @@ const jsonBytes = (value: unknown): number => {
 
 // ── program resolution ──────────────────────────────────────────────────────
 
-const capabilityOf = (program: ActionProgram, capability: string): ActionCapabilityEntry | null =>
-	program.capabilities.find((entry) => entry.capability === capability) || null;
+const capabilityOf = (capabilities: ActionCapabilityEntry[], capability: string): ActionCapabilityEntry | null =>
+	capabilities.find((entry) => entry.capability === capability) || null;
 
-// Resolve "<shareId>" or "<actionKey>" to a runnable, viewer-visible action
-// program. shareId wins (it covers seeded action-<slug> ids); actionKey falls
-// back to the invoker's OWN actions so a key reference can't be hijacked by
-// someone else publishing the same key.
-const resolveActionProgram = async (viewer: Viewer, reference: string): Promise<Fail | ActionProgram> => {
+// Resolve "<shareId>" or "<actionKey>" to a runnable action program.
+//
+// TWO MODES, because the reference arrives from two very different places:
+// - Deliberate (`/actions` inspector): the viewer read the program's derived
+//   effects and pressed Run, so a FOREIGN readable action resolves by id.
+// - Delegated (`ownedOnly` — a ttAction click inside rendered component
+//   markup): the viewer approved a control, not a program. Markup can name any
+//   id, so an id lookup here is owner-pinned like the actionKey branch already
+//   is. Otherwise foreign markup could lend the viewer's authority to a
+//   stranger's program — exactly the hijack the key branch was hardened
+//   against, reintroduced through the id path.
+// actionKey ALWAYS resolves owner-scoped, in both modes.
+const resolveActionProgram = async (
+	viewer: Viewer,
+	reference: string,
+	options?: { ownedOnly?: boolean }
+): Promise<Fail | ActionProgram> => {
 	if (!viewer) return fail(401, 'Running actions requires signing in');
 	const trimmed = typeof reference === 'string' ? reference.trim() : '';
 	if (!trimmed) return fail(400, 'Which action? Pass its id or actionKey');
 
 	let doc: { id: string; crystal: Record<string, unknown> } | null = null;
-	const byId = await getThing(viewer, trimmed);
-	if (byId.ok !== false && byId.thing && Array.isArray(byId.thing.thingtime) && byId.thing.thingtime.includes('action')) {
-		doc = { id: byId.thing.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
+	if (options?.ownedOnly) {
+		const things = await getThingsCollection();
+		const own = await things.findOne({ shareId: trimmed, ownerId: viewer.id, thingtime: 'action' } as any);
+		if (own) doc = { id: own.shareId, crystal: (own.crystal || {}) as Record<string, unknown> };
+	} else {
+		const byId = await getThing(viewer, trimmed);
+		if (byId.ok !== false && byId.thing && Array.isArray(byId.thing.thingtime) && byId.thing.thingtime.includes('action')) {
+			doc = { id: byId.thing.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
+		}
 	}
 	if (!doc) {
 		const things = await getThingsCollection();
@@ -145,7 +167,14 @@ const resolveActionProgram = async (viewer: Viewer, reference: string): Promise<
 			.toArray();
 		if (own) doc = { id: own.shareId, crystal: (own.crystal || {}) as Record<string, unknown> };
 	}
-	if (!doc) return fail(404, `No runnable action matches "${trimmed.slice(0, 80)}"`);
+	if (!doc) {
+		return fail(
+			404,
+			options?.ownedOnly
+				? `No action you own matches "${trimmed.slice(0, 80)}" — a component control can only run your own actions`
+				: `No runnable action matches "${trimmed.slice(0, 80)}"`
+		);
+	}
 
 	// Re-sanitize so run-time enforces the exact save-time contract (steps
 	// grammar, capability coverage, ref validity) even for legacy documents.
@@ -329,6 +358,15 @@ const executeProgram = async (
 	budget: ActionBudget,
 	stepPrefix: string
 ): Promise<unknown> => {
+	// Composition note: an invoked child runs on its OWN declaration, not the
+	// intersection with its parent's. That is deliberate — `actions.invoke:
+	// [child]` IS the parent's disclosure that the child runs, and the child's
+	// own program page carries its effects. No privilege boundary rides on it
+	// either way: every op executes as the invoker under the ordinary ACL.
+	// What the parent must NOT do is assert absolute negatives it cannot know
+	// ("Cannot create things") while invoking a child that does — that half is
+	// enforced in actionInspect.actionCannotAccess.
+	const effective = program.capabilities;
 	if (budget.stack.includes(program.id)) {
 		runError(`Recursive invocation refused: ${program.id} is already running (stack: ${budget.stack.join(' → ')})`);
 	}
@@ -356,12 +394,29 @@ const executeProgram = async (
 
 			if (step.op === 'things.create') {
 				const schema = await resolveSchemaRef(viewer, String(step.schema));
+				// Save-time coverage proves the program's OWN declaration; this
+				// re-check is what binds a child frame to the inherited envelope.
+				const createScope = capabilityOf(effective, 'things.create');
+				if (!createScope) runError(`Step ${label} creates without a things.create capability in the inherited envelope`);
+				if (!schemaScopeAllows(createScope, [schema.name, schema.id])) {
+					runError(`Step ${label} creates "${schema.name}" outside the declared things.create schema scope`);
+				}
 				const values = resolveValue(step.values, scope);
 				if (!values || typeof values !== 'object' || Array.isArray(values)) runError(`Step ${label} values resolved to non-object data`);
 				const created = await createThing(
 					viewer!.id,
 					{
 						thingtime: ['data'],
+						// Actions mint PRIVATE. createThing's standalone-content
+						// default is the public audience, which is the right default
+						// for something a human posts and the WRONG one for something
+						// a program mints on their behalf: "capabilities only narrow"
+						// means a run must never produce a wider audience than the
+						// invoker asked for, and a step that copies a read into a new
+						// thing would otherwise republish it to the world. An explicit
+						// audience is a v2 grammar question (declared + derived as an
+						// effect), never an implicit default.
+						acl: [ACL_OWNER],
 						// scope/provenance stamps spread LAST so no resolved value
 						// can clobber them (SchemaThingForm posture)
 						crystal: { ...(values as Record<string, unknown>), schema: schema.name, schemaId: schema.id }
@@ -381,7 +436,7 @@ const executeProgram = async (
 				if (!isDataThing(thing.thingtime)) {
 					runError(`Step ${label} read "${thing.id}" is not a data thing — actions read and write Data Things only`);
 				}
-				const readScope = capabilityOf(program, 'things.read');
+				const readScope = capabilityOf(effective, 'things.read');
 				if (!schemaScopeAllows(readScope, schemaIdentityOf(thing.crystal))) {
 					runError(`Step ${label} read "${thing.id}" outside the declared things.read schema scope`);
 				}
@@ -401,7 +456,7 @@ const executeProgram = async (
 				// search step must not read outside the declared scope while the
 				// inspector shows the narrow one (things.get closes this same gap
 				// via schemaScopeAllows below; search needs both halves).
-				const readScope = capabilityOf(program, 'things.read');
+				const readScope = capabilityOf(effective, 'things.read');
 				if (readScope?.schemas?.length) {
 					clauses.push({
 						$or: readScope.schemas.flatMap((ref) => [{ 'crystal.schemaId': ref }, { 'crystal.schema': ref }])
@@ -427,7 +482,7 @@ const executeProgram = async (
 				if (!isDataThing(currentThing.thingtime)) {
 					runError(`Step ${label} update target "${currentThing.id}" is not a data thing — actions read and write Data Things only`);
 				}
-				const updateScope = capabilityOf(program, 'things.update');
+				const updateScope = capabilityOf(effective, 'things.update');
 				if (!schemaScopeAllows(updateScope, schemaIdentityOf(currentThing.crystal))) {
 					runError(`Step ${label} updates "${currentThing.id}" outside the declared things.update schema scope`);
 				}
@@ -454,7 +509,14 @@ const executeProgram = async (
 				if (budget.childActionsRemaining <= 0) runError('Child-action budget exhausted');
 				budget.childActionsRemaining -= 1;
 				budget.childActionsUsed += 1;
-				const child = await resolveActionProgram(viewer, String(step.action));
+				const invokeScope = capabilityOf(effective, 'actions.invoke');
+				if (!invokeScope) runError(`Step ${label} invokes without an actions.invoke capability in the inherited envelope`);
+				if (invokeScope!.actions?.length && !invokeScope!.actions.includes(String(step.action))) {
+					runError(`Step ${label} invokes "${String(step.action)}" outside the declared actions.invoke allowlist`);
+				}
+				// A child named by the PARENT's program text is a deliberate
+				// composition, so it resolves the same way the parent did.
+				const child = await resolveActionProgram(viewer, String(step.action), { ownedOnly: budget.ownedOnly });
 				if (isFail(child)) runError(`Step ${label} invoke failed: ${child.error}`);
 				const childProgram = child as ActionProgram;
 				const rawInputs = step.inputs === undefined ? {} : resolveValue(step.inputs, scope);
@@ -511,10 +573,15 @@ const writeRunRecord = async (
 
 export const runAction = async (
 	viewer: Viewer,
-	request: { action?: unknown; inputs?: unknown }
+	request: { action?: unknown; inputs?: unknown; source?: unknown }
 ): Promise<RunActionResult> => {
 	if (!viewer) return fail(401, 'Running actions requires signing in');
-	const program = await resolveActionProgram(viewer, typeof request.action === 'string' ? request.action : '');
+	// 'component' = the delegated path (a click inside rendered markup). The
+	// flag only ever NARROWS resolution, so honouring a client-supplied value
+	// is safe: the viewer's own client always sends it, and a caller who omits
+	// it is acting as themselves on their own behalf.
+	const ownedOnly = request.source === 'component';
+	const program = await resolveActionProgram(viewer, typeof request.action === 'string' ? request.action : '', { ownedOnly });
 	if (isFail(program)) return program;
 
 	const declaredLimits = (program.crystal.limits || {}) as Record<string, number>;
@@ -548,7 +615,8 @@ export const runAction = async (
 		depthUsed: 0,
 		childActionsUsed: 0,
 		trace: [],
-		stack: []
+		stack: [],
+		ownedOnly
 	};
 
 	let status: 'ok' | 'error' = 'ok';

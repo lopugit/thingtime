@@ -545,6 +545,75 @@ const run = async () => {
 		JSON.stringify(dupRun.body || {}).slice(0, 160)
 	);
 
+	// ---- SECURITY REGRESSIONS (2026-08-25 review) ---------------------------
+	// R1 — action-created things must be PRIVATE. createThing's standalone
+	// default is the public audience; an action minting on the invoker's behalf
+	// must never widen the audience of data it copies from a read.
+	const secAudienceAction = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: {
+			name: 'Audience check',
+			actionKey: `audience-${suffix}`,
+			inputs: [{ name: 'name', type: 'string', required: true }],
+			steps: [
+				{ op: 'things.create', schema: CUSTOMER_ID, values: { name: '$input.name' } },
+				{ op: 'return', value: '$step.1' }
+			],
+			capabilities: [{ capability: 'things.create', schemas: [CUSTOMER_ID] }]
+		}
+	});
+	check('audience-check action saves', secAudienceAction.status === 200);
+	const secMintedRun = await runAction(alice.cookie, { action: `audience-${suffix}`, inputs: { name: 'Audience Probe' } });
+	check('audience-check action runs', secMintedRun.status === 200 && secMintedRun.body?.status === 'ok', JSON.stringify(secMintedRun.body || {}).slice(0, 200));
+	const secMintedId = secMintedRun.body?.result?.id;
+	const secMintedOwnerRead = await api(`/api/v1/things?id=${encodeURIComponent(secMintedId || '')}`, { cookie: alice.cookie });
+	check(
+		'an action-created thing is minted PRIVATE (acl tt:user, not tt:all)',
+		Array.isArray(secMintedOwnerRead.body?.thing?.acl) &&
+			secMintedOwnerRead.body.thing.acl.includes('tt:user') &&
+			!secMintedOwnerRead.body.thing.acl.includes('tt:all'),
+		JSON.stringify(secMintedOwnerRead.body?.thing?.acl || null)
+	);
+	const secMintedStrangerRead = await api(`/api/v1/things?id=${encodeURIComponent(secMintedId || '')}`, { cookie: bella.cookie });
+	check(
+		'a second user cannot read an action-created thing',
+		secMintedStrangerRead.status === 404 || secMintedStrangerRead.body?.ok === false,
+		`status ${secMintedStrangerRead.status}`
+	);
+	const secMintedAnonRead = await api(`/api/v1/things?id=${encodeURIComponent(secMintedId || '')}`);
+	check(
+		'an anonymous reader cannot read an action-created thing',
+		secMintedAnonRead.status === 404 || secMintedAnonRead.body?.ok === false,
+		`status ${secMintedAnonRead.status}`
+	);
+
+	// R2 — a component click (source: 'component') resolves ONLY actions the
+	// invoker owns, so foreign markup cannot lend the viewer's authority to a
+	// stranger's program. The secDeliberateRun inspector path still resolves it.
+	const secForeignAction = await createThing(bella.cookie, {
+		thingtime: ['action'],
+		crystal: {
+			name: 'Bella public probe',
+			actionKey: `bella-pub-${suffix}`,
+			steps: [{ op: 'return', value: 'bella-ran' }]
+		},
+		acl: ['tt:all']
+	});
+	check('a public foreign action exists', secForeignAction.status === 200, JSON.stringify(secForeignAction.body || {}).slice(0, 160));
+	const secForeignId = secForeignAction.body?.thing?.id;
+	const secDelegatedRun = await runAction(alice.cookie, { action: secForeignId, source: 'component' });
+	check(
+		'a component click REFUSES a foreign action by id (delegated path is owner-scoped)',
+		secDelegatedRun.status === 404,
+		`status ${secDelegatedRun.status} ${JSON.stringify(secDelegatedRun.body || {}).slice(0, 140)}`
+	);
+	const secDeliberateRun = await runAction(alice.cookie, { action: secForeignId });
+	check(
+		'the deliberate inspector path still runs a readable foreign action',
+		secDeliberateRun.status === 200 && secDeliberateRun.body?.result === 'bella-ran',
+		`status ${secDeliberateRun.status}`
+	);
+
 	// ---- docs twins ----------------------------------------------------------
 	const runDocs = await api('/api/v1/actions/run-docs');
 	const runsDocs = await api('/api/v1/actions/runs-docs');

@@ -28,11 +28,16 @@ vocabulary deliberately does not define one.
    operation budget, depth, child-action count, result bytes. Child Actions
    invoked via `actions.invoke` consume the *parent's* budget — `A → B → A`
    terminates by construction (no perpetual motion at AWS's expense).
-5. **No network, no secrets, no runtime access in v1.** There is no op that
+5. **Actions mint private.** A created thing gets the owner-only audience, never
+   the public standalone default: "capabilities only narrow" governs the
+   AUDIENCE of what a run produces as much as the operations it performs, so a
+   step that copies a read into a new thing can never republish it. An explicit
+   audience is a v2 grammar question (declared, and derived as an effect).
+6. **No network, no secrets, no runtime access in v1.** There is no op that
    can reach `fetch`, env vars, or MongoDB directly. External integrations
    arrive later as Connection-owned capabilities (`mailgun.send-email`
    style), keeping credentials on the Connection, never in the Action.
-6. **Data-ops touch Data Things only.** All four data-ops share one kind
+7. **Data-ops touch Data Things only.** All four data-ops share one kind
    boundary: `things.create` mints `thingtime: ['data']`, `things.search`
    filters `thingtime: 'data'`, and `things.get`/`things.update` require the
    resolved target to be a data thing (`isDataThing`). A capability scope
@@ -169,6 +174,10 @@ run record land.
 | Injection via values | refs are whole-value substitution; created/updated crystals pass validateThingtimeCrystal for the bounded `data` kind (schema/schemaId are provenance stamps — field-level schema gating is future work) |
 | Resource exhaustion | deadline, op budget, input/result byte caps, steps ≤20, trace capped, rate limit on run |
 | Secret/network reach | no op exists that touches fetch/env/Mongo; vocabulary is closed both at save and run |
+| Audience widening (created things) | actions mint `acl: [ACL_OWNER]`; createThing's public standalone default must never apply to something a program mints on the invoker's behalf |
+| Delegated authority (a ttAction click) | `source: 'component'` resolves ONLY actions the invoker owns (owner-pinned id lookup, like the actionKey branch); the flag only narrows, and rides the per-invocation budget so the whole tree inherits it |
+| Foreign markup on a trusted surface | ownership is the trust boundary: /things PreviewModal passes `untrusted` for any thing the viewer does not own, so a foreign component renders inert |
+| Consent surface over-claiming | an action that invokes children never asserts absolute negatives ("Cannot create things") about code its page never read; only the vocabulary-level negatives are unconditional |
 | Run-record forgery | action-run blocked from direct generic-route writes |
 | Foreign action invocation | actions.invoke goes through ACL read check + optional allowlist |
 | Cross-kind reach (data-op → non-data thing) | all four data-ops pin the `data` kind; get/update require `isDataThing(target)` so an unscoped read/update can't resolve to an action/schema/post/component/folder |
