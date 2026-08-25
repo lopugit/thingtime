@@ -280,6 +280,42 @@ const main = async () => {
 		JSON.stringify(afterLoginKey?.linkedApps)
 	);
 
+	// Squat regression (the reason app-link dedupe rides root uniqueKeys, not
+	// a kind-blind crystal-path unique index): a free-form data thing carrying
+	// the SAME crystal.linkKey must be accepted as ordinary data AND must not
+	// disturb the real link. Under the retired unique index this insert died
+	// with E11000 — and a duplicate could fail the whole boot index battery.
+	// Two data things sharing one linkKey value: under a kind-blind unique
+	// index the second dies with E11000, so this pins the retirement without
+	// depending on any real link's key.
+	const squatKey = `squat-${suffix}-${passkeyId}`;
+	const squatOne = await api(owner, 'POST', '/api/v1/things', { crystal: { linkKey: squatKey } });
+	const squatTwo = await api(owner, 'POST', '/api/v1/things', { crystal: { linkKey: squatKey } });
+	check(
+		'data things may share a linkKey crystal (no kind-blind unique index)',
+		squatOne.json?.ok === true && squatTwo.json?.ok === true,
+		`${squatOne.status}/${squatTwo.status} ${JSON.stringify(squatTwo.json)?.slice(0, 120)}`
+	);
+	// …and one carrying the REAL link's key must not disturb it either.
+	await api(owner, 'POST', '/api/v1/things', { crystal: { linkKey: `${passkeyId}:origin:${ORIGIN}` } });
+
+	const squatJar = newJar();
+	const squatLoginOptions = await api(squatJar, 'POST', '/api/v1/auth/passkeys/login-options');
+	const afterSquatLogin = await api(squatJar, 'POST', '/api/v1/auth/passkeys/login', {
+		response: assertionResponseFor(authenticator, squatLoginOptions.json.options, userHandle)
+	});
+	check('passkey login still works with a squatting data thing present', afterSquatLogin.json?.ok === true, JSON.stringify(afterSquatLogin.json));
+
+	const afterSquat = await api(owner, 'GET', '/api/v1/auth/passkeys');
+	const originLinks = (afterSquat.json?.passkeys?.find((p) => p.id === passkeyId)?.linkedApps || []).filter(
+		(l) => l.appKey === `origin:${ORIGIN}`
+	);
+	check(
+		'the real link still dedupes to ONE row and keeps counting',
+		originLinks.length === 1 && originLinks[0].usageCount >= 2,
+		JSON.stringify(originLinks)
+	);
+
 	// ── cross-deployment hints ──
 	console.log('\naccount hints (auto-login popup)');
 	const ownHints = await api(owner, 'GET', '/api/v1/auth/account-hints');
