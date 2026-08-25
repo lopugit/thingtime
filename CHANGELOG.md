@@ -21,6 +21,28 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Every model-backed repository lane now runs through one protected Lopu
+  action**: review/check repair, CodeQL triage, merge conflicts, promotion
+  replay, release analysis, rebase and stack-conflict rounds, and the wildcard
+  `all`-branch doctor share the repository-wide `LOPU_AGENT_BACKEND` selector.
+  The action validates and labels either the pinned Claude implementation or
+  pinned Codex implementation with an allowlisted Terra/Sol model and explicit
+  reasoning effort. Direct provider actions no longer appear in individual
+  workflows, the historical `LOPU_REVIEW_BACKEND` remains a compatibility
+  fallback, and post-merge Graphify prefers the same provider while retaining
+  structural output when semantic extraction is unavailable. — Codex (AI),
+  2026-08-25
+- **Lopu CodeQL now covers PRs targeting branches that predate the listener**:
+  a trusted default-branch `pull_request_target` event carries only the PR
+  number and immutable head SHA into a separate `workflow_dispatch` run. The
+  protected worker revalidates live PR state, rejects stale handoffs, preserves
+  the normal PR run when the target already carries a listener, and otherwise
+  uploads against the exact PR merge ref (or head while conflicts remain).
+  A merge ref is accepted only when its parents equal the live base and head,
+  preventing GitHub's stale conflict refs from being analyzed. Existing
+  two-language snapshots suppress duplicate scans. The privileged event path
+  performs no checkout or analysis and receives no AI credential. — Codex
+  (AI), 2026-08-25
 - **CodeQL now has a protected advanced-setup implementation for every PR
   target and branch**: a thin product listener calls the canonical
   `github-actions` workflow for unfiltered `pull_request` and all-branch
@@ -76,6 +98,22 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Post-merge Graphify semantics now follow Lopu's configured AI backend**:
+  promotion refreshes can use the same `OPENAI_API_KEY` and validated
+  Terra/Sol model as Codex-backed repository review, while retaining Claude
+  API/CLI credentials as a fallback. Every provider credential is included in
+  the derived-output secret scan, and structural Graphify still completes when
+  no semantic provider is available. — Codex (AI), 2026-08-25
+- **Lopu's single-agent fleet now keeps the full pending queue instead of
+  replacing older work during bursts**: PR reviews and check fixes, merge
+  conflict resolution, promotion replay, rebase/stack operations, and the
+  wildcard `all`-branch build doctor still allow only one live model-backed
+  Lopu session per repository, while GitHub's durable concurrency queue
+  retains up to 100 waiting jobs in FIFO order. The all-branch doctor is now
+  Lopu-branded and its rebuild cannot cancel or overlap another model-backed
+  repository operation. A new develop or controller commit can therefore
+  enqueue the affected PRs without cancelling a previously validated
+  promotion or repair. — Codex (AI), 2026-08-25
 - **Preview wildcard fallbacks are environment-locked and stack-aware**:
   `*.previews.dev.thingtime.com` must bind to `develop`, while the Vercel
   production fallback for `*.previews.thingtime.com` must stay detached and

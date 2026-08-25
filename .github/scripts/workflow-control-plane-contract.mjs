@@ -215,6 +215,7 @@ const ADMIN_MODEL_ENDPOINT =
 const ADMIN_MODEL_KEY = "Thingtime.PRConflictAutoResolverModelWaterfall";
 const ALLOWED_MODELS = ["default", "claude-fable-5", "claude-opus-5"];
 const AI_RUNTIME_YAML = [
+  ".github/actions/lopu-agent/action.yml",
   ".github/actions/rebase-conflict-round/action.yml",
   ".github/workflows/rebase-pr-stacks.yml",
   ".github/workflows/resolve-pr-conflicts.yml",
@@ -351,7 +352,7 @@ function assertAdminModelRouting(resolver, rebase) {
   const runtimeFiles = [...yamlFiles(workflows), ...yamlFiles(actions)]
     .filter((path) => {
       const source = readFileSync(path, "utf8");
-      return /uses:\s*anthropics\/claude-code-action@|\bbackend=(?:["']?)claude(?:-cli)?(?:["']?)\b|GRAPHIFY_(?:CLAUDE_CLI|OPENAI)_MODEL|--model\b/u.test(
+      return /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@|\bbackend=(?:["']?)claude(?:-cli)?(?:["']?)\b|GRAPHIFY_(?:CLAUDE_CLI|OPENAI)_MODEL|--model\b/u.test(
         source,
       );
     })
@@ -390,11 +391,35 @@ function assertAdminModelRouting(resolver, rebase) {
     );
   }
 
+  const lopuAgent = readFileSync(
+    resolve(actions, "lopu-agent/action.yml"),
+    "utf8",
+  );
+  assert.match(
+    lopuAgent,
+    /uses:\s*anthropics\/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79/u,
+    "the single Lopu action pins Claude's executable implementation",
+  );
+  assert.match(
+    lopuAgent,
+    /uses:\s*openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u,
+    "the single Lopu action pins Codex's executable implementation",
+  );
+  for (const path of runtimeFiles.filter((path) => path !== ".github/actions/lopu-agent/action.yml")) {
+    const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
+    assert.doesNotMatch(
+      source,
+      /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u,
+      `${path}: model execution goes through the single protected Lopu action`,
+    );
+  }
+
   const claudeActionCount = runtimeFiles.reduce((count, path) => {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
     return count +
       (source.match(/uses:\s*anthropics\/claude-code-action@/gu)?.length ?? 0);
   }, 0);
+  assert.equal(claudeActionCount, 1, "only the single Lopu action directly invokes Claude");
   const turnBudgets = runtimeFiles.flatMap((path) => {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
     return [...source.matchAll(/--max-turns\s+(\d+)/gu)].map((match) => ({
@@ -416,20 +441,22 @@ function assertAdminModelRouting(resolver, rebase) {
   const runtimeSource = runtimeFiles
     .map((path) => readFileSync(resolve(githubRoot, "..", path), "utf8"))
     .join("\n");
+  const lopuCallCount =
+    runtimeSource.match(/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/gu)?.length ?? 0;
   assert.ok(
     (runtimeSource.match(/steps\.[A-Za-z0-9_]+\.outcome == 'failure'/gu)?.length ?? 0) >=
-      claudeActionCount - 1,
+      lopuCallCount,
     "each independently resumable Claude runtime classifies its failed result before continuation",
   );
   assert.ok(
     (runtimeSource.match(/RESULT_SUBTYPE[^\n]+error_max_turns/gu)?.length ?? 0) >=
-      claudeActionCount,
+      lopuCallCount,
     "only error_max_turns can enter exact-session continuation",
   );
   assert.equal(
     runtimeSource.match(/claude --resume "\$session_id" --print/gu)?.length,
-    claudeActionCount,
-    "every Claude action has an exact --resume continuation path",
+    lopuCallCount,
+    "every Lopu caller that can select Claude has an exact --resume continuation path",
   );
 }
 
@@ -514,7 +541,7 @@ function assertUserControlledMergePause(resolver, rebase) {
 function assertResolverLockfileRecovery(resolver) {
   const prompt = workflowBlock(
     resolver,
-    "      - name: Resolve conflicts with Claude\n",
+    "      - name: Resolve conflicts with Lopu\n",
     "      - name: Continue the exact conflict-resolution session until it finishes\n",
     "resolver model prompt",
   );
@@ -575,6 +602,7 @@ export function assertControlPlaneContract() {
   }
 
   const codeql = readWorkflow("codeql-analysis.yml");
+  const codeqlTriggers = codeql.slice(0, codeql.indexOf("\npermissions:\n"));
   assert.match(
     codeql,
     /^  pull_request:$/mu,
@@ -595,6 +623,7 @@ export function assertControlPlaneContract() {
     "an open PR owns one analysis instead of duplicating its branch push",
   );
   assert.match(codeql, /ADVANCED_ENABLED: \$\{\{ vars\.CODEQL_ADVANCED_ENABLED \}\}/u);
+  assert.match(codeql, /vars\.CODEQL_CENTRAL_PR_ENABLED/u);
   assert.match(
     codeql,
     /\[ "\$ADVANCED_ENABLED" != true \][\s\S]*analyze=false/u,
@@ -602,12 +631,47 @@ export function assertControlPlaneContract() {
   );
   assert.match(codeql, /persist-credentials: false/u);
   assert.doesNotMatch(
-    codeql,
-    /pull_request_target|ANTHROPIC_API_KEY|OPENAI_API_KEY|secrets\./u,
-    "CodeQL never executes PR code in a privileged target or AI-secret context",
+    codeqlTriggers,
+    /^  pull_request_target:/mu,
+    "the protected CodeQL implementation is never a direct privileged PR listener",
   );
+  assert.doesNotMatch(codeql, /ANTHROPIC_API_KEY|OPENAI_API_KEY|secrets\./u, "CodeQL never receives an AI credential");
+  const codeqlHandoff = codeql.slice(codeql.indexOf("\n  handoff:"), codeql.indexOf("\n  scope:"));
+  assert.match(codeqlHandoff, /github\.event_name == 'pull_request_target'/u);
+  assert.match(codeqlHandoff, /CODEQL_CENTRAL_PR_ENABLED/u);
+  assert.match(codeqlHandoff, /gh workflow run codeql-analysis\.yml/u);
+  assert.match(codeqlHandoff, /--ref "\$DEFAULT_BRANCH"/u);
+  assert.doesNotMatch(
+    codeqlHandoff,
+    /actions\/checkout|codeql-action\/(?:init|analyze)|\bsecrets\./u,
+    "the privileged target-context path only dispatches trusted metadata",
+  );
+  assert.match(
+    codeql,
+    /^    if: github\.event_name != 'pull_request_target'$/mu,
+    "all checkout and analysis work is excluded from the privileged event run",
+  );
+  assert.match(codeql, /base_has_pr_listener/u);
+  assert.match(codeql, /git\/ref\/pull\/\$PR_NUMBER\/merge/u);
+  assert.match(codeql, /git\/commits\/\$merge_sha/u);
+  assert.match(codeql, /\.\[0\] == \$base and \.\[1\] == \$head/u);
+  assert.match(codeql, /analysis_ref="refs\/pull\/\$PR_NUMBER\/head"/u);
+  assert.match(codeql, /code-scanning\/analyses\?ref=\$encoded_ref/u);
+  assert.match(codeql, /^      security-events: read$/mu);
+  assert.match(codeql, /ref: \$\{\{ needs\.scope\.outputs\.analysis_ref \}\}/u);
+  assert.match(codeql, /sha: \$\{\{ needs\.scope\.outputs\.analysis_sha \}\}/u);
 
   const developPreview = readWorkflow("develop-pr-preview.yml");
+  assert.match(
+    developPreview,
+    /group: develop-pr-preview-\$\{\{ github\.event_name == 'pull_request_target' && 'handoff' \|\| 'worker' \}\}-/u,
+    "develop preview keeps its metadata handoff separate from the dispatched worker",
+  );
+  assert.match(
+    developPreview,
+    /group: develop-pr-preview-[^\n]+\n\s*queue: max\n\s*cancel-in-progress: false/u,
+    "develop preview queues per-PR requests without cancelling an active handoff or deployment",
+  );
   assert.doesNotMatch(
     developPreview,
     /^  (?:pull_request_target|repository_dispatch|schedule|workflow_dispatch):/mu,
