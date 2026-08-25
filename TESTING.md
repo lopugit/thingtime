@@ -888,6 +888,13 @@ is fixed, and cite the checklist you ran in the PR description.
       WITHOUT navigating. Logged out, the row reads "Log in" and opens the
       settings modal (account switcher hosts log-in) instead of navigating.
 
+## Shared page shell & footer (`remix/app/components/Layout/Main.tsx`, `remix/app/components/Nav/Footer.tsx`)
+
+- [ ] On the landing page and a short authenticated route, scroll from top to
+      bottom at desktop and 375px widths. The shared footer follows content
+      with ordinary visual spacing, not a large blank/dead-scroll region; its
+      links and controls remain reachable without horizontal overflow.
+
 ## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
 
 - [ ] The self-profile action row is Edit profile ✏️ / All settings ⚙️ /
