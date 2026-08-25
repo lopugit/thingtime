@@ -45,9 +45,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Lopu now receives every PR-head lifecycle update from the default branch**:
   `pull_request_target` includes synchronize, ready-for-review, and edited
   events, so old PR branches and non-default targets no longer depend on
-  carrying a current push listener themselves. The protected controller still
-  deduplicates immutable snapshots and admits at most one model-backed Lopu
-  worker per repository. — Codex (AI), 2026-08-25
+  carrying a current push listener themselves. The develop caller is also
+  aligned with the current principal-manager contract for comments, failed
+  checks, promotion/maintenance inputs, and the separately fenced CodeQL
+  disposition permission. The protected controller still deduplicates
+  immutable snapshots and admits at most one model-backed Lopu worker per
+  repository. — Codex (AI), 2026-08-25
 - **CodeQL now covers every PR target and branch**: an unfiltered PR listener,
   all-branch push listener, scheduled backstop, and protected reusable
   implementation replace default-branch-only scanning. Open PR heads use the

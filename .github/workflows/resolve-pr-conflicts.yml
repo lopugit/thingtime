@@ -11,8 +11,18 @@ on:
     # non-default target already carries a current push listener. The protected
     # controller deduplicates exact snapshots before queueing model work.
     types: [opened, synchronize, reopened, ready_for_review, edited]
+  # GitHub evaluates these event workflows from the default branch. Keep the
+  # public file metadata-only and forward each signal to the protected Lopu
+  # controller pinned below.
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  check_run:
+    types: [completed]
   schedule:
     - cron: "2,32 * * * *"
+    - cron: "43 */6 * * *"
   workflow_dispatch:
     inputs:
       pr_number:
@@ -22,6 +32,37 @@ on:
         type: string
       branch:
         description: "PR base or head branch to scan; leave blank with no PR number to scan all"
+        required: false
+        default: ""
+        type: string
+      maintenance_operation:
+        description: "Choose PR management or one explicit repository-maintenance operation"
+        required: false
+        default: "manage-prs"
+        type: choice
+        options: [manage-prs, promote-develop, promote-features, sync-main-develop]
+      promotion_dry_run:
+        description: "Plan feature promotion only — do not create or update repository state"
+        required: false
+        default: false
+        type: boolean
+      promotion_lookback:
+        description: "Recently merged source PRs to inspect during feature promotion (max 100)"
+        required: false
+        default: "50"
+        type: string
+      promotion_source_branch:
+        description: "Optional feature-promotion source branch (default develop)"
+        required: false
+        default: ""
+        type: string
+      promotion_target_branch:
+        description: "Optional feature-promotion target branch (default main)"
+        required: false
+        default: ""
+        type: string
+      promotion_path_prefix:
+        description: "Optional comma-separated allowed path prefixes for feature promotion"
         required: false
         default: ""
         type: string
@@ -48,6 +89,9 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  # The called controller narrows this per job: review is read-only and only
+  # its separately fenced disposition job may close or dismiss CodeQL alerts.
+  security-events: write
 
 jobs:
   control-plane:
@@ -55,6 +99,12 @@ jobs:
     with:
       pr_number: ${{ inputs.pr_number || '' }}
       branch: ${{ inputs.branch || '' }}
+      maintenance_operation: ${{ inputs.maintenance_operation || 'manage-prs' }}
+      promotion_dry_run: ${{ inputs.promotion_dry_run || false }}
+      promotion_lookback: ${{ inputs.promotion_lookback || '50' }}
+      promotion_source_branch: ${{ inputs.promotion_source_branch || '' }}
+      promotion_target_branch: ${{ inputs.promotion_target_branch || '' }}
+      promotion_path_prefix: ${{ inputs.promotion_path_prefix || '' }}
       detector_handoff: ${{ inputs.detector_handoff || false }}
       manual_retry: ${{ inputs.manual_retry || false }}
       depth: ${{ inputs.depth || '0' }}

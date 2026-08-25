@@ -95,6 +95,28 @@ assert.match(
   /^  pull_request_target:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, ready_for_review, edited\]$/m,
   'Lopu must receive every PR-head lifecycle update even when the PR branch has an old or missing push listener'
 );
+for (const trigger of ['issue_comment', 'pull_request_review_comment', 'check_run']) {
+  assert.match(
+    resolverCaller,
+    new RegExp(`^  ${trigger}:$`, 'm'),
+    `Lopu must receive ${trigger} repository-management signals from the default branch`
+  );
+}
+assert.match(resolverCaller, /^  security-events: write$/m, 'the thin Lopu caller must grant the maximum permission used by its separately fenced CodeQL disposition job');
+for (const input of [
+  'maintenance_operation',
+  'promotion_dry_run',
+  'promotion_lookback',
+  'promotion_source_branch',
+  'promotion_target_branch',
+  'promotion_path_prefix'
+]) {
+  assert.match(
+    resolverCaller,
+    new RegExp(`^      ${input}: \\\${\\\{ inputs\\.${input}`, 'm'),
+    `the public Lopu caller must forward ${input} to the protected controller`
+  );
+}
 
 const developPreviewCaller = readFileSync(
   resolve(workflowsRoot, 'develop-pr-preview.yml'),
