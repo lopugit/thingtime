@@ -78,6 +78,26 @@ assert.match(
   'resolve-pr-conflicts.yml must permit the protected controller to inspect and disposition CodeQL alerts'
 );
 
+const rebaseCaller = readFileSync(
+  resolve(workflowsRoot, 'rebase-pr-stacks.yml'),
+  'utf8'
+);
+const rebaseTriggersEnd = rebaseCaller.indexOf('\npermissions:\n');
+assert.ok(rebaseTriggersEnd > 0, 'rebase-pr-stacks.yml must retain its internal handoff trigger');
+const rebaseTriggers = rebaseCaller.slice(0, rebaseTriggersEnd);
+assert.match(
+  rebaseTriggers,
+  /^  repository_dispatch:\n    types: \[rebase-pr-stack-ai\]$/m,
+  'rebase-pr-stacks.yml must accept the unified manager\'s exact internal handoff'
+);
+assert.doesNotMatch(
+  rebaseTriggers,
+  /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch):/m,
+  'rebase-pr-stacks.yml must not compete with the unified Lopu manager for automatic or manual entry events'
+);
+assert.match(rebaseCaller, /^      pr_number: ""$/m, 'internal rebase handoff must derive its exact PR from repository_dispatch');
+assert.match(rebaseCaller, /^      cascade: true$/m, 'internal rebase handoff must preserve stack cascading');
+
 const developPreviewCaller = readFileSync(
   resolve(workflowsRoot, 'develop-pr-preview.yml'),
   'utf8'

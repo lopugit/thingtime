@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **One automatic Lopu owns merge, stale-branch, rebase, and stack work**: the
+  legacy rebase listener is now an internal `repository_dispatch` handoff only,
+  so a branch push cannot spawn a competing standalone rebase run that gets
+  cancelled when the unified manager starts its embedded rebase lane. Manual
+  recovery also goes through **Lopu PR manager**. — Codex (AI), 2026-08-25
 - **Lopu's product-branch listener can start every repository-manager lane**:
   the thin reusable-workflow caller now grants the maximum `security-events`
   permission required by its isolated CodeQL reader/writer jobs. GitHub no
