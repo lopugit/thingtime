@@ -14,11 +14,8 @@ const callers = [
   'electron-release.yml',
   'electron-pr-release.yml',
   'web-ci.yml',
-  'promote-develop-to-main.yml',
-  'promote-features-to-main.yml',
   'rebase-pr-stacks.yml',
   'resolve-pr-conflicts.yml',
-  'sync-main-into-develop.yml'
 ];
 
 for (const filename of callers) {
@@ -74,6 +71,25 @@ assert.match(resolverTriggers, /^  push:\n    branches: \["\*\*"\]$/m, 'Lopu mus
 assert.match(resolverTriggers, /^  issue_comment:\n    types: \[created, edited\]$/m, 'Lopu must receive PR conversations');
 assert.match(resolverTriggers, /^  pull_request_review_comment:\n    types: \[created, edited\]$/m, 'Lopu must receive inline review conversations');
 assert.match(resolverTriggers, /^  check_run:\n    types: \[completed\]$/m, 'Lopu must receive completed checks for repair review');
+assert.match(
+  resolverTriggers,
+  /^    - cron: "43 \*\/6 \* \* \*"$/m,
+  'Lopu must own the former feature-promotion maintenance schedule'
+);
+for (const input of [
+  'maintenance_operation',
+  'promotion_dry_run',
+  'promotion_lookback',
+  'promotion_source_branch',
+  'promotion_target_branch',
+  'promotion_path_prefix'
+]) {
+  assert.match(
+    resolverCaller,
+    new RegExp(`^      ${input}: \\$\\{\\{ inputs\\.${input}`, 'm'),
+    `Lopu listener must forward ${input} to the protected manager`
+  );
+}
 const resolverPermissions = resolverCaller.slice(
   resolverPermissionsStart,
   resolverJobsStart
@@ -114,25 +130,17 @@ assert.match(
   'develop-pr-preview.yml must convert the manual dispatch string to the reusable workflow number type'
 );
 
-const promotionCaller = readFileSync(
-  resolve(workflowsRoot, 'promote-features-to-main.yml'),
-  'utf8'
-);
-const promotionPermissionsStart = promotionCaller.indexOf('\npermissions:\n');
-const promotionJobsStart = promotionCaller.indexOf('\njobs:\n');
-assert.ok(
-  promotionPermissionsStart >= 0 && promotionJobsStart > promotionPermissionsStart,
-  'promote-features-to-main.yml must retain a top-level permissions block'
-);
-const promotionPermissions = promotionCaller.slice(
-  promotionPermissionsStart,
-  promotionJobsStart
-);
-assert.match(
-  promotionPermissions,
-  /^  actions: write$/m,
-  'promote-features-to-main.yml must grant the protected promoter permission to dispatch its resolver'
-);
+for (const retiredPublicWorkflow of [
+  'promote-develop-to-main.yml',
+  'promote-features-to-main.yml',
+  'sync-main-into-develop.yml'
+]) {
+  assert.equal(
+    existsSync(resolve(workflowsRoot, retiredPublicWorkflow)),
+    false,
+    `${retiredPublicWorkflow} must not remain as a competing product-branch workflow`
+  );
+}
 
 const allBranchCaller = readFileSync(
   resolve(workflowsRoot, 'all-branch.yml'),

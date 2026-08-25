@@ -925,6 +925,15 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
+- [ ] Push once to `develop`. Confirm GitHub creates one public **Lopu PR
+      manager** run containing the standing-promotion and per-feature-promotion
+      reusable jobs, with no separate **Promote develop to main** or **Promote
+      features to main** workflow run. Push once to `main` and confirm its Lopu
+      run contains the main→develop synchronization job with no standalone
+      sync workflow. Queue a second event while each component is active and
+      confirm the first run is not cancelled. Exercise each
+      `maintenance_operation` choice manually through Lopu and confirm the
+      removed workflow files do not reappear in Actions.
 - [ ] On `develop`, push a normal feature merge and open or update a PR.
       Confirm each `Lopu PR manager` run compiles and creates its controller
       jobs instead of failing at workflow startup with a nested

@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Lopu is the only automatic promotion and branch-sync entrypoint**: the
+  three product-branch workflows that separately promoted develop, promoted
+  features, and synchronized main into develop are removed. Their protected
+  implementations are non-cancelling reusable jobs inside **Lopu PR manager**;
+  develop pushes, main pushes, the six-hour backstop, and explicit
+  `maintenance_operation` recovery now all enter through that one workflow.
+  — Codex (AI), 2026-08-25
 - **One automatic Lopu owns merge, stale-branch, rebase, and stack work**: the
   legacy rebase listener is now an internal `repository_dispatch` handoff only,
   so a branch push cannot spawn a competing standalone rebase run that gets

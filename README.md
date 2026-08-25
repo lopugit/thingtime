@@ -174,7 +174,8 @@ manager**. It reviews failing checks and CodeQL findings, merges stale bases
 into PR heads, resolves merge conflicts, and owns rebases plus stack cascades
 for every same-repository PR regardless of its target branch. Push, PR,
 conversation, failed-check, and scheduled signals all enter through that one
-manager; a branch push never starts a second standalone rebase scan.
+manager; a branch push never starts a second standalone rebase, promotion, or
+branch-synchronization workflow.
 
 Inside Lopu, merge and rebase ownership remains deliberately disjoint.
 Standalone merge conflicts and clean-but-behind branches go to the base-merge
@@ -194,7 +195,10 @@ For manual recovery, open **Actions → Lopu PR manager → Run workflow** on th
 default branch. Enter an exact PR number, a base/head branch selector, or leave
 both blank for a repository scan. The same entry point deliberately retries a
 reviewed paused merge/rebase snapshot; the internal rebase handoff is not a
-second user-facing workflow.
+second user-facing workflow. The `maintenance_operation` choice also exposes
+the standing develop promotion, per-feature promotion (including dry-run and
+reverse-lane options), and main→develop synchronization without restoring
+separate Actions entries.
 
 Broad scans are API-only detectors; they hand off one trusted
 default-branch run per conflicted base, so unrelated bases do not share one AI
@@ -1084,11 +1088,12 @@ the preset fallback responses instead of calling an AI provider.
 
 ## Branch automation: develop → main promotion
 
-`develop` is the integration branch; `main` is the release branch. Four
-workflows keep them flowing without manual branch surgery, giving two
-complementary ways to ship:
+`develop` is the integration branch; `main` is the release branch. One public
+**Lopu PR manager** workflow owns the branch events and invokes three protected
+non-cancelling components, giving two complementary ways to ship:
 
-- **Promote features to main** (`.github/workflows/promote-features-to-main.yml`)
+- **Lopu's per-feature promotion component** (protected implementation
+  `github-actions:.github/workflows/promote-features-to-main.yml`)
   scans PRs merged into `develop` and opens one promotion PR per feature
   against `main` (cherry-picked `promote/pr-<n>-<slug>` branches), so every
   change can get a second, release-focused review on its own. PRs that share a
@@ -1098,15 +1103,23 @@ complementary ways to ship:
   review and merge bottom-up, deleting each branch on merge. Label a develop
   PR `no-promote` to keep it out of the train; close a promotion PR to reject
   that change for `main` permanently.
-- **Promote develop to main** (`.github/workflows/promote-develop-to-main.yml`)
+- **Lopu's standing develop promotion component** (protected implementation
+  `github-actions:.github/workflows/promote-develop-to-main.yml`)
   keeps one standing all-or-nothing PR open (head `develop`, base `main`).
   When everything on `develop` is deemed mergeable, merge it instead of
   merging every feature individually. The two trains never fight: after an
   omnibus merge the per-feature workflow sees the content already on `main`,
   skips it, and automatically closes any open promotion PRs whose diff has
   become empty.
-- **Sync main into develop** back-merges `main` after promotions land.
-- The AI conflict/rebase workflows keep promotion PRs and stacks mergeable.
+- **Lopu's main→develop synchronization component** back-merges `main` after
+  promotions land.
+- Lopu's conflict/rebase lanes keep promotion PRs and stacks mergeable.
+
+A `develop` push starts both promotion components inside its single Lopu run;
+a `main` push starts synchronization there; and the six-hour maintenance
+schedule enters through Lopu too. The old product-branch promotion/sync
+workflow files are removed, so none can compete with or cancel Lopu. Use the
+manager's `maintenance_operation` input for explicit recovery.
 
 Fork setup: everything runs with the default `GITHUB_TOKEN`, but promotion
 PRs it creates will not trigger CI, and promotion branches touching
