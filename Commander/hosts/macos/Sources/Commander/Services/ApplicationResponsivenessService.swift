@@ -10,6 +10,27 @@ enum ApplicationControlAction: String {
   case restart
 }
 
+enum ApplicationResponsivenessKind: String, Equatable, Sendable {
+  case ui
+  case agent
+  case service
+}
+
+enum ApplicationResponsivenessSignal: String, Equatable, Sendable {
+  case repeatedAccessibilityTimeout
+  case accessibilityProbeInconclusive
+
+  var permitsApplicationControl: Bool {
+    self == .repeatedAccessibilityTimeout
+  }
+}
+
+enum AccessibilityProbeResult: Equatable, Sendable {
+  case responded
+  case timedOut
+  case unavailable
+}
+
 @MainActor
 final class ApplicationResponsivenessService {
   private static let refreshInterval: TimeInterval = 3
@@ -21,11 +42,14 @@ final class ApplicationResponsivenessService {
   private struct Candidate: Sendable {
     let pid: pid_t
     let name: String
+    let kind: ApplicationResponsivenessKind
   }
 
   private struct ReportedApplication: Sendable {
     let pid: pid_t
     let name: String
+    let kind: ApplicationResponsivenessKind
+    let signal: ApplicationResponsivenessSignal
   }
 
   func snapshot() -> [[String: Any]] {
@@ -34,12 +58,14 @@ final class ApplicationResponsivenessService {
       [
         "pid": Int(application.pid),
         "name": application.name,
+        "kind": application.kind.rawValue,
+        "signal": application.signal.rawValue,
       ]
     }
   }
 
-  func isReportedUnresponsive(_ pid: pid_t) -> Bool {
-    reportedApplications.contains { $0.pid == pid }
+  func hasConfirmedUnresponsiveUI(_ pid: pid_t) -> Bool {
+    reportedApplications.contains { $0.pid == pid && $0.signal.permitsApplicationControl }
   }
 
   private func refreshIfNeeded() {
@@ -58,14 +84,14 @@ final class ApplicationResponsivenessService {
             application.bundleURL != nil,
             let name = application.localizedName?.trimmingCharacters(in: .whitespacesAndNewlines),
             !name.isEmpty else { return nil }
-      return Candidate(pid: pid, name: name)
+      return Candidate(pid: pid, name: name, kind: Self.applicationKind(for: application.activationPolicy))
     }
     refreshInFlight = true
     lastRefreshAt = Date()
-    let probe = Self.applicationIsNotResponding
-    Task { [weak self, candidates, probe] in
+    let report = Self.report
+    Task { [weak self, candidates, report] in
       let reported = await Task.detached(priority: .utility) {
-        candidates.filter { probe($0.pid) }.map { ReportedApplication(pid: $0.pid, name: $0.name) }
+        candidates.compactMap(report)
       }.value
       self?.finishRefresh(reported)
     }
@@ -74,22 +100,77 @@ final class ApplicationResponsivenessService {
   private func finishRefresh(_ applications: [ReportedApplication]) {
     refreshInFlight = false
     reportedApplications = applications.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    if !applications.isEmpty {
-      logger.warning("Commander detected \(applications.count, privacy: .public) unresponsive application(s)")
+    let confirmedCount = applications.filter { $0.signal.permitsApplicationControl }.count
+    if confirmedCount > 0 {
+      logger.warning("Commander confirmed \(confirmedCount, privacy: .public) UI accessibility timeout(s)")
     }
   }
 
-  nonisolated static func errorMeansNotResponding(_ error: AXError) -> Bool {
-    error == .cannotComplete
+  nonisolated static func applicationKind(
+    for activationPolicy: NSApplication.ActivationPolicy
+  ) -> ApplicationResponsivenessKind {
+    switch activationPolicy {
+    case .regular:
+      .ui
+    case .accessory:
+      .agent
+    case .prohibited:
+      .service
+    @unknown default:
+      .service
+    }
   }
 
-  private nonisolated static func applicationIsNotResponding(_ pid: pid_t) -> Bool {
+  nonisolated static func signal(
+    for kind: ApplicationResponsivenessKind,
+    firstProbe: AccessibilityProbeResult,
+    confirmationProbe: AccessibilityProbeResult? = nil
+  ) -> ApplicationResponsivenessSignal? {
+    guard firstProbe == .timedOut else { return nil }
+
+    switch kind {
+    case .ui:
+      return confirmationProbe == .timedOut ? .repeatedAccessibilityTimeout : nil
+    case .agent, .service:
+      // Background processes do not have a generic public responsiveness API.
+      // An AX timeout is useful diagnostic context, but not proof that they hung.
+      return .accessibilityProbeInconclusive
+    }
+  }
+
+  private nonisolated static func report(for candidate: Candidate) -> ReportedApplication? {
+    guard processIsAlive(candidate.pid) else { return nil }
+
+    let firstProbe = accessibilityProbe(for: candidate.pid)
+    let confirmationProbe: AccessibilityProbeResult?
+    if candidate.kind == .ui, firstProbe == .timedOut {
+      Thread.sleep(forTimeInterval: 0.15)
+      confirmationProbe = accessibilityProbe(for: candidate.pid)
+    } else {
+      confirmationProbe = nil
+    }
+    guard let signal = signal(
+      for: candidate.kind,
+      firstProbe: firstProbe,
+      confirmationProbe: confirmationProbe
+    ) else { return nil }
+
+    return ReportedApplication(pid: candidate.pid, name: candidate.name, kind: candidate.kind, signal: signal)
+  }
+
+  private nonisolated static func processIsAlive(_ pid: pid_t) -> Bool {
+    if kill(pid, 0) == 0 { return true }
+    return errno == EPERM
+  }
+
+  private nonisolated static func accessibilityProbe(for pid: pid_t) -> AccessibilityProbeResult {
     let element = AXUIElementCreateApplication(pid)
-    guard AXUIElementSetMessagingTimeout(element, 0.2) == .success else { return false }
+    guard AXUIElementSetMessagingTimeout(element, 0.75) == .success else { return .unavailable }
     var role: CFTypeRef?
-    return errorMeansNotResponding(
-      AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
-    )
+    let result = AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
+    if result == .success { return .responded }
+    if result == .cannotComplete { return .timedOut }
+    return .unavailable
   }
 }
 
@@ -107,7 +188,7 @@ final class UnresponsiveApplicationController {
   }
 
   func perform(pid: pid_t, action: ApplicationControlAction) throws -> [String: Any] {
-    guard pid > 1, pid != getpid(), responsiveness.isReportedUnresponsive(pid) else {
+    guard pid > 1, pid != getpid(), responsiveness.hasConfirmedUnresponsiveUI(pid) else {
       throw ApplicationControlError.notReportedUnresponsive
     }
     guard let application = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == pid }),
@@ -190,7 +271,7 @@ private enum ApplicationControlError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .notReportedUnresponsive:
-      "That app is no longer reported as not responding. Refresh Activity and try again if needed."
+      "That app no longer has a confirmed UI accessibility timeout. Refresh Activity and try again if needed."
     case .noLongerRunning:
       "That app has already quit."
     case .cannotRestart(let name):

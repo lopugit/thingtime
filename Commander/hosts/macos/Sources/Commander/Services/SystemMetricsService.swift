@@ -73,7 +73,7 @@ final class SystemMetricsService {
           "availableBytes": filesystem.availableBytes,
           "purgeableBytes": filesystem.purgeableBytes,
         ],
-        "notRespondingApplications": applicationResponsiveness.snapshot(),
+        "responsivenessApplications": applicationResponsiveness.snapshot(),
         "processes": processes,
         "gpu": gpu,
       ],
