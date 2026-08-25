@@ -1447,7 +1447,7 @@
   "remix/scripts/patch-vercel-output.mjs": {
     "mtime": 1787667311.004366,
     "ast_hash": "564452155266bb8789162e5f9dbd32b3",
-    "semantic_hash": ""
+    "semantic_hash": "564452155266bb8789162e5f9dbd32b3"
   },
   "remix/scripts/pre-dev.sh": {
     "mtime": 1787660057.4168322,
@@ -1462,7 +1462,7 @@
   "remix/scripts/verify-vercel-output.mjs": {
     "mtime": 1787667328.773191,
     "ast_hash": "e7bdd9a665908885808ee462ac8026df",
-    "semantic_hash": ""
+    "semantic_hash": "e7bdd9a665908885808ee462ac8026df"
   },
   "remix/server/routes/[...].ts": {
     "mtime": 1787660057.4190526,
@@ -1515,9 +1515,9 @@
     "semantic_hash": "23cf886c9906c68bf4d7c8179b707749"
   },
   "README.md": {
-    "mtime": 1787666854.501928,
-    "ast_hash": "102e714fe06b6164be02dce3c6eda62e",
-    "semantic_hash": "102e714fe06b6164be02dce3c6eda62e"
+    "mtime": 1787667681.8626363,
+    "ast_hash": "2bf574d52a6dbc7db7bc5cdd71d568fd",
+    "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1787660056.9122777,
@@ -1740,9 +1740,9 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1787666854.5360177,
-    "ast_hash": "ca763de49cd3c82ffa3c03e759873827",
-    "semantic_hash": "ca763de49cd3c82ffa3c03e759873827"
+    "mtime": 1787667681.8635678,
+    "ast_hash": "b266ba0cec868872a3f750d845aa57bf",
+    "semantic_hash": ""
   },
   "remix/README.md": {
     "mtime": 1787660057.12773,
@@ -7000,14 +7000,14 @@
     "semantic_hash": "2f8b788c1c49f737469587a0bddaacc7"
   },
   "remix/app/api/utils/chatgpt/pluginCore.test.ts": {
-    "mtime": 1787666854.564242,
-    "ast_hash": "3959acdc8064ffb00f62c8a33a5440d8",
-    "semantic_hash": "3959acdc8064ffb00f62c8a33a5440d8"
+    "mtime": 1787667688.0992408,
+    "ast_hash": "43e88699e988fee960aba2ca92a7b00e",
+    "semantic_hash": "43e88699e988fee960aba2ca92a7b00e"
   },
   "remix/app/api/utils/chatgpt/pluginCore.ts": {
-    "mtime": 1787666854.5645182,
-    "ast_hash": "a19e37d0d3408a24f7bdb14f2e2d25c2",
-    "semantic_hash": "a19e37d0d3408a24f7bdb14f2e2d25c2"
+    "mtime": 1787667681.8615947,
+    "ast_hash": "f838d32e58bf12121c9fcd8ec0af1c0d",
+    "semantic_hash": "f838d32e58bf12121c9fcd8ec0af1c0d"
   },
   "remix/app/routes/api/v1/integrations/chatgpt/mcp/_mcp.tsx": {
     "mtime": 1787666854.5736692,
@@ -7030,9 +7030,9 @@
     "semantic_hash": "b2b2c936e63c166970366f48a29858d2"
   },
   "integrations/ChatGPT/plugin/thingtime-chatgpt/README.md": {
-    "mtime": 1787666854.5067492,
-    "ast_hash": "bdafc4312ca436ce62afbbf8906a8522",
-    "semantic_hash": "bdafc4312ca436ce62afbbf8906a8522"
+    "mtime": 1787667681.862984,
+    "ast_hash": "5f9bd75eb66b7eb037ae60f2cc8ed946",
+    "semantic_hash": ""
   },
   "integrations/ChatGPT/plugin/thingtime-chatgpt/skills/thingtime/SKILL.md": {
     "mtime": 1787666854.507029,
