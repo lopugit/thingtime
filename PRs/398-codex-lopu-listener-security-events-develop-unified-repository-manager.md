@@ -24,6 +24,21 @@ the one **Lopu PR manager** workflow.
 - CI Control keeps its stable maintenance operation keys while translating
   rebase, promotion, and sync requests into typed Lopu manager inputs for both
   GitHub-hosted and Vercel-routed execution.
+- CodeQL now has the same arbitrary-target listener as `main`, with separate
+  protected calls for normal analysis and the metadata-only
+  `pull_request_target` handoff. Ordinary PR analysis no longer inherits the
+  handoff's `actions: write` request, while old feature/stack targets still
+  receive exact-ref scans.
+
+## Post-merge activation audit
+
+Live runs after #397 merged proved that one reusable workflow cannot combine
+the read-capped `pull_request` analysis with the write-capable metadata
+handoff: GitHub rejects the call before creating a job. The develop listener
+now selects `codeql-analysis.yml` for ordinary events and
+`codeql-pr-handoff.yml` only for `pull_request_target`. Both implementations
+remain protected on `github-actions`; the product branch still contains no
+runner, shell, checkout, or model behavior.
 
 ## Validation
 
