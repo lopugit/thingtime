@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { deriveActionEffects } from '../../schemas/registry.ts';
 
-import { actionCannotAccess, coerceValueText, deriveRequiredCapabilities } from './actionInspect.ts';
+import { actionCannotAccess, coerceValueText, componentBindsAction, deriveRequiredCapabilities } from './actionInspect.ts';
 
 // The builder's consent surface: deriveRequiredCapabilities promises that a
 // UI-authored action cannot declare less than it does, and coerceValueText
@@ -122,4 +122,17 @@ test('actionCannotAccess reflects scoped entries and vocabulary invariants', () 
 	assert.ok(list.includes('No deletes'));
 	assert.ok(list.includes('Cannot create things'));
 	assert.ok(list.some((line) => line.includes('things.read only: customer')));
+});
+
+test('componentBindsAction matches literal ttAction keys and ids', () => {
+	const render = { tag: 'div', children: [{ tag: 'span', ttAction: 'send-invoice', children: ['Send'] }] };
+	assert.equal(componentBindsAction(render, { id: 'abc', actionKey: 'send-invoice' }), true);
+	assert.equal(componentBindsAction(render, { id: 'abc', actionKey: 'other' }), false);
+	assert.equal(componentBindsAction({ tag: 'div', ttAction: 'abc' }, { id: 'abc' }), true);
+});
+
+test('componentBindsAction never false-positives on substrings', () => {
+	const render = { tag: 'div', ttAction: 'send-invoice-v2' };
+	assert.equal(componentBindsAction(render, { id: 'x', actionKey: 'send-invoice' }), false);
+	assert.equal(componentBindsAction(null, { id: 'x', actionKey: 'send-invoice' }), false);
 });

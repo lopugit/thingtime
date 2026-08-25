@@ -126,6 +126,25 @@ export const coerceValueText = (raw: string): unknown => {
 	return raw;
 };
 
+// Does a component's render template bind this action via ttAction? A static
+// scan over the serialized template catches literal bindings (the common
+// case); {arg}-driven dynamic keys resolve per-instance and are out of scope
+// for the back-reference panel.
+export const componentBindsAction = (
+	render: unknown,
+	action: { id: string; actionKey?: string | null }
+): boolean => {
+	if (!render || typeof render !== 'object') return false;
+	let serialized = '';
+	try {
+		serialized = JSON.stringify(render);
+	} catch {
+		return false;
+	}
+	if (action.actionKey && serialized.includes(`"ttAction":${JSON.stringify(action.actionKey)}`)) return true;
+	return serialized.includes(`"ttAction":${JSON.stringify(action.id)}`);
+};
+
 // Collect every schema ref an action mentions (steps + capability scopes) so
 // pages can resolve them to display names in one pass.
 export const collectSchemaRefs = (crystal: ActionCrystal | null | undefined): string[] => {

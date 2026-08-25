@@ -25,6 +25,7 @@ import {
 	actionEffectsOf,
 	actionLimitsOf,
 	collectSchemaRefs,
+	componentBindsAction,
 	describeActionStep,
 	displayRef,
 	isActionThing,
@@ -254,6 +255,7 @@ export const ActionDetailPage = () => {
 	});
 	const [runs, setRuns] = React.useState<RunRecord[]>([]);
 	const [schemaNames, setSchemaNames] = React.useState<Record<string, string>>({});
+	const [usedBy, setUsedBy] = React.useState<{ id: string; name: string; componentKey: string | null }[]>([]);
 	const actionId = state.action?.id || null;
 	const loadRuns = React.useCallback(async () => {
 		if (!actionId) return;
@@ -282,6 +284,24 @@ export const ActionDetailPage = () => {
 				setState({ key: requestKey, action, missing: !action });
 				if (action) {
 					const resolvedAction = action;
+					// "Used by": your components whose render binds this action via
+					// ttAction — the back-reference the original vision promised
+					// (🧩 Invoice Card → Send button), clickable both directions.
+					apiRef.current.v1.things
+						.list({ thingtime: 'component', limit: 100 })
+						.then((response: { things?: { id: string; crystal?: Record<string, unknown> }[] }) => {
+							if (cancelled) return;
+							const key = typeof resolvedAction.crystal.actionKey === 'string' ? resolvedAction.crystal.actionKey : null;
+							const bound = (response?.things || [])
+								.filter((component) => componentBindsAction(component.crystal?.render, { id: resolvedAction.id, actionKey: key }))
+								.map((component) => ({
+									id: component.id,
+									name: typeof component.crystal?.name === 'string' ? (component.crystal.name as string) : 'Component',
+									componentKey: typeof component.crystal?.componentKey === 'string' ? (component.crystal.componentKey as string) : null
+								}));
+							setUsedBy(bound);
+						})
+						.catch(() => {});
 					const [history] = await Promise.all([
 						apiRef.current.v1.actions.runs({ action: resolvedAction.id, limit: 20 }).catch(() => null),
 						(async () => {
@@ -481,6 +501,25 @@ export const ActionDetailPage = () => {
 							</Stack>
 						</Box>
 
+						{usedBy.length ? (
+							<Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
+								<Text {...monoLabel} mb={2}>
+									Used by
+								</Text>
+								<Flex gap={2} wrap="wrap">
+									{usedBy.map((component) => (
+										<Link key={component.id} to={`/thing/${encodeURIComponent(component.id)}`}>
+											<ActionChip size="md" tone="invoke">
+												🧩 {component.name}
+											</ActionChip>
+										</Link>
+									))}
+								</Flex>
+								<Text color={MUTED} fontSize="xs" mt={2}>
+									Components whose render binds this action via ttAction — clicking their control runs it as the viewer.
+								</Text>
+							</Box>
+						) : null}
 						{user ? <RunPanel action={action} onRan={loadRuns} /> : null}
 
 						<Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
