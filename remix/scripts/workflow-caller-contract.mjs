@@ -62,12 +62,18 @@ const resolverCaller = readFileSync(
   resolve(workflowsRoot, 'resolve-pr-conflicts.yml'),
   'utf8'
 );
+assert.match(resolverCaller, /^name: Lopu PR manager$/m, 'the public repository manager must be visibly named Lopu');
 const resolverPermissionsStart = resolverCaller.indexOf('\npermissions:\n');
 const resolverJobsStart = resolverCaller.indexOf('\njobs:\n');
 assert.ok(
   resolverPermissionsStart >= 0 && resolverJobsStart > resolverPermissionsStart,
   'resolve-pr-conflicts.yml must retain a top-level permissions block'
 );
+const resolverTriggers = resolverCaller.slice(0, resolverPermissionsStart);
+assert.match(resolverTriggers, /^  push:\n    branches: \["\*\*"\]$/m, 'Lopu must receive pushes on every branch');
+assert.match(resolverTriggers, /^  issue_comment:\n    types: \[created, edited\]$/m, 'Lopu must receive PR conversations');
+assert.match(resolverTriggers, /^  pull_request_review_comment:\n    types: \[created, edited\]$/m, 'Lopu must receive inline review conversations');
+assert.match(resolverTriggers, /^  check_run:\n    types: \[completed\]$/m, 'Lopu must receive completed checks for repair review');
 const resolverPermissions = resolverCaller.slice(
   resolverPermissionsStart,
   resolverJobsStart
