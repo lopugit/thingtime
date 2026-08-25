@@ -1,15 +1,16 @@
-# Graph Report - .  (2026-08-25)
+# Graph Report - lopu-durable-agent-queue  (2026-08-25)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 21 files · ~125,809 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 555 nodes · 1198 edges · 47 communities (32 shown, 15 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.54)
+- 552 nodes · 1195 edges · 46 communities (32 shown, 14 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 10 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `edacd213`
+- Built from commit: `caefc746`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -47,7 +48,7 @@
 - [[_COMMUNITY_Build All Branch Script|Build All Branch Script]]
 - [[_COMMUNITY_Web CI Workflow|Web CI Workflow]]
 - [[_COMMUNITY_Electron App Release Workflow|Electron App Release Workflow]]
-- [[_COMMUNITY_Community 33|Community 33]]
+- [[_COMMUNITY_Web CI Workflow|Web CI Workflow]]
 - [[_COMMUNITY_AI_ALL.md canonical instructions|AI_ALL.md canonical instructions]]
 - [[_COMMUNITY_Graphify Rules|Graphify Rules]]
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
@@ -60,7 +61,6 @@
 - [[_COMMUNITY_Vercel Git Deployment Kill Switch|Vercel Git Deployment Kill Switch]]
 - [[_COMMUNITY_Thingtime AI Instructions|Thingtime AI Instructions]]
 - [[_COMMUNITY_AI Conflict Resolution|AI Conflict Resolution]]
-- [[_COMMUNITY_Community 46|Community 46]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `selfTest()` - 48 edges
@@ -77,22 +77,24 @@
 ## Surprising Connections (you probably didn't know these)
 - `Web CI Workflow` --references--> `Testing Checklist`  [INFERRED]
   .github/workflows/web-ci.yml → TESTING.md
-- `graphify-out Refresh` --conceptually_related_to--> `Graphify Refresh`  [INFERRED]
-  .github/workflows/resolve-pr-conflicts.yml → CHANGELOG.md
-- `Build All Branch Workflow` --references--> `Build All Branch Script`  [EXTRACTED]
-  .github/workflows/all-branch.yml → .github/scripts/build-all-branch.mjs
 - `Promote Develop To Main Workflow` --references--> `Promotion PR Changelog Script`  [EXTRACTED]
   .github/workflows/promote-develop-to-main.yml → .github/scripts/promotion-pr-changelog.mjs
-- `Lopu Rebase Engine` --references--> `Graphify Refresh`  [EXTRACTED]
-  .github/workflows/rebase-pr-stacks.yml → CHANGELOG.md
+- `Promote Develop To Main Workflow` --references--> `Route CI Compute Provider Workflow`  [EXTRACTED]
+  .github/workflows/promote-develop-to-main.yml → .github/workflows/ci-provider-router.yml
+- `Sync Main Into Develop Workflow` --references--> `Route CI Compute Provider Workflow`  [EXTRACTED]
+  .github/workflows/sync-main-into-develop.yml → .github/workflows/ci-provider-router.yml
+- `Promote features to main workflow` --calls--> `CI provider router workflow`  [EXTRACTED]
+  .github/workflows/promote-features-to-main.yml → .github/workflows/ci-provider-router.yml
 
 ## Import Cycles
 - None detected.
 
 ## Hyperedges (group relationships)
+- **Lopu Control Plane PR Automation** — changelog_github_actions_control_plane, changelog_lopu_pr_management, changelog_promotion_lanes [EXTRACTED 0.86]
+- **All Branch Rebuild and Doctor Flow** — github_workflows_all_branch_workflow, github_workflows_all_branch_rebuild_job, github_scripts_build_all_branch_build_all_branch, github_workflows_all_branch_claude_code_action [EXTRACTED 0.92]
+- **Build Environment Setup** — github_workflows_all_branch_rebuild_job, github_workflows_all_branch_pnpm_action_setup, github_workflows_all_branch_actions_setup_node, github_workflows_all_branch_actions_checkout [EXTRACTED 0.90]
 - **Graphify Post-resolution Refresh Pattern** — changelog_graphify_refresh, github_workflows_resolve_pr_conflicts_graphify_out_refresh, github_workflows_rebase_pr_stacks_lopu_rebase_engine [EXTRACTED 0.90]
 - **Thin Product Listener Control-plane Pattern** — changelog_thin_product_listeners, github_workflows_resolve_pr_conflicts_thin_listener_contract, changelog_github_actions_branch [EXTRACTED 0.95]
-- **Lopu Control-plane PR Automation** — changelog_lopu_pr_management, github_workflows_resolve_pr_conflicts_lopu_pr_manager, github_workflows_rebase_pr_stacks_lopu_rebase_engine [EXTRACTED 0.95]
 - **CodeQL Advanced Setup Flow** — github_workflows_codeql_analysis_workflow, github_workflows_codeql_analysis_scope_job, github_workflows_codeql_analysis_analyze_job, github_workflows_codeql_analysis_codeql_init, github_workflows_codeql_analysis_codeql_analyze [EXTRACTED 0.95]
 - **Signed Desktop PR Release Flow** — readme_signed_desktop_pr_releases, _github_workflows_electron_pr_release_workflow, _github_workflows_electron_pr_release_resolve_validate_source, _github_workflows_electron_pr_release_import_credentials, _github_workflows_electron_pr_release_publish_prerelease [EXTRACTED 0.90]
 - **Control Plane Shape Contract** — readme_github_actions_control_plane, readme_bare_tree_invariant, readme_thin_listeners, readme_vercel_kill_switch, _github_workflows_control_plane_ci_workflow [EXTRACTED 0.90]
@@ -100,7 +102,7 @@
 - **Provider Routed CI Workflows** — _github_workflows_ci_provider_router_route_ci_compute_provider, _github_workflows_promote_develop_to_main_promote_develop_to_main, _github_workflows_promote_features_to_main_promote_features_to_main, _github_workflows_rebase_pr_stacks_rebase_prs_and_stacks, _github_workflows_resolve_pr_conflicts_resolve_pr_conflicts, _github_workflows_sync_main_into_develop_sync_main_into_develop [EXTRACTED 0.90]
 - **Canonical AI Instruction Files** — agents_thingtime_ai_instructions, ai_all_thingtime_ai_instructions, claude_thingtime_ai_instructions [EXTRACTED 0.95]
 
-## Communities (47 total, 15 thin omitted)
+## Communities (46 total, 14 thin omitted)
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.06
@@ -123,28 +125,28 @@ Cohesion: 0.10
 Nodes (30): botCommentsByLatestEvent(), clearSourceStandAside(), computePicks(), dependentMembersAfter(), exactReservationDeleteArgs(), exactReservationPushArgs(), externalStackPromotionState(), findBotPromotionRetirement() (+22 more)
 
 ### Community 5 - "prepare-round.sh"
+Cohesion: 0.14
+Nodes (14): ci-provider-router Workflow, detect Job, GitHub API, Lopu Rebase Engine, route Job, Scan Open Same-repository PRs Step, ai-merge-paused Label, Claude Resolution Agent (+6 more)
+
+### Community 6 - "promote-features-to-main.mjs"
 Cohesion: 0.12
 Nodes (22): CFG, env(), EXEC_OPTS, flag(), gh(), ghJson(), git(), isExactPausedPromotionSnapshot() (+14 more)
 
-### Community 6 - "promote-features-to-main.mjs"
+### Community 7 - "workflow-control-plane-contract.mjs"
 Cohesion: 0.13
 Nodes (25): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, ALLOWED_MODELS, appReentryDisposition(), assertAdminLoader(), assertAdminModelRouting(), assertBareControlPlaneTree() (+17 more)
 
-### Community 7 - "workflow-control-plane-contract.mjs"
+### Community 8 - "refresh-promotion-graphify.sh"
 Cohesion: 0.13
 Nodes (21): assert_control_metadata_unchanged(), assert_tool_boundary(), current_refs_hash(), emit(), fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_COUNT, GIT_CONFIG_GLOBAL (+13 more)
 
-### Community 8 - "refresh-promotion-graphify.sh"
+### Community 9 - "promotion-worker-contract.sh"
 Cohesion: 0.18
 Nodes (19): anthropics/claude-code-action, AI rebase conflict round action, bootstrap: copy trusted round code, claude: resolve conflict set in scratch, prepare: validate conflicts and scratch, verify: scratch verification and rebase continue, assert_safe_regular_text_conflict(), clear_scratch() (+11 more)
 
-### Community 9 - "promotion-worker-contract.sh"
-Cohesion: 0.12
-Nodes (16): BASE_REF, BASE_SHA, GITHUB_OUTPUT, PLAN_HASH, PROMOTION_BRANCH, reject_lineage_mismatch(), require_lineage_replay(), RESERVATION_SHA (+8 more)
-
 ### Community 10 - "Lopu PR manager Workflow"
 Cohesion: 0.12
-Nodes (17): ai-merge-paused Label, Graphify Refresh, Lopu PR Management, ci-provider-router Workflow, detect Job, GitHub API, Lopu Rebase Engine, route Job (+9 more)
+Nodes (16): BASE_REF, BASE_SHA, GITHUB_OUTPUT, PLAN_HASH, PROMOTION_BRANCH, reject_lineage_mismatch(), require_lineage_replay(), RESERVATION_SHA (+8 more)
 
 ### Community 11 - "runPromotion"
 Cohesion: 0.21
@@ -183,16 +185,16 @@ Cohesion: 0.22
 Nodes (8): Fork setup: Vercel develop previews, github-actions CI Control Plane, Known trade-off, Signed desktop PR releases, Stable develop domain, The bare-tree invariant, Why it is bare, Working on it
 
 ### Community 20 - "`github-actions` — the CI control plane"
+Cohesion: 0.25
+Nodes (7): action, allBranchWorkflow, graphify, promoter, rebaseWorkflow, worker, workflow
+
+### Community 21 - "start.sh"
 Cohesion: 0.46
 Nodes (7): emit(), emit_paths(), rebase_in_progress(), secure_git_environment(), start.sh script, usage(), write_conflicts()
 
-### Community 21 - "start.sh"
-Cohesion: 0.29
-Nodes (7): Build Signed And Notarized Electron Release Step, Derive SemVer PR Release Identity Step, Import Developer ID And Notarization Credentials Step, Publish Prerelease Step, Build And Publish Signed PR Release Job, Resolve And Validate PR Source Step, Signed Electron PR Release Workflow
-
 ### Community 22 - "Build And Publish Signed PR Release Job"
 Cohesion: 0.29
-Nodes (6): action, graphify, promoter, rebaseWorkflow, worker, workflow
+Nodes (7): Build Signed And Notarized Electron Release Step, Derive SemVer PR Release Identity Step, Import Developer ID And Notarization Credentials Step, Publish Prerelease Step, Build And Publish Signed PR Release Job, Resolve And Validate PR Source Step, Signed Electron PR Release Workflow
 
 ### Community 23 - "promotion-worker-routing-contract.mjs"
 Cohesion: 0.33
@@ -203,49 +205,49 @@ Cohesion: 0.33
 Nodes (5): framework, git, deploymentEnabled, ignoreCommand, $schema
 
 ### Community 25 - "vercel.json"
-Cohesion: 0.40
-Nodes (5): CodeQL Advanced Setup, Control-plane Changelog, github-actions Branch, Promotion Lanes, Thin Product Branch Listeners
-
-### Community 26 - "electron-pr-release-contract.mjs"
 Cohesion: 0.50
 Nodes (4): assertSignedPrReleaseContract(), count(), here, workflow
 
-### Community 27 - "Route CI Compute Provider Workflow"
+### Community 26 - "electron-pr-release-contract.mjs"
 Cohesion: 0.40
 Nodes (5): CI provider router workflow, Promote develop to main (omnibus), Promote features to main workflow, lanes: fan out the CI promotion lanes, Sync main into develop
 
-### Community 28 - "rebase-ownership-routing-contract.sh"
+### Community 27 - "Route CI Compute Provider Workflow"
 Cohesion: 0.50
 Nodes (4): Promotion PR Changelog Script, Route CI Compute Provider Workflow, Promote Develop To Main Workflow, Sync Main Into Develop Workflow
 
-### Community 29 - "controller: publish or reconcile preview"
+### Community 28 - "rebase-ownership-routing-contract.sh"
 Cohesion: 0.83
 Nodes (3): assert_owner(), assert_stack(), rebase-ownership-routing-contract.sh script
 
-### Community 30 - "Build All Branch Script"
+### Community 29 - "controller: publish or reconcile preview"
 Cohesion: 0.50
 Nodes (4): pull_request Trigger, push Trigger For github-actions, CodeQL All Branches Workflow, workflow_call Trigger
 
-### Community 31 - "Web CI Workflow"
+### Community 44 - "Thingtime AI Instructions"
+Cohesion: 0.33
+Nodes (5): Added, Changed, Control-plane changelog, Fixed, [Unreleased]
+
+### Community 45 - "AI Conflict Resolution"
 Cohesion: 1.00
 Nodes (3): Develop S3 PR preview implementation, controller: publish or reconcile preview, dispatch: trusted default-branch controller
 
 ## Knowledge Gaps
-- **150 isolated node(s):** `workflow`, `rebaseWorkflow`, `action`, `worker`, `graphify` (+145 more)
+- **149 isolated node(s):** `BASE_BRANCHES`, `MERGE_CONFIG`, `workflow`, `rebaseWorkflow`, `allBranchWorkflow` (+144 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `selfTest()` connect `selfTest` to `failureDetail`, `prepare-round.sh`, `runPromotion`, `repoFlag`, `CodeQL All Branches Workflow`?**
+- **Why does `selfTest()` connect `selfTest` to `failureDetail`, `promote-features-to-main.mjs`, `runPromotion`, `repoFlag`, `CodeQL All Branches Workflow`?**
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
-- **Why does `runPromotion()` connect `runPromotion` to `failureDetail`, `selfTest`, `prepare-round.sh`, `repoFlag`, `CodeQL All Branches Workflow`?**
+- **Why does `runPromotion()` connect `runPromotion` to `failureDetail`, `selfTest`, `promote-features-to-main.mjs`, `repoFlag`, `CodeQL All Branches Workflow`?**
   _High betweenness centrality (0.002) - this node is a cross-community bridge._
-- **Why does `controller: publish or reconcile preview` connect `Web CI Workflow` to `deploy-develop-pr-preview.mjs`?**
+- **Why does `controller: publish or reconcile preview` connect `AI Conflict Resolution` to `deploy-develop-pr-preview.mjs`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **What connects `workflow`, `rebaseWorkflow`, `action` to the rest of the system?**
-  _150 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `workflow` to the rest of the system?**
+  _149 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
 - **Should `promotion-pr-changelog.mjs` be split into smaller, more focused modules?**
