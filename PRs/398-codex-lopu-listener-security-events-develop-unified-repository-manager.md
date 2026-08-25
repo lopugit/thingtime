@@ -18,13 +18,18 @@ the one **Lopu PR manager** workflow.
 - Develop pushes now contain both promotion lanes inside one Lopu run. Main
   pushes contain main→develop synchronization there, and each internal
   component queues without cancelling in-flight work.
-- The internal rebase listener remains only for the exact legacy
-  `rebase-pr-stack-ai` handoff; every public/manual scan enters through Lopu.
+- The product rebase listener is removed. Exact legacy
+  `rebase-pr-stack-ai` workers enter through Lopu, which invokes the protected
+  `workflow_call`-only rebase engine internally.
+- CI Control keeps its stable maintenance operation keys while translating
+  rebase, promotion, and sync requests into typed Lopu manager inputs for both
+  GitHub-hosted and Vercel-routed execution.
 
 ## Validation
 
 The product caller contract proves that only the required thin listeners
-remain, every maintenance input is forwarded, the historical promotion/sync
-files stay absent, and no product branch contains executable Actions support.
+remain, every maintenance input is forwarded, the historical rebase,
+promotion, and sync files stay absent, and no product branch contains
+executable Actions support.
 Graphify structural and semantic outputs are refreshed after the source and
 documentation changes.
