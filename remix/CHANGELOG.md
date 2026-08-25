@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **CI Control repository maintenance now dispatches the unified Lopu
+  workflow**: existing rebase, feature-promotion, standing-promotion, and sync
+  operation keys translate to typed `Lopu PR manager` inputs instead of naming
+  retired workflow files. Rebase cascade and promotion dry-run/lookback values
+  remain intact for GitHub-hosted and Vercel-routed runs. The last product
+  rebase listener is removed; exact stack workers enter Lopu and then invoke
+  the protected `workflow_call`-only engine. — Codex (AI), 2026-08-25
 - **Lopu is the only automatic promotion and branch-sync entrypoint**: the
   three product-branch workflows that separately promoted develop, promoted
   features, and synchronized main into develop are removed. Their protected
