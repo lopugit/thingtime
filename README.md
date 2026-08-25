@@ -40,6 +40,36 @@ branch runs its own control-plane contract CI. Updating the implementation no
 longer requires separately merging the same behavior into `develop` and `main`;
 the thin listeners on both branches call the same reviewed revision immediately.
 
+### CodeQL coverage for every PR target and branch
+
+Thingtime uses CodeQL advanced setup so analysis is not limited to GitHub's
+default-setup branch scope. The thin `.github/workflows/codeql-analysis.yml`
+listener has an unfiltered `pull_request` trigger and a `push` trigger for
+`"**"`; therefore every PR whose target carries the listener and every direct
+branch push receives analysis. `main` and `develop` carry the listener, while
+the protected implementation directly handles PRs targeting and pushes to
+`github-actions`. New feature and stack branches inherit the listener from
+their base. When an open PR already owns a branch head, its PR run is the single
+analysis owner and the matching push run exits before CodeQL initialization.
+
+The first rollout has one ordered repository-administration step. Do not turn
+off default setup until this listener has reached the default branch, because
+GitHub rejects advanced-workflow result uploads while default setup remains
+configured and disabling it early would create a coverage gap. Once the
+listener is present on the default branch, an administrator with repository
+Administration write access should run:
+
+```sh
+gh api --method PATCH repos/OWNER/REPOSITORY/code-scanning/default-setup \
+  -f state=not-configured
+```
+
+Then manually run **CodeQL all branches**, confirm both language jobs upload
+results, and verify the repository reports default setup as `not-configured`.
+After activation, an empty Lopu CodeQL snapshot means no current matching
+head-or-merge findings (or a failed/unavailable analysis), not merely that the
+PR targets `develop` or `github-actions`.
+
 The Admin → CI Control dashboard adds the external observation/operation layer:
 signed GitHub and Vercel webhooks project repositories, features/stacks,
 branches, pull requests, Actions runs, deployments, previews, audited dispatches,
