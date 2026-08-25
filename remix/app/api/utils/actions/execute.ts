@@ -273,6 +273,16 @@ const resolveSchemaRef = async (viewer: Viewer, ref: string): Promise<ResolvedSc
 	return runError(`Schema "${ref.slice(0, 80)}" was not found (pass a schema thing id or one of your schema names)`) as never;
 };
 
+// Actions read and write Data Things only — the same kind boundary that
+// things.create (`thingtime: ['data']`) and things.search (`thingtime:
+// 'data'`) already enforce. things.get/things.update resolve a target by
+// dynamic id, and a schema scope only constrains BY schema; non-data kinds
+// (action, schema, post, component, folder) carry no schema, so a schema
+// check alone can't hold this line. Requiring the resolved target to be a
+// data thing keeps every data-op inside one kind and out of the program's
+// own definition and other kinds. Data things carry 'data' in `thingtime`.
+const isDataThing = (thingtime: unknown): boolean => Array.isArray(thingtime) && thingtime.includes('data');
+
 // Run-time defense-in-depth on top of the save-time coverage check: when a
 // capability carries a schema scope, the CONCRETE thing an op touched must
 // match it (save time can only check literal step.schema strings).
@@ -359,6 +369,9 @@ const executeProgram = async (
 				const got = await getThing(viewer, String(id));
 				if (got.ok === false) runError(`Step ${label} get failed: ${got.error}`);
 				const thing = (got as { ok: true; thing: { id: string; thingtime: string[]; crystal: unknown } }).thing;
+				if (!isDataThing(thing.thingtime)) {
+					runError(`Step ${label} read "${thing.id}" is not a data thing — actions read and write Data Things only`);
+				}
 				const readScope = capabilityOf(program, 'things.read');
 				if (!schemaScopeAllows(readScope, schemaIdentityOf(thing.crystal))) {
 					runError(`Step ${label} read "${thing.id}" outside the declared things.read schema scope`);
@@ -401,7 +414,10 @@ const executeProgram = async (
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
 				const current = await getThing(viewer, String(id));
 				if (current.ok === false) runError(`Step ${label} update target unreadable: ${current.error}`);
-				const currentThing = (current as { ok: true; thing: { id: string; crystal: unknown } }).thing;
+				const currentThing = (current as { ok: true; thing: { id: string; thingtime?: string[]; crystal: unknown } }).thing;
+				if (!isDataThing(currentThing.thingtime)) {
+					runError(`Step ${label} update target "${currentThing.id}" is not a data thing — actions read and write Data Things only`);
+				}
 				const updateScope = capabilityOf(program, 'things.update');
 				if (!schemaScopeAllows(updateScope, schemaIdentityOf(currentThing.crystal))) {
 					runError(`Step ${label} updates "${currentThing.id}" outside the declared things.update schema scope`);
