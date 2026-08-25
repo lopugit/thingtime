@@ -9,6 +9,7 @@ const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
   'all-branch.yml',
+  'codeql-analysis.yml',
   'develop-pr-preview.yml',
   'electron-release.yml',
   'electron-pr-release.yml',
@@ -30,6 +31,32 @@ for (const filename of callers) {
   assert.doesNotMatch(source, /\.github\/(?:actions|scripts)\//, `${filename} must not reference product-branch behavior files`);
   assert.equal((source.match(/^\s+uses:/gm) ?? []).length, 1, `${filename} must contain exactly one reusable-workflow call`);
 }
+
+const codeqlCaller = readFileSync(
+  resolve(workflowsRoot, 'codeql-analysis.yml'),
+  'utf8'
+);
+const codeqlTriggersEnd = codeqlCaller.indexOf('\npermissions:\n');
+assert.ok(codeqlTriggersEnd > 0, 'codeql-analysis.yml must retain its trigger block');
+const codeqlTriggers = codeqlCaller.slice(0, codeqlTriggersEnd);
+assert.match(
+  codeqlTriggers,
+  /^  pull_request:$/m,
+  'codeql-analysis.yml must scan PRs targeting every branch without a base filter'
+);
+assert.match(
+  codeqlTriggers,
+  /^  push:\n    branches: \["\*\*"\]$/m,
+  'codeql-analysis.yml must scan direct pushes to every branch'
+);
+assert.match(codeqlTriggers, /^  schedule:$/m, 'codeql-analysis.yml must retain its scheduled backstop');
+assert.match(codeqlTriggers, /^  workflow_dispatch:$/m, 'codeql-analysis.yml must support manual recovery');
+const codeqlPermissions = codeqlCaller.slice(
+  codeqlCaller.indexOf('\npermissions:\n'),
+  codeqlCaller.indexOf('\njobs:\n')
+);
+assert.match(codeqlPermissions, /^  security-events: write$/m, 'CodeQL caller must permit SARIF upload');
+assert.match(codeqlPermissions, /^  pull-requests: read$/m, 'CodeQL caller must permit duplicate-run ownership checks');
 
 const developPreviewCaller = readFileSync(
   resolve(workflowsRoot, 'develop-pr-preview.yml'),
