@@ -1,6 +1,6 @@
 import { json } from '~/api/http';
 
-import { actorCors, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
+import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
 import type { Actor } from '~/api/utils/auth/resolveActor';
 import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -39,7 +39,9 @@ const respond = async (request: Request, actor: Actor, query: SearchQuery, anonC
   // engagement windows) — the audience superset is swapped for the namespace
   // conjunction inside searchThings, server-side and inexpressible from the
   // client grammar.
-  const result = await searchThings(viewerOf(user), query, app);
+  // pat context rides along so a visibility-restricted token's audience fence
+  // applies to search results too
+  const result = await searchThings(viewerOf(user, actorPat(actor)), query, app);
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
   }

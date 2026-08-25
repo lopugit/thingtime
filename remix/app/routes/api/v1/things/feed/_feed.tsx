@@ -1,8 +1,9 @@
 import { json } from '~/api/http';
 
 import { resolveThingsActor } from '~/api/utils/auth/patTokens';
+import type { PatContext } from '~/api/utils/auth/patTokens';
 import { getOwnedAlgorithmWeights } from '~/api/utils/algorithms/algorithms';
-import { getFeed, type PostType, type PostVisibility } from '~/api/utils/things/things';
+import { getFeed, viewerOf, type PostType, type PostVisibility } from '~/api/utils/things/things';
 
 const csv = (value: string | null): string[] =>
   (value || '')
@@ -37,12 +38,14 @@ export const loader = async ({ request }: { request: Request }) => {
   // credentials degrade to an anonymous null user, so logged-out browsers keep
   // the public feed; only PAT-specific failures (missing scope, exhausted) 4xx.
   let user = null;
+  let pat: PatContext | null = null;
   if (!anonCacheable) {
     const auth = await resolveThingsActor(request, 'things.read');
     if (auth.ok === false) {
       return json({ ok: false, error: auth.error }, { status: auth.status });
     }
     user = auth.actor.user;
+    pat = auth.actor.pat;
   }
 
   const algorithmParam = (params.get('algorithm') || '').trim();
@@ -57,7 +60,9 @@ export const loader = async ({ request }: { request: Request }) => {
     }
   }
 
-  const result = await getFeed(user ? { id: user.id, username: user.username } : null, {
+  // pat context rides along so a visibility-restricted token's audience fence
+  // applies to the feed query and the per-doc checks
+  const result = await getFeed(viewerOf(user, pat), {
     types: csv(params.get('types')) as PostType[],
     circles: csv(params.get('circles')) as PostVisibility[],
     from: isoDate(params.get('from')),
