@@ -276,7 +276,9 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
     session.purpose === 'app-sandbox' ||
     session.purpose === 'oauth-code' ||
     session.purpose === 'chatgpt-oauth-code' ||
-    session.purpose === 'chatgpt-mcp'
+    session.purpose === 'chatgpt-mcp' ||
+    session.purpose === 'chatgpt-mcp-refresh' ||
+    session.purpose === 'chatgpt-mcp-connection'
   ) return anonymous;
 
   if (session.purpose === 'pat') {

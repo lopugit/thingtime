@@ -187,7 +187,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection plus Things reads and confirmed writes. tools/list is intentionally public so ChatGPT can discover titles, schemas, annotations, and per-tool OAuth requirements; it never returns account data. Every tool call accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow. The underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in the server-side session record, origin-bound to this MCP URL, and never returned by this endpoint. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection plus Things reads and confirmed writes. tools/list is intentionally public so ChatGPT can discover titles, schemas, annotations, and per-tool OAuth requirements; it never returns account data. Every tool call accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow. The underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in one origin-bound server-side connection record and never returned by this endpoint; all live bridge and refresh credentials refer to that same record. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
     auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for tools/call. tools/list is public metadata; unauthenticated tool calls return an MCP OAuth challenge.' },
     methods: ['POST'],
     steps: [
@@ -228,7 +228,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_AUTHORIZE_PATH,
     summary: 'Browser/mobile connection page for one or more scoped Thingtime accounts.',
     detail:
-      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, the configured ChatGPT client_id, the fixed ChatGPT redirect URI, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The resulting form accepts one or more named Thingtime API endpoints and personal access tokens, validates every token using /api/v1/tokens/self, encrypts the connection bundle before persistence, then redirects only a five-minute single-use authorization code back to ChatGPT. POST submits that form; credentials are never included in the redirect, OAuth code, or ChatGPT transcript.',
+      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, the configured ChatGPT client_id, the fixed ChatGPT redirect URI, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The resulting form accepts one or more named Thingtime API endpoints and personal access tokens, validates every token using /api/v1/tokens/self, encrypts the connection bundle before persistence, then redirects only a five-minute single-use authorization code back to ChatGPT. POST submits that form; credentials are never included in the redirect, OAuth code, or ChatGPT transcript.',
     auth: { mode: 'none', description: 'OAuth public-client request plus user-entered scoped personal access tokens on the first-party connection page.' },
     methods: ['GET', 'POST'],
     steps: [
@@ -248,7 +248,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           resource: 'https://thingtime.com/api/v1/integrations/chatgpt/mcp',
           code_challenge: '<S256-challenge>',
           code_challenge_method: 'S256',
-          state: '<random-state-at-least-16-characters>'
+          state: '<random-state-at-least-16-characters>',
+          scope: 'thingtime offline_access'
         }
       }
     ],
@@ -263,23 +264,29 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'integrations',
     title: 'ChatGPT OAuth token exchange',
     endpoint: CHATGPT_TOKEN_PATH,
-    summary: 'Exchange a ChatGPT OAuth code and S256 verifier for a revocable bridge credential.',
+    summary: 'Exchange an OAuth code or rotate a refresh credential for an MCP-only bridge credential.',
     detail:
-      'POST application/x-www-form-urlencoded grant_type=authorization_code, code, client_id, redirect_uri, resource, and code_verifier. The code is one-use and bound atomically to the exact client, callback, resource, and S256 verifier. Success returns a 30-day bridge access token that only works at the ChatGPT MCP gateway; it cannot authenticate any other Thingtime API route and contains no underlying personal access token.',
+      'For `grant_type=authorization_code`, POST code, client_id, redirect_uri, resource, and code_verifier. The code is one-use and bound atomically to the exact client, callback, resource, and S256 verifier. A `thingtime offline_access` authorization also returns a single-use rotating refresh token. For `grant_type=refresh_token`, POST refresh_token and client_id, plus the same resource when supplied; the token is consumed atomically and replaced. Success always returns a 30-day bridge access token that only works at the ChatGPT MCP gateway; it cannot authenticate any other Thingtime API route and contains no underlying personal access token.',
     auth: { mode: 'none', description: 'The one-time code, exact binding, and PKCE verifier are the public-client proof.' },
     methods: ['POST'],
-    steps: ['Verify state and issuer at the callback.', 'Exchange with the original S256 verifier.', 'Store only the returned bridge access token in the ChatGPT connection.'],
+    steps: ['Verify state and issuer at the callback.', 'Exchange with the original S256 verifier.', 'Store only the returned bridge credential and, when issued, replace the previous refresh credential atomically.'],
     requestExamples: [
       {
         name: 'Exchange authorization code',
         description: 'Standard OAuth form-encoded public client request.',
         method: 'POST',
         body: { grant_type: 'authorization_code', code: '<one-time-code>', client_id: 'https://chatgpt.com/oauth/client.json', redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect', resource: 'https://thingtime.com/api/v1/integrations/chatgpt/mcp', code_verifier: '<43-to-128-character-pkce-verifier>' }
+      },
+      {
+        name: 'Rotate an offline-access credential',
+        description: 'The former refresh token becomes invalid as this request succeeds.',
+        method: 'POST',
+        body: { grant_type: 'refresh_token', refresh_token: '<single-use-refresh-jwt>', client_id: 'https://chatgpt.com/oauth/client.json', resource: 'https://thingtime.com/api/v1/integrations/chatgpt/mcp' }
       }
     ],
     responseExamples: [
-      { status: 200, description: 'Revocable MCP-only bridge access token.', body: { access_token: '<bridge-jwt>', token_type: 'Bearer', expires_in: 2592000, scope: 'thingtime' } },
-      { status: 400, description: 'Invalid, expired, used, or mismatched code.', body: { error: 'invalid_grant' } }
+      { status: 200, description: 'Revocable MCP-only bridge access token, plus a replacement refresh credential when offline access was granted.', body: { access_token: '<bridge-jwt>', token_type: 'Bearer', expires_in: 2592000, refresh_token: '<rotating-refresh-jwt>', scope: 'thingtime offline_access' } },
+      { status: 400, description: 'Invalid, expired, used, or mismatched authorization or refresh grant.', body: { error: 'invalid_grant' } }
     ]
   }),
   endpoint({

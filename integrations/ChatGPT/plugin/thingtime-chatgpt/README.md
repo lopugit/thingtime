@@ -7,6 +7,10 @@ It supports multiple named Thingtime accounts and approved API endpoints in a
 single ChatGPT connection. During connection, each account supplies a scoped
 Thingtime personal access token. The token is validated, AES-256-GCM encrypted
 at the Thingtime server, and never returned to ChatGPT, Codex, or a chat.
+When the client requests `offline_access`, rotating refresh credentials renew
+the 30-day MCP-only access credential without copying the PAT into ChatGPT.
+Selecting or disconnecting an account updates the one encrypted server-side
+connection record used by every live credential.
 
 ## What the tools can do
 
@@ -52,6 +56,12 @@ The unauthenticated MCP `tools/list` response publishes only the tool catalog
 and the required OAuth scope. Invoking any Thingtime tool without a bridge
 token returns the protected-resource challenge that opens ChatGPT’s secure
 connection flow; it never returns account data or tokens.
+
+The OAuth server always requires `thingtime`. It additionally supports the
+optional `offline_access` scope and a rotating `refresh_token` grant. A bridge
+access credential lasts 30 days; each refresh credential is single-use and is
+rotated on renewal. Removing the final connected account revokes the encrypted
+connection record and every access or refresh credential that references it.
 
 See the root README and `/api/v1/integrations/chatgpt/mcp-docs` for the full
 security and API contract.

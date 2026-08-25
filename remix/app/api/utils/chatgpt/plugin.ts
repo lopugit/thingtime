@@ -14,6 +14,7 @@ import {
   CHATGPT_PLUGIN_FEATURES,
   allowedThingtimeEndpoints,
   isMcpResourceForOrigin,
+  normalizeChatGptOAuthScopes,
   normalizeThingtimeEndpoint,
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
@@ -25,8 +26,11 @@ import type { ChatGptConnection, ChatGptCredentialBundle, ChatGptOAuthRequest } 
 const OAUTH_REQUEST_PURPOSE = 'chatgpt-oauth-request';
 const OAUTH_CODE_PURPOSE = 'chatgpt-oauth-code';
 const MCP_SESSION_PURPOSE = 'chatgpt-mcp';
+const MCP_REFRESH_SESSION_PURPOSE = 'chatgpt-mcp-refresh';
+const MCP_CONNECTION_PURPOSE = 'chatgpt-mcp-connection';
 const OAUTH_CODE_TTL_MS = 5 * 60 * 1000;
 const MCP_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+const MCP_REFRESH_TTL_MS = 1000 * 60 * 60 * 24 * 180;
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_UPSTREAM_RESPONSE_BYTES = 512 * 1024;
 
@@ -134,8 +138,9 @@ const clientRequestFromClaims = (claims: Record<string, unknown>): ChatGptOAuthR
   const state = typeof claims.state === 'string' ? claims.state : '';
   const codeChallenge = typeof claims.codeChallenge === 'string' ? claims.codeChallenge : '';
   const resource = typeof claims.resource === 'string' ? claims.resource : '';
-  const scope = Array.isArray(claims.scope) ? claims.scope.filter((value): value is string => typeof value === 'string') : [];
-  if (!clientId || !redirectUri || !state || !codeChallenge || !resource || !scope.includes('thingtime')) return null;
+  const rawScope = Array.isArray(claims.scope) ? claims.scope.filter((value): value is string => typeof value === 'string') : [];
+  const scope = normalizeChatGptOAuthScopes(rawScope);
+  if (!clientId || !redirectUri || !state || !codeChallenge || !resource || !scope) return null;
   return { clientId, redirectUri, state, codeChallenge, resource, scope };
 };
 
@@ -244,6 +249,109 @@ const validateCredential = async (endpoint: string, token: string): Promise<Resu
 const requestClaimsToken = async (request: ChatGptOAuthRequest) =>
   signPurposeToken(OAUTH_REQUEST_PURPOSE, request, '10m');
 
+type McpConnectionReference = { connectionId: string; sessionJti: string };
+type ResolvedMcpBundle = { bundle: ChatGptCredentialBundle; connection: SessionDoc | null };
+
+const isUuid = (value: unknown): value is string =>
+  typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+const connectionReferenceFromMeta = (meta: unknown): McpConnectionReference | null => {
+  if (!meta || typeof meta !== 'object') return null;
+  const value = meta as Record<string, unknown>;
+  return isUuid(value.connectionId) && isUuid(value.connectionSessionJti)
+    ? { connectionId: value.connectionId, sessionJti: value.connectionSessionJti }
+    : null;
+};
+
+const scopeText = (hasOfflineAccess: boolean) => (hasOfflineAccess ? 'thingtime offline_access' : 'thingtime');
+const hasOfflineAccess = (scope: readonly string[]) => scope.includes('offline_access');
+
+const createMcpConnection = async ({
+  userId,
+  clientId,
+  resource,
+  ciphertext,
+  connectionId
+}: {
+  userId: string;
+  clientId: string;
+  resource: string;
+  ciphertext: string;
+  connectionId: string;
+}): Promise<McpConnectionReference> => {
+  const session = await createSession(userId, {
+    purpose: MCP_CONNECTION_PURPOSE,
+    expiresAt: new Date(Date.now() + MCP_REFRESH_TTL_MS),
+    meta: { clientId, resource, ciphertext, connectionId }
+  });
+  return { connectionId, sessionJti: session.jti };
+};
+
+const createMcpAccessGrant = async ({
+  userId,
+  resource,
+  connection
+}: {
+  userId: string;
+  resource: string;
+  connection: McpConnectionReference;
+}) => {
+  const session = await createSession(userId, {
+    purpose: MCP_SESSION_PURPOSE,
+    expiresAt: new Date(Date.now() + MCP_SESSION_TTL_MS),
+    meta: { resource, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
+  });
+  return {
+    accessToken: await signJwt({ sub: userId, jti: session.jti, expiresIn: '30d' }),
+    expiresIn: Math.floor(MCP_SESSION_TTL_MS / 1000)
+  };
+};
+
+const createMcpRefreshGrant = async ({
+  userId,
+  clientId,
+  resource,
+  connection
+}: {
+  userId: string;
+  clientId: string;
+  resource: string;
+  connection: McpConnectionReference;
+}) => {
+  const session = await createSession(userId, {
+    purpose: MCP_REFRESH_SESSION_PURPOSE,
+    expiresAt: new Date(Date.now() + MCP_REFRESH_TTL_MS),
+    meta: { clientId, resource, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
+  });
+  return signJwt({ sub: userId, jti: session.jti, expiresIn: '180d' });
+};
+
+const resolveMcpBundle = async (session: SessionDoc, origin: string): Promise<Result<ResolvedMcpBundle>> => {
+  const resource = session.meta?.resource;
+  if (!isMcpResourceForOrigin(resource, origin)) return { ok: false, status: 401, error: 'Authentication required' };
+
+  const reference = connectionReferenceFromMeta(session.meta);
+  if (!reference) {
+    const legacyBundle = decryptBundle(session.meta?.ciphertext);
+    if (legacyBundle.ok === false) return legacyBundle;
+    return { ok: true, value: { bundle: legacyBundle.value, connection: null } };
+  }
+
+  const connection = await getLiveSession(reference.sessionJti);
+  if (
+    !connection ||
+    connection.purpose !== MCP_CONNECTION_PURPOSE ||
+    String(connection.userId) !== String(session.userId) ||
+    connection.meta?.connectionId !== reference.connectionId ||
+    connection.meta?.resource !== resource
+  ) {
+    return { ok: false, status: 401, error: 'Authentication required' };
+  }
+  const bundle = decryptBundle(connection.meta?.ciphertext);
+  if (bundle.ok === false) return bundle;
+  return { ok: true, value: { bundle: bundle.value, connection } };
+};
+
 export const beginChatGptAuthorization = async ({ request }: { request: Request }) => {
   const parsed = parseChatGptAuthorizationRequest(new URL(request.url).searchParams, requestOrigin(request));
   if (parsed.ok === false) return oauthErrorPage(400, parsed.error);
@@ -302,6 +410,7 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   const encrypted = encryptBundle({ version: 1, defaultConnectionId: connections[0].id, connections });
   if (encrypted.ok === false) return oauthErrorPage(encrypted.status, encrypted.error);
   const expiresAt = new Date(Date.now() + OAUTH_CODE_TTL_MS);
+  const connectionId = crypto.randomUUID();
   const codeSession = await createSession(connections[0].user.id, {
     purpose: OAUTH_CODE_PURPOSE,
     expiresAt,
@@ -312,6 +421,8 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
       codeChallenge: oauthRequest.codeChallenge,
       codeChallengeMethod: 'S256',
       resource: oauthRequest.resource,
+      scope: oauthRequest.scope,
+      connectionId,
       ciphertext: encrypted.value
     }
   });
@@ -323,21 +434,15 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   return redirect(callback.toString(), { status: 302, headers: noStoreHeaders });
 };
 
-const invalidGrant = () => json({ error: 'invalid_grant', error_description: 'Authorization code is invalid, expired, already used, or does not match this request' }, { status: 400, headers: noStoreHeaders });
+const invalidGrant = () => json({ error: 'invalid_grant', error_description: 'Authorization grant is invalid, expired, already used, or does not match this request' }, { status: 400, headers: noStoreHeaders });
 
-export const exchangeChatGptAuthorizationCode = async ({ request }: { request: Request }) => {
-  const form = await formBody(request);
-  if (form.ok === false) return json({ error: 'invalid_request', error_description: form.error }, { status: form.status, headers: noStoreHeaders });
-  const params = form.value;
-  if (params.get('grant_type') !== 'authorization_code') {
-    return json({ error: 'unsupported_grant_type', error_description: 'grant_type must be authorization_code' }, { status: 400, headers: noStoreHeaders });
-  }
+const exchangeAuthorizationCodeGrant = async (params: URLSearchParams, origin: string) => {
   const code = params.get('code')?.trim() || '';
   const verifier = normalizePkceVerifier(params.get('code_verifier'));
   const clientId = params.get('client_id')?.trim() || '';
   const redirectUri = params.get('redirect_uri')?.trim() || '';
   const resource = params.get('resource')?.trim() || '';
-  if (!code || !verifier || !clientId || !redirectUri || !resource) return invalidGrant();
+  if (!code || !verifier || !clientId || !redirectUri || !resource || !isMcpResourceForOrigin(resource, origin)) return invalidGrant();
 
   const claims = await verifyJwt(code);
   if (!claims) return invalidGrant();
@@ -362,25 +467,164 @@ export const exchangeChatGptAuthorizationCode = async ({ request }: { request: R
 
   const bundle = decryptBundle(consumed.meta?.ciphertext);
   if (bundle.ok === false) return json({ error: 'server_error', error_description: bundle.error }, { status: bundle.status, headers: noStoreHeaders });
-  const expiresAt = new Date(Date.now() + MCP_SESSION_TTL_MS);
-  const session = await createSession(claims.sub, {
-    purpose: MCP_SESSION_PURPOSE,
-    expiresAt,
-    meta: { ciphertext: consumed.meta?.ciphertext, resource }
+  const encrypted = encryptBundle(bundle.value);
+  if (encrypted.ok === false) return json({ error: 'server_error', error_description: encrypted.error }, { status: encrypted.status, headers: noStoreHeaders });
+  const connection = await createMcpConnection({
+    userId: claims.sub,
+    clientId,
+    resource,
+    ciphertext: encrypted.value,
+    connectionId: isUuid(consumed.meta?.connectionId) ? consumed.meta.connectionId : crypto.randomUUID()
   });
-  const accessToken = await signJwt({ sub: claims.sub, jti: session.jti, expiresIn: '30d' });
+  const access = await createMcpAccessGrant({ userId: claims.sub, resource, connection });
+  const scope = normalizeChatGptOAuthScopes(
+    Array.isArray(consumed.meta?.scope) ? consumed.meta.scope.filter((value): value is string => typeof value === 'string') : ['thingtime']
+  ) || ['thingtime'];
+  const offlineAccess = hasOfflineAccess(scope);
+  const refreshToken = offlineAccess
+    ? await createMcpRefreshGrant({ userId: claims.sub, clientId, resource, connection })
+    : null;
   return json(
     {
-      access_token: accessToken,
+      access_token: access.accessToken,
       token_type: 'Bearer',
-      expires_in: Math.floor(MCP_SESSION_TTL_MS / 1000),
-      scope: 'thingtime'
+      expires_in: access.expiresIn,
+      scope: scopeText(offlineAccess),
+      ...(refreshToken ? { refresh_token: refreshToken } : {})
     },
     { headers: noStoreHeaders }
   );
 };
 
-type McpSession = { session: SessionDoc; bundle: ChatGptCredentialBundle };
+const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string) => {
+  const refreshToken = params.get('refresh_token')?.trim() || '';
+  const clientId = params.get('client_id')?.trim() || '';
+  const requestedResource = params.get('resource');
+  const resource = requestedResource?.trim() || '';
+  if (!refreshToken || !clientId || (requestedResource !== null && (!resource || !isMcpResourceForOrigin(resource, origin)))) return invalidGrant();
+
+  const claims = await verifyJwt(refreshToken);
+  if (!claims) return invalidGrant();
+  const now = new Date();
+  const refreshFilter: Record<string, unknown> = {
+    jti: claims.jti,
+    userId: claims.sub,
+    purpose: MCP_REFRESH_SESSION_PURPOSE,
+    revokedAt: null,
+    expiresAt: { $gt: now },
+    'meta.clientId': clientId
+  };
+  if (resource) refreshFilter['meta.resource'] = resource;
+  const consumed = await (await getSessionsCollection()).findOneAndUpdate(
+    refreshFilter,
+    { $set: { revokedAt: now, 'meta.consumedAt': now } },
+    { returnDocument: 'before' }
+  );
+  if (!consumed) return invalidGrant();
+
+  const resolved = await resolveMcpBundle(consumed, origin);
+  const connection = connectionReferenceFromMeta(consumed.meta);
+  if (resolved.ok === false || !resolved.value.connection || !connection) return invalidGrant();
+
+  const extended = await (await getSessionsCollection()).updateOne(
+    {
+      jti: connection.sessionJti,
+      userId: claims.sub,
+      purpose: MCP_CONNECTION_PURPOSE,
+      revokedAt: null,
+      expiresAt: { $gt: now },
+      'meta.connectionId': connection.connectionId
+    },
+    { $set: { expiresAt: new Date(Date.now() + MCP_REFRESH_TTL_MS), 'meta.updatedAt': now } }
+  );
+  if (!extended.matchedCount) return invalidGrant();
+
+  const storedResource = typeof consumed.meta?.resource === 'string' ? consumed.meta.resource : '';
+  const access = await createMcpAccessGrant({ userId: claims.sub, resource: storedResource, connection });
+  const nextRefreshToken = await createMcpRefreshGrant({ userId: claims.sub, clientId, resource: storedResource, connection });
+  return json(
+    {
+      access_token: access.accessToken,
+      token_type: 'Bearer',
+      expires_in: access.expiresIn,
+      refresh_token: nextRefreshToken,
+      scope: scopeText(true)
+    },
+    { headers: noStoreHeaders }
+  );
+};
+
+export const exchangeChatGptAuthorizationCode = async ({ request }: { request: Request }) => {
+  const form = await formBody(request);
+  if (form.ok === false) return json({ error: 'invalid_request', error_description: form.error }, { status: form.status, headers: noStoreHeaders });
+  const params = form.value;
+  const origin = requestOrigin(request);
+  if (params.get('grant_type') === 'authorization_code') return exchangeAuthorizationCodeGrant(params, origin);
+  if (params.get('grant_type') === 'refresh_token') return exchangeRefreshTokenGrant(params, origin);
+  return json({ error: 'unsupported_grant_type', error_description: 'grant_type must be authorization_code or refresh_token' }, { status: 400, headers: noStoreHeaders });
+};
+
+type McpSession = { session: SessionDoc; bundle: ChatGptCredentialBundle; connection: SessionDoc | null };
+
+const persistMcpBundle = async (context: McpSession): Promise<Result<void>> => {
+  const encrypted = encryptBundle(context.bundle);
+  if (encrypted.ok === false) return { ok: false, status: encrypted.status, error: encrypted.error };
+  const sessions = await getSessionsCollection();
+  const now = new Date();
+  if (context.connection) {
+    const reference = connectionReferenceFromMeta(context.session.meta);
+    if (!reference) return { ok: false, status: 401, error: 'ChatGPT connection is invalid' };
+    const updated = await sessions.updateOne(
+      {
+        jti: context.connection.jti,
+        userId: context.session.userId,
+        purpose: MCP_CONNECTION_PURPOSE,
+        revokedAt: null,
+        expiresAt: { $gt: now },
+        'meta.connectionId': reference.connectionId
+      },
+      { $set: { 'meta.ciphertext': encrypted.value, 'meta.updatedAt': now } }
+    );
+    if (!updated.matchedCount) return { ok: false, status: 401, error: 'ChatGPT connection is no longer active' };
+    return { ok: true, value: undefined };
+  }
+
+  const updated = await sessions.updateOne(
+    { jti: context.session.jti, purpose: MCP_SESSION_PURPOSE, revokedAt: null, expiresAt: { $gt: now } },
+    { $set: { 'meta.ciphertext': encrypted.value, 'meta.updatedAt': now } }
+  );
+  if (!updated.matchedCount) return { ok: false, status: 401, error: 'ChatGPT connection is no longer active' };
+  return { ok: true, value: undefined };
+};
+
+const revokeMcpConnection = async (context: McpSession) => {
+  if (!context.connection) return revokeSession(context.session.jti);
+  const reference = connectionReferenceFromMeta(context.session.meta);
+  if (!reference) return revokeSession(context.session.jti);
+  const sessions = await getSessionsCollection();
+  const now = new Date();
+  await Promise.all([
+    sessions.updateOne(
+      {
+        jti: context.connection.jti,
+        userId: context.session.userId,
+        purpose: MCP_CONNECTION_PURPOSE,
+        revokedAt: null,
+        'meta.connectionId': reference.connectionId
+      },
+      { $set: { revokedAt: now, 'meta.revokedAt': now } }
+    ),
+    sessions.updateMany(
+      {
+        userId: context.session.userId,
+        purpose: { $in: [MCP_SESSION_PURPOSE, MCP_REFRESH_SESSION_PURPOSE] },
+        revokedAt: null,
+        'meta.connectionSessionJti': context.connection.jti
+      },
+      { $set: { revokedAt: now, 'meta.revokedAt': now } }
+    )
+  ]);
+};
 
 const resolveMcpSession = async (request: Request): Promise<Result<McpSession>> => {
   const header = request.headers.get('authorization');
@@ -392,14 +636,13 @@ const resolveMcpSession = async (request: Request): Promise<Result<McpSession>> 
   if (
     !session ||
     session.purpose !== MCP_SESSION_PURPOSE ||
-    String(session.userId) !== claims.sub ||
-    !isMcpResourceForOrigin(session.meta?.resource, requestOrigin(request))
+    String(session.userId) !== claims.sub
   ) {
     return { ok: false, status: 401, error: 'Authentication required' };
   }
-  const decrypted = decryptBundle(session.meta?.ciphertext);
-  if (decrypted.ok === false) return { ok: false, status: decrypted.status, error: decrypted.error };
-  return { ok: true, value: { session, bundle: decrypted.value } };
+  const resolved = await resolveMcpBundle(session, requestOrigin(request));
+  if (resolved.ok === false) return { ok: false, status: resolved.status, error: resolved.error };
+  return { ok: true, value: { session, bundle: resolved.value.bundle, connection: resolved.value.connection } };
 };
 
 const publicConnection = (connection: ChatGptConnection) => ({
@@ -544,12 +787,8 @@ const callThingtimeTool = async (name: string, args: Record<string, unknown>, co
     const accountId = stringValue(args.accountId);
     if (!accountId || !context.bundle.connections.some((connection) => connection.id === accountId)) return { error: 'Unknown Thingtime account id' };
     context.bundle.defaultConnectionId = accountId;
-    const encrypted = encryptBundle(context.bundle);
-    if (encrypted.ok === false) return { error: encrypted.error };
-    await (await getSessionsCollection()).updateOne(
-      { jti: context.session.jti, purpose: MCP_SESSION_PURPOSE, revokedAt: null },
-      { $set: { 'meta.ciphertext': encrypted.value, 'meta.updatedAt': new Date() } }
-    );
+    const persisted = await persistMcpBundle(context);
+    if (persisted.ok === false) return { error: persisted.error, status: persisted.status };
     return { ok: true, defaultAccountId: accountId };
   }
   if (name === 'remove_thingtime_account') {
@@ -557,17 +796,13 @@ const callThingtimeTool = async (name: string, args: Record<string, unknown>, co
     const connections = context.bundle.connections.filter((connection) => connection.id !== accountId);
     if (connections.length === context.bundle.connections.length) return { error: 'Unknown Thingtime account id' };
     if (!connections.length) {
-      await revokeSession(context.session.jti);
+      await revokeMcpConnection(context);
       return { ok: true, disconnected: true, message: 'All accounts removed; this ChatGPT connection is now revoked.' };
     }
     context.bundle.connections = connections;
     if (!connections.some((connection) => connection.id === context.bundle.defaultConnectionId)) context.bundle.defaultConnectionId = connections[0].id;
-    const encrypted = encryptBundle(context.bundle);
-    if (encrypted.ok === false) return { error: encrypted.error };
-    await (await getSessionsCollection()).updateOne(
-      { jti: context.session.jti, purpose: MCP_SESSION_PURPOSE, revokedAt: null },
-      { $set: { 'meta.ciphertext': encrypted.value, 'meta.updatedAt': new Date() } }
-    );
+    const persisted = await persistMcpBundle(context);
+    if (persisted.ok === false) return { error: persisted.error, status: persisted.status };
     return { ok: true, defaultAccountId: context.bundle.defaultConnectionId, accounts: connections.map(publicConnection) };
   }
 

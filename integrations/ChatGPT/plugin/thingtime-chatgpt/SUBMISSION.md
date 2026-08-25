@@ -52,6 +52,8 @@ Positive cases:
    second explicit confirmation.
 5. Add a comment or share a test post after confirmation and verify the action
    card reflects the write-oriented metadata.
+6. Request `thingtime offline_access`, exchange the returned refresh token
+   once, then confirm the replacement token works and the original does not.
 
 Negative cases:
 
@@ -61,6 +63,8 @@ Negative cases:
    the authorization form to reject it without storing a credential.
 3. Supply a revoked, expired, or scope-insufficient PAT; expect first-party
    validation to fail without returning the token.
+4. After the final account is removed, retry both a previously issued bridge
+   token and refresh token; expect neither to recover the connection.
 
 ## Submission sequence
 

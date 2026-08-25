@@ -31,6 +31,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Security
 
+- **ChatGPT connections now survive secure refreshes without splitting account
+  state.** The optional `offline_access` scope issues one-time rotating refresh
+  credentials alongside the 30-day MCP bridge token. Every access and refresh
+  credential references one encrypted, origin-bound connection session, so an
+  account switch or final disconnect applies consistently across renewals; a
+  final disconnect revokes the connection and all of its bridge credentials.
+  The OAuth and connections capability features advance to `1.1.0`. — Codex
+  (AI), 2026-08-26
 - **ChatGPT tool annotations now match their actual effects.** Public-content
   writes are marked as open-world actions, only irreversible writes retain the
   destructive hint, and the MCP semantic feature advances to `1.0.2` for

@@ -9,8 +9,8 @@ export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-
 
 export const CHATGPT_PLUGIN_FEATURES = {
   'chatgpt.mcp': '1.0.2',
-  'chatgpt.oauth': '1.0.1',
-  'chatgpt.connections': '1.0.0',
+  'chatgpt.oauth': '1.1.0',
+  'chatgpt.connections': '1.1.0',
   'chatgpt.things.read': '1.0.0',
   'chatgpt.things.write': '1.0.0'
 } as const;
@@ -53,6 +53,16 @@ export type ChatGptCredentialBundle = {
   version: 1;
   defaultConnectionId: string;
   connections: ChatGptConnection[];
+};
+
+export const CHATGPT_OAUTH_SCOPES = ['thingtime', 'offline_access'] as const;
+
+export const normalizeChatGptOAuthScopes = (values: string[]): string[] | null => {
+  const scope = [...new Set(values.filter(Boolean))];
+  if (!scope.includes('thingtime') || scope.length > 16 || scope.some((item) => !CHATGPT_OAUTH_SCOPES.includes(item as typeof CHATGPT_OAUTH_SCOPES[number]))) {
+    return null;
+  }
+  return scope;
 };
 
 const DEFAULT_ALLOWED_ENDPOINTS = ['https://thingtime.com'];
@@ -127,11 +137,11 @@ export const parseChatGptAuthorizationRequest = (
   const resource = normalizeResource(params.get('resource'), origin);
   if (!resource) return { ok: false, error: 'resource must be this Thingtime MCP endpoint' };
 
-  const scope = (params.get('scope') || 'thingtime')
+  const scope = normalizeChatGptOAuthScopes((params.get('scope') || 'thingtime')
     .split(/\s+/)
     .map((item) => item.trim())
-    .filter(Boolean);
-  if (!scope.includes('thingtime') || scope.length > 16) return { ok: false, error: 'scope must include thingtime' };
+    .filter(Boolean));
+  if (!scope) return { ok: false, error: 'scope must include thingtime and contain only supported scopes' };
 
   return { ok: true, request: { clientId, redirectUri, state, codeChallenge, resource, scope } };
 };
@@ -185,17 +195,17 @@ export const pluginDiscovery = (origin: string) => ({
     resource: mcpResourceForOrigin(origin),
     authorization_servers: [origin],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['thingtime']
+    scopes_supported: CHATGPT_OAUTH_SCOPES
   },
   authorizationServer: {
     issuer: origin,
     authorization_endpoint: `${origin}${CHATGPT_AUTHORIZE_PATH}`,
     token_endpoint: `${origin}${CHATGPT_TOKEN_PATH}`,
     response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code'],
+    grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none'],
-    scopes_supported: ['thingtime'],
+    scopes_supported: CHATGPT_OAUTH_SCOPES,
     authorization_response_iss_parameter_supported: true
   },
   capabilityManifest: {

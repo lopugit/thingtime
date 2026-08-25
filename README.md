@@ -406,10 +406,14 @@ for ChatGPT/Codex distribution. The plugin connection page can securely attach
 several named Thingtime accounts and explicitly allowlisted Thingtime API
 origins. It accepts only scoped Personal Access Tokens (PATs), validates them
 with `/api/v1/tokens/self`, encrypts them before server-side persistence, and
-gives ChatGPT only a revocable MCP-only bridge token. Do not paste a PAT into a
-chat. The public `tools/list` response exposes only tool metadata and its
-per-tool OAuth requirements; all account data and tool calls require the
-bridge token and are origin-bound to this MCP URL.
+gives ChatGPT only a revocable MCP-only bridge token. When ChatGPT requests the
+optional `offline_access` scope, the 30-day bridge access token is renewed with
+a rotating refresh credential; every credential refers to one encrypted
+connection record, so account selection and disconnects take effect across the
+entire connection. Do not paste a PAT into a chat. The public `tools/list`
+response exposes only tool metadata and its per-tool OAuth requirements; all
+account data and tool calls require the bridge token and are origin-bound to
+this MCP URL.
 
 Set these sensitive server-side deployment variables (for example in Vercel)
 before enabling the connector. Values below are placeholders only:
