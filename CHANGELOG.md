@@ -21,11 +21,51 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
-- **Lopu's public queue now preserves every repository signal**: the unified
-  manager pairs `queue: max` with a constant `cancel-in-progress: false`, the
-  only GitHub-valid durable configuration. Comment, check, branch, schedule,
-  promotion, and exact-worker runs now queue and revalidate live state instead
-  of failing before job creation or replacing in-flight work. CodeQL's
+- **Conflict resolution now recovers from incomplete partial-clone object
+  hydration**: ordinary resolver checkouts remain blobless for cost and speed,
+  but a GitHub promisor-object rejection now aborts the partial merge, refetches
+  only the exact PR head and target branch histories without a filter, and
+  retries the same immutable merge once before any AI spend. This fixes the
+  pre-model failure observed while Lopu tried to merge `main` into `develop`
+  for PR #289, without making every PR download the repository's full object
+  history. — Codex (AI), 2026-08-25
+- **The wildcard `all`-branch doctor is now internal to the one public Lopu
+  manager**: its independent push/manual workflow is retired. PR lifecycle
+  changes and the hourly backstop call the protected reusable doctor directly;
+  develop, main, and controller pushes make one bounded bot-authored handoff
+  back through **Lopu PR manager** so provider actions never inherit unsupported
+  push provenance. Manual recovery is the manager's `build-all` maintenance
+  choice, and the doctor keeps the shared non-cancelling model fleet lock. —
+  Codex (AI), 2026-08-25
+- **Codex-backed Graphify attestations now survive promotion recovery**: the
+  interrupted-run validator accepts the same `openai` semantic mode emitted by
+  Terra/Sol-backed promotion publication, and ordinary PR merge commits and
+  status comments now identify OpenAI semantic extraction instead of
+  incorrectly reporting that no semantic credential was available. Contracts
+  keep every publication, recovery, and reporting enum aligned. — Codex (AI),
+  2026-08-25
+- **Rebase roots, stack children, and moving-ref recovery now round-trip through
+  the one public Lopu manager**: the internal rebase engine no longer attempts
+  to dispatch its triggerless implementation directly. Exact immutable worker
+  data is nested beneath a bounded repository-dispatch payload, merge-cascade
+  and rebase events have mutually exclusive owners, and automatic race retries
+  cannot inherit manual-selector authority or launch duplicate merge/review
+  work. Root handoffs use the endpoint's narrow `contents: write` permission;
+  publication-local race helpers release current and child ownership labels
+  before a fresh-ref retry. — Codex (AI), 2026-08-25
+- **Lopu now immediately recovers when a PR head or target advances beside
+  publication**: the exact lease still refuses the stale merge, but that
+  expected race is recorded as a successful guarded attempt and requeued from
+  fresh live refs up to three times instead of leaving a red run until the next
+  scheduled sweep. Success comments and stack cascades remain gated on a live
+  ref proving the exact merge commit was published. — Codex (AI), 2026-08-25
+- **Lopu's public queue now coalesces repeated repository snapshots without
+  interrupting active work**: each semantic PR/branch boundary keeps the
+  running workflow plus the newest pending signal, which re-derives all live
+  comment, check, branch, and PR state when it starts. The shared model fleet
+  retains `queue: max` only after distinct PR work has been selected, avoiding
+  the former 100-run duplicate backlog while `cancel-in-progress: false`
+  protects every running detector, worker, and model session. CodeQL's
   `pull_request_target` metadata bridge is also isolated in its own protected
   reusable workflow, so normal read-capped PR analysis retains its check
   contexts without trying to inherit `actions: write`. — Codex (AI),
@@ -136,16 +176,15 @@ every entry is attributed the same way the app changelog attributes them.
   API/CLI credentials as a fallback. Every provider credential is included in
   the derived-output secret scan, and structural Graphify still completes when
   no semantic provider is available. — Codex (AI), 2026-08-25
-- **Lopu's single-agent fleet now keeps the full pending queue instead of
-  replacing older work during bursts**: PR reviews and check fixes, merge
-  conflict resolution, promotion replay, rebase/stack operations, and the
-  wildcard `all`-branch build doctor still allow only one live model-backed
-  Lopu session per repository, while GitHub's durable concurrency queue
-  retains up to 100 waiting jobs in FIFO order. The all-branch doctor is now
-  Lopu-branded and its rebuild cannot cancel or overlap another model-backed
-  repository operation. A new develop or controller commit can therefore
-  enqueue the affected PRs without cancelling a previously validated
-  promotion or repair. — Codex (AI), 2026-08-25
+- **Lopu's single-agent fleet durably queues distinct selected work while its
+  event boundaries stay bounded**: PR reviews and check fixes, merge conflict
+  resolution, promotion replay, rebase/stack operations, and the wildcard
+  `all`-branch build doctor still allow only one live model-backed Lopu session
+  per repository. The model fleet can retain up to 100 already-selected jobs,
+  but repeated check, PR, branch, and all-branch signals are coalesced before
+  they enter it. The all-branch doctor is Lopu-branded and its rebuild cannot
+  cancel or overlap another active model-backed operation. — Codex (AI),
+  2026-08-25
 - **Preview wildcard fallbacks are environment-locked and stack-aware**:
   `*.previews.dev.thingtime.com` must bind to `develop`, while the Vercel
   production fallback for `*.previews.thingtime.com` must stay detached and

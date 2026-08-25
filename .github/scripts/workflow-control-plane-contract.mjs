@@ -406,6 +406,21 @@ function assertAdminModelRouting(resolver, rebase) {
     /uses:\s*openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u,
     "the single Lopu action pins Codex's executable implementation",
   );
+  assert.match(
+    lopuAgent,
+    /classify-claude-credential-failure\.mjs/u,
+    "the single Lopu action classifies primary account-capacity failures before failover",
+  );
+  assert.match(
+    lopuAgent,
+    /steps\.claude_primary_failure\.outputs\.retryable == 'true'/u,
+    "fallback Claude execution is limited to classified credential or account-capacity failures",
+  );
+  assert.match(
+    lopuAgent,
+    /lopu-claude-credential-slot/u,
+    "the single Lopu action records the successful credential slot for exact-session continuation",
+  );
   for (const path of runtimeFiles.filter((path) => path !== ".github/actions/lopu-agent/action.yml")) {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
     assert.doesNotMatch(
@@ -420,7 +435,11 @@ function assertAdminModelRouting(resolver, rebase) {
     return count +
       (source.match(/uses:\s*anthropics\/claude-code-action@/gu)?.length ?? 0);
   }, 0);
-  assert.equal(claudeActionCount, 1, "only the single Lopu action directly invokes Claude");
+  assert.equal(
+    claudeActionCount,
+    2,
+    "only the single Lopu action owns the ordered primary and fallback Claude invocations",
+  );
   const turnBudgets = runtimeFiles.flatMap((path) => {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
     return [...source.matchAll(/--max-turns\s+(\d+)/gu)].map((match) => ({
@@ -621,10 +640,35 @@ export function assertControlPlaneContract() {
   assert.match(codeql, /^      security-events: write$/mu);
   assert.match(
     codeql,
+    /group: >-\n\s+codeql-\$\{\{ matrix\.language \}\}-\$\{\{ github\.event_name \}\}-\$\{\{ needs\.scope\.outputs\.analysis_sha \|\| github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/u,
+    "CodeQL concurrency is fenced to the language, event owner, and immutable analyzed snapshot",
+  );
+  assert.match(
+    codeql,
+    /queue: max\n\s+cancel-in-progress: false/u,
+    "CodeQL preserves queued snapshots and never leaves a cancelled analyzer check",
+  );
+  assert.match(
+    codeql,
     /any\(\.\[\]; \.headRefOid == \$sha\)/u,
     "an open PR owns one analysis instead of duplicating its branch push",
   );
   assert.match(codeql, /ADVANCED_ENABLED: \$\{\{ vars\.CODEQL_ADVANCED_ENABLED \}\}/u);
+  assert.match(
+    codeql,
+    /backfill_listener_owned:[\s\S]*type: boolean/u,
+    "a trusted manual activation can backfill PRs that predate their target's listener",
+  );
+  assert.match(
+    codeql,
+    /BACKFILL_LISTENER_OWNED: \$\{\{ inputs\.backfill_listener_owned \}\}/u,
+    "the activation-backfill choice reaches only the unprivileged analyzer scope",
+  );
+  assert.match(
+    codeql,
+    /base_has_pr_listener[\s\S]*BACKFILL_LISTENER_OWNED[\s\S]*analysis_ref="\$merge_ref"/u,
+    "listener-owned historical PRs can be centrally backfilled without changing their branch",
+  );
   assert.match(
     codeql,
     /\[ "\$ADVANCED_ENABLED" != true \][\s\S]*analyze=false/u,
@@ -847,6 +891,36 @@ export function assertControlPlaneContract() {
     /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch|repository_dispatch):/m,
     "main/develop synchronization is reachable only through Lopu",
   );
+  assert.match(
+    mainDevelopSync,
+    /SYNC_BRANCH: sync\/main-into-develop/u,
+    "main/develop conflicts use an automation-owned PR branch",
+  );
+  assert.match(
+    mainDevelopSync,
+    /--force-with-lease="refs\/heads\/\$SYNC_BRANCH:\$remote_sha"/u,
+    "the standing sync branch can move only from its exact observed remote SHA",
+  );
+  assert.match(
+    mainDevelopSync,
+    /-f head="\$SYNC_BRANCH"/u,
+    "the safe sync PR never uses the protected main branch as its writable head",
+  );
+  assert.doesNotMatch(
+    mainDevelopSync,
+    /-f head=(?:"[^"\n]*:)?main"?(?:\s|$)/u,
+    "main is never used as the writable head of a synchronization PR",
+  );
+  assert.match(
+    mainDevelopSync,
+    /git ls-remote --heads origin refs\/heads\/main refs\/heads\/develop/u,
+    "safe sync publication revalidates both immutable branch endpoints against the remote",
+  );
+  assert.match(
+    mainDevelopSync,
+    /git merge-base --is-ancestor "\$EXPECTED_MAIN_SHA" "\$remote_sha"/u,
+    "an already-resolved safe head containing current main is preserved",
+  );
 
   const rebase = readWorkflow("rebase-pr-stacks.yml");
   const rebaseTriggers = rebase.slice(0, rebase.indexOf("\npermissions:\n"));
@@ -868,11 +942,23 @@ export function assertControlPlaneContract() {
   assert.match(rebase, /internal_worker: >-/);
   assert.match(
     rebase,
-    /github\.event_name == 'repository_dispatch'[\s\S]*inputs\.worker_handoff == true/,
-    "legacy repository_dispatch and modern exact workers are both identified before routing",
+    /github\.event_name == 'repository_dispatch'[\s\S]*github\.event\.action == 'rebase-pr-stack-ai'[\s\S]*inputs\.worker_handoff == true/,
+    "exact repository events and workflow-call workers are both identified before routing",
   );
   assert.match(rebase, /routing_proof:\$routing_proof/);
   assert.match(rebase, /routing_proof_issued_at:\$routing_proof_issued_at/);
+  assert.match(rebase, /event_type:"rebase-pr-stack-ai"/u);
+  assert.doesNotMatch(rebase, /actions\/workflows\/rebase-pr-stacks\.yml\/dispatches/u);
+  assert.match(
+    rebase,
+    /handoff:[\s\S]*?permissions:[\s\S]*?contents: write[\s\S]*?repos\/\$REPO\/dispatches/u,
+    "repository-dispatch handoff receives Contents write rather than relying on Actions write",
+  );
+  assert.match(
+    rebase,
+    /steps\.push\.outputs\.remote_state == 'retry'[\s\S]*ref_race_handoff:true/u,
+    "moving rebase refs re-enter the unified controller without manual-selector authority",
+  );
   for (const input of ["routing_proof", "routing_proof_issued_at"]) {
     assert.equal(
       rebase.match(new RegExp(`^      ${input}:$`, "gm"))?.length,
@@ -910,19 +996,87 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     resolver,
-    /github\.event\.action == 'rebase-pr-stack-ai'[\s\S]*&& 'rebase-stack'[\s\S]*\|\| 'resolve-conflicts'/u,
-    "legacy exact stack workers preserve their CI-provider policy through Lopu",
+    /github\.event\.action == 'rebase-pr-stack-ai'[\s\S]*inputs\.ref_race_handoff == true[\s\S]*&& 'rebase-stack'[\s\S]*\|\| 'resolve-conflicts'/u,
+    "exact stack workers and their automatic retries preserve rebase provider policy through Lopu",
   );
-  assert.match(resolver, /^\s+queue: max$/m);
   assert.match(
     resolver,
-    /^  queue: max\n(?:[\s\S]*?)^  cancel-in-progress: false$/m,
-    "the public Lopu queue preserves pending signals and never cancels active work",
+    /manage_rebases:[\s\S]*github\.event_name != 'repository_dispatch'[\s\S]*github\.event\.action == 'rebase-pr-stack-ai'/u,
+    "rebase repository events have exactly one rebase owner",
+  );
+  assert.match(
+    resolver,
+    /detect:[\s\S]*github\.event_name != 'repository_dispatch'[\s\S]*github\.event\.action == 'resolve-conflicts-cascade'/u,
+    "merge cascade repository events have exactly one merge owner",
+  );
+  assert.match(
+    resolver,
+    /detect:[\s\S]*inputs\.ref_race_handoff != true/u,
+    "automatic rebase retries never also launch merge detection",
+  );
+  assert.match(
+    resolver,
+    /review_detect:[\s\S]*github\.event_name != 'repository_dispatch'[\s\S]*inputs\.ref_race_handoff != true/u,
+    "internal worker events never launch a duplicate repository review",
+  );
+  assert.match(
+    resolver,
+    /pull_request_target:\n\s+types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed\]/u,
+    "the public manager owns every lifecycle change that can alter the wildcard all branch",
+  );
+  assert.match(
+    resolver,
+    /- cron: "53 \* \* \* \*"/u,
+    "the public manager owns the former hourly all-branch backstop",
+  );
+  assert.match(
+    resolver,
+    /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all\]/u,
+    "manual all-branch recovery stays inside Lopu maintenance",
+  );
+  assert.match(
+    resolver,
+    /handoff_all_branch_push:[\s\S]*branch:"lopu-internal-all-branch"[\s\S]*maintenance_operation:"manage-prs"[\s\S]*actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/u,
+    "push-triggered union rebuilds return through a supported event on the one public manager",
+  );
+  assert.match(
+    resolver,
+    /maintain_all_branch:[\s\S]*inputs\.maintenance_operation == 'build-all'[\s\S]*github\.event\.schedule == '53 \* \* \* \*'[\s\S]*uses: \.\/\.github\/workflows\/all-branch\.yml/u,
+    "PR, schedule, and manual events call only the internal all-branch implementation",
+  );
+  const publicConcurrency = resolver.slice(
+    resolver.indexOf("\nconcurrency:\n"),
+    resolver.indexOf("\npermissions:\n"),
+  );
+  assert.match(
+    publicConcurrency,
+    /^  cancel-in-progress: false$/m,
+    "the public Lopu queue never cancels active work",
+  );
+  assert.doesNotMatch(
+    publicConcurrency,
+    /^\s*queue: max$/m,
+    "the public Lopu queue coalesces duplicate pending events by semantic PR or branch key",
+  );
+  assert.match(
+    resolver,
+    /\['openai','claude','claude-cli','failed','none','unavailable'\]\.includes\(value\.graphify_semantic\)/u,
+    "interrupted-promotion recovery accepts Codex-backed Graphify attestations",
+  );
+  assert.equal(
+    resolver.match(/^\s+openai\|claude\|claude-cli\)/gmu)?.length,
+    3,
+    "PR merge commits and status comments report OpenAI semantic Graphify runs accurately",
   );
   assert.match(
     resolver,
     /name: Check out PR head[\s\S]*fetch-depth: 0[\s\S]*filter: blob:none[\s\S]*persist-credentials: false/u,
     "resolver checkout keeps exact history while lazily fetching historical blobs",
+  );
+  assert.match(
+    resolver,
+    /name: Merge base into head[\s\S]*promisor_fetch_failed\(\)[\s\S]*could not fetch \[0-9a-f\]\{40\} from promisor remote[\s\S]*--refetch --no-filter origin[\s\S]*refs\/heads\/\$HEAD_REF:refs\/remotes\/origin\/\$HEAD_REF[\s\S]*refs\/heads\/\$BASE_REF:refs\/remotes\/origin\/\$BASE_REF[\s\S]*run_snapshot_merge \|\| clean=false[\s\S]*complete-history retry still could not materialize/u,
+    "resolver retries a failed lazy promisor fetch once from complete exact branch histories",
   );
   for (const input of [
     "maintenance_operation",
@@ -932,6 +1086,8 @@ export function assertControlPlaneContract() {
     "promotion_target_branch",
     "promotion_path_prefix",
     "rebase_cascade",
+    "ref_race_retry",
+    "ref_race_handoff",
     "promotion_source_pr",
     "promotion_plan_b64",
     "routing_proof",
@@ -943,6 +1099,16 @@ export function assertControlPlaneContract() {
       `${input}: declared for workflow_call and workflow_dispatch`,
     );
   }
+  assert.match(
+    resolver,
+    /steps\.push\.outputs\.remote_state == 'retry'[\s\S]*ref_race_retry:\$retry/u,
+    "moving refs are requeued with a bounded retry counter",
+  );
+  assert.equal(
+    resolver.match(/steps\.push\.outputs\.remote_state == 'published'/gu)?.length,
+    2,
+    "only a live-ref-proven publication may post success or cascade a stack",
+  );
 
   assertUserControlledMergePause(resolver, rebase);
   assertAdminModelRouting(resolver, rebase);

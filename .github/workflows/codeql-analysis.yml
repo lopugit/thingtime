@@ -20,6 +20,11 @@ on:
         required: false
         default: ""
         type: string
+      backfill_listener_owned:
+        description: "Allow a trusted manual activation backfill even when the PR base now carries the normal listener"
+        required: false
+        default: false
+        type: boolean
   pull_request:
   push:
     branches: [github-actions]
@@ -35,6 +40,11 @@ on:
         required: false
         default: ""
         type: string
+      backfill_listener_owned:
+        description: "One-time activation backfill for a PR whose target now carries the normal listener"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -64,6 +74,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ inputs.pr_number }}
           EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          BACKFILL_LISTENER_OWNED: ${{ inputs.backfill_listener_owned }}
         run: |
           set -euo pipefail
 
@@ -120,14 +131,20 @@ jobs:
                   merge_sha=""
                 fi
               fi
-              if [ "$base_has_pr_listener" = true ] && [ -n "$merge_sha" ]; then
+              if [ "$base_has_pr_listener" = true ] \
+                 && [ -n "$merge_sha" ] \
+                 && [ "$BACKFILL_LISTENER_OWNED" != true ]; then
                 analyze=false
                 echo "PR #$PR_NUMBER has a merge ref and its target carries the normal listener; that pull_request run owns analysis."
               elif [ -n "$merge_sha" ]; then
                 analysis_ref="$merge_ref"
                 analysis_sha="$merge_sha"
                 checkout_ref="$merge_ref"
-                echo "PR #$PR_NUMBER targets a branch without the listener; Lopu will analyze its exact merge ref."
+                if [ "$base_has_pr_listener" = true ]; then
+                  echo "PR #$PR_NUMBER predates its target's listener activation; Lopu will backfill its exact merge ref."
+                else
+                  echo "PR #$PR_NUMBER targets a branch without the listener; Lopu will analyze its exact merge ref."
+                fi
               else
                 analysis_ref="refs/pull/$PR_NUMBER/head"
                 analysis_sha="$live_head_sha"
@@ -185,8 +202,12 @@ jobs:
         language: [actions, javascript-typescript]
     concurrency:
       group: >-
-        codeql-${{ matrix.language }}-${{ github.event.pull_request.head.sha || github.sha }}
-      cancel-in-progress: true
+        codeql-${{ matrix.language }}-${{ github.event_name }}-${{ needs.scope.outputs.analysis_sha || github.event.pull_request.head.sha || github.sha }}
+      # A later push/PR/central signal must not terminate CodeQL while it is
+      # uploading the earlier immutable snapshot. Preserve the whole bounded
+      # queue and let each scope check no-op when its analysis already exists.
+      queue: max
+      cancel-in-progress: false
     steps:
       - name: Check out the analyzed revision without credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

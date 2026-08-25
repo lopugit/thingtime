@@ -183,6 +183,22 @@ export GIT_CONFIG_KEY_1=core.fsmonitor
 export GIT_CONFIG_VALUE_1=false
 
 GRAPHIFY_VERSION="${GRAPHIFY_VERSION:-0.9.4}"
+[ -n "${ANTHROPIC_API_KEY_FALLBACK:-}" ] || unset ANTHROPIC_API_KEY_FALLBACK
+[ -n "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN_FALLBACK
+primary_anthropic_api_key="${ANTHROPIC_API_KEY:-}"
+primary_claude_code_oauth_token="${CLAUDE_CODE_OAUTH_TOKEN:-}"
+credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+case "$credential_slot" in
+  primary) ;;
+  fallback)
+    ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY_FALLBACK:-}"
+    CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}"
+    ;;
+  *)
+    echo "::warning::Invalid Lopu credential slot; Graphify will use its non-Claude fallback."
+    unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN
+    ;;
+esac
 [ -n "${OPENAI_API_KEY:-}" ] || unset OPENAI_API_KEY
 [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
 [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
@@ -364,7 +380,9 @@ fi
 # derived bytes. Reject exact raw or base64 credential material before commit.
 needles="$RUNNER_TEMP/promotion-graphify-needles.txt"
 : >"$needles"
-for secret in "${OPENAI_API_KEY:-}" "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}"; do
+for secret in "${OPENAI_API_KEY:-}" "$primary_anthropic_api_key" \
+  "$primary_claude_code_oauth_token" "${ANTHROPIC_API_KEY_FALLBACK:-}" \
+  "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}"; do
   [ -n "$secret" ] || continue
   printf '%s\n' "$secret" >>"$needles"
   printf '%s' "$secret" | base64 -w0 >>"$needles"
