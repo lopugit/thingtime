@@ -1178,7 +1178,7 @@ is fixed, and cite the checklist you ran in the PR description.
       manual scans leave both histories untouched: they are not stacks and
       already merge cleanly. An explicit PR-number retry may still replay one
       deliberately. Then make a standalone PR genuinely merge-conflicting and
-      confirm only **Resolve PR conflicts (AI)** owns it. Regression class:
+      confirm only the **Lopu PR manager** merge lane owns it. Regression class:
       standalone replay failures were incorrectly force-rebased and could
       ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the

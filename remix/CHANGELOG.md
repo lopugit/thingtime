@@ -37,6 +37,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **The last duplicate public PR-maintenance Actions are retired on develop**:
+  promotion and main/develop synchronization are Lopu jobs, while rebase/stack
+  handling retains only its trusted internal repository-dispatch handoff. Push,
+  PR, schedule, and manual entry now belong to the one visible Lopu PR manager,
+  preventing duplicate detection and cancellation races. — Codex (AI), 2026-08-25
 - **Lopu CodeQL target events now use the metadata-only handoff they describe**:
   the default-branch listener sends PR number and exact head SHA through the
   protected handoff, while only the separate unprivileged dispatch invokes the

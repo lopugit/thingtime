@@ -13,11 +13,8 @@ const callers = [
   'electron-release.yml',
   'electron-pr-release.yml',
   'web-ci.yml',
-  'promote-develop-to-main.yml',
-  'promote-features-to-main.yml',
   'rebase-pr-stacks.yml',
-  'resolve-pr-conflicts.yml',
-  'sync-main-into-develop.yml'
+  'resolve-pr-conflicts.yml'
 ];
 
 for (const filename of callers) {
@@ -30,6 +27,30 @@ for (const filename of callers) {
   assert.doesNotMatch(source, /\.github\/(?:actions|scripts)\//, `${filename} must not reference product-branch behavior files`);
   assert.equal((source.match(/^\s+uses:/gm) ?? []).length, 1, `${filename} must contain exactly one reusable-workflow call`);
 }
+
+for (const retired of [
+  'promote-develop-to-main.yml',
+  'promote-features-to-main.yml',
+  'sync-main-into-develop.yml'
+]) {
+  assert.equal(
+    existsSync(resolve(workflowsRoot, retired)),
+    false,
+    `${retired} must stay retired; Lopu PR manager owns its former public triggers`
+  );
+}
+
+const rebaseCaller = readFileSync(
+  resolve(workflowsRoot, 'rebase-pr-stacks.yml'),
+  'utf8'
+);
+assert.match(rebaseCaller, /^name: Lopu PR manager \(internal rebase handoff\)$/m, 'rebase remains an internal Lopu component');
+assert.match(rebaseCaller, /^  repository_dispatch:\n    types: \[rebase-pr-stack-ai\]$/m, 'the internal rebase handoff must retain its exact trusted dispatch');
+assert.doesNotMatch(
+  rebaseCaller.slice(0, rebaseCaller.indexOf('\npermissions:\n')),
+  /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch):/m,
+  'the internal rebase component must not recreate a separate public automation'
+);
 
 const codeqlCaller = readFileSync(
   resolve(workflowsRoot, 'codeql-analysis.yml'),
@@ -128,24 +149,10 @@ assert.match(
   'develop-pr-preview.yml must convert the manual dispatch string to the reusable workflow number type'
 );
 
-const promotionCaller = readFileSync(
-  resolve(workflowsRoot, 'promote-features-to-main.yml'),
-  'utf8'
-);
-const promotionPermissionsStart = promotionCaller.indexOf('\npermissions:\n');
-const promotionJobsStart = promotionCaller.indexOf('\njobs:\n');
-assert.ok(
-  promotionPermissionsStart >= 0 && promotionJobsStart > promotionPermissionsStart,
-  'promote-features-to-main.yml must retain a top-level permissions block'
-);
-const promotionPermissions = promotionCaller.slice(
-  promotionPermissionsStart,
-  promotionJobsStart
-);
 assert.match(
-  promotionPermissions,
+  resolverCaller,
   /^  actions: write$/m,
-  'promote-features-to-main.yml must grant the protected promoter permission to dispatch its resolver'
+  'Lopu PR manager must grant its protected maintenance lanes permission to dispatch trusted workers'
 );
 
 const allBranchCaller = readFileSync(
