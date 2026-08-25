@@ -24,7 +24,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   implementation replace default-branch-only scanning. Open PR heads use the
   PR analysis as the single owner, and Lopu accepts immutable head or merge-ref
   findings after revalidating both the reviewed head and base revisions. The
-  README documents the ordered default-setup-to-advanced-setup activation.
+  README documents the ordered default-setup-to-advanced-setup activation, and
+  a repository variable prevents expected pre-activation upload failures.
   — Codex (AI), 2026-08-25
 - **Signed Desktop PR releases now use the protected `github-actions` control
   plane**: this branch contains only a `pull_request_target`/manual listener;

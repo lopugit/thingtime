@@ -62,10 +62,14 @@ Administration write access should run:
 ```sh
 gh api --method PATCH repos/OWNER/REPOSITORY/code-scanning/default-setup \
   -f state=not-configured
+gh variable set CODEQL_ADVANCED_ENABLED --repo OWNER/REPOSITORY --body true
 ```
 
-Then manually run **CodeQL all branches**, confirm both language jobs upload
-results, and verify the repository reports default setup as `not-configured`.
+The absent/false variable deliberately makes the staged advanced jobs skip
+cleanly instead of failing every PR while default setup still owns uploads.
+After setting it, manually run **CodeQL all branches**, confirm both language
+jobs upload results, and verify the repository reports default setup as
+`not-configured`.
 After activation, an empty Lopu CodeQL snapshot means no current matching
 head-or-merge findings (or a failed/unavailable analysis), not merely that the
 PR targets `develop` or `github-actions`.
