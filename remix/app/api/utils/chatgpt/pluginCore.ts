@@ -81,7 +81,13 @@ export const normalizeThingtimeEndpoint = (value: unknown): string | null => {
 
 export const allowedChatGptClientIds = (): string[] => {
   const configured = process.env.THINGTIME_CHATGPT_OAUTH_CLIENT_IDS;
-  const candidates = configured ? configured.split(',') : ['https://chatgpt.com'];
+  // ChatGPT uses this Client ID Metadata Document (CIMD) for a connector
+  // whose authorization server supports issuer identification. Keep the
+  // previous fixed client identifier during the rollout so existing developer
+  // connections continue to work, but never accept arbitrary client URLs.
+  const candidates = configured
+    ? configured.split(',')
+    : ['https://chatgpt.com/oauth/client.json', 'https://chatgpt.com'];
   return [...new Set(candidates.map((value) => value.trim()).filter(Boolean))];
 };
 

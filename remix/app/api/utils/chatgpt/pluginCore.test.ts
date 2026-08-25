@@ -17,7 +17,7 @@ const validState = 'state-which-is-long-enough-to-be-safe';
 test('ChatGPT OAuth request is tightly bound to this MCP resource and callback', () => {
   const params = new URLSearchParams({
     response_type: 'code',
-    client_id: 'https://chatgpt.com',
+    client_id: 'https://chatgpt.com/oauth/client.json',
     redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect',
     resource: `https://thingtime.com${CHATGPT_MCP_PATH}`,
     code_challenge: validPkceChallenge,
@@ -29,6 +29,9 @@ test('ChatGPT OAuth request is tightly bound to this MCP resource and callback',
   assert.equal(parsed.ok, true);
   if (parsed.ok) assert.equal(parsed.request.resource, `https://thingtime.com${CHATGPT_MCP_PATH}`);
 
+  params.set('client_id', 'https://chatgpt.com');
+  assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, true);
+  params.set('client_id', 'https://chatgpt.com/oauth/client.json');
   params.set('resource', 'https://attacker.invalid/api/v1/integrations/chatgpt/mcp');
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
   params.set('resource', `https://thingtime.com${CHATGPT_MCP_PATH}`);

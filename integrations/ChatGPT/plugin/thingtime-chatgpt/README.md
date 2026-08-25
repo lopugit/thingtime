@@ -42,7 +42,9 @@ The default allowed API origin is `https://thingtime.com`. Set
 `THINGTIME_CHATGPT_ALLOWED_ENDPOINTS` to an explicit comma-separated origin
 allowlist for other deployments. Never use wildcards. Configure
 `THINGTIME_CHATGPT_OAUTH_CLIENT_IDS` only if ChatGPT issues a different client
-identifier for the registered MCP server.
+identifier for the registered MCP server; the default already permits
+ChatGPT's stable Client ID Metadata Document and the legacy ChatGPT client
+identifier.
 
 See the root README and `/api/v1/integrations/chatgpt/mcp-docs` for the full
 security and API contract.

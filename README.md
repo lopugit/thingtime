@@ -420,9 +420,10 @@ THINGTIME_CHATGPT_CREDENTIAL_KEY="<base64-encoded-32-byte-key>"
 # Defaults to https://thingtime.com when unset.
 THINGTIME_CHATGPT_ALLOWED_ENDPOINTS="https://thingtime.com,https://dev.thingtime.com"
 
-# Optional. Defaults to https://chatgpt.com. Set only if a ChatGPT plugin
-# registration provides a different OAuth client id.
-THINGTIME_CHATGPT_OAUTH_CLIENT_IDS="https://chatgpt.com"
+# Optional. Defaults to ChatGPT's stable Client ID Metadata Document plus the
+# legacy https://chatgpt.com identifier. Set only if the connection page gives
+# you an additional exact OAuth client id.
+THINGTIME_CHATGPT_OAUTH_CLIENT_IDS="https://chatgpt.com/oauth/client.json,https://chatgpt.com"
 ```
 
 The MCP protected-resource and authorization-server discovery documents are at

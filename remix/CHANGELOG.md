@@ -49,6 +49,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **ChatGPT OAuth client registration now accepts the stable Client ID Metadata
+  Document.** The connector permits ChatGPT's current `oauth/client.json`
+  client identifier, while retaining the previous fixed identifier for existing
+  developer-mode connections. — Codex (AI), 2026-08-26
 - **CodeQL now covers every PR target and branch**: an unfiltered PR listener,
   all-branch push listener, scheduled backstop, and protected reusable
   implementation replace default-branch-only scanning. Open PR heads use the
