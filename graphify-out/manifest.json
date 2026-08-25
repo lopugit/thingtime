@@ -60,14 +60,14 @@
     "semantic_hash": "14b9f6d094629a529f4abde76080542e"
   },
   ".github/scripts/resolve-pr-conflicts-routing-contract.mjs": {
-    "mtime": 1787627378.9373112,
-    "ast_hash": "d20aec4d17c96f8dfff2cb0fd20c5fb1",
-    "semantic_hash": "d20aec4d17c96f8dfff2cb0fd20c5fb1"
+    "mtime": 1787630326.0992541,
+    "ast_hash": "5ce70e52176fd52483e220e8734383ba",
+    "semantic_hash": "5ce70e52176fd52483e220e8734383ba"
   },
   ".github/scripts/workflow-control-plane-contract.mjs": {
-    "mtime": 1787625348.1618643,
-    "ast_hash": "2f1b1ffe8b51c52fe1dc3b2882ed660e",
-    "semantic_hash": "2f1b1ffe8b51c52fe1dc3b2882ed660e"
+    "mtime": 1787630280.5925415,
+    "ast_hash": "fbf1768ad953381f76325be1e0697218",
+    "semantic_hash": "fbf1768ad953381f76325be1e0697218"
   },
   "vercel.json": {
     "mtime": 1787625348.1721122,
@@ -120,9 +120,9 @@
     "semantic_hash": "e94f74d61780744f6048f62537550e11"
   },
   ".github/workflows/resolve-pr-conflicts.yml": {
-    "mtime": 1787627374.490738,
-    "ast_hash": "283413114e34836957a9c68b333558cf",
-    "semantic_hash": ""
+    "mtime": 1787630309.573784,
+    "ast_hash": "43605d80678e4333294ec6eddef86bd7",
+    "semantic_hash": "43605d80678e4333294ec6eddef86bd7"
   },
   ".github/workflows/sync-main-into-develop.yml": {
     "mtime": 1787625348.1650326,
@@ -145,9 +145,9 @@
     "semantic_hash": "14d35af8428488f574b554e2da5c0445"
   },
   "CHANGELOG.md": {
-    "mtime": 1787626885.6145067,
-    "ast_hash": "aa51b32aa631960dd220265181b284ce",
-    "semantic_hash": ""
+    "mtime": 1787630377.147304,
+    "ast_hash": "4ffdff07a4e411a95cfe4fe986987718",
+    "semantic_hash": "4ffdff07a4e411a95cfe4fe986987718"
   },
   "CLAUDE.md": {
     "mtime": 1787625348.165582,
@@ -173,5 +173,10 @@
     "mtime": 1787625348.1634493,
     "ast_hash": "d8ef4a3c0b25604f5d8365eeccef965b",
     "semantic_hash": "d8ef4a3c0b25604f5d8365eeccef965b"
+  },
+  ".github/workflows/codeql-analysis.yml": {
+    "mtime": 1787630280.5921717,
+    "ast_hash": "6f4393199394406f25746d5d96243c00",
+    "semantic_hash": "6f4393199394406f25746d5d96243c00"
   }
 }
