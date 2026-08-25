@@ -4638,6 +4638,81 @@ jobs:
             echo "paused=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # A detector snapshots every selected head/base before dispatch, but a
+      # durable repository queue can legitimately hold that exact worker while
+      # an older Lopu session finishes. Re-prove the immutable snapshot only
+      # after this job is admitted to the single agent slot, before checkout,
+      # AI, or Graphify spend. A moved ref is ordinary superseded work: the
+      # branch event/scheduled sweep owns the fresh replacement, so this run
+      # exits successfully without publishing or posting a misleading start
+      # comment.
+      - name: Revalidate queued PR snapshot before expensive work
+        id: admission
+        if: steps.user_merge_pause.outputs.paused != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
+          live_ref_sha() {
+            gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+
+          current=false
+          reason=pr-unavailable
+          if pr="$(gh api "repos/$REPO/pulls/$PR_NUMBER" 2>/dev/null)"; then
+            state="$(jq -r '.state' <<<"$pr")"
+            head_repo="$(jq -r '.head.repo.full_name // ""' <<<"$pr")"
+            base_repo="$(jq -r '.base.repo.full_name // ""' <<<"$pr")"
+            live_head_ref="$(jq -r '.head.ref // ""' <<<"$pr")"
+            live_base_ref="$(jq -r '.base.ref // ""' <<<"$pr")"
+            labels="$(jq -c '[.labels[].name]' <<<"$pr")"
+
+            if [ "$state" != open ]; then
+              reason=pr-closed
+            elif [ "$head_repo" != "$REPO" ] || [ "$base_repo" != "$REPO" ]; then
+              reason=repository-changed
+            elif [ "$live_head_ref" != "$HEAD_REF" ] || [ "$live_base_ref" != "$BASE_REF" ]; then
+              reason=ref-changed
+            elif jq -e 'any(. == "ai-merge-paused" or . == "no-ai-merge")' \
+                 >/dev/null <<<"$labels"; then
+              reason=merge-ownership-paused
+            elif jq -e 'index("ai-rebase-in-progress") != null' \
+                 >/dev/null <<<"$labels"; then
+              reason=rebase-ownership-active
+            elif [ "$RECOVER_REBASE_PAUSE" != true ] \
+                 && jq -e 'index("ai-rebase-paused") != null' \
+                    >/dev/null <<<"$labels"; then
+              reason=rebase-ownership-paused
+            elif ! live_head_sha="$(live_ref_sha "$HEAD_REF" 2>/dev/null)" \
+                 || ! live_base_sha="$(live_ref_sha "$BASE_REF" 2>/dev/null)"; then
+              reason=live-ref-unavailable
+            elif [ "$live_head_sha" != "$EXPECTED_HEAD_SHA" ]; then
+              reason=head-moved
+            elif [ "$live_base_sha" != "$EXPECTED_BASE_SHA" ]; then
+              reason=base-moved
+            else
+              current=true
+              reason=exact-snapshot-current
+            fi
+          fi
+
+          {
+            echo "current=$current"
+            echo "reason=$reason"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$current" = true ]; then
+            echo "::notice::Admitted exact PR #$PR_NUMBER snapshot $EXPECTED_HEAD_SHA onto base $EXPECTED_BASE_SHA."
+          else
+            echo "::notice::Skipping superseded PR #$PR_NUMBER worker before checkout ($reason); a current branch event or scheduled sweep owns the replacement."
+            {
+              echo "## Superseded queued Lopu worker"
+              echo
+              echo "PR #$PR_NUMBER was revalidated after entering the serialized agent slot."
+              echo "Its queued snapshot is no longer actionable ($reason), so checkout, AI, Graphify, and publication were skipped."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       # Reviewers who open a conflicted PR mid-resolution see GitHub's bare
       # conflict banner plus this workflow's (by design, always-skipped)
       # push-run check stubs — which reads as "the resolver is broken"
@@ -4649,7 +4724,9 @@ jobs:
       # same run and its terminal success/failure step update only that entry.
       # A comment failure never blocks the resolution itself.
       - name: Comment on PR (resolution starting)
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -4687,7 +4764,9 @@ jobs:
           upsert_start_comment || echo "::warning::Could not post the resolution-start comment; continuing with the resolution."
 
       - name: Check out PR head
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ matrix.pr.head_sha }}
@@ -4710,6 +4789,7 @@ jobs:
       - name: Clear deliberately retried rebase ownership pauses
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
           && env.RECOVER_REBASE_PAUSE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -4795,7 +4875,9 @@ jobs:
 
       - name: Merge base into head
         id: merge
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -4886,7 +4968,10 @@ jobs:
           # model to tamper with. conflicted.txt above is informational only.
 
       - name: Require an AI credential
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.conflicted == 'true'
         env:
           AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
           HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
@@ -4901,7 +4986,10 @@ jobs:
 
       - name: Resolve conflicts with Lopu
         id: resolve_conflicts
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.conflicted == 'true'
         continue-on-error: true
         uses: ./trusted/.github/actions/lopu-agent
         with:
@@ -4992,7 +5080,12 @@ jobs:
             --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 
       - name: Continue the exact conflict-resolution session until it finishes
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true' && needs.model_config.outputs.agent_backend == 'claude' && steps.resolve_conflicts.outcome == 'failure'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.conflicted == 'true'
+          && needs.model_config.outputs.agent_backend == 'claude'
+          && steps.resolve_conflicts.outcome == 'failure'
         shell: bash
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -5089,7 +5182,10 @@ jobs:
           done
 
       - name: Regenerate a lone pinned pnpm lockfile without credentials
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.conflicted == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -5281,7 +5377,10 @@ jobs:
           echo "::notice::Regenerated $lockfile with credential-free pinned pnpm@10.12.1; the normal verifier will stage and commit it."
 
       - name: Verify resolution and commit
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.merge.outputs.conflicted == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -5465,7 +5564,9 @@ jobs:
       # unstaged can never end up indexed here.
       - name: Rebuild Graphify structure, then LLM semantics
         id: graphify
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         # This refresh is a nicety, never worth losing a verified resolution:
         # any failure here must not skip the push step below, which is what
         # actually publishes the merge commit.
@@ -5709,7 +5810,9 @@ jobs:
           fi
 
       - name: Push merge commit
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         id: push
         env:
           PUSH_PAT: ${{ secrets.CONFLICT_RESOLVER_PAT }}
@@ -5863,7 +5966,9 @@ jobs:
           exit 1
 
       - name: Comment on PR (resolved)
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
@@ -5940,7 +6045,9 @@ jobs:
           upsert_run_comment "$body"
 
       - name: Cascade to PRs stacked on this head
-        if: steps.user_merge_pause.outputs.paused != 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
         # Always dispatch exact child PR selections, even when a PAT-backed
         # push also creates a detector run. Duplicate discovery is harmless:
         # trusted workers serialize per PR without cancellation and re-detect
@@ -6005,7 +6112,11 @@ jobs:
           done <<<"$children"
 
       - name: Collect residual conflicts for failure reporting
-        if: steps.user_merge_pause.outputs.paused != 'true' && failure() && steps.merge.outputs.conflicted == 'true'
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && failure()
+          && steps.merge.outputs.conflicted == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -6034,7 +6145,10 @@ jobs:
           sort -u -o "$residual" "$residual"
 
       - name: Comment on PR (needs attention)
-        if: steps.user_merge_pause.outputs.paused != 'true' && failure()
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && failure()
         env:
           GH_TOKEN: ${{ github.token }}
           PUSH_OUTCOME: ${{ steps.push.outcome }}

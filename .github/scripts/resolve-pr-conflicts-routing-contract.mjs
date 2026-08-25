@@ -150,6 +150,14 @@ function assertWorkflowSource() {
     source.indexOf("      - name: Comment on PR (resolution starting)"),
     source.indexOf("      - name: Check out PR head"),
   );
+  const admissionBlock = source.slice(
+    source.indexOf("      - name: Revalidate queued PR snapshot before expensive work"),
+    source.indexOf("      - name: Comment on PR (resolution starting)"),
+  );
+  const checkoutBlock = source.slice(
+    source.indexOf("      - name: Check out PR head"),
+    source.indexOf("      - name: Clear deliberately retried rebase ownership pauses"),
+  );
   const resolvedCommentBlock = source.slice(
     source.indexOf("      - name: Comment on PR (resolved)"),
     source.indexOf("      - name: Cascade to PRs stacked on this head"),
@@ -235,7 +243,7 @@ function assertWorkflowSource() {
   );
   assert.match(
     graphifyBlock,
-    /if: steps\.user_merge_pause\.outputs\.paused != 'true'\n/u,
+    /steps\.admission\.outputs\.current == 'true'/u,
     "every completed base merge gets a Graphify rebuild",
   );
   assert.doesNotMatch(
@@ -257,6 +265,32 @@ function assertWorkflowSource() {
     resolveBlock,
     /RUN_STATUS_MARKER: '<!-- thingtime-ai-resolve-status:v2 run_id=\$\{\{ github\.run_id \}\} -->'/u,
     "resolver status marker is scoped to the workflow run",
+  );
+  assert.match(admissionBlock, /id: admission/u, "queued workers have an admission gate");
+  assert.match(
+    admissionBlock,
+    /live_head_sha[\s\S]*?EXPECTED_HEAD_SHA[\s\S]*?live_base_sha[\s\S]*?EXPECTED_BASE_SHA/u,
+    "admission revalidates both immutable ref snapshots",
+  );
+  assert.match(
+    admissionBlock,
+    /checkout, AI, Graphify, and publication were skipped/u,
+    "superseded queued workers document the bounded no-op",
+  );
+  assert.ok(
+    resolveBlock.indexOf("Revalidate queued PR snapshot before expensive work") <
+      resolveBlock.indexOf("Check out PR head"),
+    "snapshot admission runs before checkout",
+  );
+  assert.match(
+    checkoutBlock,
+    /steps\.admission\.outputs\.current == 'true'/u,
+    "checkout is impossible for a superseded queued snapshot",
+  );
+  assert.match(
+    startCommentBlock,
+    /steps\.admission\.outputs\.current == 'true'/u,
+    "superseded queued work does not post a misleading start comment",
   );
   assert.doesNotMatch(
     resolveBlock,
