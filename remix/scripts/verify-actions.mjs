@@ -462,6 +462,18 @@ const run = async () => {
 		`schema=${relabeledCrystal.schema} schemaId=${String(relabeledCrystal.schemaId).slice(0, 20)}`
 	);
 
+	// ---- parameterless (PURE) actions — the Lopu round-3 crash class ---------
+	const pure = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: { name: 'Pure pong', actionKey: `pure-${suffix}`, steps: [{ op: 'return', value: 'pong' }] }
+	});
+	check('a parameterless action saves (inputs omitted, not [])', pure.status === 200 && pure.body?.thing?.crystal?.inputs === undefined);
+	const pureRun = await runAction(alice.cookie, { action: `pure-${suffix}` });
+	check(
+		'a parameterless PURE action runs: 0 ops, return is free',
+		pureRun.status === 200 && pureRun.body?.status === 'ok' && pureRun.body?.result === 'pong' && pureRun.body?.opsUsed === 0
+	);
+
 	// ---- docs twins ----------------------------------------------------------
 	const runDocs = await api('/api/v1/actions/run-docs');
 	const runsDocs = await api('/api/v1/actions/runs-docs');
