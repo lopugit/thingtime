@@ -150,20 +150,29 @@ is and isn't reachable today:
   attributes). `useTtActionClicks` reads them and runs the action AS the viewer
   through the ordinary bounded `/api/v1/actions/run`. The firing wrapper lives in
   `ComponentKindRenderer` as `onClickCapture={context.untrusted ? undefined : …}`.
-- **The trusted firing surface is wired but not yet exercised by a shipped
-  route.** `/thing/:id` renders the raw JSON "Thing data" view (no kind render);
-  `/components` catalog + args tester render the template *directly* through the
-  sanitising renderers, bypassing the wrapper (confirmed live: clicking Send in
-  the tester left the invoice `draft`); `/things` cards render with
-  `untrusted: true`. So `ComponentKindRenderer` with `untrusted=false` — the one
-  path that fires ttAction — is correct but has no current end-user route.
-- **What this means for scope.** The click-to-run half of "🧩 Component → ⚡
-  Action → 📦 Data" is built and inspectable; an end-user can't yet click Send
-  in a rendered app because the trusted **app-composition render surface** (the
-  "📁 My App" page that renders a component-kind thing through the kind registry)
-  is beyond this runtime-primitive PR. Today, actions execute from the `/actions`
-  run panel (verified: onboard-customer composition, 5 ops on one shared budget,
-  and send-invoice draft→sent). The app-render surface is the natural next PR.
+- **The trusted firing surface IS shipped and reachable — the `/things`
+  PreviewModal** (`ThingsDialogs.tsx:561`). Opening a `component`-kind thing
+  (grid tile → preview, or the `?preview=<id>` deep link) renders it via
+  `<RenderThing context={{ size: 'full' }}>` — no `untrusted` flag, so
+  `context.untrusted` is falsy and the `onClickCapture` ttAction wrapper is
+  live. **Verified end to end:** opened the seeded "Invoice #0420 (live Send
+  demo)" component (bound to a real invoice), clicked its Send pill in the
+  modal, and the invoice flipped **draft → sent** with `sentAt` stamped and the
+  Lopu toast firing — 🧩 Component → ⚡ Action → 📦 Data, from a rendered
+  component. The grid tiles *behind* the modal carry the same `data-tt-action`
+  but sit under `pointer-events: none`, so a grid click selects, never runs
+  (also verified: those nodes are inert). `/thing/:id` (raw JSON) and the
+  `/components` catalog/tester (rendered directly through the sanitising
+  renderers, bypassing the wrapper) deliberately do **not** fire — confirmed by
+  the invoice staying `draft` when clicked there.
+  (Correction: an earlier draft of this section wrongly said no shipped route
+  exercised the trusted path — it missed the `/things` PreviewModal.)
+- **What this means for scope.** "🧩 Component → ⚡ Action → 📦 Data" is
+  reachable by an end-user today through the `/things` PreviewModal, in addition
+  to the `/actions` run panel (verified: onboard-customer composition, 5 ops on
+  one shared budget; send-invoice draft→sent). A dedicated app-composition page
+  ("📁 My App" rendering many component-kind things together) is a nice future
+  surface, not a prerequisite for the flow to work.
 - **Open product decision (raised on the PR):** whether the `/components` tester
   should also fire ttAction behind a "this will run the action" confirm, or stay
   inert (the current safe default — no side-effectful runs while authoring).
