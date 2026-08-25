@@ -6392,7 +6392,7 @@
   "Commander/script/build_and_run.sh": {
     "mtime": 1787625744.8499658,
     "ast_hash": "b39947d2a7a55b0b8512e809017ef7f9",
-    "semantic_hash": ""
+    "semantic_hash": "b39947d2a7a55b0b8512e809017ef7f9"
   },
   "Commander/script/release-version.mjs": {
     "mtime": 1787576000.3812146,
@@ -6977,7 +6977,7 @@
   "Commander/docs/TESTING.md": {
     "mtime": 1787625196.0921419,
     "ast_hash": "ea536bf835272fca779ddaf005a49655",
-    "semantic_hash": ""
+    "semantic_hash": "ea536bf835272fca779ddaf005a49655"
   },
   "Commander/extensions/README.md": {
     "mtime": 1787576000.2893603,
@@ -7680,7 +7680,7 @@
     "semantic_hash": "3310fd078377d009dbe8fbe6a9aaae3e"
   },
   "Commander/hosts/macos/.build/debug/Commander.swiftmodule/arm64-apple-macos.abi.json": {
-    "mtime": 1787625232.8561974,
+    "mtime": 1787626066.8103712,
     "ast_hash": "0a4af882c2c2f56d36e8540ae8c40bbf",
     "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
   },
@@ -7690,7 +7690,7 @@
     "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
   },
   "Commander/hosts/macos/.build/release/Commander.swiftmodule/arm64-apple-macos.abi.json": {
-    "mtime": 1787578848.65637,
+    "mtime": 1787626097.700079,
     "ast_hash": "0a4af882c2c2f56d36e8540ae8c40bbf",
     "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
   },
@@ -7702,11 +7702,16 @@
   "PRs/389-codex-fix-commander-stuck-spinner--load-all-result-icons.md": {
     "mtime": 1787579195.2282956,
     "ast_hash": "0ced1992dc459aff5b6f35e3234aa19c",
-    "semantic_hash": ""
+    "semantic_hash": "0ced1992dc459aff5b6f35e3234aa19c"
   },
   "Commander/hosts/macos/.build/release/Commander.dSYM/Contents/Resources/Relocations/aarch64/Commander.yml": {
     "mtime": 1787578849.0606124,
     "ast_hash": "6cd0066d316b442ac7b5ded71e6a9082",
     "semantic_hash": "6cd0066d316b442ac7b5ded71e6a9082"
+  },
+  "PRs/389-codex-fix-commander-stuck-spinner-launch-and-icon-beachballs.md": {
+    "mtime": 1787626133.655421,
+    "ast_hash": "49464219d7211df81b7ed3e50f4419d3",
+    "semantic_hash": ""
   }
 }
