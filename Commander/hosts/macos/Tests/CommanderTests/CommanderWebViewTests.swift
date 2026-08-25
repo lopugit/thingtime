@@ -304,6 +304,23 @@ final class CommanderWebViewTests: XCTestCase {
     XCTAssertEqual(renderedPaths.count, 1)
   }
 
+  func testApplicationOpenSubmissionDoesNotWaitForLaunchServicesCompletion() {
+    let target = URL(fileURLWithPath: "/Applications/Notes.app")
+    var submittedURL: URL?
+    var activates: Bool?
+    let opener = CommanderApplicationOpener { url, configuration, _ in
+      submittedURL = url
+      activates = configuration.activates
+      // Deliberately never call the completion handler: this models a stuck
+      // Launch Services XPC reply, which must not hold Commander's UI thread.
+    }
+
+    opener.submit(target)
+
+    XCTAssertEqual(submittedURL, target)
+    XCTAssertEqual(activates, true)
+  }
+
   func testPreparedFileDragKeepsLauncherVisibleUntilTheSessionEnds() throws {
     let ready = DaemonReady(
       type: "ready",

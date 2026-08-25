@@ -173,6 +173,35 @@ install_app() {
   test -x "$installed/Contents/MacOS/$APP_NAME"
 }
 
+launch_installed_app() {
+  local installed="$HOME/Applications/$APP_NAME.app"
+  local host_pattern="^$installed/Contents/MacOS/$APP_NAME$"
+  /usr/bin/open -n "$installed" >/dev/null 2>&1 &
+  local open_pid="$!"
+
+  # `open` can remain blocked waiting for a Launch Services XPC reply after it
+  # has already launched the app. Do not make packaging or verification wait
+  # forever on that helper: give it a short normal-completion window, then
+  # terminate only that helper once the installed host is confirmed running.
+  for _ in {1..20}; do
+    if ! /bin/kill -0 "$open_pid" >/dev/null 2>&1; then
+      if wait "$open_pid"; then return 0; fi
+      echo "Commander launch helper exited before the installed app was ready." >&2
+      return 1
+    fi
+    sleep 0.1
+  done
+  if /usr/bin/pgrep -f "$host_pattern" >/dev/null 2>&1; then
+    /bin/kill -TERM "$open_pid" >/dev/null 2>&1 || true
+    wait "$open_pid" 2>/dev/null || true
+    return 0
+  fi
+  /bin/kill -TERM "$open_pid" >/dev/null 2>&1 || true
+  wait "$open_pid" 2>/dev/null || true
+  echo "Commander launch helper did not start the installed app within two seconds." >&2
+  return 1
+}
+
 stop_installed_runtime() {
   local installed="$HOME/Applications/$APP_NAME.app"
   local host_pattern="^$installed/Contents/MacOS/$APP_NAME$"
@@ -215,11 +244,11 @@ case "$MODE" in
     ;;
   run)
     install_app
-    /usr/bin/open -n "$HOME/Applications/$APP_NAME.app"
+    launch_installed_app
     ;;
   --verify|verify)
     install_app
-    /usr/bin/open -n "$HOME/Applications/$APP_NAME.app"
+    launch_installed_app
     for _ in {1..30}; do
       if /usr/bin/pgrep -f "^$HOME/Applications/$APP_NAME.app/Contents/MacOS/$APP_NAME$" >/dev/null; then break; fi
       sleep 0.1
@@ -256,12 +285,12 @@ case "$MODE" in
     ;;
   --logs|logs)
     install_app
-    /usr/bin/open -n "$HOME/Applications/$APP_NAME.app"
+    launch_installed_app
     /usr/bin/log stream --info --style compact --predicate "process == \"$APP_NAME\""
     ;;
   --telemetry|telemetry)
     install_app
-    /usr/bin/open -n "$HOME/Applications/$APP_NAME.app"
+    launch_installed_app
     /usr/bin/log stream --info --style compact --predicate "subsystem == \"$BUNDLE_ID\""
     ;;
   *)

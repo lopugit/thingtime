@@ -28,6 +28,31 @@ private enum JSONValue: Decodable {
   var array: [JSONValue]? { if case .array(let value) = self { value } else { nil } }
 }
 
+/// Submits application launches to Launch Services without waiting for its XPC reply on
+/// Commander's main actor. Launch Services can occasionally take an unbounded time to
+/// resolve a handler, but that must never make the launcher stop responding.
+@MainActor
+final class CommanderApplicationOpener {
+  typealias OpenURL = (URL, NSWorkspace.OpenConfiguration, @escaping @Sendable (NSRunningApplication?, Error?) -> Void) -> Void
+
+  private let openURL: OpenURL
+
+  init(openURL: @escaping OpenURL = { url, configuration, completionHandler in
+    NSWorkspace.shared.open(url, configuration: configuration, completionHandler: completionHandler)
+  }) {
+    self.openURL = openURL
+  }
+
+  func submit(_ url: URL) {
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = true
+    openURL(url, configuration) { _, error in
+      guard let error else { return }
+      NSLog("Commander could not complete an application launch: \(error.localizedDescription)")
+    }
+  }
+}
+
 @MainActor
 final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
   private static let maximumMessageBytes = 1024 * 1024
@@ -49,6 +74,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
   private let updateWindowMode: (String) throws -> Void
   private let updateWindowPinning: (Bool, Bool, Bool) -> Void
   private let metrics: SystemMetricsService
+  private let applicationOpener: CommanderApplicationOpener
   private let fileIconRequests = CommanderFileIconRequestQueue()
   weak var webView: WKWebView?
 
@@ -76,7 +102,8 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     updateHotKeys: @escaping (String?, [String: String]?) throws -> Void,
     updateMenuBar: @escaping (Bool) -> Void,
     updateWindowMode: @escaping (String) throws -> Void,
-    updateWindowPinning: @escaping (Bool, Bool, Bool) -> Void = { _, _, _ in }
+    updateWindowPinning: @escaping (Bool, Bool, Bool) -> Void = { _, _, _ in },
+    applicationOpener: CommanderApplicationOpener = CommanderApplicationOpener()
   ) {
     self.daemonURL = URL(string: ready.url)!
     self.nativeToken = ready.nativeToken
@@ -95,6 +122,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     self.updateMenuBar = updateMenuBar
     self.updateWindowMode = updateWindowMode
     self.updateWindowPinning = updateWindowPinning
+    self.applicationOpener = applicationOpener
     self.metrics = SystemMetricsService(daemonPID: ready.pid)
     super.init()
   }
@@ -195,9 +223,8 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
       case "application.open":
         guard let raw = request.params?["path"]?.string else { throw BridgeError.missing("path") }
         guard let url = URL(string: raw), url.scheme != nil || raw.hasPrefix("/") else { throw BridgeError.invalidURL }
-        if url.scheme != nil { NSWorkspace.shared.open(url) }
-        else { NSWorkspace.shared.open(URL(fileURLWithPath: raw)) }
-        result = nil
+        applicationOpener.submit(url.scheme != nil ? url : URL(fileURLWithPath: raw))
+        result = ["submitted": true]
       case "application.pasteTarget":
         result = pasteTargetName().map { ["name": $0] } ?? [:]
       case "filesystem.reveal":

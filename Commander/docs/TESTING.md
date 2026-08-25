@@ -52,6 +52,8 @@
 - [ ] Type a new query and press Return immediately, before the search debounce settles. Commander must never execute an item left over from the previous query.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
 - [ ] Open an application, reveal it in Finder, and copy its path through Actions.
+- [ ] Open an indexed application, URL, and System Settings result; if Launch Services takes time to launch any of
+      them, Commander must still dismiss/reopen and accept typing immediately without a rainbow beachball.
 - [ ] Search `accessibility`; verify Accessibility Settings is the first `System` result and Return opens Privacy & Security → Accessibility without changing any permission. Repeat with `screen recording`, `full disk access`, and `login items`.
 - [ ] Search `displays` on a machine whose file index contains many `display*` names. Verify Displays Settings remains the first result above matching applications/files and Return opens System Settings → Displays.
 - [ ] Search for an application and drag its result into a disposable Terminal prompt. Verify the exact shell-escaped `.app` path is inserted, no app opens during the drag, and ordinary click/double-click execution still works. Cancel or clear the prompt without running it; do not mutate macOS Privacy & Security permissions during routine QA.
