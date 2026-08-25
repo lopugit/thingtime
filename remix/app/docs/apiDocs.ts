@@ -832,6 +832,473 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-account-hints',
+    group: 'auth',
+    title: 'Cross-deployment account hints',
+    endpoint: '/api/v1/auth/account-hints',
+    summary: 'Accounts this browser is signed into on other Thingtime deployments, for the auto-login popup.',
+    detail:
+      'Every sign-in writes a { rosterId, origin } pointer into the Domain=.thingtime.com tt_hints cookie, ' +
+      'so production, dev, and preview deployments share it. This endpoint resolves those pointers LIVE ' +
+      'through the same roster + session chokepoints as the account switcher: a hint exists exactly while ' +
+      'its session on the other deployment is live, and dead pointers are pruned (the cookie is rewritten). ' +
+      'Responses carry only public profile hints (username, display name, avatar) — never emails, session ' +
+      'ids, or tokens — and picking a suggestion still requires that account\'s password or passkey. ' +
+      'Same-origin only: no CORS headers, so no cross-site page can read a browser\'s suggestions.',
+    auth: { mode: 'none', description: 'Cookie-driven; works signed out (that is its point).' },
+    methods: ['GET'],
+    steps: [
+      'GET with credentials (the browser sends tt_hints automatically).',
+      'Render hints as "continue as" suggestions; each lists the deployments (origins) it was seen on.',
+      'On pick, prefill the username for password login or call the passkey login ceremony.',
+      'Entries with alreadyHere:true are already in this origin\'s switcher — skip them in the popup.'
+    ],
+    requestExamples: [{ name: 'Fetch suggestions', description: 'Resolve this browser\'s cross-deployment hints.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One live account found on another deployment.',
+        body: {
+          ok: true,
+          hints: [
+            {
+              user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', avatarUrl: null },
+              origins: [{ origin: 'https://thingtime.com', lastSeenAt: '2026-08-19T03:12:00.000Z' }],
+              alreadyHere: false
+            }
+          ]
+        }
+      },
+      { status: 200, description: 'No hints (cookie empty or every session ended).', body: { ok: true, hints: [] } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-account-hints-resolve',
+    group: 'auth',
+    title: 'Resolve own-origin hints (federated)',
+    endpoint: '/api/v1/auth/account-hints/resolve',
+    summary: 'This deployment vouches for the hint pointers ITS origin wrote — the federated half of auto-login.',
+    detail:
+      'Cross-origin, credentialed, CORS-restricted to the Thingtime family (and localhost dev). Another ' +
+      'deployment\'s page calls this when its own /account-hints reported pointers it could not resolve ' +
+      '(different database): the shared tt_hints cookie arrives on the same-site fetch, and THIS deployment ' +
+      'resolves only the pointers its own origin wrote, through the same live roster/session chokepoints. ' +
+      'Each environment answers only for its own sessions — the user\'s browser assembles the full picture; ' +
+      'no deployment ever holds another\'s session state. Read-only: never prunes, never sets cookies.',
+    auth: { mode: 'none', description: 'Cookie-driven; answers only for pointers this origin minted.' },
+    methods: ['GET'],
+    steps: [
+      'GET /api/v1/auth/account-hints on your own origin first.',
+      'For each origin in its `unresolved`, fetch that origin\'s /account-hints/resolve with credentials.',
+      'Merge the returned hints (dedupe by user id) into the "continue as" list.'
+    ],
+    requestExamples: [{ name: 'Federated resolve', description: 'Asked by another deployment\'s page.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'This origin vouches for one live account.',
+        body: { ok: true, hints: [{ user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', avatarUrl: null }, origins: [{ origin: 'https://dev.thingtime.com', lastSeenAt: '2026-08-19T03:12:00.000Z' }], alreadyHere: false }] }
+      },
+      { status: 200, description: 'Nothing to vouch for.', body: { ok: true, hints: [] } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-sso-handoff',
+    group: 'auth',
+    title: 'Mint a cross-origin sign-in code',
+    endpoint: '/api/v1/auth/sso-handoff',
+    summary: 'A signed-in Thingtime surface mints a short-lived, origin-bound, single-use code for another deployment.',
+    detail:
+      'POST { origin } — for Thingtime deployments OUTSIDE the *.thingtime.com cookie family (immutable ' +
+      '*.vercel.app previews, custom domains). The code is a 2-minute purpose-fenced JWT bound to the target ' +
+      'origin (aud), backed by a pre-minted browser session that self-expires if never claimed. The target ' +
+      'page redeems it at ITS OWN /api/v1/auth/sso-session. Origins stay default-open (owner decision) — ' +
+      'security is the per-code binding, TTL, and single use. Used by the /authorize?self=1 popup and the ' +
+      'FedCM assertion endpoint.',
+    auth: { mode: 'session', description: 'Requires a signed-in session (app tokens are rejected).' },
+    methods: ['POST'],
+    steps: [
+      'POST { origin: "https://<target-origin>" } from a signed-in first-party surface.',
+      'Deliver the code to the target page (postMessage from the popup, or the FedCM token).',
+      'The target page POSTs it to its own /api/v1/auth/sso-session within 2 minutes.'
+    ],
+    requestExamples: [
+      { name: 'Mint for a preview', description: 'Sign into an immutable preview deployment.', method: 'POST', body: { origin: 'https://thingtime-abc123-lopugits-projects.vercel.app' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Code minted.', body: { ok: true, code: 'eyJhbGciOi…', aud: 'https://thingtime-abc123-lopugits-projects.vercel.app', expiresAt: '2026-08-19T05:02:00.000Z' } },
+      { status: 401, description: 'Not signed in.', body: { ok: false, error: 'Unauthorized' } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-sso-session',
+    group: 'auth',
+    title: 'Redeem a sign-in code',
+    endpoint: '/api/v1/auth/sso-session',
+    summary: 'Exchange a handoff code for a first-class session on THIS deployment.',
+    detail:
+      'POST { code } — verifies the signature (deployments share JWT key material), requires the code\'s aud ' +
+      'to equal this deployment\'s public origin, claims it atomically exactly once (a second redemption ' +
+      'revokes the session — theft signal), then runs the exact password-login tail: httpOnly auth cookie, ' +
+      'switcher roster merge, cross-deployment hint pointer. Redemption only succeeds where this deployment ' +
+      'shares the minting environment\'s database (an immutable preview and its alias twin do) — anything ' +
+      'else fails closed with a generic error.',
+    auth: { mode: 'none', description: 'The code is the credential.' },
+    methods: ['POST'],
+    steps: [
+      'Receive a code from the /authorize?self=1 popup (postMessage) or a FedCM assertion.',
+      'POST { code } to THIS deployment within 2 minutes.',
+      'On 200 the session cookies are set — treat it like a successful /api/v1/login.'
+    ],
+    requestExamples: [{ name: 'Redeem', description: 'Become a session here.', method: 'POST', body: { code: 'eyJhbGciOi…' } }],
+    responseExamples: [
+      { status: 200, description: 'Signed in.', body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik' } } },
+      { status: 403, description: 'Code bound to a different origin.', body: { ok: false, error: 'This sign-in link belongs to a different site' } },
+      { status: 401, description: 'Expired, replayed, or different environment.', body: { ok: false, error: 'This sign-in link is no longer valid — try again' } }
+    ]
+  }),
+  endpoint({
+    id: 'fedcm-config',
+    group: 'auth',
+    title: 'FedCM provider config',
+    endpoint: '/api/v1/fedcm/config',
+    summary: 'The FedCM identity-provider manifest — where the browser finds the accounts and assertion endpoints.',
+    detail:
+      'Discovered via /.well-known/web-identity at the domain root. Any page can pass this URL as configURL ' +
+      'to navigator.credentials.get({ identity }) and the BROWSER — never the page — fetches the accounts ' +
+      'list with the user\'s first-party Thingtime cookies and renders its native "Continue as …" sheet. ' +
+      'Pure metadata; endpoints are absolute URLs on this deployment.',
+    auth: { mode: 'none', description: 'Public metadata.' },
+    methods: ['GET'],
+    steps: [
+      'Reference it as configURL in navigator.credentials.get({ identity: { providers: [...] } }).',
+      'Use clientId "thingtime-self" for Thingtime deployments (session handoff) or a ttapp_… clientId (app token).',
+      'Redeem the returned token: sso-session for handoff codes, Bearer for app tokens.'
+    ],
+    requestExamples: [{ name: 'Fetch config', description: 'Browser loads the manifest.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Provider manifest.',
+        body: {
+          accounts_endpoint: 'https://thingtime.com/api/v1/fedcm/accounts',
+          client_metadata_endpoint: 'https://thingtime.com/api/v1/fedcm/client-metadata',
+          id_assertion_endpoint: 'https://thingtime.com/api/v1/fedcm/assertion',
+          login_url: 'https://thingtime.com/login',
+          branding: { name: 'Thingtime', background_color: '#16161a', color: '#ffffff' }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'fedcm-accounts',
+    group: 'auth',
+    title: 'FedCM accounts',
+    endpoint: '/api/v1/fedcm/accounts',
+    summary: 'The signed-in accounts behind the browser\'s native "Continue as …" sheet.',
+    detail:
+      'Browser-mediated only: requires Sec-Fetch-Dest: webidentity (page JS can never set Sec-Fetch-*), so ' +
+      'no embedding page can read it — the browser fetches with first-party cookies and draws the sheet ' +
+      'itself. The list is this browser\'s own switcher roster (resolveRoster, ownership-gated), never a ' +
+      'central registry: only sessions this roster owns can later be redeemed by an assertion. Returns 401 ' +
+      'with an empty list when signed out.',
+    auth: { mode: 'none', description: 'First-party cookies via the browser\'s FedCM fetch.' },
+    methods: ['GET'],
+    steps: [
+      'Never call this from page JS — the browser does, during navigator.credentials.get({ identity }).',
+      'Sign into thingtime.com first; the sheet lists the roster accounts.',
+      'Direct (non-FedCM) requests are refused with 400.'
+    ],
+    requestExamples: [{ name: 'Browser fetch', description: 'Sent by the FedCM machinery.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Roster accounts.',
+        body: { accounts: [{ id: '64f000000000000000000002', name: 'Nik', email: 'nik@example.com', picture: 'https://…/avatar.png' }] }
+      },
+      { status: 400, description: 'Not a FedCM fetch.', body: { ok: false, error: 'FedCM requests only' } }
+    ]
+  }),
+  endpoint({
+    id: 'fedcm-client-metadata',
+    group: 'auth',
+    title: 'FedCM client metadata',
+    endpoint: '/api/v1/fedcm/client-metadata',
+    summary: 'Policy links the browser shows alongside the FedCM consent sheet.',
+    detail: 'Standard FedCM metadata endpoint; Thingtime\'s own pages and registered apps share the platform policies.',
+    auth: { mode: 'none', description: 'Public metadata.' },
+    methods: ['GET'],
+    steps: ['Never call directly — the browser fetches it during the FedCM ceremony.'],
+    requestExamples: [{ name: 'Browser fetch', description: 'Sent by the FedCM machinery.', method: 'GET', query: { client_id: 'thingtime-self' } }],
+    responseExamples: [
+      { status: 200, description: 'Policy links.', body: { privacy_policy_url: 'https://thingtime.com/', terms_of_service_url: 'https://thingtime.com/' } }
+    ]
+  }),
+  endpoint({
+    id: 'fedcm-assertion',
+    group: 'auth',
+    title: 'FedCM assertion',
+    endpoint: '/api/v1/fedcm/assertion',
+    summary: 'The browser exchanges the user\'s sheet pick for a token: a session-handoff code or an app token.',
+    detail:
+      'Browser-mediated only (Sec-Fetch-Dest: webidentity), form-encoded { client_id, account_id, nonce? } ' +
+      'with the RP\'s Origin header. The picked account must belong to this browser\'s roster (re-checked ' +
+      'server-side). client_id "thingtime-self" mints a 2-minute aud-bound single-use handoff code the RP ' +
+      'redeems at its own /api/v1/auth/sso-session for a full session; a registered ttapp_… client gets the ' +
+      'same app-scoped Bearer token the consent popup issues, baseline profile scope only (wider grants ' +
+      'still require the consent popup). Errors use the FedCM { error: { code } } shape.',
+    auth: { mode: 'none', description: 'First-party cookies via the browser\'s FedCM fetch; roster ownership enforced.' },
+    methods: ['POST'],
+    steps: [
+      'Never call directly — the browser posts here after the user picks an account on the sheet.',
+      'Thingtime-self RPs redeem the returned token at their own /api/v1/auth/sso-session.',
+      'App RPs use the returned token as a Bearer credential, exactly like a consent-popup grant.'
+    ],
+    requestExamples: [
+      { name: 'Browser assertion', description: 'Form-encoded by the FedCM machinery.', method: 'POST', body: { client_id: 'thingtime-self', account_id: '64f000000000000000000002' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Token minted.', body: { token: 'eyJhbGciOi…' } },
+      { status: 401, description: 'Account not in this browser\'s roster.', body: { error: { code: 'unauthorized' } } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-passkeys-list',
+    group: 'auth',
+    title: 'List passkeys',
+    endpoint: '/api/v1/auth/passkeys',
+    summary: 'The session user\'s passkeys: provider, dates, revocation state, and linked apps.',
+    detail:
+      'Each entry is safe metadata only (nickname, description, provider derived from the authenticator\'s ' +
+      'AAGUID, created/last-used dates, backup state, transports, revokedAt) plus linkedApps — the origins ' +
+      'and SSO apps the passkey has authenticated, with first/last-used timestamps and usage counts. ' +
+      'Credential material (credential id, public key, counter) never leaves the server.',
+    auth: { mode: 'session', description: 'Requires a signed-in session.' },
+    methods: ['GET'],
+    steps: [
+      'GET with credentials.',
+      'Render the list in Settings → Security; revoked entries stay listed until deleted.',
+      'Offer rename/describe (POST /update), revoke (POST /revoke), and delete (POST /delete).'
+    ],
+    requestExamples: [{ name: 'List passkeys', description: 'All passkeys for the session user.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One active passkey.',
+        body: {
+          ok: true,
+          passkeys: [
+            {
+              id: 'a1b2c3d4-…',
+              nickname: 'MacBook Touch ID',
+              description: null,
+              providerName: 'iCloud Keychain',
+              aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
+              deviceType: 'multiDevice',
+              backedUp: true,
+              transports: ['internal', 'hybrid'],
+              createdAt: '2026-08-19T03:00:00.000Z',
+              lastUsedAt: '2026-08-19T04:00:00.000Z',
+              lastUsedOrigin: 'https://thingtime.com',
+              revokedAt: null,
+              linkedApps: [{ appKey: 'origin:https://thingtime.com', appName: 'thingtime.com', firstUsedAt: '2026-08-19T04:00:00.000Z', lastUsedAt: '2026-08-19T04:00:00.000Z', usageCount: 1 }]
+            }
+          ]
+        }
+      },
+      { status: 401, description: 'Not signed in.', body: { ok: false, error: 'Unauthorized' } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-passkeys-register-options',
+    group: 'auth',
+    title: 'Start passkey registration',
+    endpoint: '/api/v1/auth/passkeys/register-options',
+    summary: 'Password-confirmed WebAuthn creation options for adding a passkey to the session account.',
+    detail:
+      'POST { password } — re-confirms the current password (adding a passkey mints a durable credential), ' +
+      'then returns navigator.credentials.create options and sets a signed 10-minute challenge cookie. ' +
+      'Options request a DISCOVERABLE credential (residentKey required), which is what makes usernameless ' +
+      'login and the browser\'s conditional-UI autofill (iCloud Keychain, 1Password) work. Existing ' +
+      'credentials are excluded so the same authenticator can\'t double-register. The rpID is ' +
+      'thingtime.com for every *.thingtime.com deployment, so one passkey works on production, dev, and ' +
+      'previews alike.',
+    auth: { mode: 'session', description: 'Requires a signed-in session; the body re-confirms the password.' },
+    methods: ['POST'],
+    steps: [
+      'POST { password } with credentials.',
+      'Pass the returned options to navigator.credentials.create (via @simplewebauthn/browser startRegistration).',
+      'POST the attestation to /api/v1/auth/passkeys/register within 10 minutes.',
+      'Wrong password → 403; 25-passkey cap → 409.'
+    ],
+    requestExamples: [{ name: 'Start registration', description: 'Confirm the password and mint options.', method: 'POST', body: { password: 'hunter22!' } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Creation options (challenge cookie set).',
+        body: { ok: true, options: { challenge: 'sYm…', rp: { name: 'Thingtime', id: 'thingtime.com' }, user: { id: 'NjRm…', name: 'nik', displayName: 'Nik' }, authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' } } }
+      },
+      { status: 403, description: 'Password mismatch.', body: { ok: false, error: 'Wrong password' } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-passkeys-register',
+    group: 'auth',
+    title: 'Finish passkey registration',
+    endpoint: '/api/v1/auth/passkeys/register',
+    summary: 'Verify the attestation from the browser and store the new passkey.',
+    detail:
+      'POST { response, nickname?, description? } where response is the JSON result of ' +
+      'navigator.credentials.create. Verified against the challenge cookie from /register-options ' +
+      '(user verification required), then stored as a protected `passkey` thing: metadata in crystal, ' +
+      'credential material in the secure blob, global credential-id uniqueness via uniqueKeys. The ' +
+      'nickname defaults to the provider name derived from the authenticator\'s AAGUID (e.g. ' +
+      '"1Password", "iCloud Keychain").',
+    auth: { mode: 'session', description: 'Requires the same signed-in session that started the ceremony.' },
+    methods: ['POST'],
+    steps: [
+      'Run startRegistration(options) in the browser (the platform sheet offers Save to iCloud Keychain / 1Password).',
+      'POST { response, nickname?, description? } with credentials.',
+      'Render the returned passkey in the manager; the challenge cookie is cleared.',
+      'A credential registered anywhere on Thingtime already → 409.'
+    ],
+    requestExamples: [
+      {
+        name: 'Finish registration',
+        description: 'Store the verified credential.',
+        method: 'POST',
+        body: { response: { id: 'B64URL…', rawId: 'B64URL…', type: 'public-key', response: { clientDataJSON: '…', attestationObject: '…' } }, nickname: 'MacBook Touch ID' }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Passkey stored.', body: { ok: true, passkey: { id: 'a1b2c3d4-…', nickname: 'MacBook Touch ID', providerName: 'iCloud Keychain', revokedAt: null } } },
+      { status: 400, description: 'Challenge expired.', body: { ok: false, error: 'This passkey setup expired — start again' } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-passkeys-login-options',
+    group: 'auth',
+    title: 'Start passkey login',
+    endpoint: '/api/v1/auth/passkeys/login-options',
+    summary: 'WebAuthn request options for a usernameless, discoverable-credential login.',
+    detail:
+      'POST (no body, no auth) — returns navigator.credentials.get options with EMPTY allowCredentials ' +
+      'and sets a signed 10-minute challenge cookie. Empty allowCredentials means the authenticator lists ' +
+      'whatever Thingtime passkeys it holds (no username, no enumeration surface) — this is also the ' +
+      'options payload for conditional-UI autofill: request it on login-form mount with ' +
+      'mediation:"conditional" and Safari/Chrome surface the iCloud Keychain / 1Password passkey popup ' +
+      'directly on the username field.',
+    auth: { mode: 'none', description: 'Anonymous — this begins a login.' },
+    methods: ['POST'],
+    steps: [
+      'POST once when the login surface mounts (conditional) or on "Sign in with a passkey" (modal).',
+      'Pass options to startAuthentication (useBrowserAutofill for conditional UI).',
+      'POST the assertion to /api/v1/auth/passkeys/login within 10 minutes.'
+    ],
+    requestExamples: [{ name: 'Mint options', description: 'Start a passkey login.', method: 'POST' }],
+    responseExamples: [
+      { status: 200, description: 'Request options (challenge cookie set).', body: { ok: true, options: { challenge: 'kJd…', rpId: 'thingtime.com', allowCredentials: [], userVerification: 'preferred' } } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-passkeys-login',
+    group: 'auth',
+    title: 'Finish passkey login',
+    endpoint: '/api/v1/auth/passkeys/login',
+    summary: 'Verify a passkey assertion and sign in — cookies, switcher roster, and hints included.',
+    detail:
+      'POST { response, clientId? } where response is the JSON result of navigator.credentials.get. The ' +
+      'credential is looked up by id, revocation is checked BEFORE any cryptography, the assertion is ' +
+      'verified (user verification required) against the challenge cookie, and the login then finishes ' +
+      'exactly like password login: httpOnly auth cookie, account merged into the switcher roster, ' +
+      'cross-deployment hint updated. Passkeys bypass email-OTP 2FA by design (possession + on-device ' +
+      'verification IS multi-factor). The optional clientId records which registered app the login served ' +
+      'on the passkey\'s linkedApps. Sessions carry meta.method:"passkey" for auditability.',
+    auth: { mode: 'none', description: 'Anonymous — the assertion is the credential.' },
+    methods: ['POST'],
+    steps: [
+      'Run startAuthentication(options) in the browser.',
+      'POST { response } with credentials; include clientId when the login serves an SSO/app flow.',
+      'On 200 the session cookies are set — treat it like a successful /api/v1/login.',
+      'Revoked or unknown credentials → 401 with a deliberately generic error.'
+    ],
+    requestExamples: [
+      {
+        name: 'Finish login',
+        description: 'Present the assertion.',
+        method: 'POST',
+        body: { response: { id: 'B64URL…', rawId: 'B64URL…', type: 'public-key', response: { clientDataJSON: '…', authenticatorData: '…', signature: '…', userHandle: 'B64URL…' } } }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Signed in.', body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik' }, passkeyId: 'a1b2c3d4-…' } },
+      { status: 401, description: 'Unknown, revoked, or unverifiable credential.', body: { ok: false, error: 'This passkey is not registered here' } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-passkeys-update',
+    group: 'auth',
+    title: 'Rename / describe a passkey',
+    endpoint: '/api/v1/auth/passkeys/update',
+    summary: 'Update a passkey\'s nickname and/or description.',
+    detail:
+      'POST { id, nickname?, description? } — metadata only, so no password confirmation (nothing here ' +
+      'changes what the credential can do). An empty description clears it; nicknames cannot be empty.',
+    auth: { mode: 'session', description: 'Requires the passkey\'s owner session.' },
+    methods: ['POST'],
+    steps: ['POST { id, nickname?, description? } with credentials.', 'Render the returned passkey.'],
+    requestExamples: [
+      { name: 'Rename', description: 'Set a friendlier name.', method: 'POST', body: { id: 'a1b2c3d4-…', nickname: 'Work MacBook', description: 'Touch ID on the office laptop' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Updated.', body: { ok: true, passkey: { id: 'a1b2c3d4-…', nickname: 'Work MacBook' } } },
+      { status: 404, description: 'Not yours / unknown id.', body: { ok: false, error: 'Passkey not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-passkeys-revoke',
+    group: 'auth',
+    title: 'Revoke a passkey',
+    endpoint: '/api/v1/auth/passkeys/revoke',
+    summary: 'Password-confirmed, immediate, permanent block on a passkey\'s ability to log in.',
+    detail:
+      'POST { id, password } — sets revokedAt; the login endpoint rejects revoked credentials before any ' +
+      'signature work. The record stays listed (audit trail) until deleted via /delete. Password ' +
+      'confirmation keeps a walk-up attacker with an unlocked session from silently disabling the ' +
+      'owner\'s passkeys.',
+    auth: { mode: 'session', description: 'Requires the passkey\'s owner session; the body re-confirms the password.' },
+    methods: ['POST'],
+    steps: [
+      'POST { id, password } with credentials.',
+      'The passkey shows as revoked in the manager immediately.',
+      'Delete it via /api/v1/auth/passkeys/delete to free the authenticator for re-registration.'
+    ],
+    requestExamples: [{ name: 'Revoke', description: 'Block this passkey.', method: 'POST', body: { id: 'a1b2c3d4-…', password: 'hunter22!' } }],
+    responseExamples: [
+      { status: 200, description: 'Revoked.', body: { ok: true, passkey: { id: 'a1b2c3d4-…', revokedAt: '2026-08-19T05:00:00.000Z' } } },
+      { status: 409, description: 'Already revoked.', body: { ok: false, error: 'This passkey is already revoked' } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-passkeys-delete',
+    group: 'auth',
+    title: 'Delete a revoked passkey',
+    endpoint: '/api/v1/auth/passkeys/delete',
+    summary: 'Password-confirmed removal of a REVOKED passkey and its linked-app records.',
+    detail:
+      'POST { id, password } — refuses non-revoked passkeys (409), keeping "working credential" → "gone" ' +
+      'a deliberate two-step path. Deletion also removes the passkey\'s linked-app records and frees the ' +
+      'authenticator to register a fresh passkey.',
+    auth: { mode: 'session', description: 'Requires the passkey\'s owner session; the body re-confirms the password.' },
+    methods: ['POST'],
+    steps: ['Revoke the passkey first.', 'POST { id, password } with credentials.', 'The passkey and its linked apps are gone.'],
+    requestExamples: [{ name: 'Delete', description: 'Remove a revoked passkey.', method: 'POST', body: { id: 'a1b2c3d4-…', password: 'hunter22!' } }],
+    responseExamples: [
+      { status: 200, description: 'Deleted.', body: { ok: true } },
+      { status: 409, description: 'Still active.', body: { ok: false, error: 'Revoke this passkey before deleting it' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-set-admin',
     group: 'admin',
     title: 'Promote / demote admin',
@@ -4938,6 +5405,83 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'Revocable from both sides: the developer deletes the app (/api/v1/apps/delete), or the user disconnects it (/api/v1/oauth/grants/revoke) — the token dies before its exp like every Thingtime JWT.'
+    ]
+  }),
+  endpoint({
+    id: 'oauth-desktop-authorize',
+    group: 'embed',
+    title: 'Desktop authorize (issue PKCE code)',
+    endpoint: '/api/v1/oauth/desktop/authorize',
+    summary: 'Turn installed-app consent into a short-lived one-time code for an exact loopback callback.',
+    detail:
+      'POST from the first-party consent page with clientId, redirectUri, S256 codeChallenge, state, and approved scopes. The callback must be plain HTTP on 127.0.0.1 or [::1] with an explicit unprivileged port and an allowlisted exact origin. The response contains a five-minute code and echoed state; it cannot authenticate a normal Thingtime endpoint and is consumed once at /api/v1/oauth/token.',
+    auth: { mode: 'session', description: "The end user's Thingtime browser session after explicit consent." },
+    methods: ['POST'],
+    steps: [
+      'Bind the loopback listener before opening the system browser.',
+      'Open /authorize with client_id, redirect_uri, code_challenge, code_challenge_method=S256, and state.',
+      'Verify the callback state before exchanging its code.'
+    ],
+    requestExamples: [
+      {
+        name: 'Issue one-time code',
+        description: 'Commander consent with private cloud settings storage.',
+        method: 'POST',
+        body: {
+          clientId: 'ttapp_example',
+          redirectUri: 'http://127.0.0.1:45432/oauth/callback',
+          codeChallenge: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          codeChallengeMethod: 'S256',
+          state: 'opaque-request-state',
+          scope: 'profile.username app-data',
+          scopes: ['profile.username', 'app-data']
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Code issued; the consent page navigates to the local callback.',
+        body: { ok: true, redirectTo: 'http://127.0.0.1:45432/oauth/callback?code=<one-time-code>&state=opaque-request-state' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'oauth-token',
+    group: 'embed',
+    title: 'Desktop token exchange',
+    endpoint: '/api/v1/oauth/token',
+    summary: 'Exchange a one-time desktop authorization code with its S256 verifier.',
+    detail:
+      'POST { grantType: "authorization_code", clientId, redirectUri, code, codeVerifier }. Native apps are public clients: an exact callback, five-minute one-time code, and PKCE verifier replace a client secret. Success returns the existing revocable, origin-bound app token.',
+    auth: { mode: 'none', description: 'The one-time code plus S256 verifier are the public client proof.' },
+    methods: ['POST'],
+    steps: [
+      'Verify callback state.',
+      'Exchange the code with the original verifier and exact callback URI.',
+      'Store accessToken in the OS credential vault.'
+    ],
+    requestExamples: [
+      {
+        name: 'Exchange',
+        description: 'Consume the loopback code once.',
+        method: 'POST',
+        body: {
+          grantType: 'authorization_code',
+          clientId: 'ttapp_example',
+          redirectUri: 'http://127.0.0.1:45432/oauth/callback',
+          code: '<one-time-code>',
+          codeVerifier: '<43-to-128-character-pkce-verifier>'
+        }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'App token minted.', body: { ok: true, accessToken: '<app-scoped-jwt>', tokenType: 'Bearer' } },
+      {
+        status: 400,
+        description: 'Wrong verifier, mismatch, expiry, or replay.',
+        body: { ok: false, error: 'Authorization code is invalid, expired, already used, or does not match this request' }
+      }
     ]
   }),
   endpoint({

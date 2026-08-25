@@ -17,7 +17,110 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Security
+
+- **Passkey app links join the relationship-uniqueness family.** `passkey-app-link`
+  shipped in #323 with its own kind-blind `crystal.linkKey` unique index —
+  authored while #320/#325/#326 were retiring exactly that pattern. A
+  free-form data crystal could take the slot (blocking a passkey's linked-app
+  record) or, worse, hold a DUPLICATE of it, which fails the whole boot-time
+  index battery on E11000 and takes registration/login down with it. Dedupe
+  now rides the server-only root `uniqueKeys` namespace
+  (`linkKey:<passkeyId>:<appKey>`, stamped through the shared
+  `relationshipUniqueKeys` helper), the per-login upsert matches on that same
+  stamped value (served by the existing `uniqueKeys` index, with a crystal-path
+  fallback until legacy rows are backfilled), and the unique index is retired
+  outright — no replacement lookup index needed, one less index on the busiest
+  collection. The existing `backfill-relationship-unique-keys` migration is
+  map-driven, so re-running it stamps legacy rows. Regression-pinned in
+  `verify-passkeys.mjs` (47 checks). — Claude (AI), 2026-08-25
+
+### Changed
+
+- **Lopu CodeQL now covers every PR target and branch**: an unfiltered PR
+  listener, all-branch push listener, scheduled backstop, and protected reusable
+  implementation replace default-branch-only scanning. A metadata-only
+  default-branch target event also dispatches exact-ref analysis for PRs whose
+  target predates the listener, without checking out code or exposing AI
+  credentials in the privileged run. Targets that already carry a listener
+  keep the normal PR check as owner; older targets use their merge ref, with a
+  head-ref fallback when the merge ref is missing or its parents are stale.
+  Live-state fences and existing two-language snapshots reject stale or
+  duplicate work. The README documents the ordered
+  default-setup-to-advanced-setup activation and its two repository variables.
+  — Codex (AI), 2026-08-25
+- **Signed Desktop PR releases now use the protected `github-actions` control
+  plane**: this branch contains only a `pull_request_target`/manual listener;
+  the owner-and-label gate, immutable PR-SHA checkout, unsigned verification,
+  signing, notarization, and prerelease publishing remain in the reusable
+  implementation. — Codex (AI), 2026-08-24
+
+### Added
+
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
+
 ### Fixed
+
+- **The default-branch all-builder listener no longer cancels its protected
+  worker before the durable queue starts**: `main` now matches `develop` by
+  leaving concurrency ownership entirely to the `github-actions`
+  implementation. Bursty PR/push events therefore remain queued instead of
+  cancelling an in-flight all-branch rebuild at the caller boundary. — Codex
+  (AI), 2026-08-25
+- **Lopu is the only automatic promotion and branch-sync entrypoint**: the
+  three product-branch workflows that separately promoted develop, promoted
+  features, and synchronized main into develop are removed. Their protected
+  implementations are non-cancelling reusable jobs inside **Lopu PR manager**;
+  develop pushes, main pushes, the six-hour backstop, and explicit
+  `maintenance_operation` recovery now all enter through that one workflow.
+  — Codex (AI), 2026-08-25
+- **One automatic Lopu owns merge, stale-branch, rebase, and stack work**: the
+  legacy rebase listener is now an internal `repository_dispatch` handoff only,
+  so a branch push cannot spawn a competing standalone rebase run that gets
+  cancelled when the unified manager starts its embedded rebase lane. Manual
+  recovery also goes through **Lopu PR manager**. — Codex (AI), 2026-08-25
+- **Lopu's default-branch listener can start every repository-manager lane**:
+  the thin reusable-workflow caller now grants the maximum `security-events`
+  permission required by its isolated CodeQL reader/writer jobs. GitHub no
+  longer rejects `check_run`, comment, push, or scheduled Lopu runs before any
+  job is created, while the model review job remains read-only and alert
+  dispositions stay in the separately fenced writer. — Codex (AI), 2026-08-25
+- **CodeQL promotion remains valid when release-listener work overlaps**: the
+  main promotion now keeps one Electron release-listener contract block rather
+  than combining two independently valid additions into duplicate JavaScript
+  declarations. — Codex (AI), 2026-08-25
+- **Build all branch listener can dispatch its control-plane worker**: the
+  reusable workflow's push handoff requires `actions: write`; the main listener
+  now grants that inherited permission instead of failing at workflow startup.
+  — Codex (AI), 2026-08-24
+- **PR #299 Messenger membership durability**: unordered batched member writes
+  now treat duplicate-key failures as benign only when the Mongo driver reports
+  no accompanying write-concern failure. The check covers the current driver's
+  concern-only and result-level error shapes and fails closed when the result
+  cannot be inspected. — Codex (AI), 2026-08-24
+- **Storage-accounting migrations retain protected attachment fields**: the
+  pending census and real whole-account backfill now project the complete
+  attachment object envelope before calculating canonical bytes, preventing
+  legitimate preview uploads from stopping migration with
+  `InvalidAttachmentStorageEnvelopeError`. — Codex (AI), 2026-08-23
 
 - **Media layout selections now reach the Things API**: the shared client API
   transport preserves `mediaLayout` for post creation and rich comments, so a
@@ -71,7 +174,109 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Verified via S3 preflight (bucket CORS already allowed the preview origins
   — only the page policy blocked the connection). — Claude (AI), 2026-08-19
 
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
+
+### Performance
+
+- **PR #299 performance audit — findings, notes and fixes**: full ten-dimension
+  audit of the codebase with every finding adversarially verified against the
+  real source (74 raw → 63 confirmed, 11 refuted); see
+  `PRs/299-claude-thingtime-performance-optimization-55ea95-performance-audit-findings-notes-and-fixes.md`
+  for the complete record. Landed this round: route-level code splitting plus
+  removal of the never-rendered FontAwesome solid set, taking the entry chunk
+  from 1,165 KB to 168 KB gzipped (−86%); `resolveSessionUser` now resolves
+  session, user and subscription concurrently, turning three sequential Mongo
+  round trips into one on every authenticated request; `useRecentReactions`
+  shares a single fetch across all consumers (8 → 1 identical requests per page,
+  ~40 → 1 on a 20-post feed); chat-member writes batch into one `insertMany`
+  (50 → 1 round trips per add); `toPublicPosts` overlaps attachment and profile
+  resolution; and the notifications bell no longer polls hidden tabs.
+  — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round two**: content-hashed `/assets/` now ship
+  `immutable` caching (index.html's ~80 eagerly-referenced chunks stopped costing
+  a conditional GET per repeat visit, restoring the zero-network disk-cache
+  path); the comment permalink's ancestor ACL checks share one batched lookup
+  (was n + n(n-1)/2 sequential round trips at nesting depth n); search result
+  pages use the same batched walk; a partial index backs the unread-notification
+  badge so the count no longer fetches every notification a user ever received;
+  `buildSummaryContext` resolves in 3 dependency stages instead of 6 serial ones;
+  the messenger access gate resolves chat and membership together; and the
+  `/api/docs` render cache is LRU-bounded (it was keyed by the caller-controlled
+  Host header). — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round three**: `resolveRelated`'s child reads are
+  projected (dropping each comment's `extended` sidecar, up to 512KB per doc)
+  and the reply aggregate projects before `$group`, removing a 100MB
+  `$group`-cap failure mode on large threads; a `{kind, createdAt, shareId}`
+  index gives the dual-era post match a sortable v1 branch, so the feed stops
+  fetching every visible post and sorting in memory; a sparse `shareOfId` index
+  turns the live share-count aggregation from a full collection scan into an
+  indexed lookup on every feed page, post read and reaction toggle; chat member
+  existence checks batch into two queries; and the feed's post row is memoized
+  so `PostCard`'s `React.memo` actually hits. — Claude (AI), 2026-08-18
+- **PR #299 independent review**: every push was re-reviewed by a second
+  session (verification record in the PR note's "Review record" section);
+  no invalid changes found. One hardening landed from review:
+  `insertChatMembers` rethrows bulk write-concern failures instead of
+  swallowing them with the benign duplicate-key races, matching the old
+  per-id `insertOne` semantics. The `readAt: null` partial-index spec was
+  confirmed against the production cluster's MongoDB 8.0.1.
+  — Claude (AI), 2026-08-18
+- **PR #299 follow-up review**: `resolveRelated`'s narrow child projection now
+  retains `crystal.mediaLayout`, so rich comments keep their selected Rows/Grid
+  layout across feed, profile, and permalink reloads instead of silently
+  falling back to masonry. A focused projection-contract regression test covers
+  every direct-comment and eagerly shipped reply-level use of that field.
+  — Codex (AI), 2026-08-24
+
 ### Added
+
+- **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
+  Three layers, all powered by the browser's own sessions — never a central
+  session store. (1) *Federated hint resolution*: `/api/v1/auth/account-hints`
+  now reports foreign-database origins as `unresolved`, and the client fans
+  out to each origin's new `/account-hints/resolve` (CORS restricted to the
+  Thingtime family, credentialed, read-only) so every environment vouches
+  only for its own sessions. (2) *Cross-origin session handoff*: a signed-in
+  surface mints a 2-minute, aud-bound, single-use code
+  (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
+  cookie family (immutable `*.vercel.app` previews) redeems at its own
+  `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
+  the session (theft signal), different-environment redemption fails closed;
+  the `/authorize?self=1` popup ("Continue to <host>?") and a
+  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) *FedCM
+  identity provider*: `/.well-known/web-identity` + config/accounts/
+  client-metadata/assertion endpoints let Chromium render its native
+  "Continue as…" sheet on any domain from the switcher roster
+  (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,
+  assertion mints handoff codes for Thingtime-self or baseline app tokens for
+  registered clients). E2E: `remix/scripts/verify-federated-login.mjs` — 31
+  checks against two stacks on separate mongods, including the full
+  FedCM→assertion→session loop. — Claude (AI), 2026-08-19
+
+- **Passkeys (WebAuthn) + cross-deployment auto-login.** Full passkey support:
+  password-confirmed registration (`POST /api/v1/auth/passkeys/register-options`
+  → `/register`), usernameless discoverable login (`/login-options` → `/login`,
+  bypasses email-OTP by design, sessions carry `meta.method: "passkey"`), and a
+  Settings → Security manager (nicknames, descriptions, provider names derived
+  from authenticator AAGUIDs, created/last-used dates, linked apps, revoke +
+  delete, both password-confirmed). rpID is `thingtime.com` for every
+  `*.thingtime.com` deployment so one passkey works on production, dev, and
+  previews; conditional-UI autofill (`autocomplete="username webauthn"` +
+  `mediation: conditional`) surfaces the native iCloud Keychain / 1Password
+  popups on the login form. Credentials are protected `passkey` things (secure
+  blob + uniqueKeys, HOME collection — a `tt_mongo` override can never capture
+  or plant credentials); usage records are `passkey-app-link` child things.
+  Auto-login: every sign-in writes a `{rosterId, origin}` pointer into the
+  `Domain=.thingtime.com` `tt_hints` cookie; `GET /api/v1/auth/account-hints`
+  resolves pointers live (same roster/session chokepoints as the switcher) so
+  signed-out visitors get a "Continue as…" popup listing accounts with live
+  sessions on other deployments — picking one still requires that account's
+  password or passkey. E2E-verified by `remix/scripts/verify-passkeys.mjs`, a
+  software WebAuthn authenticator (P-256 + CBOR) driving the real API (44
+  checks). — Claude (AI), 2026-08-19
 
 - **Admin AI-moderation settings + free omni text moderation (2026-08-19,
   Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
@@ -195,6 +400,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Native iOS drawer and media capture**: the iOS WebView now uses the same
+  fixed drawer trigger as mobile web, so opening the drawer keeps its close
+  control inside the panel instead of translating it with the top nav. The
+  generated app Info.plist now declares camera, microphone, and photo-library
+  purpose strings so WebKit's Take Photo or Video flow requests permission
+  instead of terminating the app. — Codex (AI), 2026-08-17
 - **Manual develop-preview recovery reaches its controller**: the thin `main`
   listener now converts `workflow_dispatch`'s string PR number to the numeric
   input required by the protected reusable workflow. Manual recovery no longer
@@ -220,6 +431,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Native iOS per-branch deployment history**: the Vercel deployments API now
+  preserves its existing latest-per-branch response while optionally returning
+  a bounded newest-first history for each branch. The native Web destination
+  drawer presents that history as a second disclosure level, marks the most
+  recent ready deployment as `Last successful` when a newer build is queued,
+  and keeps every specific deployment URL directly selectable. Signed iOS
+  build 15 targets the matching branch preview and is available to internal
+  TestFlight testers. — Codex (AI), 2026-08-18
 - **Recoverable first-session Things space**: a fresh browser can land on
   `/things` and immediately receive the real Things UI through a rate-limited
   temporary user Thing, bounded subscription, normal browser session, and

@@ -6,6 +6,91 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Passkeys + cross-deployment auto-login
+
+- [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
+      unique index: `node scripts/verify-passkeys.mjs` covers it (two data
+      things may share one `crystal.linkKey`; the real link still dedupes to
+      one row and keeps counting). After deploying, re-run the
+      `backfill-relationship-unique-keys` migration from /admin so legacy
+      `passkey-app-link` rows get stamped — until then they dedupe through the
+      crystal-path fallback in the upsert filter.
+- [ ] `things_passkey_link_key_unique` is gone from the `things` collection
+      after a boot (`db.things_v2.getIndexes()`). On a dev machine running
+      several worktrees against ONE local mongod, a sibling checkout still on
+      pre-fix code re-creates it at its next boot — drop it again and update
+      that worktree; it is not a code regression.
+
+- [ ] Settings → Security → "Add a passkey ✨": wrong password → error toast,
+      no platform sheet; correct password → the browser/1Password/iCloud sheet
+      opens and the saved passkey appears in the list with provider name,
+      created date, and your nickname. Cancelling the sheet shows NO error
+      toast (cancel is silent).
+- [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
+      44/44 — full software-authenticator ceremony: registration, duplicate
+      409, challenge replay refusals, usernameless login, lastUsed + linked
+      apps, revocation blocking login, revoke-before-delete, hint liveness.
+- [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
+      sheet → welcome toast → roster merged, other accounts untouched); the
+      username field offers the browser's own passkey autofill popup
+      (conditional UI) on browsers that support it.
+- [ ] Revoked passkey: revoke (password-confirmed) → the passkey stops logging
+      in IMMEDIATELY (401), stays listed with a Revoked badge, Delete appears
+      only after revocation and asks for the password again.
+- [ ] Passkey login bypasses email-OTP 2FA (a 2FA-enabled account logs
+      straight in with a passkey — the passkey is the second factor).
+- [ ] Auto-login popup: with a live session on another `*.thingtime.com`
+      deployment, a signed-out visit shows the "Continue as… ✨" corner card;
+      picking an account routes to `/login?u=<username>` with the username
+      prefilled and password focused; "Not now" snoozes it for a day; it never
+      renders on `/login`, `/register`, `/authorize`, `/reset-password`, or
+      while signed in.
+- [ ] Hint liveness: log out on the OTHER deployment → the suggestion
+      disappears here on the next fetch (hints resolve live sessions, never a
+      cached identity). `GET /api/v1/auth/account-hints` responses carry no
+      email — only id/username/displayName/avatarUrl.
+
+## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
+
+- [ ] Commander desktop OAuth: from the signed macOS Commander app, open
+      Thingtime login and complete consent in the system browser. The callback
+      must reach only Commander’s exact `127.0.0.1` loopback origin, exchange
+      a one-time S256 PKCE code, and create the expected Keychain-backed
+      account. Replaying the callback code, changing the callback URI, or
+      changing the verifier must fail without creating another grant.
+
+- [ ] `node scripts/verify-federated-login.mjs` passes (31 checks) against two
+      stacks on DIFFERENT databases (recipe in the script header — stack B
+      must be a production build; a second dev stack silently shares `.env`'s
+      database). Proves: per-environment hint authority + federated resolve
+      (CORS allow family / deny others, read-only), handoff aud binding,
+      cross-environment fail-closed, single-use + replay-revokes-session, and
+      the full FedCM accounts→assertion→session loop.
+- [ ] On a `*.thingtime.com` page, DevTools → Network shows at most
+      `MAX_FEDERATED_ORIGINS` (4) `/account-hints/resolve` fan-out fetches,
+      only for origins the local endpoint reported `unresolved`, and the
+      popup/login strip merges accounts without duplicate users.
+- [ ] On a NON-thingtime origin (immutable `*.vercel.app` preview) while
+      signed out: the corner card offers "Sign in with Thingtime 🌈" (never
+      the hints list); the button opens the `/authorize?self=1` popup, the
+      popup shows "Continue to <host>?" with the ACTIVE account, Continue
+      signs the page in (welcome toast) and the popup closes; Cancel closes
+      with nothing shared. In Chrome with FedCM available, the native
+      "Continue as" sheet ALSO auto-appears on page load (no click; the
+      browser's own dismissal cooldown governs re-prompts) and completes the
+      same loop. Until the hub code is live on production thingtime.com, set
+      `localStorage['tt-sso-hub'] = '"https://pr-<N>.previews.dev.thingtime.com"'`
+      (JSON string, matching localCache format) on the foreign origin to
+      point both flows at a preview hub sharing the deployment's database.
+- [ ] The `/authorize?self=1` popup signed OUT shows the embedded login (with
+      the cross-deployment hints strip) before the confirm card.
+- [ ] Replaying a captured sso-session code fails AND kills the session it
+      minted (theft response); a code redeemed on the wrong origin 403s; an
+      expired (>2 min) code 401s.
+- [ ] FedCM endpoints refuse non-browser fetches (no
+      `Sec-Fetch-Dest: webidentity` → 400) and `/fedcm/accounts` 401s when
+      signed out.
+
 ## Public upload approval (new-signup permissions)
 
 - [ ] Register a brand-new account. `POST /api/v1/auth/register` returns
@@ -129,6 +214,21 @@ is fixed, and cite the checklist you ran in the PR description.
       remain automatic. CODEOWNERS presence alone is not an enforcement check;
       independent CODEOWNER approval is optional future hardening once a second
       trusted collaborator can review changes.
+- [ ] Enable `CODEQL_CENTRAL_PR_ENABLED` and update a PR targeting an older
+      feature or stack branch that does not contain the CodeQL listener. The
+      `pull_request_target` run must perform metadata-only handoff with no
+      checkout, CodeQL initialization, AI secret, or repository code execution;
+      its separate `workflow_dispatch` run must revalidate the live head and
+      upload both language categories against the exact merge ref. Repeat with
+      a conflicting PR whose old merge ref still exists: its parent mismatch
+      must be reported and the fallback must scan `refs/pull/<number>/head`.
+- [ ] Update a PR whose target already carries the normal listener. Its
+      `pull_request` run—not the target-context fallback—must remain the owner
+      of both Analyze job contexts required by branch protection.
+- [ ] Re-dispatch the same unchanged PR head after both CodeQL categories are
+      present: the protected scope job must report that analysis is complete and
+      skip initialization. Dispatch an older expected SHA and confirm it no-ops
+      rather than scanning or publishing against stale PR state.
 - [ ] In Vercel, confirm `dev.thingtime.com` is bound to the literal `develop`
       Git branch and has no domain `customEnvironmentId`, rather than being
       bound to the whole Custom Environment; the Custom Environment's own domain
@@ -190,11 +290,24 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## iOS web destination drawer
 
-- [ ] Confirm `https://thingtime.com/api/v1/vercel/deployments?limit=50` reports
-      `source: "api"`, `hasError: false`, and more than the production `main`
-      deployment before testing the native picker. A tokenless response or
-      `Vercel API returned 403` means the Vercel project token must be repaired
-      and a fresh deployment built before the app can discover previews.
+- [ ] At a phone-width native WebView destination, open the web app navigation
+      drawer from the top-left menu icon. The same fixed icon used by mobile web
+      stays inside the drawer header while the page and top nav move aside; no
+      duplicate icon appears at the drawer's outside edge. Close it, scroll from
+      the page top to bottom, reopen it, and confirm the icon remains tappable.
+- [ ] From any media composer in the native iOS app, choose Add Media → Take
+      Photo or Video. The system requests camera access instead of terminating
+      the app; photo capture returns a selectable file. Repeat with video and
+      confirm microphone permission is requested, then verify Photo Library
+      selection still returns media without a crash.
+- [ ] Confirm
+      `https://thingtime.com/api/v1/vercel/deployments?limit=50&history=10`
+      reports `source: "api"`, `hasError: false`, and `deploymentGroups` with
+      up to ten newest-first deployments per branch before testing the native
+      picker. The compatibility `deployments` array must still expose one
+      latest row per branch. A tokenless response or `Vercel API returned 403`
+      means the Vercel project token must be repaired and a fresh deployment
+      built before the app can discover previews.
 - [ ] Launch the iOS app with at least twelve returned destinations, open the
       left-edge Web destination drawer, and scroll from the first row to the
       final row and back. The header, refresh, and close controls stay pinned;
@@ -203,6 +316,16 @@ is fixed, and cite the checklist you ran in the PR description.
       without dismissing the drawer. Then swipe predominantly left and confirm
       the drawer closes; reopen it, select an off-screen preview, and confirm
       the web view loads that exact URL.
+- [ ] Find a branch whose newest deployment is queued/building and whose prior
+      deployment is ready. Expand the branch row, confirm both deployments are
+      shown newest first and the ready child is labelled `Last successful`,
+      then select that child and verify the WebView loads its immutable URL
+      rather than the queued branch alias. Reopen the drawer and confirm the
+      selected branch expands automatically with the child checkmark visible.
+- [ ] Expand and collapse several branches while scrolling to the bottom and
+      back in portrait and landscape. Nested deployment rows remain inside
+      their branch cards, disclosure controls stay tappable, and vertical
+      scrolling never triggers the horizontal drawer-close gesture.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
@@ -518,6 +641,11 @@ is fixed, and cite the checklist you ran in the PR description.
       `useApi`, reopen the editor and confirm the selected Rows/Grid mode,
       columns/pattern, and non-default spans survived the client request. A
       correct pre-submit preview is not sufficient evidence of persistence.
+
+- [ ] Reload a post with a rich comment using Rows or Grid. Its chosen
+      `mediaLayout` (including columns/pattern and non-default spans) survives
+      the feed, profile, and `/post/:id` projections rather than silently
+      falling back to masonry.
 - [ ] Server bounds: `mediaLayout` rejects pattern rows over 25 entries or
       outside 1..6, columns outside 1..6, spans maps over 25 entries, and
       non-object payloads with a 400; unknown keys are stripped; legacy posts
@@ -788,6 +916,25 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
+- [ ] Queue two all-branch rebuild signals through the default `main` listener.
+      Confirm the thin caller has no concurrency block, both calls reach the
+      protected implementation, and its `queue: max` worker completes the
+      first request rather than cancelling it when the second arrives.
+- [ ] Push once to `develop`. Confirm GitHub creates one public **Lopu PR
+      manager** run containing the standing-promotion and per-feature-promotion
+      reusable jobs, with no separate **Promote develop to main** or **Promote
+      features to main** workflow run. Push once to `main` and confirm its Lopu
+      run contains the main→develop synchronization job with no standalone
+      sync workflow. Queue a second event while each component is active and
+      confirm the first run is not cancelled. Exercise each
+      `maintenance_operation` choice manually through Lopu and confirm the
+      removed workflow files do not reappear in Actions.
+- [ ] On the default branch, complete a check run and create/edit a normal PR
+      comment. Confirm each `Lopu PR manager` run compiles and creates its
+      controller jobs instead of failing at workflow startup with a nested
+      `security-events: none` permission error. Also confirm the scheduled and
+      all-branch push listeners create jobs, and that CodeQL alert mutations
+      occur only in the controller's separately fenced disposition writer.
 - [ ] Create standalone same-repository merge-conflicting PRs targeting
       `main` and a non-default base. Confirm both are detected and updated,
       while a clean PR, a fork PR, a protected head, and the default branch
@@ -878,6 +1025,11 @@ is fixed, and cite the checklist you ran in the PR description.
       must fail closed. A legitimate derived Graphify commit must be exactly
       one direct child of the already-verified source head and may change only
       the approved Graphify output paths.
+- [ ] Promote two independently green features that add the same workflow
+      caller contract at different source offsets. The combined promotion must
+      keep one declaration/assertion block, and
+      `node remix/scripts/workflow-caller-contract.mjs` must pass before the
+      promotion is considered release-clean.
 - [ ] Set `conflict-marker-size=10` for a planned text path and leave real
       10-character start/base/end markers after the model round; verification
       must reject them. A standalone Markdown `=======` divider must remain
@@ -1006,13 +1158,19 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`)
 
+- [ ] Push one commit to a branch with PRs targeting and originating from it.
+      Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
+      rebase, and stack detection. The thin `rebase-pr-stacks.yml` listener
+      must accept only `repository_dispatch: rebase-pr-stack-ai`: it has no
+      push, PR, schedule, or manual trigger and cannot create a competing run
+      that later gets cancelled by Lopu's embedded rebase lane.
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
       Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
       manual scans leave both histories untouched: they are not stacks and
       already merge cleanly. An explicit PR-number retry may still replay one
       deliberately. Then make a standalone PR genuinely merge-conflicting and
-      confirm only **Resolve PR conflicts (AI)** owns it. Regression class:
+      confirm only Lopu's base-merge lane owns it. Regression class:
       standalone replay failures were incorrectly force-rebased and could
       ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
@@ -1021,11 +1179,11 @@ is fixed, and cite the checklist you ran in the PR description.
       without duplicating the parent's commits. Confirm a stack member with
       either `mergeable: false` or `rebaseable: false` remains rebase-owned,
       while a clean stack is left alone.
-- [ ] Exercise detection from a branch push, PR opened/reopened event, the
-      scheduled scan, and a manual PR-number dispatch. Automatic scans evaluate
-      every same-repo PR regardless of base branch, never dispatch a
-      standalone history rewrite, route standalone merge conflicts to the
-      merge workflow, do not race a blocked child ahead of its parent, and
+- [ ] Exercise detection through Lopu from a branch push, PR opened/reopened
+      event, the scheduled scan, and a manual PR-number dispatch. Automatic
+      scans evaluate every same-repo PR regardless of base branch, never
+      dispatch a standalone history rewrite, route standalone merge conflicts
+      to Lopu's base-merge lane, do not race a blocked child ahead of its parent, and
       terminate after resolution instead of looping on the workflow's own
       push. A blank manual dispatch must perform the same repository-wide scan.
 - [ ] Return unknown merge/rebaseability for several PRs at once and confirm
@@ -1170,6 +1328,10 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] `merge-legacy-collections` dry-run reports per-collection copy counts and
       writes nothing; the real run copies only docs missing at the destination
       (re-run reports 0) and never deletes a legacy collection.
+- [ ] When `merge-legacy-collections` reports `0 pending`, stale physical
+      generations remain visible in the Storage generations table without an
+      orange adoption warning. Make one legacy document genuinely pending and
+      confirm the warning returns until the merge converges again.
 - [ ] Against a disposable replica-set database, the first registered and
       sandbox app-storage counter can be created without MongoDB code 224:
       the ensure upsert uses only the deterministic `shareId`, while the
@@ -1181,6 +1343,11 @@ is fixed, and cite the checklist you ran in the PR description.
       restores `storageClass: "control"`; running
       `backfill-user-storage-accounting` directly invokes that repair first.
       A community/user-owned `thingtime: ["schema"]` Thing remains billable.
+- [ ] Seed a canonical attachment with every protected object-accounting root
+      field, then dry-run and run `backfill-user-storage-accounting`. Both
+      passes retain the complete attachment envelope while calculating exact
+      bytes, converge to zero pending, and never misclassify the attachment as
+      `InvalidAttachmentStorageEnvelopeError` because of a Mongo projection.
 - [ ] Force a migration runner exception once: the public error field remains
       a safe exception class/code (never a raw Mongo message, query, document
       id, host, or credential), and Lopu renders contextual text beneath the
@@ -2037,6 +2204,10 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       shown everywhere names render; promote/demote/remove for admins with
       the owner untouchable; owner leaving hands the chat to the earliest
       admin, else earliest member.
+- [ ] Member batch durability fault injection: a membership `insertMany` with
+      only duplicate-key write errors stays idempotent, while the same result
+      plus a write-concern failure returns an error instead of reporting a
+      successful chat creation or member add.
 - [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
       kind 403s ("managed by their own endpoints"); chats/messages are 404
       through `GET /api/v1/things?id=` for non-owners;
