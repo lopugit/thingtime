@@ -1,0 +1,88 @@
+name: CodeQL all branches
+
+# Canonical advanced CodeQL implementation. Product branches carry only a
+# trigger-only caller pinned to this protected github-actions copy. A direct
+# push trigger remains here so changes to the control-plane branch itself are
+# scanned even though that sparse branch does not carry the product listener.
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches: [github-actions]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    name: Select one analysis owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      analyze: ${{ steps.scope.outputs.analyze }}
+    steps:
+      - name: Prefer the PR analysis for an open branch head
+        id: scope
+        shell: bash
+        env:
+          ADVANCED_ENABLED: ${{ vars.CODEQL_ADVANCED_ENABLED }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          analyze=true
+          if [ "$ADVANCED_ENABLED" != true ]; then
+            analyze=false
+            echo '::notice::Advanced CodeQL is staged but inactive. Promote the listener to the default branch, disable default setup, then set CODEQL_ADVANCED_ENABLED=true.'
+          elif [ "$GITHUB_EVENT_NAME" = push ]; then
+            open_prs="$(gh pr list --repo "$REPO" --state open \
+              --head "$GITHUB_REF_NAME" --limit 100 \
+              --json headRefOid)"
+            if jq -e --arg sha "$GITHUB_SHA" \
+                 'any(.[]; .headRefOid == $sha)' <<<"$open_prs" >/dev/null; then
+              analyze=false
+              echo "An open PR owns $GITHUB_REF_NAME@$GITHUB_SHA; its pull_request run is the single CodeQL analysis owner."
+            fi
+          fi
+          echo "analyze=$analyze" >>"$GITHUB_OUTPUT"
+
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    needs: scope
+    if: needs.scope.outputs.analyze == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript]
+    concurrency:
+      group: >-
+        codeql-${{ matrix.language }}-${{ github.event.pull_request.head.sha || github.sha }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out the analyzed revision without credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          category: /language:${{ matrix.language }}
