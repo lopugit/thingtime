@@ -23,7 +23,6 @@ jobs:
     runs-on: macos-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      COMMANDER_SIGNING_IDENTITY: "-"
     steps:
       - name: Check out main
         uses: actions/checkout@v4
@@ -42,6 +41,49 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@10.12.1 --activate
+
+      - name: Import Developer ID and notarization credentials
+        shell: bash
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          : "${MAC_CSC_LINK:?MAC_CSC_LINK is required}"
+          : "${MAC_CSC_KEY_PASSWORD:?MAC_CSC_KEY_PASSWORD is required}"
+          : "${APPLE_API_KEY_BASE64:?APPLE_API_KEY_BASE64 is required}"
+          : "${APPLE_API_KEY_ID:?APPLE_API_KEY_ID is required}"
+          : "${APPLE_API_ISSUER:?APPLE_API_ISSUER is required}"
+          : "${APPLE_TEAM_ID:?APPLE_TEAM_ID is required}"
+
+          keychain_path="${RUNNER_TEMP}/commander-signing.keychain-db"
+          certificate_path="${RUNNER_TEMP}/commander-developer-id.p12"
+          api_key_path="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
+          keychain_password="$(openssl rand -hex 32)"
+          printf '%s' "${MAC_CSC_LINK}" | /usr/bin/base64 -D > "${certificate_path}"
+          printf '%s' "${APPLE_API_KEY_BASE64}" | /usr/bin/base64 -D > "${api_key_path}"
+          chmod 600 "${certificate_path}" "${api_key_path}"
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security import "${certificate_path}" -k "${keychain_path}" -P "${MAC_CSC_KEY_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${keychain_password}" "${keychain_path}"
+          security list-keychains -d user -s "${keychain_path}"
+          security default-keychain -d user -s "${keychain_path}"
+          identity="$(security find-identity -v -p codesigning "${keychain_path}" | sed -nE 's/.*"(Developer ID Application:[^"]+)".*/\1/p' | head -n 1)"
+          test -n "${identity}"
+          {
+            echo "COMMANDER_SIGNING_IDENTITY=${identity}"
+            echo "COMMANDER_SIGNING_MODE=distribution"
+            echo "COMMANDER_NOTARY_KEY=${api_key_path}"
+            echo "COMMANDER_NOTARY_KEY_ID=${APPLE_API_KEY_ID}"
+            echo "COMMANDER_NOTARY_ISSUER=${APPLE_API_ISSUER}"
+            echo "COMMANDER_NOTARY_TEAM_ID=${APPLE_TEAM_ID}"
+          } >> "${GITHUB_ENV}"
 
       - name: Resolve release metadata version
         id: version
@@ -88,6 +130,23 @@ jobs:
           COMMANDER_BUILD_NUMBER: ${{ env.THINGTIME_COMMANDER_BUILD_NUMBER }}
         run: ./script/build_and_run.sh --build-only
 
+      - name: Notarize and staple Commander bundle
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_bundle="Commander/dist/Commander.app"
+          submission_archive="${RUNNER_TEMP}/Commander-notarization.zip"
+          test -d "${app_bundle}"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${app_bundle}" "${submission_archive}"
+          xcrun notarytool submit "${submission_archive}" --wait \
+            --key "${COMMANDER_NOTARY_KEY}" \
+            --key-id "${COMMANDER_NOTARY_KEY_ID}" \
+            --issuer "${COMMANDER_NOTARY_ISSUER}"
+          xcrun stapler staple "${app_bundle}"
+          xcrun stapler validate "${app_bundle}"
+          spctl -a -vv --type execute "${app_bundle}"
+
       - name: Collect release assets
         if: steps.existing_release.outputs.exists != 'true'
         shell: bash
@@ -132,7 +191,7 @@ jobs:
             echo "- Build metadata: \`build.${THINGTIME_COMMANDER_BUILD_NUMBER}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo
-            echo "> This macOS bundle is ad-hoc signed and is not notarized."
+            echo "> This macOS bundle is Developer ID signed, notarized, and stapled."
             echo
             if [ -n "${generated_notes}" ]; then
               echo "${generated_notes}"
