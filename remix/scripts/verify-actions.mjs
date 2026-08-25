@@ -523,6 +523,28 @@ const run = async () => {
 		pureRun.status === 200 && pureRun.body?.status === 'ok' && pureRun.body?.result === 'pong' && pureRun.body?.opsUsed === 0
 	);
 
+	// ---- duplicate actionKey resolution (latest revision wins) ---------------
+	// Nothing index-enforces per-owner actionKey uniqueness yet, so a key-
+	// referenced run must resolve deterministically: highest crystal.version
+	// (the schema's revision counter), not Mongo natural order. v1 is created
+	// FIRST so a natural-order findOne would wrongly pick it.
+	const dupKey = `dup-${suffix}`;
+	const dupV1 = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: { name: 'Dup v1', actionKey: dupKey, version: 1, steps: [{ op: 'return', value: 'first revision' }] }
+	});
+	const dupV2 = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: { name: 'Dup v2', actionKey: dupKey, version: 2, steps: [{ op: 'return', value: 'second revision' }] }
+	});
+	check('two revisions can share an actionKey', dupV1.status === 200 && dupV2.status === 200);
+	const dupRun = await runAction(alice.cookie, { action: dupKey });
+	check(
+		'a key-referenced run resolves the LATEST revision (highest version)',
+		dupRun.status === 200 && dupRun.body?.status === 'ok' && dupRun.body?.result === 'second revision',
+		JSON.stringify(dupRun.body || {}).slice(0, 160)
+	);
+
 	// ---- docs twins ----------------------------------------------------------
 	const runDocs = await api('/api/v1/actions/run-docs');
 	const runsDocs = await api('/api/v1/actions/runs-docs');

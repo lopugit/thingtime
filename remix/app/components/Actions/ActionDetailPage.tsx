@@ -31,6 +31,7 @@ import {
 	displayRef,
 	isActionThing,
 	runInputDescriptorsOf,
+	selectActionByKey,
 	type ActionThing
 } from './actionInspect';
 
@@ -269,13 +270,23 @@ export const ActionDetailPage = () => {
 		if (history?.runs) setRuns(history.runs as RunRecord[]);
 	}, [actionId]);
 	const requestKey = `${key || ''} ${user?.id || 'anonymous'}`;
+	// Reset per-action satellite state the moment the route targets a different
+	// action (during render, so the first frame of B never shows A's runs,
+	// Used-by chips, or schema names while B's fetches are still in flight).
+	const [seenKey, setSeenKey] = React.useState(requestKey);
+	if (seenKey !== requestKey) {
+		setSeenKey(requestKey);
+		setRuns([]);
+		setUsedBy([]);
+		setSchemaNames({});
+	}
 	// Optimistic first paint (house rule): the /actions list caches full action
 	// crystals, so navigating from it can render the inspector instantly from
 	// that cache while the authoritative fetch reconciles in the background.
 	const cachedAction = React.useMemo(() => {
 		if (!key) return null;
 		const cache = readLocalCache<{ actions?: ActionThing[] }>(`tt-actions-${user?.id || 'anon'}`);
-		return (cache?.actions || []).find((entry) => entry?.id === key || entry?.crystal?.actionKey === key) || null;
+		return selectActionByKey(cache?.actions || [], key);
 	}, [key, user?.id]);
 	const visible = state.key === requestKey ? state : { key: requestKey, action: cachedAction, missing: false };
 
@@ -292,7 +303,7 @@ export const ActionDetailPage = () => {
 				if (!action && user?.id) {
 					// fall back to the caller's own actionKey namespace
 					const mine = await apiRef.current.v1.things.list({ thingtime: 'action', limit: 100 }).catch(() => null);
-					action = ((mine?.things || []) as ActionThing[]).find((thing) => thing?.crystal?.actionKey === key) || null;
+					action = selectActionByKey((mine?.things || []) as ActionThing[], key);
 				}
 				if (cancelled) return;
 				setState({ key: requestKey, action, missing: !action });
@@ -534,7 +545,7 @@ export const ActionDetailPage = () => {
 								</Text>
 							</Box>
 						) : null}
-						{user ? <RunPanel action={action} onRan={loadRuns} /> : null}
+						{user ? <RunPanel action={action} key={action.id} onRan={loadRuns} /> : null}
 
 						<Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
 							<Text {...monoLabel} mb={2}>

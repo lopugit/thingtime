@@ -129,11 +129,20 @@ const resolveActionProgram = async (viewer: Viewer, reference: string): Promise<
 	}
 	if (!doc) {
 		const things = await getThingsCollection();
-		const own = await things.findOne({
-			ownerId: viewer.id,
-			thingtime: 'action',
-			'crystal.actionKey': trimmed
-		} as any);
+		// Deterministic under duplicate keys: nothing index-enforces per-owner
+		// actionKey uniqueness yet, so resolve to the LATEST revision (highest
+		// crystal.version, newest doc as the tiebreak) — matching the schema's
+		// "version counter for saved revisions of an actionKey" story instead
+		// of Mongo natural order.
+		const [own] = await things
+			.find({
+				ownerId: viewer.id,
+				thingtime: 'action',
+				'crystal.actionKey': trimmed
+			} as any)
+			.sort({ 'crystal.version': -1, createdAt: -1 })
+			.limit(1)
+			.toArray();
 		if (own) doc = { id: own.shareId, crystal: (own.crystal || {}) as Record<string, unknown> };
 	}
 	if (!doc) return fail(404, `No runnable action matches "${trimmed.slice(0, 80)}"`);

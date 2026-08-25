@@ -206,3 +206,32 @@ test('parseActionRef: literals, escapes, and proto segments', () => {
 	const malformed = parseActionRef('$bogus.root');
 	assert.equal(malformed && 'ok' in malformed && malformed.ok === false, true, 'unknown root must be refused');
 });
+
+// Input defaults substitute verbatim at run time when the input is omitted,
+// so an incongruent default would make every default-using run fail input
+// validation. The grammar refuses the mismatch at save time instead.
+test('input defaults must be congruent with their declared type', () => {
+	const withInputs = (extra: Record<string, unknown>) => ({
+		...validBase,
+		inputs: [{ name: 'title', type: 'string', required: true }, extra]
+	});
+	expectFail(withInputs({ name: 'note', type: 'string', default: true }), /default must be text/, 'boolean default on a string input');
+	expectFail(withInputs({ name: 'count', type: 'number', default: 'lots' }), /default must be a number/, 'text default on a number input');
+	expectFail(withInputs({ name: 'flag', type: 'boolean', default: 'true' }), /default must be true or false/, 'text default on a boolean input');
+	expectFail(
+		withInputs({ name: 'mode', type: 'enum', values: ['draft', 'sent'], default: 'paid' }),
+		/default must be one of its enum values/,
+		'out-of-set enum default'
+	);
+	const ok = sanitizeActionCrystal({
+		...validBase,
+		inputs: [
+			{ name: 'title', type: 'string', required: true },
+			{ name: 'note', type: 'string', default: '42' },
+			{ name: 'count', type: 'number', default: 3 },
+			{ name: 'flag', type: 'boolean', default: false },
+			{ name: 'mode', type: 'enum', values: ['draft', 'sent'], default: 'sent' }
+		]
+	});
+	assert.equal(ok.ok, true, 'congruent defaults save');
+});

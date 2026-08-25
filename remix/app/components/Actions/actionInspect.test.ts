@@ -3,7 +3,15 @@ import { test } from 'node:test';
 
 import { deriveActionEffects } from '../../schemas/registry.ts';
 
-import { actionCannotAccess, coerceValueText, componentBindsAction, deriveRequiredCapabilities, runInputDescriptorsOf } from './actionInspect.ts';
+import {
+	actionCannotAccess,
+	coerceInputDefault,
+	coerceValueText,
+	componentBindsAction,
+	deriveRequiredCapabilities,
+	runInputDescriptorsOf,
+	selectActionByKey
+} from './actionInspect.ts';
 
 // The builder's consent surface: deriveRequiredCapabilities promises that a
 // UI-authored action cannot declare less than it does, and coerceValueText
@@ -164,4 +172,38 @@ test('a declared input list passes through by reference', () => {
 	assert.equal(runInputDescriptorsOf(crystal), inputs);
 	// stable across calls too, so the memo below it never re-derives
 	assert.equal(runInputDescriptorsOf(crystal), runInputDescriptorsOf(crystal));
+});
+
+// Builder defaults are only coerced TOWARD the declared type — the grammar
+// refuses incongruent defaults at save time, so a string input's '42' (or a
+// zero-padded phone) must survive as text while a number input's '42'
+// becomes 42. Anything the coercion can't honestly convert passes through
+// so the save fails with the grammar's message instead of mislabeling.
+test('coerceInputDefault coerces toward the declared type only', () => {
+	assert.equal(coerceInputDefault('42', 'number'), 42);
+	assert.equal(coerceInputDefault('1.50', 'number'), 1.5);
+	assert.equal(coerceInputDefault('abc', 'number'), 'abc');
+	assert.equal(coerceInputDefault('true', 'boolean'), true);
+	assert.equal(coerceInputDefault('false', 'boolean'), false);
+	assert.equal(coerceInputDefault('yes', 'boolean'), 'yes');
+	assert.equal(coerceInputDefault('42', 'string'), '42');
+	assert.equal(coerceInputDefault('true', 'text'), 'true');
+	assert.equal(coerceInputDefault('sent', 'enum'), 'sent');
+	assert.equal(coerceInputDefault('0412345678', 'string'), '0412345678');
+});
+
+// Duplicate actionKeys must resolve identically in the inspector and the
+// executor (latest revision = highest crystal.version), or the page would
+// display a different program than a key-referenced run executes.
+test('selectActionByKey: id wins, then the latest actionKey revision', () => {
+	const v1 = { id: 'a1', crystal: { actionKey: 'send', version: 1 } };
+	const v2 = { id: 'a2', crystal: { actionKey: 'send', version: 2 } };
+	const unversioned = { id: 'a3', crystal: { actionKey: 'send' } };
+	const other = { id: 'b1', crystal: { actionKey: 'tag' } };
+	assert.equal(selectActionByKey([v2, v1, other], 'a1'), v1);
+	assert.equal(selectActionByKey([v1, v2, other], 'send'), v2);
+	assert.equal(selectActionByKey([v2, v1], 'send'), v2);
+	assert.equal(selectActionByKey([unversioned, v1], 'send'), v1);
+	assert.equal(selectActionByKey([other], 'send'), null);
+	assert.equal(selectActionByKey([], 'send'), null);
 });

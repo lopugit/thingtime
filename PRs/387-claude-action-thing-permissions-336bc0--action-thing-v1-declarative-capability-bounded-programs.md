@@ -230,3 +230,44 @@ security/adversarial framing per the owner's directive), then fixes:
   PreviewModal Send pill (🧩→⚡→📦: draft→sent + fresh `sentAt`); inspector
   and browse pages show zero horizontal overflow at 375px with schema-name
   chips resolved.
+
+### Round 5b — correctness-lens fixes (same review pass)
+
+The correctness lens confirmed four defects; all fixed and regression-tested:
+
+1. **Input-default/type congruence.** The builder coerced defaults blindly
+   (`'true'` on a string input became boolean `true`), producing actions whose
+   defaults could never pass run-time input validation when the input was
+   omitted (`actions.invoke` children, ttAction clicks, API runs). Now:
+   `coerceInputDefault` (pure, tested) coerces only toward the declared type,
+   and `sanitizeActionInputs` refuses incongruent defaults at save time —
+   string/text need text, number needs a number, boolean needs true/false,
+   enum defaults must be one of the declared values (fail-at-save beats
+   fail-at-every-run; actionGrammar congruence test added).
+2. **⚡ kind renderer was unreachable from /things tiles**: `ThingsViews`
+   stripped actions to the bare crystal, whose shape the renderer's `match`
+   rejects (no kind/render key → native-tree fallback). Action things now
+   pass WHOLE like components; grid/list tiles render the compact ⚡ card
+   with op tone dots (verified live).
+3. **Cross-action state leak in the inspector**: navigating A→B via an
+   `open ⚡` chip kept A's run history, Used-by chips, schema names, and the
+   RunPanel's last result until (and unless) B's fetches resolved. Satellite
+   state now resets during render the moment the route key changes, and the
+   RunPanel is keyed by action id.
+4. **Nondeterministic invoke-by-key under duplicate actionKeys**: nothing
+   index-enforces per-owner key uniqueness, and the executor's fallback was
+   an unsorted `findOne` (Mongo natural order — typically the OLDEST
+   revision), while the inspector's fallback used list order — the page could
+   display a different program than a key-referenced run executed. Both now
+   resolve the LATEST revision (highest `crystal.version`, newest doc as
+   tiebreak): the executor sorts, and the shared `selectActionByKey` helper
+   (pure, tested) drives both inspector fallbacks. New live battery pair
+   creates v1-then-v2 with one key and proves the run returns v2 (a
+   natural-order findOne would pick v1).
+
+Also: the `things.ts` reserved-prefix comment no longer describes an
+`action-<slug>` seed path that doesn't exist.
+
+Validation: verify-actions.mjs **65/65** (63 + the 2 duplicate-key checks) ·
+test:actions **25/25** · test:schemas **82/82** · targeted lint clean ·
+build:client clean · /things ⚡ tiles verified in the browser.
