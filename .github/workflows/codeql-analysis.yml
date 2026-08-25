@@ -1,0 +1,215 @@
+name: Lopu CodeQL all branches
+
+# Canonical unprivileged advanced CodeQL implementation. Product branches call
+# this workflow for analysis events and call codeql-pr-handoff.yml only for the
+# metadata-only pull_request_target hop. Keeping those permission ceilings in
+# separate reusable workflows lets normal pull_request runs retain their PR
+# check contexts without asking a read-capped event for actions:write. A direct
+# push trigger remains here so changes to the control-plane branch itself are
+# scanned even though that sparse branch does not carry the product listener.
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "Trusted PR number selected by the default-branch Lopu listener"
+        required: false
+        default: ""
+        type: string
+      expected_head_sha:
+        description: "Head SHA bound to the PR event that requested the scan"
+        required: false
+        default: ""
+        type: string
+  pull_request:
+  push:
+    branches: [github-actions]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Open PR to scan; leave blank to scan the selected branch"
+        required: false
+        default: ""
+        type: string
+      expected_head_sha:
+        description: "Optional exact live head SHA for stale-dispatch rejection"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    name: Select one analysis owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      security-events: read
+    outputs:
+      analyze: ${{ steps.scope.outputs.analyze }}
+      analysis_ref: ${{ steps.scope.outputs.analysis_ref }}
+      analysis_sha: ${{ steps.scope.outputs.analysis_sha }}
+      checkout_ref: ${{ steps.scope.outputs.checkout_ref }}
+    steps:
+      - name: Prefer the PR analysis for an open branch head
+        id: scope
+        shell: bash
+        env:
+          ADVANCED_ENABLED: ${{ vars.CODEQL_ADVANCED_ENABLED }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+        run: |
+          set -euo pipefail
+
+          analyze=true
+          analysis_ref=""
+          analysis_sha=""
+          checkout_ref=""
+          if [ "$ADVANCED_ENABLED" != true ]; then
+            analyze=false
+            echo '::notice::Advanced CodeQL is staged but inactive. Promote the listener to the default branch, disable default setup, then set CODEQL_ADVANCED_ENABLED=true.'
+          elif [ "$EVENT_NAME" = workflow_dispatch ] && [ -n "$PR_NUMBER" ]; then
+            [[ "$PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]] || {
+              echo "::error::Invalid PR number."
+              exit 1
+            }
+            if [ -n "$EXPECTED_HEAD_SHA" ] && [[ ! "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40,64}$ ]]; then
+              echo "::error::Invalid expected PR head SHA."
+              exit 1
+            fi
+
+            pr_json="$(gh api "repos/$REPO/pulls/$PR_NUMBER")"
+            state="$(jq -r '.state' <<<"$pr_json")"
+            live_head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
+            base_sha="$(jq -r '.base.sha' <<<"$pr_json")"
+            if [ "$state" != open ]; then
+              analyze=false
+              echo "PR #$PR_NUMBER is no longer open; the stale scan is a no-op."
+            elif [ -n "$EXPECTED_HEAD_SHA" ] && [ "$EXPECTED_HEAD_SHA" != "$live_head_sha" ]; then
+              analyze=false
+              echo "PR #$PR_NUMBER advanced from $EXPECTED_HEAD_SHA to $live_head_sha; its newer event owns analysis."
+            else
+              base_listener_b64=""
+              if candidate_listener_b64="$(
+                gh api "repos/$REPO/contents/.github/workflows/codeql-analysis.yml?ref=$base_sha" \
+                  --jq .content 2>/dev/null
+              )"; then
+                base_listener_b64="$candidate_listener_b64"
+              fi
+              base_has_pr_listener=false
+              if [ -n "$base_listener_b64" ]; then
+                base_listener="$(printf '%s' "$base_listener_b64" | tr -d '\n' | base64 --decode)"
+                if grep -Eq '^  pull_request:$' <<<"$base_listener"; then
+                  base_has_pr_listener=true
+                fi
+              fi
+
+              merge_ref="refs/pull/$PR_NUMBER/merge"
+              merge_sha="$(gh api "repos/$REPO/git/ref/pull/$PR_NUMBER/merge" --jq .object.sha 2>/dev/null || true)"
+              if [ -n "$merge_sha" ]; then
+                merge_parents="$(gh api "repos/$REPO/git/commits/$merge_sha" --jq '[.parents[].sha]')"
+                if ! jq -e --arg base "$base_sha" --arg head "$live_head_sha" \
+                    'length == 2 and .[0] == $base and .[1] == $head' <<<"$merge_parents" >/dev/null; then
+                  echo "PR #$PR_NUMBER has a stale merge ref; ignoring it because its parents do not match the live base and head."
+                  merge_sha=""
+                fi
+              fi
+              if [ "$base_has_pr_listener" = true ] && [ -n "$merge_sha" ]; then
+                analyze=false
+                echo "PR #$PR_NUMBER has a merge ref and its target carries the normal listener; that pull_request run owns analysis."
+              elif [ -n "$merge_sha" ]; then
+                analysis_ref="$merge_ref"
+                analysis_sha="$merge_sha"
+                checkout_ref="$merge_ref"
+                echo "PR #$PR_NUMBER targets a branch without the listener; Lopu will analyze its exact merge ref."
+              else
+                analysis_ref="refs/pull/$PR_NUMBER/head"
+                analysis_sha="$live_head_sha"
+                checkout_ref="$analysis_ref"
+                echo "PR #$PR_NUMBER has no merge ref; Lopu will analyze its exact head while conflict management continues."
+              fi
+
+              if [ "$analyze" = true ]; then
+                encoded_ref="$(jq -rn --arg value "$analysis_ref" '$value | @uri')"
+                analyses="$(gh api "repos/$REPO/code-scanning/analyses?ref=$encoded_ref&per_page=100")"
+                if jq -e --arg sha "$analysis_sha" '
+                  [.[]
+                    | select(.commit_sha == $sha and .tool.name == "CodeQL")
+                    | .category]
+                  | unique as $categories
+                  | ($categories | index("/language:actions")) != null
+                    and ($categories | index("/language:javascript-typescript")) != null
+                ' <<<"$analyses" >/dev/null; then
+                  analyze=false
+                  echo "PR #$PR_NUMBER@$analysis_sha already has both Lopu CodeQL language analyses."
+                fi
+              fi
+            fi
+          elif [ "$EVENT_NAME" = push ]; then
+            open_prs="$(gh pr list --repo "$REPO" --state open \
+              --head "$GITHUB_REF_NAME" --limit 100 \
+              --json headRefOid)"
+            if jq -e --arg sha "$GITHUB_SHA" \
+                 'any(.[]; .headRefOid == $sha)' <<<"$open_prs" >/dev/null; then
+              analyze=false
+              echo "An open PR owns $GITHUB_REF_NAME@$GITHUB_SHA; its pull_request run is the single CodeQL analysis owner."
+            fi
+          fi
+          {
+            echo "analyze=$analyze"
+            echo "analysis_ref=$analysis_ref"
+            echo "analysis_sha=$analysis_sha"
+            echo "checkout_ref=$checkout_ref"
+          } >>"$GITHUB_OUTPUT"
+
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    needs: scope
+    if: needs.scope.outputs.analyze == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript]
+    concurrency:
+      group: >-
+        codeql-${{ matrix.language }}-${{ github.event.pull_request.head.sha || github.sha }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out the analyzed revision without credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ needs.scope.outputs.checkout_ref || github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Analyze the triggering revision
+        if: needs.scope.outputs.analysis_ref == ''
+        uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          category: /language:${{ matrix.language }}
+
+      - name: Analyze the exact centrally dispatched PR head
+        if: needs.scope.outputs.analysis_ref != ''
+        uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          category: /language:${{ matrix.language }}
+          ref: ${{ needs.scope.outputs.analysis_ref }}
+          sha: ${{ needs.scope.outputs.analysis_sha }}

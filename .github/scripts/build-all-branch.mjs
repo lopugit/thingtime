@@ -173,6 +173,7 @@ export function shouldRevertDoctorStatusPath(path) {
 export function assertAllBranchWorkflowContract(workflowText) {
   const text = String(workflowText ?? "").replaceAll("\r\n", "\n");
   const triggerBlock = text.split("\npermissions:", 1)[0];
+  assert.match(text, /^name: Lopu all-branch integration$/m, "the union doctor is branded as Lopu");
   assert.match(
     triggerBlock,
     /\non:\n(?:[ \t].*\n)*?  push:\n    branches: \[github-actions\]\n/,
@@ -183,6 +184,22 @@ export function assertAllBranchWorkflowContract(workflowText) {
     text,
     /\n  rebuild:\n[\s\S]*?github\.event_name != 'push'/,
     "push events must stay out of the unsupported rebuild/doctor job"
+  );
+  assert.match(
+    text,
+    /concurrency:\n(?:\s*#.*\n)*\s*group: all-branch-[^\n]+\n\s*queue: max\n\s*cancel-in-progress: false/,
+    "all-branch workflow requests must queue instead of cancelling an active doctor"
+  );
+  const rebuildBlock = text.slice(text.indexOf("\n  rebuild:"));
+  assert.match(
+    rebuildBlock,
+    /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n\s*queue: max\n\s*cancel-in-progress: false/,
+    "the union doctor must share Lopu's durable single-agent fleet"
+  );
+  assert.equal(
+    [...rebuildBlock.matchAll(/You are Lopu, Thingtime's principal PR and repository manager\./g)].length,
+    3,
+    "every union repair round must identify itself as Lopu"
   );
 }
 
