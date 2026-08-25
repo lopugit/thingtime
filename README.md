@@ -68,20 +68,49 @@ the same protected `.github/actions/lopu-agent` interface. Post-merge Graphify
 refreshes follow the same configured provider when a matching semantic
 credential is available.
 
+When advanced CodeQL is first activated, an older open PR may predate the
+normal listener now present on its target branch. Backfill that immutable live
+snapshot without touching the PR branch by dispatching the protected analyzer:
+
+```bash
+gh workflow run codeql-analysis.yml --ref github-actions \
+  -f pr_number=<PR_NUMBER> \
+  -f expected_head_sha=<LIVE_HEAD_SHA> \
+  -f backfill_listener_owned=true
+```
+
+The worker revalidates the open PR and exact head/base/merge snapshot, skips
+already-complete CodeQL categories, and has no AI credential or repository
+write permission. Analyzer concurrency is fenced by language, event owner, and
+immutable snapshot; queued scans are preserved and never cancel an in-flight
+CodeQL upload into a red PR check.
+
 Lopu is also the one public repository-maintenance entrypoint. A `develop`
 push starts the standing and per-feature promotion components as jobs inside
-the same **Lopu PR manager** run; a `main` push starts the main→develop sync
-component there; and the six-hour feature-promotion backstop is another Lopu
-schedule. The three deterministic implementations remain protected reusable
-components, but have no push, schedule, repository-dispatch, or manual trigger
-of their own. Manual recovery uses **Actions → Lopu PR manager → Run workflow**
-and its `maintenance_operation` choice. Their concurrency queues never cancel
-an in-flight promotion or synchronization.
+the same **Lopu PR manager** run; a `main` push starts the main→develop sync;
+PR lifecycle changes and the hourly backstop maintain the wildcard `all`
+branch. Qualifying pushes are converted to a bot-authored manager dispatch so
+the model-backed doctor never receives unsupported push provenance. The four
+deterministic implementations remain protected reusable components with no
+push, schedule, repository-dispatch, or manual trigger of their own. Manual
+recovery uses **Actions → Lopu PR manager → Run workflow** and its
+`maintenance_operation` choice, including `build-all`. Their queues never
+cancel an active promotion, synchronization, or union repair.
 
-The public manager itself also uses GitHub's durable `queue: max` mode with
-`cancel-in-progress: false`. Distinct PR, comment, failed-check, branch, and
-scheduled signals wait behind the active run in their bounded namespace and
-revalidate live state when they start; none is replaced before Lopu sees it.
+When `main` cannot be pushed cleanly into `develop`, Lopu publishes the fenced
+candidate to the automation-owned `sync/main-into-develop` branch and opens or
+refreshes a PR from that branch. It never uses protected `main` as the writable
+PR head. The ordinary Lopu conflict lane can therefore merge `develop` into
+the safe head, resolve it, rebuild Graphify, and publish without rewriting
+either primary branch.
+
+The public manager coalesces event storms by semantic PR or branch key: GitHub
+keeps the active run plus the newest pending run, and
+`cancel-in-progress: false` prevents that newest signal from interrupting work
+already running. The survivor re-derives the complete live PR, comment, check,
+and branch state. Only the shared model fleet uses durable `queue: max`, because
+already-selected work for distinct PRs must not disappear while one Lopu is
+active.
 
 The stack rebase/cascade implementation is internal in the same way. Existing
 `rebase-pr-stack-ai` exact-worker events enter through **Lopu PR manager**, keep
@@ -116,6 +145,25 @@ For Claude instead, set `LOPU_AGENT_BACKEND=claude` (or omit it) and configure
 not accept an OpenAI account username/password or browser session. A Codex run
 uses the OpenAI Platform project associated with `OPENAI_API_KEY`; it does not
 consume a ChatGPT Pro weekly allowance.
+
+Lopu also supports one ordered secondary Claude account:
+
+```text
+Primary Actions secret:   ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN
+Fallback Actions secret:  ANTHROPIC_API_KEY_FALLBACK or CLAUDE_CODE_OAUTH_TOKEN_FALLBACK
+```
+
+The protected Lopu action retries the same task with the fallback slot only
+when the primary result reports a plan/weekly limit, API rate or credit limit,
+or rejected credential. It does not treat `error_max_turns` as failover: that
+continues the exact session with whichever slot started it. Both slots are
+included in every generated-output credential scan.
+
+Use `CLAUDE_CODE_OAUTH_TOKEN_FALLBACK` for another Claude subscription's
+included Claude Code allowance (generate it with `claude setup-token` while
+signed into that account). `ANTHROPIC_API_KEY_FALLBACK` instead uses the Claude
+Platform organization's separate pay-as-you-go API credits; a Claude Pro/Max
+subscription does not include Console API usage.
 
 ## The bare-tree invariant
 

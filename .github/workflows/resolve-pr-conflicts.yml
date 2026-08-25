@@ -60,6 +60,10 @@
 #   powers the Claude resolution agent (OAuth token via `/install-github-app`
 #   in the claude CLI) and can power LLM semantic extraction in the post-merge
 #   Graphify refresh.
+# - ANTHROPIC_API_KEY_FALLBACK or CLAUDE_CODE_OAUTH_TOKEN_FALLBACK (optional):
+#   a second account used only after the primary reports an account-capacity,
+#   rate-limit, credit, or credential failure. Max-turn exhaustion continues
+#   the exact selected session instead of restarting under another account.
 # - OPENAI_API_KEY (required when Lopu's review backend is Codex): powers the
 #   pinned Codex Action and the same post-merge Graphify semantic refresh. The
 #   configured review backend chooses which available provider Graphify tries
@@ -294,6 +298,16 @@ on:
         required: false
         default: "0"
         type: string
+      ref_race_retry:
+        description: "Internal: bounded retry count after a head/base ref moves beside publication"
+        required: false
+        default: "0"
+        type: string
+      ref_race_handoff:
+        description: "Internal: automatic moving-ref retry that must not inherit manual-selector authority"
+        required: false
+        default: false
+        type: boolean
       promotion_source_pr:
         description: "Internal: merged develop source PR"
         required: false
@@ -345,13 +359,11 @@ on:
   # for this event, and resolution happens only after an exact-PR selection is
   # handed off to the fixed `github-actions` control-plane revision, the same hop every
   # detector takes.
-  # Deliberately NOT `synchronize`: that fires on every push to a PR head,
-  # including this workflow's own resolution pushes. Head pushes are covered
-  # by the plain `push` trigger instead — its detect run also scans the PR
-  # FROM the pushed branch (see the scan step), which catches conflicts a
-  # head push itself creates, without adding a per-PR target-context event.
+  # The complete lifecycle also owns wildcard-all membership: synchronize,
+  # draft transitions, edits, and closure can change either union content or
+  # stack topology. Duplicate head-push resolution signals coalesce by PR key.
   pull_request_target:
-    types: [opened, reopened]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed]
   # A Lopu conversation is part of PR management too. Only human-authored
   # events reach the review handoff below, so Lopu's own comments cannot loop
   # back into another model session.
@@ -373,6 +385,8 @@ on:
     # Feature-promotion maintenance used to own a separate scheduled workflow.
     # Keep its cadence while routing it through this one public Lopu entry.
     - cron: "43 */6 * * *"
+    # The wildcard-all integration used to expose its own hourly workflow.
+    - cron: "53 * * * *"
   workflow_dispatch:
     inputs:
       pr_number:
@@ -390,7 +404,7 @@ on:
         required: false
         default: "manage-prs"
         type: choice
-        options: [manage-prs, promote-develop, promote-features, sync-main-develop]
+        options: [manage-prs, promote-develop, promote-features, sync-main-develop, build-all]
       promotion_dry_run:
         description: "Plan feature promotion only — do not create or update branches, PRs, comments, or labels"
         required: false
@@ -436,6 +450,16 @@ on:
         required: false
         default: "0"
         type: string
+      ref_race_retry:
+        description: "Internal: bounded retry count after a head/base ref moves beside publication"
+        required: false
+        default: "0"
+        type: string
+      ref_race_handoff:
+        description: "Internal: automatic moving-ref retry that must not inherit manual-selector authority"
+        required: false
+        default: false
+        type: boolean
       promotion_source_pr:
         description: "Internal: merged develop source PR"
         required: false
@@ -477,9 +501,11 @@ on:
     # workflow instead of a second rebase-specific product listener.
     types: [resolve-conflicts-cascade, rebase-pr-stack-ai]
 
-# Detector and worker runs are both durable. A detector and the worker it
-# spawns never share a namespace, and queue:max preserves every pending run
-# instead of silently replacing an earlier repository signal.
+# Detector and worker runs never share a namespace. Within each semantic
+# PR/branch namespace, GitHub keeps the active run plus the newest pending run;
+# the newest run re-derives live PR, comment, check, and branch state, so an
+# older pending snapshot is redundant. The model jobs below still use the
+# durable repository fleet queue because work for distinct PRs must not vanish.
 concurrency:
   # Distinct namespaces are load-bearing:
   #   resolve-detect-*   external/event/API-only detectors
@@ -488,6 +514,12 @@ concurrency:
   # A human exact-PR detector therefore cannot cancel the worker it creates.
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
+        && github.actor == 'github-actions[bot]'
+        && github.ref_name == 'github-actions'
+        && inputs.pr_number == ''
+        && inputs.branch == 'lopu-internal-all-branch'
+        && 'lopu-maintenance-build-all'
+        || github.event_name == 'workflow_dispatch'
         && inputs.maintenance_operation != ''
         && inputs.maintenance_operation != 'manage-prs'
         && format('lopu-maintenance-{0}', inputs.maintenance_operation)
@@ -556,11 +588,8 @@ concurrency:
              github.event.client_payload.branch || github.run_id)
         || format('resolve-detect-{0}-{1}',
              github.event_name, github.ref_name || github.run_id) }}
-  queue: max
-  # GitHub rejects queue:max whenever cancel-in-progress can evaluate true.
-  # More importantly, replacing an older detector can lose a distinct PR,
-  # comment, check, or branch signal. Let each bounded detector revalidate live
-  # state when it reaches the front of its namespace instead.
+  # Never interrupt a detector or worker already running. Default pending-run
+  # coalescing bounds event storms to one newest waiter per semantic key.
   cancel-in-progress: false
 
 permissions:
@@ -573,6 +602,11 @@ jobs:
       && inputs.promotion_plan_b64 == ''
       && (inputs.maintenance_operation == ''
           || inputs.maintenance_operation == 'manage-prs')
+      && !(github.event_name == 'workflow_dispatch'
+           && github.actor == 'github-actions[bot]'
+           && github.ref_name == 'github-actions'
+           && inputs.pr_number == ''
+           && inputs.branch == 'lopu-internal-all-branch')
       && (github.event_name != 'issue_comment'
           || (github.event.issue.pull_request
               && github.event.comment.user.type == 'User'))
@@ -587,8 +621,10 @@ jobs:
     uses: ./.github/workflows/ci-provider-router.yml
     with:
       workflow: >-
-        ${{ github.event_name == 'repository_dispatch'
-            && github.event.action == 'rebase-pr-stack-ai'
+        ${{ ((github.event_name == 'repository_dispatch'
+             && github.event.action == 'rebase-pr-stack-ai')
+            || (github.event_name == 'workflow_dispatch'
+                && inputs.ref_race_handoff == true))
             && 'rebase-stack'
             || 'resolve-conflicts' }}
       execution_provider: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
@@ -632,6 +668,8 @@ jobs:
       && github.event_name != 'issue_comment'
       && github.event_name != 'pull_request_review_comment'
       && github.event_name != 'check_run'
+      && (github.event_name != 'repository_dispatch'
+          || github.event.action == 'rebase-pr-stack-ai')
       && !(github.event_name == 'workflow_dispatch'
            && inputs.detector_handoff == true
            && github.actor == 'github-actions[bot]')
@@ -640,11 +678,67 @@ jobs:
       pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.pull_request.number || '' }}
       branch: ${{ inputs.branch || github.event.client_payload.branch || (github.event_name == 'push' && github.ref_name) || github.event.pull_request.base.ref || '' }}
       cascade: ${{ github.event_name != 'workflow_dispatch' || inputs.rebase_cascade }}
+      ref_race_retry: ${{ inputs.ref_race_retry || '0' }}
+      automatic_retry: ${{ inputs.ref_race_handoff || false }}
       execution_provider: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
       runner_label: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
       control_dispatch_id: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
       routing_proof: ${{ inputs.routing_proof || github.event.client_payload.routing_proof || '' }}
       routing_proof_issued_at: ${{ inputs.routing_proof_issued_at || github.event.client_payload.routing_proof_issued_at || '' }}
+    secrets: inherit
+
+  handoff_all_branch_push:
+    name: Hand off push rebuild through the one Lopu manager
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && github.event_name == 'push'
+      && github.event.deleted == false
+      && (github.ref_name == 'develop'
+          || github.ref_name == 'main'
+          || github.ref_name == 'github-actions')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch supported-event all-branch maintenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          jq -n '{
+            ref:"github-actions",
+            inputs:{
+              pr_number:"",
+              branch:"lopu-internal-all-branch",
+              maintenance_operation:"manage-prs"
+            }
+          }' | gh api --method POST \
+            "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+            --input -
+
+  maintain_all_branch:
+    name: Lopu builds and repairs the all branch
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && ((github.event_name == 'workflow_dispatch'
+           && inputs.maintenance_operation == 'build-all')
+          || (github.event_name == 'workflow_dispatch'
+              && github.actor == 'github-actions[bot]'
+              && github.ref_name == 'github-actions'
+              && inputs.maintenance_operation == 'manage-prs'
+              && inputs.pr_number == ''
+              && inputs.branch == 'lopu-internal-all-branch')
+          || github.event_name == 'pull_request_target'
+          || (github.event_name == 'schedule'
+              && github.event.schedule == '53 * * * *'))
+    permissions:
+      contents: write
+      pull-requests: read
+    uses: ./.github/workflows/all-branch.yml
     secrets: inherit
 
   maintain_develop_promotion:
@@ -725,13 +819,18 @@ jobs:
   detect:
     name: Find merge-conflicting PRs
     needs: route
-    # Branch deletions also fire `push`; there is nothing to scan then.
+    # Branch deletions also fire `push`; there is nothing to scan then. Internal
+    # repository events have one owner: merge cascades enter this detector,
+    # while exact rebase workers stay exclusively in manage_rebases.
     if: >-
       needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && (github.event_name != 'push' || github.event.deleted == false)
+      && inputs.ref_race_handoff != true
+      && (github.event_name != 'repository_dispatch'
+          || github.event.action == 'resolve-conflicts-cascade')
       && github.event_name != 'issue_comment'
       && github.event_name != 'pull_request_review_comment'
       && github.event_name != 'check_run'
@@ -764,8 +863,8 @@ jobs:
           CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
           EVENT_ACTOR: ${{ github.actor }}
           TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}
-          SELECTED_PR: ${{ inputs.pr_number }}
-          INPUT_BRANCH: ${{ inputs.branch }}
+          SELECTED_PR: ${{ inputs.pr_number || github.event.client_payload.pr_number || '' }}
+          INPUT_BRANCH: ${{ inputs.branch || github.event.client_payload.branch || '' }}
           DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
           DETECTOR_HANDOFF: ${{ inputs.detector_handoff && 'true' || 'false' }}
           ROUTED_MANUAL_RETRY: ${{ inputs.manual_retry && 'true' || 'false' }}
@@ -807,12 +906,14 @@ jobs:
           HUMAN_EXPLICIT: >-
             ${{ github.event_name == 'workflow_dispatch'
                 && inputs.detector_handoff != true
+                && inputs.ref_race_handoff != true
                 && (inputs.pr_number != '' || inputs.branch != '') }}
           # An explicit human PR/base/head detector may recover rebase-owned
           # holds. `ai-merge-paused` is deliberately excluded: a user must
           # remove that label before any resolver run may proceed.
           MANUAL_RETRY: >-
             ${{ github.event_name == 'workflow_dispatch'
+                && inputs.ref_race_handoff != true
                 && ((inputs.detector_handoff == true
                      && inputs.manual_retry == true)
                     || (inputs.detector_handoff != true
@@ -1634,14 +1735,17 @@ jobs:
     name: Find PRs for Lopu repository review
     needs: route
     # Reviews run when a PR is opened, its head/base moves, or an operator asks
-    # for a selector. The scheduled conflict backstop deliberately does not
-    # re-review unchanged clean PRs over and over.
+    # for a selector. Internal merge/rebase events already have an exact worker
+    # owner, and the scheduled conflict backstop deliberately does not re-review
+    # unchanged clean PRs over and over.
     if: >-
       needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && github.event_name != 'schedule'
+      && github.event_name != 'repository_dispatch'
+      && inputs.ref_race_handoff != true
       && (github.event_name != 'push' || github.event.deleted == false)
       && (github.event_name != 'issue_comment'
           || (github.event.issue.pull_request
@@ -2287,14 +2391,14 @@ jobs:
         if: steps.prepare.outputs.any == 'true'
         env:
           AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
-          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
           set -euo pipefail
           case "$AGENT_BACKEND" in
             claude)
               [ "$HAS_CLAUDE_CREDENTIAL" = true ] \
-                || { echo "::error::Add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN to enable Lopu's configured Claude review backend."; exit 1; }
+                || { echo "::error::Add a primary or fallback Anthropic/Claude Code credential to enable Lopu's configured Claude review backend."; exit 1; }
               ;;
             codex)
               [ "$HAS_OPENAI_CREDENTIAL" = true ] \
@@ -2315,6 +2419,8 @@ jobs:
           backend: ${{ needs.model_config.outputs.agent_backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: "github-actions"
@@ -2442,12 +2548,29 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PRIMARY_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           GH_TOKEN: ${{ github.token }}
           MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
         run: |
           set -euo pipefail
+
+          credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+          case "$credential_slot" in
+            primary)
+              export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            fallback)
+              export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            *) echo "::error::Invalid Lopu Claude credential slot."; exit 1 ;;
+          esac
+          [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
+          [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
           classify_output() {
             node - "$1" <<'NODE'
@@ -3241,6 +3364,8 @@ jobs:
           allow-unresolved: "true"
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: github-actions
@@ -3782,6 +3907,8 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           GRAPHIFY_BACKEND_PREFERENCE: ${{ needs.model_config.outputs.agent_backend }}
           LOPU_OPENAI_MODEL: ${{ needs.model_config.outputs.codex_model }}
           PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
@@ -4110,6 +4237,8 @@ jobs:
           backend: ${{ needs.model_config.outputs.agent_backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: github-actions
@@ -4158,12 +4287,29 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PRIMARY_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
           ANALYSIS_DIR: ${{ steps.release_analysis_inputs.outputs.dir }}
         run: |
           set -euo pipefail
+
+          credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+          case "$credential_slot" in
+            primary)
+              export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            fallback)
+              export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            *) echo "::error::Invalid Lopu Claude credential slot."; exit 1 ;;
+          esac
+          [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
+          [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
           classify_output() {
             node - "$1" <<'NODE'
@@ -4263,6 +4409,8 @@ jobs:
           ANALYSIS_DIR: ${{ steps.release_analysis_inputs.outputs.dir }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
@@ -4277,7 +4425,9 @@ jobs:
           fi
           needles="$RUNNER_TEMP/analysis-needles"
           : >"$needles"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}" "${GH_TOKEN:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" \
+            "${ANTHROPIC_API_KEY_FALLBACK:-}" "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" \
+            "${OPENAI_API_KEY:-}" "${GH_TOKEN:-}"; do
             [[ -n "$secret" ]] || continue
             printf '%s\n' "$secret" >>"$needles"
             printf '%s' "$secret" | base64 | tr -d '\n' >>"$needles"; printf '\n' >>"$needles"
@@ -4386,7 +4536,7 @@ jobs:
                     typeof value.run_url === 'string' &&
                     (value.model_args === undefined || (typeof value.model_args === 'string' && value.model_args.length <= 2048)) &&
                     (value.graphify_mode === undefined || ['true','nochange','failed'].includes(value.graphify_mode)) &&
-                    (value.graphify_semantic === undefined || ['claude','claude-cli','failed','none','unavailable'].includes(value.graphify_semantic))) valid = true;
+                    (value.graphify_semantic === undefined || ['openai','claude','claude-cli','failed','none','unavailable'].includes(value.graphify_semantic))) valid = true;
               } catch {}
             }
           }
@@ -4786,6 +4936,24 @@ jobs:
           # annotation even though conflict resolution succeeded.
           set-safe-directory: false
 
+      - name: Check out the fixed trusted github-actions control plane
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          fetch-depth: 1
+          persist-credentials: false
+          path: trusted
+          set-safe-directory: false
+
+      - name: Keep the trusted control plane outside PR publication
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+        run: printf 'trusted/\n' >>.git/info/exclude
+
       - name: Clear deliberately retried rebase ownership pauses
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
@@ -4900,10 +5068,58 @@ jobs:
             || { echo "::error::Checkout does not match the snapshotted PR head."; exit 1; }
           echo "$pre_merge" > "$RUNNER_TEMP/pre_merge_sha.txt"
 
+          # Keep the normal checkout blobless: downloading the repository's
+          # multi-gigabyte history for every candidate would make routine
+          # no-conflict updates needlessly expensive. GitHub can occasionally
+          # reject one of Git's lazy promisor-object batches, though (observed
+          # while merging main into develop on resolver run 32842546267). In
+          # that narrow case, hydrate the two exact branch histories without a
+          # filter and retry the merge once. The fallback is deterministic,
+          # contains no model or credential, and never loops.
+          merge_log="$RUNNER_TEMP/merge-attempt.log"
+          run_snapshot_merge() {
+            local status
+            set +e
+            git merge --no-edit \
+              -m "Merge branch '$BASE_REF' into $HEAD_REF" \
+              "$base" \
+              > >(tee -a "$merge_log") \
+              2> >(tee -a "$merge_log" >&2)
+            status=$?
+            set -e
+            return "$status"
+          }
+          promisor_fetch_failed() {
+            grep -Eq \
+              'could not fetch [0-9a-f]{40} from promisor remote|upload-pack: not our ref [0-9a-f]{40}' \
+              "$merge_log"
+          }
+
+          : > "$merge_log"
           clean=true
-          git merge --no-edit \
-            -m "Merge branch '$BASE_REF' into $HEAD_REF" \
-            "$base" || clean=false
+          run_snapshot_merge || clean=false
+          if promisor_fetch_failed; then
+            echo "::notice::The blobless checkout could not hydrate a promised merge object; refetching the exact PR branches without a partial-clone filter and retrying once."
+            if git rev-parse --verify --quiet MERGE_HEAD >/dev/null; then
+              git merge --abort || true
+            fi
+            git reset --hard "$pre_merge"
+            git fetch --no-tags --no-recurse-submodules \
+              --refetch --no-filter origin \
+              "+refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF" \
+              "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+            git config --unset-all remote.origin.promisor || true
+            git config --unset-all remote.origin.partialclonefilter || true
+            git reset --hard "$pre_merge"
+
+            : > "$merge_log"
+            clean=true
+            run_snapshot_merge || clean=false
+            if promisor_fetch_failed; then
+              echo "::error::The complete-history retry still could not materialize the exact merge snapshot."
+              exit 1
+            fi
+          fi
 
           # graphify-out determinism: the repo's graph.json merge driver is not
           # configured in CI, so git text-merges it — producing a mixed
@@ -4974,12 +5190,12 @@ jobs:
           && steps.merge.outputs.conflicted == 'true'
         env:
           AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
-          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
           set -euo pipefail
           case "$AGENT_BACKEND" in
-            claude) [ "$HAS_CLAUDE_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Claude backend needs ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN."; exit 1; } ;;
+            claude) [ "$HAS_CLAUDE_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Claude backend needs a primary or fallback Anthropic/Claude Code credential."; exit 1; } ;;
             codex) [ "$HAS_OPENAI_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Codex backend needs OPENAI_API_KEY."; exit 1; } ;;
             *) echo "::error::Unknown Lopu agent backend: $AGENT_BACKEND"; exit 1 ;;
           esac
@@ -4996,6 +5212,8 @@ jobs:
           backend: ${{ needs.model_config.outputs.agent_backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key-fallback: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          claude-code-oauth-token-fallback: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           # The trusted Actions workflow dispatch uses GITHUB_TOKEN, so its
@@ -5088,11 +5306,28 @@ jobs:
           && steps.resolve_conflicts.outcome == 'failure'
         shell: bash
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PRIMARY_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
         run: |
           set -euo pipefail
+
+          credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+          case "$credential_slot" in
+            primary)
+              export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            fallback)
+              export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            *) echo "::error::Invalid Lopu Claude credential slot."; exit 1 ;;
+          esac
+          [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
+          [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
           classify_output() {
             node - "$1" <<'NODE'
@@ -5194,7 +5429,9 @@ jobs:
           # process might nevertheless have exported, then execute pnpm under
           # env -i so AI, GitHub, npm, and repository-write credentials cannot
           # reach package resolution.
-          unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN GH_TOKEN GITHUB_TOKEN
+          unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN
+          unset ANTHROPIC_API_KEY_FALLBACK CLAUDE_CODE_OAUTH_TOKEN_FALLBACK
+          unset GH_TOKEN GITHUB_TOKEN
           unset ACTIONS_TOKEN NODE_AUTH_TOKEN NPM_TOKEN NODE_OPTIONS
 
           if [ ! -f .git/MERGE_HEAD ]; then
@@ -5384,6 +5621,8 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY_FALLBACK: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          CLAUDE_CODE_OAUTH_TOKEN_FALLBACK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
         run: |
@@ -5518,7 +5757,9 @@ jobs:
           # not a boundary (see header).
           keyfile="$RUNNER_TEMP/scan-needles.txt"
           : > "$keyfile"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" \
+            "${ANTHROPIC_API_KEY_FALLBACK:-}" "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" \
+            "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             printf '%s\n' "$secret" >> "$keyfile"
             printf '%s' "$secret" | base64 -w0 >> "$keyfile"
@@ -5583,8 +5824,10 @@ jobs:
           # header). Same secrets the resolve step runs on, so no NEW
           # principals see them beyond the pinned graphifyy package and the
           # claude CLI it shells out to.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PRIMARY_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PRIMARY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FALLBACK_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_FALLBACK }}
+          FALLBACK_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
           CODEX_MODEL: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
@@ -5593,6 +5836,18 @@ jobs:
           PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
         run: |
           set -euo pipefail
+          credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
+          case "$credential_slot" in
+            primary)
+              export ANTHROPIC_API_KEY="$PRIMARY_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            fallback)
+              export ANTHROPIC_API_KEY="$FALLBACK_ANTHROPIC_API_KEY"
+              export CLAUDE_CODE_OAUTH_TOKEN="$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN"
+              ;;
+            *) echo "::warning::Invalid Lopu credential slot; Graphify will use its non-Claude fallback."; unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN ;;
+          esac
           # An empty env var and an unset one look the same to `[ -n ]` but
           # not necessarily to child processes (the claude CLI); normalize.
           [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
@@ -5766,7 +6021,9 @@ jobs:
           # them. Best-effort backstop, not a boundary (see header).
           keyfile="$RUNNER_TEMP/graphify-needles.txt"
           : > "$keyfile"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}"; do
+          for secret in "$PRIMARY_ANTHROPIC_API_KEY" "$PRIMARY_CLAUDE_CODE_OAUTH_TOKEN" \
+            "$FALLBACK_ANTHROPIC_API_KEY" "$FALLBACK_CLAUDE_CODE_OAUTH_TOKEN" \
+            "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             printf '%s\n' "$secret" >> "$keyfile"
             printf '%s' "$secret" | base64 -w0 >> "$keyfile"
@@ -5795,7 +6052,7 @@ jobs:
             echo "refreshed=nochange" >> "$GITHUB_OUTPUT"
           else
             case "$semantic" in
-              claude|claude-cli)
+              openai|claude|claude-cli)
                 detail="Structural \`graphify update\` followed by LLM semantic \`graphify extract\` (graphify $GRAPHIFY_VERSION, $semantic backend); unchanged content served from the tracked semantic cache." ;;
               failed)
                 detail="Structural \`graphify update\` completed (graphify $GRAPHIFY_VERSION); LLM semantic extraction failed, so the verified structural graph was preserved." ;;
@@ -5827,6 +6084,16 @@ jobs:
           live_ref_sha() {
             gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
           }
+          defer_ref_race() {
+            local reason="$1" live_sha="$2"
+            {
+              echo "remote_state=retry"
+              echo "retry_reason=$reason"
+              echo "live_sha=$live_sha"
+            } >> "$GITHUB_OUTPUT"
+            echo "::warning::$reason moved to $live_sha beside publication; the exact lease preserved it and Lopu will requeue from fresh refs."
+            exit 0
+          }
 
           # Revalidate immediately beside the write. The scheduled detector
           # deliberately widens availability, so publication must fail closed
@@ -5857,8 +6124,8 @@ jobs:
           # Stack ownership is structural, not timing-dependent. A newly
           # opened parent/child makes this merge run abstain unless the PR is
           # explicitly labelled no-ai-rebase.
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
           if ! jq -e 'index("no-ai-rebase") != null' >/dev/null <<<"$labels"; then
-            default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
             all_open="$(
               gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --slurp \
                 | jq -c 'add // []'
@@ -5881,10 +6148,12 @@ jobs:
               || { echo "::error::PR became a stack member; rebase workflow now owns it."; exit 1; }
           fi
 
-          [ "$(live_ref_sha "$HEAD_REF")" = "$EXPECTED_HEAD_SHA" ] \
-            || { echo "::error::Head moved immediately before push; exact lease preserved the newer work."; exit 1; }
-          [ "$(live_ref_sha "$BASE_REF")" = "$EXPECTED_BASE_SHA" ] \
-            || { echo "::error::Base moved immediately before push; rerun against the new base."; exit 1; }
+          live_head_sha="$(live_ref_sha "$HEAD_REF")"
+          [ "$live_head_sha" = "$EXPECTED_HEAD_SHA" ] \
+            || defer_ref_race head "$live_head_sha"
+          live_base_sha="$(live_ref_sha "$BASE_REF")"
+          [ "$live_base_sha" = "$EXPECTED_BASE_SHA" ] \
+            || defer_ref_race base "$live_base_sha"
           [ "$(gh api "repos/$REPO/branches/$(encode_ref "$HEAD_REF")" --jq '.protected')" != true ] \
             || { echo "::error::Head branch became protected while resolving."; exit 1; }
           [ "$HEAD_REF" != "$default_ref" ] \
@@ -5965,10 +6234,96 @@ jobs:
           echo "::error::Ambiguous push outcome: live head is unexpected ($remote_sha)."
           exit 1
 
+      - name: Requeue after a moving-ref race
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.push.outputs.remote_state == 'retry'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RACE_RETRY_ATTEMPT: ${{ inputs.ref_race_retry || '0' }}
+          RACE_REASON: ${{ steps.push.outputs.retry_reason }}
+          RACE_LIVE_SHA: ${{ steps.push.outputs.live_sha }}
+          DEPTH: ${{ inputs.depth || '0' }}
+        run: |
+          set -euo pipefail
+
+          case "$RACE_RETRY_ATTEMPT" in
+            ''|*[!0-9]*)
+              echo "::error::ref_race_retry must be a decimal integer."
+              exit 1
+              ;;
+          esac
+          if [ "$RACE_RETRY_ATTEMPT" -ge 3 ]; then
+            echo "::error::Head/base refs moved during four consecutive publication attempts; leaving the exact remote refs untouched for the scheduled sweep."
+            exit 1
+          fi
+          next_attempt=$((RACE_RETRY_ATTEMPT + 1))
+          dispatch_id="ref-race:$PR_NUMBER:${{ github.run_id }}:${{ github.run_attempt }}:$next_attempt"
+
+          payload="$(jq -n \
+            --arg pr_number "$PR_NUMBER" \
+            --arg depth "$DEPTH" \
+            --arg retry "$next_attempt" \
+            --arg dispatch_id "$dispatch_id" '
+              {
+                ref:"github-actions",
+                inputs:{
+                  pr_number:$pr_number,
+                  branch:"",
+                  detector_handoff:true,
+                  manual_retry:false,
+                  depth:$depth,
+                  ref_race_retry:$retry,
+                  execution_provider:"github-actions",
+                  runner_label:"",
+                  control_dispatch_id:$dispatch_id,
+                  routing_proof:"",
+                  routing_proof_issued_at:""
+                }
+              }
+            ')"
+          for attempt in 1 2 3; do
+            if gh api --method POST \
+                 "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+                 --input - <<<"$payload"; then
+              break
+            fi
+            [ "$attempt" -eq 3 ] && exit 1
+            sleep 2
+          done
+
+          marker_comment_id="$(
+            gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --slurp \
+              | jq -r --arg marker "$RUN_STATUS_MARKER" '
+                  add // []
+                  | [.[]
+                      | select(.user.login == "github-actions[bot]")
+                      | select(.body | contains($marker))
+                      | .id]
+                  | last // empty
+                '
+          )"
+          body="$RUNNER_TEMP/ref-race-requeue.md"
+          {
+            echo "🔄 Lopu preserved the live \`$RACE_REASON\` ref at \`$RACE_LIVE_SHA\` because it moved beside publication, then queued retry $next_attempt/3 from fresh PR refs."
+            echo
+            echo "No stale merge commit was pushed. [View this guarded attempt]($RUN_URL)."
+            echo
+            echo "$RUN_STATUS_MARKER"
+          } > "$body"
+          if [ -n "$marker_comment_id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$marker_comment_id" \
+              -F "body=@$body" >/dev/null
+          else
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body" >/dev/null
+          fi
+
       - name: Comment on PR (resolved)
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
+          && steps.push.outputs.remote_state == 'published'
         env:
           GH_TOKEN: ${{ github.token }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
@@ -6018,7 +6373,7 @@ jobs:
             case "$GRAPHIFY_REFRESHED" in
               true)
                 case "$GRAPHIFY_SEMANTIC" in
-                  claude|claude-cli)
+                  openai|claude|claude-cli)
                     echo "> Rebuilt the merged code graph first with \`graphify update .\`, then ran LLM semantic extraction (\`graphify extract .\`, $GRAPHIFY_SEMANTIC backend) and committed the result." ;;
                   failed)
                     echo "> Rebuilt and committed the merged code graph with \`graphify update .\`. LLM semantic extraction was attempted afterward but failed; the valid structural result was preserved (see the workflow log)." ;;
@@ -6027,7 +6382,7 @@ jobs:
                 esac ;;
               nochange)
                 case "$GRAPHIFY_SEMANTIC" in
-                  claude|claude-cli) echo "> Rebuilt the code graph, then ran LLM semantic extraction; the tracked Graphify output was already current." ;;
+                  openai|claude|claude-cli) echo "> Rebuilt the code graph, then ran LLM semantic extraction; the tracked Graphify output was already current." ;;
                   failed) echo "> Rebuilt the code graph; semantic extraction failed afterward, but the tracked structural output was already current." ;;
                   *) echo "> Rebuilt the code graph; the tracked Graphify output was already current." ;;
                 esac ;;
@@ -6048,6 +6403,7 @@ jobs:
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
+          && steps.push.outputs.remote_state == 'published'
         # Always dispatch exact child PR selections, even when a PAT-backed
         # push also creates a detector run. Duplicate discovery is harmless:
         # trusted workers serialize per PR without cancellation and re-detect

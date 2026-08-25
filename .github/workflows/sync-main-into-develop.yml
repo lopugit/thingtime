@@ -3,9 +3,11 @@
 # When the public Lopu manager receives a main push (or an explicit owner
 # maintenance request), merge main into develop:
 # - Clean merge → pushed straight to develop, no ceremony.
-# - Conflicts → a standing PR (base develop, head main) is opened instead, so
-#   the conflict is resolved in the PR UI; if one is already open we reuse it
-#   (its head is the moving main ref, so it tracks new commits by itself).
+# - Conflicts or workflow-scope push refusal → a standing PR is opened from the
+#   automation-owned `sync/main-into-develop` branch. The branch is updated
+#   from an immutable, revalidated candidate and may be rewritten only with an
+#   exact force-with-lease. Lopu can safely merge `develop` into that head and
+#   resolve it without ever mutating the protected `main` branch.
 #
 # Token notes (same trade-off documented in resolve-pr-conflicts.yml):
 # - GITHUB_TOKEN pushes are rejected whenever the merge brings ANY change
@@ -88,16 +90,31 @@ jobs:
         if: steps.develop.outputs.exists == 'true'
         id: merge
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          git fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/develop:refs/remotes/origin/develop
+          main_sha="$(git rev-parse 'origin/main^{commit}')"
+          develop_sha="$(git rev-parse 'origin/develop^{commit}')"
+          [ "$(git rev-parse 'HEAD^{commit}')" = "$develop_sha" ] || {
+            echo "::error::The checked-out develop branch moved before synchronization."
+            exit 1
+          }
+
           if git merge --no-edit origin/main; then
             echo "result=clean" >> "$GITHUB_OUTPUT"
+            echo "candidate_sha=$(git rev-parse 'HEAD^{commit}')" >> "$GITHUB_OUTPUT"
           else
             git merge --abort
             echo "result=conflict" >> "$GITHUB_OUTPUT"
+            echo "candidate_sha=$main_sha" >> "$GITHUB_OUTPUT"
             echo "::notice::main → develop has conflicts; opening a PR instead."
           fi
+          echo "main_sha=$main_sha" >> "$GITHUB_OUTPUT"
+          echo "develop_sha=$develop_sha" >> "$GITHUB_OUTPUT"
 
       - name: Push develop
         if: steps.merge.outputs.result == 'clean'
@@ -113,14 +130,52 @@ jobs:
             echo "::warning::Push to develop was refused (workflow-file changes need a PAT); falling back to a PR."
           fi
 
-      - name: Open (or reuse) the sync PR
+      - name: Open or refresh the safe sync PR
         if: steps.merge.outputs.result == 'conflict' || steps.push.outputs.result == 'blocked'
         env:
           GH_TOKEN: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT }}
+          SYNC_BRANCH: sync/main-into-develop
+          CANDIDATE_SHA: ${{ steps.merge.outputs.candidate_sha }}
+          EXPECTED_MAIN_SHA: ${{ steps.merge.outputs.main_sha }}
+          EXPECTED_DEVELOP_SHA: ${{ steps.merge.outputs.develop_sha }}
         run: |
+          set -euo pipefail
           if [ -z "$GH_TOKEN" ]; then
             echo "::error::Opening the sync PR needs SYNC_BRANCHES_PAT or CONFLICT_RESOLVER_PAT — a PR created by GITHUB_TOKEN would run no CI."
             exit 1
+          fi
+
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Invalid synchronization candidate SHA."
+            exit 1
+          }
+          branch_refs="$(git ls-remote --heads origin refs/heads/main refs/heads/develop)"
+          live_main_sha="$(printf '%s\n' "$branch_refs" | awk '$2 == "refs/heads/main" {print $1}')"
+          live_develop_sha="$(printf '%s\n' "$branch_refs" | awk '$2 == "refs/heads/develop" {print $1}')"
+          [ "$live_main_sha" = "$EXPECTED_MAIN_SHA" ] \
+            && [ "$live_develop_sha" = "$EXPECTED_DEVELOP_SHA" ] || {
+              echo "::error::main or develop moved before the safe sync branch publication."
+              exit 1
+            }
+
+          remote_sha="$(git ls-remote --heads origin "refs/heads/$SYNC_BRANCH" | awk 'NR == 1 {print $1}')"
+          if [ -n "$remote_sha" ]; then
+            git fetch --no-tags origin \
+              "refs/heads/$SYNC_BRANCH:refs/remotes/origin/lopu-main-develop-sync"
+            [ "$(git rev-parse 'refs/remotes/origin/lopu-main-develop-sync^{commit}')" = "$remote_sha" ] || {
+              echo "::error::$SYNC_BRANCH moved while its safe update was being prepared."
+              exit 1
+            }
+
+            if git merge-base --is-ancestor "$EXPECTED_MAIN_SHA" "$remote_sha"; then
+              CANDIDATE_SHA="$remote_sha"
+              echo "::notice::$SYNC_BRANCH already contains the current main; preserving Lopu's existing resolution."
+            else
+              git push origin "$CANDIDATE_SHA:refs/heads/$SYNC_BRANCH" \
+                --force-with-lease="refs/heads/$SYNC_BRANCH:$remote_sha"
+            fi
+          else
+            git push origin "$CANDIDATE_SHA:refs/heads/$SYNC_BRANCH"
           fi
 
           # Keep lookup and creation on the REST API. `gh pr` uses GraphQL,
@@ -133,7 +188,7 @@ jobs:
               if existing=$(gh api --method GET "repos/${{ github.repository }}/pulls" \
                 -f state=open \
                 -f base=develop \
-                -f head="${{ github.repository_owner }}:main" \
+                -f head="${{ github.repository_owner }}:$SYNC_BRANCH" \
                 --jq '.[0].number // empty'); then
                 printf '%s' "$existing"
                 return 0
@@ -150,27 +205,27 @@ jobs:
             echo "::warning::Could not query the standing sync PR after bounded retries; attempting the idempotent create path."
           fi
           if [ -n "$existing" ]; then
-            echo "Sync PR #$existing is already open and tracks main automatically." >> "$GITHUB_STEP_SUMMARY"
+            echo "Safe sync PR #$existing is already open and now points at candidate $CANDIDATE_SHA." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          sync_pr_body="Automated sync opened by the *Sync main into develop* workflow because main could not be merged into develop directly (merge conflicts, or the merge touches workflow files that GITHUB_TOKEN cannot push). Resolve any conflicts here and merge — this PR's head is \`main\`, so it picks up new commits on its own."
+          sync_pr_body="Automated sync opened by **Lopu PR manager** because main could not be merged into develop directly (merge conflicts, or workflow-file push scope). The automation-owned \`$SYNC_BRANCH\` head carries the exact fenced candidate; Lopu may merge \`develop\` into it, resolve conflicts, rebuild Graphify, and push the result without mutating \`main\`."
           for attempt in 1 2 3; do
             created=""
             if created=$(gh api --method POST "repos/${{ github.repository }}/pulls" \
               -f base=develop \
-              -f head=main \
+              -f head="$SYNC_BRANCH" \
               -f title="Sync main into develop" \
               -f body="$sync_pr_body" \
               --jq '.number'); then
-              echo "Opened sync PR #$created (main → develop)." >> "$GITHUB_STEP_SUMMARY"
+              echo "Opened safe sync PR #$created ($SYNC_BRANCH → develop)." >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
 
             echo "::warning::Sync PR creation attempt $attempt failed; checking whether GitHub committed it despite the API error."
             existing=""
             if existing=$(find_sync_pr) && [ -n "$existing" ]; then
-              echo "Sync PR #$existing exists after a transient create error and tracks main automatically." >> "$GITHUB_STEP_SUMMARY"
+              echo "Safe sync PR #$existing exists after a transient create error." >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             if [ "$attempt" -lt 3 ]; then
@@ -178,5 +233,5 @@ jobs:
             fi
           done
 
-          echo "::error::Could not open or find the main → develop sync PR after bounded retries."
+          echo "::error::Could not open or find the safe main → develop sync PR after bounded retries."
           exit 1
