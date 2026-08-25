@@ -77,11 +77,64 @@ runtime trio: **Data Thing + Component Thing + Action Thing = program.**
 
 ## Deferred (with rationale)
 
-- `ttAction` bindings inside component render trees (a Send button in a
-  rendered component invoking the action directly): needs allowlist work in
-  the sanitizing renderers (`data-tt-action` prop + delegated click capture)
-  — deliberately kept out of the sanitizer-touching surface of this PR.
+- ~~`ttAction` bindings inside component render trees~~ — **SHIPPED in Round 4
+  (7e8f751a1)**: `ttAction`/`ttActionInputs` node keys fold into
+  `data-tt-action`/`data-tt-action-inputs` (the only two data-* attributes the
+  sanitizing renderer allowlists; inert markup, no URL/JS sinks, tt keys
+  stripped from nodes); `useTtActionClicks` onClickCapture on trusted surfaces
+  runs the action AS the viewer (no new authority; executor envelope bounds
+  the run). /things renders component things through the kind renderer now
+  (resolved savedArgs; PreviewModal is the interactive surface, grid tiles
+  stay pointerEvents:none for selection). Browser-verified: Send pill inside
+  a rendered Invoice Card → send-invoice ran 28ms · 2 ops, invoice
+  draft→sent. componentTemplate.test.ts guards the fold (test:actions 19/19).
 - `things.delete` op, `forEach`/`if`/`parallel`/`retry` primitives (each with
   explicit limits), Connection-owned external capabilities
   (`mailgun.send-email` style), PAT scope for runs, non-declarative executors
   behind the same Action interface.
+
+## Round 3 — Lopu review round 2 rebuilt on-branch (2026-08-25, commit 7706c3eef)
+
+Lopu's second review confirmed the four executor-contract fixes and raised two
+NEW findings in the builder; its prepared fixes again never landed on the
+branch (head pinned at `e91d0baf`), so both were rebuilt from the findings:
+
+1. **Derivation honesty** — `deriveRequiredCapabilities` now unscopes the
+   whole capability the moment one step for it lacks a literal schema. The
+   regression: `things.search {schema}` + bare `things.get $input.x` derived
+   `things.read: [schema]`, which saved (save time can't resolve dynamic ids)
+   and then refused mid-run — while `deriveActionEffects` reported the same
+   step as the `'*'` broad read. One unscoped step ⇒ unscoped capability;
+   the chip and the effects summary can no longer contradict. Same rule for
+   `actions.invoke` without a literal action name.
+2. **Canonical-decimal coercion** — `coerceValueText` moved into
+   `actionInspect.ts` (pure, testable) and only coerces text matching
+   `^-?(0|[1-9]\d*)(\.\d+)?$`: `0412345678`, `0800`, `007`, `1e3`, `0x10`,
+   `Infinity` stay strings (`1.50` still reads 1.5). Zero-padded values were
+   unauthorable: coercion was lossy AND string schema fields reject numbers.
+
+Tests: `app/components/Actions/actionInspect.test.ts` (13) + `test:actions`
+script wired into the `test:unit` chain web-ci runs. Revert-proofed both
+directions (old derivation fails the sibling-widening + effects-agreement
+tests; old coercion fails the zero-padded/exponent test).
+
+### Validation (this round)
+
+- `test:actions` 13/13 · `test:schemas` 81/81 · targeted lint clean ·
+  `build:client` clean.
+- `verify-actions.mjs` **56/56** and `verify-components.mjs` **30/30** against
+  the live worktree stack (after clearing an orphan port-squatting dev pair on
+  17050/17052 — the PM2 entry was crash-looping on "port in use"; killed the
+  orphans by port, clean restart, re-ran green).
+- Browser click-through (desktop 1280 + 375px mobile, no horizontal
+  overflow): authored **Stamp phone note** in the builder — search scoped to
+  a schema + bare get + update stamping `phone: 0412345678` — and watched the
+  derived CAN ACCESS chips show **unscoped** `things.read` (the fix, live);
+  saved definition carries `"phone": "0412345678"` as a string. First run
+  failed cleanly (`Schema "Customer" was not found` — demo schema is
+  lowercase) and the error run landed in LAST RUNS with budget stamps — the
+  inspectable-trail invariant covering the failure path. Edited the step to
+  `customer` through the unified things path (grammar re-validated on save),
+  re-ran from the inspector: **ok · 26ms · 3 ops**, per-step trace, Margaret
+  Hamilton stamped with the zero-padded phone string intact and schema
+  provenance preserved. Intent → build → inspect → edit → re-run, all in UI.
