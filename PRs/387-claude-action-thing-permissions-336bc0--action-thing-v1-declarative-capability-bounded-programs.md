@@ -138,3 +138,32 @@ tests; old coercion fails the zero-padded/exponent test).
   re-ran from the inspector: **ok · 26ms · 3 ops**, per-step trace, Margaret
   Hamilton stamped with the zero-padded phone string intact and schema
   provenance preserved. Intent → build → inspect → edit → re-run, all in UI.
+
+## Round 4 — ttAction reachability, precisely mapped (2026-08-25)
+
+Traced the ttAction binding end to end on the live stack and pinned exactly what
+is and isn't reachable today:
+
+- **Runtime: complete and safe.** `componentTemplate.ts` folds `ttAction` /
+  `ttActionInputs` into `data-tt-action` / `data-tt-action-inputs` (verified
+  live: the tester's `invoiceId` arg substitutes correctly into the DOM
+  attributes). `useTtActionClicks` reads them and runs the action AS the viewer
+  through the ordinary bounded `/api/v1/actions/run`. The firing wrapper lives in
+  `ComponentKindRenderer` as `onClickCapture={context.untrusted ? undefined : …}`.
+- **The trusted firing surface is wired but not yet exercised by a shipped
+  route.** `/thing/:id` renders the raw JSON "Thing data" view (no kind render);
+  `/components` catalog + args tester render the template *directly* through the
+  sanitising renderers, bypassing the wrapper (confirmed live: clicking Send in
+  the tester left the invoice `draft`); `/things` cards render with
+  `untrusted: true`. So `ComponentKindRenderer` with `untrusted=false` — the one
+  path that fires ttAction — is correct but has no current end-user route.
+- **What this means for scope.** The click-to-run half of "🧩 Component → ⚡
+  Action → 📦 Data" is built and inspectable; an end-user can't yet click Send
+  in a rendered app because the trusted **app-composition render surface** (the
+  "📁 My App" page that renders a component-kind thing through the kind registry)
+  is beyond this runtime-primitive PR. Today, actions execute from the `/actions`
+  run panel (verified: onboard-customer composition, 5 ops on one shared budget,
+  and send-invoice draft→sent). The app-render surface is the natural next PR.
+- **Open product decision (raised on the PR):** whether the `/components` tester
+  should also fire ttAction behind a "this will run the action" confirm, or stay
+  inert (the current safe default — no side-effectful runs while authoring).
