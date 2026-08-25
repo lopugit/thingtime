@@ -72,17 +72,24 @@ export const describeActionStep = (step: Record<string, unknown>, names?: Record
 	return op;
 };
 
-// Derive the MINIMAL capability set a step list needs — the builder prefixes
-// authoring with this so a UI-authored action's declaration is true by
-// construction (the save-time coverage check in registry.ts stays the real
-// gate). Literal step schemas seed the scopes; get/update steps (id-based)
-// leave their capability unscoped until the author narrows it.
+// Derive the MINIMAL-AND-SUFFICIENT capability set a step list needs — the
+// builder prefixes authoring with this so a UI-authored action's declaration
+// is true by construction (the save-time coverage check in registry.ts stays
+// the real gate). Literal step schemas seed the scopes, but a single
+// schema-less step (a dynamic-id get, a bare search) makes the WHOLE
+// capability unscoped: the run-time scope check applies to every step, so a
+// sibling-seeded narrower scope would save fine and then refuse mid-run —
+// while contradicting the '*' broad-read effect deriveActionEffects already
+// reports for that same step. The wider declaration is the honest one.
 export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): ActionCapabilityEntry[] => {
 	const scopes = new Map<string, Set<string>>();
+	const unscoped = new Set<string>();
 	const invoked = new Set<string>();
+	let invokeUnscoped = false;
 	const need = (capability: string, schema?: string | null) => {
 		if (!scopes.has(capability)) scopes.set(capability, new Set());
 		if (schema) scopes.get(capability)!.add(schema);
+		else unscoped.add(capability);
 	};
 	for (const step of steps) {
 		if (!step || typeof step !== 'object') continue;
@@ -93,13 +100,30 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 		if (step.op === 'actions.invoke') {
 			need('actions.invoke');
 			if (typeof step.action === 'string' && step.action) invoked.add(step.action);
+			else invokeUnscoped = true;
 		}
 	}
 	return [...scopes.entries()].map(([capability, schemaSet]) => ({
 		capability,
-		...(schemaSet.size ? { schemas: [...schemaSet] } : {}),
-		...(capability === 'actions.invoke' && invoked.size ? { actions: [...invoked] } : {})
+		...(schemaSet.size && !unscoped.has(capability) ? { schemas: [...schemaSet] } : {}),
+		...(capability === 'actions.invoke' && invoked.size && !invokeUnscoped ? { actions: [...invoked] } : {})
 	}));
+};
+
+// Builder form values are strings; interpret them the way an author expects:
+// refs and $$-escapes stay verbatim, "true"/"false" become booleans, and only
+// CANONICAL decimal text becomes a number. The canonical test matters: naive
+// Number() coercion turns "0412345678" into 412345678 and "1e3" into 1000 —
+// lossy for zero-padded text, and a string schema field then rejects the
+// number outright, making such values unauthorable in the builder.
+const CANONICAL_DECIMAL = /^-?(0|[1-9]\d*)(\.\d+)?$/;
+export const coerceValueText = (raw: string): unknown => {
+	const text = raw.trim();
+	if (text.startsWith('$')) return text; // refs and $$-escapes stay verbatim
+	if (text === 'true') return true;
+	if (text === 'false') return false;
+	if (CANONICAL_DECIMAL.test(text)) return Number(text);
+	return raw;
 };
 
 // Collect every schema ref an action mentions (steps + capability scopes) so

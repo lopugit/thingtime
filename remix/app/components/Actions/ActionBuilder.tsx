@@ -8,7 +8,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { CARD_STYLES } from '~/theme/card';
 import { ACTION_INPUT_TYPES, ACTION_STEP_OPS } from '~/schemas/registry';
 import { ActionChip } from './ActionChip';
-import { deriveRequiredCapabilities, displayRef } from './actionInspect';
+import { coerceValueText, deriveRequiredCapabilities, displayRef } from './actionInspect';
 
 // Form-driven action authoring. The design rule that matters: capabilities
 // are DERIVED from the steps (deriveRequiredCapabilities) and shown for
@@ -33,18 +33,6 @@ const slugify = (value: string): string =>
 		.replace(/[^a-z0-9]+/g, '-')
 		.replace(/^-+|-+$/g, '')
 		.slice(0, 80);
-
-// Values in the form are strings; interpret them the way an author expects:
-// refs and $$-escapes stay strings, "true"/"false" become booleans, numeric
-// text becomes numbers, everything else stays a string.
-const coerceValueText = (raw: string): unknown => {
-	const text = raw.trim();
-	if (text.startsWith('$')) return text; // refs and $$-escapes stay verbatim
-	if (text === 'true') return true;
-	if (text === 'false') return false;
-	if (text !== '' && !Number.isNaN(Number(text))) return Number(text);
-	return raw;
-};
 
 type InputRow = { name: string; type: string; required: boolean; default: string };
 type ValueRow = { key: string; value: string };
