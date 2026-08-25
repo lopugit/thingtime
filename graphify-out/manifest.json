@@ -65,9 +65,9 @@
     "semantic_hash": "029015346bca433c37f095b0b841305e"
   },
   ".github/scripts/workflow-control-plane-contract.mjs": {
-    "mtime": 1787645596.1698549,
-    "ast_hash": "3008ac050d469908d6a875ad52aa0c28",
-    "semantic_hash": "3008ac050d469908d6a875ad52aa0c28"
+    "mtime": 1787647754.2916398,
+    "ast_hash": "ec8dc2da577bd74edde8f4cc679a3fc7",
+    "semantic_hash": "ec8dc2da577bd74edde8f4cc679a3fc7"
   },
   "vercel.json": {
     "mtime": 1787633244.8850276,
@@ -115,13 +115,13 @@
     "semantic_hash": "665a251b0cc416395e2d7be32c926f1b"
   },
   ".github/workflows/rebase-pr-stacks.yml": {
-    "mtime": 1787639001.823617,
-    "ast_hash": "05eb4f52b73062408aa75c9a2fffc811",
-    "semantic_hash": "05eb4f52b73062408aa75c9a2fffc811"
+    "mtime": 1787646132.8902164,
+    "ast_hash": "df45d26ec749b7dcab9b68339c7b253b",
+    "semantic_hash": "df45d26ec749b7dcab9b68339c7b253b"
   },
   ".github/workflows/resolve-pr-conflicts.yml": {
-    "mtime": 1787645596.169339,
-    "ast_hash": "a21984f898edfe2bfa6a4b5ad9c83e95",
+    "mtime": 1787647727.6563377,
+    "ast_hash": "2e9754c9eb253f096296789a7dfc0aa5",
     "semantic_hash": ""
   },
   ".github/workflows/sync-main-into-develop.yml": {
@@ -145,8 +145,8 @@
     "semantic_hash": "14d35af8428488f574b554e2da5c0445"
   },
   "CHANGELOG.md": {
-    "mtime": 1787645596.1705394,
-    "ast_hash": "04f23e8b9a7192fe5dc7a5172f152c07",
+    "mtime": 1787647746.5491827,
+    "ast_hash": "db9134c1a11fc138940b9644dde9c179",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -155,8 +155,8 @@
     "semantic_hash": "14d35af8428488f574b554e2da5c0445"
   },
   "README.md": {
-    "mtime": 1787645596.1701188,
-    "ast_hash": "4761097f27e131c46323b10165e9275f",
+    "mtime": 1787647746.5488756,
+    "ast_hash": "33d2aa9793501c2ce9f1b12ed5f2ec96",
     "semantic_hash": ""
   },
   ".github/workflows/commander-release.yml": {
@@ -175,13 +175,18 @@
     "semantic_hash": "d8ef4a3c0b25604f5d8365eeccef965b"
   },
   ".github/workflows/codeql-analysis.yml": {
-    "mtime": 1787636880.9893136,
-    "ast_hash": "3b6373f3eaf7bbfd79535946df6efad0",
-    "semantic_hash": "3b6373f3eaf7bbfd79535946df6efad0"
+    "mtime": 1787647727.6569238,
+    "ast_hash": "bac6efb90c2b5724ffe6435b637fb46b",
+    "semantic_hash": ""
   },
   ".github/actions/lopu-agent/action.yml": {
     "mtime": 1787639415.0316327,
     "ast_hash": "497892a894cf883f760566f7673188b2",
     "semantic_hash": "497892a894cf883f760566f7673188b2"
+  },
+  ".github/workflows/codeql-pr-handoff.yml": {
+    "mtime": 1787647727.6571581,
+    "ast_hash": "5c9eacd506c3f179eef7dc9d6ec6cf00",
+    "semantic_hash": ""
   }
 }
