@@ -5068,10 +5068,58 @@ jobs:
             || { echo "::error::Checkout does not match the snapshotted PR head."; exit 1; }
           echo "$pre_merge" > "$RUNNER_TEMP/pre_merge_sha.txt"
 
+          # Keep the normal checkout blobless: downloading the repository's
+          # multi-gigabyte history for every candidate would make routine
+          # no-conflict updates needlessly expensive. GitHub can occasionally
+          # reject one of Git's lazy promisor-object batches, though (observed
+          # while merging main into develop on resolver run 32842546267). In
+          # that narrow case, hydrate the two exact branch histories without a
+          # filter and retry the merge once. The fallback is deterministic,
+          # contains no model or credential, and never loops.
+          merge_log="$RUNNER_TEMP/merge-attempt.log"
+          run_snapshot_merge() {
+            local status
+            set +e
+            git merge --no-edit \
+              -m "Merge branch '$BASE_REF' into $HEAD_REF" \
+              "$base" \
+              > >(tee -a "$merge_log") \
+              2> >(tee -a "$merge_log" >&2)
+            status=$?
+            set -e
+            return "$status"
+          }
+          promisor_fetch_failed() {
+            grep -Eq \
+              'could not fetch [0-9a-f]{40} from promisor remote|upload-pack: not our ref [0-9a-f]{40}' \
+              "$merge_log"
+          }
+
+          : > "$merge_log"
           clean=true
-          git merge --no-edit \
-            -m "Merge branch '$BASE_REF' into $HEAD_REF" \
-            "$base" || clean=false
+          run_snapshot_merge || clean=false
+          if promisor_fetch_failed; then
+            echo "::notice::The blobless checkout could not hydrate a promised merge object; refetching the exact PR branches without a partial-clone filter and retrying once."
+            if git rev-parse --verify --quiet MERGE_HEAD >/dev/null; then
+              git merge --abort || true
+            fi
+            git reset --hard "$pre_merge"
+            git fetch --no-tags --no-recurse-submodules \
+              --refetch --no-filter origin \
+              "+refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF" \
+              "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+            git config --unset-all remote.origin.promisor || true
+            git config --unset-all remote.origin.partialclonefilter || true
+            git reset --hard "$pre_merge"
+
+            : > "$merge_log"
+            clean=true
+            run_snapshot_merge || clean=false
+            if promisor_fetch_failed; then
+              echo "::error::The complete-history retry still could not materialize the exact merge snapshot."
+              exit 1
+            fi
+          fi
 
           # graphify-out determinism: the repo's graph.json merge driver is not
           # configured in CI, so git text-merges it — producing a mixed

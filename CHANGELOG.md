@@ -21,6 +21,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Conflict resolution now recovers from incomplete partial-clone object
+  hydration**: ordinary resolver checkouts remain blobless for cost and speed,
+  but a GitHub promisor-object rejection now aborts the partial merge, refetches
+  only the exact PR head and target branch histories without a filter, and
+  retries the same immutable merge once before any AI spend. This fixes the
+  pre-model failure observed while Lopu tried to merge `main` into `develop`
+  for PR #289, without making every PR download the repository's full object
+  history. — Codex (AI), 2026-08-25
 - **The wildcard `all`-branch doctor is now internal to the one public Lopu
   manager**: its independent push/manual workflow is retired. PR lifecycle
   changes and the hourly backstop call the protected reusable doctor directly;
