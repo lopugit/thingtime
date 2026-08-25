@@ -102,10 +102,13 @@ PR head. The ordinary Lopu conflict lane can therefore merge `develop` into
 the safe head, resolve it, rebuild Graphify, and publish without rewriting
 either primary branch.
 
-The public manager itself also uses GitHub's durable `queue: max` mode with
-`cancel-in-progress: false`. Distinct PR, comment, failed-check, branch, and
-scheduled signals wait behind the active run in their bounded namespace and
-revalidate live state when they start; none is replaced before Lopu sees it.
+The public manager coalesces event storms by semantic PR or branch key: GitHub
+keeps the active run plus the newest pending run, and
+`cancel-in-progress: false` prevents that newest signal from interrupting work
+already running. The survivor re-derives the complete live PR, comment, check,
+and branch state. Only the shared model fleet uses durable `queue: max`, because
+already-selected work for distinct PRs must not disappear while one Lopu is
+active.
 
 The stack rebase/cascade implementation is internal in the same way. Existing
 `rebase-pr-stack-ai` exact-worker events enter through **Lopu PR manager**, keep

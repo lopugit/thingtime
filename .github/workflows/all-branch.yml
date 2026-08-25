@@ -58,14 +58,15 @@ permissions:
   contents: write
   pull-requests: read
 
-# Preserve every requested rebuild. Each worker re-derives the complete live
-# union and exits cheaply when its inputs are already represented, so queued
-# duplicates are safe while cancellation could interrupt a Lopu doctor round.
+# Coalesce a protected-branch burst at the cheap workflow boundary. GitHub's
+# normal concurrency behavior keeps the active run plus the newest pending run
+# for each group; cancel-in-progress:false protects the active handoff/doctor.
+# The surviving worker re-derives the complete live union, so older pending
+# rebuild requests contain no state that the newest request cannot recover.
 concurrency:
   # Keep the tiny push handoff separate from the worker it dispatches so the
   # worker cannot cancel its own caller before the caller reports success.
   group: all-branch-${{ github.event_name == 'push' && 'handoff' || 'worker' }}
-  queue: max
   cancel-in-progress: false
 
 jobs:

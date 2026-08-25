@@ -187,8 +187,17 @@ export function assertAllBranchWorkflowContract(workflowText) {
   );
   assert.match(
     text,
-    /concurrency:\n(?:\s*#.*\n)*\s*group: all-branch-[^\n]+\n\s*queue: max\n\s*cancel-in-progress: false/,
-    "all-branch workflow requests must queue instead of cancelling an active doctor"
+    /concurrency:\n(?:\s*#.*\n)*\s*group: all-branch-[^\n]+\n\s*cancel-in-progress: false/,
+    "all-branch requests must coalesce without cancelling an active doctor"
+  );
+  const workflowConcurrency = text.slice(
+    text.indexOf("\nconcurrency:\n"),
+    text.indexOf("\njobs:\n")
+  );
+  assert.doesNotMatch(
+    workflowConcurrency,
+    /^\s*queue: max$/m,
+    "all-branch event storms must retain only the newest pending handoff or worker"
   );
   const rebuildBlock = text.slice(text.indexOf("\n  rebuild:"));
   assert.match(

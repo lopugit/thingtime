@@ -501,9 +501,11 @@ on:
     # workflow instead of a second rebase-specific product listener.
     types: [resolve-conflicts-cascade, rebase-pr-stack-ai]
 
-# Detector and worker runs are both durable. A detector and the worker it
-# spawns never share a namespace, and queue:max preserves every pending run
-# instead of silently replacing an earlier repository signal.
+# Detector and worker runs never share a namespace. Within each semantic
+# PR/branch namespace, GitHub keeps the active run plus the newest pending run;
+# the newest run re-derives live PR, comment, check, and branch state, so an
+# older pending snapshot is redundant. The model jobs below still use the
+# durable repository fleet queue because work for distinct PRs must not vanish.
 concurrency:
   # Distinct namespaces are load-bearing:
   #   resolve-detect-*   external/event/API-only detectors
@@ -580,11 +582,8 @@ concurrency:
              github.event.client_payload.branch || github.run_id)
         || format('resolve-detect-{0}-{1}',
              github.event_name, github.ref_name || github.run_id) }}
-  queue: max
-  # GitHub rejects queue:max whenever cancel-in-progress can evaluate true.
-  # More importantly, replacing an older detector can lose a distinct PR,
-  # comment, check, or branch signal. Let each bounded detector revalidate live
-  # state when it reaches the front of its namespace instead.
+  # Never interrupt a detector or worker already running. Default pending-run
+  # coalescing bounds event storms to one newest waiter per semantic key.
   cancel-in-progress: false
 
 permissions:

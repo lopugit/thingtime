@@ -36,11 +36,13 @@ every entry is attributed the same way the app changelog attributes them.
   fresh live refs up to three times instead of leaving a red run until the next
   scheduled sweep. Success comments and stack cascades remain gated on a live
   ref proving the exact merge commit was published. — Codex (AI), 2026-08-25
-- **Lopu's public queue now preserves every repository signal**: the unified
-  manager pairs `queue: max` with a constant `cancel-in-progress: false`, the
-  only GitHub-valid durable configuration. Comment, check, branch, schedule,
-  promotion, and exact-worker runs now queue and revalidate live state instead
-  of failing before job creation or replacing in-flight work. CodeQL's
+- **Lopu's public queue now coalesces repeated repository snapshots without
+  interrupting active work**: each semantic PR/branch boundary keeps the
+  running workflow plus the newest pending signal, which re-derives all live
+  comment, check, branch, and PR state when it starts. The shared model fleet
+  retains `queue: max` only after distinct PR work has been selected, avoiding
+  the former 100-run duplicate backlog while `cancel-in-progress: false`
+  protects every running detector, worker, and model session. CodeQL's
   `pull_request_target` metadata bridge is also isolated in its own protected
   reusable workflow, so normal read-capped PR analysis retains its check
   contexts without trying to inherit `actions: write`. — Codex (AI),
@@ -151,16 +153,15 @@ every entry is attributed the same way the app changelog attributes them.
   API/CLI credentials as a fallback. Every provider credential is included in
   the derived-output secret scan, and structural Graphify still completes when
   no semantic provider is available. — Codex (AI), 2026-08-25
-- **Lopu's single-agent fleet now keeps the full pending queue instead of
-  replacing older work during bursts**: PR reviews and check fixes, merge
-  conflict resolution, promotion replay, rebase/stack operations, and the
-  wildcard `all`-branch build doctor still allow only one live model-backed
-  Lopu session per repository, while GitHub's durable concurrency queue
-  retains up to 100 waiting jobs in FIFO order. The all-branch doctor is now
-  Lopu-branded and its rebuild cannot cancel or overlap another model-backed
-  repository operation. A new develop or controller commit can therefore
-  enqueue the affected PRs without cancelling a previously validated
-  promotion or repair. — Codex (AI), 2026-08-25
+- **Lopu's single-agent fleet durably queues distinct selected work while its
+  event boundaries stay bounded**: PR reviews and check fixes, merge conflict
+  resolution, promotion replay, rebase/stack operations, and the wildcard
+  `all`-branch build doctor still allow only one live model-backed Lopu session
+  per repository. The model fleet can retain up to 100 already-selected jobs,
+  but repeated check, PR, branch, and all-branch signals are coalesced before
+  they enter it. The all-branch doctor is Lopu-branded and its rebuild cannot
+  cancel or overlap another active model-backed operation. — Codex (AI),
+  2026-08-25
 - **Preview wildcard fallbacks are environment-locked and stack-aware**:
   `*.previews.dev.thingtime.com` must bind to `develop`, while the Vercel
   production fallback for `*.previews.thingtime.com` must stay detached and

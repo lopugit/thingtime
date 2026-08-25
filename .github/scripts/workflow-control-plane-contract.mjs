@@ -1019,11 +1019,19 @@ export function assertControlPlaneContract() {
     /review_detect:[\s\S]*github\.event_name != 'repository_dispatch'[\s\S]*inputs\.ref_race_handoff != true/u,
     "internal worker events never launch a duplicate repository review",
   );
-  assert.match(resolver, /^\s+queue: max$/m);
+  const publicConcurrency = resolver.slice(
+    resolver.indexOf("\nconcurrency:\n"),
+    resolver.indexOf("\npermissions:\n"),
+  );
   assert.match(
-    resolver,
-    /^  queue: max\n(?:[\s\S]*?)^  cancel-in-progress: false$/m,
-    "the public Lopu queue preserves pending signals and never cancels active work",
+    publicConcurrency,
+    /^  cancel-in-progress: false$/m,
+    "the public Lopu queue never cancels active work",
+  );
+  assert.doesNotMatch(
+    publicConcurrency,
+    /^\s*queue: max$/m,
+    "the public Lopu queue coalesces duplicate pending events by semantic PR or branch key",
   );
   assert.match(
     resolver,
