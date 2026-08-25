@@ -128,6 +128,7 @@ jobs:
         working-directory: Commander
         env:
           COMMANDER_BUILD_NUMBER: ${{ env.THINGTIME_COMMANDER_BUILD_NUMBER }}
+          COMMANDER_NOTARIZATION_MODE: external
         run: ./script/build_and_run.sh --build-only
 
       - name: Notarize and staple Commander bundle
