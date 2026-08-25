@@ -56,11 +56,14 @@
 # and the merge commit pushed back to the PR branch.
 #
 # Secrets:
-# - ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (one required): powers the
-#   resolution agent (OAuth token via `/install-github-app` in the claude CLI),
-#   and, when present, LLM semantic extraction in the post-merge graphify
-#   refresh (ANTHROPIC_API_KEY selects graphify's claude API backend;
-#   CLAUDE_CODE_OAUTH_TOKEN its claude-cli backend).
+# - ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (one required for Claude):
+#   powers the Claude resolution agent (OAuth token via `/install-github-app`
+#   in the claude CLI) and can power LLM semantic extraction in the post-merge
+#   Graphify refresh.
+# - OPENAI_API_KEY (required when Lopu's review backend is Codex): powers the
+#   pinned Codex Action and the same post-merge Graphify semantic refresh. The
+#   configured review backend chooses which available provider Graphify tries
+#   first, with the other provider retained as a credential-backed fallback.
 # - CONFLICT_RESOLVER_PAT (optional): a PAT with repo + workflow scope. Without
 #   it, pushes use GITHUB_TOKEN, which GitHub rejects whenever the merge brings
 #   ANY change under .github/workflows/ (workflow runs are then skipped early,
@@ -133,11 +136,12 @@
 # staged graphify-out subtree still equals the base side, so refreshing
 # earlier would fail its own check.
 #
-# The refresh includes LLM SEMANTIC extraction when a Claude credential
-# exists: `graphify extract` + `graphify cluster-only` with whichever backend
-# the repo's secret supports (ANTHROPIC_API_KEY → claude API backend;
-# CLAUDE_CODE_OAUTH_TOKEN → claude-cli backend, the same credential the
-# resolver itself runs on). extract is manifest-incremental, and unchanged
+# The refresh includes LLM SEMANTIC extraction when a configured Lopu provider
+# credential exists: `graphify extract` + `graphify cluster-only` through
+# OPENAI_API_KEY, ANTHROPIC_API_KEY, or CLAUDE_CODE_OAUTH_TOKEN. The configured
+# review backend is preferred, so Terra/Sol-based Lopu review and Graphify use
+# the same OpenAI project credential while Claude remains a fallback. Extract
+# is manifest-incremental, and unchanged
 # content is served from the tracked content-addressed semantic cache
 # (graphify-out/cache/semantic/), so only content genuinely new to the merge
 # reaches the LLM — a typical conflict merge costs a handful of calls, often
@@ -147,8 +151,8 @@
 # result whose node count halved is refused before staging.
 # With no credential, or when extraction fails, the step falls back to the
 # old AST-only `graphify update`. Handing this step a credential exposes it
-# to the pinned graphifyy package and the claude CLI (no NEW principals —
-# the resolve step already runs on the same secret); in exchange, the staged
+# to the pinned graphifyy package and the selected provider client (no NEW
+# principals — the review/resolve path already runs on the same secret); in exchange, the staged
 # refresh outputs get the same best-effort secret scan as resolved files
 # before committing, and the step still runs only after verification, on a
 # tree the model never influenced.
@@ -3697,8 +3701,11 @@ jobs:
         shell: bash
         env:
           GRAPHIFY_VERSION: "0.9.4"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GRAPHIFY_BACKEND_PREFERENCE: ${{ needs.model_config.outputs.review_backend }}
+          LOPU_OPENAI_MODEL: ${{ needs.model_config.outputs.codex_model }}
           PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
         run: |
           set -euo pipefail
@@ -3736,7 +3743,7 @@ jobs:
           (( ${#MODEL_ARGS} <= 2048 )) && [[ ! "$MODEL_ARGS" =~ [[:cntrl:]] ]] \
             || fail "Validated model audit context is oversized or contains control characters."
           case "$GRAPHIFY_MODE" in true|nochange|failed) ;; *) fail "Invalid Graphify refresh audit mode." ;; esac
-          case "$GRAPHIFY_SEMANTIC" in claude|claude-cli|failed|none|unavailable) ;; *) fail "Invalid Graphify semantic audit mode." ;; esac
+          case "$GRAPHIFY_SEMANTIC" in openai|claude|claude-cli|failed|none|unavailable) ;; *) fail "Invalid Graphify semantic audit mode." ;; esac
           case "$AI_STARTED" in true|false) ;; *) fail "Invalid promotion AI-participation classification." ;; esac
           upsert_comment() {
             local number="$1" marker="$2" body_file="$3" comment_id

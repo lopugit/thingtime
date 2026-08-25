@@ -488,7 +488,8 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
     "the composite independently enforces the 500-round ceiling",
   );
 
-  const aiRuntimePattern = /anthropics\/claude-code-action@|\bbackend=(?:"|')?claude(?:"|')?\b/;
+  const aiRuntimePattern =
+    /anthropics\/claude-code-action@|\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\b/;
   const actualRuntimeFiles = [
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "actions")),
@@ -504,6 +505,20 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
     ".github/workflows/rebase-pr-stacks.yml",
     ".github/workflows/resolve-pr-conflicts.yml",
   ], "new AI runtime source must be added to the Admin-model contract");
+
+  const promotionGraphify = readFileSync(
+    join(REPO_ROOT, ".github/scripts/rebase-stack/refresh-promotion-graphify.sh"),
+    "utf8",
+  );
+  assert.match(promotionGraphify, /GRAPHIFY_BACKEND_PREFERENCE/u, "promotion Graphify follows Lopu's provider choice");
+  assert.match(promotionGraphify, /backend=openai/u, "promotion Graphify supports the OpenAI backend");
+  assert.match(promotionGraphify, /LOPU_OPENAI_MODEL/u, "promotion Graphify receives Lopu's Terra or Sol model");
+  assert.match(
+    promotionGraphify,
+    /for secret in "\$\{OPENAI_API_KEY:-\}" "\$\{ANTHROPIC_API_KEY:-\}" "\$\{CLAUDE_CODE_OAUTH_TOKEN:-\}"/u,
+    "promotion Graphify scans every provider credential before committing derived output",
+  );
+  assert.match(promotionGraphify, /--api-timeout 7200/u, "promotion semantic extraction has the repository timeout budget");
 
   const requiredModelBindings = new Map([
     [".github/actions/rebase-conflict-round/action.yml", "${{ inputs.model-args }}"],

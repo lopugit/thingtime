@@ -76,6 +76,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Post-merge Graphify semantics now follow Lopu's configured AI backend**:
+  promotion refreshes can use the same `OPENAI_API_KEY` and validated
+  Terra/Sol model as Codex-backed repository review, while retaining Claude
+  API/CLI credentials as a fallback. Every provider credential is included in
+  the derived-output secret scan, and structural Graphify still completes when
+  no semantic provider is available. — Codex (AI), 2026-08-25
 - **Lopu's single-agent fleet now keeps the full pending queue instead of
   replacing older work during bursts**: PR reviews and check fixes, merge
   conflict resolution, promotion replay, rebase/stack operations, and the
