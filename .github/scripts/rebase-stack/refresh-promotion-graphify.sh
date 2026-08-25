@@ -187,16 +187,22 @@ GRAPHIFY_VERSION="${GRAPHIFY_VERSION:-0.9.4}"
 [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
 # The workflow supplies only the closed, validated Admin primary. A named
-# model is forced through Graphify's API flag and Claude CLI environment; the
-# `default` sentinel intentionally leaves both backends unforced.
+# Claude model (re-validated against the closed charset here) is forced
+# through Graphify's API flag and Claude CLI environment; the `default`
+# sentinel intentionally leaves both backends unforced.
 graphify_model_args=()
 case "${PREFERRED_MODEL:-default}" in
   default)
     unset GRAPHIFY_CLAUDE_CLI_MODEL
     ;;
-  claude-fable-5|claude-opus-5)
-    graphify_model_args=(--model "$PREFERRED_MODEL")
-    export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+  claude-*)
+    if [[ "$PREFERRED_MODEL" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
+      graphify_model_args=(--model "$PREFERRED_MODEL")
+      export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+    else
+      echo "::warning::Unexpected preferred model output; Graphify will use its built-in default."
+      unset GRAPHIFY_CLAUDE_CLI_MODEL
+    fi
     ;;
   *)
     echo "::warning::Unexpected preferred model output; Graphify will use its built-in default."

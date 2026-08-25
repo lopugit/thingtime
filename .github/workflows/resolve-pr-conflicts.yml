@@ -1717,7 +1717,11 @@ jobs:
             "$endpoint"; then
             # Slurp first so a response containing multiple top-level JSON
             # values is malformed too. Only the exact public setting key and a
-            # unique 1..3 item array from the closed model allowlist is valid.
+            # unique 1..256 item array of closed-charset composed option ids
+            # (`<model>[:<effort>][:fast]`, the expanded Admin catalog) is
+            # valid. Every entry must start with an alphanumeric — never `-` —
+            # and can never contain a space, so a compromised response cannot
+            # smuggle another CLI flag through this chain.
             if configured="$(jq -cse '
               select(length == 1)
               | .[0]
@@ -1726,12 +1730,9 @@ jobs:
               | select(.key == "Thingtime.PRConflictAutoResolverModelWaterfall")
               | .waterfall
               | select(type == "array")
-              | select(length >= 1 and length <= 3)
+              | select(length >= 1 and length <= 256)
               | select(all(.[]; type == "string"))
-              | select(all(.[];
-                  . == "default"
-                  or . == "claude-fable-5"
-                  or . == "claude-opus-5"))
+              | select(all(.[]; test("^[a-z0-9][a-z0-9.:-]{0,63}$")))
               | select(length == (unique | length))
             ' "$response_file" 2>/dev/null)"; then
               waterfall="$configured"
@@ -1748,39 +1749,118 @@ jobs:
             echo "::warning::Thingtime conflict-resolver model waterfall is unavailable; using [default]."
           fi
 
-          # Never interpolate API strings into claude_args. Rebuild the entire
-          # ordered chain from fixed literals after validation, so even a
-          # compromised response cannot inject another CLI flag or model name.
+          # Never interpolate API strings into claude_args. Re-validate every
+          # entry against fixed patterns and rebuild the ordered chain only
+          # from the matched tokens, so even a compromised response cannot
+          # inject another CLI flag or model name. Composed option ids carry
+          # `<model>[:<effort>][:fast]`. Claude Code runs Claude-capable
+          # entries only; an entry for another provider (an OpenAI id, for
+          # example) configures that provider's own consumers and is skipped
+          # here without failing the chain.
           mapfile -t configured_ids < <(jq -r '.[]' <<<"$waterfall")
           models=()
+          claude_effort="max"
+          primary_fast=0
+          mapping_failed=0
           for id in "${configured_ids[@]}"; do
-            case "$id" in
-              default) models+=("default") ;;
-              claude-fable-5) models+=("claude-fable-5") ;;
-              claude-opus-5) models+=("claude-opus-5") ;;
-              *)
-                echo "::warning::Validated waterfall mapping failed closed; using [default]."
-                models=("default")
-                source="built-in default"
+            if ! [[ "$id" =~ ^[a-z0-9][a-z0-9.:-]{0,63}$ ]] || [[ "$id" == *::* ]] || [[ "$id" == *: ]]; then
+              mapping_failed=1
+              break
+            fi
+            IFS=':' read -r -a segments <<<"$id"
+            base="${segments[0]}"
+            effort=""
+            fast=0
+            segments_ok=1
+            for segment in "${segments[@]:1}"; do
+              case "$segment" in
+                fast)
+                  [ "$fast" -eq 0 ] || segments_ok=0
+                  fast=1
+                  ;;
+                none|minimal|low|medium|high|xhigh|max|ultra)
+                  [ -z "$effort" ] || segments_ok=0
+                  effort="$segment"
+                  ;;
+                *) segments_ok=0 ;;
+              esac
+            done
+            if [ "$segments_ok" -ne 1 ]; then
+              mapping_failed=1
+              break
+            fi
+            if [ "$base" = "default" ]; then
+              model="default"
+            elif [[ "$base" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
+              model="${BASH_REMATCH[0]}"
+            else
+              echo "Skipping non-Claude waterfall entry '$id'; it configures that provider's own consumers."
+              continue
+            fi
+            duplicate=0
+            for existing in "${models[@]}"; do
+              if [ "$existing" = "$model" ]; then
+                duplicate=1
                 break
-                ;;
-            esac
+              fi
+            done
+            # Variants of one base model collapse into its single CLI slot;
+            # the first occurrence keeps the position, and only the primary
+            # entry's effort steers the session-wide --effort flag.
+            [ "$duplicate" -eq 0 ] || continue
+            if [ "${#models[@]}" -eq 0 ]; then
+              case "$effort" in
+                low|medium|high|xhigh|max) claude_effort="$effort" ;;
+                "") : ;;
+                *) echo "Primary entry effort '$effort' has no Claude Code tier; keeping --effort max." ;;
+              esac
+              primary_fast="$fast"
+            fi
+            models+=("$model")
           done
+          if [ "$mapping_failed" -eq 1 ]; then
+            echo "::warning::Validated waterfall mapping failed closed; using [default]."
+            models=("default")
+            claude_effort="max"
+            primary_fast=0
+            source="built-in default"
+          fi
+          if [ "${#models[@]}" -eq 0 ]; then
+            echo "::warning::No Claude-capable waterfall entries; using [default]."
+            models=("default")
+            claude_effort="max"
+            primary_fast=0
+          fi
+          has_default=0
+          for existing in "${models[@]}"; do
+            if [ "$existing" = "default" ]; then
+              has_default=1
+            fi
+          done
+          [ "$has_default" -eq 1 ] || models+=("default")
+          if [ "$primary_fast" -eq 1 ]; then
+            echo "The primary entry requests fast mode; headless Claude Code has no fast-mode flag, so it is recorded but not applied."
+          fi
 
           primary="${models[0]}"
           case "$primary" in
-            claude-fable-5) backend_label="Claude Fable 5 Max Fast" ;;
+            claude-fable-5) backend_label="Claude Fable 5" ;;
             claude-opus-5) backend_label="Claude Opus 5" ;;
-            *) backend_label="Claude Code default" ;;
+            default) backend_label="Claude Code default" ;;
+            *) backend_label="Claude Code $primary" ;;
           esac
+          if [ "$claude_effort" != "max" ]; then
+            backend_label="$backend_label ($claude_effort effort)"
+          fi
           model_args="--model $primary"
           if [ "${#models[@]}" -gt 1 ]; then
             fallbacks="$(IFS=,; echo "${models[*]:1}")"
             model_args="$model_args --fallback-model $fallbacks"
           fi
+          model_args="$model_args --effort $claude_effort"
 
           echo "Model waterfall source: $source"
-          echo "Lopu backend model waterfall (Claude Code): $(IFS=,; echo "${models[*]}")"
+          echo "Lopu backend model waterfall (Claude Code): $(IFS=,; echo "${models[*]}") · effort $claude_effort"
           echo "Fallbacks apply only to model overload, unavailability, or eligible server errors."
           echo "A model that completes but leaves conflict markers does not mechanically trigger the next model."
           echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
@@ -2125,7 +2205,6 @@ jobs:
             conversational comment, alongside clear visible Lopu attribution.
           claude_args: |
             ${{ needs.model_config.outputs.model_args }}
-            --effort max
             --max-turns 500
             --dangerously-skip-permissions
             --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
@@ -2251,7 +2330,7 @@ jobs:
             echo "::warning::Lopu repository review stopped with subtype $RESULT_SUBTYPE; no unrelated retry was sent."
             exit 1
           fi
-          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-fable-5|claude-opus-5)(\ --fallback-model\ (default|claude-fable-5|claude-opus-5)(,(default|claude-fable-5|claude-opus-5))*)?$ ]] || {
+          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-[a-z0-9-]{1,48})(\ --fallback-model\ (default|claude-[a-z0-9-]{1,48})(,(default|claude-[a-z0-9-]{1,48}))*)?\ --effort\ (low|medium|high|xhigh|max)$ ]] || {
             echo "::warning::The Lopu review model handoff no longer matches its closed argument grammar."
             exit 1
           }
@@ -2267,7 +2346,6 @@ jobs:
             claude --resume "$session_id" --print \
               "Continue Lopu's repository-review task from this exact session. Finish the review and reports for every candidate in the original manifest, retaining the original task objective and full repository access." \
               "${model_args[@]}" \
-              --effort max \
               --max-turns 500 \
               --output-format json \
               --dangerously-skip-permissions \
@@ -3603,7 +3681,6 @@ jobs:
             rename or delete any other file. Keep it under 300 lines.
           claude_args: |
             ${{ needs.model_config.outputs.model_args }}
-            --effort max
             --max-turns 500
             --dangerously-skip-permissions
             --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
@@ -3669,7 +3746,7 @@ jobs:
           fi
           session_id="$RESULT_SESSION"
 
-          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-fable-5|claude-opus-5)(\ --fallback-model\ (default|claude-fable-5|claude-opus-5)(,(default|claude-fable-5|claude-opus-5))*)?$ ]] || {
+          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-[a-z0-9-]{1,48})(\ --fallback-model\ (default|claude-[a-z0-9-]{1,48})(,(default|claude-[a-z0-9-]{1,48}))*)?\ --effort\ (low|medium|high|xhigh|max)$ ]] || {
             echo "::warning::The release-analysis model handoff no longer matches its closed argument grammar."
             exit 1
           }
@@ -3685,7 +3762,6 @@ jobs:
             claude --resume "$session_id" --print \
               "Continue Lopu's release-analysis task from this session. Finish the requested report with full repository access and retain the original task objective." \
               "${model_args[@]}" \
-              --effort max \
               --max-turns 500 \
               --output-format json \
               --dangerously-skip-permissions \
@@ -4417,7 +4493,6 @@ jobs:
           # completed-but-unresolved edit with another model.
           claude_args: |
             ${{ needs.model_config.outputs.model_args }}
-            --effort max
             --max-turns 500
             --dangerously-skip-permissions
             --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
@@ -4481,7 +4556,7 @@ jobs:
           fi
           session_id="$RESULT_SESSION"
 
-          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-fable-5|claude-opus-5)(\ --fallback-model\ (default|claude-fable-5|claude-opus-5)(,(default|claude-fable-5|claude-opus-5))*)?$ ]] || {
+          [[ "$MODEL_ARGS" =~ ^--model\ (default|claude-[a-z0-9-]{1,48})(\ --fallback-model\ (default|claude-[a-z0-9-]{1,48})(,(default|claude-[a-z0-9-]{1,48}))*)?\ --effort\ (low|medium|high|xhigh|max)$ ]] || {
             echo "::error::The trusted model handoff no longer matches its closed argument grammar."
             exit 1
           }
@@ -4497,7 +4572,6 @@ jobs:
             claude --resume "$session_id" --print \
               "Continue Lopu's conflict-resolution task from this session with full repository access. Finish the unresolved conflict work while retaining the original task objective. An eligible pinned pnpm lockfile may remain marker-bearing as the original prompt's successful handoff to the next trusted step; do not misclassify that handoff as unfinished." \
               "${model_args[@]}" \
-              --effort max \
               --max-turns 500 \
               --output-format json \
               --dangerously-skip-permissions \
@@ -4926,17 +5000,23 @@ jobs:
           [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
           # `default` deliberately leaves each Graphify backend on its own
-          # default. Every named value is a literal emitted by model_config's
-          # closed allowlist: the API backend consumes --model, while the
-          # claude-cli backend consumes GRAPHIFY_CLAUDE_CLI_MODEL.
+          # default. The value is model_config's already-validated primary
+          # base model; re-validate its closed charset here before use: the
+          # API backend consumes --model, while the claude-cli backend
+          # consumes GRAPHIFY_CLAUDE_CLI_MODEL.
           graphify_model_args=()
           case "${PREFERRED_MODEL:-default}" in
             default)
               unset GRAPHIFY_CLAUDE_CLI_MODEL
               ;;
-            claude-fable-5|claude-opus-5)
-              graphify_model_args=(--model "$PREFERRED_MODEL")
-              export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+            claude-*)
+              if [[ "$PREFERRED_MODEL" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
+                graphify_model_args=(--model "$PREFERRED_MODEL")
+                export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+              else
+                echo "::warning::Unexpected preferred model output; Graphify will use its built-in default."
+                unset GRAPHIFY_CLAUDE_CLI_MODEL
+              fi
               ;;
             *)
               echo "::warning::Unexpected preferred model output; Graphify will use its built-in default."

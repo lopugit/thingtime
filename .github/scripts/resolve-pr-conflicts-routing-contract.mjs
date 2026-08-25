@@ -315,9 +315,14 @@ function aiRuntimeSourceFiles(directory) {
 function assertAdminLoader(block, label) {
   assert.match(block, /https:\/\/thingtime\.com\/api\/v1\/settings\/pr-conflict-auto-resolver-model-waterfall/, `${label}: endpoint`);
   assert.match(block, /Thingtime\.PRConflictAutoResolverModelWaterfall/, `${label}: singleton key`);
-  for (const model of ["default", "claude-fable-5", "claude-opus-5"]) {
-    assert.ok(block.includes(model), `${label}: closed model ${model}`);
-  }
+  // Composed option ids (`<model>[:<effort>][:fast]`): the loader keeps a
+  // closed grammar — id charset, effort segment set, and the Claude base
+  // pattern the CLI chain is rebuilt from — instead of a closed id list.
+  assert.ok(block.includes("[a-z0-9][a-z0-9.:-]{0,63}"), `${label}: closed composed-id charset`);
+  assert.ok(block.includes("none|minimal|low|medium|high|xhigh|max|ultra"), `${label}: closed effort segments`);
+  assert.ok(block.includes("^claude-[a-z0-9-]{1,48}$"), `${label}: closed Claude base pattern`);
+  assert.ok(block.includes('. + ["default"]'), `${label}: default hard fallback`);
+  assert.match(block, /--effort \$claude_effort/, `${label}: session effort in model args`);
   assert.match(block, /model_args=.*GITHUB_OUTPUT/, `${label}: full waterfall output`);
   assert.match(block, /primary_model=.*GITHUB_OUTPUT/, `${label}: primary model output`);
 }

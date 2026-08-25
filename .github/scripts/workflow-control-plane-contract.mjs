@@ -212,7 +212,13 @@ function assertRoutingProofContract(providerRouter) {
 const ADMIN_MODEL_ENDPOINT =
   "https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall";
 const ADMIN_MODEL_KEY = "Thingtime.PRConflictAutoResolverModelWaterfall";
-const ALLOWED_MODELS = ["default", "claude-fable-5", "claude-opus-5"];
+// Composed option ids (`<model>[:<effort>][:fast]`) from the expanded Admin
+// catalog. The loader stays a closed grammar: a charset that can never lead
+// with `-` or contain a space, a closed effort segment set, and a closed
+// Claude base-model pattern the CLI chain is rebuilt from.
+const ADMIN_MODEL_ID_CHARSET = "[a-z0-9][a-z0-9.:-]{0,63}";
+const ADMIN_MODEL_EFFORT_SEGMENTS = "none|minimal|low|medium|high|xhigh|max|ultra";
+const ADMIN_CLAUDE_BASE_PATTERN = "^claude-[a-z0-9-]{1,48}$";
 const AI_RUNTIME_YAML = [
   ".github/actions/rebase-conflict-round/action.yml",
   ".github/workflows/rebase-pr-stacks.yml",
@@ -244,9 +250,27 @@ function assertAdminLoader(block, label) {
     block.includes(ADMIN_MODEL_KEY),
     `${label}: validates the exact Admin setting key`,
   );
-  for (const model of ALLOWED_MODELS) {
-    assert.ok(block.includes(model), `${label}: allowlists ${model}`);
-  }
+  assert.ok(
+    block.includes(ADMIN_MODEL_ID_CHARSET),
+    `${label}: validates the closed composed-id charset`,
+  );
+  assert.ok(
+    block.includes(ADMIN_MODEL_EFFORT_SEGMENTS),
+    `${label}: parses the closed effort segment set`,
+  );
+  assert.ok(
+    block.includes(ADMIN_CLAUDE_BASE_PATTERN),
+    `${label}: rebuilds Claude models from the closed base pattern`,
+  );
+  assert.ok(
+    block.includes('. + ["default"]'),
+    `${label}: appends the default hard fallback defensively`,
+  );
+  assert.match(
+    block,
+    /--effort \$claude_effort/u,
+    `${label}: appends the validated session effort to the model args`,
+  );
   assert.match(
     block,
     /model_args=.*>> "\$GITHUB_OUTPUT"/u,
