@@ -21,6 +21,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu now immediately recovers when a PR head or target advances beside
+  publication**: the exact lease still refuses the stale merge, but that
+  expected race is recorded as a successful guarded attempt and requeued from
+  fresh live refs up to three times instead of leaving a red run until the next
+  scheduled sweep. Success comments and stack cascades remain gated on a live
+  ref proving the exact merge commit was published. — Codex (AI), 2026-08-25
 - **Lopu's public queue now preserves every repository signal**: the unified
   manager pairs `queue: max` with a constant `cancel-in-progress: false`, the
   only GitHub-valid durable configuration. Comment, check, branch, schedule,

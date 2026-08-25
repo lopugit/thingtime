@@ -298,6 +298,11 @@ on:
         required: false
         default: "0"
         type: string
+      ref_race_retry:
+        description: "Internal: bounded retry count after a head/base ref moves beside publication"
+        required: false
+        default: "0"
+        type: string
       promotion_source_pr:
         description: "Internal: merged develop source PR"
         required: false
@@ -437,6 +442,11 @@ on:
         type: boolean
       depth:
         description: "Internal: stacked-PR cascade depth (leave at 0)"
+        required: false
+        default: "0"
+        type: string
+      ref_race_retry:
+        description: "Internal: bounded retry count after a head/base ref moves beside publication"
         required: false
         default: "0"
         type: string
@@ -893,6 +903,16 @@ jobs:
           }
           live_ref_sha() {
             gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+          defer_ref_race() {
+            local reason="$1" live_sha="$2"
+            {
+              echo "remote_state=retry"
+              echo "retry_reason=$reason"
+              echo "live_sha=$live_sha"
+            } >> "$GITHUB_OUTPUT"
+            echo "::warning::$reason moved to $live_sha beside publication; the exact lease preserved it and Lopu will requeue from fresh refs."
+            exit 0
           }
           decode_base64url() {
             local value="$1"
@@ -5966,8 +5986,8 @@ jobs:
           # Stack ownership is structural, not timing-dependent. A newly
           # opened parent/child makes this merge run abstain unless the PR is
           # explicitly labelled no-ai-rebase.
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
           if ! jq -e 'index("no-ai-rebase") != null' >/dev/null <<<"$labels"; then
-            default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
             all_open="$(
               gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --slurp \
                 | jq -c 'add // []'
@@ -5990,10 +6010,12 @@ jobs:
               || { echo "::error::PR became a stack member; rebase workflow now owns it."; exit 1; }
           fi
 
-          [ "$(live_ref_sha "$HEAD_REF")" = "$EXPECTED_HEAD_SHA" ] \
-            || { echo "::error::Head moved immediately before push; exact lease preserved the newer work."; exit 1; }
-          [ "$(live_ref_sha "$BASE_REF")" = "$EXPECTED_BASE_SHA" ] \
-            || { echo "::error::Base moved immediately before push; rerun against the new base."; exit 1; }
+          live_head_sha="$(live_ref_sha "$HEAD_REF")"
+          [ "$live_head_sha" = "$EXPECTED_HEAD_SHA" ] \
+            || defer_ref_race head "$live_head_sha"
+          live_base_sha="$(live_ref_sha "$BASE_REF")"
+          [ "$live_base_sha" = "$EXPECTED_BASE_SHA" ] \
+            || defer_ref_race base "$live_base_sha"
           [ "$(gh api "repos/$REPO/branches/$(encode_ref "$HEAD_REF")" --jq '.protected')" != true ] \
             || { echo "::error::Head branch became protected while resolving."; exit 1; }
           [ "$HEAD_REF" != "$default_ref" ] \
@@ -6074,10 +6096,96 @@ jobs:
           echo "::error::Ambiguous push outcome: live head is unexpected ($remote_sha)."
           exit 1
 
+      - name: Requeue after a moving-ref race
+        if: >-
+          steps.user_merge_pause.outputs.paused != 'true'
+          && steps.admission.outputs.current == 'true'
+          && steps.push.outputs.remote_state == 'retry'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RACE_RETRY_ATTEMPT: ${{ inputs.ref_race_retry || '0' }}
+          RACE_REASON: ${{ steps.push.outputs.retry_reason }}
+          RACE_LIVE_SHA: ${{ steps.push.outputs.live_sha }}
+          DEPTH: ${{ inputs.depth || '0' }}
+        run: |
+          set -euo pipefail
+
+          case "$RACE_RETRY_ATTEMPT" in
+            ''|*[!0-9]*)
+              echo "::error::ref_race_retry must be a decimal integer."
+              exit 1
+              ;;
+          esac
+          if [ "$RACE_RETRY_ATTEMPT" -ge 3 ]; then
+            echo "::error::Head/base refs moved during four consecutive publication attempts; leaving the exact remote refs untouched for the scheduled sweep."
+            exit 1
+          fi
+          next_attempt=$((RACE_RETRY_ATTEMPT + 1))
+          dispatch_id="ref-race:$PR_NUMBER:${{ github.run_id }}:${{ github.run_attempt }}:$next_attempt"
+
+          payload="$(jq -n \
+            --arg pr_number "$PR_NUMBER" \
+            --arg depth "$DEPTH" \
+            --arg retry "$next_attempt" \
+            --arg dispatch_id "$dispatch_id" '
+              {
+                ref:"github-actions",
+                inputs:{
+                  pr_number:$pr_number,
+                  branch:"",
+                  detector_handoff:true,
+                  manual_retry:false,
+                  depth:$depth,
+                  ref_race_retry:$retry,
+                  execution_provider:"github-actions",
+                  runner_label:"",
+                  control_dispatch_id:$dispatch_id,
+                  routing_proof:"",
+                  routing_proof_issued_at:""
+                }
+              }
+            ')"
+          for attempt in 1 2 3; do
+            if gh api --method POST \
+                 "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+                 --input - <<<"$payload"; then
+              break
+            fi
+            [ "$attempt" -eq 3 ] && exit 1
+            sleep 2
+          done
+
+          marker_comment_id="$(
+            gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --slurp \
+              | jq -r --arg marker "$RUN_STATUS_MARKER" '
+                  add // []
+                  | [.[]
+                      | select(.user.login == "github-actions[bot]")
+                      | select(.body | contains($marker))
+                      | .id]
+                  | last // empty
+                '
+          )"
+          body="$RUNNER_TEMP/ref-race-requeue.md"
+          {
+            echo "🔄 Lopu preserved the live \`$RACE_REASON\` ref at \`$RACE_LIVE_SHA\` because it moved beside publication, then queued retry $next_attempt/3 from fresh PR refs."
+            echo
+            echo "No stale merge commit was pushed. [View this guarded attempt]($RUN_URL)."
+            echo
+            echo "$RUN_STATUS_MARKER"
+          } > "$body"
+          if [ -n "$marker_comment_id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$marker_comment_id" \
+              -F "body=@$body" >/dev/null
+          else
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body" >/dev/null
+          fi
+
       - name: Comment on PR (resolved)
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
+          && steps.push.outputs.remote_state == 'published'
         env:
           GH_TOKEN: ${{ github.token }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
@@ -6157,6 +6265,7 @@ jobs:
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
+          && steps.push.outputs.remote_state == 'published'
         # Always dispatch exact child PR selections, even when a PAT-backed
         # push also creates a detector run. Duplicate discovery is harmless:
         # trusted workers serialize per PR without cancellation and re-detect

@@ -1006,6 +1006,7 @@ export function assertControlPlaneContract() {
     "promotion_target_branch",
     "promotion_path_prefix",
     "rebase_cascade",
+    "ref_race_retry",
     "promotion_source_pr",
     "promotion_plan_b64",
     "routing_proof",
@@ -1017,6 +1018,16 @@ export function assertControlPlaneContract() {
       `${input}: declared for workflow_call and workflow_dispatch`,
     );
   }
+  assert.match(
+    resolver,
+    /steps\.push\.outputs\.remote_state == 'retry'[\s\S]*ref_race_retry:\$retry/u,
+    "moving refs are requeued with a bounded retry counter",
+  );
+  assert.equal(
+    resolver.match(/steps\.push\.outputs\.remote_state == 'published'/gu)?.length,
+    2,
+    "only a live-ref-proven publication may post success or cascade a stack",
+  );
 
   assertUserControlledMergePause(resolver, rebase);
   assertAdminModelRouting(resolver, rebase);
