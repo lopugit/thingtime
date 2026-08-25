@@ -17,6 +17,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Security
+
+- **Passkey app links join the relationship-uniqueness family.** `passkey-app-link`
+  shipped in #323 with its own kind-blind `crystal.linkKey` unique index —
+  authored while #320/#325/#326 were retiring exactly that pattern. A
+  free-form data crystal could take the slot (blocking a passkey's linked-app
+  record) or, worse, hold a DUPLICATE of it, which fails the whole boot-time
+  index battery on E11000 and takes registration/login down with it. Dedupe
+  now rides the server-only root `uniqueKeys` namespace
+  (`linkKey:<passkeyId>:<appKey>`, stamped through the shared
+  `relationshipUniqueKeys` helper), the per-login upsert matches on that same
+  stamped value (served by the existing `uniqueKeys` index, with a crystal-path
+  fallback until legacy rows are backfilled), and the unique index is retired
+  outright — no replacement lookup index needed, one less index on the busiest
+  collection. The existing `backfill-relationship-unique-keys` migration is
+  map-driven, so re-running it stamps legacy rows. Regression-pinned in
+  `verify-passkeys.mjs` (47 checks). — Claude (AI), 2026-08-25
+
 ### Changed
 
 - **CodeQL now covers every PR target and branch**: an unfiltered PR listener,
