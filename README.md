@@ -182,41 +182,34 @@ https://www.gofundme.com/f/thingtime
 
 ### Force Push ? 👉👈
 
-Thingtime has two deliberately separate conflict workflows:
+Thingtime has one automatic principal repository workflow: **Lopu PR
+manager**. It reviews failing checks and CodeQL findings, merges stale bases
+into PR heads, resolves merge conflicts, and owns rebases plus stack cascades
+for every same-repository PR regardless of its target branch. Push, PR,
+conversation, failed-check, and scheduled signals all enter through that one
+manager; a branch push never starts a second standalone rebase scan.
 
-- **Resolve PR conflicts (AI)** merges a PR's base branch into its head branch.
-- **Rebase PRs and stacks (AI)** rebases the PR head and, when the PR is part
-  of a stack, continues from the stack root toward its leaves.
+Inside Lopu, merge and rebase ownership remains deliberately disjoint.
+Standalone merge conflicts and clean-but-behind branches go to the base-merge
+lane. Genuine stack members whose history needs replay go to the rebase lane;
+adding `no-ai-rebase` opts a merge-conflicting stack member back into the
+merge-based lane. The protected rebase engine still accepts the manager's
+exact `repository_dispatch` worker handoff, but its thin product listener has
+no push, PR, schedule, or manual trigger of its own.
 
-Both workflows cover every same-repository PR regardless of its base branch.
-The merge workflow listens to pushes on `"**"` and checks open PRs both
-targeting and originating from the pushed branch. A staggered twice-hourly
-all-PR sweep catches conflicts whose original event was missed or ran from an
-older branch without the latest workflow. Their ownership is intentionally
-disjoint: standalone merge conflicts go to the merge workflow; standalone PRs
-that merge cleanly but cannot rebase, plus stack members whose current history
-needs a merge or rebase update, go to the rebase workflow. Adding
-`no-ai-rebase` opts a merge-conflicting stack member back into the merge-based
-resolver instead.
+The rebase lane covers the case GitHub reports as `mergeable: true` but
+`rebaseable: false`: a plain merge needs no help, yet replaying stacked commits
+onto their base may stop at a conflict. A detected stack is rebased
+root-to-leaf, so each child is replayed onto the rewritten parent rather than
+onto the parent's old SHA.
 
-The rebase workflow covers the case GitHub reports as `mergeable: true` but
-`rebaseable: false`: a plain merge needs no help, yet replaying the branch's
-commits onto its base stops at a conflict. It automatically scans same-repo
-PRs after branch pushes and PR `opened`/`reopened` events, with a scheduled
-all-PR scan as a backstop because GitHub emits no dedicated event when its
-**Rebase stack** button fails. A standalone PR is replayed onto its base; a
-detected stack is rebased root-to-leaf, so each child is replayed onto the
-rewritten parent rather than onto the parent's old SHA.
+For manual recovery, open **Actions → Lopu PR manager → Run workflow** on the
+default branch. Enter an exact PR number, a base/head branch selector, or leave
+both blank for a repository scan. The same entry point deliberately retries a
+reviewed paused merge/rebase snapshot; the internal rebase handoff is not a
+second user-facing workflow.
 
-To run it directly, open **Actions → Rebase PRs and stacks (AI) → Run
-workflow** on the default branch, enter the PR number, and leave cascading
-enabled when the PR has children. Leaving the number blank scans all open
-same-repository PRs. Manual dispatch is also the recovery path after reviewing
-a paused run.
-
-**Resolve PR conflicts (AI)** has the same manual convention: enter a base
-branch to scan only that base, or leave it blank to scan every open eligible
-PR. Broad scans are API-only detectors; they hand off one trusted
+Broad scans are API-only detectors; they hand off one trusted
 default-branch run per conflicted base, so unrelated bases do not share one AI
 job. If a run fails while the same eligible snapshot is still live, it adds
 `ai-merge-paused` so the scheduled sweep cannot repeatedly spend AI budget.

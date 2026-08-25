@@ -1132,13 +1132,19 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`)
 
+- [ ] Push one commit to a branch with PRs targeting and originating from it.
+      Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
+      rebase, and stack detection. The thin `rebase-pr-stacks.yml` listener
+      must accept only `repository_dispatch: rebase-pr-stack-ai`: it has no
+      push, PR, schedule, or manual trigger and cannot create a competing run
+      that later gets cancelled by Lopu's embedded rebase lane.
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
       Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
       manual scans leave both histories untouched: they are not stacks and
       already merge cleanly. An explicit PR-number retry may still replay one
       deliberately. Then make a standalone PR genuinely merge-conflicting and
-      confirm only **Resolve PR conflicts (AI)** owns it. Regression class:
+      confirm only Lopu's base-merge lane owns it. Regression class:
       standalone replay failures were incorrectly force-rebased and could
       ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
@@ -1147,11 +1153,11 @@ is fixed, and cite the checklist you ran in the PR description.
       without duplicating the parent's commits. Confirm a stack member with
       either `mergeable: false` or `rebaseable: false` remains rebase-owned,
       while a clean stack is left alone.
-- [ ] Exercise detection from a branch push, PR opened/reopened event, the
-      scheduled scan, and a manual PR-number dispatch. Automatic scans evaluate
-      every same-repo PR regardless of base branch, never dispatch a
-      standalone history rewrite, route standalone merge conflicts to the
-      merge workflow, do not race a blocked child ahead of its parent, and
+- [ ] Exercise detection through Lopu from a branch push, PR opened/reopened
+      event, the scheduled scan, and a manual PR-number dispatch. Automatic
+      scans evaluate every same-repo PR regardless of base branch, never
+      dispatch a standalone history rewrite, route standalone merge conflicts
+      to Lopu's base-merge lane, do not race a blocked child ahead of its parent, and
       terminate after resolution instead of looping on the workflow's own
       push. A blank manual dispatch must perform the same repository-wide scan.
 - [ ] Return unknown merge/rebaseability for several PRs at once and confirm

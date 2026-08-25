@@ -56,3 +56,13 @@ controller continues to give its model-backed review job read-only access and
 keeps any alert disposition in a separate fenced writer. The product caller
 contract asserts this permission so a future thin-listener cleanup cannot
 silently restore the startup failure.
+
+## Single automatic Lopu entry point
+
+The unified manager already owns merge, stale-branch, rebase, and stack
+detection. Its former standalone rebase listener is retained only for the
+exact internal `rebase-pr-stack-ai` worker handoff; it has no push, PR,
+schedule, or manual trigger. This prevents one branch update from launching
+two overlapping model-management workflows and avoids the legacy rebase run
+being cancelled when Lopu's embedded rebase lane starts. Manual recovery now
+uses **Lopu PR manager** with an exact PR or branch selector.
