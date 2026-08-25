@@ -27,13 +27,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
-- **Canonical guarded Lopu PR resolver**: `Lopu PR resolver` now performs its
-  own read-only detection and default-branch self-handoff instead of delegating
-  to a second branch. It revalidates immutable PR snapshots, confines its
-  configured Claude Code backend to Git's original non-Graphify conflict paths,
-  rejects unstaged/out-of-scope changes and unresolved markers, uses an exact
-  head lease for publication, and posts an auditable Lopu attestation. — Codex
-  (AI), 2026-08-24
 - **`all` branch AI build doctor**: the Build all branch workflow now runs the
   union build after every input-changed rebuild and, when textually-clean
   merges collide semantically (duplicate helpers declared by two PRs), repairs

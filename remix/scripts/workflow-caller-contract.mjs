@@ -16,6 +16,7 @@ const callers = [
   'promote-develop-to-main.yml',
   'promote-features-to-main.yml',
   'rebase-pr-stacks.yml',
+  'resolve-pr-conflicts.yml',
   'sync-main-into-develop.yml'
 ];
 
@@ -58,59 +59,6 @@ assert.match(
   promotionPermissions,
   /^  actions: write$/m,
   'promote-features-to-main.yml must grant the protected promoter permission to dispatch its resolver'
-);
-
-const resolver = readFileSync(
-  resolve(workflowsRoot, 'resolve-pr-conflicts.yml'),
-  'utf8'
-);
-assert.match(resolver, /^name: Lopu PR resolver$/m, 'the canonical resolver must use Lopu as its user-facing identity');
-assert.doesNotMatch(
-  resolver,
-  /^\s{2}push:/m,
-  'the write-capable resolver must not execute workflow content supplied by a pushed branch'
-);
-assert.match(
-  resolver,
-  /^\s{2}pull_request:/m,
-  "the detector must run from GitHub's unprivileged pull_request event"
-);
-assert.doesNotMatch(
-  resolver,
-  /^\s{2}pull_request_target:/m,
-  'the resolver must not combine a privileged pull_request_target trigger with a PR-head checkout'
-);
-assert.doesNotMatch(
-  resolver,
-  /resolve-pr-conflicts\.yml@github-actions/,
-  'resolve-pr-conflicts.yml must be the canonical workflow, not another thin caller'
-);
-assert.match(
-  resolver,
-  /pull_request:\n[\s\S]*?Unprivileged detector only/,
-  'the pull_request entry point must be documented as unprivileged and detector-only'
-);
-assert.match(
-  resolver,
-  /inputs\.internal_handoff == true\n\s*&& github\.actor == 'github-actions\[bot\]'/,
-  'only a bot-authored internal workflow_dispatch may enter the resolver job'
-);
-assert.match(resolver, /persist-credentials: false/, 'the AI workspace checkout must not retain a GitHub credential');
-assert.match(resolver, /git diff --name-only --diff-filter=U/, 'the resolver must derive the AI edit scope from Git conflict paths');
-assert.match(
-  resolver,
-  /git diff --quiet \|\| \{[\s\S]*?unstaged edits/,
-  'the resolver must reject unscoped or unstaged AI edits'
-);
-assert.match(
-  resolver,
-  /--force-with-lease=refs\/heads\/\$HEAD_REF:\$HEAD_SHA/,
-  'publication must retain the exact head lease captured before Lopu works'
-);
-assert.match(
-  resolver,
-  /anthropics\/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79/,
-  'the current Lopu backend action must stay pinned to its reviewed immutable revision'
 );
 
 const electronPrReleaseCaller = readFileSync(
@@ -168,4 +116,4 @@ assert.deepEqual(
   'product branches must not retain local Actions scripts; the develop-preview controller lives on github-actions'
 );
 
-console.log(`workflow caller contract: ${callers.length} thin listeners plus one guarded canonical Lopu resolver`);
+console.log(`workflow caller contract: ${callers.length} thin listeners pinned to github-actions`);

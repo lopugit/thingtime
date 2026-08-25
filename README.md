@@ -137,7 +137,7 @@ https://www.gofundme.com/f/thingtime
 
 Thingtime has two deliberately separate conflict workflows:
 
-- **Lopu PR resolver** merges a PR's base branch into its head branch.
+- **Resolve PR conflicts (AI)** merges a PR's base branch into its head branch.
 - **Rebase PRs and stacks (AI)** rebases the PR head and, when the PR is part
   of a stack, continues from the stack root toward its leaves.
 
@@ -167,34 +167,20 @@ enabled when the PR has children. Leaving the number blank scans all open
 same-repository PRs. Manual dispatch is also the recovery path after reviewing
 a paused run.
 
-**Lopu PR resolver** is the canonical all-in-one resolver. Enter a PR number
-to inspect one PR, enter a branch to inspect PRs based on or from that branch,
-or leave both blank to scan all open same-repository PRs. PR events inspect
-only the affected PR; the twice-hourly sweep is a quiet backstop. The detector
-does not run from arbitrary pushed branch workflow content. Detection never
-checks out PR code and runs with read-only repository access plus the narrow
-permission required to dispatch the default-branch worker. Each eligible
-conflict is handed to one
-bot-authenticated `workflow_dispatch` job on the default branch, which repeats
-all live PR, label, ownership, protection, and SHA checks before it writes.
+**Resolve PR conflicts (AI)** has the same manual convention: enter a base
+branch to scan only that base, or leave it blank to scan every open eligible
+PR. Broad scans are API-only detectors; they hand off one trusted
+default-branch run per conflicted base, so unrelated bases do not share one AI
+job. If a run fails while the same eligible snapshot is still live, it adds
+`ai-merge-paused` so the scheduled sweep cannot repeatedly spend AI budget.
+The hold is bound to the exact owner, refs, SHAs, and topology recorded in a
+bot-only hidden marker: a changed snapshot is eligible again automatically,
+while the same snapshot requires review and a named-base manual retry.
 
-Lopu is the durable Thingtime identity; the workflow separately records the
-actual backend in its run and PR attestation. The initial backend is the
-repository's configured **Claude Code** OAuth integration, so it can be
-replaced later without turning PR history into a mix of assistant names.
-Lopu reads the repository direction and affected code, but has only
-read/search/edit/write tools: no shell, Git, or network. The workflow derives
-its allowed edit set from `git diff --diff-filter=U`, rejects every unstaged or
-out-of-scope change, treats `graphify-out/` as base-derived data rather than a
-Lopu merge target, and rejects remaining conflict markers. Immediately before
-publication it re-reads both refs and pushes only with an exact head lease. If
-either branch moves while Lopu is working, the merge is discarded and the next
-detector pass uses a fresh snapshot. The PR receives an attestation with the
-base/head snapshots, verified merge SHA, backend, and resolver-run link.
-
-Add `no-ai-merge` for a permanent opt-out or `ai-merge-paused` for a temporary
-human hold. Fork PRs, drafts, protected heads, the default branch as a head,
-and PRs currently owned by the rebase agent are intentionally skipped.
+The merge workflow also snapshots the exact live head and base SHAs, repeats
+its PR/ref/label/stack/protection checks immediately before publication, and
+uses an exact head lease. If either branch moves while Claude is working, the
+resolved merge is discarded rather than overwriting the newer work.
 
 Detection is patient and audible: GitHub computes a PR's mergeability lazily
 after its base moves and verdicts can take minutes to settle, so the merge

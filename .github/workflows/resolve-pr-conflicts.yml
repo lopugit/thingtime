@@ -1,27 +1,16 @@
-name: Lopu PR resolver
-
-# This is the one canonical merge-conflict agent. It deliberately owns only
-# merge-based repairs; rebase-pr-stacks.yml continues to own history rewrites.
-# Every external event is read-only detection. An eligible PR is then handed to
-# this exact workflow on the default branch, where the agent may edit only the
-# files Git marked conflicted while merging the PR base into its head.
+name: Lopu PR manager
 
 run-name: >-
-  ${{ inputs.internal_handoff == true
-      && format('Lopu resolves PR #{0}', inputs.pr_number)
-      || inputs.pr_number != ''
-      && format('Lopu inspects PR #{0}', inputs.pr_number)
-      || inputs.branch != ''
-      && format('Lopu inspects conflicts under {0}', inputs.branch)
-      || format('Lopu inspects PR conflicts after {0}', github.event_name) }}
+  Lopu manages PRs${{ inputs.pr_number && format(' for #{0}', inputs.pr_number) || inputs.branch && format(' under {0}', inputs.branch) || format(' after {0}', github.event_name) }}
 
 on:
-  pull_request:
-    # Unprivileged detector only: never check out or execute PR code here.
-    types: [opened, reopened, synchronize, edited, ready_for_review]
+  push:
+    branches: ["**"]
+  pull_request_target:
+    types: [opened, reopened]
   # GitHub evaluates issue/review-comment and check-run workflows from the
-  # default branch, so these PR-manager signals reach the read-only detector
-  # below, which then hands eligible PRs to the trusted default-branch worker.
+  # default branch, so this thin listener forwards those PR-manager signals to
+  # the protected Lopu controller at @github-actions.
   issue_comment:
     types: [created, edited]
   pull_request_review_comment:
@@ -33,463 +22,46 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: "Exact PR to inspect; leave blank to inspect a branch or all open PRs"
+        description: "Exact PR to scan (takes precedence over branch); leave blank for a branch/all scan"
         required: false
         default: ""
         type: string
       branch:
-        description: "Limit detection to PRs based on or from this branch"
+        description: "PR base or head branch to scan; leave blank with no PR number to scan all"
         required: false
         default: ""
         type: string
-      internal_handoff:
-        description: "Internal trusted handoff; do not set manually"
+      detector_handoff:
+        description: "Internal trusted worker routing flag (leave false)"
         required: false
         default: false
         type: boolean
-      expected_head_sha:
-        description: "Internal immutable PR-head snapshot"
+      manual_retry:
+        description: "Internal explicit-retry routing flag (leave false)"
         required: false
-        default: ""
-        type: string
-      expected_base_sha:
-        description: "Internal immutable PR-base snapshot"
+        default: false
+        type: boolean
+      depth:
+        description: "Internal stacked-PR cascade depth (leave at 0)"
         required: false
-        default: ""
+        default: "0"
         type: string
   repository_dispatch:
     types: [resolve-conflicts-cascade]
 
 permissions:
-  contents: read
-  pull-requests: read
-
-concurrency:
-  group: >-
-    lopu-pr-resolver-${{ inputs.pr_number || github.event.pull_request.number || github.ref_name || github.run_id }}
-  cancel-in-progress: false
+  actions: write
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
-  detect:
-    name: Lopu detects eligible conflicting PRs
-    # A bot-authored internal dispatch is the only path permitted to resolve;
-    # it must not recursively dispatch another worker.
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.internal_handoff != true }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    permissions:
-      actions: write
-      contents: read
-      pull-requests: read
-    outputs:
-      selected: ${{ steps.select.outputs.selected }}
-      default_branch: ${{ steps.select.outputs.default_branch }}
-    steps:
-      - name: Snapshot eligible PRs without checking out code
-        id: select
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
-          DISPATCH_PR_NUMBER: ${{ github.event.client_payload.pr_number || '' }}
-          INPUT_PR_NUMBER: ${{ inputs.pr_number || '' }}
-          INPUT_BRANCH: ${{ inputs.branch || '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          fail() { echo "::error::$*"; exit 1; }
-          encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
-          valid_ref() {
-            [ -n "$1" ] && [ "${#1}" -le 240 ] \
-              && git check-ref-format "refs/heads/$1" >/dev/null 2>&1 \
-              && [[ "$1" != refs/* ]]
-          }
-
-          default_branch="$(gh api "repos/$REPO" --jq '.default_branch')"
-          valid_ref "$default_branch" || fail "GitHub returned an invalid default branch."
-          echo "default_branch=$default_branch" >> "$GITHUB_OUTPUT"
-
-          candidates=()
-          if [ -n "$INPUT_PR_NUMBER" ]; then
-            candidates+=("$INPUT_PR_NUMBER")
-          elif [ -n "$DISPATCH_PR_NUMBER" ]; then
-            candidates+=("$DISPATCH_PR_NUMBER")
-          elif [ -n "$EVENT_PR_NUMBER" ]; then
-            candidates+=("$EVENT_PR_NUMBER")
-          elif [ -n "$INPUT_BRANCH" ]; then
-            valid_ref "$INPUT_BRANCH" || fail "The requested branch is not a safe branch name."
-            while IFS= read -r number; do candidates+=("$number"); done < <(
-              { gh pr list --repo "$REPO" --state open --head "$INPUT_BRANCH" --limit 100 --json number --jq '.[].number'
-                gh pr list --repo "$REPO" --state open --base "$INPUT_BRANCH" --limit 100 --json number --jq '.[].number'; } \
-                | sort -u
-            )
-          else
-            while IFS= read -r number; do candidates+=("$number"); done < <(
-              gh pr list --repo "$REPO" --state open --limit 100 --json number --jq '.[].number'
-            )
-          fi
-
-          selected='[]'
-          for number in "${candidates[@]}"; do
-            [[ "$number" =~ ^[1-9][0-9]*$ ]] || { echo "::warning::Ignoring invalid PR number '$number'."; continue; }
-
-            pr=''
-            mergeable_state='unknown'
-            for _ in 1 2 3 4 5; do
-              pr="$(gh api "repos/$REPO/pulls/$number")" || { echo "::warning::Could not read PR #$number."; break; }
-              mergeable_state="$(jq -r '.mergeable_state // "unknown"' <<<"$pr")"
-              [ "$mergeable_state" != unknown ] && break
-              sleep 5
-            done
-            [ -n "$pr" ] || continue
-
-            state="$(jq -r '.state // empty' <<<"$pr")"
-            draft="$(jq -r '.draft // false' <<<"$pr")"
-            head_repo="$(jq -r '.head.repo.full_name // empty' <<<"$pr")"
-            head_ref="$(jq -r '.head.ref // empty' <<<"$pr")"
-            base_ref="$(jq -r '.base.ref // empty' <<<"$pr")"
-            head_sha="$(jq -r '.head.sha // empty' <<<"$pr")"
-            base_sha="$(jq -r '.base.sha // empty' <<<"$pr")"
-            labels="$(jq -r '[.labels[].name] | join("\\n")' <<<"$pr")"
-
-            if [ "$state" != open ] || [ "$draft" = true ] || [ "$head_repo" != "$REPO" ]; then
-              continue
-            fi
-            if [ "$mergeable_state" != dirty ]; then
-              continue
-            fi
-            if printf '%s\n' "$labels" | grep -Fxq -e no-ai-merge -e ai-merge-paused -e ai-rebase-in-progress; then
-              continue
-            fi
-            if [ "$head_ref" = "$default_branch" ] || ! valid_ref "$head_ref" || ! valid_ref "$base_ref"; then
-              continue
-            fi
-            if ! [[ "$head_sha" =~ ^[0-9a-f]{40}$ && "$base_sha" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "::warning::Skipping PR #$number because GitHub returned an invalid ref snapshot."
-              continue
-            fi
-
-            if ! protection="$(gh api "repos/$REPO/branches/$(encode_ref "$head_ref")" --jq '.protected' 2>/dev/null)"; then
-              echo "::warning::Skipping PR #$number because head-branch protection could not be verified."
-              continue
-            fi
-            if [ "$protection" = true ]; then
-              echo "::notice::Skipping PR #$number because $head_ref is protected."
-              continue
-            fi
-
-            selected="$(jq -c \
-              --argjson number "$number" \
-              --arg head_ref "$head_ref" \
-              --arg base_ref "$base_ref" \
-              --arg head_sha "$head_sha" \
-              --arg base_sha "$base_sha" \
-              '. + [{number:$number,head_ref:$head_ref,base_ref:$base_ref,head_sha:$head_sha,base_sha:$base_sha}]' \
-              <<<"$selected")"
-          done
-
-          echo "selected=$selected" >> "$GITHUB_OUTPUT"
-          echo "Selected $(jq 'length' <<<"$selected") eligible conflicting PR(s)."
-
-      - name: Hand off each PR to the trusted default-branch worker
-        if: ${{ steps.select.outputs.selected != '[]' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          DEFAULT_BRANCH: ${{ steps.select.outputs.default_branch }}
-          SELECTED: ${{ steps.select.outputs.selected }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          while IFS= read -r item; do
-            number="$(jq -r '.number' <<<"$item")"
-            echo "Dispatching PR #$number to the trusted resolver."
-            jq -n \
-              --arg ref "$DEFAULT_BRANCH" \
-              --arg pr_number "$number" \
-              --arg expected_head_sha "$(jq -r '.head_sha' <<<"$item")" \
-              --arg expected_base_sha "$(jq -r '.base_sha' <<<"$item")" \
-              '{ref:$ref,inputs:{pr_number:$pr_number,branch:"",internal_handoff:"true",expected_head_sha:$expected_head_sha,expected_base_sha:$expected_base_sha}}' \
-              | gh api --method POST \
-                  "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
-                  --input -
-          done < <(jq -c '.[]' <<<"$SELECTED")
-
-  resolve:
-    name: Lopu resolves PR #${{ inputs.pr_number }} with guarded edits
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      && inputs.internal_handoff == true
-      && github.actor == 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    permissions:
-      actions: write
-      contents: write
-      issues: write
-      pull-requests: write
-    steps:
-      - name: Revalidate the trusted handoff and immutable PR snapshot
-        id: validate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          EVENT_REF: ${{ github.ref_name }}
-          PR_NUMBER: ${{ inputs.pr_number }}
-          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
-          EXPECTED_BASE_SHA: ${{ inputs.expected_base_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          skip() { echo "::notice::$*"; echo 'eligible=false' >> "$GITHUB_OUTPUT"; exit 0; }
-          encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
-          valid_ref() {
-            [ -n "$1" ] && [ "${#1}" -le 240 ] \
-              && git check-ref-format "refs/heads/$1" >/dev/null 2>&1 \
-              && [[ "$1" != refs/* ]]
-          }
-
-          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || skip "The handoff PR number is invalid."
-          [[ "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$EXPECTED_BASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
-            || skip "The handoff does not contain immutable SHA snapshots."
-          default_branch="$(gh api "repos/$REPO" --jq '.default_branch')"
-          [ "$EVENT_REF" = "$default_branch" ] || skip "Workers may run only from the default branch."
-
-          pr="$(gh api "repos/$REPO/pulls/$PR_NUMBER")" || skip "PR #$PR_NUMBER is no longer readable."
-          state="$(jq -r '.state // empty' <<<"$pr")"
-          draft="$(jq -r '.draft // false' <<<"$pr")"
-          head_repo="$(jq -r '.head.repo.full_name // empty' <<<"$pr")"
-          head_ref="$(jq -r '.head.ref // empty' <<<"$pr")"
-          base_ref="$(jq -r '.base.ref // empty' <<<"$pr")"
-          head_sha="$(jq -r '.head.sha // empty' <<<"$pr")"
-          base_sha="$(jq -r '.base.sha // empty' <<<"$pr")"
-          mergeable_state="$(jq -r '.mergeable_state // unknown' <<<"$pr")"
-          labels="$(jq -r '[.labels[].name] | join("\\n")' <<<"$pr")"
-
-          [ "$state" = open ] && [ "$draft" = false ] && [ "$head_repo" = "$REPO" ] \
-            || skip "PR #$PR_NUMBER is not an open, ready same-repository PR."
-          [ "$mergeable_state" = dirty ] || skip "PR #$PR_NUMBER no longer has a merge conflict."
-          [ "$head_sha" = "$EXPECTED_HEAD_SHA" ] && [ "$base_sha" = "$EXPECTED_BASE_SHA" ] \
-            || skip "PR refs moved after detection; a fresh detector pass will re-snapshot them."
-          if printf '%s\n' "$labels" | grep -Fxq -e no-ai-merge -e ai-merge-paused -e ai-rebase-in-progress; then
-            skip "PR #$PR_NUMBER is opted out, paused, or owned by the rebase agent."
-          fi
-          if [ "$head_ref" = "$default_branch" ] || ! valid_ref "$head_ref" || ! valid_ref "$base_ref"; then
-            skip "PR #$PR_NUMBER has an unsafe target ref."
-          fi
-          if ! protection="$(gh api "repos/$REPO/branches/$(encode_ref "$head_ref")" --jq '.protected' 2>/dev/null)"; then
-            skip "Head-branch protection could not be verified."
-          fi
-          [ "$protection" = false ] || skip "The PR head branch is protected."
-
-          {
-            echo 'eligible=true'
-            echo "head_ref=$head_ref"
-            echo "base_ref=$base_ref"
-            echo "head_sha=$head_sha"
-            echo "base_sha=$base_sha"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Check out the immutable base snapshot
-        if: ${{ steps.validate.outputs.eligible == 'true' }}
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          ref: ${{ steps.validate.outputs.base_sha }}
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Materialize only the auto-merge conflict
-        id: merge
-        if: ${{ steps.validate.outputs.eligible == 'true' }}
-        env:
-          HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          git config --local core.hooksPath /dev/null
-          git config --local core.fsmonitor false
-          git config --local core.quotePath false
-          git fetch --no-tags origin "$HEAD_SHA:refs/pr-conflict-resolver/head"
-          if git merge --no-commit --no-ff --no-verify refs/pr-conflict-resolver/head; then
-            echo '::error::GitHub reported a conflict but the immutable merge completed cleanly.'
-            exit 1
-          fi
-
-          git diff --name-only --diff-filter=U > "$RUNNER_TEMP/conflicted-paths.txt"
-          [ -s "$RUNNER_TEMP/conflicted-paths.txt" ] || {
-            echo '::error::The stopped merge did not identify any conflicted paths.'
-            exit 1
-          }
-          while IFS= read -r path; do
-            [[ "$path" =~ ^[A-Za-z0-9._/@+=,:\ -]+$ ]] || {
-              echo "::error::Refusing an unsafe conflicted path: $path"
-              exit 1
-            }
-          done < "$RUNNER_TEMP/conflicted-paths.txt"
-
-          # Graphify output is derived data. Retain the base side; never ask
-          # the model to hand-merge it into a poisoned graph pair.
-          : > "$RUNNER_TEMP/agent-paths.txt"
-          while IFS= read -r path; do
-            if [[ "$path" == graphify-out/* ]]; then
-              git checkout --ours -- "$path"
-              git add -- "$path"
-            else
-              printf '%s\n' "$path" >> "$RUNNER_TEMP/agent-paths.txt"
-            fi
-          done < "$RUNNER_TEMP/conflicted-paths.txt"
-
-          if [ -s "$RUNNER_TEMP/agent-paths.txt" ]; then
-            {
-              echo '# AI conflict-resolution scope'
-              echo
-              echo 'Resolve only these merge-conflict files. Do not edit this scope file.'
-              echo 'The files are already in a merge-in-progress working tree.'
-              echo
-              sed 's/^/- `/' "$RUNNER_TEMP/agent-paths.txt" | sed 's/$/`/'
-            } > PR_RESOLUTION_SCOPE.md
-            echo 'needs_agent=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'needs_agent=false' >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Lopu resolves the scoped conflict (Claude Code backend)
-        if: ${{ steps.validate.outputs.eligible == 'true' && steps.merge.outputs.needs_agent == 'true' }}
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          prompt: |
-            You are Lopu, Thingtime's PR merge-conflict resolver. Your backend
-            is Claude Code. Use Lopu as the user-facing identity; the workflow
-            may separately state the configured backend for transparency.
-
-            The working tree is an in-progress merge of `${{ steps.validate.outputs.base_ref }}`
-            into PR #${{ inputs.pr_number }} (`${{ steps.validate.outputs.head_ref }}`).
-            Resolve it as a coherent continuation of the repository, not as a
-            textual "ours" or "theirs" choice.
-
-            First read `AGENTS.md`, `CLAUDE.md`, `FUNDAMENTALS.md`,
-            `DECISIONS.md`, and `PR_RESOLUTION_SCOPE.md`. Then read the
-            conflicted files and nearby callers, tests, docs, and schemas needed
-            to preserve the relevant contract.
-
-            You may edit only the files in `PR_RESOLUTION_SCOPE.md`. Do not add
-            features, change unrelated behaviour, edit Graphify output, alter
-            workflow/security configuration, use network tools, use a shell or
-            git, or leave conflict markers. If a correct resolution needs a
-            change outside that list, stop without editing.
-          claude_args: >-
-            --allowedTools "Read,Grep,Glob,Edit,Write"
-            --disallowedTools "WebFetch,WebSearch,Bash,Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Read(.git/**),Edit(.git/**),Write(.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/sys/**),Edit(/sys/**),Write(/sys/**),Read(/dev/**),Edit(/dev/**),Write(/dev/**),Read(/etc/**),Edit(/etc/**),Write(/etc/**),Read(/run/secrets/**),Edit(/run/secrets/**),Write(/run/secrets/**),Read(/var/run/secrets/**),Edit(/var/run/secrets/**),Write(/var/run/secrets/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*)"
-
-      - name: Verify the agent edited only merge-conflict paths
-        id: verify
-        if: ${{ steps.validate.outputs.eligible == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          rm -f PR_RESOLUTION_SCOPE.md
-          paths="$RUNNER_TEMP/agent-paths.txt"
-          if [ -s "$paths" ]; then
-            git diff --name-only > "$RUNNER_TEMP/worktree-edits.txt"
-            while IFS= read -r path; do
-              grep -Fxq -- "$path" "$paths" || {
-                echo "::error::AI changed a path outside the conflict scope: $path"
-                exit 1
-              }
-            done < "$RUNNER_TEMP/worktree-edits.txt"
-            while IFS= read -r path; do
-              grep -En '^(<<<<<<<|=======|>>>>>>>)' -- "$path" && {
-                echo "::error::Unresolved conflict marker remains in $path"
-                exit 1
-              }
-            done < "$paths"
-            git add --pathspec-from-file="$paths"
-          fi
-          git diff --name-only --diff-filter=U | grep . && {
-            echo '::error::The merge still has unmerged paths.'
-            exit 1
-          } || true
-          git diff --quiet || {
-            echo '::error::The working tree still contains unstaged edits.'
-            exit 1
-          }
-          git diff --cached --check
-          git diff --cached --quiet && {
-            echo '::error::The verified merge contains no changes to commit.'
-            exit 1
-          }
-          git -c user.name='github-actions[bot]' \
-              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-              commit -m "chore(ci): resolve PR #${{ inputs.pr_number }} merge conflict"
-          echo "merge_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Recheck the head lease and publish the verified merge
-        id: publish
-        if: ${{ steps.verify.outputs.merge_sha != '' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ inputs.pr_number }}
-          HEAD_REF: ${{ steps.validate.outputs.head_ref }}
-          BASE_REF: ${{ steps.validate.outputs.base_ref }}
-          HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
-          BASE_SHA: ${{ steps.validate.outputs.base_sha }}
-          MERGE_SHA: ${{ steps.verify.outputs.merge_sha }}
-          PUSH_PAT: ${{ secrets.CONFLICT_RESOLVER_PAT }}
-          PUSH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          pr="$(gh api "repos/$REPO/pulls/$PR_NUMBER")"
-          [ "$(jq -r '.state' <<<"$pr")" = open ] || { echo '::notice::PR closed before publication.'; exit 0; }
-          [ "$(jq -r '.head.sha' <<<"$pr")" = "$HEAD_SHA" ] || { echo '::notice::PR head moved before publication.'; exit 0; }
-          [ "$(jq -r '.base.sha' <<<"$pr")" = "$BASE_SHA" ] || { echo '::notice::PR base moved before publication.'; exit 0; }
-          labels="$(jq -r '[.labels[].name] | join("\\n")' <<<"$pr")"
-          if printf '%s\n' "$labels" | grep -Fxq -e no-ai-merge -e ai-merge-paused -e ai-rebase-in-progress; then
-            echo '::notice::PR was opted out, paused, or claimed by the rebase agent before publication.'
-            exit 0
-          fi
-
-          token="$PUSH_TOKEN"
-          if [ -n "$PUSH_PAT" ]; then token="$PUSH_PAT"; fi
-          auth="$(printf 'x-access-token:%s' "$token" | base64 --wrap=0)"
-          git -c credential.helper= \
-              -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
-              push "https://github.com/$REPO.git" \
-              "HEAD:refs/heads/$HEAD_REF" \
-              "--force-with-lease=refs/heads/$HEAD_REF:$HEAD_SHA"
-          echo 'published=true' >> "$GITHUB_OUTPUT"
-          echo "merge_sha=$MERGE_SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Attest the published resolution on the PR
-        if: ${{ steps.publish.outputs.published == 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ inputs.pr_number }}
-          BASE_REF: ${{ steps.validate.outputs.base_ref }}
-          HEAD_REF: ${{ steps.validate.outputs.head_ref }}
-          BASE_SHA: ${{ steps.validate.outputs.base_sha }}
-          HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
-          MERGE_SHA: ${{ steps.publish.outputs.merge_sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" \
-            -f body="🌈 **Lopu resolved this merge conflict**
-
-            - Merged \`$BASE_REF\` at \`$BASE_SHA\` into \`$HEAD_REF\` from the immutable head \`$HEAD_SHA\`.
-            - The agent could edit only Git's original non-Graphify conflict paths; Graphify conflicts kept the base-derived side.
-            - Lopu used the configured Claude Code backend for this scoped resolution.
-            - Verified merge commit: \`$MERGE_SHA\`.
-            - [Resolver run]($RUN_URL)
-
-            Please review the resolved diff before merging this PR."
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/resolve-pr-conflicts.yml@github-actions
+    with:
+      pr_number: ${{ inputs.pr_number || '' }}
+      branch: ${{ inputs.branch || '' }}
+      detector_handoff: ${{ inputs.detector_handoff || false }}
+      manual_retry: ${{ inputs.manual_retry || false }}
+      depth: ${{ inputs.depth || '0' }}
+    secrets: inherit
