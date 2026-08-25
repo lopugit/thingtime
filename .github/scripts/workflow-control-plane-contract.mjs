@@ -215,6 +215,7 @@ const ADMIN_MODEL_ENDPOINT =
 const ADMIN_MODEL_KEY = "Thingtime.PRConflictAutoResolverModelWaterfall";
 const ALLOWED_MODELS = ["default", "claude-fable-5", "claude-opus-5"];
 const AI_RUNTIME_YAML = [
+  ".github/actions/lopu-agent/action.yml",
   ".github/actions/rebase-conflict-round/action.yml",
   ".github/workflows/rebase-pr-stacks.yml",
   ".github/workflows/resolve-pr-conflicts.yml",
@@ -351,7 +352,7 @@ function assertAdminModelRouting(resolver, rebase) {
   const runtimeFiles = [...yamlFiles(workflows), ...yamlFiles(actions)]
     .filter((path) => {
       const source = readFileSync(path, "utf8");
-      return /uses:\s*anthropics\/claude-code-action@|\bbackend=(?:["']?)claude(?:-cli)?(?:["']?)\b|GRAPHIFY_(?:CLAUDE_CLI|OPENAI)_MODEL|--model\b/u.test(
+      return /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@|\bbackend=(?:["']?)claude(?:-cli)?(?:["']?)\b|GRAPHIFY_(?:CLAUDE_CLI|OPENAI)_MODEL|--model\b/u.test(
         source,
       );
     })
@@ -390,11 +391,35 @@ function assertAdminModelRouting(resolver, rebase) {
     );
   }
 
+  const lopuAgent = readFileSync(
+    resolve(actions, "lopu-agent/action.yml"),
+    "utf8",
+  );
+  assert.match(
+    lopuAgent,
+    /uses:\s*anthropics\/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79/u,
+    "the single Lopu action pins Claude's executable implementation",
+  );
+  assert.match(
+    lopuAgent,
+    /uses:\s*openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u,
+    "the single Lopu action pins Codex's executable implementation",
+  );
+  for (const path of runtimeFiles.filter((path) => path !== ".github/actions/lopu-agent/action.yml")) {
+    const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
+    assert.doesNotMatch(
+      source,
+      /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u,
+      `${path}: model execution goes through the single protected Lopu action`,
+    );
+  }
+
   const claudeActionCount = runtimeFiles.reduce((count, path) => {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
     return count +
       (source.match(/uses:\s*anthropics\/claude-code-action@/gu)?.length ?? 0);
   }, 0);
+  assert.equal(claudeActionCount, 1, "only the single Lopu action directly invokes Claude");
   const turnBudgets = runtimeFiles.flatMap((path) => {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
     return [...source.matchAll(/--max-turns\s+(\d+)/gu)].map((match) => ({
@@ -416,20 +441,22 @@ function assertAdminModelRouting(resolver, rebase) {
   const runtimeSource = runtimeFiles
     .map((path) => readFileSync(resolve(githubRoot, "..", path), "utf8"))
     .join("\n");
+  const lopuCallCount =
+    runtimeSource.match(/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/gu)?.length ?? 0;
   assert.ok(
     (runtimeSource.match(/steps\.[A-Za-z0-9_]+\.outcome == 'failure'/gu)?.length ?? 0) >=
-      claudeActionCount - 1,
+      lopuCallCount,
     "each independently resumable Claude runtime classifies its failed result before continuation",
   );
   assert.ok(
     (runtimeSource.match(/RESULT_SUBTYPE[^\n]+error_max_turns/gu)?.length ?? 0) >=
-      claudeActionCount,
+      lopuCallCount,
     "only error_max_turns can enter exact-session continuation",
   );
   assert.equal(
     runtimeSource.match(/claude --resume "\$session_id" --print/gu)?.length,
-    claudeActionCount,
-    "every Claude action has an exact --resume continuation path",
+    lopuCallCount,
+    "every Lopu caller that can select Claude has an exact --resume continuation path",
   );
 }
 
@@ -514,7 +541,7 @@ function assertUserControlledMergePause(resolver, rebase) {
 function assertResolverLockfileRecovery(resolver) {
   const prompt = workflowBlock(
     resolver,
-    "      - name: Resolve conflicts with Claude\n",
+    "      - name: Resolve conflicts with Lopu\n",
     "      - name: Continue the exact conflict-resolution session until it finishes\n",
     "resolver model prompt",
   );

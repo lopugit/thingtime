@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 const WORKFLOW_URL = new URL("../workflows/resolve-pr-conflicts.yml", import.meta.url);
 const REBASE_WORKFLOW_URL = new URL("../workflows/rebase-pr-stacks.yml", import.meta.url);
 const REBASE_ACTION_URL = new URL("../actions/rebase-conflict-round/action.yml", import.meta.url);
+const LOPU_ACTION_URL = new URL("../actions/lopu-agent/action.yml", import.meta.url);
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const positiveDecimal = (value) => /^[1-9][0-9]*$/.test(value);
@@ -123,6 +124,7 @@ function assertWorkflowSource() {
   const source = readFileSync(WORKFLOW_URL, "utf8");
   const rebaseSource = readFileSync(REBASE_WORKFLOW_URL, "utf8");
   const rebaseActionSource = readFileSync(REBASE_ACTION_URL, "utf8");
+  const lopuActionSource = readFileSync(LOPU_ACTION_URL, "utf8");
   const modelBlock = source.slice(
     source.indexOf("\n  model_config:"),
     source.indexOf("\n  resolve_promotion:"),
@@ -332,15 +334,24 @@ function assertWorkflowSource() {
   assert.match(reviewBlock, /POST repos\/\$REPO\/pulls\/<PR_NUMBER>\/comments\/<COMMENT_ID>\/replies/u, "Lopu can reply inline");
   assert.match(reviewBlock, /thingtime-lopu-conversation:v1/u, "Lopu marks its free-form conversational comments");
   assert.match(reviewBlock, /Never\n            edit another actor's comment/u, "Lopu edits only its own comments");
-  assert.match(reviewBlock, /openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u, "Lopu has a pinned Codex review backend");
+  assert.match(reviewBlock, /uses: \.\/trusted\/\.github\/actions\/lopu-agent/u, "review runs through the single protected Lopu action");
   assert.match(reviewBlock, /OPENAI_API_KEY/u, "Codex review uses a GitHub Actions secret");
-  assert.match(modelBlock, /LOPU_REVIEW_BACKEND/u, "Lopu review backend is repository-configurable");
+  assert.match(modelBlock, /LOPU_AGENT_BACKEND/u, "Lopu's global agent backend is repository-configurable");
+  assert.match(modelBlock, /LOPU_REVIEW_BACKEND/u, "the historical review backend remains a compatibility fallback");
   assert.match(modelBlock, /gpt-5\.6-terra/u, "Terra is an allowed Lopu Codex model");
   assert.match(modelBlock, /gpt-5\.6-sol/u, "Sol is an allowed Lopu Codex model");
-  assert.match(modelBlock, /model_reasoning_effort/u, "Codex reasoning effort is configured explicitly");
+  assert.match(lopuActionSource, /effort: \$\{\{ inputs\.codex-reasoning-effort \}\}/u, "Codex reasoning effort is configured explicitly");
+  assert.match(lopuActionSource, /allow-bot-users: \$\{\{ inputs\.allowed-bots \}\}/u, "Codex receives the same closed bot identity as Claude");
+  assert.match(lopuActionSource, /anthropics\/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79/u, "Lopu pins its Claude implementation");
+  assert.match(lopuActionSource, /openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/u, "Lopu pins its Codex implementation");
+  assert.match(lopuActionSource, /gpt-5\.6-terra\) model_label=/u, "Lopu accepts Terra");
+  assert.match(lopuActionSource, /gpt-5\.6-sol\) model_label=/u, "Lopu accepts Sol");
+  assert.doesNotMatch(source, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "controller workflows never bypass the protected Lopu action");
+  assert.doesNotMatch(rebaseSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase workflows never bypass the protected Lopu action");
+  assert.doesNotMatch(rebaseActionSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase conflict rounds never bypass the protected Lopu action");
   assert.match(reviewBlock, /Publish Lopu's controller\/workflow fix as a PR/u, "controller failures have a dedicated Lopu PR publisher");
   assert.match(reviewBlock, /--base github-actions/u, "controller fixes target the protected controller branch");
-  assert.match(reviewBlock, /Never push or merge `github-actions`, `main`, or any target\/default/u, "model may not directly publish protected branches");
+  assert.match(reviewBlock, /Never push `github-actions`, `main`, or\s+another target\/default branch directly/u, "model may not directly publish protected branches");
   assert.match(reviewBlock, /security-events: read/u, "the model receives read-only CodeQL evidence access");
   assert.doesNotMatch(
     source.slice(source.indexOf("\n  review:"), source.indexOf("\n  codeql_dispositions:")),
@@ -489,7 +500,7 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
   );
 
   const aiRuntimePattern =
-    /anthropics\/claude-code-action@|\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\b/;
+    /(?:anthropics\/claude-code-action|openai\/codex-action)@|uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent|\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\b/;
   const actualRuntimeFiles = [
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "actions")),
@@ -499,6 +510,7 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
     .map((path) => relative(REPO_ROOT, path))
     .sort();
   assert.deepEqual(actualRuntimeFiles, [
+    ".github/actions/lopu-agent/action.yml",
     ".github/actions/rebase-conflict-round/action.yml",
     ".github/scripts/rebase-stack/refresh-promotion-graphify.sh",
     ".github/workflows/all-branch.yml",
@@ -521,6 +533,7 @@ function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, model
   assert.match(promotionGraphify, /--api-timeout 7200/u, "promotion semantic extraction has the repository timeout budget");
 
   const requiredModelBindings = new Map([
+    [".github/actions/lopu-agent/action.yml", "${{ inputs.codex-model }}"],
     [".github/actions/rebase-conflict-round/action.yml", "${{ inputs.model-args }}"],
     [".github/scripts/rebase-stack/refresh-promotion-graphify.sh", 'case "${PREFERRED_MODEL:-default}"'],
     [".github/workflows/all-branch.yml", "${{ steps.models.outputs.model_args }}"],

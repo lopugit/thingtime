@@ -21,6 +21,17 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Every model-backed repository lane now runs through one protected Lopu
+  action**: review/check repair, CodeQL triage, merge conflicts, promotion
+  replay, release analysis, rebase and stack-conflict rounds, and the wildcard
+  `all`-branch doctor share the repository-wide `LOPU_AGENT_BACKEND` selector.
+  The action validates and labels either the pinned Claude implementation or
+  pinned Codex implementation with an allowlisted Terra/Sol model and explicit
+  reasoning effort. Direct provider actions no longer appear in individual
+  workflows, the historical `LOPU_REVIEW_BACKEND` remains a compatibility
+  fallback, and post-merge Graphify prefers the same provider while retaining
+  structural output when semantic extraction is unavailable. — Codex (AI),
+  2026-08-25
 - **Lopu CodeQL now covers PRs targeting branches that predate the listener**:
   a trusted default-branch `pull_request_target` event carries only the PR
   number and immutable head SHA into a separate `workflow_dispatch` run. The

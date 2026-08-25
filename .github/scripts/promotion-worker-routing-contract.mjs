@@ -21,6 +21,10 @@ const action = readFileSync(
   new URL("../actions/rebase-conflict-round/action.yml", import.meta.url),
   "utf8",
 );
+const lopuAgent = readFileSync(
+  new URL("../actions/lopu-agent/action.yml", import.meta.url),
+  "utf8",
+);
 const worker = readFileSync(
   new URL("./rebase-stack/promotion-worker.sh", import.meta.url),
   "utf8",
@@ -48,6 +52,8 @@ assert.match(
   /manage_rebases:[\s\S]*?permissions:\s+actions: write\s+contents: write\s+pull-requests: write\s+issues: write/,
 );
 assert.match(workflow, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/);
+assert.match(workflow, /LOPU_AGENT_BACKEND/);
+assert.match(workflow, /uses: \.\/trusted\/\.github\/actions\/lopu-agent/);
 const durableFleetQueue =
   /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n(?:\s*#.*\n)*\s*queue: max\s+cancel-in-progress: false/g;
 assert.equal(
@@ -55,6 +61,8 @@ assert.equal(
   3,
   "every review, promotion, and conflict worker uses the durable single-Lopu queue",
 );
+assert.match(rebaseWorkflow, /uses: &thingtime_rebase_conflict_round_action \.\/trusted\/\.github\/actions\/rebase-conflict-round/);
+assert.match(rebaseWorkflow, /backend: \$\{\{ vars\.LOPU_AGENT_BACKEND/);
 assert.match(workflow, /--dangerously-skip-permissions/);
 assert.match(workflow, /--allowedTools "Bash\(\*\),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"/);
 assert.doesNotMatch(workflow, /DISALLOWED_TOOLS/);
@@ -80,11 +88,29 @@ assert.equal(
   1,
   "the all-branch build doctor shares the durable single-Lopu queue",
 );
+assert.match(allBranchWorkflow, /uses: \.\/control-plane\/\.github\/actions\/lopu-agent/);
+assert.match(allBranchWorkflow, /LOPU_AGENT_BACKEND/);
 
 assert.match(action, /You are Lopu, Thingtime's principal PR and repository manager/);
+assert.match(action, /uses: \.\/trusted\/\.github\/actions\/lopu-agent/);
 assert.match(action, /--dangerously-skip-permissions/);
 assert.match(action, /--allowedTools "Bash\(\*\),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"/);
 assert.doesNotMatch(action, /DISALLOWED_TOOLS/);
+assert.match(lopuAgent, /name: Lopu agent/);
+assert.match(lopuAgent, /anthropics\/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79/);
+assert.match(lopuAgent, /openai\/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e/);
+for (const [label, source] of [
+  ["resolver workflow", workflow],
+  ["rebase workflow", rebaseWorkflow],
+  ["all-branch workflow", allBranchWorkflow],
+  ["rebase conflict action", action],
+]) {
+  assert.doesNotMatch(
+    source,
+    /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/,
+    `${label} must not bypass the single Lopu action`,
+  );
+}
 assert.match(worker, /git commit -q/);
 assert.doesNotMatch(worker, /review_gated/);
 assert.doesNotMatch(worker, /ci_sensitive_paths/);

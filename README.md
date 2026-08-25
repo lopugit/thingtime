@@ -58,6 +58,39 @@ syntax-checks every script, runs each `--self-test`, and asserts this branch's
 shape (see below). Web CI does not run — its path filters are `remix/**`, which
 cannot exist here.
 
+## Lopu principal repository manager
+
+Lopu is the repository-facing identity for every model-backed automation in
+this control plane. PR review and failing-check repair, CodeQL triage, merge
+conflict resolution, promotion replay, stale-branch updates, rebases and stack
+cascades, release analysis, and the wildcard `all`-branch build doctor all call
+the same protected `.github/actions/lopu-agent` interface. Post-merge Graphify
+refreshes follow the same configured provider when a matching semantic
+credential is available.
+
+The default backend is Claude. To use Codex through the OpenAI Platform API,
+configure these repository settings (all names and values are examples; never
+commit a real key):
+
+```text
+Repository variable: LOPU_AGENT_BACKEND=codex
+Repository variable: LOPU_CODEX_MODEL=gpt-5.6-terra
+Repository variable: LOPU_CODEX_REASONING_EFFORT=xhigh
+Actions secret:      OPENAI_API_KEY=<OpenAI-Platform-project-key>
+```
+
+`LOPU_CODEX_MODEL` accepts `gpt-5.6-terra` or `gpt-5.6-sol`, and reasoning
+effort accepts `medium`, `high`, `xhigh`, or `max`. Runs are visibly attributed
+as Lopu and report a label such as `OpenAI API GPT-5.6 Terra Extra High`.
+`LOPU_REVIEW_BACKEND` remains a compatibility fallback, but
+`LOPU_AGENT_BACKEND` is the canonical single selector for the whole agent.
+
+For Claude instead, set `LOPU_AGENT_BACKEND=claude` (or omit it) and configure
+`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`. GitHub-hosted automation does
+not accept an OpenAI account username/password or browser session. A Codex run
+uses the OpenAI Platform project associated with `OPENAI_API_KEY`; it does not
+consume a ChatGPT Pro weekly allowance.
+
 ## The bare-tree invariant
 
 `.github/scripts/workflow-control-plane-contract.mjs` asserts that no path

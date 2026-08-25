@@ -1693,6 +1693,8 @@ jobs:
       model_args: ${{ steps.waterfall.outputs.model_args }}
       primary_model: ${{ steps.waterfall.outputs.primary_model }}
       backend_label: ${{ steps.waterfall.outputs.backend_label }}
+      agent_backend: ${{ steps.waterfall.outputs.agent_backend }}
+      agent_backend_label: ${{ steps.waterfall.outputs.agent_backend_label }}
       review_backend: ${{ steps.waterfall.outputs.review_backend }}
       review_backend_label: ${{ steps.waterfall.outputs.review_backend_label }}
       codex_model: ${{ steps.waterfall.outputs.codex_model }}
@@ -1702,9 +1704,9 @@ jobs:
         id: waterfall
         shell: bash
         env:
-          # The resolver/promotion waterfall remains Claude-configured. This
-          # opt-in provider only selects Lopu's autonomous PR-review worker.
-          LOPU_REVIEW_BACKEND: ${{ vars.LOPU_REVIEW_BACKEND || 'claude' }}
+          # One provider selection governs every model-backed Lopu lane. Keep
+          # LOPU_REVIEW_BACKEND as a compatibility fallback for existing repos.
+          LOPU_AGENT_BACKEND: ${{ vars.LOPU_AGENT_BACKEND || vars.LOPU_REVIEW_BACKEND || 'claude' }}
           LOPU_CODEX_MODEL: ${{ vars.LOPU_CODEX_MODEL || 'gpt-5.6-terra' }}
           LOPU_CODEX_REASONING_EFFORT: ${{ vars.LOPU_CODEX_REASONING_EFFORT || 'xhigh' }}
         run: |
@@ -1802,10 +1804,10 @@ jobs:
           echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
           echo "backend_label=$backend_label" >> "$GITHUB_OUTPUT"
 
-          review_backend="${LOPU_REVIEW_BACKEND:-claude}"
-          case "$review_backend" in
+          agent_backend="${LOPU_AGENT_BACKEND:-claude}"
+          case "$agent_backend" in
             claude)
-              review_backend_label="$backend_label"
+              agent_backend_label="$backend_label"
               codex_model=""
               codex_reasoning_effort=""
               ;;
@@ -1832,19 +1834,22 @@ jobs:
                   effort_label="Extra High"
                   ;;
               esac
-              review_backend_label="OpenAI API $model_name $effort_label"
+              agent_backend_label="OpenAI API $model_name $effort_label"
               ;;
             *)
-              echo "::warning::Unsupported LOPU_REVIEW_BACKEND '$review_backend'; using claude."
-              review_backend="claude"
-              review_backend_label="$backend_label"
+              echo "::warning::Unsupported LOPU_AGENT_BACKEND '$agent_backend'; using claude."
+              agent_backend="claude"
+              agent_backend_label="$backend_label"
               codex_model=""
               codex_reasoning_effort=""
               ;;
           esac
-          echo "Lopu review backend: $review_backend ($review_backend_label)"
-          echo "review_backend=$review_backend" >> "$GITHUB_OUTPUT"
-          echo "review_backend_label=$review_backend_label" >> "$GITHUB_OUTPUT"
+          echo "Lopu agent backend: $agent_backend ($agent_backend_label)"
+          echo "agent_backend=$agent_backend" >> "$GITHUB_OUTPUT"
+          echo "agent_backend_label=$agent_backend_label" >> "$GITHUB_OUTPUT"
+          # Compatibility outputs for the already-published review contract.
+          echo "review_backend=$agent_backend" >> "$GITHUB_OUTPUT"
+          echo "review_backend_label=$agent_backend_label" >> "$GITHUB_OUTPUT"
           echo "codex_model=$codex_model" >> "$GITHUB_OUTPUT"
           echo "codex_reasoning_effort=$codex_reasoning_effort" >> "$GITHUB_OUTPUT"
 
@@ -2133,12 +2138,12 @@ jobs:
       - name: Require an AI credential
         if: steps.prepare.outputs.any == 'true'
         env:
-          REVIEW_BACKEND: ${{ needs.model_config.outputs.review_backend }}
+          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
           HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
           HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
           set -euo pipefail
-          case "$REVIEW_BACKEND" in
+          case "$AGENT_BACKEND" in
             claude)
               [ "$HAS_CLAUDE_CREDENTIAL" = true ] \
                 || { echo "::error::Add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN to enable Lopu's configured Claude review backend."; exit 1; }
@@ -2148,21 +2153,28 @@ jobs:
                 || { echo "::error::Add an OpenAI Platform project key as the OPENAI_API_KEY Actions secret to enable Lopu's Codex review backend."; exit 1; }
               ;;
             *)
-              echo "::error::Lopu review backend '$REVIEW_BACKEND' is not in the closed provider allowlist."
+              echo "::error::Lopu agent backend '$AGENT_BACKEND' is not in the closed provider allowlist."
               exit 1
               ;;
           esac
 
       - name: Review the repository and improve selected PRs as Lopu
         id: lopu_review
-        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.review_backend == 'claude'
+        if: steps.prepare.outputs.any == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        uses: ./trusted/.github/actions/lopu-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ github.token }}
-          allowed_bots: "github-actions"
+          backend: ${{ needs.model_config.outputs.agent_backend }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ github.token }}
+          allowed-bots: "github-actions"
+          codex-model: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
+          codex-reasoning-effort: ${{ needs.model_config.outputs.codex_reasoning_effort || 'xhigh' }}
+          working-directory: .
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
           prompt: |
             You are Lopu, Thingtime's principal developer, PR manager, and
             repository steward. You have full repository, shell, GitHub, and
@@ -2265,7 +2277,7 @@ jobs:
             edit another actor's comment or Lopu's deterministic resolver/status
             comments. Add that hidden marker to every new free-form Lopu
             conversational comment, alongside clear visible Lopu attribution.
-          claude_args: |
+          claude-args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
             --max-turns 500
@@ -2277,94 +2289,8 @@ jobs:
           # to its own repository comments and review replies.
           GH_TOKEN: ${{ github.token }}
 
-      - name: Review the repository and improve selected PRs as Lopu with Codex
-        id: lopu_review_codex
-        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.review_backend == 'codex'
-        continue-on-error: true
-        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          working-directory: .
-          # Lopu needs to run repository tests and GitHub CLI commands in the
-          # externally isolated Actions runner. It still drops sudo before the
-          # agent starts so no post-checkout root privilege is available.
-          sandbox: danger-full-access
-          safety-strategy: drop-sudo
-          codex-args: >-
-            --model ${{ needs.model_config.outputs.codex_model }}
-            --config 'model_reasoning_effort="${{ needs.model_config.outputs.codex_reasoning_effort }}"'
-          prompt: |
-            You are Lopu, Thingtime's principal developer, PR manager, and
-            repository steward, using ${{ needs.model_config.outputs.review_backend_label }}.
-            Complete a thoughtful engineering review for every candidate in
-            `$RUNNER_TEMP/lopu-review-manifest.json`.
-
-            For each candidate, work in its complete directory under
-            `$RUNNER_TEMP/lopu-review-worktrees`, compare its immutable head
-            against its base, and inspect relevant architecture, repository
-            direction, project docs, Graphify output when useful, related GitHub
-            history/PRs, tests, and operational conventions. Review correctness,
-            security, crashes, performance, data/API compatibility, test coverage,
-            and maintainability before style. Make only genuinely justified
-            changes, but make those changes directly in the PR worktree and run
-            focused validation. Leave desired PR fixes uncommitted: the following
-            trusted step lease-checks and pushes only to that exact PR head.
-
-            Treat failing PR checks as first-class review findings. For every
-            candidate inspect `gh pr checks` and the relevant check-run/Actions
-            logs. When `REVIEW_DISPATCH_ID` begins
-            `lopu-review:check-run:<CHECK_RUN_ID>:` first retrieve exactly that
-            check with `gh api repos/$REPO/check-runs/<CHECK_RUN_ID>`. Distinguish
-            reproducible defects from outages, stale results, and cancellations.
-            Each manifest record also names a trusted `codeql_alerts_path` and an
-            initially empty `codeql_dispositions_path`. Inspect every listed
-            CodeQL finding. Fix real findings in the PR worktree and leave them
-            open so the next scan marks them fixed. Only a demonstrably
-            inapplicable finding may be proposed for dismissal by writing a JSON
-            array of `{ "alert_number": <integer>, "reason": "false positive" |
-            "used in tests", "comment": "Lopu evidence: <specific auditable
-            justification>" }` to that disposition path. Never use `won't fix`,
-            never propose an alert absent from the snapshot, and never PATCH
-            CodeQL state directly; an isolated trusted job validates and applies
-            the proposal later.
-            If the failure belongs to the PR, repair the PR worktree. If it belongs
-            to the protected controller (`.github/workflows/**`,
-            `.github/actions/**`, or `.github/scripts/**`), edit only that path
-            under `$GITHUB_WORKSPACE/trusted`, write diagnosis and validation to
-            `$RUNNER_TEMP/lopu-workflow-fix.md`, and do not commit or push it. A
-            trusted follow-up will make a dedicated PR against `github-actions`.
-            Never push or merge `github-actions`, `main`, or any target/default
-            branch yourself.
-
-            PR conversation is a first-class responsibility. You have no comment
-            quota, template, or topic restriction: use the GitHub CLI/API to post
-            as many relevant, useful Markdown comments as you judge appropriate
-            on same-repository PRs. When the dispatch id names an issue comment,
-            fetch it from `repos/$REPO/issues/comments/<COMMENT_ID>` and reply on
-            `repos/$REPO/issues/<PR_NUMBER>/comments` when useful. When it names
-            an inline review comment, fetch it from
-            `repos/$REPO/pulls/comments/<COMMENT_ID>` and reply through
-            `repos/$REPO/pulls/<PR_NUMBER>/comments/<COMMENT_ID>/replies` when
-            that is clearest. You may edit an earlier Lopu conversational comment
-            only after fetching it and verifying it is authored by
-            `github-actions[bot]` and contains
-            `<!-- thingtime-lopu-conversation:v1 -->`; never edit another actor's
-            comment or deterministic resolver/status comments. Add that marker and
-            visible Lopu attribution to every new free-form Lopu comment.
-
-            Do not merge, rebase, delete branches, or change files outside a
-            reviewed PR worktree except for the narrowly allowed controller fix.
-            For every reviewed PR, write a concise Markdown report to
-            `$RUNNER_TEMP/lopu-review-reports/<PR_NUMBER>.md` covering comparison,
-            findings, changes or why none were needed, and validation results.
-            Do not include secrets, tokens, or private values in reports/comments.
-        env:
-          # The Codex action receives the repository-scoped GitHub token for
-          # direct Lopu conversation/check inspection, never a push credential.
-          GH_TOKEN: ${{ github.token }}
-
       - name: Continue the exact Lopu repository-review session until it finishes
-        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.review_backend == 'claude' && steps.lopu_review.outcome == 'failure'
+        if: steps.prepare.outputs.any == 'true' && needs.model_config.outputs.agent_backend == 'claude' && steps.lopu_review.outcome == 'failure'
         continue-on-error: true
         shell: bash
         env:
@@ -3156,6 +3082,7 @@ jobs:
         if: steps.prepare_promotion.outputs.conflicted == 'true'
         uses: &thingtime_promotion_conflict_round_action ./trusted/.github/actions/rebase-conflict-round
         with: &thingtime_promotion_conflict_round_inputs
+          backend: ${{ needs.model_config.outputs.agent_backend }}
           repo-path: ${{ steps.repo.outputs.repo_path }}
           deterministic-conflict-paths: ${{ steps.prepare_promotion.outputs.deterministic_conflict_paths }}
           pr-number: ${{ inputs.promotion_source_pr }}
@@ -3166,9 +3093,12 @@ jobs:
           allow-unresolved: "true"
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ github.token }}
           allowed-bots: github-actions
           model-args: ${{ needs.model_config.outputs.model_args }}
+          codex-model: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
+          codex-reasoning-effort: ${{ needs.model_config.outputs.codex_reasoning_effort || 'xhigh' }}
 
       - &thingtime_promotion_conflict_retry
         name: Continue synthetic promotion conflict resolution (up to round 500)
@@ -3704,7 +3634,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          GRAPHIFY_BACKEND_PREFERENCE: ${{ needs.model_config.outputs.review_backend }}
+          GRAPHIFY_BACKEND_PREFERENCE: ${{ needs.model_config.outputs.agent_backend }}
           LOPU_OPENAI_MODEL: ${{ needs.model_config.outputs.codex_model }}
           PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
         run: |
@@ -4027,12 +3957,19 @@ jobs:
         id: release_analysis
         if: steps.release_analysis_inputs.outputs.ready == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79
+        uses: ./trusted/.github/actions/lopu-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ github.token }}
-          allowed_bots: github-actions
+          backend: ${{ needs.model_config.outputs.agent_backend }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ github.token }}
+          allowed-bots: github-actions
+          codex-model: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
+          codex-reasoning-effort: ${{ needs.model_config.outputs.codex_reasoning_effort || 'xhigh' }}
+          working-directory: .
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
           prompt: |
             You are writing an ADVISORY release analysis for promotion PR
             #${{ steps.publish_promotion.outputs.promotion_pr }} (source PR
@@ -4061,7 +3998,7 @@ jobs:
 
             Write ONLY to `release-analysis/out/analysis.md`. Do not create,
             rename or delete any other file. Keep it under 300 lines.
-          claude_args: |
+          claude-args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
             --max-turns 500
@@ -4069,7 +4006,7 @@ jobs:
             --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 
       - name: Continue the exact release-analysis session until it finishes
-        if: steps.release_analysis_inputs.outputs.ready == 'true' && steps.release_analysis.outcome == 'failure'
+        if: steps.release_analysis_inputs.outputs.ready == 'true' && needs.model_config.outputs.agent_backend == 'claude' && steps.release_analysis.outcome == 'failure'
         continue-on-error: true
         shell: bash
         env:
@@ -4178,6 +4115,7 @@ jobs:
           ANALYSIS_DIR: ${{ steps.release_analysis_inputs.outputs.dir }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
           analysis="$ANALYSIS_DIR/out/analysis.md"
@@ -4191,7 +4129,7 @@ jobs:
           fi
           needles="$RUNNER_TEMP/analysis-needles"
           : >"$needles"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${GH_TOKEN:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}" "${GH_TOKEN:-}"; do
             [[ -n "$secret" ]] || continue
             printf '%s\n' "$secret" >>"$needles"
             printf '%s' "$secret" | base64 | tr -d '\n' >>"$needles"; printf '\n' >>"$needles"
@@ -4798,30 +4736,40 @@ jobs:
       - name: Require an AI credential
         if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true'
         env:
-          HAS_AI_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
+          HAS_CLAUDE_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_OPENAI_CREDENTIAL: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
           set -euo pipefail
-          if [ "$HAS_AI_CREDENTIAL" != "true" ]; then
-            echo "::error::Add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN to enable Lopu's configured Claude backend (claude CLI: /install-github-app)."
-            exit 1
-          fi
+          case "$AGENT_BACKEND" in
+            claude) [ "$HAS_CLAUDE_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Claude backend needs ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN."; exit 1; } ;;
+            codex) [ "$HAS_OPENAI_CREDENTIAL" = true ] || { echo "::error::Lopu's configured Codex backend needs OPENAI_API_KEY."; exit 1; } ;;
+            *) echo "::error::Unknown Lopu agent backend: $AGENT_BACKEND"; exit 1 ;;
+          esac
 
-      - name: Resolve conflicts with Claude
+      - name: Resolve conflicts with Lopu
         id: resolve_conflicts
         if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
+        uses: ./trusted/.github/actions/lopu-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ github.token }}
+          backend: ${{ needs.model_config.outputs.agent_backend }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ github.token }}
           # The trusted Actions workflow dispatch uses GITHUB_TOKEN, so its
           # github-actions worker is attributed to github-actions[bot]. The action
           # refuses non-human actors by default ("Workflow initiated by non-human
           # actor: github-actions (type: Bot)"), which silently broke the whole
           # push -> handoff -> dispatch -> resolve chain: only runs a human
           # dispatched ever reached the model. Allow exactly this bot, not '*'.
-          allowed_bots: "github-actions"
+          allowed-bots: "github-actions"
+          codex-model: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
+          codex-reasoning-effort: ${{ needs.model_config.outputs.codex_reasoning_effort || 'xhigh' }}
+          working-directory: .
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
           prompt: |
             You are Lopu, Thingtime's principal PR and repository manager. Resolve
             this merge conflict with full repository, shell, GitHub, and web-tool
@@ -4884,7 +4832,7 @@ jobs:
           # The first admin-ordered model is primary; the rest are Claude
           # Code's native availability fallbacks. This does not retry a
           # completed-but-unresolved edit with another model.
-          claude_args: |
+          claude-args: |
             ${{ needs.model_config.outputs.model_args }}
             --effort max
             --max-turns 500
@@ -4892,7 +4840,7 @@ jobs:
             --allowedTools "Bash(*),Read,Edit,Write,Glob,Grep,WebFetch,WebSearch"
 
       - name: Continue the exact conflict-resolution session until it finishes
-        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true' && steps.resolve_conflicts.outcome == 'failure'
+        if: steps.user_merge_pause.outputs.paused != 'true' && steps.merge.outputs.conflicted == 'true' && needs.model_config.outputs.agent_backend == 'claude' && steps.resolve_conflicts.outcome == 'failure'
         shell: bash
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -5185,6 +5133,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
         run: |
           set -euo pipefail
@@ -5318,7 +5267,7 @@ jobs:
           # not a boundary (see header).
           keyfile="$RUNNER_TEMP/scan-needles.txt"
           : > "$keyfile"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             printf '%s\n' "$secret" >> "$keyfile"
             printf '%s' "$secret" | base64 -w0 >> "$keyfile"
@@ -5355,7 +5304,7 @@ jobs:
             -m "Merge $BASE_REF into $HEAD_REF (AI-resolved conflicts)" \
             -m "Conflicted paths: $conflicted_list" \
             -m "Resolved by the resolve-pr-conflicts workflow: $RUN_URL" \
-            -m "Co-Authored-By: Claude <noreply@anthropic.com>"
+            -m "Co-Authored-By: Lopu <github-actions[bot]@users.noreply.github.com>"
 
       # Runs ONLY after the base-into-head merge has completed (and any conflict
       # resolution has been verified and committed). Structural extraction is
@@ -5383,6 +5332,9 @@ jobs:
           # claude CLI it shells out to.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
+          CODEX_MODEL: ${{ needs.model_config.outputs.codex_model || 'gpt-5.6-terra' }}
           # Keep the post-resolution semantic refresh on the same trusted,
           # administrator-selected primary model as the conflict edit itself.
           PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
@@ -5392,6 +5344,7 @@ jobs:
           # not necessarily to child processes (the claude CLI); normalize.
           [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
           [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
+          [ -n "${OPENAI_API_KEY:-}" ] || unset OPENAI_API_KEY
 
           # `default` deliberately leaves each Graphify backend on its own
           # default. Every named value is a literal emitted by model_config's
@@ -5434,23 +5387,48 @@ jobs:
           fi
           export PATH="$HOME/.local/bin:$PATH"
 
-          # Pick a semantic backend from whichever Claude credential exists.
+          select_claude_backend() {
+            if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+              printf 'claude\n'
+            elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+              printf 'claude-cli\n'
+            fi
+          }
           backend=""
-          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-            backend="claude"
-          elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+          case "${AGENT_BACKEND:-claude}" in
+            codex)
+              if [ -n "${OPENAI_API_KEY:-}" ]; then backend=openai; else backend="$(select_claude_backend)"; fi
+              ;;
+            claude)
+              backend="$(select_claude_backend)"
+              if [ -z "$backend" ] && [ -n "${OPENAI_API_KEY:-}" ]; then backend=openai; fi
+              ;;
+            *) echo "::warning::Unexpected Lopu backend; choosing an available Graphify credential."; backend="$(select_claude_backend)" ;;
+          esac
+          if [ "$backend" = "claude-cli" ]; then
             # graphify's claude-cli backend shells out to `claude -p`, which
             # authenticates from CLAUDE_CODE_OAUTH_TOKEN — the same mechanism
             # claude-code-action uses. The resolve step may have left the CLI
             # installed already; install it if not.
             if command -v claude >/dev/null 2>&1; then
-              backend="claude-cli"
+              :
             elif npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 \
                  && command -v claude >/dev/null 2>&1; then
-              backend="claude-cli"
+              :
             else
               echo "::warning::claude CLI unavailable and could not be installed — semantic extraction skipped (AST-only refresh)."
+              backend=""
             fi
+          fi
+          if [ "$backend" = openai ]; then
+            unset GRAPHIFY_CLAUDE_CLI_MODEL
+            case "${CODEX_MODEL:-gpt-5.6-terra}" in
+              gpt-5.6-terra|gpt-5.6-sol)
+                graphify_model_args=(--model "$CODEX_MODEL")
+                export GRAPHIFY_OPENAI_MODEL="$CODEX_MODEL"
+                ;;
+              *) echo "::warning::Unexpected Lopu Codex model; Graphify will use its OpenAI default."; unset GRAPHIFY_OPENAI_MODEL ;;
+            esac
           fi
 
           # Mechanical guard for graph collapse. `graphify update` has its own
@@ -5535,7 +5513,7 @@ jobs:
           # them. Best-effort backstop, not a boundary (see header).
           keyfile="$RUNNER_TEMP/graphify-needles.txt"
           : > "$keyfile"
-          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}"; do
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}" "${OPENAI_API_KEY:-}"; do
             [ -n "$secret" ] || continue
             printf '%s\n' "$secret" >> "$keyfile"
             printf '%s' "$secret" | base64 -w0 >> "$keyfile"
