@@ -46,11 +46,29 @@ Thingtime uses CodeQL advanced setup so analysis is not limited to GitHub's
 default-setup branch scope. The thin `.github/workflows/codeql-analysis.yml`
 listener has an unfiltered `pull_request` trigger and a `push` trigger for
 `"**"`; therefore every PR whose target carries the listener and every direct
-branch push receives analysis. `main` and `develop` carry the listener, while
-the protected implementation directly handles PRs targeting and pushes to
-`github-actions`. New feature and stack branches inherit the listener from
-their base. When an open PR already owns a branch head, its PR run is the single
-analysis owner and the matching push run exits before CodeQL initialization.
+branch push receives analysis. A default-branch `pull_request_target` listener
+also covers PRs whose target branch predates the listener. That privileged run
+calls a dedicated protected metadata-only handoff, checks out no code, and
+receives no AI credential. The handoff forwards only the PR number and immutable
+event head SHA into a separate
+`workflow_dispatch` run, which revalidates live state and analyzes the exact PR
+merge ref—or the head ref while a conflict prevents GitHub from creating one.
+Lopu validates both merge parents against the live base and head before using
+that ref, because GitHub can retain an obsolete merge ref after a conflict.
+`main` and `develop` carry the normal listener,
+while the protected implementation directly handles PRs targeting and pushes
+to `github-actions`; the central handoff closes the remaining arbitrary-target
+gap. A PR whose target already carries the listener keeps its normal
+`pull_request` run as owner, preserving branch-protection check contexts. When
+the selected ref already has both language snapshots, Lopu exits before CodeQL
+initialization instead of paying for a duplicate scan.
+
+The analysis and metadata handoff use separate protected reusable workflows.
+That split is required by GitHub's permission model: ordinary `pull_request`
+tokens are capped at `actions: read`, while only the metadata-only
+`pull_request_target` bridge needs `actions: write` to dispatch the exact PR
+scan. The split preserves normal PR check contexts without granting analysis a
+write-capable Actions token.
 
 The first rollout has one ordered repository-administration step. Do not turn
 off default setup until this listener has reached the default branch, because

@@ -9,7 +9,6 @@ const workflowsRoot = resolve(repositoryRoot, '.github', 'workflows');
 
 const callers = [
   'all-branch.yml',
-  'codeql-analysis.yml',
   'develop-pr-preview.yml',
   'electron-release.yml',
   'electron-pr-release.yml',
@@ -35,10 +34,18 @@ const codeqlCaller = readFileSync(
 const codeqlTriggersEnd = codeqlCaller.indexOf('\npermissions:\n');
 assert.ok(codeqlTriggersEnd > 0, 'codeql-analysis.yml must retain its trigger block');
 const codeqlTriggers = codeqlCaller.slice(0, codeqlTriggersEnd);
+assert.doesNotMatch(codeqlCaller, /^\s+runs-on:|^\s+steps:|^\s+run:/m, 'CodeQL listener must remain executable-code-free');
+assert.doesNotMatch(codeqlCaller, /\.github\/(?:actions|scripts)\//, 'CodeQL listener must not reference product-branch behavior files');
+assert.equal((codeqlCaller.match(/^\s+uses:/gm) ?? []).length, 2, 'CodeQL listener must have exactly one analysis call and one target-event handoff call');
 assert.match(
   codeqlTriggers,
   /^  pull_request:$/m,
   'codeql-analysis.yml must scan PRs targeting every branch without a base filter'
+);
+assert.match(
+  codeqlTriggers,
+  /^  pull_request_target:\n    types: \[opened, synchronize, reopened, ready_for_review, edited\]$/m,
+  'codeql-analysis.yml must receive every PR target through the trusted default-branch listener'
 );
 assert.match(
   codeqlTriggers,
@@ -53,6 +60,27 @@ const codeqlPermissions = codeqlCaller.slice(
 );
 assert.match(codeqlPermissions, /^  security-events: write$/m, 'CodeQL caller must permit SARIF upload');
 assert.match(codeqlPermissions, /^  pull-requests: read$/m, 'CodeQL caller must permit duplicate-run ownership checks');
+assert.match(codeqlPermissions, /^  actions: write$/m, 'CodeQL caller must permit the metadata-only trusted handoff');
+assert.match(
+  codeqlCaller,
+  /^  pr-handoff:\n    if: github\.event_name == 'pull_request_target'\n    uses: lopugit\/thingtime\/\.github\/workflows\/codeql-pr-handoff\.yml@github-actions$/m,
+  'CodeQL target events must call the isolated protected metadata handoff'
+);
+assert.match(
+  codeqlCaller,
+  /^  control-plane:\n    if: github\.event_name != 'pull_request_target'\n    uses: lopugit\/thingtime\/\.github\/workflows\/codeql-analysis\.yml@github-actions$/m,
+  'read-capped PR events must call only the unprivileged CodeQL analyzer'
+);
+assert.match(
+  codeqlCaller,
+  /^      pr_number: \$\{\{ inputs\.pr_number \|\| '' \}\}$/m,
+  'CodeQL caller must forward only the optional trusted PR number'
+);
+assert.match(
+  codeqlCaller,
+  /^      expected_head_sha: \$\{\{ inputs\.expected_head_sha \|\| '' \}\}$/m,
+  'CodeQL caller must bind a central scan to the event head SHA'
+);
 
 const resolverCaller = readFileSync(
   resolve(workflowsRoot, 'resolve-pr-conflicts.yml'),
@@ -207,4 +235,4 @@ assert.deepEqual(
   'product branches must not retain local Actions scripts; the develop-preview controller lives on github-actions'
 );
 
-console.log(`workflow caller contract: ${callers.length} thin listeners pinned to github-actions`);
+console.log(`workflow caller contract: ${callers.length + 1} thin listeners pinned to github-actions`);
