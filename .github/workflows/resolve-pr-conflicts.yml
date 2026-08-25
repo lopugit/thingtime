@@ -1,13 +1,16 @@
-name: Resolve PR conflicts (AI)
+name: Lopu PR manager
 
 run-name: >-
-  Resolve PR conflicts${{ inputs.pr_number && format(' for #{0}', inputs.pr_number) || inputs.branch && format(' under {0}', inputs.branch) || format(' after {0}', github.event_name) }}
+  Lopu manages PRs${{ inputs.pr_number && format(' for #{0}', inputs.pr_number) || inputs.branch && format(' under {0}', inputs.branch) || format(' after {0}', github.event_name) }}
 
 on:
   push:
     branches: ["**"]
   pull_request_target:
-    types: [opened, reopened]
+    # This default-branch signal is independent of whether an old PR head or
+    # non-default target already carries a current push listener. The protected
+    # controller deduplicates exact snapshots before queueing model work.
+    types: [opened, synchronize, reopened, ready_for_review, edited]
   schedule:
     - cron: "2,32 * * * *"
   workflow_dispatch:
