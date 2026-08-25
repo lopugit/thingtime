@@ -6390,8 +6390,8 @@
     "semantic_hash": "c22ab7d26d7e1eb3818cef99711f7a45"
   },
   "Commander/script/build_and_run.sh": {
-    "mtime": 1787646825.6970987,
-    "ast_hash": "cc3272a94d0171af390337c2711ab0b1",
+    "mtime": 1787652727.3496742,
+    "ast_hash": "cd76ddc9ba11eaae7a16c5cbe39aab38",
     "semantic_hash": ""
   },
   "Commander/script/release-version.mjs": {
@@ -6935,8 +6935,8 @@
     "semantic_hash": "5a3628c64c892a09c8e3b9d67de906a1"
   },
   "Commander/README.md": {
-    "mtime": 1787646825.6975398,
-    "ast_hash": "2e4216ebbcbfec58d639a61e5fccecb0",
+    "mtime": 1787652727.350241,
+    "ast_hash": "9581e97790b1831c765cf4866e68cfaa",
     "semantic_hash": ""
   },
   "Commander/THIRD_PARTY_NOTICES.md": {
