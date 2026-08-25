@@ -16,6 +16,14 @@ test('MCP tools/list publishes OAuth requirements before a user links Thingtime'
   assert.equal(payload.result.tools.length, 13);
   assert.deepEqual(payload.result.tools[0].securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
   assert.deepEqual(payload.result.tools[0]._meta.securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
+  const annotations = Object.fromEntries(payload.result.tools.map((tool: any) => [tool.name, tool.annotations]));
+  assert.deepEqual(annotations.create_thingtime_thing, { readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+  assert.deepEqual(annotations.update_thingtime_thing, { readOnlyHint: false, destructiveHint: true, openWorldHint: true });
+  assert.deepEqual(annotations.delete_thingtime_thing, { readOnlyHint: false, destructiveHint: true, openWorldHint: true });
+  assert.deepEqual(annotations.comment_on_thingtime_thing, { readOnlyHint: false, destructiveHint: true, openWorldHint: true });
+  assert.deepEqual(annotations.react_to_thingtime_thing, { readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+  assert.deepEqual(annotations.save_thingtime_thing, { readOnlyHint: false, destructiveHint: false, openWorldHint: false });
+  assert.deepEqual(annotations.share_thingtime_thing, { readOnlyHint: false, destructiveHint: true, openWorldHint: true });
 });
 
 test('an unauthenticated protected tool call returns the OAuth challenge ChatGPT needs', async () => {

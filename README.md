@@ -432,11 +432,13 @@ The MCP protected-resource and authorization-server discovery documents are at
 `/.well-known/oauth-protected-resource` and
 `/.well-known/oauth-authorization-server`; its origin-scoped feature manifest
 is `/.well-known/thingtime-chatgpt-capabilities.json`. In ChatGPT Developer
-mode add the public MCP URL, complete the account form in the browser, and
-then use the generated ChatGPT app registration identifier when publishing the
-plugin package. The connection page is mobile-safe; whether a particular iOS
-ChatGPT account exposes developer plugins remains a ChatGPT product-surface
-availability check.
+mode on the web, add the public MCP URL, complete the account form in the
+browser, and then use the generated ChatGPT app registration identifier when
+packaging the plugin for a local or team marketplace. ChatGPT custom MCP apps
+are currently web-only; iOS ChatGPT chats cannot invoke Developer Mode MCP
+apps. Public Plugins Directory distribution additionally requires a fixed
+production origin, verified publisher identity, legal URLs, test cases, and
+OpenAI review; see the package's `SUBMISSION.md`.
 
 ## Extensible data — `extended` + schema-less crystals
 

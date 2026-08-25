@@ -31,6 +31,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Security
 
+- **ChatGPT tool annotations now match their actual effects.** Public-content
+  writes are marked as open-world actions, only irreversible writes retain the
+  destructive hint, and the MCP semantic feature advances to `1.0.2` for
+  review-safe metadata scanning. — Codex (AI), 2026-08-26
 - **ChatGPT now discovers OAuth before invoking protected tools.** The MCP
   catalog publishes standard per-tool OAuth metadata while returning no account
   data, protected calls emit the model-readable OAuth challenge ChatGPT uses to

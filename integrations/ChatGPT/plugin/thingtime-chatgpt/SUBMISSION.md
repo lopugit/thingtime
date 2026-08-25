@@ -1,0 +1,81 @@
+# Thingtime plugin submission handoff
+
+This package is ready to be scanned as an MCP-backed plugin once its server is
+deployed at the final production origin. Do not submit a Vercel preview: OpenAI
+pins the MCP origin after review, so the submitted URL must be the stable
+production URL.
+
+## Required owner-provided materials
+
+- An OpenAI Platform organization with **Apps Management** write access.
+- A verified Thingtime developer or business identity in that organization.
+- Public, publisher-matching website, support, privacy-policy, and terms URLs.
+- A production MCP URL at
+  `https://thingtime.com/api/v1/integrations/chatgpt/mcp`, or the final stable
+  Thingtime production origin if it differs.
+- A reviewer-only Thingtime account and least-privilege PAT that can complete
+  the first-party authorization form without MFA, email confirmation, or
+  private-network access. Never commit or paste those credentials into this
+  repository.
+- Country/region availability and the final release notes.
+
+## MCP metadata justification
+
+All thirteen tools require the `thingtime` OAuth bridge scope and are scoped to
+one selected Thingtime connection. The server does not proxy arbitrary URLs.
+
+- **Read-only:** account listing, profile lookup, list, and search only
+  retrieve data.
+- **Private mutable:** selecting a default account and saving a Thing change
+  only the connected account or its private library; neither is irreversible
+  or open-world.
+- **Irreversible:** disconnecting an account revokes its bridge session;
+  updates can overwrite content; deletes remove Things; comments and shares
+  can publish content that cannot be reliably recalled. These tools advertise
+  `destructiveHint: true`.
+- **Potentially public:** create, update, delete, comment, react, and share
+  can affect public Thingtime content, so they advertise `openWorldHint: true`.
+  Every write-tool description tells ChatGPT to obtain the user's confirmation
+  first.
+
+## Reviewer test cases
+
+Positive cases:
+
+1. Connect two named accounts at allowed Thingtime origins; verify only labels,
+   endpoint origins, and opaque account IDs return from `list_thingtime_accounts`.
+2. Select the second account and verify future reads use it without exposing a
+   PAT.
+3. Search a known Thing and verify the selected account is returned with a
+   minimal, relevant result.
+4. Create a private draft after explicit confirmation, then update it after a
+   second explicit confirmation.
+5. Add a comment or share a test post after confirmation and verify the action
+   card reflects the write-oriented metadata.
+
+Negative cases:
+
+1. Invoke a protected tool before OAuth; expect a 401 plus the
+   `mcp/www_authenticate` resource-metadata challenge.
+2. Supply an endpoint outside `THINGTIME_CHATGPT_ALLOWED_ENDPOINTS`; expect
+   the authorization form to reject it without storing a credential.
+3. Supply a revoked, expired, or scope-insufficient PAT; expect first-party
+   validation to fail without returning the token.
+
+## Submission sequence
+
+1. Deploy the reviewed server to its fixed production origin and smoke its
+   protected-resource, authorization-server, capability-manifest, `tools/list`,
+   unauthorized `tools/call`, and first-party authorization form responses.
+2. Open the OpenAI Platform plugin submission portal, create a **With MCP**
+   draft, enter the production URL, configure OAuth, verify the domain when
+   prompted, and select **Scan Tools**.
+3. Check the discovered schemas, OAuth security schemes, titles, output
+   schemas, and annotations against the justifications above. Add the listing,
+   legal links, starter prompts, region availability, test cases, credentials,
+   and release notes.
+4. Submit for review. Publish from the portal only after OpenAI approval.
+
+OpenAI currently documents custom MCP apps as web-only. A public submission
+can make the plugin discoverable in the universal Plugins Directory, but it
+does not override that MCP mobile-surface limitation.

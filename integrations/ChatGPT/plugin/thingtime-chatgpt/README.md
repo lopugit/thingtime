@@ -22,8 +22,9 @@ explicitly allowed Thingtime origins and the focused Things operation list.
 
 1. Deploy the Thingtime branch to a public HTTPS origin and configure the
    required server environment variables in the main README.
-2. In ChatGPT on the web or desktop app, turn on **Developer mode** under
-   Settings → Security & login.
+2. In ChatGPT **on the web**, turn on **Developer mode** under Settings →
+   Security & login. OpenAI currently makes custom MCP apps web-only; they
+   cannot be invoked in iOS ChatGPT chats.
 3. Open **Plugins**, choose **Add plugin**, and enter the public MCP URL:
    `https://<your-thingtime-origin>/api/v1/integrations/chatgpt/mcp`.
 4. ChatGPT opens the Thingtime connection page. Add each account/API endpoint
@@ -32,9 +33,10 @@ explicitly allowed Thingtime origins and the focused Things operation list.
    when packaging this plugin for a personal marketplace or team distribution.
 
 Use the ChatGPT connection manager to reconnect; do not paste any Thingtime
-token into a chat message. The connection page works in a mobile browser, but
-availability of developer plugins on the iOS ChatGPT app is controlled by the
-ChatGPT account/surface and must be confirmed there after installation.
+token into a chat message. See [SUBMISSION.md](./SUBMISSION.md) before public
+Plugins Directory submission: OpenAI requires a fixed production origin,
+verified publisher identity, public legal links, reviewer credentials, and
+review approval.
 
 ## Operational configuration
 

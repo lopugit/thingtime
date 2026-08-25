@@ -206,8 +206,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Public tool metadata, including each tool’s OAuth requirement and write annotation.',
-        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'search_thingtime_things', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }] }] } }
+        description: 'Public tool metadata, including each tool’s OAuth requirement and precise action annotations.',
+        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'search_thingtime_things', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } }] } }
       },
       {
         status: 401,

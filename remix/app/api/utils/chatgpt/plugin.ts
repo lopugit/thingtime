@@ -484,49 +484,49 @@ const toolDefinitions = [
     title: 'Create Thingtime Thing',
     description: 'Create a Thing using the selected account. Use only after the user confirms the intended content.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['thing'], properties: { accountId: { type: 'string' }, thing: { type: 'object', description: 'Thingtime /api/v1/things create payload.' } } },
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }
   }),
   protectedTool({
     name: 'update_thingtime_thing',
     title: 'Update Thingtime Thing',
     description: 'Update one owned Thing. Use only after the user confirms the change.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['thing'], properties: { accountId: { type: 'string' }, thing: { type: 'object', description: 'Thingtime /api/v1/things/update payload including id.' } } },
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true }
   }),
   protectedTool({
     name: 'delete_thingtime_thing',
     title: 'Delete Thingtime Thing',
     description: 'Delete one owned Thing. Use only after the user confirms deletion.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { accountId: { type: 'string' }, id: { type: 'string' } } },
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true }
   }),
   protectedTool({
     name: 'comment_on_thingtime_thing',
     title: 'Comment on Thingtime Thing',
     description: 'Add a comment to a Thing after the user confirms its text.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['comment'], properties: { accountId: { type: 'string' }, comment: { type: 'object', description: 'Thingtime /api/v1/things/comment payload.' } } },
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true }
   }),
   protectedTool({
     name: 'react_to_thingtime_thing',
     title: 'React to Thingtime Thing',
     description: 'Toggle a reaction on a Thing after the user confirms it.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['reaction'], properties: { accountId: { type: 'string' }, reaction: { type: 'object', description: 'Thingtime /api/v1/things/react payload.' } } },
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }
   }),
   protectedTool({
     name: 'save_thingtime_thing',
     title: 'Save Thingtime Thing',
     description: 'Toggle a Thing in the selected account’s saved library.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { accountId: { type: 'string' }, id: { type: 'string' } } },
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
   }),
   protectedTool({
     name: 'share_thingtime_thing',
     title: 'Share Thingtime Thing',
     description: 'Share a post through the selected Thingtime account after user confirmation.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['share'], properties: { accountId: { type: 'string' }, share: { type: 'object', description: 'Thingtime /api/v1/things/share payload.' } } },
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true }
   })
 ];
 
