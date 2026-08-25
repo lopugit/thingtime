@@ -1,4 +1,5 @@
 import XCTest
+import ApplicationServices
 @testable import Commander
 
 @MainActor
@@ -69,6 +70,12 @@ final class SystemMetricsServiceTests: XCTestCase {
         row["cpuPercent"] is Double && row["residentMemoryBytes"] is UInt64 &&
         row["diskReadBytesPerSecond"] is Double && row["diskWriteBytesPerSecond"] is Double
     })
+    XCTAssertNotNil(machine?["notRespondingApplications"] as? [[String: Any]])
     XCTAssertNotNil(machine?["gpu"] as? [String: Any])
+  }
+
+  func testOnlyAccessibilityTimeoutsAreTreatedAsNotResponding() {
+    XCTAssertTrue(ApplicationResponsivenessService.errorMeansNotResponding(.cannotComplete))
+    XCTAssertFalse(ApplicationResponsivenessService.errorMeansNotResponding(.apiDisabled))
   }
 }

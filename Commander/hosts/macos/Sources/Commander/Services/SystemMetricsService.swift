@@ -6,6 +6,7 @@ import OSLog
 @MainActor
 final class SystemMetricsService {
   private let daemonPID: pid_t
+  private let applicationResponsiveness: ApplicationResponsivenessService
   private let logger = Logger(subsystem: "com.thingtime.Commander", category: "Metrics")
   private var previousMachineCPU: (total: UInt64, idle: UInt64)?
   private var previousCommanderCPU: (nanoseconds: UInt64, sampledAt: UInt64)?
@@ -21,8 +22,9 @@ final class SystemMetricsService {
     let sampledAt: UInt64
   }
 
-  init(daemonPID: Int32) {
+  init(daemonPID: Int32, applicationResponsiveness: ApplicationResponsivenessService = ApplicationResponsivenessService()) {
     self.daemonPID = daemonPID
+    self.applicationResponsiveness = applicationResponsiveness
   }
 
   func snapshot() -> [String: Any] {
@@ -71,6 +73,7 @@ final class SystemMetricsService {
           "availableBytes": filesystem.availableBytes,
           "purgeableBytes": filesystem.purgeableBytes,
         ],
+        "notRespondingApplications": applicationResponsiveness.snapshot(),
         "processes": processes,
         "gpu": gpu,
       ],

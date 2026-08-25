@@ -7,6 +7,7 @@ import type {
 } from '@commander/protocol';
 import {
   Activity,
+  AlertTriangle,
   Cpu,
   HardDrive,
   MemoryStick,
@@ -14,15 +15,20 @@ import {
   Network,
   Play,
   RefreshCw,
+  RotateCcw,
   Rows3,
+  Power,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { nativeBridgeAvailable, nativeRequest } from '../lib/nativeBridge.js';
+import '../styles/ActivityUnresponsiveApplications.css';
 
 const REFRESH_INTERVAL_MS = 2_000;
 const NETWORK_PING_INTERVAL_MS = 15_000;
 type ProcessSortKey = 'name' | 'parent' | 'cpu' | 'gpu' | 'memory' | 'network' | 'disk';
 type SortDirection = 'ascending' | 'descending';
+type ApplicationControlAction = 'quit' | 'forceQuit' | 'restart';
+type ApplicationControlResult = { submitted?: boolean; cancelled?: boolean };
 
 export function ActivitySettings({
   settings,
@@ -125,6 +131,19 @@ export function ActivitySettings({
 
   const setActivitySettings = (patch: Partial<CommanderSettings['activity']>) => {
     onChange({ ...settings, activity: { ...settings.activity, ...patch } });
+  };
+
+  const controlUnresponsiveApplication = async (pid: number, action: ApplicationControlAction) => {
+    try {
+      const result = await nativeRequest<ApplicationControlResult>('application.control', { pid, action });
+      if (!result?.submitted && !result?.cancelled) {
+        throw new Error('Commander could not submit that application control request.');
+      }
+      onError(null);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : 'Commander could not control that application.');
+      throw error;
+    }
   };
 
   if (!nativeBridgeAvailable()) {
@@ -260,6 +279,10 @@ export function ActivitySettings({
         }
         onRunSpeedTest={() => void runSpeedTest()}
       />
+      <UnresponsiveApplications
+        applications={machine?.notRespondingApplications ?? []}
+        onControl={controlUnresponsiveApplication}
+      />
       <ProcessTable
         processes={machine?.processes ?? []}
         sortKey={sortKey}
@@ -282,6 +305,92 @@ export function ActivitySettings({
         estimate, not a promise that every byte can be reclaimed immediately.
       </p>
     </div>
+  );
+}
+
+function UnresponsiveApplications({
+  applications,
+  onControl,
+}: {
+  applications: Array<{ pid: number; name: string }>;
+  onControl(pid: number, action: ApplicationControlAction): Promise<void>;
+}) {
+  const [pendingPID, setPendingPID] = useState<number>();
+
+  if (!applications.length) return null;
+
+  const control = async (pid: number, action: ApplicationControlAction) => {
+    setPendingPID(pid);
+    try {
+      await onControl(pid, action);
+    } catch {
+      // The parent reports the native error through the settings error surface.
+    } finally {
+      setPendingPID(undefined);
+    }
+  };
+
+  return (
+    <section
+      className="activity-section activity-unresponsive-applications"
+      aria-labelledby="not-responding-applications-title"
+    >
+      <div className="activity-section-heading">
+        <div>
+          <h3 id="not-responding-applications-title">
+            <AlertTriangle /> Not responding apps
+          </h3>
+          <p>macOS reported that these apps did not answer an accessibility request.</p>
+        </div>
+        <span>{applications.length} detected</span>
+      </div>
+      <p className="activity-unresponsive-note">
+        Force quitting can lose unsaved work. Quit and restart first asks the app to quit, then force quits it
+        only if needed.
+      </p>
+      <div className="activity-unresponsive-list">
+        {applications.map((application) => {
+          const pending = pendingPID === application.pid;
+          return (
+            <div className="activity-unresponsive-row" key={application.pid}>
+              <div className="activity-unresponsive-app-name">
+                <AlertTriangle aria-hidden="true" />
+                <div>
+                  <strong>{application.name}</strong>
+                  <small>PID {application.pid}</small>
+                </div>
+              </div>
+              <div className="activity-unresponsive-actions">
+                <button
+                  type="button"
+                  className="activity-unresponsive-action"
+                  disabled={pending}
+                  onClick={() => void control(application.pid, 'quit')}
+                >
+                  <Power /> {pending ? 'Working…' : 'Quit'}
+                </button>
+                <button
+                  type="button"
+                  className="activity-unresponsive-action force-quit"
+                  disabled={pending}
+                  onClick={() => void control(application.pid, 'forceQuit')}
+                >
+                  <AlertTriangle /> Force quit
+                </button>
+                <button
+                  type="button"
+                  className="activity-unresponsive-action"
+                  disabled={pending}
+                  onClick={() => void control(application.pid, 'restart')}
+                >
+                  <RotateCcw /> Quit & restart
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

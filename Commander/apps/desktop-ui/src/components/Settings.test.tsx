@@ -91,6 +91,7 @@ vi.mock('../lib/nativeBridge.js', () => ({
   nativeBridgeAvailable: vi.fn(() => true),
   nativeRequest: vi.fn(async (method: string) => {
     if (method === 'permission.fullDiskAccess') return { granted: true };
+    if (method === 'application.control') return { submitted: true };
     return {
       sampledAtMs: 1,
       commander: {
@@ -124,6 +125,7 @@ vi.mock('../lib/nativeBridge.js', () => ({
           availableBytes: 300 * 1024 * 1024 * 1024,
           purgeableBytes: 12 * 1024 * 1024 * 1024,
         },
+        notRespondingApplications: [{ pid: 101, name: 'Thingtime' }],
         processes: [
           {
             pid: 99,
@@ -268,6 +270,20 @@ describe('Commander settings deep links', () => {
     expect(screen.getByText(/nothing here leaves this device/i)).toBeVisible();
   });
 
+  it('offers quit, force quit, and restart controls for an unresponsive app', async () => {
+    window.history.replaceState({}, '', '/settings.html?tab=activity');
+    render(<Settings state={state()} />);
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Not responding apps' })).toBeVisible());
+    expect(screen.getByText('Thingtime')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Quit' }));
+    await waitFor(() =>
+      expect(nativeRequest).toHaveBeenCalledWith('application.control', { pid: 101, action: 'quit' }),
+    );
+    expect(screen.getByRole('button', { name: 'Force quit' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Quit & restart' })).toBeVisible();
+  });
+
   it('shows indexing roots and ignore rules and can request a scoped refresh', async () => {
     window.history.replaceState({}, '', '/settings.html?tab=search');
     const commander = state();
@@ -304,9 +320,9 @@ describe('Commander settings deep links', () => {
     const fullDiskAccessCard = screen.getByRole('region', { name: 'macOS whole-volume access' });
     expect(fullDiskAccessCard).toBeVisible();
     expect(fullDiskAccessCard.parentElement).toHaveClass('search-settings-stack');
-    expect(fullDiskAccessCard.compareDocumentPosition(screen.getByText('Fuzzy and adaptive everywhere'))).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
+    expect(
+      fullDiskAccessCard.compareDocumentPosition(screen.getByText('Fuzzy and adaptive everywhere')),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(nativeRequest).toHaveBeenCalledWith('permission.fullDiskAccess');
 
     fireEvent.click(screen.getByRole('button', { name: 'Files' }));
