@@ -154,8 +154,8 @@ assert.match(
 );
 assert.match(
   resolverCaller,
-  /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all\]/m,
-  'manual wildcard-all recovery must be a Lopu maintenance choice'
+  /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql\]/m,
+  'manual wildcard-all and CodeQL recovery must remain Lopu maintenance choices'
 );
 
 const electronPrReleaseCaller = readFileSync(

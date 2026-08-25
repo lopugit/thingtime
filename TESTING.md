@@ -188,9 +188,10 @@ is fixed, and cite the checklist you ran in the PR description.
       branches contain no `.github/workflows/all-branch.yml` or rebase-specific
       listener. Push `develop` and `main`, exercise every PR lifecycle transition
       including draft and close, wait for the `53 * * * *` backstop, and invoke
-      the `build-all` maintenance choice manually. Every path must appear under
-      **Lopu PR manager**, call the protected reusable doctor, and keep at most
-      one model-backed Lopu job active without cancelling it.
+      the `build-all` and `backfill-codeql` maintenance choices manually. Every
+      path must appear under **Lopu PR manager**, call the corresponding
+      protected implementation, and keep at most one model-backed Lopu job
+      active without cancelling it.
 
 ## Develop-target Vercel PR previews
 

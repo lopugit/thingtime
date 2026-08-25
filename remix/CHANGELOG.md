@@ -37,6 +37,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **The develop Lopu listener exposes the complete maintenance contract**:
+  manual recovery now includes the protected controller's bounded
+  `backfill-codeql` operation alongside PR management, promotions, branch sync,
+  and the wildcard-all build. The caller contract and operational checklist
+  pin this menu so product-branch listeners cannot silently drift behind the
+  single `github-actions` implementation. — Codex (AI), 2026-08-26
 - **The wildcard `all`-branch workflow is folded into the one public Lopu
   manager**: product branches no longer retain a separate all-branch listener.
   Develop/main pushes, the full PR lifecycle including draft and close, the

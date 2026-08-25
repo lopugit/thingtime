@@ -41,7 +41,7 @@ on:
         required: false
         default: "manage-prs"
         type: choice
-        options: [manage-prs, promote-develop, promote-features, sync-main-develop, build-all]
+        options: [manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql]
       promotion_dry_run:
         description: "Plan feature promotion only — do not create or update repository state"
         required: false
