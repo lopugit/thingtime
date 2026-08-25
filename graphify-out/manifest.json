@@ -1445,9 +1445,9 @@
     "semantic_hash": "33c41e5c78a7edd4008ff2e5107fbf31"
   },
   "remix/scripts/patch-vercel-output.mjs": {
-    "mtime": 1787660057.4167774,
-    "ast_hash": "0850ad3c48ae4650cb3ff9d852c00b69",
-    "semantic_hash": "0850ad3c48ae4650cb3ff9d852c00b69"
+    "mtime": 1787667311.004366,
+    "ast_hash": "564452155266bb8789162e5f9dbd32b3",
+    "semantic_hash": ""
   },
   "remix/scripts/pre-dev.sh": {
     "mtime": 1787660057.4168322,
@@ -1460,9 +1460,9 @@
     "semantic_hash": "8c7be181590daceb9245603573f4166e"
   },
   "remix/scripts/verify-vercel-output.mjs": {
-    "mtime": 1787660057.4180834,
-    "ast_hash": "f8cef93843a2a363b6a98734a9a7556f",
-    "semantic_hash": "f8cef93843a2a363b6a98734a9a7556f"
+    "mtime": 1787667328.773191,
+    "ast_hash": "e7bdd9a665908885808ee462ac8026df",
+    "semantic_hash": ""
   },
   "remix/server/routes/[...].ts": {
     "mtime": 1787660057.4190526,
