@@ -687,16 +687,23 @@ jobs:
       routing_proof_issued_at: ${{ inputs.routing_proof_issued_at || github.event.client_payload.routing_proof_issued_at || '' }}
     secrets: inherit
 
-  handoff_all_branch_push:
-    name: Hand off push rebuild through the one Lopu manager
+  handoff_all_branch_event:
+    name: Hand off all-branch rebuild through the one Lopu manager
+    # Every automatic union signal enters the same protected workflow_dispatch
+    # namespace. Its public concurrency keeps the active rebuild plus one
+    # newest pending live snapshot, so a burst of PR lifecycle events never
+    # creates one durable model-fleet waiter per PR.
     if: >-
       inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
-      && github.event_name == 'push'
-      && github.event.deleted == false
-      && (github.ref_name == 'develop'
-          || github.ref_name == 'main'
-          || github.ref_name == 'github-actions')
+      && ((github.event_name == 'push'
+           && github.event.deleted == false
+           && (github.ref_name == 'develop'
+               || github.ref_name == 'main'
+               || github.ref_name == 'github-actions'))
+          || github.event_name == 'pull_request_target'
+          || (github.event_name == 'schedule'
+              && github.event.schedule == '53 * * * *'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -731,10 +738,7 @@ jobs:
               && github.ref_name == 'github-actions'
               && inputs.maintenance_operation == 'manage-prs'
               && inputs.pr_number == ''
-              && inputs.branch == 'lopu-internal-all-branch')
-          || github.event_name == 'pull_request_target'
-          || (github.event_name == 'schedule'
-              && github.event.schedule == '53 * * * *'))
+              && inputs.branch == 'lopu-internal-all-branch'))
     permissions:
       contents: write
       pull-requests: read

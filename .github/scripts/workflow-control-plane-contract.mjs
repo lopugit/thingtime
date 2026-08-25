@@ -1056,15 +1056,31 @@ export function assertControlPlaneContract() {
     /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql\]/u,
     "manual all-branch and CodeQL recovery stay inside Lopu maintenance",
   );
+  const allBranchHandoff = resolver.slice(
+    resolver.indexOf("\n  handoff_all_branch_event:"),
+    resolver.indexOf("\n  maintain_all_branch:"),
+  );
+  const allBranchMaintenance = resolver.slice(
+    resolver.indexOf("\n  maintain_all_branch:"),
+    resolver.indexOf("\n  maintain_develop_promotion:"),
+  );
+  assert.match(allBranchHandoff, /github\.event_name == 'push'/u);
+  assert.match(allBranchHandoff, /github\.event_name == 'pull_request_target'/u);
+  assert.match(allBranchHandoff, /github\.event\.schedule == '53 \* \* \* \*'/u);
   assert.match(
-    resolver,
-    /handoff_all_branch_push:[\s\S]*branch:"lopu-internal-all-branch"[\s\S]*maintenance_operation:"manage-prs"[\s\S]*actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/u,
-    "push-triggered union rebuilds return through a supported event on the one public manager",
+    allBranchHandoff,
+    /branch:"lopu-internal-all-branch"[\s\S]*maintenance_operation:"manage-prs"[\s\S]*actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/u,
+    "every automatic union signal returns through one coalescing Lopu maintenance namespace",
   );
   assert.match(
-    resolver,
-    /maintain_all_branch:[\s\S]*inputs\.maintenance_operation == 'build-all'[\s\S]*github\.event\.schedule == '53 \* \* \* \*'[\s\S]*uses: \.\/\.github\/workflows\/all-branch\.yml/u,
-    "PR, schedule, and manual events call only the internal all-branch implementation",
+    allBranchMaintenance,
+    /inputs\.maintenance_operation == 'build-all'[\s\S]*inputs\.branch == 'lopu-internal-all-branch'[\s\S]*uses: \.\/\.github\/workflows\/all-branch\.yml/u,
+    "manual and trusted central events call the internal all-branch implementation",
+  );
+  assert.doesNotMatch(
+    allBranchMaintenance,
+    /github\.event_name == '(?:pull_request_target|schedule)'/u,
+    "PR and schedule listeners never enqueue one durable all-branch worker apiece",
   );
   assert.match(
     resolver,

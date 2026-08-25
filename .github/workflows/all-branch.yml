@@ -76,14 +76,18 @@ jobs:
       LOPU_CODEX_REASONING_EFFORT: ${{ vars.LOPU_CODEX_REASONING_EFFORT || 'xhigh' }}
     steps:
       - name: Check out develop working tree
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: develop
           fetch-depth: 0
+          # The builder fetches every exact base/PR ref itself. Keep complete
+          # commit ancestry for merge ordering without downloading historical
+          # blobs that no current union build reads.
+          filter: blob:none
           persist-credentials: false
 
       - name: Check out protected build controller
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: github-actions
           path: control-plane

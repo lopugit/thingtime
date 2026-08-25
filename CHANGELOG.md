@@ -21,6 +21,16 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **All-branch maintenance now coalesces before it reaches Lopu's durable model
+  fleet**: PR lifecycle, protected-branch push, and hourly backstop events make
+  the same metadata-only handoff to the protected manager instead of attaching
+  one full union doctor to every originating run. That central namespace keeps
+  the active rebuild plus one newest pending live snapshot and never cancels
+  active work, preventing the unbounded all-branch waiter backlog that delayed
+  conflict resolution and ordinary PR checks. The eventual doctor still shares
+  the repository-wide single-agent fleet, while its full-history checkout uses
+  blobless transport to avoid downloading historical file contents the current
+  union never reads. — Codex (AI), 2026-08-26
 - **Lopu now closes historical CodeQL coverage gaps across every open PR**:
   each existing repository-maintenance cadence inventories current merge/head
   snapshots, both required CodeQL languages, and already-active analysis runs,
