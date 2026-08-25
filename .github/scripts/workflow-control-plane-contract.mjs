@@ -678,6 +678,16 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     codeql,
+    /merge_sha=""[\s\S]*if candidate_merge_sha="\$\([\s\S]*git\/ref\/pull\/\$PR_NUMBER\/merge[\s\S]*\)"; then[\s\S]*\[\[ "\$candidate_merge_sha" =~ \^\[0-9a-f\]\{40,64\}\$ \]\][\s\S]*merge_sha="\$candidate_merge_sha"/u,
+    "a missing synthetic merge ref cannot turn GitHub's 404 JSON body into a commit SHA",
+  );
+  assert.doesNotMatch(
+    codeql,
+    /merge_sha="\$\(gh api[^\n]*git\/ref\/pull\/\$PR_NUMBER\/merge[^\n]*\|\| true\)"/u,
+    "the exact-head CodeQL fallback must preserve the gh api failure status",
+  );
+  assert.match(
+    codeql,
     /\[ "\$ADVANCED_ENABLED" != true \][\s\S]*analyze=false/u,
     "advanced uploads remain cleanly inactive until the ordered default-setup transition completes",
   );
