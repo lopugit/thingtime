@@ -18,6 +18,9 @@ on:
   workflow_dispatch:
 
 permissions:
+  # The protected implementation dispatches a supported-event worker from its
+  # push handoff. Reusable workflows cannot elevate beyond this listener.
+  actions: write
   contents: write
   pull-requests: read
 
