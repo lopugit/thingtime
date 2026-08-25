@@ -7,9 +7,10 @@ import { ChakraThingRenderer, HtmlThingRenderer, RenderThing, isChakraThingNode 
 import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
 import { CARD_STYLES } from '~/theme/card';
 
-import {
+import type {
   ThingsDisplayMode,
-  ThingsThing,
+  ThingsThing} from './thingsCore';
+import {
   VISIBILITY_META,
   formatWhen,
   interpolateRenderTree,
@@ -60,7 +61,11 @@ const ThingPreviewBox = ({
       <HtmlThingRenderer node={node as HtmlThingNode} />
     );
   } else {
-    body = <RenderThing context={{ size: 'compact' }} fallback={fallback} thing={previewSourceOf(thing)} />;
+    // component things pass WHOLE — the component kind renderer resolves the
+    // template against savedArgs/defaults (raw crystal.render would draw
+    // unresolved {tokens} and skip the ttAction fold)
+    const source = thing.thingtime.includes('component') ? (thing as unknown as Record<string, unknown>) : previewSourceOf(thing);
+    body = <RenderThing context={{ size: 'compact' }} fallback={fallback} thing={source} />;
   }
   return (
     <Box

@@ -123,3 +123,103 @@ test('coerceArgValue clamps back into each arg type', () => {
 	assert.equal(coerceArgValue({ name: 'e', type: 'enum', values: ['a', 'b'] } as any, 'zzz'), 'a');
 	assert.equal(coerceArgValue({ name: 's', type: 'string', maxLength: 3 } as any, 'abcdef'), 'abc');
 });
+
+// The ttAction binding's markup half: a ttAction key on a node folds into the
+// two allowlisted data-* props and NEVER survives as a node key. These are
+// the guards that keep the interactive marker inert markup — the click half
+// (useTtActionClicks) and the executor's envelope carry the actual authority.
+
+test('ttAction folds into data-tt-action and is stripped from the node', () => {
+	const resolved = resolveTemplate(
+		{ tag: 'div', ttAction: 'send-invoice', props: { style: { color: '#fff' } }, children: ['Send'] },
+		{}
+	) as Record<string, unknown>;
+	assert.equal('ttAction' in resolved, false);
+	const props = resolved.props as Record<string, unknown>;
+	assert.equal(props['data-tt-action'], 'send-invoice');
+	assert.equal((props.style as Record<string, unknown>).color, '#fff');
+});
+
+test('ttActionInputs serialize to JSON with {arg} tokens substituted', () => {
+	const resolved = resolveTemplate(
+		{ tag: 'div', ttAction: 'send-invoice', ttActionInputs: { invoiceId: '{invoiceId}', note: 'literal' }, children: ['Send'] },
+		{ invoiceId: 'abc123' }
+	) as Record<string, unknown>;
+	const props = resolved.props as Record<string, unknown>;
+	assert.equal('ttActionInputs' in resolved, false);
+	assert.deepEqual(JSON.parse(String(props['data-tt-action-inputs'])), { invoiceId: 'abc123', note: 'literal' });
+});
+
+test('ttAction with no props object creates one', () => {
+	const resolved = resolveTemplate({ tag: 'span', ttAction: 'ping', children: ['go'] }, {}) as Record<string, unknown>;
+	assert.equal((resolved.props as Record<string, unknown>)['data-tt-action'], 'ping');
+});
+
+test('{arg} tokens substitute inside the ttAction key itself', () => {
+	const resolved = resolveTemplate({ tag: 'div', ttAction: '{which}', children: ['go'] }, { which: 'tag-customer' }) as Record<
+		string,
+		unknown
+	>;
+	assert.equal((resolved.props as Record<string, unknown>)['data-tt-action'], 'tag-customer');
+});
+
+test('an empty resolved ttAction attaches nothing', () => {
+	const resolved = resolveTemplate({ tag: 'div', ttAction: '{missing}', children: ['go'] }, {}) as Record<string, unknown>;
+	assert.equal(resolved.props, undefined);
+});
+
+test('ttAction inside a ttIf branch resolves with the branch', () => {
+	const resolved = resolveTemplate(
+		{
+			ttIf: {
+				arg: 'sent',
+				equals: 'true',
+				then: { tag: 'div', children: ['✓ sent'] },
+				else: { tag: 'div', ttAction: 'send-invoice', ttActionInputs: { invoiceId: '{invoiceId}' }, children: ['Send'] }
+			}
+		},
+		{ sent: 'false', invoiceId: 'inv9' }
+	) as Record<string, unknown>;
+	const props = resolved.props as Record<string, unknown>;
+	assert.equal(props['data-tt-action'], 'send-invoice');
+	assert.deepEqual(JSON.parse(String(props['data-tt-action-inputs'])), { invoiceId: 'inv9' });
+});
+
+// Where the two halves of this rebase meet: ttAction arrived without the
+// shared budget, the budget arrived without ttAction. ttActionInputs is
+// attacker-shaped template like any other node, so it has to spend the SAME
+// budget — resolved with a fresh one it would multiply MAX_RESOLVED_VALUES by
+// the node count and hand the repeat bomb a way around the whole-tree guard.
+
+const sumActionInputValues = (value: unknown): number => {
+	if (Array.isArray(value)) return value.reduce((sum: number, entry) => sum + sumActionInputValues(entry), 0);
+	if (!value || typeof value !== 'object') return 0;
+	const record = value as Record<string, unknown>;
+	const blob = (record.props as Record<string, unknown> | undefined)?.['data-tt-action-inputs'];
+	let total = 0;
+	if (typeof blob === 'string') {
+		try {
+			total += countValues(JSON.parse(blob));
+		} catch {}
+	}
+	// the blob itself is a string, so recursing through props cannot double-count
+	for (const entry of Object.values(record)) total += sumActionInputValues(entry);
+	return total;
+};
+
+test('ttActionInputs spend the shared budget, not a fresh one per node', () => {
+	const template = {
+		tag: 'div',
+		children: Array.from({ length: 8 }, () => ({
+			tag: 'span',
+			ttAction: 'send-invoice',
+			ttActionInputs: repeatBomb(6),
+			children: ['Send']
+		}))
+	};
+	const produced = sumActionInputValues(resolveTemplate(template, {}));
+	assert.ok(
+		produced <= MAX_RESOLVED_VALUES + 1,
+		`ttActionInputs produced ${produced} values, above the ${MAX_RESOLVED_VALUES} shared budget`
+	);
+});

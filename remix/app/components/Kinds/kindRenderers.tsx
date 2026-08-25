@@ -9,6 +9,7 @@ import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
 import { Avatar, KindBadge, KindCard, MutedMono, Sparkline, formatPrice, maybeTimeAgo, toArray, toNumberOr, toStringOr } from './kindPrimitives';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '~/components/ComponentsLibrary/componentTemplate';
+import { useTtActionClicks } from '~/components/Actions/useTtActionClicks';
 import { safeCssUrl, safeUrl } from './safeUrl';
 
 // The original core kind renderers: the templates a feed/search/page can use
@@ -756,7 +757,7 @@ const ChakraKindRenderer = ({ value }: { value: ChakraThingNode; context: KindRe
 
 type ComponentKindValue = { render: unknown; values: Record<string, string | number | boolean | undefined> };
 
-const ComponentKindRenderer = ({ value }: { value: ComponentKindValue; context: KindRenderContext }) => {
+const ComponentKindRenderer = ({ value, context }: { value: ComponentKindValue; context: KindRenderContext }) => {
 	// Memoised like the /components preview: resolution walks the whole template
 	// under the MAX_RESOLVED_VALUES budget, so a feed or search page listing
 	// several component things would redo that work on every parent render.
@@ -766,8 +767,11 @@ const ComponentKindRenderer = ({ value }: { value: ComponentKindValue; context: 
 	const valuesKey = JSON.stringify(value.values);
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of value.values
 	const resolved = React.useMemo(() => resolveTemplate(value.render, value.values), [value.render, valuesKey]);
+	// ttAction controls only fire on trusted surfaces (your own /things, the
+	// component tester) — never in untrusted feed/search renders
+	const onTtAction = useTtActionClicks();
 	return (
-		<Box width="100%">
+		<Box onClickCapture={context.untrusted ? undefined : onTtAction} width="100%">
 			{isChakraThingNode(resolved) ? (
 				<ChakraThingRenderer node={resolved as ChakraThingNode} />
 			) : (
