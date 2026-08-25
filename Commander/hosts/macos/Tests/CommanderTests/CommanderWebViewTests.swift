@@ -224,7 +224,7 @@ final class CommanderWebViewTests: XCTestCase {
     )
   }
 
-  func testCustomResizeCancelsOnInputLifecycleChangesAndCanBeDisabled() throws {
+  func testCustomResizeCancelsOnInputLifecycleChangesIncludingReturnAndCanBeDisabled() throws {
     let ready = DaemonReady(
       type: "ready",
       protocolVersion: 1,
@@ -267,6 +267,22 @@ final class CommanderWebViewTests: XCTestCase {
         )
       )
     }
+    func returnKeyEvent() throws -> NSEvent {
+      try XCTUnwrap(
+        NSEvent.keyEvent(
+          with: .keyDown,
+          location: .zero,
+          modifierFlags: [],
+          timestamp: 0,
+          windowNumber: panel.windowNumber,
+          context: nil,
+          characters: "\r",
+          charactersIgnoringModifiers: "\r",
+          isARepeat: false,
+          keyCode: 36
+        )
+      )
+    }
 
     panel.sendEvent(try mouseEvent(.leftMouseDown))
     XCTAssertTrue(controller.resizeSessionActiveForTesting)
@@ -275,6 +291,14 @@ final class CommanderWebViewTests: XCTestCase {
 
     panel.sendEvent(try mouseEvent(.leftMouseDown))
     controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification, object: panel))
+    XCTAssertFalse(controller.resizeSessionActiveForTesting)
+
+    panel.sendEvent(try mouseEvent(.leftMouseDown))
+    panel.sendEvent(try returnKeyEvent())
+    XCTAssertFalse(controller.resizeSessionActiveForTesting)
+
+    panel.sendEvent(try mouseEvent(.leftMouseDown))
+    controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification, object: panel))
     XCTAssertFalse(controller.resizeSessionActiveForTesting)
 
     panel.sendEvent(try mouseEvent(.leftMouseDown))
