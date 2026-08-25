@@ -1083,12 +1083,18 @@ is fixed, and cite the checklist you ran in the PR description.
       entries without discarding the rest of the order and always keep
       `default` present.
 - [ ] Resolver workflow config parsing in the `github-actions` control plane
-      still accepts only bare `default`, `claude-fable-5`, and
-      `claude-opus-5` until it is upgraded for the expanded catalog: any
-      other saved entry makes the workflow fail closed with a warning and
-      only `--model default`. Preserved legacy orders keep their public
-      order, append `default` defensively, and no stored value can inject
-      another CLI flag.
+      (PR #391) validates the widened-but-closed grammar: unique 1..256
+      entries matching `^[a-z0-9][a-z0-9.:-]{0,63}$`, parsed into
+      model/effort/fast segments. Claude Code runs `default` plus `claude-*`
+      bases (rebuilt from the closed pattern, variants collapse to one CLI
+      slot per base); OpenAI entries are skipped with a log line; the
+      primary entry's effort becomes the session `--effort` (default max)
+      and fast mode is logged as not applied headless. Malformed JSON,
+      unknown/duplicate/empty segments, oversized arrays, or an unavailable
+      endpoint fail closed to `--model default --effort max` with a warning;
+      `default` is appended defensively and no stored value can inject
+      another CLI flag. Control planes predating PR #391 fail closed to
+      `[default]` for any non-legacy entry.
 - [ ] Save a new Admin order, then issue GETs through separate warm app
       instances immediately (no 15-second wait): both must read the new
       home-DB value. With Mongo unavailable, a warm instance may return its

@@ -105,7 +105,13 @@
   grammar. That change belongs on the `github-actions` branch: parse
   `<model>[:effort][:fast]`, filter to Claude-capable entries for the Claude
   Code CLI args, keep the injection-safe closed charset, and decide the
-  effort/fast mapping for headless Claude Code. Tracked as a follow-up task.
+  effort/fast mapping for headless Claude Code.
+  **Filed as https://github.com/lopugit/thingtime/pull/391** — widened
+  charset grammar across all three loaders (resolver, rebase, all-branch
+  doctor), primary-entry effort applied via a mandatory `--effort` in
+  model_args (fast logged; no headless flag), downstream gates and both
+  contract self-tests updated, verified by a 36-case harness plus a live
+  production-endpoint run.
 
 ## Gotchas learned
 
