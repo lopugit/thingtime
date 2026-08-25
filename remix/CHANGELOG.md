@@ -259,6 +259,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   main promotion now keeps one Electron release-listener contract block rather
   than combining two independently valid additions into duplicate JavaScript
   declarations. — Codex (AI), 2026-08-25
+- **Commander launch and verification remain responsive when Launch Services stalls**:
+  application launches now submit asynchronously instead of blocking the native UI
+  thread, and the signed build verifier terminates only its own stuck launch helper
+  after the installed Commander host is confirmed running. — Codex (AI), 2026-08-25
 - **Build all branch listener can dispatch its control-plane worker**: the
   reusable workflow's push handoff requires `actions: write`; the main listener
   now grants that inherited permission instead of failing at workflow startup.
