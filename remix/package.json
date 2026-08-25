@@ -42,7 +42,7 @@
     "test:dependencies": "node --test scripts/ensure-dependencies.test.js",
     "test:editorjs": "node --import tsx --test app/components/Editor/*.test.ts app/components/Kinds/*.test.ts",
     "test:lopu": "node --import tsx --test app/api/utils/lopu/*.test.ts",
-    "test:migrations": "node --import tsx --test app/api/utils/migrations/*.test.ts",
+    "test:migrations": "node --import tsx --test app/api/utils/migrations/*.test.ts app/components/Schemas/migrationUiCore.test.ts",
     "test:messenger": "node --import tsx --test app/api/utils/messenger/*.test.ts",
     "test:preview-build": "node --import tsx --test app/utils/previewBuildFreshness.test.ts",
     "test:sensitive-reveal": "node --import tsx --test app/api/utils/auth/passwordConfirmation.test.ts app/api/utils/things/sensitiveReveal.test.ts app/routes/api/v1/things/reveal/reveal.test.ts",
