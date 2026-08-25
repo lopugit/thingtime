@@ -211,7 +211,14 @@ is fixed, and cite the checklist you ran in the PR description.
       must be reported and the fallback must scan `refs/pull/<number>/head`.
 - [ ] Update a PR whose target already carries the normal listener. Its
       `pull_request` run—not the target-context fallback—must remain the owner
-      of both Analyze job contexts required by branch protection.
+      of both Analyze job contexts required by branch protection. Confirm the
+      listener's `control-plane` call reaches the unprivileged analyzer without
+      the former nested `actions: write` workflow-validation error, while the
+      `pr-handoff` call is skipped.
+- [ ] On the corresponding `pull_request_target` event, confirm only
+      `pr-handoff` calls the protected metadata bridge and `control-plane` is
+      skipped. The bridge may dispatch the exact unprivileged scan but must not
+      check out repository code or receive an AI/provider credential.
 - [ ] Re-dispatch the same unchanged PR head after both CodeQL categories are
       present: the protected scope job must report that analysis is complete and
       skip initialization. Dispatch an older expected SHA and confirm it no-ops
