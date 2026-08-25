@@ -3202,7 +3202,7 @@
   "remix/app/docs/apiDocs.ts": {
     "mtime": 1787668329.7060883,
     "ast_hash": "37d945edec7c5e6e6b3da5a41727ab27",
-    "semantic_hash": ""
+    "semantic_hash": "37d945edec7c5e6e6b3da5a41727ab27"
   },
   "remix/app/routes/docs/api.tsx": {
     "mtime": 1787660057.1953893,
@@ -6992,22 +6992,22 @@
   "remix/app/api/utils/chatgpt/plugin.test.ts": {
     "mtime": 1787668125.9567213,
     "ast_hash": "3941314659e769d50f5d49e86a3b5d56",
-    "semantic_hash": ""
+    "semantic_hash": "3941314659e769d50f5d49e86a3b5d56"
   },
   "remix/app/api/utils/chatgpt/plugin.ts": {
     "mtime": 1787668162.5741901,
     "ast_hash": "d27fa090453c042a4bde50b45621a11e",
-    "semantic_hash": ""
+    "semantic_hash": "d27fa090453c042a4bde50b45621a11e"
   },
   "remix/app/api/utils/chatgpt/pluginCore.test.ts": {
     "mtime": 1787668125.956483,
     "ast_hash": "4973ea38948cfe4b9e44aec53312fc29",
-    "semantic_hash": ""
+    "semantic_hash": "4973ea38948cfe4b9e44aec53312fc29"
   },
   "remix/app/api/utils/chatgpt/pluginCore.ts": {
     "mtime": 1787668162.57357,
     "ast_hash": "a38242f3f2be4e5901a83a4fddc716e3",
-    "semantic_hash": ""
+    "semantic_hash": "a38242f3f2be4e5901a83a4fddc716e3"
   },
   "remix/app/routes/api/v1/integrations/chatgpt/mcp/_mcp.tsx": {
     "mtime": 1787666854.5736692,
