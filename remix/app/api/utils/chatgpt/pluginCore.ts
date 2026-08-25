@@ -8,12 +8,15 @@ export const CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-au
 export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
 
 export const CHATGPT_PLUGIN_FEATURES = {
-  'chatgpt.mcp': '1.0.2',
+  'chatgpt.mcp': '1.1.0',
   'chatgpt.oauth': '1.1.0',
   'chatgpt.connections': '1.1.0',
   'chatgpt.things.read': '1.0.0',
   'chatgpt.things.write': '1.0.0'
 } as const;
+
+export const CHATGPT_MCP_INSTRUCTIONS =
+  'Thingtime operates only on named accounts connected through this app. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. Read and search may proceed on request; before any create, update, delete, comment, reaction, save, share, or disconnect, state the selected account, target, and effect and obtain clear confirmation.';
 
 export const CHATGPT_PLUGIN_ROUTES = [
   { method: 'POST', path: CHATGPT_MCP_PATH, feature: 'chatgpt.mcp' },

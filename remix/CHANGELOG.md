@@ -17,8 +17,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Changed
+
+- **Thingtime’s ChatGPT deployment runbook now follows the supported workspace
+  app path.** It documents Admin/Owner Developer Mode, Apps → Create, OAuth
+  tool scanning, draft testing from the tools menu/@mentions, publication,
+  frozen tool snapshots, role/action controls, and the current web-only plus
+  plan-level write limits. — Codex (AI), 2026-08-26
+
 ### Added
 
+- **Thingtime’s MCP initialization now supplies connector-wide interaction
+  instructions.** ChatGPT receives the account-selection, token-safety, and
+  confirmed-mutation contract before tools are called; the additive MCP feature
+  advances to `1.1.0`. — Codex (AI), 2026-08-26
 - **Thingtime ChatGPT/Codex MCP connector.** A public OAuth 2.1 + S256 PKCE
   streamable-HTTP MCP gateway now connects multiple named, allowlisted
   Thingtime API endpoints through encrypted, scoped and revocable PATs. The

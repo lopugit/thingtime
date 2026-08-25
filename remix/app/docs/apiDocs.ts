@@ -187,7 +187,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection plus Things reads and confirmed writes. tools/list is intentionally public so ChatGPT can discover titles, schemas, annotations, and per-tool OAuth requirements; it never returns account data. Every tool call accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow. The underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in one origin-bound server-side connection record and never returned by this endpoint; all live bridge and refresh credentials refer to that same record. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection plus Things reads and confirmed writes. Initialization returns concise server-wide instructions that require explicit account selection when ambiguous and confirmation before mutations. tools/list is intentionally public so ChatGPT can discover titles, schemas, annotations, and per-tool OAuth requirements; it never returns account data. Every tool call accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow. The underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in one origin-bound server-side connection record and never returned by this endpoint; all live bridge and refresh credentials refer to that same record. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
     auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for tools/call. tools/list is public metadata; unauthenticated tool calls return an MCP OAuth challenge.' },
     methods: ['POST'],
     steps: [
@@ -226,14 +226,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'integrations',
     title: 'ChatGPT OAuth authorization',
     endpoint: CHATGPT_AUTHORIZE_PATH,
-    summary: 'Browser/mobile connection page for one or more scoped Thingtime accounts.',
+    summary: 'First-party browser connection page for one or more scoped Thingtime accounts.',
     detail:
       'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, the configured ChatGPT client_id, the fixed ChatGPT redirect URI, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The resulting form accepts one or more named Thingtime API endpoints and personal access tokens, validates every token using /api/v1/tokens/self, encrypts the connection bundle before persistence, then redirects only a five-minute single-use authorization code back to ChatGPT. POST submits that form; credentials are never included in the redirect, OAuth code, or ChatGPT transcript.',
     auth: { mode: 'none', description: 'OAuth public-client request plus user-entered scoped personal access tokens on the first-party connection page.' },
     methods: ['GET', 'POST'],
     steps: [
       'Create least-privilege personal access tokens in each Thingtime account.',
-      'Let ChatGPT open this endpoint with its OAuth parameters and approve the accounts in the mobile-safe page.',
+      'Let ChatGPT open this endpoint with its OAuth parameters and approve the accounts in the first-party browser page.',
       'The browser redirects to ChatGPT with a short-lived code and original state.'
     ],
     requestExamples: [

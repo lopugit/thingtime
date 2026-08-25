@@ -26,15 +26,26 @@ explicitly allowed Thingtime origins and the focused Things operation list.
 
 1. Deploy the Thingtime branch to a public HTTPS origin and configure the
    required server environment variables in the main README.
-2. In ChatGPT **on the web**, turn on **Developer mode** under Settings →
-   Security & login. OpenAI currently makes custom MCP apps web-only; they
-   cannot be invoked in iOS ChatGPT chats.
-3. Open **Plugins**, choose **Add plugin**, and enter the public MCP URL:
-   `https://<your-thingtime-origin>/api/v1/integrations/chatgpt/mcp`.
-4. ChatGPT opens the Thingtime connection page. Add each account/API endpoint
-   and a least-privilege personal access token, then continue.
-5. Copy the generated ChatGPT app registration identifier into `.app.json`
-   when packaging this plugin for a personal marketplace or team distribution.
+2. Use ChatGPT **on the web** with a Business or Enterprise/Edu workspace.
+   An admin/owner enables Developer Mode from Workspace Settings → Apps →
+   Create. Business workspaces allow only admins/owners to do this; an
+   Enterprise/Edu admin can grant individual builder access with RBAC.
+3. Create an MCP app, enter the public MCP URL
+   `https://<your-thingtime-origin>/api/v1/integrations/chatgpt/mcp`, select
+   OAuth, and click **Scan Tools**. Complete the Thingtime OAuth form when it
+   opens; request/approve `offline_access` so ChatGPT can renew the connection.
+4. Click **Create**. The connector appears as a development draft under Apps;
+   start a new chat, select it from the tools menu or @mention it, and test
+   reads and confirmed writes.
+5. Have an admin/owner publish the reviewed draft from Workspace Settings →
+   Apps. Enterprise/Edu can then limit users and individual actions with RBAC.
+
+OpenAI currently makes custom MCP apps web-only: they cannot be invoked in
+iOS ChatGPT chats. Full write/modify MCP access is currently available only in
+the Business and Enterprise/Edu beta; Pro users are limited to read/fetch MCP
+use. After publishing, ChatGPT freezes the scanned tool definitions, so an
+admin must review and publish a tool refresh before a later server change is
+enabled.
 
 Use the ChatGPT connection manager to reconnect; do not paste any Thingtime
 token into a chat message. See [SUBMISSION.md](./SUBMISSION.md) before public

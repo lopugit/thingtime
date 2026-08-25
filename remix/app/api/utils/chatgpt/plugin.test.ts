@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { handleChatGptMcp } from './plugin';
+import { CHATGPT_MCP_INSTRUCTIONS } from './pluginCore';
 
 test('MCP tools/list publishes OAuth requirements before a user links Thingtime', async () => {
   const response = await handleChatGptMcp({
@@ -55,4 +56,6 @@ test('MCP initialize is available before OAuth so clients can negotiate the prot
 
   assert.equal(response.status, 200);
   assert.equal(payload.result.serverInfo.name, 'thingtime-chatgpt');
+  assert.equal(payload.result.instructions, CHATGPT_MCP_INSTRUCTIONS);
+  assert.match(payload.result.instructions, /select one explicitly/);
 });

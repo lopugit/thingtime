@@ -5,9 +5,35 @@ deployed at the final production origin. Do not submit a Vercel preview: OpenAI
 pins the MCP origin after review, so the submitted URL must be the stable
 production URL.
 
+## ChatGPT workspace deployment
+
+This is the supported way to test and distribute the connector within a
+ChatGPT Business or Enterprise/Edu workspace. It is separate from a public
+Plugins Directory submission.
+
+1. An admin/owner enables Developer Mode from Workspace Settings → Apps →
+   Create (Enterprise/Edu may grant developer access by RBAC).
+2. Create a custom MCP app with the remote HTTPS MCP URL, select OAuth, and
+   choose **Scan Tools**. Complete the first-party authorization form and
+   verify that `offline_access` is requested so the rotating refresh grant is
+   issued.
+3. Create the draft, then test it from the tools menu or with an @mention in a
+   new web chat. Verify a read, a confirmed write, a refresh, and a final
+   disconnect using the cases below.
+4. An admin/owner reviews the write-action safety warnings and publishes the
+   draft from Workspace Settings → Apps. Enterprise/Edu may constrain actions
+   and access before publication.
+
+Custom MCP apps are web-only. Full write/modify support is currently a
+Business/Enterprise/Edu beta; Pro can use only read/fetch MCP connections.
+ChatGPT freezes scanned tool definitions at approval, so future server tool
+changes must be refreshed and republished by an admin.
+
 ## Required owner-provided materials
 
 - An OpenAI Platform organization with **Apps Management** write access.
+- A ChatGPT Business or Enterprise/Edu workspace, with an admin/owner who can
+  create, test, and publish the custom MCP app.
 - A verified Thingtime developer or business identity in that organization.
 - Public, publisher-matching website, support, privacy-policy, and terms URLs.
 - A production MCP URL at

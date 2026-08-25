@@ -11,6 +11,7 @@ import {
   CHATGPT_AUTHORIZE_PATH,
   CHATGPT_PROTECTED_RESOURCE_METADATA_PATH,
   CHATGPT_MCP_PATH,
+  CHATGPT_MCP_INSTRUCTIONS,
   CHATGPT_PLUGIN_FEATURES,
   allowedThingtimeEndpoints,
   isMcpResourceForOrigin,
@@ -896,7 +897,8 @@ export const handleChatGptMcp = async ({ request }: { request: Request }) => {
     return json(jsonRpcResponse(id, {
       protocolVersion: message.params?.protocolVersion || '2025-06-18',
       capabilities: { tools: {} },
-      serverInfo: { name: 'thingtime-chatgpt', version: CHATGPT_PLUGIN_FEATURES['chatgpt.mcp'] }
+      serverInfo: { name: 'thingtime-chatgpt', version: CHATGPT_PLUGIN_FEATURES['chatgpt.mcp'] },
+      instructions: CHATGPT_MCP_INSTRUCTIONS
     }));
   }
   if (message.method === 'ping') return notification ? new Response(null, { status: 202 }) : json(jsonRpcResponse(id, {}));

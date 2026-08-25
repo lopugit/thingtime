@@ -435,14 +435,23 @@ THINGTIME_CHATGPT_OAUTH_CLIENT_IDS="https://chatgpt.com/oauth/client.json,https:
 The MCP protected-resource and authorization-server discovery documents are at
 `/.well-known/oauth-protected-resource` and
 `/.well-known/oauth-authorization-server`; its origin-scoped feature manifest
-is `/.well-known/thingtime-chatgpt-capabilities.json`. In ChatGPT Developer
-mode on the web, add the public MCP URL, complete the account form in the
-browser, and then use the generated ChatGPT app registration identifier when
-packaging the plugin for a local or team marketplace. ChatGPT custom MCP apps
-are currently web-only; iOS ChatGPT chats cannot invoke Developer Mode MCP
-apps. Public Plugins Directory distribution additionally requires a fixed
-production origin, verified publisher identity, legal URLs, test cases, and
-OpenAI review; see the package's `SUBMISSION.md`.
+is `/.well-known/thingtime-chatgpt-capabilities.json`.
+
+For the supported ChatGPT workspace path, use ChatGPT **on the web** with a
+Business or Enterprise/Edu workspace. An admin or owner enables Developer Mode
+from Workspace Settings → Apps → Create, supplies this remote MCP URL, selects
+OAuth, and uses **Scan Tools**. ChatGPT then opens Thingtime’s first-party
+account form; its advertised `offline_access` scope allows the rotating refresh
+flow. Create the draft, test it from the tools menu or by @mentioning it in a
+new chat, then have an admin/owner publish it from Workspace Settings → Apps.
+Full write/modify MCP access is currently a Business/Enterprise/Edu beta;
+Pro-only connections are limited to read/fetch. ChatGPT custom MCP apps are
+currently web-only, so iOS ChatGPT chats cannot invoke this connector. After
+approval, tool definitions are a frozen snapshot: an admin must review and
+publish a refresh before changes are enabled. Public Plugins Directory
+distribution remains a separate process requiring a fixed production origin,
+verified publisher identity, legal URLs, test cases, and OpenAI review; see
+the package's `SUBMISSION.md`.
 
 ## Extensible data — `extended` + schema-less crystals
 
