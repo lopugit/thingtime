@@ -21,6 +21,16 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu now updates clean-but-behind PR branches before reviewing them**:
+  the shared detector treats GitHub's `BEHIND` state as a base-merge request,
+  snapshots both refs, and merges the PR target into an eligible same-repo
+  head under the same serialized Lopu worker used for conflict resolution.
+  Conflicting stacks remain on Lopu's rebase lane, while clean behind stacks
+  receive the requested target-into-head merge and cascade; reviews wait for a
+  current head. Every completed merge rebuilds Graphify structurally first with
+  `graphify update .`, then runs incremental LLM semantic extraction when a
+  configured credential is available. A semantic failure preserves and
+  publishes the valid structural rebuild. — Codex (AI), 2026-08-25
 - **Signed Desktop PR releases now run from the protected control plane**:
   the reusable builder/releaser validates current owner-labelled PR state and
   pins its exact source SHA before checkout; the eventual product listener is
