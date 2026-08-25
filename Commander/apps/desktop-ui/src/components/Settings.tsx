@@ -78,6 +78,7 @@ export function Settings({ state }: { state: CommanderState }) {
       <div className="settings-content">
         {tab === 'general' ? (
           <GeneralSettings
+            platform={bootstrap.platform}
             settings={bootstrap.settings}
             onChange={(next) => void state.saveSettings(next)}
             onError={state.reportError}

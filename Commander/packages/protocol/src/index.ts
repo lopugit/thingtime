@@ -624,6 +624,12 @@ export function normalizeActivitySettings(value: unknown): ActivitySettings {
   };
 }
 
+export const DEFAULT_USE_CUSTOM_WINDOW_RESIZE_HANDLING = true;
+
+export function normalizeCustomWindowResizeHandling(value: unknown): boolean {
+  return typeof value === 'boolean' ? value : DEFAULT_USE_CUSTOM_WINDOW_RESIZE_HANDLING;
+}
+
 export function normalizeIndexingSettings(value: unknown): IndexingSettings {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const candidate = source as Partial<IndexingSettings>;
@@ -757,6 +763,7 @@ export interface CommanderSettings {
   showMenuBarIcon: boolean;
   showFavouritesInCompactMode: boolean;
   windowMode: WindowMode;
+  useCustomWindowResizeHandling: boolean;
   appearance: Appearance;
   textSize: TextSize;
   hotkey: string;
@@ -1235,6 +1242,7 @@ export interface NativeSettingsSnapshot {
   openAtLogin: boolean;
   showMenuBarIcon: boolean;
   windowMode: WindowMode;
+  useCustomWindowResizeHandling: boolean;
   windowPinning: WindowPinningSettings;
 }
 
@@ -1254,6 +1262,7 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   showMenuBarIcon: true,
   showFavouritesInCompactMode: true,
   windowMode: 'default',
+  useCustomWindowResizeHandling: DEFAULT_USE_CUSTOM_WINDOW_RESIZE_HANDLING,
   appearance: 'system',
   textSize: 'default',
   hotkey: 'Command+Space',

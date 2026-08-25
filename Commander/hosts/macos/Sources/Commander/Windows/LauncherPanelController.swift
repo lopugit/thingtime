@@ -3,6 +3,11 @@ import ApplicationServices
 
 private final class CommanderPanel: NSPanel {
   var resizeSurfaceInset = CommanderWebView.launcherSurfaceInset
+  var usesCustomWindowResizeHandling = true {
+    didSet {
+      if !usesCustomWindowResizeHandling { cancelResizeSession() }
+    }
+  }
   private var resizeSession: (
     edges: CommanderResizeEdges,
     frame: NSRect,
@@ -15,9 +20,19 @@ private final class CommanderPanel: NSPanel {
   // fields the normal macOS editing presentation.
   override var canBecomeMain: Bool { true }
 
+  var hasResizeSession: Bool { resizeSession != nil }
+
+  func cancelResizeSession() {
+    guard resizeSession != nil else { return }
+    resizeSession = nil
+    invalidateShadow()
+  }
+
   override func sendEvent(_ event: NSEvent) {
     switch event.type {
-    case .leftMouseDown where styleMask.contains(.resizable):
+    case .leftMouseDown:
+      cancelResizeSession()
+      guard usesCustomWindowResizeHandling, styleMask.contains(.resizable) else { break }
       let mouseLocation = convertPoint(toScreen: event.locationInWindow)
       let edges = CommanderWebView.resizeEdges(
         at: mouseLocation,
@@ -32,29 +47,46 @@ private final class CommanderPanel: NSPanel {
         return
       }
     case .leftMouseDragged:
-      if let resizeSession {
-        setFrame(
-          CommanderWebView.resizedFrame(
-            from: resizeSession.frame,
-            edges: resizeSession.edges,
-            startingMouseLocation: resizeSession.mouseLocation,
-            mouseLocation: convertPoint(toScreen: event.locationInWindow),
-            minimumSize: minSize
-          ),
-          display: true
-        )
-        invalidateShadow()
-        return
-      }
+      guard usesCustomWindowResizeHandling, let resizeSession else { break }
+      setFrame(
+        CommanderWebView.resizedFrame(
+          from: resizeSession.frame,
+          edges: resizeSession.edges,
+          startingMouseLocation: resizeSession.mouseLocation,
+          mouseLocation: convertPoint(toScreen: event.locationInWindow),
+          minimumSize: minSize
+        ),
+        display: true
+      )
+      invalidateShadow()
+      return
     case .leftMouseUp:
-      if resizeSession != nil {
-        resizeSession = nil
-        invalidateShadow()
-        return
-      }
+      guard resizeSession != nil else { break }
+      cancelResizeSession()
+      return
     default: break
     }
     super.sendEvent(event)
+  }
+
+  override func resignKey() {
+    cancelResizeSession()
+    super.resignKey()
+  }
+
+  override func cancelOperation(_ sender: Any?) {
+    cancelResizeSession()
+    super.cancelOperation(sender)
+  }
+
+  override func orderOut(_ sender: Any?) {
+    cancelResizeSession()
+    super.orderOut(sender)
+  }
+
+  override func close() {
+    cancelResizeSession()
+    super.close()
   }
 }
 
@@ -218,6 +250,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     showRequestID &+= 1
     isPresented = false
     cancelCommandHotKeyPresentation()
+    panel.cancelResizeSession()
     panel.orderOut(nil)
   }
 
@@ -340,6 +373,11 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     panel.invalidateShadow()
   }
 
+  func setCustomWindowResizeHandling(_ enabled: Bool) {
+    panel.usesCustomWindowResizeHandling = enabled
+    webView.usesCustomWindowResizeHandling = enabled
+  }
+
   func shutdown() {
     hide()
     commandPresentationFallback?.cancel()
@@ -349,6 +387,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   func windowDidResignKey(_ notification: Notification) {
+    panel.cancelResizeSession()
     guard !fileDragInProgress else { return }
     guard !isPinned else { return }
     let commandPresentationWasActive = commandPresentationItemID != nil
@@ -414,6 +453,10 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   var panelForTesting: NSPanel { panel }
+  var customWindowResizeHandlingEnabledForTesting: Bool {
+    panel.usesCustomWindowResizeHandling && webView.usesCustomWindowResizeHandling
+  }
+  var resizeSessionActiveForTesting: Bool { panel.hasResizeSession }
   static var launcherOpenedScriptForTesting: String { launcherOpenedScript }
   static func commandHotKeyScriptForTesting(itemID: String) -> String {
     commandHotKeyScript(itemID: itemID)

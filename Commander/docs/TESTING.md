@@ -63,6 +63,10 @@
 - [ ] Drag each launcher corner and edge inward and outward in default and compact modes. Verify native resize cursors
       appear, the panel follows the pointer down to its mode-specific minimum, and content remains usable without an
       opaque outer rectangle.
+- [ ] While resizing, trigger an emoji insertion, release the mouse, press Escape, change focus, hide, or close the
+      launcher. The resize session must cancel immediately, so later pointer movement cannot resize the panel. In
+      General, turn custom resize handling off and verify AppKit's standard edge resizing works; turn it back on and
+      verify Commander’s inner resize handles work again after relaunch.
 - [ ] Pin the launcher from the bottom-right window icon, focus another app, and verify the pinned window remains
       visible. Command-Space must focus the most recently used Commander window on the current display. Right-click
       the icon and choose Open New Window; verify the newly created window starts pinned even when the global default

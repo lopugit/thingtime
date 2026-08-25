@@ -80,6 +80,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
   private let updateHotKeys: (String?, [String: String]?) throws -> Void
   private let updateMenuBar: (Bool) -> Void
   private let updateWindowMode: (String) throws -> Void
+  private let updateCustomWindowResizeHandling: (Bool) -> Void
   private let updateWindowPinning: (Bool, Bool, Bool) -> Void
   private let metrics: SystemMetricsService
   private let applicationResponsiveness: ApplicationResponsivenessService
@@ -112,6 +113,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     updateHotKeys: @escaping (String?, [String: String]?) throws -> Void,
     updateMenuBar: @escaping (Bool) -> Void,
     updateWindowMode: @escaping (String) throws -> Void,
+    updateCustomWindowResizeHandling: @escaping (Bool) -> Void = { _ in },
     updateWindowPinning: @escaping (Bool, Bool, Bool) -> Void = { _, _, _ in },
     applicationOpener: CommanderApplicationOpener = CommanderApplicationOpener()
   ) {
@@ -131,6 +133,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     self.updateHotKeys = updateHotKeys
     self.updateMenuBar = updateMenuBar
     self.updateWindowMode = updateWindowMode
+    self.updateCustomWindowResizeHandling = updateCustomWindowResizeHandling
     self.updateWindowPinning = updateWindowPinning
     self.applicationOpener = applicationOpener
     let applicationResponsiveness = ApplicationResponsivenessService()
@@ -333,6 +336,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
         try loginItem.update(enabled: openAtLogin)
         updateMenuBar(showMenuBarIcon)
         try updateWindowMode(windowMode)
+        updateCustomWindowResizeHandling(request.params?["useCustomWindowResizeHandling"]?.bool ?? true)
         updateWindowPinning(pinningEnabled, defaultPinned, focusRecentOnCurrentDisplay)
         try updateHotKeys(shortcut, commandShortcuts)
         result = ["applied": true]

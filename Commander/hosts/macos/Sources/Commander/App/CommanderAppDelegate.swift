@@ -17,6 +17,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   private var hotKeyShortcut: String?
   private var commandHotKeyShortcuts: [String: String] = [:]
   private var windowMode = LauncherWindowMode.standard
+  private var useCustomWindowResizeHandling = true
   private var pinningEnabled = true
   private var defaultPinned = false
   private var focusRecentOnCurrentDisplay = true
@@ -130,6 +131,9 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       },
       updateMenuBar: { [weak self] visible in self?.setMenuBarVisible(visible) },
       updateWindowMode: { [weak self] mode in try self?.setWindowMode(mode) },
+      updateCustomWindowResizeHandling: { [weak self] enabled in
+        self?.setCustomWindowResizeHandling(enabled)
+      },
       updateWindowPinning: { [weak self] enabled, pinned, focusCurrentDisplay in
         self?.setWindowPinning(
           enabled: enabled,
@@ -154,6 +158,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       pinningEnabled: pinningEnabled
     )
     controller.setWindowMode(windowMode)
+    controller.setCustomWindowResizeHandling(useCustomWindowResizeHandling)
     controller.didBecomeKey = { [weak self] id in self?.markRecent(id) }
     launchers[id] = controller
     markRecent(id)
@@ -329,6 +334,11 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     }
     windowMode = mode
     for launcher in launchers.values { launcher.setWindowMode(mode) }
+  }
+
+  private func setCustomWindowResizeHandling(_ enabled: Bool) {
+    useCustomWindowResizeHandling = enabled
+    for launcher in launchers.values { launcher.setCustomWindowResizeHandling(enabled) }
   }
 
   private func activeScreen() -> NSScreen? {

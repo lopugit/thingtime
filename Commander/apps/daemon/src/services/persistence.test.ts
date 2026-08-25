@@ -258,6 +258,33 @@ describe('PersistentStore Thingtime defaults', () => {
     }
   });
 
+  it('migrates and persists the custom macOS window resize preference', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
+    const dataDirectory = path.join(temporary, 'data');
+    await mkdir(dataDirectory);
+    vi.stubEnv('COMMANDER_DATA_DIR', dataDirectory);
+    const legacySettings = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
+    delete legacySettings.useCustomWindowResizeHandling;
+    await writeFile(
+      path.join(dataDirectory, 'state.json'),
+      `${JSON.stringify({ version: 1, settings: legacySettings, accounts: [], extensions: [] })}\n`,
+    );
+
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      expect(store.snapshot().settings.useCustomWindowResizeHandling).toBe(true);
+      await store.setSettings({ ...store.snapshot().settings, useCustomWindowResizeHandling: false });
+      expect(store.snapshot().settings.useCustomWindowResizeHandling).toBe(false);
+      expect(
+        JSON.parse(await readFile(path.join(dataDirectory, 'state.json'), 'utf8')).settings
+          .useCustomWindowResizeHandling,
+      ).toBe(false);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('normalizes persisted command shortcuts without accepting the reserved launcher identifier', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
     const dataDirectory = path.join(temporary, 'data');
