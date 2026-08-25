@@ -161,6 +161,9 @@ name: Lopu PR manager
 
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
+      && inputs.maintenance_operation != 'manage-prs'
+      && format('Lopu runs repository maintenance: {0}', inputs.maintenance_operation)
+      || github.event_name == 'workflow_dispatch'
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && inputs.promotion_source_pr != ''
@@ -238,6 +241,36 @@ on:
         type: string
       branch:
         description: "PR base or head branch to scan; leave blank with no PR number to scan all"
+        required: false
+        default: ""
+        type: string
+      maintenance_operation:
+        description: "Public Lopu operation; automatic branch events select their own maintenance lanes"
+        required: false
+        default: "manage-prs"
+        type: string
+      promotion_dry_run:
+        description: "Plan a feature-promotion operation without mutating repository state"
+        required: false
+        default: false
+        type: boolean
+      promotion_lookback:
+        description: "Recently merged source PRs to inspect during feature promotion (max 100)"
+        required: false
+        default: "50"
+        type: string
+      promotion_source_branch:
+        description: "Optional feature-promotion source branch (default develop)"
+        required: false
+        default: ""
+        type: string
+      promotion_target_branch:
+        description: "Optional feature-promotion target branch (default main)"
+        required: false
+        default: ""
+        type: string
+      promotion_path_prefix:
+        description: "Optional comma-separated allowed path prefixes for a feature-promotion lane"
         required: false
         default: ""
         type: string
@@ -332,6 +365,9 @@ on:
     # It is offset from the rebase-only sweep to keep API and runner bursts
     # separate while preserving deterministic merge-vs-rebase ownership.
     - cron: "2,32 * * * *"
+    # Feature-promotion maintenance used to own a separate scheduled workflow.
+    # Keep its cadence while routing it through this one public Lopu entry.
+    - cron: "43 */6 * * *"
   workflow_dispatch:
     inputs:
       pr_number:
@@ -341,6 +377,37 @@ on:
         type: string
       branch:
         description: "PR base or head branch to scan; leave blank with no PR number to scan all"
+        required: false
+        default: ""
+        type: string
+      maintenance_operation:
+        description: "Choose PR management or one explicit repository-maintenance operation"
+        required: false
+        default: "manage-prs"
+        type: choice
+        options: [manage-prs, promote-develop, promote-features, sync-main-develop]
+      promotion_dry_run:
+        description: "Plan feature promotion only — do not create or update branches, PRs, comments, or labels"
+        required: false
+        default: false
+        type: boolean
+      promotion_lookback:
+        description: "Recently merged source PRs to inspect during feature promotion (max 100)"
+        required: false
+        default: "50"
+        type: string
+      promotion_source_branch:
+        description: "Optional feature-promotion source branch (default develop)"
+        required: false
+        default: ""
+        type: string
+      promotion_target_branch:
+        description: "Optional feature-promotion target branch (default main)"
+        required: false
+        default: ""
+        type: string
+      promotion_path_prefix:
+        description: "Optional comma-separated allowed path prefixes for a feature-promotion lane"
         required: false
         default: ""
         type: string
@@ -408,6 +475,10 @@ concurrency:
   # A human exact-PR detector therefore cannot cancel the worker it creates.
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
+        && inputs.maintenance_operation != ''
+        && inputs.maintenance_operation != 'manage-prs'
+        && format('lopu-maintenance-{0}', inputs.maintenance_operation)
+        || github.event_name == 'workflow_dispatch'
         && github.actor == 'github-actions[bot]'
         && (github.ref_name == 'github-actions'
            || github.workflow_ref
@@ -472,10 +543,13 @@ concurrency:
              github.event.client_payload.branch || github.run_id)
         || format('resolve-detect-{0}-{1}',
              github.event_name, github.ref_name || github.run_id) }}
+  queue: max
   # Every external detector is safe to supersede. A validated internal worker
   # must finish or fail coherently; never cancel it halfway through a merge.
   cancel-in-progress: >-
-    ${{ !(github.event_name == 'workflow_dispatch'
+    ${{ (inputs.maintenance_operation == ''
+          || inputs.maintenance_operation == 'manage-prs')
+        && !(github.event_name == 'workflow_dispatch'
           && (github.ref_name == 'github-actions'
              || github.workflow_ref
              == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
@@ -506,6 +580,8 @@ jobs:
     if: >-
       inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
+      && (inputs.maintenance_operation == ''
+          || inputs.maintenance_operation == 'manage-prs')
       && (github.event_name != 'issue_comment'
           || (github.event.issue.pull_request
               && github.event.comment.user.type == 'User'))
@@ -572,6 +648,81 @@ jobs:
       control_dispatch_id: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
       routing_proof: ${{ inputs.routing_proof || github.event.client_payload.routing_proof || '' }}
       routing_proof_issued_at: ${{ inputs.routing_proof_issued_at || github.event.client_payload.routing_proof_issued_at || '' }}
+    secrets: inherit
+
+  maintain_develop_promotion:
+    name: Lopu maintains the standing develop to main promotion
+    # This job replaces the former public push/manual entry on
+    # promote-develop-to-main.yml. It intentionally does not depend on the
+    # PR-scanner router: the internal component owns its existing provider
+    # route, and a Vercel-offloaded scanner must not suppress maintenance.
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && ((github.event_name == 'push'
+           && github.ref_name == 'develop'
+           && github.event.deleted == false)
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.maintenance_operation == 'promote-develop'))
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/promote-develop-to-main.yml
+    with:
+      execution_provider: ${{ inputs.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
+    secrets: inherit
+
+  maintain_feature_promotions:
+    name: Lopu maintains per-feature promotions
+    # Push and scheduled ownership used to live on a second public workflow.
+    # The implementation remains reusable, but Lopu is now its only entry.
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && ((github.event_name == 'push'
+           && github.ref_name == 'develop'
+           && github.event.deleted == false)
+          || (github.event_name == 'schedule'
+              && github.event.schedule == '43 */6 * * *')
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.maintenance_operation == 'promote-features'))
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      issues: write
+    uses: ./.github/workflows/promote-features-to-main.yml
+    with:
+      dry_run: ${{ inputs.promotion_dry_run || false }}
+      lookback: ${{ inputs.promotion_lookback || '50' }}
+      source_branch: ${{ inputs.promotion_source_branch || '' }}
+      target_branch: ${{ inputs.promotion_target_branch || '' }}
+      require_path_prefix: ${{ inputs.promotion_path_prefix || '' }}
+      execution_provider: ${{ inputs.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
+    secrets: inherit
+
+  maintain_main_develop_sync:
+    name: Lopu synchronizes main into develop
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && ((github.event_name == 'push'
+           && github.ref_name == 'main'
+           && github.event.deleted == false)
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.maintenance_operation == 'sync-main-develop'))
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/sync-main-into-develop.yml
+    with:
+      execution_provider: ${{ inputs.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
     secrets: inherit
 
   detect:
@@ -4546,6 +4697,10 @@ jobs:
           # Fetch every branch so the exact snapshotted base commit is local;
           # no authenticated fetch is needed later.
           fetch-depth: 0
+          # This repository has multi-gigabyte history. Keep the complete
+          # commit graph required by merge-base/merge-tree, but fetch blobs
+          # lazily instead of downloading every historical file for each PR.
+          filter: blob:none
           # Keep the token out of .git/config: the model has Read access to
           # the workspace, and the push step supplies its own auth.
           persist-credentials: false

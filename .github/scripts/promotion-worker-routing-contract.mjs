@@ -17,6 +17,18 @@ const allBranchWorkflow = readFileSync(
   new URL("../workflows/all-branch.yml", import.meta.url),
   "utf8",
 );
+const developPromotionWorkflow = readFileSync(
+  new URL("../workflows/promote-develop-to-main.yml", import.meta.url),
+  "utf8",
+);
+const featurePromotionWorkflow = readFileSync(
+  new URL("../workflows/promote-features-to-main.yml", import.meta.url),
+  "utf8",
+);
+const mainDevelopSyncWorkflow = readFileSync(
+  new URL("../workflows/sync-main-into-develop.yml", import.meta.url),
+  "utf8",
+);
 const action = readFileSync(
   new URL("../actions/rebase-conflict-round/action.yml", import.meta.url),
   "utf8",
@@ -42,6 +54,13 @@ assert.match(workflow, /^name: Lopu PR manager$/m);
 assert.match(workflow, /manage_rebases:/);
 assert.match(workflow, /uses: \.\/\.github\/workflows\/rebase-pr-stacks\.yml/);
 assert.match(workflow, /name: Lopu scans rebases and stack cascades/);
+assert.match(workflow, /maintain_develop_promotion:/);
+assert.match(workflow, /maintain_feature_promotions:/);
+assert.match(workflow, /maintain_main_develop_sync:/);
+assert.match(workflow, /uses: \.\/\.github\/workflows\/promote-develop-to-main\.yml/);
+assert.match(workflow, /uses: \.\/\.github\/workflows\/promote-features-to-main\.yml/);
+assert.match(workflow, /uses: \.\/\.github\/workflows\/sync-main-into-develop\.yml/);
+assert.match(workflow, /github\.event\.schedule == '43 \*\/6 \* \* \*'/);
 assert.match(workflow, /review_detect:/);
 assert.match(workflow, /review_handoff:/);
 assert.match(workflow, /review:\s+name: Lopu reviews selected PRs/);
@@ -81,6 +100,36 @@ assert.equal(
   1,
   "the rebase and stack worker shares the durable single-Lopu queue",
 );
+
+for (const [label, source] of [
+  ["develop promotion", developPromotionWorkflow],
+  ["feature promotion", featurePromotionWorkflow],
+  ["main/develop synchronization", mainDevelopSyncWorkflow],
+]) {
+  assert.match(source, /^  workflow_call:$/m, `${label} remains an internal reusable component`);
+  assert.doesNotMatch(
+    source,
+    /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch|repository_dispatch):/m,
+    `${label} must not compete with the public Lopu workflow`,
+  );
+  assert.match(source, /^\s+cancel-in-progress: false$/m, `${label} never cancels in-flight work`);
+}
+assert.match(developPromotionWorkflow, /^name: Lopu internal develop promotion$/m);
+assert.match(featurePromotionWorkflow, /^name: Lopu internal feature promotion$/m);
+assert.match(
+  featurePromotionWorkflow,
+  /route:[\s\S]*inputs\.source_branch == ''[\s\S]*inputs\.target_branch == ''[\s\S]*inputs\.require_path_prefix == ''/,
+  "custom promotion authority stays on the reviewed GitHub runner",
+);
+assert.match(featurePromotionWorkflow, /promote:\s+needs: route\s+if: >-\s+always\(\)/);
+assert.match(mainDevelopSyncWorkflow, /^name: Lopu internal main\/develop synchronization$/m);
+for (const input of ["source_branch", "target_branch", "require_path_prefix"]) {
+  assert.equal(
+    featurePromotionWorkflow.match(new RegExp(`^      ${input}:$`, "gm"))?.length,
+    1,
+    `feature promotion ${input}: is exposed only through workflow_call`,
+  );
+}
 
 assert.match(allBranchWorkflow, /^name: Lopu all-branch integration$/m);
 assert.equal(

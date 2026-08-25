@@ -50,9 +50,10 @@
 # - Lopu also handles promotion conflicts and historical source context as part
 #   of its whole-repository review.
 #
-# This implementation lives on protected `github-actions`. Thin product-branch
-# listeners invoke it with `workflow_call`; its own schedule/dispatch also run
-# from the protected control plane.
+# This implementation lives on protected `github-actions` and is callable only
+# from the public Lopu manager. Push, schedule, and manual entry events belong
+# to that one manager so a develop update creates one coherent repository run
+# rather than several competing workflow runs.
 #
 # Token notes (same trade-off documented in sync-main-into-develop.yml):
 # - Since GitHub's June 2026 behavior change, GITHUB_TOKEN-authored opened,
@@ -62,7 +63,7 @@
 #   directly. SYNC_BRANCHES_PAT and CONFLICT_RESOLVER_PAT are honoured as
 #   fallbacks when they carry the same required scope.
 
-name: Promote features to main
+name: Lopu internal feature promotion
 
 on:
   workflow_call:
@@ -75,42 +76,9 @@ on:
         description: "How many recently merged develop PRs to scan (max 100)"
         type: string
         default: "50"
-      execution_provider:
-        description: "Internal: hosted compute selected by Thingtime CI Control"
-        required: false
-        default: "github-actions"
-        type: string
-      runner_label:
-        description: "Internal: unique Vercel Sandbox self-hosted runner label"
-        required: false
-        default: ""
-        type: string
-      control_dispatch_id:
-        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
-        required: false
-        default: ""
-        type: string
-  push:
-    branches: [develop]
-  schedule:
-    - cron: "43 */6 * * *"
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Plan only — no branches, PRs, comments, closes, or retargets"
-        type: boolean
-        default: false
-      lookback:
-        description: "How many recently merged develop PRs to scan (max 100)"
-        required: false
-        default: "50"
       # The reverse lane (owner request, 2026-08-12): one source, one target,
-      # per dispatch. Defaults preserve the standing develop → main lane for
-      # every push/schedule/listener run; a manual dispatch may promote
-      # main-only CI work onto the control plane with
-      # source_branch=main target_branch=github-actions
-      # require_path_prefix=.github/ — the prefix guard keeps app-wide PRs
-      # (e.g. a merged develop → main promotion) out of a CI-scoped lane.
+      # per invocation. The public Lopu workflow exposes these only when its
+      # explicit feature-promotion maintenance operation is selected.
       source_branch:
         description: "Branch whose merged PRs are promoted (default develop)"
         required: false
@@ -130,8 +98,7 @@ on:
         description: "Internal: hosted compute selected by Thingtime CI Control"
         required: false
         default: "github-actions"
-        type: choice
-        options: [github-actions, vercel-sandbox]
+        type: string
       runner_label:
         description: "Internal: unique Vercel Sandbox self-hosted runner label"
         required: false
@@ -155,6 +122,15 @@ concurrency:
 
 jobs:
   route:
+    # CI Control's public provider contract intentionally carries only the
+    # standing develop→main lane. An explicit reverse/custom lane contains
+    # additional branch/path authority, so keep that owner-requested operation
+    # on the reviewed GitHub runner instead of silently dropping its inputs
+    # while offloading compute.
+    if: >-
+      inputs.source_branch == ''
+      && inputs.target_branch == ''
+      && inputs.require_path_prefix == ''
     uses: ./.github/workflows/ci-provider-router.yml
     with:
       workflow: promote-features
@@ -167,8 +143,19 @@ jobs:
 
   promote:
     needs: route
-    if: needs.route.outputs.execute == 'true'
-    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
+    if: >-
+      always()
+      && ((inputs.source_branch != ''
+           || inputs.target_branch != ''
+           || inputs.require_path_prefix != '')
+          || needs.route.outputs.execute == 'true')
+    runs-on: >-
+      ${{ (inputs.source_branch != ''
+           || inputs.target_branch != ''
+           || inputs.require_path_prefix != '')
+          && 'ubuntu-latest'
+          || needs.route.outputs.runner_label
+          || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
