@@ -142,12 +142,12 @@ final class CommanderWebViewTests: XCTestCase {
     controller.shutdown()
   }
 
-  func testOpenNewWindowPinOverrideWinsOverTheGlobalDefault() {
+  func testNewWindowPinningUsesTheGlobalDefault() {
     XCTAssertFalse(
-      CommanderAppDelegate.initialPinnedState(defaultPinned: false, pinnedOverride: nil)
+      CommanderAppDelegate.initialPinnedState(defaultPinned: false)
     )
     XCTAssertTrue(
-      CommanderAppDelegate.initialPinnedState(defaultPinned: false, pinnedOverride: true)
+      CommanderAppDelegate.initialPinnedState(defaultPinned: true)
     )
   }
 

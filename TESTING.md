@@ -1430,6 +1430,9 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Search `settings`, press Return, and verify the separate native Settings
       window. Exercise every General option, record a custom shortcut, quit and
       relaunch, and confirm hotkey/menu-bar/login-item state is restored.
+- [ ] In General settings, turn “Open new Commander windows pinned” off, use
+      Open New Window, and verify that launcher dismisses on focus loss; turn
+      it on, open another window, and verify it remains visible on focus loss.
 - [ ] Search apps with prefix, substring, keyword, and fuzzy queries; navigate
       with arrows, execute with Return, open Command-K, traverse actions, and
       dismiss actions/launcher with Escape. Long names must not clip or create
