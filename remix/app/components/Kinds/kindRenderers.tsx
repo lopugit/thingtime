@@ -767,8 +767,15 @@ const ComponentKindRenderer = ({ value, context }: { value: ComponentKindValue; 
 	const valuesKey = JSON.stringify(value.values);
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of value.values
 	const resolved = React.useMemo(() => resolveTemplate(value.render, value.values), [value.render, valuesKey]);
-	// ttAction controls only fire on trusted surfaces (your own /things, the
-	// component tester) — never in untrusted feed/search renders
+	// ttAction controls fire only on the trusted /things render surface — a
+	// component-kind thing rendered through the kind registry in your own app,
+	// where context.untrusted is false. Untrusted feed/search renders pass
+	// context.untrusted and get no handler. NOTE the /components catalog and
+	// its args tester draw the same template DIRECTLY through the sanitising
+	// renderers (ComponentPreview / ComponentDetailPage), bypassing this
+	// wrapper — so authoring and browsing a component never fire a
+	// side-effectful action run; explicit execution lives on the /actions run
+	// panel. Keep those preview paths off this wrapper deliberately.
 	const onTtAction = useTtActionClicks();
 	return (
 		<Box onClickCapture={context.untrusted ? undefined : onTtAction} width="100%">
