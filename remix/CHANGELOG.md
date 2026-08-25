@@ -19,13 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
-- **CodeQL now covers every PR target and branch**: an unfiltered PR listener,
-  all-branch push listener, scheduled backstop, and protected reusable
-  implementation replace default-branch-only scanning. Open PR heads use the
-  PR analysis as the single owner, and Lopu accepts immutable head or merge-ref
-  findings after revalidating both the reviewed head and base revisions. The
-  README documents the ordered default-setup-to-advanced-setup activation, and
-  a repository variable prevents expected pre-activation upload failures.
+- **Lopu CodeQL now covers every PR target and branch**: an unfiltered PR
+  listener, all-branch push listener, scheduled backstop, and protected reusable
+  implementation replace default-branch-only scanning. A metadata-only
+  default-branch target event also dispatches exact-ref analysis for PRs whose
+  target predates the listener, without checking out code or exposing AI
+  credentials in the privileged run. Targets that already carry a listener
+  keep the normal PR check as owner; older targets use their merge ref, with a
+  head-ref fallback when the merge ref is missing or its parents are stale.
+  Live-state fences and existing two-language snapshots reject stale or
+  duplicate work. The README documents the ordered
+  default-setup-to-advanced-setup activation and its two repository variables.
   — Codex (AI), 2026-08-25
 - **Signed Desktop PR releases now use the protected `github-actions` control
   plane**: this branch contains only a `pull_request_target`/manual listener;

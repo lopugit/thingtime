@@ -201,6 +201,21 @@ is fixed, and cite the checklist you ran in the PR description.
       remain automatic. CODEOWNERS presence alone is not an enforcement check;
       independent CODEOWNER approval is optional future hardening once a second
       trusted collaborator can review changes.
+- [ ] Enable `CODEQL_CENTRAL_PR_ENABLED` and update a PR targeting an older
+      feature or stack branch that does not contain the CodeQL listener. The
+      `pull_request_target` run must perform metadata-only handoff with no
+      checkout, CodeQL initialization, AI secret, or repository code execution;
+      its separate `workflow_dispatch` run must revalidate the live head and
+      upload both language categories against the exact merge ref. Repeat with
+      a conflicting PR whose old merge ref still exists: its parent mismatch
+      must be reported and the fallback must scan `refs/pull/<number>/head`.
+- [ ] Update a PR whose target already carries the normal listener. Its
+      `pull_request` run—not the target-context fallback—must remain the owner
+      of both Analyze job contexts required by branch protection.
+- [ ] Re-dispatch the same unchanged PR head after both CodeQL categories are
+      present: the protected scope job must report that analysis is complete and
+      skip initialization. Dispatch an older expected SHA and confirm it no-ops
+      rather than scanning or publishing against stale PR state.
 - [ ] In Vercel, confirm `dev.thingtime.com` is bound to the literal `develop`
       Git branch and has no domain `customEnvironmentId`, rather than being
       bound to the whole Custom Environment; the Custom Environment's own domain

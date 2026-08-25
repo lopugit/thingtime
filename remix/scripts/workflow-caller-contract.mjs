@@ -46,6 +46,11 @@ assert.match(
 );
 assert.match(
   codeqlTriggers,
+  /^  pull_request_target:\n    types: \[opened, synchronize, reopened, ready_for_review, edited\]$/m,
+  'codeql-analysis.yml must receive every PR target through the trusted default-branch listener'
+);
+assert.match(
+  codeqlTriggers,
   /^  push:\n    branches: \["\*\*"\]$/m,
   'codeql-analysis.yml must scan direct pushes to every branch'
 );
@@ -57,6 +62,17 @@ const codeqlPermissions = codeqlCaller.slice(
 );
 assert.match(codeqlPermissions, /^  security-events: write$/m, 'CodeQL caller must permit SARIF upload');
 assert.match(codeqlPermissions, /^  pull-requests: read$/m, 'CodeQL caller must permit duplicate-run ownership checks');
+assert.match(codeqlPermissions, /^  actions: write$/m, 'CodeQL caller must permit the metadata-only trusted handoff');
+assert.match(
+  codeqlCaller,
+  /^      pr_number: \$\{\{ inputs\.pr_number \|\| '' \}\}$/m,
+  'CodeQL caller must forward only the optional trusted PR number'
+);
+assert.match(
+  codeqlCaller,
+  /^      expected_head_sha: \$\{\{ inputs\.expected_head_sha \|\| '' \}\}$/m,
+  'CodeQL caller must bind a central scan to the event head SHA'
+);
 
 const developPreviewCaller = readFileSync(
   resolve(workflowsRoot, 'develop-pr-preview.yml'),

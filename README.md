@@ -46,11 +46,21 @@ Thingtime uses CodeQL advanced setup so analysis is not limited to GitHub's
 default-setup branch scope. The thin `.github/workflows/codeql-analysis.yml`
 listener has an unfiltered `pull_request` trigger and a `push` trigger for
 `"**"`; therefore every PR whose target carries the listener and every direct
-branch push receives analysis. `main` and `develop` carry the listener, while
-the protected implementation directly handles PRs targeting and pushes to
-`github-actions`. New feature and stack branches inherit the listener from
-their base. When an open PR already owns a branch head, its PR run is the single
-analysis owner and the matching push run exits before CodeQL initialization.
+branch push receives analysis. A default-branch `pull_request_target` listener
+also covers PRs whose target branch predates the listener. That privileged run
+checks out no code and receives no AI credential: the protected worker forwards
+only the PR number and immutable event head SHA into a separate
+`workflow_dispatch` run, which revalidates live state and analyzes the exact PR
+merge ref—or the head ref while a conflict prevents GitHub from creating one.
+Lopu validates both merge parents against the live base and head before using
+that ref, because GitHub can retain an obsolete merge ref after a conflict.
+`main` and `develop` carry the normal listener,
+while the protected implementation directly handles PRs targeting and pushes
+to `github-actions`; the central handoff closes the remaining arbitrary-target
+gap. A PR whose target already carries the listener keeps its normal
+`pull_request` run as owner, preserving branch-protection check contexts. When
+the selected ref already has both language snapshots, Lopu exits before CodeQL
+initialization instead of paying for a duplicate scan.
 
 The first rollout has one ordered repository-administration step. Do not turn
 off default setup until this listener has reached the default branch, because
@@ -60,6 +70,7 @@ listener is present on the default branch, an administrator with repository
 Administration write access should run:
 
 ```sh
+gh variable set CODEQL_CENTRAL_PR_ENABLED --repo OWNER/REPOSITORY --body true
 gh api --method PATCH repos/OWNER/REPOSITORY/code-scanning/default-setup \
   -f state=not-configured
 gh variable set CODEQL_ADVANCED_ENABLED --repo OWNER/REPOSITORY --body true
@@ -67,9 +78,11 @@ gh variable set CODEQL_ADVANCED_ENABLED --repo OWNER/REPOSITORY --body true
 
 The absent/false variable deliberately makes the staged advanced jobs skip
 cleanly instead of failing every PR while default setup still owns uploads.
-After setting it, manually run **CodeQL all branches**, confirm both language
-jobs upload results, and verify the repository reports default setup as
-`not-configured`.
+After setting them, manually run **Lopu CodeQL all branches**, confirm both
+language jobs upload results, and verify the repository reports default setup
+as `not-configured`. Then update a PR targeting an older feature/stack branch
+that does not contain the listener and confirm its metadata-only target event
+creates a separate exact-head scan.
 After activation, an empty Lopu CodeQL snapshot means no current matching
 head-or-merge findings (or a failed/unavailable analysis), not merely that the
 PR targets `develop` or `github-actions`.
