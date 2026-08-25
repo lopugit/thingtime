@@ -27,6 +27,44 @@ test('MCP tools/list publishes OAuth requirements before a user links Thingtime'
   assert.deepEqual(annotations.share_thingtime_thing, { readOnlyHint: false, destructiveHint: true, openWorldHint: true });
 });
 
+test('MCP tool discovery preserves the complete multi-account Thingtime contract', async () => {
+  const response = await handleChatGptMcp({
+    request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
+    })
+  });
+  const payload: any = await response.json();
+  const tools = payload.result.tools;
+
+  assert.deepEqual(
+    tools.map((tool: any) => tool.name),
+    [
+      'list_thingtime_accounts',
+      'select_thingtime_account',
+      'remove_thingtime_account',
+      'get_thingtime_profile',
+      'list_thingtime_things',
+      'search_thingtime_things',
+      'create_thingtime_thing',
+      'update_thingtime_thing',
+      'delete_thingtime_thing',
+      'comment_on_thingtime_thing',
+      'react_to_thingtime_thing',
+      'save_thingtime_thing',
+      'share_thingtime_thing'
+    ]
+  );
+  for (const tool of tools) {
+    assert.equal(tool.inputSchema.type, 'object');
+    assert.equal(tool.inputSchema.additionalProperties, false);
+    assert.deepEqual(tool.securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
+    assert.deepEqual(tool._meta.securitySchemes, [{ type: 'oauth2', scopes: ['thingtime'] }]);
+    assert.deepEqual(tool.outputSchema, { type: 'object', additionalProperties: true });
+  }
+});
+
 test('an unauthenticated protected tool call returns the OAuth challenge ChatGPT needs', async () => {
   const response = await handleChatGptMcp({
     request: new Request('https://thingtime.example/api/v1/integrations/chatgpt/mcp', {
