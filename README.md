@@ -81,7 +81,9 @@ gh workflow run codeql-analysis.yml --ref github-actions \
 
 The worker revalidates the open PR and exact head/base/merge snapshot, skips
 already-complete CodeQL categories, and has no AI credential or repository
-write permission.
+write permission. Analyzer concurrency is fenced by language, event owner, and
+immutable snapshot; queued scans are preserved and never cancel an in-flight
+CodeQL upload into a red PR check.
 
 Lopu is also the one public repository-maintenance entrypoint. A `develop`
 push starts the standing and per-feature promotion components as jobs inside

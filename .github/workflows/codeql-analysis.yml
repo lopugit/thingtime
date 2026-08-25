@@ -202,8 +202,12 @@ jobs:
         language: [actions, javascript-typescript]
     concurrency:
       group: >-
-        codeql-${{ matrix.language }}-${{ github.event.pull_request.head.sha || github.sha }}
-      cancel-in-progress: true
+        codeql-${{ matrix.language }}-${{ github.event_name }}-${{ needs.scope.outputs.analysis_sha || github.event.pull_request.head.sha || github.sha }}
+      # A later push/PR/central signal must not terminate CodeQL while it is
+      # uploading the earlier immutable snapshot. Preserve the whole bounded
+      # queue and let each scope check no-op when its analysis already exists.
+      queue: max
+      cancel-in-progress: false
     steps:
       - name: Check out the analyzed revision without credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

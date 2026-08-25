@@ -640,6 +640,16 @@ export function assertControlPlaneContract() {
   assert.match(codeql, /^      security-events: write$/mu);
   assert.match(
     codeql,
+    /group: >-\n\s+codeql-\$\{\{ matrix\.language \}\}-\$\{\{ github\.event_name \}\}-\$\{\{ needs\.scope\.outputs\.analysis_sha \|\| github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/u,
+    "CodeQL concurrency is fenced to the language, event owner, and immutable analyzed snapshot",
+  );
+  assert.match(
+    codeql,
+    /queue: max\n\s+cancel-in-progress: false/u,
+    "CodeQL preserves queued snapshots and never leaves a cancelled analyzer check",
+  );
+  assert.match(
+    codeql,
     /any\(\.\[\]; \.headRefOid == \$sha\)/u,
     "an open PR owns one analysis instead of duplicating its branch push",
   );
