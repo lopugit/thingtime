@@ -303,6 +303,11 @@ on:
         required: false
         default: "0"
         type: string
+      ref_race_handoff:
+        description: "Internal: automatic moving-ref retry that must not inherit manual-selector authority"
+        required: false
+        default: false
+        type: boolean
       promotion_source_pr:
         description: "Internal: merged develop source PR"
         required: false
@@ -450,6 +455,11 @@ on:
         required: false
         default: "0"
         type: string
+      ref_race_handoff:
+        description: "Internal: automatic moving-ref retry that must not inherit manual-selector authority"
+        required: false
+        default: false
+        type: boolean
       promotion_source_pr:
         description: "Internal: merged develop source PR"
         required: false
@@ -601,8 +611,10 @@ jobs:
     uses: ./.github/workflows/ci-provider-router.yml
     with:
       workflow: >-
-        ${{ github.event_name == 'repository_dispatch'
-            && github.event.action == 'rebase-pr-stack-ai'
+        ${{ ((github.event_name == 'repository_dispatch'
+             && github.event.action == 'rebase-pr-stack-ai')
+            || (github.event_name == 'workflow_dispatch'
+                && inputs.ref_race_handoff == true))
             && 'rebase-stack'
             || 'resolve-conflicts' }}
       execution_provider: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
@@ -646,6 +658,8 @@ jobs:
       && github.event_name != 'issue_comment'
       && github.event_name != 'pull_request_review_comment'
       && github.event_name != 'check_run'
+      && (github.event_name != 'repository_dispatch'
+          || github.event.action == 'rebase-pr-stack-ai')
       && !(github.event_name == 'workflow_dispatch'
            && inputs.detector_handoff == true
            && github.actor == 'github-actions[bot]')
@@ -654,6 +668,8 @@ jobs:
       pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.pull_request.number || '' }}
       branch: ${{ inputs.branch || github.event.client_payload.branch || (github.event_name == 'push' && github.ref_name) || github.event.pull_request.base.ref || '' }}
       cascade: ${{ github.event_name != 'workflow_dispatch' || inputs.rebase_cascade }}
+      ref_race_retry: ${{ inputs.ref_race_retry || '0' }}
+      automatic_retry: ${{ inputs.ref_race_handoff || false }}
       execution_provider: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
       runner_label: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
       control_dispatch_id: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
@@ -739,13 +755,18 @@ jobs:
   detect:
     name: Find merge-conflicting PRs
     needs: route
-    # Branch deletions also fire `push`; there is nothing to scan then.
+    # Branch deletions also fire `push`; there is nothing to scan then. Internal
+    # repository events have one owner: merge cascades enter this detector,
+    # while exact rebase workers stay exclusively in manage_rebases.
     if: >-
       needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && (github.event_name != 'push' || github.event.deleted == false)
+      && inputs.ref_race_handoff != true
+      && (github.event_name != 'repository_dispatch'
+          || github.event.action == 'resolve-conflicts-cascade')
       && github.event_name != 'issue_comment'
       && github.event_name != 'pull_request_review_comment'
       && github.event_name != 'check_run'
@@ -778,8 +799,8 @@ jobs:
           CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
           EVENT_ACTOR: ${{ github.actor }}
           TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}
-          SELECTED_PR: ${{ inputs.pr_number }}
-          INPUT_BRANCH: ${{ inputs.branch }}
+          SELECTED_PR: ${{ inputs.pr_number || github.event.client_payload.pr_number || '' }}
+          INPUT_BRANCH: ${{ inputs.branch || github.event.client_payload.branch || '' }}
           DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
           DETECTOR_HANDOFF: ${{ inputs.detector_handoff && 'true' || 'false' }}
           ROUTED_MANUAL_RETRY: ${{ inputs.manual_retry && 'true' || 'false' }}
@@ -821,12 +842,14 @@ jobs:
           HUMAN_EXPLICIT: >-
             ${{ github.event_name == 'workflow_dispatch'
                 && inputs.detector_handoff != true
+                && inputs.ref_race_handoff != true
                 && (inputs.pr_number != '' || inputs.branch != '') }}
           # An explicit human PR/base/head detector may recover rebase-owned
           # holds. `ai-merge-paused` is deliberately excluded: a user must
           # remove that label before any resolver run may proceed.
           MANUAL_RETRY: >-
             ${{ github.event_name == 'workflow_dispatch'
+                && inputs.ref_race_handoff != true
                 && ((inputs.detector_handoff == true
                      && inputs.manual_retry == true)
                     || (inputs.detector_handoff != true
@@ -903,16 +926,6 @@ jobs:
           }
           live_ref_sha() {
             gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
-          }
-          defer_ref_race() {
-            local reason="$1" live_sha="$2"
-            {
-              echo "remote_state=retry"
-              echo "retry_reason=$reason"
-              echo "live_sha=$live_sha"
-            } >> "$GITHUB_OUTPUT"
-            echo "::warning::$reason moved to $live_sha beside publication; the exact lease preserved it and Lopu will requeue from fresh refs."
-            exit 0
           }
           decode_base64url() {
             local value="$1"
@@ -1658,14 +1671,17 @@ jobs:
     name: Find PRs for Lopu repository review
     needs: route
     # Reviews run when a PR is opened, its head/base moves, or an operator asks
-    # for a selector. The scheduled conflict backstop deliberately does not
-    # re-review unchanged clean PRs over and over.
+    # for a selector. Internal merge/rebase events already have an exact worker
+    # owner, and the scheduled conflict backstop deliberately does not re-review
+    # unchanged clean PRs over and over.
     if: >-
       needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && github.event_name != 'schedule'
+      && github.event_name != 'repository_dispatch'
+      && inputs.ref_race_handoff != true
       && (github.event_name != 'push' || github.event.deleted == false)
       && (github.event_name != 'issue_comment'
           || (github.event.issue.pull_request
@@ -5955,6 +5971,16 @@ jobs:
           }
           live_ref_sha() {
             gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+          defer_ref_race() {
+            local reason="$1" live_sha="$2"
+            {
+              echo "remote_state=retry"
+              echo "retry_reason=$reason"
+              echo "live_sha=$live_sha"
+            } >> "$GITHUB_OUTPUT"
+            echo "::warning::$reason moved to $live_sha beside publication; the exact lease preserved it and Lopu will requeue from fresh refs."
+            exit 0
           }
 
           # Revalidate immediately beside the write. The scheduled detector

@@ -942,11 +942,23 @@ export function assertControlPlaneContract() {
   assert.match(rebase, /internal_worker: >-/);
   assert.match(
     rebase,
-    /github\.event_name == 'repository_dispatch'[\s\S]*inputs\.worker_handoff == true/,
-    "legacy repository_dispatch and modern exact workers are both identified before routing",
+    /github\.event_name == 'repository_dispatch'[\s\S]*github\.event\.action == 'rebase-pr-stack-ai'[\s\S]*inputs\.worker_handoff == true/,
+    "exact repository events and workflow-call workers are both identified before routing",
   );
   assert.match(rebase, /routing_proof:\$routing_proof/);
   assert.match(rebase, /routing_proof_issued_at:\$routing_proof_issued_at/);
+  assert.match(rebase, /event_type:"rebase-pr-stack-ai"/u);
+  assert.doesNotMatch(rebase, /actions\/workflows\/rebase-pr-stacks\.yml\/dispatches/u);
+  assert.match(
+    rebase,
+    /handoff:[\s\S]*?permissions:[\s\S]*?contents: write[\s\S]*?repos\/\$REPO\/dispatches/u,
+    "repository-dispatch handoff receives Contents write rather than relying on Actions write",
+  );
+  assert.match(
+    rebase,
+    /steps\.push\.outputs\.remote_state == 'retry'[\s\S]*ref_race_handoff:true/u,
+    "moving rebase refs re-enter the unified controller without manual-selector authority",
+  );
   for (const input of ["routing_proof", "routing_proof_issued_at"]) {
     assert.equal(
       rebase.match(new RegExp(`^      ${input}:$`, "gm"))?.length,
@@ -984,8 +996,28 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     resolver,
-    /github\.event\.action == 'rebase-pr-stack-ai'[\s\S]*&& 'rebase-stack'[\s\S]*\|\| 'resolve-conflicts'/u,
-    "legacy exact stack workers preserve their CI-provider policy through Lopu",
+    /github\.event\.action == 'rebase-pr-stack-ai'[\s\S]*inputs\.ref_race_handoff == true[\s\S]*&& 'rebase-stack'[\s\S]*\|\| 'resolve-conflicts'/u,
+    "exact stack workers and their automatic retries preserve rebase provider policy through Lopu",
+  );
+  assert.match(
+    resolver,
+    /manage_rebases:[\s\S]*github\.event_name != 'repository_dispatch'[\s\S]*github\.event\.action == 'rebase-pr-stack-ai'/u,
+    "rebase repository events have exactly one rebase owner",
+  );
+  assert.match(
+    resolver,
+    /detect:[\s\S]*github\.event_name != 'repository_dispatch'[\s\S]*github\.event\.action == 'resolve-conflicts-cascade'/u,
+    "merge cascade repository events have exactly one merge owner",
+  );
+  assert.match(
+    resolver,
+    /detect:[\s\S]*inputs\.ref_race_handoff != true/u,
+    "automatic rebase retries never also launch merge detection",
+  );
+  assert.match(
+    resolver,
+    /review_detect:[\s\S]*github\.event_name != 'repository_dispatch'[\s\S]*inputs\.ref_race_handoff != true/u,
+    "internal worker events never launch a duplicate repository review",
   );
   assert.match(resolver, /^\s+queue: max$/m);
   assert.match(
@@ -1007,6 +1039,7 @@ export function assertControlPlaneContract() {
     "promotion_path_prefix",
     "rebase_cascade",
     "ref_race_retry",
+    "ref_race_handoff",
     "promotion_source_pr",
     "promotion_plan_b64",
     "routing_proof",

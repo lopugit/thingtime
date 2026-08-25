@@ -33,6 +33,7 @@ export function route(input) {
   const depth = String(input.depth ?? "0");
   const detectorHandoff = input.detectorHandoff === true;
   const routedManualRetry = input.manualRetry === true;
+  const refRaceHandoff = input.refRaceHandoff === true;
 
   const errors = [];
   if (!validDepth(depth)) errors.push("invalid depth");
@@ -52,7 +53,8 @@ export function route(input) {
 
   const valid = errors.length === 0;
   const internalWorker = valid && internalShape;
-  const humanDispatch = event === "workflow_dispatch" && !detectorHandoff;
+  const humanDispatch =
+    event === "workflow_dispatch" && !detectorHandoff && !refRaceHandoff;
   const humanExplicit = humanDispatch && Boolean(prNumber || branch);
   const conversationEvent =
     event === "issue_comment" || event === "pull_request_review_comment";
@@ -106,6 +108,7 @@ export function route(input) {
     scanAll,
     scanHead,
     manualRetry,
+    refRaceHandoff,
     selector,
     concurrency,
     cancelInProgress: !internalShape,
@@ -141,7 +144,39 @@ function assertWorkflowSource() {
     source.indexOf("\n  review_handoff:"),
     source.indexOf("\n  model_config:"),
   );
+  const manageRebasesBlock = source.slice(
+    source.indexOf("\n  manage_rebases:"),
+    source.indexOf("\n  maintain_develop_promotion:"),
+  );
+  const detectBlock = source.slice(
+    source.indexOf("\n  detect:"),
+    source.indexOf("\n  handoff:"),
+  );
+  const reviewDetectBlock = source.slice(
+    source.indexOf("\n  review_detect:"),
+    source.indexOf("\n  review_handoff:"),
+  );
   const resolveBlock = source.slice(source.indexOf("\n  resolve:"));
+  const mergePushBlock = source.slice(
+    source.indexOf("      - name: Push merge commit"),
+    source.indexOf("      - name: Requeue after a moving-ref race"),
+  );
+  const rebaseContextBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Validate dispatch against live PR and branch refs"),
+    rebaseSource.indexOf("      - name: Comment on PR (rebase starting)"),
+  );
+  const rebasePushBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Force-push the fully verified rewritten history once"),
+    rebaseSource.indexOf("      - name: Requeue after a moving-ref rebase race"),
+  );
+  const rebaseHandoffBlock = rebaseSource.slice(
+    rebaseSource.indexOf("\n  handoff:"),
+    rebaseSource.indexOf("\n  rebase:"),
+  );
+  const rebaseChildDispatchBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Dispatch exact child transplants"),
+    rebaseSource.indexOf("      - name: Release current PR and report success"),
+  );
   const cascadeBlock = source.slice(
     source.indexOf("      - name: Cascade to PRs stacked on this head"),
     source.indexOf("      - name: Comment on PR (needs attention)"),
@@ -216,6 +251,31 @@ function assertWorkflowSource() {
     source,
     /detect:[\s\S]*?github\.event_name != 'pull_request_review_comment'/u,
     "conversation events do not launch unrelated conflict scans",
+  );
+  assert.match(
+    manageRebasesBlock,
+    /github\.event_name != 'repository_dispatch'[\s\S]*github\.event\.action == 'rebase-pr-stack-ai'/u,
+    "exact rebase repository events are owned only by the rebase engine",
+  );
+  assert.match(
+    source,
+    /github\.event\.action == 'rebase-pr-stack-ai'[\s\S]*inputs\.ref_race_handoff == true[\s\S]*&& 'rebase-stack'/u,
+    "automatic rebase race retries retain the rebase compute-provider policy",
+  );
+  assert.match(
+    detectBlock,
+    /github\.event_name != 'repository_dispatch'[\s\S]*github\.event\.action == 'resolve-conflicts-cascade'/u,
+    "merge cascade repository events are owned only by the conflict detector",
+  );
+  assert.match(
+    detectBlock,
+    /inputs\.ref_race_handoff != true/u,
+    "automatic rebase race retries cannot also enter the merge detector",
+  );
+  assert.match(
+    reviewDetectBlock,
+    /github\.event_name != 'repository_dispatch'[\s\S]*inputs\.ref_race_handoff != true/u,
+    "internal events and automatic rebase retries never launch a duplicate whole-PR review",
   );
   assert.match(
     source,
@@ -331,7 +391,73 @@ function assertWorkflowSource() {
 
   const dispatchCount =
     source.match(/actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g)?.length || 0;
-  assert.equal(dispatchCount, 3, "conflict detector, Lopu review batch, and stacked cascade use fixed workflow dispatch");
+  assert.equal(
+    dispatchCount,
+    4,
+    "conflict detector, Lopu review batch, stacked cascade, and moving-ref retry use fixed workflow dispatch",
+  );
+  assert.match(
+    rebaseSource,
+    /event_type:"rebase-pr-stack-ai"/u,
+    "rebase roots and children return through the unified Lopu repository event",
+  );
+  assert.equal(
+    rebaseSource.match(/event_type:"rebase-pr-stack-ai"/gu)?.length,
+    2,
+    "root and child handoffs use the same exact rebase event",
+  );
+  assert.equal(
+    rebaseSource.match(/worker:\{/gu)?.length,
+    2,
+    "immutable root and child snapshots are nested under one bounded worker payload",
+  );
+  assert.match(
+    rebaseHandoffBlock,
+    /permissions:\s+#[^\n]*\n(?:\s+#[^\n]*\n)*\s+contents: write/u,
+    "root repository dispatch has the documented Contents write permission",
+  );
+  const boundedPayloadShape =
+    /client_payload:\{\s+pr_number:\$pr_number,\s+execution_provider:\$execution_provider,\s+runner_label:\$runner_label,\s+control_dispatch_id:\$control_dispatch_id,\s+routing_proof:\$routing_proof,\s+routing_proof_issued_at:\$routing_proof_issued_at,\s+worker:\{/u;
+  assert.match(
+    rebaseHandoffBlock,
+    boundedPayloadShape,
+    "root dispatch keeps six routing properties plus one nested worker object",
+  );
+  assert.match(
+    rebaseChildDispatchBlock,
+    boundedPayloadShape,
+    "child dispatch keeps six routing properties plus one nested worker object",
+  );
+  assert.doesNotMatch(
+    rebaseSource,
+    /actions\/workflows\/rebase-pr-stacks\.yml\/dispatches/u,
+    "the triggerless reusable rebase engine never tries to workflow-dispatch itself",
+  );
+  assert.match(
+    rebaseSource,
+    /steps\.push\.outputs\.remote_state == 'retry'[\s\S]*ref_race_handoff:true/u,
+    "moving rebase refs release ownership and re-enter Lopu as an automatic detector",
+  );
+  for (const [name, block] of [
+    ["merge publication", mergePushBlock],
+    ["rebase publication", rebasePushBlock],
+  ]) {
+    assert.ok(
+      block.indexOf("defer_ref_race()") >= 0 &&
+        block.indexOf("defer_ref_race()") < block.indexOf("|| defer_ref_race"),
+      `${name}: moving-ref helper is defined in the same Actions step before use`,
+    );
+  }
+  assert.doesNotMatch(
+    detectBlock,
+    /defer_ref_race\(\)/u,
+    "merge detector does not define a publication-only shell helper",
+  );
+  assert.doesNotMatch(
+    rebaseContextBlock,
+    /defer_ref_race\(\)/u,
+    "rebase context validation does not define a publication-only shell helper",
+  );
   assert.match(source, /review_detect:/, "clean PRs have a Lopu review selector");
   assert.match(source, /review_handoff:/, "one review selector handoff exists");
   assert.match(
@@ -679,6 +805,25 @@ export function selfTest() {
     detectorOnly: true,
     handoffEligible: true,
     manualRetry: true,
+    selector: "pr:190",
+    concurrency: "resolve-detect-pr190",
+    cancelInProgress: true,
+    modelAndResolve: false,
+  });
+
+  assertRoute("automatic moving-ref retry", {
+    event: "workflow_dispatch",
+    ref: "github-actions",
+    actor: "github-actions[bot]",
+    prNumber: "190",
+    refRaceHandoff: true,
+  }, {
+    valid: true,
+    detectorOnly: true,
+    handoffEligible: true,
+    humanExplicit: false,
+    manualRetry: false,
+    refRaceHandoff: true,
     selector: "pr:190",
     concurrency: "resolve-detect-pr190",
     cancelInProgress: true,

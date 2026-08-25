@@ -21,6 +21,15 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Rebase roots, stack children, and moving-ref recovery now round-trip through
+  the one public Lopu manager**: the internal rebase engine no longer attempts
+  to dispatch its triggerless implementation directly. Exact immutable worker
+  data is nested beneath a bounded repository-dispatch payload, merge-cascade
+  and rebase events have mutually exclusive owners, and automatic race retries
+  cannot inherit manual-selector authority or launch duplicate merge/review
+  work. Root handoffs use the endpoint's narrow `contents: write` permission;
+  publication-local race helpers release current and child ownership labels
+  before a fresh-ref retry. — Codex (AI), 2026-08-25
 - **Lopu now immediately recovers when a PR head or target advances beside
   publication**: the exact lease still refuses the stale merge, but that
   expected race is recorded as a successful guarded attempt and requeued from

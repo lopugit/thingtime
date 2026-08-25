@@ -99,6 +99,11 @@ assert.doesNotMatch(rebaseWorkflow, /^  push:$/m);
 assert.doesNotMatch(rebaseWorkflow, /^  pull_request_target:$/m);
 assert.doesNotMatch(rebaseWorkflow, /^  schedule:$/m);
 assert.doesNotMatch(rebaseWorkflow, /^  workflow_dispatch:$/m);
+assert.match(rebaseWorkflow, /event_type:"rebase-pr-stack-ai"/);
+assert.equal(rebaseWorkflow.match(/event_type:"rebase-pr-stack-ai"/g)?.length, 2);
+assert.equal(rebaseWorkflow.match(/worker:\{/g)?.length, 2);
+assert.doesNotMatch(rebaseWorkflow, /actions\/workflows\/rebase-pr-stacks\.yml\/dispatches/);
+assert.match(rebaseWorkflow, /handoff:[\s\S]*?permissions:[\s\S]*?contents: write[\s\S]*?repos\/\$REPO\/dispatches/);
 assert.match(rebaseWorkflow, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/);
 assert.equal(
   [...rebaseWorkflow.matchAll(durableFleetQueue)].length,
