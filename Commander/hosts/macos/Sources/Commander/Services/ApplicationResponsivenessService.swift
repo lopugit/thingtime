@@ -19,10 +19,6 @@ enum ApplicationResponsivenessKind: String, Equatable, Sendable {
 enum ApplicationResponsivenessSignal: String, Equatable, Sendable {
   case repeatedAccessibilityTimeout
   case accessibilityProbeInconclusive
-
-  var permitsApplicationControl: Bool {
-    self == .repeatedAccessibilityTimeout
-  }
 }
 
 enum AccessibilityProbeResult: Equatable, Sendable {
@@ -64,8 +60,8 @@ final class ApplicationResponsivenessService {
     }
   }
 
-  func hasConfirmedUnresponsiveUI(_ pid: pid_t) -> Bool {
-    reportedApplications.contains { $0.pid == pid && $0.signal.permitsApplicationControl }
+  func hasReportedApplication(_ pid: pid_t) -> Bool {
+    reportedApplications.contains { $0.pid == pid }
   }
 
   private func refreshIfNeeded() {
@@ -100,7 +96,7 @@ final class ApplicationResponsivenessService {
   private func finishRefresh(_ applications: [ReportedApplication]) {
     refreshInFlight = false
     reportedApplications = applications.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    let confirmedCount = applications.filter { $0.signal.permitsApplicationControl }.count
+    let confirmedCount = applications.filter { $0.signal == .repeatedAccessibilityTimeout }.count
     if confirmedCount > 0 {
       logger.warning("Commander confirmed \(confirmedCount, privacy: .public) UI accessibility timeout(s)")
     }
@@ -188,8 +184,11 @@ final class UnresponsiveApplicationController {
   }
 
   func perform(pid: pid_t, action: ApplicationControlAction) throws -> [String: Any] {
-    guard pid > 1, pid != getpid(), responsiveness.hasConfirmedUnresponsiveUI(pid) else {
-      throw ApplicationControlError.notReportedUnresponsive
+    // Activity only permits controls for a process that it just observed alive. The
+    // signal determines the warning shown in the UI; it is not an authorization
+    // boundary for an intentional quit, force quit, or restart request.
+    guard pid > 1, pid != getpid(), responsiveness.hasReportedApplication(pid) else {
+      throw ApplicationControlError.notReportedByActivity
     }
     guard let application = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == pid }),
           !application.isTerminated else {
@@ -263,15 +262,15 @@ final class UnresponsiveApplicationController {
 }
 
 private enum ApplicationControlError: LocalizedError {
-  case notReportedUnresponsive
+  case notReportedByActivity
   case noLongerRunning
   case cannotRestart(String)
   case notAccepted(String)
 
   var errorDescription: String? {
     switch self {
-    case .notReportedUnresponsive:
-      "That app no longer has a confirmed UI accessibility timeout. Refresh Activity and try again if needed."
+    case .notReportedByActivity:
+      "That app is no longer listed in Activity. Refresh and try again if needed."
     case .noLongerRunning:
       "That app has already quit."
     case .cannotRestart(let name):
