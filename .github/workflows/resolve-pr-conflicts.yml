@@ -477,8 +477,9 @@ on:
     # workflow instead of a second rebase-specific product listener.
     types: [resolve-conflicts-cascade, rebase-pr-stack-ai]
 
-# Detector runs are disposable; internal per-PR workers are not. A detector and
-# the worker it spawns must never share a cancellation namespace.
+# Detector and worker runs are both durable. A detector and the worker it
+# spawns never share a namespace, and queue:max preserves every pending run
+# instead of silently replacing an earlier repository signal.
 concurrency:
   # Distinct namespaces are load-bearing:
   #   resolve-detect-*   external/event/API-only detectors
@@ -556,33 +557,11 @@ concurrency:
         || format('resolve-detect-{0}-{1}',
              github.event_name, github.ref_name || github.run_id) }}
   queue: max
-  # Every external detector is safe to supersede. A validated internal worker
-  # must finish or fail coherently; never cancel it halfway through a merge.
-  cancel-in-progress: >-
-    ${{ (inputs.maintenance_operation == ''
-          || inputs.maintenance_operation == 'manage-prs')
-        && !(github.event_name == 'workflow_dispatch'
-          && (github.ref_name == 'github-actions'
-             || github.workflow_ref
-             == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
-             || github.workflow_ref
-             == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/main', github.repository))
-          && (((github.actor == 'github-actions[bot]')
-               && inputs.promotion_source_pr != ''
-               && inputs.promotion_plan_b64 != ''
-               && inputs.detector_handoff != true
-               && inputs.manual_retry != true
-               && inputs.depth == '0'
-               && inputs.pr_number == ''
-               && inputs.branch == '')
-              || (github.actor == 'github-actions[bot]'
-                  && inputs.promotion_source_pr == ''
-                  && inputs.promotion_plan_b64 == ''
-                  && inputs.detector_handoff == true
-                  && ((startsWith(inputs.control_dispatch_id, 'lopu-review:'))
-                      || (!startsWith(inputs.control_dispatch_id, 'lopu-review:')
-                          && inputs.pr_number != ''
-                          && inputs.branch == ''))))) }}
+  # GitHub rejects queue:max whenever cancel-in-progress can evaluate true.
+  # More importantly, replacing an older detector can lose a distinct PR,
+  # comment, check, or branch signal. Let each bounded detector revalidate live
+  # state when it reaches the front of its namespace instead.
+  cancel-in-progress: false
 
 permissions:
   contents: read

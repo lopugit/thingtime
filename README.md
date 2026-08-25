@@ -78,6 +78,11 @@ of their own. Manual recovery uses **Actions → Lopu PR manager → Run workflo
 and its `maintenance_operation` choice. Their concurrency queues never cancel
 an in-flight promotion or synchronization.
 
+The public manager itself also uses GitHub's durable `queue: max` mode with
+`cancel-in-progress: false`. Distinct PR, comment, failed-check, branch, and
+scheduled signals wait behind the active run in their bounded namespace and
+revalidate live state when they start; none is replaced before Lopu sees it.
+
 The stack rebase/cascade implementation is internal in the same way. Existing
 `rebase-pr-stack-ai` exact-worker events enter through **Lopu PR manager**, keep
 their `rebase-stack` provider policy and immutable snapshot payload, and are

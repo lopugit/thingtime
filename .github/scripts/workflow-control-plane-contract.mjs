@@ -15,6 +15,7 @@ const scripts = resolve(githubRoot, "scripts");
 
 const IMPLEMENTATIONS = [
   "codeql-analysis.yml",
+  "codeql-pr-handoff.yml",
   "develop-pr-preview.yml",
   "electron-release.yml",
   "electron-pr-release.yml",
@@ -602,6 +603,7 @@ export function assertControlPlaneContract() {
   }
 
   const codeql = readWorkflow("codeql-analysis.yml");
+  const codeqlHandoff = readWorkflow("codeql-pr-handoff.yml");
   const codeqlTriggers = codeql.slice(0, codeql.indexOf("\npermissions:\n"));
   assert.match(
     codeql,
@@ -623,7 +625,6 @@ export function assertControlPlaneContract() {
     "an open PR owns one analysis instead of duplicating its branch push",
   );
   assert.match(codeql, /ADVANCED_ENABLED: \$\{\{ vars\.CODEQL_ADVANCED_ENABLED \}\}/u);
-  assert.match(codeql, /vars\.CODEQL_CENTRAL_PR_ENABLED/u);
   assert.match(
     codeql,
     /\[ "\$ADVANCED_ENABLED" != true \][\s\S]*analyze=false/u,
@@ -636,20 +637,26 @@ export function assertControlPlaneContract() {
     "the protected CodeQL implementation is never a direct privileged PR listener",
   );
   assert.doesNotMatch(codeql, /ANTHROPIC_API_KEY|OPENAI_API_KEY|secrets\./u, "CodeQL never receives an AI credential");
-  const codeqlHandoff = codeql.slice(codeql.indexOf("\n  handoff:"), codeql.indexOf("\n  scope:"));
+  assert.match(codeqlHandoff, /^  workflow_call:$/mu);
+  assert.doesNotMatch(
+    codeqlHandoff,
+    /^  (?:pull_request|pull_request_target|push|schedule|workflow_dispatch|repository_dispatch):/mu,
+    "the CodeQL handoff is reachable only through the product listener",
+  );
   assert.match(codeqlHandoff, /github\.event_name == 'pull_request_target'/u);
   assert.match(codeqlHandoff, /CODEQL_CENTRAL_PR_ENABLED/u);
+  assert.match(codeqlHandoff, /^      actions: write$/mu);
   assert.match(codeqlHandoff, /gh workflow run codeql-analysis\.yml/u);
   assert.match(codeqlHandoff, /--ref "\$DEFAULT_BRANCH"/u);
   assert.doesNotMatch(
     codeqlHandoff,
-    /actions\/checkout|codeql-action\/(?:init|analyze)|\bsecrets\./u,
+    /actions\/checkout|codeql-action\/(?:init|analyze)|LOPU_AGENT_BACKEND|ANTHROPIC|OPENAI|\bsecrets\./u,
     "the privileged target-context path only dispatches trusted metadata",
   );
-  assert.match(
+  assert.doesNotMatch(
     codeql,
-    /^    if: github\.event_name != 'pull_request_target'$/mu,
-    "all checkout and analysis work is excluded from the privileged event run",
+    /^  pull_request_target:|^      actions: write$/mu,
+    "the unprivileged CodeQL analyzer never inherits the target-event write ceiling",
   );
   assert.match(codeql, /base_has_pr_listener/u);
   assert.match(codeql, /git\/ref\/pull\/\$PR_NUMBER\/merge/u);
@@ -907,6 +914,11 @@ export function assertControlPlaneContract() {
     "legacy exact stack workers preserve their CI-provider policy through Lopu",
   );
   assert.match(resolver, /^\s+queue: max$/m);
+  assert.match(
+    resolver,
+    /^  queue: max\n(?:[\s\S]*?)^  cancel-in-progress: false$/m,
+    "the public Lopu queue preserves pending signals and never cancels active work",
+  );
   assert.match(
     resolver,
     /name: Check out PR head[\s\S]*fetch-depth: 0[\s\S]*filter: blob:none[\s\S]*persist-credentials: false/u,
