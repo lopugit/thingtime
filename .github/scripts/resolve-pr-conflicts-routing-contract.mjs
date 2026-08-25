@@ -151,6 +151,10 @@ function assertWorkflowSource() {
   const failureCommentBlock = source.slice(
     source.indexOf("      - name: Comment on PR (needs attention)"),
   );
+  const graphifyBlock = source.slice(
+    source.indexOf("      - name: Rebuild Graphify structure, then LLM semantics"),
+    source.indexOf("      - name: Push merge commit"),
+  );
 
   assert.match(source, /description: "PR base or head branch to scan;/);
   assert.doesNotMatch(source, /unique head|exact PR snapshot/);
@@ -207,6 +211,41 @@ function assertWorkflowSource() {
   assert.match(source, /actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g);
   assert.doesNotMatch(source, /gh api "repos\/\$REPO\/dispatches"/);
   assert.doesNotMatch(cascadeBlock, /if: env\.HAS_WORKFLOW_PUSH/);
+  assert.match(source, /mergeStateStatus/u, "detector reads GitHub's behind/current state");
+  assert.match(
+    source,
+    /select\(\.mergeable == "CONFLICTING" or \.mergeStateStatus == "BEHIND"\)/u,
+    "conflicting and clean-but-behind PRs both enter Lopu's base-merge lane",
+  );
+  assert.match(
+    source,
+    /mode: \(if \.mergeable == "CONFLICTING" then "conflict" else "outdated" end\)/u,
+    "workers retain why the PR needs a base merge",
+  );
+  assert.match(
+    source,
+    /select\(\.mergeStateStatus != "BEHIND" and \.mergeStateStatus != "UNKNOWN"\)/u,
+    "whole-PR review waits until its head is current",
+  );
+  assert.match(
+    graphifyBlock,
+    /if: steps\.user_merge_pause\.outputs\.paused != 'true'\n/u,
+    "every completed base merge gets a Graphify rebuild",
+  );
+  assert.doesNotMatch(
+    graphifyBlock,
+    /if:.*graphify_reset/u,
+    "Graphify refresh is not limited to graph-tree conflicts",
+  );
+  assert.ok(
+    graphifyBlock.indexOf("graphify update .") < graphifyBlock.indexOf("graphify extract ."),
+    "structural Graphify extraction runs before LLM semantic extraction",
+  );
+  assert.match(
+    graphifyBlock,
+    /preserving the completed structural refresh/u,
+    "semantic failure retains the completed structural graph",
+  );
 
   assert.match(
     resolveBlock,
