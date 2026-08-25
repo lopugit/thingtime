@@ -2649,11 +2649,16 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 ## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
 
 - [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
-      end to end (52 checks: closed-vocabulary + capability-coverage + scope +
+      end to end (63 checks: closed-vocabulary + capability-coverage + scope +
       ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
       run-time scope enforcement, shared budget across actions.invoke, direct +
       ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
       owner-private history, private-action 404, docs twins).
+- [ ] Kind boundary: an action declaring an UNSCOPED `things.update` (or
+      `things.read`) whose step targets a non-data thing (a schema thing, an
+      action thing) is refused at run time ("not a data thing — actions read and
+      write Data Things only") and leaves the target unchanged; the action still
+      SAVES (save time can't resolve a dynamic id). Covered by verify-actions.
 - [ ] `node remix/scripts/seed-demo-app.mjs http://127.0.0.1:<nitro-port> <user>`
       seeds the Customer/Invoice demo idempotently (re-run reports "exists").
 - [ ] /actions lists your actions with derived effect chips (creates/reads/
