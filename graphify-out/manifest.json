@@ -1490,8 +1490,8 @@
     "semantic_hash": "b5607222aa41aa41799c6c348c2e6930"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1787556056.6909516,
-    "ast_hash": "54ebdf0083f133142251b42685f4f1b6",
+    "mtime": 1787631547.378402,
+    "ast_hash": "6fba03331d000cf14201c78864fca595",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2332,7 +2332,7 @@
   "remix/app/docs/apiDocs.ts": {
     "mtime": 1787556056.6987474,
     "ast_hash": "ce415ea62a9274ddb11ff3983738aa5a",
-    "semantic_hash": ""
+    "semantic_hash": "ce415ea62a9274ddb11ff3983738aa5a"
   },
   "remix/app/routes/docs/api.tsx": {
     "mtime": 1786536620.9309306,
@@ -2827,7 +2827,7 @@
   "remix/app/schemas/registry.ts": {
     "mtime": 1787556056.7030542,
     "ast_hash": "c519e23498a646eab2fb0d07bd1023c9",
-    "semantic_hash": ""
+    "semantic_hash": "c519e23498a646eab2fb0d07bd1023c9"
   },
   "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
     "mtime": 1786536620.6143124,
@@ -2942,12 +2942,12 @@
   "remix/app/api/utils/apps/appTokens.ts": {
     "mtime": 1787555884.361187,
     "ast_hash": "54ca6d7be23c216823cba9ad73e72cda",
-    "semantic_hash": ""
+    "semantic_hash": "54ca6d7be23c216823cba9ad73e72cda"
   },
   "remix/app/api/utils/apps/apps.ts": {
     "mtime": 1787555884.360863,
     "ast_hash": "7c5cf3616815961d3a295bcda4a19546",
-    "semantic_hash": ""
+    "semantic_hash": "7c5cf3616815961d3a295bcda4a19546"
   },
   "remix/app/api/utils/apps/cors.ts": {
     "mtime": 1786536620.874769,
@@ -3042,7 +3042,7 @@
   "remix/app/components/OAuth/AuthorizePage.tsx": {
     "mtime": 1787556056.6974242,
     "ast_hash": "3a5ed49c22bd821e27aad62cabaaf093",
-    "semantic_hash": ""
+    "semantic_hash": "3a5ed49c22bd821e27aad62cabaaf093"
   },
   "remix/app/components/Schemas/SchemaBuilder.tsx": {
     "mtime": 1786536620.9052508,
@@ -3097,7 +3097,7 @@
   "remix/app/routes/api/v1/apps/_apps.tsx": {
     "mtime": 1787555904.5056443,
     "ast_hash": "97543ed303bb5958d23344fc91d438dd",
-    "semantic_hash": ""
+    "semantic_hash": "97543ed303bb5958d23344fc91d438dd"
   },
   "remix/app/routes/api/v1/apps/delete/_delete.tsx": {
     "mtime": 1786536620.9203088,
@@ -3107,12 +3107,12 @@
   "remix/app/routes/api/v1/apps/public/_public.tsx": {
     "mtime": 1787555904.5062513,
     "ast_hash": "d9536faa126f16ca93ad561d4a880ea3",
-    "semantic_hash": ""
+    "semantic_hash": "d9536faa126f16ca93ad561d4a880ea3"
   },
   "remix/app/routes/api/v1/apps/update/_update.tsx": {
     "mtime": 1787555904.5059576,
     "ast_hash": "b3fd3a8d8b94029e9659cb9fc7cf61ed",
-    "semantic_hash": ""
+    "semantic_hash": "b3fd3a8d8b94029e9659cb9fc7cf61ed"
   },
   "remix/app/routes/api/v1/auth/password-reset/confirm/_confirm.tsx": {
     "mtime": 1786536620.9219046,
@@ -3275,8 +3275,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787556056.6123073,
-    "ast_hash": "387782916ce2a3897fd59de3d9a3f34f",
+    "mtime": 1787631529.2395275,
+    "ast_hash": "913ecf345095096af4a57fdb3d522027",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -3307,7 +3307,7 @@
   "remix/app/schemas/builtinSchemaProjection.test.ts": {
     "mtime": 1787556056.7026098,
     "ast_hash": "60b43a76d7cc34ec7aabdc82e06d8f62",
-    "semantic_hash": ""
+    "semantic_hash": "60b43a76d7cc34ec7aabdc82e06d8f62"
   },
   "remix/app/routes/docs/docsCode.tsx": {
     "mtime": 1786536620.9320421,
@@ -3487,7 +3487,7 @@
   "AI_ALL.md": {
     "mtime": 1787316653.7384582,
     "ast_hash": "b0d24eb3e4786472cecbf96a928171d0",
-    "semantic_hash": ""
+    "semantic_hash": "b0d24eb3e4786472cecbf96a928171d0"
   },
   "PRs/162-codex-fix-pr159-index-retry-docs--fix-index-bootstrap-retries-after-prs-159-and-161.md": {
     "mtime": 1786536620.609777,
@@ -5497,12 +5497,12 @@
   "remix/app/api/utils/apps/desktopOAuth.ts": {
     "mtime": 1787556079.5398514,
     "ast_hash": "850f361f2753387313124ed00fed71b0",
-    "semantic_hash": ""
+    "semantic_hash": "850f361f2753387313124ed00fed71b0"
   },
   "remix/app/api/utils/apps/desktopOAuthCore.test.ts": {
     "mtime": 1787555884.3616989,
     "ast_hash": "943e2d306de0804f97ede637c68baa76",
-    "semantic_hash": ""
+    "semantic_hash": "943e2d306de0804f97ede637c68baa76"
   },
   "remix/app/api/utils/apps/desktopOAuthCore.ts": {
     "mtime": 1787556056.6922169,
@@ -5512,7 +5512,7 @@
   "remix/app/api/utils/apps/desktopOAuthRedirect.ts": {
     "mtime": 1787556079.53952,
     "ast_hash": "7e874dd0a191c660c725643c1fce9c3f",
-    "semantic_hash": ""
+    "semantic_hash": "7e874dd0a191c660c725643c1fce9c3f"
   },
   "remix/app/api/utils/auth/credentialPurpose.ts": {
     "mtime": 1787556056.693081,
@@ -5527,7 +5527,7 @@
   "remix/app/routes/api/v1/oauth/desktop/authorize/_authorize.tsx": {
     "mtime": 1787556079.5401597,
     "ast_hash": "9c6ecfab06f58c9fd047ea941504cf86",
-    "semantic_hash": ""
+    "semantic_hash": "9c6ecfab06f58c9fd047ea941504cf86"
   },
   "PRs/login-with-thingtime-anywhere.md": {
     "mtime": 1787556056.6115868,
@@ -5602,17 +5602,17 @@
   "Commander/apps/daemon/src/server.test.ts": {
     "mtime": 1787577238.8197942,
     "ast_hash": "d05997e7acec615c78ec7777e5b12e8e",
-    "semantic_hash": ""
+    "semantic_hash": "d05997e7acec615c78ec7777e5b12e8e"
   },
   "Commander/apps/daemon/src/server.ts": {
     "mtime": 1787575360.7049618,
     "ast_hash": "f24ddc40832a11c65137bb9ae8d45443",
-    "semantic_hash": ""
+    "semantic_hash": "f24ddc40832a11c65137bb9ae8d45443"
   },
   "Commander/apps/daemon/src/services/applications.ts": {
     "mtime": 1787575865.3748271,
     "ast_hash": "2f7ce3d865fa28b87e379b76bb31f1ba",
-    "semantic_hash": ""
+    "semantic_hash": "2f7ce3d865fa28b87e379b76bb31f1ba"
   },
   "Commander/apps/daemon/src/services/calculator.test.ts": {
     "mtime": 1787372670.3990464,
@@ -5627,7 +5627,7 @@
   "Commander/apps/daemon/src/services/catalog.ts": {
     "mtime": 1787577238.8191562,
     "ast_hash": "7dd1b2794d2960e8e6650c64fd726a91",
-    "semantic_hash": ""
+    "semantic_hash": "7dd1b2794d2960e8e6650c64fd726a91"
   },
   "Commander/apps/daemon/src/services/config.ts": {
     "mtime": 1787120414.6268342,
@@ -5642,7 +5642,7 @@
   "Commander/apps/daemon/src/services/indexing.ts": {
     "mtime": 1787575878.8396828,
     "ast_hash": "2ff13670d97dc18e9d373fd1dcf67682",
-    "semantic_hash": ""
+    "semantic_hash": "2ff13670d97dc18e9d373fd1dcf67682"
   },
   "Commander/apps/daemon/src/services/macosSystem.test.ts": {
     "mtime": 1787577238.819435,
@@ -5662,7 +5662,7 @@
   "Commander/apps/daemon/src/services/persistence.test.ts": {
     "mtime": 1787575360.7084324,
     "ast_hash": "e39b549698b5204069fdaeb2303168a2",
-    "semantic_hash": ""
+    "semantic_hash": "e39b549698b5204069fdaeb2303168a2"
   },
   "Commander/apps/daemon/src/services/persistence.ts": {
     "mtime": 1787485092.9216933,
@@ -5682,12 +5682,12 @@
   "Commander/apps/daemon/src/services/search.test.ts": {
     "mtime": 1787575797.452062,
     "ast_hash": "84cfef78f13f248151db60222a9d7e4f",
-    "semantic_hash": ""
+    "semantic_hash": "84cfef78f13f248151db60222a9d7e4f"
   },
   "Commander/apps/daemon/src/services/search.ts": {
     "mtime": 1787575779.882945,
     "ast_hash": "fed8c8609eaa34b918ce88535824af86",
-    "semantic_hash": ""
+    "semantic_hash": "fed8c8609eaa34b918ce88535824af86"
   },
   "Commander/apps/daemon/src/services/searchCache.test.ts": {
     "mtime": 1787321979.5227537,
@@ -5702,7 +5702,7 @@
   "Commander/apps/daemon/src/services/thingtime.test.ts": {
     "mtime": 1787555587.5432036,
     "ast_hash": "07b3146163a096bb32a8d4c88a890e84",
-    "semantic_hash": ""
+    "semantic_hash": "07b3146163a096bb32a8d4c88a890e84"
   },
   "Commander/apps/daemon/src/services/thingtime.ts": {
     "mtime": 1787478097.6135137,
@@ -5787,17 +5787,17 @@
   "Commander/apps/desktop-ui/src/components/IndexingSettings.tsx": {
     "mtime": 1787577100.1929083,
     "ast_hash": "966452c5a53b3a1cc97b72d95e74379b",
-    "semantic_hash": ""
+    "semantic_hash": "966452c5a53b3a1cc97b72d95e74379b"
   },
   "Commander/apps/desktop-ui/src/components/Launcher.test.tsx": {
-    "mtime": 1787560043.366212,
-    "ast_hash": "932f78e53270de1c68102209719de36d",
-    "semantic_hash": ""
+    "mtime": 1787631529.2385242,
+    "ast_hash": "4e61ccdefd3d231ed07b0ea93a993c8b",
+    "semantic_hash": "4e61ccdefd3d231ed07b0ea93a993c8b"
   },
   "Commander/apps/desktop-ui/src/components/Launcher.tsx": {
-    "mtime": 1787462652.7391934,
-    "ast_hash": "ba02dfdb93b3f2b38c061bae4b8525fb",
-    "semantic_hash": "ba02dfdb93b3f2b38c061bae4b8525fb"
+    "mtime": 1787631529.2386773,
+    "ast_hash": "6ac0505d1cb8aa8a62c45f20f80d10d2",
+    "semantic_hash": "6ac0505d1cb8aa8a62c45f20f80d10d2"
   },
   "Commander/apps/desktop-ui/src/components/ResultContextMenu.tsx": {
     "mtime": 1787317146.335799,
@@ -5805,9 +5805,9 @@
     "semantic_hash": "f1bb7f71f60b11afbede6fc6335b5be0"
   },
   "Commander/apps/desktop-ui/src/components/ResultIcon.tsx": {
-    "mtime": 1787115631.1148171,
-    "ast_hash": "8a18141a33e9d13bdb91c3dd4ac5cee2",
-    "semantic_hash": "8a18141a33e9d13bdb91c3dd4ac5cee2"
+    "mtime": 1787631529.238814,
+    "ast_hash": "39e52f1c77bcc40d9fec294ea2366150",
+    "semantic_hash": "39e52f1c77bcc40d9fec294ea2366150"
   },
   "Commander/apps/desktop-ui/src/components/SearchPreferencesSettings.test.tsx": {
     "mtime": 1787316883.3031745,
@@ -5822,12 +5822,12 @@
   "Commander/apps/desktop-ui/src/components/Settings.test.tsx": {
     "mtime": 1787579162.0406053,
     "ast_hash": "bee5d0fcd689bec76ccdf8a5ed84634f",
-    "semantic_hash": ""
+    "semantic_hash": "bee5d0fcd689bec76ccdf8a5ed84634f"
   },
   "Commander/apps/desktop-ui/src/components/Settings.tsx": {
     "mtime": 1787579162.0395663,
     "ast_hash": "23419c7508b4e193accd165c4db9cfcb",
-    "semantic_hash": ""
+    "semantic_hash": "23419c7508b4e193accd165c4db9cfcb"
   },
   "Commander/apps/desktop-ui/src/components/UiErrorBoundary.test.tsx": {
     "mtime": 1786957602.0644598,
@@ -5862,12 +5862,12 @@
   "Commander/apps/desktop-ui/src/hooks/useCommander.test.tsx": {
     "mtime": 1787560043.3655982,
     "ast_hash": "e31fc54e4bdaa1f10f4dd6ca7273a1ee",
-    "semantic_hash": ""
+    "semantic_hash": "e31fc54e4bdaa1f10f4dd6ca7273a1ee"
   },
   "Commander/apps/desktop-ui/src/hooks/useCommander.ts": {
     "mtime": 1787560000.1227367,
     "ast_hash": "ab2a5b55228b71ede190c3100653eebc",
-    "semantic_hash": ""
+    "semantic_hash": "ab2a5b55228b71ede190c3100653eebc"
   },
   "Commander/apps/desktop-ui/src/lib/api.ts": {
     "mtime": 1787485092.9225464,
@@ -5922,7 +5922,7 @@
   "Commander/crates/commander-indexer/src/lib.rs": {
     "mtime": 1787575637.7952552,
     "ast_hash": "5854ed749bbd09103ce95c38aa0eb12a",
-    "semantic_hash": ""
+    "semantic_hash": "5854ed749bbd09103ce95c38aa0eb12a"
   },
   "Commander/crates/commander-indexer/src/main.rs": {
     "mtime": 1787316391.0940554,
@@ -6187,7 +6187,7 @@
   "Commander/hosts/macos/Sources/Commander/App/CommanderAppDelegate.swift": {
     "mtime": 1787555554.6488788,
     "ast_hash": "e06c76520a7bfea09a8a607d895e2a48",
-    "semantic_hash": ""
+    "semantic_hash": "e06c76520a7bfea09a8a607d895e2a48"
   },
   "Commander/hosts/macos/Sources/Commander/App/CommanderApplicationMenu.swift": {
     "mtime": 1787470227.2390182,
@@ -6205,9 +6205,9 @@
     "semantic_hash": "eccbec619ae5dd913af481b28cd1884a"
   },
   "Commander/hosts/macos/Sources/Commander/Bridge/CommanderNativeBridge.swift": {
-    "mtime": 1787574863.7063375,
-    "ast_hash": "1b06432766d930154bdfc4c8acf61470",
-    "semantic_hash": ""
+    "mtime": 1787631538.2173307,
+    "ast_hash": "8646244b8efd3c3c72dcd5000ad870ee",
+    "semantic_hash": "8646244b8efd3c3c72dcd5000ad870ee"
   },
   "Commander/hosts/macos/Sources/Commander/Services/DaemonSupervisor.swift": {
     "mtime": 1787130859.6184244,
@@ -6255,9 +6255,9 @@
     "semantic_hash": "ce464763205feb83fa2b51a3271f5e12"
   },
   "Commander/hosts/macos/Tests/CommanderTests/CommanderWebViewTests.swift": {
-    "mtime": 1787555581.0577846,
-    "ast_hash": "b89ab82f9b7c7b3de28db57e6f9fd9c2",
-    "semantic_hash": ""
+    "mtime": 1787631538.2174757,
+    "ast_hash": "17a030fd1c205977060c57aee17e82da",
+    "semantic_hash": "17a030fd1c205977060c57aee17e82da"
   },
   "Commander/hosts/macos/Tests/CommanderTests/GlobalHotKeyTests.swift": {
     "mtime": 1787130859.6033564,
@@ -6267,7 +6267,7 @@
   "Commander/hosts/macos/Tests/CommanderTests/SystemMetricsServiceTests.swift": {
     "mtime": 1787574863.7078164,
     "ast_hash": "2db9231824767bb984946a84707d867a",
-    "semantic_hash": ""
+    "semantic_hash": "2db9231824767bb984946a84707d867a"
   },
   "Commander/hosts/windows/Commander.Host.csproj": {
     "mtime": 1786538031.00106,
@@ -6277,7 +6277,7 @@
   "Commander/hosts/windows/NativeBridgeContract.cs": {
     "mtime": 1787574863.7069135,
     "ast_hash": "4b1759938e3e076f291a96380a5edd31",
-    "semantic_hash": ""
+    "semantic_hash": "4b1759938e3e076f291a96380a5edd31"
   },
   "Commander/package.json": {
     "mtime": 1787468038.573307,
@@ -6292,12 +6292,12 @@
   "Commander/packages/filesystem-indexer/src/index.test.ts": {
     "mtime": 1787558741.5798068,
     "ast_hash": "6d087b699d4cb1ecd5d81be497668ed9",
-    "semantic_hash": ""
+    "semantic_hash": "6d087b699d4cb1ecd5d81be497668ed9"
   },
   "Commander/packages/filesystem-indexer/src/index.ts": {
     "mtime": 1787575625.1335928,
     "ast_hash": "3739bdf01979ca6b83a5cf092791312e",
-    "semantic_hash": ""
+    "semantic_hash": "3739bdf01979ca6b83a5cf092791312e"
   },
   "Commander/packages/filesystem-indexer/src/test-fixtures/fake-indexer.mjs": {
     "mtime": 1787316455.5743828,
@@ -6317,12 +6317,12 @@
   "Commander/packages/protocol/src/index.test.ts": {
     "mtime": 1787575711.5693514,
     "ast_hash": "d0b9eaf8271903be3460d335a12f0bf4",
-    "semantic_hash": ""
+    "semantic_hash": "d0b9eaf8271903be3460d335a12f0bf4"
   },
   "Commander/packages/protocol/src/index.ts": {
     "mtime": 1787575392.4312015,
     "ast_hash": "8ed2a7707df0e40135fff277343eaf7e",
-    "semantic_hash": ""
+    "semantic_hash": "8ed2a7707df0e40135fff277343eaf7e"
   },
   "Commander/packages/protocol/tsconfig.json": {
     "mtime": 1786537288.0705836,
@@ -6390,9 +6390,9 @@
     "semantic_hash": "c22ab7d26d7e1eb3818cef99711f7a45"
   },
   "Commander/script/build_and_run.sh": {
-    "mtime": 1787555554.6493201,
-    "ast_hash": "a34e5098682c9b5aa871096e489d8700",
-    "semantic_hash": ""
+    "mtime": 1787631538.217629,
+    "ast_hash": "b39947d2a7a55b0b8512e809017ef7f9",
+    "semantic_hash": "b39947d2a7a55b0b8512e809017ef7f9"
   },
   "Commander/script/release-version.mjs": {
     "mtime": 1787468053.6593475,
@@ -6912,27 +6912,27 @@
   "Commander/hosts/macos/.build/workspace-state.json": {
     "mtime": 1786538249.7637663,
     "ast_hash": "2e5a5ad2a66d6697a649f98dcd8f1c38",
-    "semantic_hash": ""
+    "semantic_hash": "2e5a5ad2a66d6697a649f98dcd8f1c38"
   },
   "Commander/hosts/macos/Sources/Commander/Services/OAuthCallbackHandoff.swift": {
     "mtime": 1787555581.0538998,
     "ast_hash": "54f79ef4e3619f1c463c5f700d6599c5",
-    "semantic_hash": ""
+    "semantic_hash": "54f79ef4e3619f1c463c5f700d6599c5"
   },
   "remix/api/index.js": {
     "mtime": 1786536637.5902443,
     "ast_hash": "844210d487b558804d922d7ac0c53dfa",
-    "semantic_hash": ""
+    "semantic_hash": "844210d487b558804d922d7ac0c53dfa"
   },
   ".github/workflows/commander-release.yml": {
     "mtime": 1787468288.3389647,
     "ast_hash": "41a47b613fa6090f88eaf652744343a9",
-    "semantic_hash": ""
+    "semantic_hash": "41a47b613fa6090f88eaf652744343a9"
   },
   "Commander/ARCHITECTURE.md": {
     "mtime": 1787132001.9716873,
     "ast_hash": "5a3628c64c892a09c8e3b9d67de906a1",
-    "semantic_hash": ""
+    "semantic_hash": "5a3628c64c892a09c8e3b9d67de906a1"
   },
   "Commander/README.md": {
     "mtime": 1787555612.9919524,
@@ -6942,27 +6942,27 @@
   "Commander/THIRD_PARTY_NOTICES.md": {
     "mtime": 1787121007.0253167,
     "ast_hash": "2dbfed92269a58a6b7790b290fdbc057",
-    "semantic_hash": ""
+    "semantic_hash": "2dbfed92269a58a6b7790b290fdbc057"
   },
   "Commander/apps/desktop-ui/index.html": {
     "mtime": 1786537379.9290855,
     "ast_hash": "c5e5fc3cab4d3ac802c8ce8a6ad5e3c3",
-    "semantic_hash": ""
+    "semantic_hash": "c5e5fc3cab4d3ac802c8ce8a6ad5e3c3"
   },
   "Commander/apps/desktop-ui/launcher.html": {
     "mtime": 1786539307.674792,
     "ast_hash": "c5e5fc3cab4d3ac802c8ce8a6ad5e3c3",
-    "semantic_hash": ""
+    "semantic_hash": "c5e5fc3cab4d3ac802c8ce8a6ad5e3c3"
   },
   "Commander/apps/desktop-ui/settings.html": {
     "mtime": 1786539307.675104,
     "ast_hash": "19231afe43dbe81bdc945f969c00e2ce",
-    "semantic_hash": ""
+    "semantic_hash": "19231afe43dbe81bdc945f969c00e2ce"
   },
   "Commander/crates/commander-core/README.md": {
     "mtime": 1786540480.0485861,
     "ast_hash": "b1ab1088f6cd0e952e67d4f62c1b7cac",
-    "semantic_hash": ""
+    "semantic_hash": "b1ab1088f6cd0e952e67d4f62c1b7cac"
   },
   "Commander/crates/commander-indexer/README.md": {
     "mtime": 1787575668.1627924,
@@ -6972,57 +6972,57 @@
   "Commander/design/DESIGN_SYSTEM.md": {
     "mtime": 1786537288.071146,
     "ast_hash": "c1c9a24ce686e3795623339869dcb61f",
-    "semantic_hash": ""
+    "semantic_hash": "c1c9a24ce686e3795623339869dcb61f"
   },
   "Commander/docs/RAYCAST_COMPATIBILITY.md": {
     "mtime": 1787372698.3826146,
     "ast_hash": "acb578d05997728808c9a6c795cbad62",
-    "semantic_hash": ""
+    "semantic_hash": "acb578d05997728808c9a6c795cbad62"
   },
   "Commander/docs/TESTING.md": {
-    "mtime": 1787577142.199181,
-    "ast_hash": "c124253220202da32649450caebd106c",
+    "mtime": 1787631538.2171514,
+    "ast_hash": "ea536bf835272fca779ddaf005a49655",
     "semantic_hash": ""
   },
   "Commander/extensions/README.md": {
     "mtime": 1786926434.4904888,
     "ast_hash": "7e34eb58ca30e19be553c5644817ff40",
-    "semantic_hash": ""
+    "semantic_hash": "7e34eb58ca30e19be553c5644817ff40"
   },
   "Commander/extensions/raycast/CHANGELOG.md": {
     "mtime": 1786926456.3374805,
     "ast_hash": "11935baef16feb9985d6252de6a95a71",
-    "semantic_hash": ""
+    "semantic_hash": "11935baef16feb9985d6252de6a95a71"
   },
   "Commander/extensions/raycast/DEVLOG.md": {
     "mtime": 1786536620.8022127,
     "ast_hash": "f89ba8abc8a34811c7de7830048b42cc",
-    "semantic_hash": ""
+    "semantic_hash": "f89ba8abc8a34811c7de7830048b42cc"
   },
   "Commander/extensions/raycast/README.md": {
     "mtime": 1786926456.337221,
     "ast_hash": "9e3f85ab336f15a29c79ae62e72b604c",
-    "semantic_hash": ""
+    "semantic_hash": "9e3f85ab336f15a29c79ae62e72b604c"
   },
   "Commander/extensions/raycast/assets/webp/README.md": {
     "mtime": 1786536620.8159273,
     "ast_hash": "f162fbffa18046af73dfca08802a536f",
-    "semantic_hash": ""
+    "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "Commander/extensions/raycast/pnpm-workspace.yaml": {
     "mtime": 1786926546.3360615,
     "ast_hash": "cb99c58fa07c0f29efd37c5b15b56380",
-    "semantic_hash": ""
+    "semantic_hash": "cb99c58fa07c0f29efd37c5b15b56380"
   },
   "Commander/hosts/linux/README.md": {
     "mtime": 1786538031.0013404,
     "ast_hash": "218d1b8a094719881427511fda736f69",
-    "semantic_hash": ""
+    "semantic_hash": "218d1b8a094719881427511fda736f69"
   },
   "Commander/hosts/windows/README.md": {
     "mtime": 1786539280.1206658,
     "ast_hash": "455e513d58c50c5758856744b18bb5ee",
-    "semantic_hash": ""
+    "semantic_hash": "455e513d58c50c5758856744b18bb5ee"
   },
   "Commander/packages/filesystem-indexer/README.md": {
     "mtime": 1787575668.1635544,
@@ -7032,656 +7032,676 @@
   "Commander/pnpm-workspace.yaml": {
     "mtime": 1786537288.0694253,
     "ast_hash": "2147477c215b8b3975078ace39bca6e2",
-    "semantic_hash": ""
+    "semantic_hash": "2147477c215b8b3975078ace39bca6e2"
   },
   "PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md": {
-    "mtime": 1787468198.1977973,
-    "ast_hash": "f77ebf76fe4490897b197f675d5c3f31",
+    "mtime": 1787631576.5681775,
+    "ast_hash": "129b555bc94abdec352ea10aebaba443",
     "semantic_hash": ""
   },
   "TODO/commander-app-registration-manager.md": {
     "mtime": 1787466842.45522,
     "ast_hash": "9b10931260f48992b3239095cdd4f710",
-    "semantic_hash": ""
+    "semantic_hash": "9b10931260f48992b3239095cdd4f710"
   },
   "Commander/design/commander-app-icon.png": {
     "mtime": 1786540128.4991813,
     "ast_hash": "f5e1e4c6d9ff6168bc7b3548d8201f42",
-    "semantic_hash": ""
+    "semantic_hash": "f5e1e4c6d9ff6168bc7b3548d8201f42"
   },
   "Commander/design/commander-concept.png": {
     "mtime": 1786537145.0789611,
     "ast_hash": "f37a50e8c6d924f6e25dfa800e78bb88",
-    "semantic_hash": ""
+    "semantic_hash": "f37a50e8c6d924f6e25dfa800e78bb88"
   },
   "Commander/extensions/raycast/assets/command-icon.png": {
     "mtime": 1786536620.8025892,
     "ast_hash": "7df98b14e65cef0ba33ba7d4adaaf883",
-    "semantic_hash": ""
+    "semantic_hash": "7df98b14e65cef0ba33ba7d4adaaf883"
   },
   "Commander/extensions/raycast/assets/thumbnails/100x100.webp": {
     "mtime": 1786536620.8031566,
     "ast_hash": "735868e81fabfad954c3534b3f5d5234",
-    "semantic_hash": ""
+    "semantic_hash": "735868e81fabfad954c3534b3f5d5234"
   },
   "Commander/extensions/raycast/assets/thumbnails/100x1024.webp": {
     "mtime": 1786536620.8032174,
     "ast_hash": "548c67e18d4904375dbf443dbff4a3fb",
-    "semantic_hash": ""
+    "semantic_hash": "548c67e18d4904375dbf443dbff4a3fb"
   },
   "Commander/extensions/raycast/assets/thumbnails/100x128.webp": {
     "mtime": 1786536620.8032732,
     "ast_hash": "e8de5986370da80201878eec390c7b4d",
-    "semantic_hash": ""
+    "semantic_hash": "e8de5986370da80201878eec390c7b4d"
   },
   "Commander/extensions/raycast/assets/thumbnails/100x256.webp": {
     "mtime": 1786536620.803333,
     "ast_hash": "41d380cc159543e3ad96cccbb468a9d1",
-    "semantic_hash": ""
+    "semantic_hash": "41d380cc159543e3ad96cccbb468a9d1"
   },
   "Commander/extensions/raycast/assets/thumbnails/100x32.webp": {
     "mtime": 1786536620.8034017,
     "ast_hash": "12f382326eaf74a5eea4f4889ee2271e",
-    "semantic_hash": ""
+    "semantic_hash": "12f382326eaf74a5eea4f4889ee2271e"
   },
   "Commander/extensions/raycast/assets/thumbnails/100x50.webp": {
     "mtime": 1786536620.8034685,
     "ast_hash": "041d11be4cf4820f65a9656231130f16",
-    "semantic_hash": ""
+    "semantic_hash": "041d11be4cf4820f65a9656231130f16"
   },
   "Commander/extensions/raycast/assets/thumbnails/100x512.webp": {
     "mtime": 1786536620.8035238,
     "ast_hash": "c25b04b4ba3a7800b253764f97214f57",
-    "semantic_hash": ""
+    "semantic_hash": "c25b04b4ba3a7800b253764f97214f57"
   },
   "Commander/extensions/raycast/assets/thumbnails/100x64.webp": {
     "mtime": 1786536620.803576,
     "ast_hash": "77c5807ddd87634acbb62de1b1ece7c8",
-    "semantic_hash": ""
+    "semantic_hash": "77c5807ddd87634acbb62de1b1ece7c8"
   },
   "Commander/extensions/raycast/assets/thumbnails/1024x100.webp": {
     "mtime": 1786536620.8036306,
     "ast_hash": "01b05e27e01267fc666d7c582713f235",
-    "semantic_hash": ""
+    "semantic_hash": "01b05e27e01267fc666d7c582713f235"
   },
   "Commander/extensions/raycast/assets/thumbnails/1024x1024.webp": {
     "mtime": 1786536620.8036866,
     "ast_hash": "9fb79365ac8284d47088751d1a0a177e",
-    "semantic_hash": ""
+    "semantic_hash": "9fb79365ac8284d47088751d1a0a177e"
   },
   "Commander/extensions/raycast/assets/thumbnails/1024x128.webp": {
     "mtime": 1786536620.8037543,
     "ast_hash": "d6b3d3644a51fd150ae5ec6a62a988f6",
-    "semantic_hash": ""
+    "semantic_hash": "d6b3d3644a51fd150ae5ec6a62a988f6"
   },
   "Commander/extensions/raycast/assets/thumbnails/1024x256.webp": {
     "mtime": 1786536620.8038101,
     "ast_hash": "a7710eaa2749b8b8b199c0b25c65728a",
-    "semantic_hash": ""
+    "semantic_hash": "a7710eaa2749b8b8b199c0b25c65728a"
   },
   "Commander/extensions/raycast/assets/thumbnails/1024x32.webp": {
     "mtime": 1786536620.8038695,
     "ast_hash": "9dfdeb3666a0bec63e50caab52366627",
-    "semantic_hash": ""
+    "semantic_hash": "9dfdeb3666a0bec63e50caab52366627"
   },
   "Commander/extensions/raycast/assets/thumbnails/1024x50.webp": {
     "mtime": 1786536620.803932,
     "ast_hash": "1e33dd955e181f6e5ceabd6b8686e221",
-    "semantic_hash": ""
+    "semantic_hash": "1e33dd955e181f6e5ceabd6b8686e221"
   },
   "Commander/extensions/raycast/assets/thumbnails/1024x512.webp": {
     "mtime": 1786536620.8039904,
     "ast_hash": "041d11be4cf4820f65a9656231130f16",
-    "semantic_hash": ""
+    "semantic_hash": "041d11be4cf4820f65a9656231130f16"
   },
   "Commander/extensions/raycast/assets/thumbnails/1024x64.webp": {
     "mtime": 1786536620.804053,
     "ast_hash": "1eaaf0dd19b76951ad9e849a11765fec",
-    "semantic_hash": ""
+    "semantic_hash": "1eaaf0dd19b76951ad9e849a11765fec"
   },
   "Commander/extensions/raycast/assets/thumbnails/128x100.webp": {
     "mtime": 1786536620.804124,
     "ast_hash": "ad8e4eb889bf1d22d0f99138e7182b55",
-    "semantic_hash": ""
+    "semantic_hash": "ad8e4eb889bf1d22d0f99138e7182b55"
   },
   "Commander/extensions/raycast/assets/thumbnails/128x1024.webp": {
     "mtime": 1786536620.8041835,
     "ast_hash": "fcac12d399356633af86adc6d16bacca",
-    "semantic_hash": ""
+    "semantic_hash": "fcac12d399356633af86adc6d16bacca"
   },
   "Commander/extensions/raycast/assets/thumbnails/128x128.webp": {
     "mtime": 1786536620.804241,
     "ast_hash": "fc1f3571c6107b85d2437559c3becb75",
-    "semantic_hash": ""
+    "semantic_hash": "fc1f3571c6107b85d2437559c3becb75"
   },
   "Commander/extensions/raycast/assets/thumbnails/128x256.webp": {
     "mtime": 1786536620.8042994,
     "ast_hash": "732f430fb86a397e3ad1fa686d55abfc",
-    "semantic_hash": ""
+    "semantic_hash": "732f430fb86a397e3ad1fa686d55abfc"
   },
   "Commander/extensions/raycast/assets/thumbnails/128x32.webp": {
     "mtime": 1786536620.8043504,
     "ast_hash": "a7710eaa2749b8b8b199c0b25c65728a",
-    "semantic_hash": ""
+    "semantic_hash": "a7710eaa2749b8b8b199c0b25c65728a"
   },
   "Commander/extensions/raycast/assets/thumbnails/128x50.webp": {
     "mtime": 1786536620.8044076,
     "ast_hash": "2bf6425b05366d0ecf6c27a3b83609bd",
-    "semantic_hash": ""
+    "semantic_hash": "2bf6425b05366d0ecf6c27a3b83609bd"
   },
   "Commander/extensions/raycast/assets/thumbnails/128x512.webp": {
     "mtime": 1786536620.8044605,
     "ast_hash": "15c4bef51a849699df98c02f777ab262",
-    "semantic_hash": ""
+    "semantic_hash": "15c4bef51a849699df98c02f777ab262"
   },
   "Commander/extensions/raycast/assets/thumbnails/128x64.webp": {
     "mtime": 1786536620.8045156,
     "ast_hash": "041d11be4cf4820f65a9656231130f16",
-    "semantic_hash": ""
+    "semantic_hash": "041d11be4cf4820f65a9656231130f16"
   },
   "Commander/extensions/raycast/assets/thumbnails/256x100.webp": {
     "mtime": 1786536620.8045702,
     "ast_hash": "2bf6425b05366d0ecf6c27a3b83609bd",
-    "semantic_hash": ""
+    "semantic_hash": "2bf6425b05366d0ecf6c27a3b83609bd"
   },
   "Commander/extensions/raycast/assets/thumbnails/256x1024.webp": {
     "mtime": 1786536620.8046372,
     "ast_hash": "15c4bef51a849699df98c02f777ab262",
-    "semantic_hash": ""
+    "semantic_hash": "15c4bef51a849699df98c02f777ab262"
   },
   "Commander/extensions/raycast/assets/thumbnails/256x128.webp": {
     "mtime": 1786536620.804692,
     "ast_hash": "041d11be4cf4820f65a9656231130f16",
-    "semantic_hash": ""
+    "semantic_hash": "041d11be4cf4820f65a9656231130f16"
   },
   "Commander/extensions/raycast/assets/thumbnails/256x256.webp": {
     "mtime": 1786536620.804751,
     "ast_hash": "07421b07ff635559cba013803440d97c",
-    "semantic_hash": ""
+    "semantic_hash": "07421b07ff635559cba013803440d97c"
   },
   "Commander/extensions/raycast/assets/thumbnails/256x32.webp": {
     "mtime": 1786536620.804814,
     "ast_hash": "d6b3d3644a51fd150ae5ec6a62a988f6",
-    "semantic_hash": ""
+    "semantic_hash": "d6b3d3644a51fd150ae5ec6a62a988f6"
   },
   "Commander/extensions/raycast/assets/thumbnails/256x50.webp": {
     "mtime": 1786536620.8048801,
     "ast_hash": "cc72936f7b7da2b4008eff47efb93631",
-    "semantic_hash": ""
+    "semantic_hash": "cc72936f7b7da2b4008eff47efb93631"
   },
   "Commander/extensions/raycast/assets/thumbnails/256x512.webp": {
     "mtime": 1786536620.8049452,
     "ast_hash": "732f430fb86a397e3ad1fa686d55abfc",
-    "semantic_hash": ""
+    "semantic_hash": "732f430fb86a397e3ad1fa686d55abfc"
   },
   "Commander/extensions/raycast/assets/thumbnails/256x64.webp": {
     "mtime": 1786536620.804999,
     "ast_hash": "a7710eaa2749b8b8b199c0b25c65728a",
-    "semantic_hash": ""
+    "semantic_hash": "a7710eaa2749b8b8b199c0b25c65728a"
   },
   "Commander/extensions/raycast/assets/thumbnails/32x100.webp": {
     "mtime": 1786536620.8050504,
     "ast_hash": "fd8c2a24f88965a409a0617e802341da",
-    "semantic_hash": ""
+    "semantic_hash": "fd8c2a24f88965a409a0617e802341da"
   },
   "Commander/extensions/raycast/assets/thumbnails/32x1024.webp": {
     "mtime": 1786536620.8051038,
     "ast_hash": "66dd5687f8f9a48d3f29a8db1fa5a3fd",
-    "semantic_hash": ""
+    "semantic_hash": "66dd5687f8f9a48d3f29a8db1fa5a3fd"
   },
   "Commander/extensions/raycast/assets/thumbnails/32x128.webp": {
     "mtime": 1786536620.805161,
     "ast_hash": "b8681dbb626215d6450fa76723430248",
-    "semantic_hash": ""
+    "semantic_hash": "b8681dbb626215d6450fa76723430248"
   },
   "Commander/extensions/raycast/assets/thumbnails/32x256.webp": {
     "mtime": 1786536620.8052232,
     "ast_hash": "b561610d45505d6fd54dfc3d8bfadc3e",
-    "semantic_hash": ""
+    "semantic_hash": "b561610d45505d6fd54dfc3d8bfadc3e"
   },
   "Commander/extensions/raycast/assets/thumbnails/32x32.webp": {
     "mtime": 1786536620.805285,
     "ast_hash": "2de1e744b5a42a3d3a8ac4d62cabc4b1",
-    "semantic_hash": ""
+    "semantic_hash": "2de1e744b5a42a3d3a8ac4d62cabc4b1"
   },
   "Commander/extensions/raycast/assets/thumbnails/32x50.webp": {
     "mtime": 1786536620.8053436,
     "ast_hash": "67bec7b59d303942a302b537edd90bfd",
-    "semantic_hash": ""
+    "semantic_hash": "67bec7b59d303942a302b537edd90bfd"
   },
   "Commander/extensions/raycast/assets/thumbnails/32x512.webp": {
     "mtime": 1786536620.805399,
     "ast_hash": "7e8896196e74bdbbac7808cbb5785053",
-    "semantic_hash": ""
+    "semantic_hash": "7e8896196e74bdbbac7808cbb5785053"
   },
   "Commander/extensions/raycast/assets/thumbnails/32x64.webp": {
     "mtime": 1786536620.8054547,
     "ast_hash": "d3ad09b4066bcdb7a5e028d42e845737",
-    "semantic_hash": ""
+    "semantic_hash": "d3ad09b4066bcdb7a5e028d42e845737"
   },
   "Commander/extensions/raycast/assets/thumbnails/50x100.webp": {
     "mtime": 1786536620.8055122,
     "ast_hash": "8b3a39c312515c385434de68b5feb173",
-    "semantic_hash": ""
+    "semantic_hash": "8b3a39c312515c385434de68b5feb173"
   },
   "Commander/extensions/raycast/assets/thumbnails/50x1024.webp": {
     "mtime": 1786536620.8055644,
     "ast_hash": "b5211da2374a026497e6d497fc8e607f",
-    "semantic_hash": ""
+    "semantic_hash": "b5211da2374a026497e6d497fc8e607f"
   },
   "Commander/extensions/raycast/assets/thumbnails/50x128.webp": {
     "mtime": 1786536620.8056169,
     "ast_hash": "f255f73a1c44db5ed35834c9e459498c",
-    "semantic_hash": ""
+    "semantic_hash": "f255f73a1c44db5ed35834c9e459498c"
   },
   "Commander/extensions/raycast/assets/thumbnails/50x256.webp": {
     "mtime": 1786536620.8056707,
     "ast_hash": "06161da97ed7ce027b633f12ff9aafea",
-    "semantic_hash": ""
+    "semantic_hash": "06161da97ed7ce027b633f12ff9aafea"
   },
   "Commander/extensions/raycast/assets/thumbnails/50x32.webp": {
     "mtime": 1786536620.8057196,
     "ast_hash": "9bcdedc562fcd893375e3ef02c487c56",
-    "semantic_hash": ""
+    "semantic_hash": "9bcdedc562fcd893375e3ef02c487c56"
   },
   "Commander/extensions/raycast/assets/thumbnails/50x50.webp": {
     "mtime": 1786536620.805772,
     "ast_hash": "888f03c095219bf591b5bfd5edcb7229",
-    "semantic_hash": ""
+    "semantic_hash": "888f03c095219bf591b5bfd5edcb7229"
   },
   "Commander/extensions/raycast/assets/thumbnails/50x512.webp": {
     "mtime": 1786536620.805829,
     "ast_hash": "da2d4344d0031f7c0b5f86de2234668a",
-    "semantic_hash": ""
+    "semantic_hash": "da2d4344d0031f7c0b5f86de2234668a"
   },
   "Commander/extensions/raycast/assets/thumbnails/50x64.webp": {
     "mtime": 1786536620.805882,
     "ast_hash": "e3a5763ca0ce945ded0b8df4834a355d",
-    "semantic_hash": ""
+    "semantic_hash": "e3a5763ca0ce945ded0b8df4834a355d"
   },
   "Commander/extensions/raycast/assets/thumbnails/512x100.webp": {
     "mtime": 1786536620.8059347,
     "ast_hash": "cc72936f7b7da2b4008eff47efb93631",
-    "semantic_hash": ""
+    "semantic_hash": "cc72936f7b7da2b4008eff47efb93631"
   },
   "Commander/extensions/raycast/assets/thumbnails/512x1024.webp": {
     "mtime": 1786536620.8060076,
     "ast_hash": "732f430fb86a397e3ad1fa686d55abfc",
-    "semantic_hash": ""
+    "semantic_hash": "732f430fb86a397e3ad1fa686d55abfc"
   },
   "Commander/extensions/raycast/assets/thumbnails/512x128.webp": {
     "mtime": 1786536620.806066,
     "ast_hash": "a7710eaa2749b8b8b199c0b25c65728a",
-    "semantic_hash": ""
+    "semantic_hash": "a7710eaa2749b8b8b199c0b25c65728a"
   },
   "Commander/extensions/raycast/assets/thumbnails/512x256.webp": {
     "mtime": 1786536620.806127,
     "ast_hash": "041d11be4cf4820f65a9656231130f16",
-    "semantic_hash": ""
+    "semantic_hash": "041d11be4cf4820f65a9656231130f16"
   },
   "Commander/extensions/raycast/assets/thumbnails/512x32.webp": {
     "mtime": 1786536620.8061922,
     "ast_hash": "1eaaf0dd19b76951ad9e849a11765fec",
-    "semantic_hash": ""
+    "semantic_hash": "1eaaf0dd19b76951ad9e849a11765fec"
   },
   "Commander/extensions/raycast/assets/thumbnails/512x50.webp": {
     "mtime": 1786536620.8062527,
     "ast_hash": "01b05e27e01267fc666d7c582713f235",
-    "semantic_hash": ""
+    "semantic_hash": "01b05e27e01267fc666d7c582713f235"
   },
   "Commander/extensions/raycast/assets/thumbnails/512x512.webp": {
     "mtime": 1786536620.8063092,
     "ast_hash": "32567f9cf361e3672899a22d8cc61023",
-    "semantic_hash": ""
+    "semantic_hash": "32567f9cf361e3672899a22d8cc61023"
   },
   "Commander/extensions/raycast/assets/thumbnails/512x64.webp": {
     "mtime": 1786536620.8063695,
     "ast_hash": "d6b3d3644a51fd150ae5ec6a62a988f6",
-    "semantic_hash": ""
+    "semantic_hash": "d6b3d3644a51fd150ae5ec6a62a988f6"
   },
   "Commander/extensions/raycast/assets/thumbnails/64x100.webp": {
     "mtime": 1786536620.8064349,
     "ast_hash": "0b24192d3e2827e3a401aca95040c22d",
-    "semantic_hash": ""
+    "semantic_hash": "0b24192d3e2827e3a401aca95040c22d"
   },
   "Commander/extensions/raycast/assets/thumbnails/64x1024.webp": {
     "mtime": 1786536620.8064997,
     "ast_hash": "f4d1778f5c0150f3f204a96561b29e64",
-    "semantic_hash": ""
+    "semantic_hash": "f4d1778f5c0150f3f204a96561b29e64"
   },
   "Commander/extensions/raycast/assets/thumbnails/64x128.webp": {
     "mtime": 1786536620.8065627,
     "ast_hash": "732f430fb86a397e3ad1fa686d55abfc",
-    "semantic_hash": ""
+    "semantic_hash": "732f430fb86a397e3ad1fa686d55abfc"
   },
   "Commander/extensions/raycast/assets/thumbnails/64x256.webp": {
     "mtime": 1786536620.8066275,
     "ast_hash": "15c4bef51a849699df98c02f777ab262",
-    "semantic_hash": ""
+    "semantic_hash": "15c4bef51a849699df98c02f777ab262"
   },
   "Commander/extensions/raycast/assets/thumbnails/64x32.webp": {
     "mtime": 1786536620.8066907,
     "ast_hash": "041d11be4cf4820f65a9656231130f16",
-    "semantic_hash": ""
+    "semantic_hash": "041d11be4cf4820f65a9656231130f16"
   },
   "Commander/extensions/raycast/assets/thumbnails/64x50.webp": {
     "mtime": 1786536620.806775,
     "ast_hash": "ad8e4eb889bf1d22d0f99138e7182b55",
-    "semantic_hash": ""
+    "semantic_hash": "ad8e4eb889bf1d22d0f99138e7182b55"
   },
   "Commander/extensions/raycast/assets/thumbnails/64x512.webp": {
     "mtime": 1786536620.8068404,
     "ast_hash": "fcac12d399356633af86adc6d16bacca",
-    "semantic_hash": ""
+    "semantic_hash": "fcac12d399356633af86adc6d16bacca"
   },
   "Commander/extensions/raycast/assets/thumbnails/64x64.webp": {
     "mtime": 1786536620.8069072,
     "ast_hash": "0815fe49880b0ead9e894b93b02631be",
-    "semantic_hash": ""
+    "semantic_hash": "0815fe49880b0ead9e894b93b02631be"
   },
   "Commander/extensions/raycast/assets/thumbnails/_original.webp": {
     "mtime": 1786536620.807077,
     "ast_hash": "42989f6a0a723d5a36fc37f813ece386",
-    "semantic_hash": ""
+    "semantic_hash": "42989f6a0a723d5a36fc37f813ece386"
   },
   "Commander/extensions/raycast/assets/thumbnails/bloom.webp": {
     "mtime": 1786536620.8072524,
     "ast_hash": "905b8ee51ec19c18615b35d32b73c7e9",
-    "semantic_hash": ""
+    "semantic_hash": "905b8ee51ec19c18615b35d32b73c7e9"
   },
   "Commander/extensions/raycast/assets/thumbnails/bokeh_blur.webp": {
     "mtime": 1786536620.8074458,
     "ast_hash": "0942133950d62e9fe67c942ecaf98a3b",
-    "semantic_hash": ""
+    "semantic_hash": "0942133950d62e9fe67c942ecaf98a3b"
   },
   "Commander/extensions/raycast/assets/thumbnails/box_blur.webp": {
     "mtime": 1786536620.8076262,
     "ast_hash": "3b24ddf442102a6af69d2ddb9b91c2aa",
-    "semantic_hash": ""
+    "semantic_hash": "3b24ddf442102a6af69d2ddb9b91c2aa"
   },
   "Commander/extensions/raycast/assets/thumbnails/checkerboard.webp": {
     "mtime": 1786536620.8078704,
     "ast_hash": "f0eb21741fb34eb1de2f732c96eced89",
-    "semantic_hash": ""
+    "semantic_hash": "f0eb21741fb34eb1de2f732c96eced89"
   },
   "Commander/extensions/raycast/assets/thumbnails/chrome.webp": {
     "mtime": 1786536620.8079994,
     "ast_hash": "936d222a57d7bee20dde1ab96817e732",
-    "semantic_hash": ""
+    "semantic_hash": "936d222a57d7bee20dde1ab96817e732"
   },
   "Commander/extensions/raycast/assets/thumbnails/circular_screen.webp": {
     "mtime": 1786536620.8081667,
     "ast_hash": "4f206bbf130fc26f08fffc648ecb265a",
-    "semantic_hash": ""
+    "semantic_hash": "4f206bbf130fc26f08fffc648ecb265a"
   },
   "Commander/extensions/raycast/assets/thumbnails/circular_wrap.webp": {
     "mtime": 1786536620.808479,
     "ast_hash": "1b6bfc08cab1c4f708bc2aebd5b99112",
-    "semantic_hash": ""
+    "semantic_hash": "1b6bfc08cab1c4f708bc2aebd5b99112"
   },
   "Commander/extensions/raycast/assets/thumbnails/cmyk_halftone.webp": {
     "mtime": 1786536620.808754,
     "ast_hash": "1d2110f60ed7d9be349d37ee0c051530",
-    "semantic_hash": ""
+    "semantic_hash": "1d2110f60ed7d9be349d37ee0c051530"
   },
   "Commander/extensions/raycast/assets/thumbnails/comic.webp": {
     "mtime": 1786536620.8088684,
     "ast_hash": "0ccc00d30a83cbddb78005f70ceed87e",
-    "semantic_hash": ""
+    "semantic_hash": "0ccc00d30a83cbddb78005f70ceed87e"
   },
   "Commander/extensions/raycast/assets/thumbnails/constant_color.webp": {
     "mtime": 1786536620.808939,
     "ast_hash": "95846f980ec4e631878f5a88668f05bf",
-    "semantic_hash": ""
+    "semantic_hash": "95846f980ec4e631878f5a88668f05bf"
   },
   "Commander/extensions/raycast/assets/thumbnails/crystallize.webp": {
     "mtime": 1786536620.809009,
     "ast_hash": "2282d54aef6a99ca29a2bc0a41539796",
-    "semantic_hash": ""
+    "semantic_hash": "2282d54aef6a99ca29a2bc0a41539796"
   },
   "Commander/extensions/raycast/assets/thumbnails/depth_of_field.webp": {
     "mtime": 1786536620.8091803,
     "ast_hash": "8663d71c360de2419ed9f857e940948f",
-    "semantic_hash": ""
+    "semantic_hash": "8663d71c360de2419ed9f857e940948f"
   },
   "Commander/extensions/raycast/assets/thumbnails/disc_blur.webp": {
     "mtime": 1786536620.8092802,
     "ast_hash": "b0f031da64eaac0ec0c1bbe5798d13a4",
-    "semantic_hash": ""
+    "semantic_hash": "b0f031da64eaac0ec0c1bbe5798d13a4"
   },
   "Commander/extensions/raycast/assets/thumbnails/dither.webp": {
     "mtime": 1786536620.8093503,
     "ast_hash": "95572d605e0a0701f160a6100adc84c8",
-    "semantic_hash": ""
+    "semantic_hash": "95572d605e0a0701f160a6100adc84c8"
   },
   "Commander/extensions/raycast/assets/thumbnails/document_enhancement.webp": {
     "mtime": 1786536620.8094523,
     "ast_hash": "0ea9e1bb6c7d0410db6f66a50502601c",
-    "semantic_hash": ""
+    "semantic_hash": "0ea9e1bb6c7d0410db6f66a50502601c"
   },
   "Commander/extensions/raycast/assets/thumbnails/dot_screen.webp": {
     "mtime": 1786536620.8097546,
     "ast_hash": "36086cef3a65dee318937c912dc3738a",
-    "semantic_hash": ""
+    "semantic_hash": "36086cef3a65dee318937c912dc3738a"
   },
   "Commander/extensions/raycast/assets/thumbnails/edge_work.webp": {
     "mtime": 1786536620.8100271,
     "ast_hash": "86d16e84030afa7824eaeaa260c66a54",
-    "semantic_hash": ""
+    "semantic_hash": "86d16e84030afa7824eaeaa260c66a54"
   },
   "Commander/extensions/raycast/assets/thumbnails/edges.webp": {
     "mtime": 1786536620.8101983,
     "ast_hash": "2ad52cc3af5d49b0804c7381bbba6f13",
-    "semantic_hash": ""
+    "semantic_hash": "2ad52cc3af5d49b0804c7381bbba6f13"
   },
   "Commander/extensions/raycast/assets/thumbnails/fade.webp": {
     "mtime": 1786536620.8103426,
     "ast_hash": "3a3cf0429d02bf05e063a69d36fa84ee",
-    "semantic_hash": ""
+    "semantic_hash": "3a3cf0429d02bf05e063a69d36fa84ee"
   },
   "Commander/extensions/raycast/assets/thumbnails/gaussian_blur.webp": {
     "mtime": 1786536620.810519,
     "ast_hash": "16369ec24e0da7c53daf862c679aa033",
-    "semantic_hash": ""
+    "semantic_hash": "16369ec24e0da7c53daf862c679aa033"
   },
   "Commander/extensions/raycast/assets/thumbnails/gloom.webp": {
     "mtime": 1786536620.8107083,
     "ast_hash": "b29c6e7ddb60632792dbfae9fbc890e4",
-    "semantic_hash": ""
+    "semantic_hash": "b29c6e7ddb60632792dbfae9fbc890e4"
   },
   "Commander/extensions/raycast/assets/thumbnails/hatched_screen.webp": {
     "mtime": 1786536620.8111053,
     "ast_hash": "948e165a442a0eb0a1f901b111a02467",
-    "semantic_hash": ""
+    "semantic_hash": "948e165a442a0eb0a1f901b111a02467"
   },
   "Commander/extensions/raycast/assets/thumbnails/hexagonal_pixellate.webp": {
     "mtime": 1786536620.8112147,
     "ast_hash": "f4963b34bc1944cf2b636ad0f95da2a8",
-    "semantic_hash": ""
+    "semantic_hash": "f4963b34bc1944cf2b636ad0f95da2a8"
   },
   "Commander/extensions/raycast/assets/thumbnails/instant.webp": {
     "mtime": 1786536620.8113556,
     "ast_hash": "f2cd7ef0a5e72b45d059aa193c0384c1",
-    "semantic_hash": ""
+    "semantic_hash": "f2cd7ef0a5e72b45d059aa193c0384c1"
   },
   "Commander/extensions/raycast/assets/thumbnails/invert.webp": {
     "mtime": 1786536620.8114946,
     "ast_hash": "d9ed13703efc39150d853b65eb0c84e0",
-    "semantic_hash": ""
+    "semantic_hash": "d9ed13703efc39150d853b65eb0c84e0"
   },
   "Commander/extensions/raycast/assets/thumbnails/kaleidoscope.webp": {
     "mtime": 1786536620.8115945,
     "ast_hash": "be61b6db0a1f2f177d0274bd7b7cb66a",
-    "semantic_hash": ""
+    "semantic_hash": "be61b6db0a1f2f177d0274bd7b7cb66a"
   },
   "Commander/extensions/raycast/assets/thumbnails/lenticular_halo.webp": {
     "mtime": 1786536620.811812,
     "ast_hash": "558e8d0d77ec11a09a17bd5f8fa72ddb",
-    "semantic_hash": ""
+    "semantic_hash": "558e8d0d77ec11a09a17bd5f8fa72ddb"
   },
   "Commander/extensions/raycast/assets/thumbnails/line_overlay.webp": {
     "mtime": 1786536620.8119755,
     "ast_hash": "8dc730c62c01f34c5ea44e11946f5496",
-    "semantic_hash": ""
+    "semantic_hash": "8dc730c62c01f34c5ea44e11946f5496"
   },
   "Commander/extensions/raycast/assets/thumbnails/line_screen.webp": {
     "mtime": 1786536620.8120763,
     "ast_hash": "81fb85f15e2917dced6f36ae1e26f3cc",
-    "semantic_hash": ""
+    "semantic_hash": "81fb85f15e2917dced6f36ae1e26f3cc"
   },
   "Commander/extensions/raycast/assets/thumbnails/linear_gradient.webp": {
     "mtime": 1786536620.8122425,
     "ast_hash": "a1931487888eb18e401c1f0359138f1d",
-    "semantic_hash": ""
+    "semantic_hash": "a1931487888eb18e401c1f0359138f1d"
   },
   "Commander/extensions/raycast/assets/thumbnails/maximum_component.webp": {
     "mtime": 1786536620.8123279,
     "ast_hash": "6944d08bf12d43bc3c9844e25e1b7baa",
-    "semantic_hash": ""
+    "semantic_hash": "6944d08bf12d43bc3c9844e25e1b7baa"
   },
   "Commander/extensions/raycast/assets/thumbnails/median.webp": {
     "mtime": 1786536620.8124404,
     "ast_hash": "9200416b8dc0677b89f9c5c1fcb2b418",
-    "semantic_hash": ""
+    "semantic_hash": "9200416b8dc0677b89f9c5c1fcb2b418"
   },
   "Commander/extensions/raycast/assets/thumbnails/minimum_component.webp": {
     "mtime": 1786536620.812589,
     "ast_hash": "108ff4dcfc08374d561579cd224aa4fc",
-    "semantic_hash": ""
+    "semantic_hash": "108ff4dcfc08374d561579cd224aa4fc"
   },
   "Commander/extensions/raycast/assets/thumbnails/mono.webp": {
     "mtime": 1786536620.812665,
     "ast_hash": "21dfba9be9bf36a22422dd93e147aa87",
-    "semantic_hash": ""
+    "semantic_hash": "21dfba9be9bf36a22422dd93e147aa87"
   },
   "Commander/extensions/raycast/assets/thumbnails/motion_blur.webp": {
     "mtime": 1786536620.81276,
     "ast_hash": "31c7205d670ac42529ced2fb78f9da29",
-    "semantic_hash": ""
+    "semantic_hash": "31c7205d670ac42529ced2fb78f9da29"
   },
   "Commander/extensions/raycast/assets/thumbnails/noir.webp": {
     "mtime": 1786536620.8128963,
     "ast_hash": "de551c31f5c6cea7b69889f4d4f9fcf3",
-    "semantic_hash": ""
+    "semantic_hash": "de551c31f5c6cea7b69889f4d4f9fcf3"
   },
   "Commander/extensions/raycast/assets/thumbnails/noise_reduction.webp": {
     "mtime": 1786536620.8130364,
     "ast_hash": "43833aaa0246a1a922d3661a845c933f",
-    "semantic_hash": ""
+    "semantic_hash": "43833aaa0246a1a922d3661a845c933f"
   },
   "Commander/extensions/raycast/assets/thumbnails/pixellate.webp": {
     "mtime": 1786536620.8131182,
     "ast_hash": "1d710e4d9bdebe5ae4dd855cc8c01d9f",
-    "semantic_hash": ""
+    "semantic_hash": "1d710e4d9bdebe5ae4dd855cc8c01d9f"
   },
   "Commander/extensions/raycast/assets/thumbnails/pointillize.webp": {
     "mtime": 1786536620.8132274,
     "ast_hash": "d58c3f4efc03f82543ac88a05c6c091b",
-    "semantic_hash": ""
+    "semantic_hash": "d58c3f4efc03f82543ac88a05c6c091b"
   },
   "Commander/extensions/raycast/assets/thumbnails/posterize.webp": {
     "mtime": 1786536620.8133419,
     "ast_hash": "21f49b632b46029d2cca752885486e76",
-    "semantic_hash": ""
+    "semantic_hash": "21f49b632b46029d2cca752885486e76"
   },
   "Commander/extensions/raycast/assets/thumbnails/process.webp": {
     "mtime": 1786536620.8134975,
     "ast_hash": "ffb15687b1d75afbc854f299f228caa6",
-    "semantic_hash": ""
+    "semantic_hash": "ffb15687b1d75afbc854f299f228caa6"
   },
   "Commander/extensions/raycast/assets/thumbnails/radial_gradient.webp": {
     "mtime": 1786536620.8135967,
     "ast_hash": "65d46402af8a5965626f364733308f0f",
-    "semantic_hash": ""
+    "semantic_hash": "65d46402af8a5965626f364733308f0f"
   },
   "Commander/extensions/raycast/assets/thumbnails/random.webp": {
     "mtime": 1786536620.8144386,
     "ast_hash": "428e1dd14b1836c4965e8c32e0c457a3",
-    "semantic_hash": ""
+    "semantic_hash": "428e1dd14b1836c4965e8c32e0c457a3"
   },
   "Commander/extensions/raycast/assets/thumbnails/sepia.webp": {
     "mtime": 1786536620.814555,
     "ast_hash": "fe003ad29ca7f6839f5cdf0a08ce05ad",
-    "semantic_hash": ""
+    "semantic_hash": "fe003ad29ca7f6839f5cdf0a08ce05ad"
   },
   "Commander/extensions/raycast/assets/thumbnails/sharpen_luminance.webp": {
     "mtime": 1786536620.814627,
     "ast_hash": "c92ca1a3a6e4bd88150f84bf16aed1b4",
-    "semantic_hash": ""
+    "semantic_hash": "c92ca1a3a6e4bd88150f84bf16aed1b4"
   },
   "Commander/extensions/raycast/assets/thumbnails/star_shine.webp": {
     "mtime": 1786536620.814729,
     "ast_hash": "35c86ebd743f70663fbe80bd11acb428",
-    "semantic_hash": ""
+    "semantic_hash": "35c86ebd743f70663fbe80bd11acb428"
   },
   "Commander/extensions/raycast/assets/thumbnails/stripes.webp": {
     "mtime": 1786536620.8148088,
     "ast_hash": "a148cc8b115b3a47dfef8122274c669c",
-    "semantic_hash": ""
+    "semantic_hash": "a148cc8b115b3a47dfef8122274c669c"
   },
   "Commander/extensions/raycast/assets/thumbnails/sunbeams.webp": {
     "mtime": 1786536620.8149354,
     "ast_hash": "d7d3126133d4c94355be69b54bbb7f51",
-    "semantic_hash": ""
+    "semantic_hash": "d7d3126133d4c94355be69b54bbb7f51"
   },
   "Commander/extensions/raycast/assets/thumbnails/thermal.webp": {
     "mtime": 1786536620.8150458,
     "ast_hash": "a21d561e5aa4f1036727414d74cd02ef",
-    "semantic_hash": ""
+    "semantic_hash": "a21d561e5aa4f1036727414d74cd02ef"
   },
   "Commander/extensions/raycast/assets/thumbnails/tonal.webp": {
     "mtime": 1786536620.8151433,
     "ast_hash": "b9d4c514eaf654447e423641d9ed2a0c",
-    "semantic_hash": ""
+    "semantic_hash": "b9d4c514eaf654447e423641d9ed2a0c"
   },
   "Commander/extensions/raycast/assets/thumbnails/transfer.webp": {
     "mtime": 1786536620.815329,
     "ast_hash": "4e41535b1550f33c0703997e541319c5",
-    "semantic_hash": ""
+    "semantic_hash": "4e41535b1550f33c0703997e541319c5"
   },
   "Commander/extensions/raycast/assets/thumbnails/vignette.webp": {
     "mtime": 1786536620.8155801,
     "ast_hash": "664f0310495d70138e6195e9983e88cf",
-    "semantic_hash": ""
+    "semantic_hash": "664f0310495d70138e6195e9983e88cf"
   },
   "Commander/extensions/raycast/assets/thumbnails/x-ray.webp": {
     "mtime": 1786536620.8156867,
     "ast_hash": "324eec49b1d3f209b01042fa87201684",
-    "semantic_hash": ""
+    "semantic_hash": "324eec49b1d3f209b01042fa87201684"
   },
   "Commander/extensions/raycast/assets/thumbnails/zoom_blur.webp": {
     "mtime": 1786536620.8157976,
     "ast_hash": "3db1646f29d70e7384b34ea67d1a6044",
-    "semantic_hash": ""
+    "semantic_hash": "3db1646f29d70e7384b34ea67d1a6044"
   },
   "Commander/extensions/raycast/metadata/sips-1.png": {
     "mtime": 1786536620.844392,
     "ast_hash": "2ef549e62cfa889db1897b1b8b130cb4",
-    "semantic_hash": ""
+    "semantic_hash": "2ef549e62cfa889db1897b1b8b130cb4"
   },
   "Commander/extensions/raycast/metadata/sips-2.png": {
     "mtime": 1786536620.8495367,
     "ast_hash": "ed0dbc2303a6dad26fb30e0844bdd622",
-    "semantic_hash": ""
+    "semantic_hash": "ed0dbc2303a6dad26fb30e0844bdd622"
   },
   "Commander/extensions/raycast/metadata/sips-3.png": {
     "mtime": 1786536620.8563168,
     "ast_hash": "67ff5fa3f6758b5d34e8942d98eda6bb",
-    "semantic_hash": ""
+    "semantic_hash": "67ff5fa3f6758b5d34e8942d98eda6bb"
   },
   "Commander/extensions/raycast/metadata/sips-4.png": {
     "mtime": 1786536620.862555,
     "ast_hash": "60a7fb5a6eedd8efc2c1da97c3aa0bab",
-    "semantic_hash": ""
+    "semantic_hash": "60a7fb5a6eedd8efc2c1da97c3aa0bab"
   },
   "Commander/apps/daemon/src/services/applications.test.ts": {
     "mtime": 1787575691.4216032,
     "ast_hash": "c142768706b2895fbbd770d4f224a21b",
-    "semantic_hash": ""
+    "semantic_hash": "c142768706b2895fbbd770d4f224a21b"
   },
   "Commander/hosts/macos/Sources/Commander/Services/FullDiskAccessService.swift": {
     "mtime": 1787574863.7071347,
     "ast_hash": "3310fd078377d009dbe8fbe6a9aaae3e",
-    "semantic_hash": ""
+    "semantic_hash": "3310fd078377d009dbe8fbe6a9aaae3e"
+  },
+  "Commander/apps/desktop-ui/src/lib/nativeFileIcons.ts": {
+    "mtime": 1787631529.238925,
+    "ast_hash": "02c86844d101d877efe770de166bdcce",
+    "semantic_hash": "02c86844d101d877efe770de166bdcce"
+  },
+  "Commander/hosts/macos/.build/debug/Commander.swiftmodule/arm64-apple-macos.abi.json": {
+    "mtime": 1787631622.518144,
+    "ast_hash": "0a4af882c2c2f56d36e8540ae8c40bbf",
+    "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
+  },
+  "Commander/hosts/macos/.build/debug/CommanderTests.swiftmodule/arm64-apple-macos.abi.json": {
+    "mtime": 1787631624.8625636,
+    "ast_hash": "0a4af882c2c2f56d36e8540ae8c40bbf",
+    "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
+  },
+  "Commander/hosts/macos/.build/release/Commander.swiftmodule/arm64-apple-macos.abi.json": {
+    "mtime": 1787576180.0429916,
+    "ast_hash": "0a4af882c2c2f56d36e8540ae8c40bbf",
+    "semantic_hash": "0a4af882c2c2f56d36e8540ae8c40bbf"
   }
 }
