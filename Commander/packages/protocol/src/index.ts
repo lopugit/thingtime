@@ -1174,7 +1174,7 @@ export interface SystemMetrics {
       availableBytes: number;
       purgeableBytes: number;
     };
-    notRespondingApplications: SystemUnresponsiveApplication[];
+    responsivenessApplications: SystemResponsivenessApplication[];
     processes: SystemProcessMetric[];
     gpu: {
       name: string;
@@ -1200,9 +1200,11 @@ export interface SystemProcessMetric {
   gpuPercent?: number;
 }
 
-export interface SystemUnresponsiveApplication {
+export interface SystemResponsivenessApplication {
   pid: number;
   name: string;
+  kind: 'ui' | 'agent' | 'service';
+  signal: 'repeatedAccessibilityTimeout' | 'accessibilityProbeInconclusive';
 }
 
 export interface ThingtimeNetworkProbe {

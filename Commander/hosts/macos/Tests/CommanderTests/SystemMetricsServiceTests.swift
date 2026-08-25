@@ -70,12 +70,37 @@ final class SystemMetricsServiceTests: XCTestCase {
         row["cpuPercent"] is Double && row["residentMemoryBytes"] is UInt64 &&
         row["diskReadBytesPerSecond"] is Double && row["diskWriteBytesPerSecond"] is Double
     })
-    XCTAssertNotNil(machine?["notRespondingApplications"] as? [[String: Any]])
+    XCTAssertNotNil(machine?["responsivenessApplications"] as? [[String: Any]])
     XCTAssertNotNil(machine?["gpu"] as? [String: Any])
   }
 
-  func testOnlyAccessibilityTimeoutsAreTreatedAsNotResponding() {
-    XCTAssertTrue(ApplicationResponsivenessService.errorMeansNotResponding(.cannotComplete))
-    XCTAssertFalse(ApplicationResponsivenessService.errorMeansNotResponding(.apiDisabled))
+  func testResponsivenessSignalsSeparateConfirmedUIFromAgentAndServiceProbeLimits() {
+    XCTAssertEqual(ApplicationResponsivenessService.applicationKind(for: .regular), .ui)
+    XCTAssertEqual(ApplicationResponsivenessService.applicationKind(for: .accessory), .agent)
+    XCTAssertEqual(ApplicationResponsivenessService.applicationKind(for: .prohibited), .service)
+
+    XCTAssertEqual(
+      ApplicationResponsivenessService.signal(
+        for: .ui,
+        firstProbe: .timedOut,
+        confirmationProbe: .timedOut
+      ),
+      .repeatedAccessibilityTimeout
+    )
+    XCTAssertNil(
+      ApplicationResponsivenessService.signal(
+        for: .ui,
+        firstProbe: .timedOut,
+        confirmationProbe: .responded
+      )
+    )
+    XCTAssertEqual(
+      ApplicationResponsivenessService.signal(for: .agent, firstProbe: .timedOut),
+      .accessibilityProbeInconclusive
+    )
+    XCTAssertEqual(
+      ApplicationResponsivenessService.signal(for: .service, firstProbe: .timedOut),
+      .accessibilityProbeInconclusive
+    )
   }
 }

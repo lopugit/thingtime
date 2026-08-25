@@ -125,7 +125,10 @@ vi.mock('../lib/nativeBridge.js', () => ({
           availableBytes: 300 * 1024 * 1024 * 1024,
           purgeableBytes: 12 * 1024 * 1024 * 1024,
         },
-        notRespondingApplications: [{ pid: 101, name: 'Thingtime' }],
+        responsivenessApplications: [
+          { pid: 101, name: 'Thingtime', kind: 'ui', signal: 'repeatedAccessibilityTimeout' },
+          { pid: 102, name: 'Thingtime Agent', kind: 'agent', signal: 'accessibilityProbeInconclusive' },
+        ],
         processes: [
           {
             pid: 99,
@@ -270,12 +273,19 @@ describe('Commander settings deep links', () => {
     expect(screen.getByText(/nothing here leaves this device/i)).toBeVisible();
   });
 
-  it('offers quit, force quit, and restart controls for an unresponsive app', async () => {
+  it('labels responsiveness evidence and only offers controls for a confirmed UI timeout', async () => {
     window.history.replaceState({}, '', '/settings.html?tab=activity');
     render(<Settings state={state()} />);
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Not responding apps' })).toBeVisible());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Responsiveness signals' })).toBeVisible(),
+    );
     expect(screen.getByText('Thingtime')).toBeVisible();
+    expect(screen.getByText('UI app')).toBeVisible();
+    expect(screen.getByText('2 AX timeouts')).toBeVisible();
+    expect(screen.getByText('Thingtime Agent')).toBeVisible();
+    expect(screen.getByText('Agent')).toBeVisible();
+    expect(screen.getByText('AX probe inconclusive')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Quit' }));
     await waitFor(() =>
       expect(nativeRequest).toHaveBeenCalledWith('application.control', { pid: 101, action: 'quit' }),

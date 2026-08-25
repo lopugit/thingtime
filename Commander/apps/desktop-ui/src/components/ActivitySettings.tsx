@@ -3,6 +3,7 @@ import type {
   CommanderSettings,
   SystemMetrics,
   SystemProcessMetric,
+  SystemResponsivenessApplication,
   ThingtimeNetworkProbe,
 } from '@commander/protocol';
 import {
@@ -280,7 +281,7 @@ export function ActivitySettings({
         onRunSpeedTest={() => void runSpeedTest()}
       />
       <UnresponsiveApplications
-        applications={machine?.notRespondingApplications ?? []}
+        applications={machine?.responsivenessApplications ?? []}
         onControl={controlUnresponsiveApplication}
       />
       <ProcessTable
@@ -312,7 +313,7 @@ function UnresponsiveApplications({
   applications,
   onControl,
 }: {
-  applications: Array<{ pid: number; name: string }>;
+  applications: SystemResponsivenessApplication[];
   onControl(pid: number, action: ApplicationControlAction): Promise<void>;
 }) {
   const [pendingPID, setPendingPID] = useState<number>();
@@ -330,62 +331,99 @@ function UnresponsiveApplications({
     }
   };
 
+  const confirmedCount = applications.filter(
+    (application) => application.signal === 'repeatedAccessibilityTimeout',
+  ).length;
+  const inconclusiveCount = applications.length - confirmedCount;
+  const hasConfirmedTimeout = confirmedCount > 0;
+
   return (
     <section
-      className="activity-section activity-unresponsive-applications"
-      aria-labelledby="not-responding-applications-title"
+      className={`activity-section activity-unresponsive-applications${hasConfirmedTimeout ? ' has-confirmed-timeout' : ''}`}
+      aria-labelledby="responsiveness-applications-title"
     >
       <div className="activity-section-heading">
         <div>
-          <h3 id="not-responding-applications-title">
-            <AlertTriangle /> Not responding apps
+          <h3 id="responsiveness-applications-title">
+            {hasConfirmedTimeout ? <AlertTriangle /> : <Activity />} Responsiveness signals
           </h3>
-          <p>macOS reported that these apps did not answer an accessibility request.</p>
+          <p>
+            UI apps require two timed-out accessibility probes before Commander calls them unresponsive.
+            Agents and services stay visible, but macOS has no generic public health probe for them.
+          </p>
         </div>
-        <span>{applications.length} detected</span>
+        <span>
+          {hasConfirmedTimeout ? `${confirmedCount} confirmed` : `${inconclusiveCount} informational`}
+        </span>
       </div>
       <p className="activity-unresponsive-note">
-        Force quitting can lose unsaved work. Quit and restart first asks the app to quit, then force quits it
-        only if needed.
+        Commander only enables app controls for a confirmed UI timeout. An accessibility result from an agent
+        or service is diagnostic context, not evidence that the process is frozen.
       </p>
       <div className="activity-unresponsive-list">
         {applications.map((application) => {
           const pending = pendingPID === application.pid;
+          const confirmed = application.signal === 'repeatedAccessibilityTimeout';
           return (
-            <div className="activity-unresponsive-row" key={application.pid}>
+            <div
+              className={`activity-unresponsive-row${confirmed ? ' confirmed' : ' informational'}`}
+              key={application.pid}
+            >
               <div className="activity-unresponsive-app-name">
-                <AlertTriangle aria-hidden="true" />
+                {confirmed ? <AlertTriangle aria-hidden="true" /> : <Activity aria-hidden="true" />}
                 <div>
                   <strong>{application.name}</strong>
-                  <small>PID {application.pid}</small>
+                  <div
+                    className="activity-unresponsive-badges"
+                    aria-label={`Process classification for ${application.name}`}
+                  >
+                    <span className="activity-unresponsive-badge kind">
+                      {application.kind === 'ui'
+                        ? 'UI app'
+                        : application.kind === 'agent'
+                          ? 'Agent'
+                          : 'Service'}
+                    </span>
+                    <span className={`activity-unresponsive-badge signal${confirmed ? ' confirmed' : ''}`}>
+                      {confirmed ? '2 AX timeouts' : 'AX probe inconclusive'}
+                    </span>
+                  </div>
+                  <small>
+                    PID {application.pid} ·{' '}
+                    {confirmed
+                      ? 'Repeated UI accessibility timeouts; this is actionable, but can still be transient.'
+                      : 'Process is alive; its type has no generic macOS responsiveness test.'}
+                  </small>
                 </div>
               </div>
-              <div className="activity-unresponsive-actions">
-                <button
-                  type="button"
-                  className="activity-unresponsive-action"
-                  disabled={pending}
-                  onClick={() => void control(application.pid, 'quit')}
-                >
-                  <Power /> {pending ? 'Working…' : 'Quit'}
-                </button>
-                <button
-                  type="button"
-                  className="activity-unresponsive-action force-quit"
-                  disabled={pending}
-                  onClick={() => void control(application.pid, 'forceQuit')}
-                >
-                  <AlertTriangle /> Force quit
-                </button>
-                <button
-                  type="button"
-                  className="activity-unresponsive-action"
-                  disabled={pending}
-                  onClick={() => void control(application.pid, 'restart')}
-                >
-                  <RotateCcw /> Quit & restart
-                </button>
-              </div>
+              {!confirmed ? null : (
+                <div className="activity-unresponsive-actions">
+                  <button
+                    type="button"
+                    className="activity-unresponsive-action"
+                    disabled={pending}
+                    onClick={() => void control(application.pid, 'quit')}
+                  >
+                    <Power /> {pending ? 'Working…' : 'Quit'}
+                  </button>
+                  <button
+                    type="button"
+                    className="activity-unresponsive-action force-quit"
+                    disabled={pending}
+                    onClick={() => void control(application.pid, 'forceQuit')}
+                  >
+                    <AlertTriangle /> Force quit
+                  </button>
+                  <button
+                    type="button"
+                    className="activity-unresponsive-action"
+                    disabled={pending}
+                    onClick={() => void control(application.pid, 'restart')}
+                  >
+                    <RotateCcw /> Quit & restart
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
