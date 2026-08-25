@@ -76,7 +76,7 @@ export type ThingtimeSchema = {
   example: Record<string, unknown>;
 };
 
-export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'inherit'] as const;
+export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'hidden', 'inherit'] as const;
 export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
 // Protected operational Things created when an admin migration throws. The
@@ -118,6 +118,10 @@ export const CI_CONTROL_THINGTIME = [
 //                       through the generic routes; acl entries are not).
 //   tt:inherit          attached things (comments, reactions) — as visible as
 //                       their target
+//   tt:hidden           unlisted: matches NO viewer here (owner short-circuit
+//                       aside) — visibility comes from the doc's random
+//                       linkKey instead: anyone presenting it via a ?key= URL
+//                       may view (things.ts canView). Never in feeds/search.
 //
 // Examples: ['tt:all'] is public; ['-tt:all', 'tt:userFriends', 'tt:user'] is
 // friends-only; ['tt:all', '-tt:user/somebody'] is public except one user.
@@ -135,6 +139,7 @@ export const ACL_OWNER = 'tt:user';
 export const ACL_FRIENDS = 'tt:userFriends';
 export const ACL_FAMILY = 'tt:userFamily';
 export const ACL_INHERIT = 'tt:inherit';
+export const ACL_HIDDEN = 'tt:hidden';
 export const ACL_USER_PREFIX = 'tt:user/';
 export const ACL_APP_PREFIX = 'tt:app/';
 
@@ -149,6 +154,7 @@ export const LEGACY_VISIBILITY_ACLS: Record<ThingVisibility, string[]> = {
   friends: ['-tt:all', ACL_FRIENDS, ACL_OWNER],
   family: ['-tt:all', ACL_FAMILY, ACL_OWNER],
   private: [ACL_OWNER],
+  hidden: [ACL_HIDDEN, ACL_OWNER],
   inherit: [ACL_INHERIT]
 };
 
@@ -160,6 +166,7 @@ export const visibilityFromAcl = (acl: string[]): ThingVisibility => {
   if (acl.includes(ACL_ALL)) return 'public';
   if (acl.includes(ACL_FRIENDS)) return 'friends';
   if (acl.includes(ACL_FAMILY)) return 'family';
+  if (acl.includes(ACL_HIDDEN)) return 'hidden';
   return 'private';
 };
 

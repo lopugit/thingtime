@@ -29,7 +29,7 @@ export type FeedAuthor = {
 };
 
 export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
-export type PostVisibility = 'public' | 'friends' | 'family' | 'private';
+export type PostVisibility = 'public' | 'friends' | 'family' | 'private' | 'hidden';
 
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
 
@@ -79,6 +79,8 @@ export type PublicPost = {
   acl: string[];
   author: FeedAuthor | null;
   visibility: PostVisibility;
+  // owner-only, hidden posts only: the secret behind /post/<id>?key=<linkKey>
+  linkKey?: string;
   text: string;
   images: string[];
   // Stable metadata only. Content always resolves through the authenticated
@@ -166,7 +168,8 @@ export const CIRCLE_META: Record<PostVisibility, { label: string; emoji: string;
   public: { label: 'Public', emoji: '🌐', hint: 'Anyone on Thingtime' },
   friends: { label: 'Friends', emoji: '🤝', hint: 'Your friends circle' },
   family: { label: 'Family', emoji: '🏡', hint: 'Your family circle' },
-  private: { label: 'Private', emoji: '🔒', hint: 'Only you' }
+  private: { label: 'Private', emoji: '🔒', hint: 'Only you' },
+  hidden: { label: 'Hidden', emoji: '🕵️', hint: 'Unlisted — only people with its secret link' }
 };
 
 export const MARKETPLACE_CATEGORY_META: Record<MarketplaceCategory, { label: string; emoji: string }> = {

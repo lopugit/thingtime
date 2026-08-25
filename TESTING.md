@@ -1991,6 +1991,31 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       the mint response report the fence; the settings row badges 🌐/🔒
       restricted tokens; combines with the 🧸 sandbox. Covered by section F
       of `node scripts/verify-pat-tokens.mjs`.
+- [ ] Hidden visibility ('hidden', acl ['tt:hidden','tt:user'] + random
+      linkKey): composer/post-menu offer 🕵️ Hidden; the created/edited thing
+      returns owner-only linkKey (never in non-owner projections); anonymous
+      GET ?id= 404s without the key, 200s with ?key=<linkKey>, wrong keys stay
+      blind; the post never appears in the public feed, other users' profile
+      view, or search — the owner still sees it in their own feed/listings;
+      body.key admits other users to comment/react/save/share; PATCHing the
+      audience away from hidden kills the link INSTANTLY, and re-hiding mints
+      a FRESH key (old links stay dead — key rotation on every entry into
+      hidden); "Copy hidden link 🕵️" in the post menu copies
+      /post/<id>?key=<linkKey> and the /post page threads ?key= through to
+      the API. Covered by section G of `node scripts/verify-pat-tokens.mjs`.
+- [ ] GET bridge (/api/v1/get + per-token allowGet, "Works via GET links 🌍"
+      in the minter): only tokens minted with the tick resolve there (others
+      403), the token rides ?token= (Bearer also accepted, cookies NEVER —
+      a cookie-only request 401s, so mutating GETs can't be CSRF'd), op ∈
+      get/list/search/feed/self/create/update/upsert/delete/react/comment/
+      save/share behave exactly like their endpoints: same scopes (403s free),
+      same atomic use accounting (op=self is free introspection), same
+      sandbox + visibility fence, mirrored rate-limit keys. Args = body JSON
+      param + query params overlaid ({/[/" values parse as JSON, bare words
+      stay strings, thingtime accepts csv); responses carry Cache-Control:
+      private, no-store + Referrer-Policy: no-referrer; unknown ops 400.
+      Minted rows badge 🌍 GET links. Covered by section H of
+      `node scripts/verify-pat-tokens.mjs`.
 - [ ] PAT × app-token coexistence on the shared things routes (one resolver,
       three credential kinds): a PAT ignores Origin (no app binding), the
       OPTIONS preflight for app SDKs still serves with Authorization allowed,

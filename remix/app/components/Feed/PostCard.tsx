@@ -1198,22 +1198,37 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     try {
       const resp = await api.v1.things.update({ id: post.id, visibility: next });
       if (resp?.post) {
-        onChanged?.((prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl }));
+        // linkKey rides along: entering hidden mints a fresh secret, so the
+        // Copy hidden link item works the moment the switch lands
+        onChanged?.((prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey }));
       }
       const meta = CIRCLE_META[next];
-      lopu({ title: `Privacy set to ${meta.label} ${meta.emoji}`, status: 'success', duration: 4000 });
+      lopu({
+        title: `Privacy set to ${meta.label} ${meta.emoji}`,
+        description: next === 'hidden' ? 'Unlisted everywhere — “Copy hidden link” in the post menu shares its secret URL.' : undefined,
+        status: 'success',
+        duration: 4000
+      });
     } catch (err: any) {
       onChanged?.((prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
       lopu({ title: err?.error || 'Could not change privacy 😞', status: 'error' });
     }
   };
 
-  // menu copy-link: always the clipboard (the share icon owns the native sheet)
+  // menu copy-link: always the clipboard (the share icon owns the native
+  // sheet). Hidden posts copy their SECRET link — permalink + ?key= — the
+  // only door into an unlisted post (linkKey projects to the owner only).
+  const hiddenLink = post.visibility === 'hidden' && post.linkKey ? `${permalinkPath}?key=${encodeURIComponent(post.linkKey)}` : null;
   const handleCopyLink = async () => {
-		const url = `${window.location.origin}${permalinkPath}`;
+		const url = `${window.location.origin}${hiddenLink || permalinkPath}`;
     try {
       await navigator.clipboard.writeText(url);
-      lopu({ title: 'Link copied 🔗', status: 'success', duration: 4000 });
+      lopu({
+        title: hiddenLink ? 'Hidden link copied 🕵️' : 'Link copied 🔗',
+        description: hiddenLink ? 'Anyone holding this exact link can view the post — share it deliberately.' : undefined,
+        status: 'success',
+        duration: 4000
+      });
     } catch {
       // clipboard unavailable (http origin) — hand the link over anyway
       lopu({ title: `Copy this link: ${url}`, status: 'info', duration: 10000 });
@@ -1525,7 +1540,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   </MenuItem>
                 )}
                 <MenuItem fontSize="sm" onClick={handleCopyLink}>
-                  Copy link 🔗
+                  {hiddenLink ? 'Copy hidden link 🕵️' : 'Copy link 🔗'}
                 </MenuItem>
                 {!mediaThing && (
                   <>

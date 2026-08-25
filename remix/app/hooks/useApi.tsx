@@ -492,7 +492,9 @@ export function useApi() {
         [asyncFetcher]
       ),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
-			get: useCallback(async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`, options), []),
+			// key: a hidden thing's secret link key (?key= on /post pages) — lets
+			// anyone holding the link view the unlisted thing
+			get: useCallback(async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/things${toQuery({ id: args?.id, key: args?.key })}`, options), []),
       list: useCallback(
         async (args) =>
           getJson(
@@ -669,7 +671,8 @@ export function useApi() {
               expiresInMs: args?.expiresInMs ?? null,
               maxUses: args?.maxUses ?? null,
               onlyCreatedThings: args?.onlyCreatedThings === true,
-              visibility: args?.visibility ?? 'all'
+              visibility: args?.visibility ?? 'all',
+              allowGet: args?.allowGet === true
             },
             { action: '/api/v1/tokens' }
           ),
