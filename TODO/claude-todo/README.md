@@ -26,6 +26,8 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 14 | Editor.js block drag/drop reordering (desktop pointer, mobile long-press, keyboard alternative, autosave/undo-safe) | 🔴 Not started | [14-editorjs-block-drag-drop.md](./14-editorjs-block-drag-drop.md) |
 | 18 | Unique account invite links with optional username/profile prefill | 🔴 Not started | [18-account-invite-links.md](./18-account-invite-links.md) |
 | 19 | Group chats with per-participant anonymity, including the creator | 🔴 Not started | [19-anonymous-group-chats.md](./19-anonymous-group-chats.md) |
+| 20 | Run actions from the component tester (confirm gate, inert browse grid) | 🔴 Not started · owner-approved | [20-tester-runs-actions.md](./20-tester-runs-actions.md) |
+| 21 | Composed app surface — a folder of Things rendered as a working mini-app | 🔴 Not started | [21-app-composition-surface.md](./21-app-composition-surface.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 

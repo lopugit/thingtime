@@ -173,9 +173,14 @@ is and isn't reachable today:
   one shared budget; send-invoice draft→sent). A dedicated app-composition page
   ("📁 My App" rendering many component-kind things together) is a nice future
   surface, not a prerequisite for the flow to work.
-- **Open product decision (raised on the PR):** whether the `/components` tester
-  should also fire ttAction behind a "this will run the action" confirm, or stay
-  inert (the current safe default — no side-effectful runs while authoring).
+- **Product decision — RESOLVED 2026-08-25 by the repo owner: the tester should
+  fire.** The `/components/:key` live preview and args tester will run ttAction
+  bindings behind a "this will run the action" confirm; the browse grid stays
+  inert (one preview component renders feed/grid/columns, so arming it would arm
+  an infinite scroller). Scoped out of this PR and specced as
+  `TODO/claude-todo/20-tester-runs-actions.md` (roadmap item 19); the "📁 My App"
+  composition surface above is specced as
+  `TODO/claude-todo/21-app-composition-surface.md` (roadmap item 20).
 
 ## Round 5 — functional multi-review pass (2026-08-25, post-completion directive)
 
