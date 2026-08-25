@@ -97,6 +97,10 @@ path, so a webhook outage cannot silently turn off conflict resolution or CI;
 the dashboard makes drift and stale delivery state visible. Administrator
 dispatches always enter the reviewed `github-actions` implementation; neither
 the UI nor API can load workflow YAML from an arbitrary feature branch.
+The existing CI Control operation keys remain stable, but rebase, feature
+promotion, standing promotion, and main/develop synchronization are translated
+to typed **Lopu PR manager** inputs instead of dispatching retired workflow
+files.
 
 For supported automations, an administrator can choose **GitHub Actions** or
 **Vercel Sandbox** independently. The native listener first runs a tiny provider
@@ -195,8 +199,9 @@ Standalone merge conflicts and clean-but-behind branches go to the base-merge
 lane. Genuine stack members whose history needs replay go to the rebase lane;
 adding `no-ai-rebase` opts a merge-conflicting stack member back into the
 merge-based lane. The protected rebase engine still accepts the manager's
-exact `repository_dispatch` worker handoff, but its thin product listener has
-no push, PR, schedule, or manual trigger of its own.
+exact `repository_dispatch` worker handoff through **Lopu PR manager**. It is a
+`workflow_call`-only implementation; no product branch contains or exposes a
+second rebase workflow.
 
 The rebase lane covers the case GitHub reports as `mergeable: true` but
 `rebaseable: false`: a plain merge needs no help, yet replaying stacked commits

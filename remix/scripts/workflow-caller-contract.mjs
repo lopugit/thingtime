@@ -14,7 +14,6 @@ const callers = [
   'electron-release.yml',
   'electron-pr-release.yml',
   'web-ci.yml',
-  'rebase-pr-stacks.yml',
   'resolve-pr-conflicts.yml',
 ];
 
@@ -101,6 +100,11 @@ assert.match(resolverTriggers, /^  pull_request_review_comment:\n    types: \[cr
 assert.match(resolverTriggers, /^  check_run:\n    types: \[completed\]$/m, 'Lopu must receive completed checks for repair review');
 assert.match(
   resolverTriggers,
+  /^  repository_dispatch:\n    types: \[resolve-conflicts-cascade, rebase-pr-stack-ai\]$/m,
+  'Lopu must receive exact stack workers without a second public rebase listener'
+);
+assert.match(
+  resolverTriggers,
   /^    - cron: "43 \*\/6 \* \* \*"$/m,
   'Lopu must own the former feature-promotion maintenance schedule'
 );
@@ -118,6 +122,11 @@ for (const input of [
     `Lopu listener must forward ${input} to the protected manager`
   );
 }
+assert.match(
+  resolverCaller,
+  /^      rebase_cascade: \$\{\{ github\.event_name != 'workflow_dispatch' \|\| inputs\.rebase_cascade \}\}$/m,
+  'automatic Lopu events cascade stacks while an explicit CI Control retry may opt out'
+);
 const resolverPermissions = resolverCaller.slice(
   resolverPermissionsStart,
   resolverJobsStart
@@ -127,26 +136,6 @@ assert.match(
   /^  security-events: write$/m,
   'resolve-pr-conflicts.yml must permit the protected controller to inspect and disposition CodeQL alerts'
 );
-
-const rebaseCaller = readFileSync(
-  resolve(workflowsRoot, 'rebase-pr-stacks.yml'),
-  'utf8'
-);
-const rebaseTriggersEnd = rebaseCaller.indexOf('\npermissions:\n');
-assert.ok(rebaseTriggersEnd > 0, 'rebase-pr-stacks.yml must retain its internal handoff trigger');
-const rebaseTriggers = rebaseCaller.slice(0, rebaseTriggersEnd);
-assert.match(
-  rebaseTriggers,
-  /^  repository_dispatch:\n    types: \[rebase-pr-stack-ai\]$/m,
-  'rebase-pr-stacks.yml must accept the unified manager\'s exact internal handoff'
-);
-assert.doesNotMatch(
-  rebaseTriggers,
-  /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch):/m,
-  'rebase-pr-stacks.yml must not compete with the unified Lopu manager for automatic or manual entry events'
-);
-assert.match(rebaseCaller, /^      pr_number: ""$/m, 'internal rebase handoff must derive its exact PR from repository_dispatch');
-assert.match(rebaseCaller, /^      cascade: true$/m, 'internal rebase handoff must preserve stack cascading');
 
 const developPreviewCaller = readFileSync(
   resolve(workflowsRoot, 'develop-pr-preview.yml'),
@@ -159,6 +148,7 @@ assert.match(
 );
 
 for (const retiredPublicWorkflow of [
+  'rebase-pr-stacks.yml',
   'promote-develop-to-main.yml',
   'promote-features-to-main.yml',
   'sync-main-into-develop.yml'

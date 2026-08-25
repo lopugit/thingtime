@@ -1147,10 +1147,15 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Push one commit to a branch with PRs targeting and originating from it.
       Confirm exactly one automatic `Lopu PR manager` run owns merge, stale,
-      rebase, and stack detection. The thin `rebase-pr-stacks.yml` listener
-      must accept only `repository_dispatch: rebase-pr-stack-ai`: it has no
-      push, PR, schedule, or manual trigger and cannot create a competing run
-      that later gets cancelled by Lopu's embedded rebase lane.
+      rebase, and stack detection. Product branches must contain no
+      `rebase-pr-stacks.yml`; `Lopu PR manager` accepts both exact merge and
+      rebase repository-dispatch events, while the protected rebase engine is
+      `workflow_call`-only and cannot create a competing public run.
+- [ ] From Admin → CI Control, dispatch rebase (with cascade both enabled and
+      disabled), feature promotion, standing promotion, and main/develop sync.
+      Confirm each audit record names `resolve-pr-conflicts.yml`, the request
+      retains its original allowlisted operation key, and the translated Lopu
+      inputs preserve the requested PR/branch, cascade, dry-run, and lookback.
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
       Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
