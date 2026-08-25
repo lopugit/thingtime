@@ -29,6 +29,16 @@ private final class CommanderPanel: NSPanel {
   }
 
   override func sendEvent(_ event: NSEvent) {
+    // A resize gesture is valid only while Commander is receiving its drag
+    // stream. Keyboard actions such as selecting an emoji with Return can
+    // arrive after a matching mouse-up was missed, so never let a stale resize
+    // session survive any non-drag input.
+    if resizeSession != nil, event.type != .leftMouseDragged {
+      let consumedMouseUp = event.type == .leftMouseUp
+      cancelResizeSession()
+      if consumedMouseUp { return }
+    }
+
     switch event.type {
     case .leftMouseDown:
       cancelResizeSession()
@@ -61,12 +71,17 @@ private final class CommanderPanel: NSPanel {
       invalidateShadow()
       return
     case .leftMouseUp:
-      guard resizeSession != nil else { break }
-      cancelResizeSession()
-      return
+      break
     default: break
     }
     super.sendEvent(event)
+  }
+
+  override func performDrag(with event: NSEvent) {
+    // The web UI's draggable regions use AppKit's drag loop. It must never
+    // inherit an earlier edge-resize session.
+    cancelResizeSession()
+    super.performDrag(with: event)
   }
 
   override func resignKey() {
@@ -419,6 +434,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   func windowDidBecomeKey(_ notification: Notification) {
+    panel.cancelResizeSession()
     didBecomeKey?(id)
   }
 

@@ -3275,8 +3275,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1787654914.4629748,
-    "ast_hash": "29910b93f46bc5dedaa22c6caf97d145",
+    "mtime": 1787656286.4035614,
+    "ast_hash": "2a42a22972b8758195fd6ebb4d5d4f67",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -6240,8 +6240,8 @@
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Windows/LauncherPanelController.swift": {
-    "mtime": 1787654847.2994866,
-    "ast_hash": "57037f40081fc00e07ff82013388a25b",
+    "mtime": 1787656481.8267922,
+    "ast_hash": "e8a07a71adfcb589786b5a085e17ecf7",
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Sources/Commander/Windows/SettingsWindowController.swift": {
@@ -6255,8 +6255,8 @@
     "semantic_hash": "ce464763205feb83fa2b51a3271f5e12"
   },
   "Commander/hosts/macos/Tests/CommanderTests/CommanderWebViewTests.swift": {
-    "mtime": 1787654886.9757729,
-    "ast_hash": "96d3cf3a7d90119ad96aab115eadc4ec",
+    "mtime": 1787656239.2891529,
+    "ast_hash": "0cc54781226a273c29022bdffbe42fb9",
     "semantic_hash": ""
   },
   "Commander/hosts/macos/Tests/CommanderTests/GlobalHotKeyTests.swift": {
@@ -6980,8 +6980,8 @@
     "semantic_hash": "acb578d05997728808c9a6c795cbad62"
   },
   "Commander/docs/TESTING.md": {
-    "mtime": 1787654914.4625423,
-    "ast_hash": "a4b74a123e1084b930f9539f4ab1076d",
+    "mtime": 1787656286.402339,
+    "ast_hash": "b20bf2f65455f764cf4f7e6318b20375",
     "semantic_hash": ""
   },
   "Commander/extensions/README.md": {
