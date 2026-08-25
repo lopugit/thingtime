@@ -4,6 +4,7 @@ import AppKit
 final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   private static let launcherHotKeyIdentifier = "launcher"
   private let daemon = DaemonSupervisor()
+  private let portInspector = LoopbackPortInspector()
   private let keychain = KeychainStore()
   private let loginItem = LaunchAtLoginService()
   private var daemonReady: DaemonReady?
@@ -47,8 +48,8 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func startDaemon() {
-    daemon.start(onUnexpectedExit: { [weak self] error in
+  private func startDaemon(port: Int = DaemonSupervisor.defaultPort) {
+    daemon.start(port: port, onUnexpectedExit: { [weak self] error in
       self?.handleUnexpectedDaemonExit(error)
     }) { [weak self] result in
       guard let self else { return }
@@ -371,6 +372,11 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func presentStartupError(_ error: Error) {
+    if let daemonError = error as? DaemonError,
+       case let .portInUse(port, _) = daemonError {
+      presentPortConflict(port: port)
+      return
+    }
     NSApp.setActivationPolicy(.regular)
     NSApp.activate(ignoringOtherApps: true)
     let alert = NSAlert()
@@ -388,6 +394,11 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func presentServiceError(_ error: Error) {
+    if let daemonError = error as? DaemonError,
+       case let .portInUse(port, _) = daemonError {
+      presentPortConflict(port: port)
+      return
+    }
     NSApp.setActivationPolicy(.regular)
     NSApp.activate(ignoringOtherApps: true)
     let alert = NSAlert()
@@ -400,6 +411,50 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       NSApp.setActivationPolicy(.accessory)
       startDaemon()
     } else {
+      NSApp.terminate(nil)
+    }
+  }
+
+  private func presentPortConflict(port: Int) {
+    NSApp.setActivationPolicy(.regular)
+    NSApp.activate(ignoringOtherApps: true)
+    let listener = portInspector.listener(on: port)
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "Commander’s local port is busy"
+    if let listener {
+      alert.informativeText = "Port \(port) is currently used by \(listener.command) (PID \(listener.pid)). Choose how Commander should recover."
+    } else {
+      alert.informativeText = "Port \(port) is currently unavailable. Choose how Commander should recover."
+    }
+    alert.addButton(withTitle: "Close Commander")
+    alert.addButton(withTitle: "Start on Next Available Port")
+    if let listener {
+      alert.addButton(withTitle: "Close \(listener.command) (PID \(listener.pid))")
+    }
+    switch alert.runModal() {
+    case .alertSecondButtonReturn:
+      guard let nextPort = portInspector.nextAvailablePort(after: port) else {
+        presentStartupError(LoopbackPortInspectorError.listenerChanged(port: port))
+        return
+      }
+      NSApp.setActivationPolicy(.accessory)
+      startDaemon(port: nextPort)
+    case .alertThirdButtonReturn:
+      guard let listener else {
+        NSApp.terminate(nil)
+        return
+      }
+      do {
+        try portInspector.terminate(listener, listeningOn: port)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+          NSApp.setActivationPolicy(.accessory)
+          self?.startDaemon(port: port)
+        }
+      } catch {
+        presentStartupError(error)
+      }
+    default:
       NSApp.terminate(nil)
     }
   }

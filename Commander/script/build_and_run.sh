@@ -159,6 +159,9 @@ build_all() {
   /usr/bin/plutil -insert CFBundleVersion -string "$BUILD_NUMBER" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert LSMinimumSystemVersion -string "$MIN_SYSTEM_VERSION" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert LSUIElement -bool true "$staged_bundle/Contents/Info.plist"
+  # Commander owns one daemon/loopback port. Let Launch Services reactivate the
+  # existing host rather than spawning a second instance that races for it.
+  /usr/bin/plutil -insert LSMultipleInstancesProhibited -bool true "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert NSHighResolutionCapable -bool true "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert NSPrincipalClass -string NSApplication "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert CFBundleURLTypes -json '[{"CFBundleURLName":"com.thingtime.Commander.oauth","CFBundleURLSchemes":["com.thingtime.commander"]}]' "$staged_bundle/Contents/Info.plist"
@@ -247,7 +250,7 @@ install_app() {
 launch_installed_app() {
   local installed="$HOME/Applications/$APP_NAME.app"
   local host_pattern="^$installed/Contents/MacOS/$APP_NAME$"
-  /usr/bin/open -n "$installed" >/dev/null 2>&1 &
+  /usr/bin/open "$installed" >/dev/null 2>&1 &
   local open_pid="$!"
 
   # `open` can remain blocked waiting for a Launch Services XPC reply after it
