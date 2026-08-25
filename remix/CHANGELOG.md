@@ -61,6 +61,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **The default-branch all-builder listener no longer cancels its protected
+  worker before the durable queue starts**: `main` now matches `develop` by
+  leaving concurrency ownership entirely to the `github-actions`
+  implementation. Bursty PR/push events therefore remain queued instead of
+  cancelling an in-flight all-branch rebuild at the caller boundary. — Codex
+  (AI), 2026-08-25
 - **Lopu is the only automatic promotion and branch-sync entrypoint**: the
   three product-branch workflows that separately promoted develop, promoted
   features, and synchronized main into develop are removed. Their protected

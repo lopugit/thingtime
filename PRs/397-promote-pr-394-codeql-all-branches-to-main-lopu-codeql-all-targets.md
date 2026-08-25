@@ -74,3 +74,9 @@ pushes own main→develop synchronization, and the six-hour promoter sweep plus
 manual maintenance choices enter through Lopu. This makes the earlier
 "single public workflow" claim true for repository management rather than only
 for model-backed merge/rebase work.
+
+The live #399 check exposed one final default-listener mismatch: `main` still
+had a caller-level `cancel-in-progress: true` group around the all-branch
+reusable call. That outer group can cancel the call before the protected
+implementation's durable queue starts. This PR removes it and locks the absence
+in the caller contract, matching the already-correct `develop` listener.

@@ -903,6 +903,10 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
+- [ ] Queue two all-branch rebuild signals through the default `main` listener.
+      Confirm the thin caller has no concurrency block, both calls reach the
+      protected implementation, and its `queue: max` worker completes the
+      first request rather than cancelling it when the second arrives.
 - [ ] Push once to `develop`. Confirm GitHub creates one public **Lopu PR
       manager** run containing the standing-promotion and per-feature-promotion
       reusable jobs, with no separate **Promote develop to main** or **Promote

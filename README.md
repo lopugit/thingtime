@@ -1134,6 +1134,11 @@ schedule enters through Lopu too. The old product-branch promotion/sync
 workflow files are removed, so none can compete with or cancel Lopu. Use the
 manager's `maintenance_operation` input for explicit recovery.
 
+The default-branch `all`-builder listener is also deliberately concurrency-free.
+Its protected implementation owns the durable `queue: max` namespace; putting
+`cancel-in-progress` on the thin caller would cancel the entire reusable call
+before that worker queue can retain it.
+
 Fork setup: everything runs with the default `GITHUB_TOKEN`, but promotion
 PRs it creates will not trigger CI, and promotion branches touching
 `.github/workflows/**` cannot be pushed. Optionally add a `PROMOTION_PAT`

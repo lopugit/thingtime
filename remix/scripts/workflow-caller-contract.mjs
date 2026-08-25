@@ -29,6 +29,18 @@ for (const filename of callers) {
   assert.equal((source.match(/^\s+uses:/gm) ?? []).length, 1, `${filename} must contain exactly one reusable-workflow call`);
 }
 
+const allBranchCaller = readFileSync(
+  resolve(workflowsRoot, 'all-branch.yml'),
+  'utf8'
+);
+const allBranchTriggersEnd = allBranchCaller.indexOf('\npermissions:\n');
+assert.ok(allBranchTriggersEnd > 0, 'all-branch.yml must retain its public trigger block');
+assert.doesNotMatch(
+  allBranchCaller,
+  /^concurrency:$/m,
+  'the thin all-branch listener must not cancel a reusable call before the protected durable queue owns it'
+);
+
 const codeqlCaller = readFileSync(
   resolve(workflowsRoot, 'codeql-analysis.yml'),
   'utf8'
