@@ -207,3 +207,27 @@ test('selectActionByKey: id wins, then the latest actionKey revision', () => {
 	assert.equal(selectActionByKey([other], 'send'), null);
 	assert.equal(selectActionByKey([], 'send'), null);
 });
+
+// A composing action cannot assert absolute negatives about code it never
+// read: the invoked child runs on its OWN declaration, so "Cannot create
+// things" on the parent would be a lie the inspector tells about the run.
+// Only the vocabulary-level negatives (no network/secrets/deletes) hold for
+// every program unconditionally.
+test('a composing action does not claim negatives its children can break', () => {
+	const composed = actionCannotAccess([{ capability: 'actions.invoke', actions: ['make-invoice'] }]);
+	assert.ok(composed.includes('No network'), 'vocabulary negatives always hold');
+	assert.ok(composed.includes('No secrets'));
+	assert.ok(composed.includes('No deletes'));
+	assert.equal(composed.includes('Cannot create things'), false, 'a child may create');
+	assert.equal(composed.includes('Cannot update things'), false, 'a child may update');
+	assert.equal(composed.includes('Cannot read things'), false, 'a child may read');
+	assert.ok(composed.some((line) => /Runs other actions/.test(line)), 'the composition is disclosed instead');
+});
+
+test('a non-composing action still asserts the full negative list', () => {
+	const leaf = actionCannotAccess([{ capability: 'things.read', schemas: ['customer'] }]);
+	assert.ok(leaf.includes('Cannot create things'));
+	assert.ok(leaf.includes('Cannot update things'));
+	assert.ok(leaf.includes('Cannot invoke other actions'));
+	assert.equal(leaf.includes('Cannot read things'), false, 'it declared things.read');
+});

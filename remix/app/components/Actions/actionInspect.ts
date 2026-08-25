@@ -239,10 +239,18 @@ export const actionCannotAccess = (
 	const list = ['No network', 'No secrets', 'No deletes'];
 	const declared = capabilities || [];
 	const has = (capability: string) => declared.some((entry) => entry.capability === capability);
-	if (!has('things.read')) list.push('Cannot read things');
-	if (!has('things.create')) list.push('Cannot create things');
-	if (!has('things.update')) list.push('Cannot update things');
-	if (!has('actions.invoke')) list.push('Cannot invoke other actions');
+	// An action that invokes another action cannot honestly claim the absolute
+	// negatives: the child runs on ITS own declaration, so "Cannot create
+	// things" would be a claim about code this page never read. Only the three
+	// vocabulary-level negatives above hold unconditionally (no op reaches the
+	// network, secrets, or a delete). The composed case says so instead, and
+	// the Does list links each invoked child so its effects are one click away.
+	const composes = has('actions.invoke');
+	if (!has('things.read') && !composes) list.push('Cannot read things');
+	if (!has('things.create') && !composes) list.push('Cannot create things');
+	if (!has('things.update') && !composes) list.push('Cannot update things');
+	if (!composes) list.push('Cannot invoke other actions');
+	else list.push('Runs other actions — their effects are listed on their own pages');
 	for (const entry of declared) {
 		if (entry.schemas?.length) list.push(`${entry.capability} only: ${entry.schemas.map((ref) => displayRef(ref, names)).join(', ')}`);
 		if (entry.actions?.length) list.push(`invoke only: ${entry.actions.join(', ')}`);

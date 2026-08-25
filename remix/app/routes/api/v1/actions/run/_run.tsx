@@ -19,7 +19,7 @@ export const action = async ({ request }: { request: Request }) => {
 		return json({ ok: false, error: 'Actions are running very fast — take a breather ⚡' }, rateLimitedResponseInit(limit));
 	}
 	const body = await readJsonBody(request, MAX_BODY_BYTES);
-	const result = await runAction(viewerOf(user), { action: body?.action, inputs: body?.inputs });
+	const result = await runAction(viewerOf(user), { action: body?.action, inputs: body?.inputs, source: body?.source });
 	if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
 	return json(result);
 };
