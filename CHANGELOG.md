@@ -21,6 +21,21 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **The wildcard `all`-branch doctor is now internal to the one public Lopu
+  manager**: its independent push/manual workflow is retired. PR lifecycle
+  changes and the hourly backstop call the protected reusable doctor directly;
+  develop, main, and controller pushes make one bounded bot-authored handoff
+  back through **Lopu PR manager** so provider actions never inherit unsupported
+  push provenance. Manual recovery is the manager's `build-all` maintenance
+  choice, and the doctor keeps the shared non-cancelling model fleet lock. —
+  Codex (AI), 2026-08-25
+- **Codex-backed Graphify attestations now survive promotion recovery**: the
+  interrupted-run validator accepts the same `openai` semantic mode emitted by
+  Terra/Sol-backed promotion publication, and ordinary PR merge commits and
+  status comments now identify OpenAI semantic extraction instead of
+  incorrectly reporting that no semantic credential was available. Contracts
+  keep every publication, recovery, and reporting enum aligned. — Codex (AI),
+  2026-08-25
 - **Rebase roots, stack children, and moving-ref recovery now round-trip through
   the one public Lopu manager**: the internal rebase engine no longer attempts
   to dispatch its triggerless implementation directly. Exact immutable worker

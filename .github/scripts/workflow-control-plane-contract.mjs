@@ -1019,6 +1019,31 @@ export function assertControlPlaneContract() {
     /review_detect:[\s\S]*github\.event_name != 'repository_dispatch'[\s\S]*inputs\.ref_race_handoff != true/u,
     "internal worker events never launch a duplicate repository review",
   );
+  assert.match(
+    resolver,
+    /pull_request_target:\n\s+types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed\]/u,
+    "the public manager owns every lifecycle change that can alter the wildcard all branch",
+  );
+  assert.match(
+    resolver,
+    /- cron: "53 \* \* \* \*"/u,
+    "the public manager owns the former hourly all-branch backstop",
+  );
+  assert.match(
+    resolver,
+    /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all\]/u,
+    "manual all-branch recovery stays inside Lopu maintenance",
+  );
+  assert.match(
+    resolver,
+    /handoff_all_branch_push:[\s\S]*branch:"lopu-internal-all-branch"[\s\S]*maintenance_operation:"manage-prs"[\s\S]*actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/u,
+    "push-triggered union rebuilds return through a supported event on the one public manager",
+  );
+  assert.match(
+    resolver,
+    /maintain_all_branch:[\s\S]*inputs\.maintenance_operation == 'build-all'[\s\S]*github\.event\.schedule == '53 \* \* \* \*'[\s\S]*uses: \.\/\.github\/workflows\/all-branch\.yml/u,
+    "PR, schedule, and manual events call only the internal all-branch implementation",
+  );
   const publicConcurrency = resolver.slice(
     resolver.indexOf("\nconcurrency:\n"),
     resolver.indexOf("\npermissions:\n"),
@@ -1032,6 +1057,16 @@ export function assertControlPlaneContract() {
     publicConcurrency,
     /^\s*queue: max$/m,
     "the public Lopu queue coalesces duplicate pending events by semantic PR or branch key",
+  );
+  assert.match(
+    resolver,
+    /\['openai','claude','claude-cli','failed','none','unavailable'\]\.includes\(value\.graphify_semantic\)/u,
+    "interrupted-promotion recovery accepts Codex-backed Graphify attestations",
+  );
+  assert.equal(
+    resolver.match(/^\s+openai\|claude\|claude-cli\)/gmu)?.length,
+    3,
+    "PR merge commits and status comments report OpenAI semantic Graphify runs accurately",
   );
   assert.match(
     resolver,

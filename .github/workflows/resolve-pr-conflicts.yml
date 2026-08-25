@@ -359,13 +359,11 @@ on:
   # for this event, and resolution happens only after an exact-PR selection is
   # handed off to the fixed `github-actions` control-plane revision, the same hop every
   # detector takes.
-  # Deliberately NOT `synchronize`: that fires on every push to a PR head,
-  # including this workflow's own resolution pushes. Head pushes are covered
-  # by the plain `push` trigger instead — its detect run also scans the PR
-  # FROM the pushed branch (see the scan step), which catches conflicts a
-  # head push itself creates, without adding a per-PR target-context event.
+  # The complete lifecycle also owns wildcard-all membership: synchronize,
+  # draft transitions, edits, and closure can change either union content or
+  # stack topology. Duplicate head-push resolution signals coalesce by PR key.
   pull_request_target:
-    types: [opened, reopened]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, closed]
   # A Lopu conversation is part of PR management too. Only human-authored
   # events reach the review handoff below, so Lopu's own comments cannot loop
   # back into another model session.
@@ -387,6 +385,8 @@ on:
     # Feature-promotion maintenance used to own a separate scheduled workflow.
     # Keep its cadence while routing it through this one public Lopu entry.
     - cron: "43 */6 * * *"
+    # The wildcard-all integration used to expose its own hourly workflow.
+    - cron: "53 * * * *"
   workflow_dispatch:
     inputs:
       pr_number:
@@ -404,7 +404,7 @@ on:
         required: false
         default: "manage-prs"
         type: choice
-        options: [manage-prs, promote-develop, promote-features, sync-main-develop]
+        options: [manage-prs, promote-develop, promote-features, sync-main-develop, build-all]
       promotion_dry_run:
         description: "Plan feature promotion only — do not create or update branches, PRs, comments, or labels"
         required: false
@@ -514,6 +514,12 @@ concurrency:
   # A human exact-PR detector therefore cannot cancel the worker it creates.
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
+        && github.actor == 'github-actions[bot]'
+        && github.ref_name == 'github-actions'
+        && inputs.pr_number == ''
+        && inputs.branch == 'lopu-internal-all-branch'
+        && 'lopu-maintenance-build-all'
+        || github.event_name == 'workflow_dispatch'
         && inputs.maintenance_operation != ''
         && inputs.maintenance_operation != 'manage-prs'
         && format('lopu-maintenance-{0}', inputs.maintenance_operation)
@@ -596,6 +602,11 @@ jobs:
       && inputs.promotion_plan_b64 == ''
       && (inputs.maintenance_operation == ''
           || inputs.maintenance_operation == 'manage-prs')
+      && !(github.event_name == 'workflow_dispatch'
+           && github.actor == 'github-actions[bot]'
+           && github.ref_name == 'github-actions'
+           && inputs.pr_number == ''
+           && inputs.branch == 'lopu-internal-all-branch')
       && (github.event_name != 'issue_comment'
           || (github.event.issue.pull_request
               && github.event.comment.user.type == 'User'))
@@ -674,6 +685,60 @@ jobs:
       control_dispatch_id: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
       routing_proof: ${{ inputs.routing_proof || github.event.client_payload.routing_proof || '' }}
       routing_proof_issued_at: ${{ inputs.routing_proof_issued_at || github.event.client_payload.routing_proof_issued_at || '' }}
+    secrets: inherit
+
+  handoff_all_branch_push:
+    name: Hand off push rebuild through the one Lopu manager
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && github.event_name == 'push'
+      && github.event.deleted == false
+      && (github.ref_name == 'develop'
+          || github.ref_name == 'main'
+          || github.ref_name == 'github-actions')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch supported-event all-branch maintenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          jq -n '{
+            ref:"github-actions",
+            inputs:{
+              pr_number:"",
+              branch:"lopu-internal-all-branch",
+              maintenance_operation:"manage-prs"
+            }
+          }' | gh api --method POST \
+            "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+            --input -
+
+  maintain_all_branch:
+    name: Lopu builds and repairs the all branch
+    if: >-
+      inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
+      && ((github.event_name == 'workflow_dispatch'
+           && inputs.maintenance_operation == 'build-all')
+          || (github.event_name == 'workflow_dispatch'
+              && github.actor == 'github-actions[bot]'
+              && github.ref_name == 'github-actions'
+              && inputs.maintenance_operation == 'manage-prs'
+              && inputs.pr_number == ''
+              && inputs.branch == 'lopu-internal-all-branch')
+          || github.event_name == 'pull_request_target'
+          || (github.event_name == 'schedule'
+              && github.event.schedule == '53 * * * *'))
+    permissions:
+      contents: write
+      pull-requests: read
+    uses: ./.github/workflows/all-branch.yml
     secrets: inherit
 
   maintain_develop_promotion:
@@ -4471,7 +4536,7 @@ jobs:
                     typeof value.run_url === 'string' &&
                     (value.model_args === undefined || (typeof value.model_args === 'string' && value.model_args.length <= 2048)) &&
                     (value.graphify_mode === undefined || ['true','nochange','failed'].includes(value.graphify_mode)) &&
-                    (value.graphify_semantic === undefined || ['claude','claude-cli','failed','none','unavailable'].includes(value.graphify_semantic))) valid = true;
+                    (value.graphify_semantic === undefined || ['openai','claude','claude-cli','failed','none','unavailable'].includes(value.graphify_semantic))) valid = true;
               } catch {}
             }
           }
@@ -5939,7 +6004,7 @@ jobs:
             echo "refreshed=nochange" >> "$GITHUB_OUTPUT"
           else
             case "$semantic" in
-              claude|claude-cli)
+              openai|claude|claude-cli)
                 detail="Structural \`graphify update\` followed by LLM semantic \`graphify extract\` (graphify $GRAPHIFY_VERSION, $semantic backend); unchanged content served from the tracked semantic cache." ;;
               failed)
                 detail="Structural \`graphify update\` completed (graphify $GRAPHIFY_VERSION); LLM semantic extraction failed, so the verified structural graph was preserved." ;;
@@ -6260,7 +6325,7 @@ jobs:
             case "$GRAPHIFY_REFRESHED" in
               true)
                 case "$GRAPHIFY_SEMANTIC" in
-                  claude|claude-cli)
+                  openai|claude|claude-cli)
                     echo "> Rebuilt the merged code graph first with \`graphify update .\`, then ran LLM semantic extraction (\`graphify extract .\`, $GRAPHIFY_SEMANTIC backend) and committed the result." ;;
                   failed)
                     echo "> Rebuilt and committed the merged code graph with \`graphify update .\`. LLM semantic extraction was attempted afterward but failed; the valid structural result was preserved (see the workflow log)." ;;
@@ -6269,7 +6334,7 @@ jobs:
                 esac ;;
               nochange)
                 case "$GRAPHIFY_SEMANTIC" in
-                  claude|claude-cli) echo "> Rebuilt the code graph, then ran LLM semantic extraction; the tracked Graphify output was already current." ;;
+                  openai|claude|claude-cli) echo "> Rebuilt the code graph, then ran LLM semantic extraction; the tracked Graphify output was already current." ;;
                   failed) echo "> Rebuilt the code graph; semantic extraction failed afterward, but the tracked structural output was already current." ;;
                   *) echo "> Rebuilt the code graph; the tracked Graphify output was already current." ;;
                 esac ;;

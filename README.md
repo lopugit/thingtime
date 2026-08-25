@@ -87,13 +87,15 @@ CodeQL upload into a red PR check.
 
 Lopu is also the one public repository-maintenance entrypoint. A `develop`
 push starts the standing and per-feature promotion components as jobs inside
-the same **Lopu PR manager** run; a `main` push starts the main→develop sync
-component there; and the six-hour feature-promotion backstop is another Lopu
-schedule. The three deterministic implementations remain protected reusable
-components, but have no push, schedule, repository-dispatch, or manual trigger
-of their own. Manual recovery uses **Actions → Lopu PR manager → Run workflow**
-and its `maintenance_operation` choice. Their concurrency queues never cancel
-an in-flight promotion or synchronization.
+the same **Lopu PR manager** run; a `main` push starts the main→develop sync;
+PR lifecycle changes and the hourly backstop maintain the wildcard `all`
+branch. Qualifying pushes are converted to a bot-authored manager dispatch so
+the model-backed doctor never receives unsupported push provenance. The four
+deterministic implementations remain protected reusable components with no
+push, schedule, repository-dispatch, or manual trigger of their own. Manual
+recovery uses **Actions → Lopu PR manager → Run workflow** and its
+`maintenance_operation` choice, including `build-all`. Their queues never
+cancel an active promotion, synchronization, or union repair.
 
 When `main` cannot be pushed cleanly into `develop`, Lopu publishes the fenced
 candidate to the automation-owned `sync/main-into-develop` branch and opens or

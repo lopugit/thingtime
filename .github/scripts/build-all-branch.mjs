@@ -167,39 +167,26 @@ export function shouldRevertDoctorStatusPath(path) {
   return isForbiddenDoctorPath(p);
 }
 
-// Keep the push handoff executable, not merely documented. GitHub only runs
-// a workflow for events declared in its top-level `on` block; the handoff job
-// is unreachable if that trigger drifts away.
+// Keep the doctor internal to the one public Lopu manager. Push normalization
+// lives in resolve-pr-conflicts.yml because provider actions reject push-event
+// provenance even when the implementation is reached through workflow_call.
 export function assertAllBranchWorkflowContract(workflowText) {
   const text = String(workflowText ?? "").replaceAll("\r\n", "\n");
   const triggerBlock = text.split("\npermissions:", 1)[0];
-  assert.match(text, /^name: Lopu all-branch integration$/m, "the union doctor is branded as Lopu");
+  assert.match(text, /^name: Lopu internal all-branch integration$/m, "the union doctor is branded as Lopu");
   assert.match(
     triggerBlock,
-    /\non:\n(?:[ \t].*\n)*?  push:\n    branches: \[github-actions\]\n/,
-    "all-branch workflow must trigger on pushes to github-actions"
-  );
-  assert.match(text, /\n  handoff:\n[\s\S]*?github\.event_name == 'push'/, "push events must enter the handoff job");
-  assert.match(
-    text,
-    /\n  rebuild:\n[\s\S]*?github\.event_name != 'push'/,
-    "push events must stay out of the unsupported rebuild/doctor job"
-  );
-  assert.match(
-    text,
-    /concurrency:\n(?:\s*#.*\n)*\s*group: all-branch-[^\n]+\n\s*cancel-in-progress: false/,
-    "all-branch requests must coalesce without cancelling an active doctor"
-  );
-  const workflowConcurrency = text.slice(
-    text.indexOf("\nconcurrency:\n"),
-    text.indexOf("\njobs:\n")
+    /\non:\n  workflow_call:\n/,
+    "all-branch workflow must remain callable by the public Lopu manager"
   );
   assert.doesNotMatch(
-    workflowConcurrency,
-    /^\s*queue: max$/m,
-    "all-branch event storms must retain only the newest pending handoff or worker"
+    triggerBlock,
+    /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch|repository_dispatch):/m,
+    "all-branch workflow must not expose a second public trigger"
   );
+  assert.doesNotMatch(text, /\n  handoff:\n/, "push normalization belongs to the public Lopu manager");
   const rebuildBlock = text.slice(text.indexOf("\n  rebuild:"));
+  assert.match(rebuildBlock, /if: github\.repository == 'lopugit\/thingtime'/);
   assert.match(
     rebuildBlock,
     /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n\s*queue: max\n\s*cancel-in-progress: false/,

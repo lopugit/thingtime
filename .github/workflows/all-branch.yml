@@ -27,9 +27,10 @@
 # next rebuild; a fixup that stops applying (the source PRs healed) is dropped
 # silently. Unchanged inputs skip the build check and every model round.
 # `anthropics/claude-code-action` rejects push events, including a reusable
-# workflow called by a push listener. Push-triggered calls therefore dispatch
-# one bot-authored workflow_dispatch worker on the protected github-actions
-# ref; only that supported-event worker may enter the rebuild/doctor path.
+# workflow called by a push listener. The one public Lopu PR manager therefore
+# converts qualifying pushes into a bot-authored workflow_dispatch before it
+# calls this internal implementation. PR lifecycle, schedule, and manual
+# manager events are already supported and call it directly.
 #
 # Security model (matches the resolver): the model has NO shell and NO git —
 # it only edits files; both checkouts use persist-credentials: false, so no
@@ -46,52 +47,19 @@
 # optional second account. Without any Claude/Codex credential the union is
 # pushed unhealed, exactly as before.
 
-name: Lopu all-branch integration
+name: Lopu internal all-branch integration
 
 on:
-  push:
-    branches: [github-actions]
   workflow_call:
-  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: read
 
-# Coalesce a protected-branch burst at the cheap workflow boundary. GitHub's
-# normal concurrency behavior keeps the active run plus the newest pending run
-# for each group; cancel-in-progress:false protects the active handoff/doctor.
-# The surviving worker re-derives the complete live union, so older pending
-# rebuild requests contain no state that the newest request cannot recover.
-concurrency:
-  # Keep the tiny push handoff separate from the worker it dispatches so the
-  # worker cannot cancel its own caller before the caller reports success.
-  group: all-branch-${{ github.event_name == 'push' && 'handoff' || 'worker' }}
-  cancel-in-progress: false
-
 jobs:
-  handoff:
-    name: Hand off push rebuild to the github-actions control plane
-    if: github.repository == 'lopugit/thingtime' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - name: Dispatch supported-event rebuild
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          jq -n '{ref:"github-actions"}' \
-            | gh api --method POST \
-                "repos/$REPO/actions/workflows/all-branch.yml/dispatches" \
-                --input -
-
   rebuild:
     name: Lopu builds and repairs the all branch
-    if: github.repository == 'lopugit/thingtime' && github.event_name != 'push'
+    if: github.repository == 'lopugit/thingtime'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     # The deterministic union build and its optional model-backed doctor stay

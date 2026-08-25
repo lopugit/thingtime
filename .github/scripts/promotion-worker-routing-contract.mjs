@@ -141,7 +141,13 @@ for (const input of ["source_branch", "target_branch", "require_path_prefix"]) {
   );
 }
 
-assert.match(allBranchWorkflow, /^name: Lopu all-branch integration$/m);
+assert.match(allBranchWorkflow, /^name: Lopu internal all-branch integration$/m);
+assert.match(allBranchWorkflow, /^  workflow_call:$/m);
+assert.doesNotMatch(
+  allBranchWorkflow,
+  /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch|repository_dispatch):/m,
+  "the all-branch doctor remains an internal Lopu component",
+);
 assert.equal(
   [...allBranchWorkflow.matchAll(durableFleetQueue)].length,
   1,
