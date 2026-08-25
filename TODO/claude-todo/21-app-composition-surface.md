@@ -24,6 +24,29 @@ every read. A first-party composed app must not claim either. Express app-ness
 as a view over an existing folder, or introduce a distinct kind; do not overload
 the client-identity control plane.
 
+## Why it is scoped this way
+
+The collision above and the reuse decisions below were verified against the
+registry and the things utils while grounding this spec on 2026-08-25. They are
+findings, not preferences, and they are the reason this surface introduces no
+new kind and no new root field.
+
+- **`app` and `appId` belong to the OAuth control plane.** The `app` kind is
+  registered third-party client identity, `app-data` is its storage family, and
+  the root `appId` scalar namespaces things written through an app token and
+  conjoins into every read for them. A first-party composed app claiming either
+  would collide with an unrelated notion of "app".
+- **Folder-plus-view beats a new kind.** The registry refuses a `post` and
+  `folder` composite on the rule that folder things stand alone and content
+  goes in a folder by pointer, so an app cannot be a folder composite. Folder
+  containment, the kind-registry dispatch, and the folder-scoped things read
+  already exist and are tested; reuse all three rather than building a parallel
+  membership or render path.
+- **The untrusted allowlist already excludes `component` and `action`.** A
+  shared or foreign app therefore renders no foreign component template at all
+  today. That is a fail-closed default that this surface inherits, not a gap to
+  patch in passing; widening it is its own review.
+
 ## Required experience
 
 ### Opening an app

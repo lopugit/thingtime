@@ -21,6 +21,26 @@ button label — is the source of truth about what will execute. And the browse
 grid must stay inert: one shared preview component renders the feed, grid, and
 columns views, so arming it arms every card of an infinite scroller at once.
 
+## Why it is scoped this way
+
+Both limits below were verified against the code while grounding this spec on
+2026-08-25. They are findings, not preferences: do not relax either without
+re-reading the cited files first.
+
+- **One preview component serves the whole catalog.** The browse page's preview
+  is a single component rendered by the feed, grid, and columns views alike, so
+  attaching the click handler inside it arms every visible card of an infinite
+  scroller in one edit. Nothing structural prevents that today — unlike
+  `/things` tiles, the catalog previews carry no inert guard at all — which is
+  why the prop-level default *is* the guard and has to be pinned by a test.
+- **A bare action key is a confused-deputy vector.** The executor resolves a
+  bare key against the invoking viewer's own actions by design, so a stranger
+  publishing your key cannot shadow it. The consequence runs the other way too:
+  a foreign component carrying `ttAction: "cleanup-drafts"` runs *your* program
+  of that name with author-chosen inputs. It is simultaneously the sharpest
+  reason the confirmation exists and the one case the dialog cannot resolve
+  client-side, so the honesty of the wording matters more than the lookup.
+
 ## Required experience
 
 ### On the component page
