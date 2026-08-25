@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Button, Flex, Stack, Text } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router';
 
+import { ActionBuilder } from './ActionBuilder';
 import { ActionChip, type ChipSize, type ChipTone } from './ActionChip';
 
 import { useApi } from '~/hooks/useApi';
@@ -124,6 +125,7 @@ export const ActionsPage = () => {
 	const [actions, setActions] = React.useState<ActionThing[]>(cached?.actions || []);
 	const [loaded, setLoaded] = React.useState(false);
 	const [schemaNames, setSchemaNames] = React.useState<Record<string, string>>({});
+	const [building, setBuilding] = React.useState(false);
 
 	// resolve schema refs (ids) to display names — one fetch per unique ref
 	React.useEffect(() => {
@@ -180,15 +182,23 @@ export const ActionsPage = () => {
 			width="100%"
 		>
 			<Stack maxW="920px" minW={0} px={{ base: 4, md: 6 }} pt={{ base: 4, md: 7 }} spacing={5} width="100%">
-				<Box>
-					<Text as="h1" fontSize="2xl" fontWeight="800" color="var(--tt-ink, #16161a)">
-						⚡ Actions
-					</Text>
-					<Text color={MUTED} fontSize="sm" mt={1}>
-						Small declarative programs over your things — typed inputs, explicit capabilities, a shared
-						execution budget, and an inspectable trail. Click one to see exactly what it can (and cannot) do.
-					</Text>
-				</Box>
+				<Flex align="flex-start" justify="space-between" gap={3} wrap="wrap">
+					<Box minW={0}>
+						<Text as="h1" fontSize="2xl" fontWeight="800" color="var(--tt-ink, #16161a)">
+							⚡ Actions
+						</Text>
+						<Text color={MUTED} fontSize="sm" mt={1}>
+							Small declarative programs over your things — typed inputs, explicit capabilities, a shared
+							execution budget, and an inspectable trail. Click one to see exactly what it can (and cannot) do.
+						</Text>
+					</Box>
+					{user && !building ? (
+						<Button colorScheme="purple" onClick={() => setBuilding(true)} size="sm">
+							⚡ New action
+						</Button>
+					) : null}
+				</Flex>
+				{building ? <ActionBuilder onClose={() => setBuilding(false)} /> : null}
 				{!user ? (
 					<Box {...CARD_STYLES} p={6}>
 						<Text color={MUTED}>Sign in to see and run your actions.</Text>
