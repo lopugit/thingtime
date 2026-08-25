@@ -1,6 +1,7 @@
 # Keep develop in sync with main.
 #
-# On every push to main (or manual dispatch), merge main into develop:
+# When the public Lopu manager receives a main push (or an explicit owner
+# maintenance request), merge main into develop:
 # - Clean merge → pushed straight to develop, no ceremony.
 # - Conflicts → a standing PR (base develop, head main) is opened instead, so
 #   the conflict is resolved in the PR UI; if one is already open we reuse it
@@ -19,7 +20,7 @@
 #   sit open with no CI checks. The step fails loudly when neither PAT secret
 #   exists rather than degrading to a checkless PR.
 
-name: Sync main into develop
+name: Lopu internal main/develop synchronization
 
 on:
   workflow_call:
@@ -29,26 +30,6 @@ on:
         required: false
         default: "github-actions"
         type: string
-      runner_label:
-        description: "Internal: unique Vercel Sandbox self-hosted runner label"
-        required: false
-        default: ""
-        type: string
-      control_dispatch_id:
-        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
-        required: false
-        default: ""
-        type: string
-  push:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      execution_provider:
-        description: "Internal: hosted compute selected by Thingtime CI Control"
-        required: false
-        default: "github-actions"
-        type: choice
-        options: [github-actions, vercel-sandbox]
       runner_label:
         description: "Internal: unique Vercel Sandbox self-hosted runner label"
         required: false

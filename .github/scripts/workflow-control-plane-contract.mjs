@@ -767,11 +767,27 @@ export function assertControlPlaneContract() {
     assert.match(source, /control_dispatch_id:/, `${name}: carries the Thingtime dispatch id`);
     assert.match(source, /needs: route/, `${name}: implementation waits for provider selection`);
     assert.match(source, /needs\.route\.outputs\.execute == 'true'/, `${name}: implementation obeys provider selection`);
-    assert.match(source, /runs-on: \$\{\{ needs\.route\.outputs\.runner_label \|\| 'ubuntu-latest' \}\}/, `${name}: uses only the validated runner label`);
+    if (name === "promote-features-to-main.yml") {
+      assert.match(source, /always\(\)/, `${name}: custom lane may continue after the provider route is deliberately skipped`);
+      assert.match(
+        source,
+        /inputs\.source_branch != ''[\s\S]*'ubuntu-latest'[\s\S]*needs\.route\.outputs\.runner_label/,
+        `${name}: custom branch\/path authority remains on GitHub while standing work uses only the validated runner label`,
+      );
+    } else {
+      assert.match(source, /runs-on: \$\{\{ needs\.route\.outputs\.runner_label \|\| 'ubuntu-latest' \}\}/, `${name}: uses only the validated runner label`);
+    }
     assert.doesNotMatch(source, /runs-on:.*inputs\.runner_label/, `${name}: never schedules directly from caller metadata`);
   }
 
   const promotions = readWorkflow("promote-features-to-main.yml");
+  assert.match(promotions, /^name: Lopu internal feature promotion$/m);
+  assert.match(promotions, /^  workflow_call:$/m);
+  assert.doesNotMatch(
+    promotions,
+    /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch|repository_dispatch):/m,
+    "feature promotion is reachable only through Lopu",
+  );
   assert.match(promotions, /ref: github-actions/);
   assert.match(promotions, /workflow-control\/\.github\/scripts\/promote-features-to-main\.mjs/);
   assert.doesNotMatch(
@@ -806,8 +822,24 @@ export function assertControlPlaneContract() {
   );
 
   const omnibus = readWorkflow("promote-develop-to-main.yml");
+  assert.match(omnibus, /^name: Lopu internal develop promotion$/m);
+  assert.match(omnibus, /^  workflow_call:$/m);
+  assert.doesNotMatch(
+    omnibus,
+    /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch|repository_dispatch):/m,
+    "standing promotion is reachable only through Lopu",
+  );
   assert.match(omnibus, /ref: github-actions/);
   assert.match(omnibus, /workflow-control\/\.github\/scripts\/promotion-pr-changelog\.mjs/);
+
+  const mainDevelopSync = readWorkflow("sync-main-into-develop.yml");
+  assert.match(mainDevelopSync, /^name: Lopu internal main\/develop synchronization$/m);
+  assert.match(mainDevelopSync, /^  workflow_call:$/m);
+  assert.doesNotMatch(
+    mainDevelopSync,
+    /^  (?:push|pull_request|pull_request_target|schedule|workflow_dispatch|repository_dispatch):/m,
+    "main/develop synchronization is reachable only through Lopu",
+  );
 
   const rebase = readWorkflow("rebase-pr-stacks.yml");
   assert.match(rebase, /ref: github-actions/);
@@ -854,7 +886,18 @@ export function assertControlPlaneContract() {
   assert.match(resolver, /internal_worker: >-/);
   assert.match(resolver, /routing_proof:\$routing_proof/);
   assert.match(resolver, /routing_proof_issued_at:\$routing_proof_issued_at/);
+  assert.match(resolver, /maintain_develop_promotion:/);
+  assert.match(resolver, /maintain_feature_promotions:/);
+  assert.match(resolver, /maintain_main_develop_sync:/);
+  assert.match(resolver, /github\.event\.schedule == '43 \*\/6 \* \* \*'/);
+  assert.match(resolver, /^\s+queue: max$/m);
   for (const input of [
+    "maintenance_operation",
+    "promotion_dry_run",
+    "promotion_lookback",
+    "promotion_source_branch",
+    "promotion_target_branch",
+    "promotion_path_prefix",
     "promotion_source_pr",
     "promotion_plan_b64",
     "routing_proof",

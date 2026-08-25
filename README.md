@@ -68,6 +68,16 @@ the same protected `.github/actions/lopu-agent` interface. Post-merge Graphify
 refreshes follow the same configured provider when a matching semantic
 credential is available.
 
+Lopu is also the one public repository-maintenance entrypoint. A `develop`
+push starts the standing and per-feature promotion components as jobs inside
+the same **Lopu PR manager** run; a `main` push starts the main→develop sync
+component there; and the six-hour feature-promotion backstop is another Lopu
+schedule. The three deterministic implementations remain protected reusable
+components, but have no push, schedule, repository-dispatch, or manual trigger
+of their own. Manual recovery uses **Actions → Lopu PR manager → Run workflow**
+and its `maintenance_operation` choice. Their concurrency queues never cancel
+an in-flight promotion or synchronization.
+
 The default backend is Claude. To use Codex through the OpenAI Platform API,
 configure these repository settings (all names and values are examples; never
 commit a real key):

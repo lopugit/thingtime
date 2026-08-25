@@ -21,6 +21,17 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu is now the sole automatic promotion and branch-synchronization
+  entrypoint too**: the standing develop→main promotion, per-feature promotion
+  train, six-hour promotion backstop, and main→develop synchronization run as
+  internal jobs of **Lopu PR manager**. Their reusable implementations no
+  longer expose push, schedule, or manual triggers, and explicit recovery is
+  selected through Lopu's `maintenance_operation` input. Each durable
+  component retains non-cancelling concurrency, so a new repository event
+  queues behind rather than replacing in-flight maintenance. Custom
+  source/target/path promotion authority stays on a reviewed GitHub runner so
+  CI-provider routing cannot drop those owner-selected inputs. — Codex (AI),
+  2026-08-25
 - **Every model-backed repository lane now runs through one protected Lopu
   action**: review/check repair, CodeQL triage, merge conflicts, promotion
   replay, release analysis, rebase and stack-conflict rounds, and the wildcard
