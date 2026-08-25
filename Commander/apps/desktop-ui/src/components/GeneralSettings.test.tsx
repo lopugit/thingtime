@@ -47,4 +47,24 @@ describe('General settings shortcut recorder', () => {
       'false',
     );
   });
+
+  it('persists the macOS resize handling choice through the settings change callback', () => {
+    const onChange = vi.fn();
+    render(<GeneralSettings settings={DEFAULT_SETTINGS} onChange={onChange} onError={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /custom resize handling/i }));
+
+    expect(onChange).toHaveBeenCalledWith({
+      ...DEFAULT_SETTINGS,
+      useCustomWindowResizeHandling: false,
+    });
+  });
+
+  it('does not show the AppKit-specific resize switch on Windows', () => {
+    render(
+      <GeneralSettings platform="windows" settings={DEFAULT_SETTINGS} onChange={vi.fn()} onError={vi.fn()} />,
+    );
+
+    expect(screen.queryByRole('checkbox', { name: /custom resize handling/i })).not.toBeInTheDocument();
+  });
 });

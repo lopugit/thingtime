@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
-import type { CommanderSettings } from '@commander/protocol';
+import type { CommanderSettings, Platform } from '@commander/protocol';
 import { Laptop, Moon, Sun } from 'lucide-react';
 import { nativeRequest } from '../lib/nativeBridge.js';
 import { formatShortcut, shortcutFromKeyboardEvent } from '../lib/shortcuts.js';
 
 export function GeneralSettings({
+  platform = 'macos',
   settings,
   onChange,
   onError,
 }: {
+  platform?: Platform;
   settings: CommanderSettings;
   onChange(next: CommanderSettings): void;
   onError(message: string | null): void;
@@ -168,6 +170,17 @@ export function GeneralSettings({
             </button>
           </div>
         </SettingRow>
+        {platform === 'macos' ? (
+          <SettingRow label="Window Resizing">
+            <Toggle
+              label="Use Commander’s custom resize handling (off uses AppKit)"
+              checked={settings.useCustomWindowResizeHandling}
+              onChange={(useCustomWindowResizeHandling) =>
+                update('useCustomWindowResizeHandling', useCustomWindowResizeHandling)
+              }
+            />
+          </SettingRow>
+        ) : null}
         <SettingRow label="Favourites">
           <Toggle
             label="Show favourites in compact mode"

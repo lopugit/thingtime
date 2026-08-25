@@ -16,6 +16,7 @@ import {
   normalizeCommandShortcuts,
   normalizeCommanderThingtimeClientId,
   normalizeCommanderThingtimeCustomEnvironments,
+  normalizeCustomWindowResizeHandling,
   normalizeEmojiDefaultAction,
   normalizeIndexingSettings,
   normalizeRecentSearches,
@@ -59,6 +60,9 @@ function normalizedSettings(settings: Partial<CommanderSettings> | undefined): C
     emojiDefaultAction: normalizeEmojiDefaultAction(settings?.emojiDefaultAction),
     calculator: normalizeCalculatorSettings(settings?.calculator),
     activity: normalizeActivitySettings(settings?.activity),
+    useCustomWindowResizeHandling: normalizeCustomWindowResizeHandling(
+      settings?.useCustomWindowResizeHandling,
+    ),
     windowPinning: normalizeWindowPinningSettings(settings?.windowPinning),
     indexing: normalizeIndexingSettings(settings?.indexing),
     thingtimeCustomEnvironments: normalizeCommanderThingtimeCustomEnvironments(
@@ -101,6 +105,7 @@ export class PersistentStore {
         parsed.settings?.emojiDefaultAction !== settings.emojiDefaultAction ||
         JSON.stringify(parsed.settings?.calculator) !== JSON.stringify(settings.calculator) ||
         JSON.stringify(parsed.settings?.activity) !== JSON.stringify(settings.activity) ||
+        parsed.settings?.useCustomWindowResizeHandling !== settings.useCustomWindowResizeHandling ||
         JSON.stringify(parsed.settings?.windowPinning) !== JSON.stringify(settings.windowPinning);
       const environmentsNeedMigration =
         JSON.stringify(parsed.settings?.thingtimeCustomEnvironments ?? []) !==

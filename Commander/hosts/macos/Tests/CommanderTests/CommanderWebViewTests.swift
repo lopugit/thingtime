@@ -224,6 +224,123 @@ final class CommanderWebViewTests: XCTestCase {
     )
   }
 
+  func testCustomResizeCancelsOnInputLifecycleChangesAndCanBeDisabled() throws {
+    let ready = DaemonReady(
+      type: "ready",
+      protocolVersion: 1,
+      port: 1,
+      url: "http://127.0.0.1:1",
+      sessionToken: "test-session",
+      nativeToken: "test-native",
+      pid: 1
+    )
+    let bridge = CommanderNativeBridge(
+      ready: ready,
+      keychain: KeychainStore(),
+      loginItem: LaunchAtLoginService(),
+      showLauncher: {},
+      hideLauncher: {},
+      showSettings: { _ in },
+      updateHotKeys: { _, _ in },
+      updateMenuBar: { _ in },
+      updateWindowMode: { _ in }
+    )
+    let controller = LauncherPanelController(ready: ready, bridge: bridge)
+    let panel = controller.panelForTesting
+    defer { controller.shutdown() }
+    let location = NSPoint(
+      x: panel.frame.width - CommanderWebView.launcherSurfaceInset,
+      y: panel.frame.height / 2
+    )
+    func mouseEvent(_ type: NSEvent.EventType) throws -> NSEvent {
+      try XCTUnwrap(
+        NSEvent.mouseEvent(
+          with: type,
+          location: location,
+          modifierFlags: [],
+          timestamp: 0,
+          windowNumber: panel.windowNumber,
+          context: nil,
+          eventNumber: 0,
+          clickCount: 1,
+          pressure: 1
+        )
+      )
+    }
+
+    panel.sendEvent(try mouseEvent(.leftMouseDown))
+    XCTAssertTrue(controller.resizeSessionActiveForTesting)
+    panel.sendEvent(try mouseEvent(.leftMouseUp))
+    XCTAssertFalse(controller.resizeSessionActiveForTesting)
+
+    panel.sendEvent(try mouseEvent(.leftMouseDown))
+    controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification, object: panel))
+    XCTAssertFalse(controller.resizeSessionActiveForTesting)
+
+    panel.sendEvent(try mouseEvent(.leftMouseDown))
+    controller.hide()
+    XCTAssertFalse(controller.resizeSessionActiveForTesting)
+
+    panel.sendEvent(try mouseEvent(.leftMouseDown))
+    panel.cancelOperation(nil)
+    XCTAssertFalse(controller.resizeSessionActiveForTesting)
+
+    panel.sendEvent(try mouseEvent(.leftMouseDown))
+    controller.setCustomWindowResizeHandling(false)
+    XCTAssertFalse(controller.resizeSessionActiveForTesting)
+    XCTAssertFalse(controller.customWindowResizeHandlingEnabledForTesting)
+    panel.sendEvent(try mouseEvent(.leftMouseDown))
+    XCTAssertFalse(controller.resizeSessionActiveForTesting)
+  }
+
+  func testCustomResizeCancelsWhenThePanelCloses() throws {
+    let ready = DaemonReady(
+      type: "ready",
+      protocolVersion: 1,
+      port: 1,
+      url: "http://127.0.0.1:1",
+      sessionToken: "test-session",
+      nativeToken: "test-native",
+      pid: 1
+    )
+    let bridge = CommanderNativeBridge(
+      ready: ready,
+      keychain: KeychainStore(),
+      loginItem: LaunchAtLoginService(),
+      showLauncher: {},
+      hideLauncher: {},
+      showSettings: { _ in },
+      updateHotKeys: { _, _ in },
+      updateMenuBar: { _ in },
+      updateWindowMode: { _ in }
+    )
+    let controller = LauncherPanelController(ready: ready, bridge: bridge)
+    let panel = controller.panelForTesting
+    defer { controller.shutdown() }
+    let event = try XCTUnwrap(
+      NSEvent.mouseEvent(
+        with: .leftMouseDown,
+        location: NSPoint(
+          x: panel.frame.width - CommanderWebView.launcherSurfaceInset,
+          y: panel.frame.height / 2
+        ),
+        modifierFlags: [],
+        timestamp: 0,
+        windowNumber: panel.windowNumber,
+        context: nil,
+        eventNumber: 0,
+        clickCount: 1,
+        pressure: 1
+      )
+    )
+    panel.sendEvent(event)
+    XCTAssertTrue(controller.resizeSessionActiveForTesting)
+
+    panel.close()
+
+    XCTAssertFalse(controller.resizeSessionActiveForTesting)
+  }
+
   func testSettingsDeepLinkDispatchesOnlyKnownTabs() {
     let script = SettingsWindowController.settingsTabScriptForTesting(.search)
     XCTAssertTrue(script.contains("commander:settings-tab"))

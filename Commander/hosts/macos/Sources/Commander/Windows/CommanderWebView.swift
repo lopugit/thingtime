@@ -25,6 +25,12 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource 
   private let allowedOrigin: String
   private var surfaceMask: (inset: CGFloat, cornerRadius: CGFloat)?
   private var preparedFileDragURL: URL?
+  var usesCustomWindowResizeHandling = true {
+    didSet {
+      guard oldValue != usesCustomWindowResizeHandling else { return }
+      window?.invalidateCursorRects(for: self)
+    }
+  }
   static let launcherSurfaceInset: CGFloat = 18
   static let resizeHandleWidth: CGFloat = 10
 
@@ -58,7 +64,7 @@ final class CommanderWebView: WKWebView, WKNavigationDelegate, NSDraggingSource 
 
   override func resetCursorRects() {
     super.resetCursorRects()
-    guard let surfaceMask else { return }
+    guard usesCustomWindowResizeHandling, let surfaceMask else { return }
     let surfaceBounds = bounds.insetBy(dx: surfaceMask.inset, dy: surfaceMask.inset)
     let width = min(Self.resizeHandleWidth, surfaceBounds.width / 2)
     let height = min(Self.resizeHandleWidth, surfaceBounds.height / 2)

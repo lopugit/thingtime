@@ -14,7 +14,8 @@ public sealed record NativeSettingsSnapshot(
     bool OpenAtLogin,
     bool ShowMenuBarIcon,
     string WindowMode,
-    WindowPinningSettings WindowPinning);
+    WindowPinningSettings WindowPinning,
+    bool UseCustomWindowResizeHandling = true);
 public sealed record CredentialKey(string Issuer, string ClientId, string AccountId);
 public sealed record FullDiskAccessStatus(bool Granted);
 public sealed record SystemMemoryBreakdown(

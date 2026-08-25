@@ -1721,6 +1721,9 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Commander desktop launcher
 
+- [ ] In General, turn custom resize handling off and verify AppKit's standard edge resizing works. Turn it back on,
+      begin a resize, then release the mouse, press Escape, change focus, hide, close, or insert an emoji; later
+      pointer movement must never continue resizing the launcher. Relaunch and verify the selected mode persists.
 - [ ] Launch the installed `~/Applications/Commander.app`, verify the signed
       app starts its bundled Node daemon and Rust search child, then open/close
       the launcher repeatedly with the configured global shortcut. The search

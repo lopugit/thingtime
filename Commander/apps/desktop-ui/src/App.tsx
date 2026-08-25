@@ -54,6 +54,7 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
       openAtLogin: settings.openAtLogin,
       showMenuBarIcon: settings.showMenuBarIcon,
       windowMode: settings.windowMode,
+      useCustomWindowResizeHandling: settings.useCustomWindowResizeHandling,
       windowPinning: settings.windowPinning,
     }).catch((error: unknown) => {
       state.reportError(error instanceof Error ? error.message : 'Could not apply native settings');
@@ -64,6 +65,7 @@ export function App({ surface: surfaceOverride }: { surface?: 'launcher' | 'sett
     state.bootstrap?.settings.openAtLogin,
     state.bootstrap?.settings.showMenuBarIcon,
     state.bootstrap?.settings.windowMode,
+    state.bootstrap?.settings.useCustomWindowResizeHandling,
     state.bootstrap?.settings.windowPinning,
   ]);
 
