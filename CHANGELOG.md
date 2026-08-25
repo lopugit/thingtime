@@ -164,6 +164,15 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **Lopu's PR detector now survives transient GitHub API outages without
+  corrupting its JSON pipeline**: read-only API calls retry bounded HTTP 408,
+  429, 500, 502, 503, and 504 responses with short backoff while permanent
+  authentication, permission, and schema failures still fail closed. The
+  detector validates GraphQL response shape before parsing it and reuses each
+  complete repository PR snapshot for selection and stack ownership instead of
+  immediately requesting the same inventory twice. This fixes the pre-model
+  HTTP 504 failure observed on the first safe `main`→`develop` sync PR #414.
+  — Codex (AI), 2026-08-26
 - **PR resolution no longer downloads every historical repository blob**:
   Lopu's merge worker keeps full commit ancestry for exact merge-base and
   merge-tree verification while using `blob:none` partial clone. Current and

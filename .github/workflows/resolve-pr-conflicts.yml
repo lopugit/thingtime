@@ -988,8 +988,45 @@ jobs:
           encode_ref() {
             jq -rn --arg value "$1" '$value | @uri'
           }
+          # Read-only GitHub API requests may occasionally fail at the edge
+          # (the #414 detector observed an HTTP 504 after its first successful
+          # PR inventory). Retry only explicit transient statuses, keep every
+          # notice on stderr so command-substitution JSON stays clean, and
+          # surface auth/schema/permission failures immediately. Mutating API
+          # calls deliberately do not use this helper because a blind retry
+          # could duplicate a side effect.
+          gh_read_retry() {
+            local attempt output errors delay
+            output="$RUNNER_TEMP/gh-read-${BASHPID:-$$}.out"
+            errors="$RUNNER_TEMP/gh-read-${BASHPID:-$$}.err"
+            for attempt in 1 2 3 4; do
+              : > "$output"
+              : > "$errors"
+              if gh api "$@" >"$output" 2>"$errors"; then
+                cat "$output"
+                rm -f "$output" "$errors"
+                return 0
+              fi
+              if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors"; then
+                if [ "$attempt" -lt 4 ]; then
+                  delay="$((1 << attempt))"
+                  echo "::notice::GitHub API read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
+                  sleep "$delay"
+                  continue
+                fi
+                echo "::error::GitHub API read still failed after 4 transient attempts." >&2
+              else
+                echo "::error::GitHub API read failed without a recoverable transient response." >&2
+              fi
+              sed -n '1,20p' "$errors" >&2
+              rm -f "$output" "$errors"
+              return 1
+            done
+            rm -f "$output" "$errors"
+            return 1
+          }
           live_ref_sha() {
-            gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+            gh_read_retry "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
           }
           decode_base64url() {
             local value="$1"
@@ -1020,7 +1057,7 @@ jobs:
               printf '_Posted by the conflict detector at %s; this notice is edited in place on re-checks._\n\n%s\n' \
                 "$(date -u '+%H:%M UTC, %Y-%m-%d')" "$marker"
             } > "$body"
-            comment_id="$(gh api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp \
+            comment_id="$(gh_read_retry --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp \
               | jq -r '
                   add // []
                   | [.[]
@@ -1037,12 +1074,13 @@ jobs:
           }
 
           all_open_prs() {
-            local owner name
+            local owner name response inventory
             owner="${REPO%%/*}"
             name="${REPO#*/}"
+            response="$RUNNER_TEMP/open-pr-inventory.json"
             # GraphQL variable names must remain literal for gh to bind them.
             # shellcheck disable=SC2016
-            gh api graphql --paginate --slurp \
+            gh_read_retry graphql --paginate --slurp \
               -f owner="$owner" \
               -f name="$name" \
               -f query='query($owner: String!, $name: String!, $endCursor: String) {
@@ -1066,22 +1104,33 @@ jobs:
                     pageInfo { hasNextPage endCursor }
                   }
                 }
-              }' \
-              | jq -c '[.[].data.repository.pullRequests.nodes[]
-                  | {number, headRefName, baseRefName, isCrossRepository,
-                     isDraft, mergeable, mergeStateStatus,
-                     labels:(.labels.nodes // [])}]'
+              }' > "$response"
+            if ! jq -e '
+              type == "array"
+              and length > 0
+              and all(.[];
+                (((.errors // []) | length) == 0)
+                and ((.data.repository.pullRequests.nodes | type) == "array"))
+            ' "$response" >/dev/null; then
+              echo "::error::GitHub returned a successful but malformed PR inventory response." >&2
+              rm -f "$response"
+              return 1
+            fi
+            inventory="$(jq -c '[.[].data.repository.pullRequests.nodes[]
+              | {number, headRefName, baseRefName, isCrossRepository,
+                 isDraft, mergeable, mergeStateStatus,
+                 labels:(.labels.nodes // [])}]' "$response")"
+            rm -f "$response"
+            printf '%s\n' "$inventory"
           }
 
           query() {
-            local open
-            open="$(all_open_prs)"
             if [ -n "$SELECTED_PR" ]; then
-              jq -c --argjson number "$SELECTED_PR" '[.[] | select(.number == $number)]' <<<"$open"
+              jq -c --argjson number "$SELECTED_PR" '[.[] | select(.number == $number)]' <<<"$all_open"
               return
             fi
             if [ "$SCAN_ALL" = "true" ]; then
-              printf '%s\n' "$open"
+              printf '%s\n' "$all_open"
               return
             fi
             jq -c \
@@ -1091,7 +1140,7 @@ jobs:
                   | select(.baseRefName == $target
                       or ($scan_head and .headRefName == $target))]
                 | unique_by(.number)
-              ' <<<"$open"
+              ' <<<"$all_open"
           }
 
           # GitHub computes mergeability and merge-state status lazily after a
@@ -1102,6 +1151,7 @@ jobs:
           # the old fixed eight-attempt/80-second loop gave up too early
           # (observed on PR #190) — so the wait is a time budget that exits
           # the moment every scanned PR has a verdict.
+          all_open="$(all_open_prs)"
           prs="$(query)"
           if [ "$HUMAN_EXPLICIT" = true ]; then
             if [ "$(jq 'length' <<<"$prs")" -eq 0 ]; then
@@ -1135,6 +1185,7 @@ jobs:
             attempt="$(( attempt + 1 ))"
             echo "attempt $attempt (${elapsed}s elapsed): $unknown PR(s) still computing mergeability or merge-state status; retrying in ${MERGEABLE_POLL_INTERVAL}s..."
             sleep "$MERGEABLE_POLL_INTERVAL"
+            all_open="$(all_open_prs)"
             prs="$(query)"
           done
 
@@ -1156,10 +1207,9 @@ jobs:
           # long-lived integration branches use that label on their promotion
           # PR, and must not make every feature PR targeting the integration
           # branch look like one enormous stack.
-          all_open="$(all_open_prs)"
           # A reverse synchronization/promotion PR headed by the default branch
           # is not a stack parent for ordinary PRs based on that branch.
-          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          default_ref="$(gh_read_retry "repos/$REPO" --jq '.default_branch')"
 
           # This is an operator-controlled hard stop, not a failed-snapshot
           # cache. Do not inspect its age, bot metadata, refs, or topology:
