@@ -21,6 +21,17 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Changed
 
+- **Lopu CodeQL now covers PRs targeting branches that predate the listener**:
+  a trusted default-branch `pull_request_target` event carries only the PR
+  number and immutable head SHA into a separate `workflow_dispatch` run. The
+  protected worker revalidates live PR state, rejects stale handoffs, preserves
+  the normal PR run when the target already carries a listener, and otherwise
+  uploads against the exact PR merge ref (or head while conflicts remain).
+  A merge ref is accepted only when its parents equal the live base and head,
+  preventing GitHub's stale conflict refs from being analyzed. Existing
+  two-language snapshots suppress duplicate scans. The privileged event path
+  performs no checkout or analysis and receives no AI credential. — Codex
+  (AI), 2026-08-25
 - **CodeQL now has a protected advanced-setup implementation for every PR
   target and branch**: a thin product listener calls the canonical
   `github-actions` workflow for unfiltered `pull_request` and all-branch

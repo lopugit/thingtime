@@ -575,6 +575,7 @@ export function assertControlPlaneContract() {
   }
 
   const codeql = readWorkflow("codeql-analysis.yml");
+  const codeqlTriggers = codeql.slice(0, codeql.indexOf("\npermissions:\n"));
   assert.match(
     codeql,
     /^  pull_request:$/mu,
@@ -595,6 +596,7 @@ export function assertControlPlaneContract() {
     "an open PR owns one analysis instead of duplicating its branch push",
   );
   assert.match(codeql, /ADVANCED_ENABLED: \$\{\{ vars\.CODEQL_ADVANCED_ENABLED \}\}/u);
+  assert.match(codeql, /vars\.CODEQL_CENTRAL_PR_ENABLED/u);
   assert.match(
     codeql,
     /\[ "\$ADVANCED_ENABLED" != true \][\s\S]*analyze=false/u,
@@ -602,10 +604,35 @@ export function assertControlPlaneContract() {
   );
   assert.match(codeql, /persist-credentials: false/u);
   assert.doesNotMatch(
-    codeql,
-    /pull_request_target|ANTHROPIC_API_KEY|OPENAI_API_KEY|secrets\./u,
-    "CodeQL never executes PR code in a privileged target or AI-secret context",
+    codeqlTriggers,
+    /^  pull_request_target:/mu,
+    "the protected CodeQL implementation is never a direct privileged PR listener",
   );
+  assert.doesNotMatch(codeql, /ANTHROPIC_API_KEY|OPENAI_API_KEY|secrets\./u, "CodeQL never receives an AI credential");
+  const codeqlHandoff = codeql.slice(codeql.indexOf("\n  handoff:"), codeql.indexOf("\n  scope:"));
+  assert.match(codeqlHandoff, /github\.event_name == 'pull_request_target'/u);
+  assert.match(codeqlHandoff, /CODEQL_CENTRAL_PR_ENABLED/u);
+  assert.match(codeqlHandoff, /gh workflow run codeql-analysis\.yml/u);
+  assert.match(codeqlHandoff, /--ref "\$DEFAULT_BRANCH"/u);
+  assert.doesNotMatch(
+    codeqlHandoff,
+    /actions\/checkout|codeql-action\/(?:init|analyze)|\bsecrets\./u,
+    "the privileged target-context path only dispatches trusted metadata",
+  );
+  assert.match(
+    codeql,
+    /^    if: github\.event_name != 'pull_request_target'$/mu,
+    "all checkout and analysis work is excluded from the privileged event run",
+  );
+  assert.match(codeql, /base_has_pr_listener/u);
+  assert.match(codeql, /git\/ref\/pull\/\$PR_NUMBER\/merge/u);
+  assert.match(codeql, /git\/commits\/\$merge_sha/u);
+  assert.match(codeql, /\.\[0\] == \$base and \.\[1\] == \$head/u);
+  assert.match(codeql, /analysis_ref="refs\/pull\/\$PR_NUMBER\/head"/u);
+  assert.match(codeql, /code-scanning\/analyses\?ref=\$encoded_ref/u);
+  assert.match(codeql, /^      security-events: read$/mu);
+  assert.match(codeql, /ref: \$\{\{ needs\.scope\.outputs\.analysis_ref \}\}/u);
+  assert.match(codeql, /sha: \$\{\{ needs\.scope\.outputs\.analysis_sha \}\}/u);
 
   const developPreview = readWorkflow("develop-pr-preview.yml");
   assert.doesNotMatch(
