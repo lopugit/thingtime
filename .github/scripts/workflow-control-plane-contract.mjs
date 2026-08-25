@@ -891,6 +891,11 @@ export function assertControlPlaneContract() {
   assert.match(resolver, /maintain_main_develop_sync:/);
   assert.match(resolver, /github\.event\.schedule == '43 \*\/6 \* \* \*'/);
   assert.match(resolver, /^\s+queue: max$/m);
+  assert.match(
+    resolver,
+    /name: Check out PR head[\s\S]*fetch-depth: 0[\s\S]*filter: blob:none[\s\S]*persist-credentials: false/u,
+    "resolver checkout keeps exact history while lazily fetching historical blobs",
+  );
   for (const input of [
     "maintenance_operation",
     "promotion_dry_run",

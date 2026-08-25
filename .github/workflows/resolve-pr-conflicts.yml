@@ -4697,6 +4697,10 @@ jobs:
           # Fetch every branch so the exact snapshotted base commit is local;
           # no authenticated fetch is needed later.
           fetch-depth: 0
+          # This repository has multi-gigabyte history. Keep the complete
+          # commit graph required by merge-base/merge-tree, but fetch blobs
+          # lazily instead of downloading every historical file for each PR.
+          filter: blob:none
           # Keep the token out of .git/config: the model has Read access to
           # the workspace, and the push step supplies its own auth.
           persist-credentials: false

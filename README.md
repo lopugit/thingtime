@@ -78,6 +78,11 @@ of their own. Manual recovery uses **Actions → Lopu PR manager → Run workflo
 and its `maintenance_operation` choice. Their concurrency queues never cancel
 an in-flight promotion or synchronization.
 
+Conflict and stale-branch workers retain the complete commit graph needed to
+merge the exact snapshotted base, but use Git partial-clone blob filtering so
+Lopu does not download the repository's multi-gigabyte historical file corpus
+for every PR. Required working-tree and merge blobs are fetched lazily.
+
 The default backend is Claude. To use Codex through the OpenAI Platform API,
 configure these repository settings (all names and values are examples; never
 commit a real key):

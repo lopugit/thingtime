@@ -109,6 +109,12 @@ every entry is attributed the same way the app changelog attributes them.
 
 ### Fixed
 
+- **PR resolution no longer downloads every historical repository blob**:
+  Lopu's merge worker keeps full commit ancestry for exact merge-base and
+  merge-tree verification while using `blob:none` partial clone. Current and
+  merge-required blobs remain available on demand, avoiding a multi-gigabyte
+  full-history transfer for each merely out-of-date PR. — Codex (AI),
+  2026-08-25
 - **Post-merge Graphify semantics now follow Lopu's configured AI backend**:
   promotion refreshes can use the same `OPENAI_API_KEY` and validated
   Terra/Sol model as Codex-backed repository review, while retaining Claude
