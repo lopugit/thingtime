@@ -13,6 +13,7 @@ import {
   CHATGPT_MCP_PATH,
   CHATGPT_PLUGIN_FEATURES,
   allowedThingtimeEndpoints,
+  isMcpResourceForOrigin,
   normalizeThingtimeEndpoint,
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
@@ -388,7 +389,12 @@ const resolveMcpSession = async (request: Request): Promise<Result<McpSession>> 
   const claims = await verifyJwt(token);
   if (!claims) return { ok: false, status: 401, error: 'Authentication required' };
   const session = await getLiveSession(claims.jti);
-  if (!session || session.purpose !== MCP_SESSION_PURPOSE || String(session.userId) !== claims.sub) {
+  if (
+    !session ||
+    session.purpose !== MCP_SESSION_PURPOSE ||
+    String(session.userId) !== claims.sub ||
+    !isMcpResourceForOrigin(session.meta?.resource, requestOrigin(request))
+  ) {
     return { ok: false, status: 401, error: 'Authentication required' };
   }
   const decrypted = decryptBundle(session.meta?.ciphertext);
@@ -418,85 +424,110 @@ const boundedLimit = (value: unknown) => {
   return Number.isInteger(number) && number > 0 ? Math.min(number, 100) : undefined;
 };
 
+const oauthSecurityScheme = [{ type: 'oauth2', scopes: ['thingtime'] }] as const;
+const protectedToolContract = {
+  title: 'Thingtime action',
+  securitySchemes: oauthSecurityScheme,
+  // Some existing MCP clients read the legacy metadata mirror. Keeping it in
+  // sync with the standard field makes the OAuth requirement unambiguous.
+  _meta: { securitySchemes: oauthSecurityScheme },
+  outputSchema: { type: 'object', additionalProperties: true }
+} as const;
+
+const protectedTool = <T extends Record<string, unknown>>(tool: T) => ({ ...protectedToolContract, ...tool });
+
 const toolDefinitions = [
-  {
+  protectedTool({
     name: 'list_thingtime_accounts',
+    title: 'List connected Thingtime accounts',
     description: 'List the Thingtime accounts connected to this ChatGPT connection. No token values are returned.',
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'select_thingtime_account',
+    title: 'Select default Thingtime account',
     description: 'Make one connected Thingtime account the default for later tool calls.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['accountId'], properties: { accountId: { type: 'string', description: 'An id returned by list_thingtime_accounts.' } } },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'remove_thingtime_account',
+    title: 'Disconnect Thingtime account',
     description: 'Disconnect one Thingtime account from ChatGPT. The original Thingtime personal access token remains revocable in Thingtime Settings.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['accountId'], properties: { accountId: { type: 'string' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'get_thingtime_profile',
+    title: 'Get Thingtime profile',
     description: 'Read the selected connection’s Thingtime token identity and granted scopes.',
     inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'list_thingtime_things',
+    title: 'List Thingtime Things',
     description: 'List Things visible to the selected Thingtime account.',
     inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' }, thingtime: { type: 'string' }, folder: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 100 } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'search_thingtime_things',
+    title: 'Search Thingtime Things',
     description: 'Search Things visible to the selected account by text and optional Thingtime kind.',
     inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' }, query: { type: 'string' }, thingtime: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 100 } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'create_thingtime_thing',
+    title: 'Create Thingtime Thing',
     description: 'Create a Thing using the selected account. Use only after the user confirms the intended content.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['thing'], properties: { accountId: { type: 'string' }, thing: { type: 'object', description: 'Thingtime /api/v1/things create payload.' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'update_thingtime_thing',
+    title: 'Update Thingtime Thing',
     description: 'Update one owned Thing. Use only after the user confirms the change.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['thing'], properties: { accountId: { type: 'string' }, thing: { type: 'object', description: 'Thingtime /api/v1/things/update payload including id.' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'delete_thingtime_thing',
+    title: 'Delete Thingtime Thing',
     description: 'Delete one owned Thing. Use only after the user confirms deletion.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { accountId: { type: 'string' }, id: { type: 'string' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'comment_on_thingtime_thing',
+    title: 'Comment on Thingtime Thing',
     description: 'Add a comment to a Thing after the user confirms its text.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['comment'], properties: { accountId: { type: 'string' }, comment: { type: 'object', description: 'Thingtime /api/v1/things/comment payload.' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'react_to_thingtime_thing',
+    title: 'React to Thingtime Thing',
     description: 'Toggle a reaction on a Thing after the user confirms it.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['reaction'], properties: { accountId: { type: 'string' }, reaction: { type: 'object', description: 'Thingtime /api/v1/things/react payload.' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'save_thingtime_thing',
+    title: 'Save Thingtime Thing',
     description: 'Toggle a Thing in the selected account’s saved library.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { accountId: { type: 'string' }, id: { type: 'string' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
-  },
-  {
+  }),
+  protectedTool({
     name: 'share_thingtime_thing',
+    title: 'Share Thingtime Thing',
     description: 'Share a post through the selected Thingtime account after user confirmation.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['share'], properties: { accountId: { type: 'string' }, share: { type: 'object', description: 'Thingtime /api/v1/things/share payload.' } } },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
-  }
+  })
 ];
 
 const mcpToolResult = (value: unknown, isError = false) => ({
@@ -605,7 +636,8 @@ const jsonRpcResponse = (id: unknown, result?: unknown, error?: { code: number; 
   ...(error ? { error } : { result })
 });
 
-const authChallenge = (origin: string) => `Bearer resource_metadata="${origin}${CHATGPT_PROTECTED_RESOURCE_METADATA_PATH}"`;
+const authChallenge = (origin: string) =>
+  `Bearer resource_metadata="${origin}${CHATGPT_PROTECTED_RESOURCE_METADATA_PATH}", error="invalid_token", error_description="A Thingtime connection is required"`;
 
 export const handleChatGptMcp = async ({ request }: { request: Request }) => {
   if (request.method.toUpperCase() !== 'POST') {
@@ -637,20 +669,20 @@ export const handleChatGptMcp = async ({ request }: { request: Request }) => {
     return json(jsonRpcResponse(id, undefined, { code: -32601, message: 'Method not found' }), { status: 404 });
   }
 
+  if (message.method === 'tools/list') {
+    return notification ? new Response(null, { status: 202 }) : json(jsonRpcResponse(id, { tools: toolDefinitions }));
+  }
   const context = await resolveMcpSession(request);
   if (context.ok === false) {
     const challenge = authChallenge(requestOrigin(request));
     const denied = {
       ...mcpToolResult({ error: context.error }, true),
-      _meta: { 'mcp/www_authenticate': challenge }
+      _meta: { 'mcp/www_authenticate': [challenge] }
     };
     return json(
       jsonRpcResponse(id, denied),
       { status: context.status, headers: { 'WWW-Authenticate': challenge, ...noStoreHeaders } }
     );
-  }
-  if (message.method === 'tools/list') {
-    return notification ? new Response(null, { status: 202 }) : json(jsonRpcResponse(id, { tools: toolDefinitions }));
   }
   const name = typeof message.params?.name === 'string' ? message.params.name : '';
   const args = asRecord(message.params?.arguments) || {};

@@ -187,8 +187,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection plus Things reads and confirmed writes. It accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow; the underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in the server-side session record and never returned by this endpoint. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
-    auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token. Unauthenticated tool calls return an MCP OAuth challenge.' },
+      'Implements a focused, headless MCP tool surface for connected Thingtime accounts: account selection plus Things reads and confirmed writes. tools/list is intentionally public so ChatGPT can discover titles, schemas, annotations, and per-tool OAuth requirements; it never returns account data. Every tool call accepts only a revocable ChatGPT bridge access token minted by the adjacent OAuth 2.1/PKCE flow. The underlying scoped Thingtime personal access tokens are AES-256-GCM encrypted in the server-side session record, origin-bound to this MCP URL, and never returned by this endpoint. Discovery begins at /.well-known/oauth-protected-resource and the origin-scoped semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+    auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for tools/call. tools/list is public metadata; unauthenticated tool calls return an MCP OAuth challenge.' },
     methods: ['POST'],
     steps: [
       'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
@@ -206,14 +206,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Tool definitions with read/write annotations.',
-        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'search_thingtime_things' }] } }
+        description: 'Public tool metadata, including each tool’s OAuth requirement and write annotation.',
+        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'search_thingtime_things', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }] }] } }
       },
       {
         status: 401,
         description: 'MCP OAuth challenge.',
-        headers: { 'WWW-Authenticate': 'Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource"' },
-        body: { jsonrpc: '2.0', id: 1, error: { code: -32001, message: 'Authentication required' } }
+        headers: { 'WWW-Authenticate': 'Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"' },
+        body: { jsonrpc: '2.0', id: 1, result: { isError: true, _meta: { 'mcp/www_authenticate': ['Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"'] } } }
       }
     ],
     notes: [
@@ -274,7 +274,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Exchange authorization code',
         description: 'Standard OAuth form-encoded public client request.',
         method: 'POST',
-        body: { grant_type: 'authorization_code', code: '<one-time-code>', client_id: 'https://chatgpt.com', redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect', resource: 'https://thingtime.com/api/v1/integrations/chatgpt/mcp', code_verifier: '<43-to-128-character-pkce-verifier>' }
+        body: { grant_type: 'authorization_code', code: '<one-time-code>', client_id: 'https://chatgpt.com/oauth/client.json', redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect', resource: 'https://thingtime.com/api/v1/integrations/chatgpt/mcp', code_verifier: '<43-to-128-character-pkce-verifier>' }
       }
     ],
     responseExamples: [

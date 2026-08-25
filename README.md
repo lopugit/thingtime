@@ -407,7 +407,9 @@ several named Thingtime accounts and explicitly allowlisted Thingtime API
 origins. It accepts only scoped Personal Access Tokens (PATs), validates them
 with `/api/v1/tokens/self`, encrypts them before server-side persistence, and
 gives ChatGPT only a revocable MCP-only bridge token. Do not paste a PAT into a
-chat.
+chat. The public `tools/list` response exposes only tool metadata and its
+per-tool OAuth requirements; all account data and tool calls require the
+bridge token and are origin-bound to this MCP URL.
 
 Set these sensitive server-side deployment variables (for example in Vercel)
 before enabling the connector. Values below are placeholders only:

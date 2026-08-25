@@ -5,6 +5,7 @@ import {
   CHATGPT_MCP_PATH,
   CHATGPT_PLUGIN_FEATURES,
   CHATGPT_PLUGIN_ROUTES,
+  isMcpResourceForOrigin,
   normalizeThingtimeEndpoint,
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
@@ -28,6 +29,8 @@ test('ChatGPT OAuth request is tightly bound to this MCP resource and callback',
   const parsed = parseChatGptAuthorizationRequest(params, 'https://thingtime.com');
   assert.equal(parsed.ok, true);
   if (parsed.ok) assert.equal(parsed.request.resource, `https://thingtime.com${CHATGPT_MCP_PATH}`);
+  assert.equal(isMcpResourceForOrigin(`https://thingtime.com${CHATGPT_MCP_PATH}`, 'https://thingtime.com'), true);
+  assert.equal(isMcpResourceForOrigin(`https://other.example${CHATGPT_MCP_PATH}`, 'https://thingtime.com'), false);
 
   params.set('client_id', 'https://chatgpt.com');
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, true);

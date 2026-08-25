@@ -8,8 +8,8 @@ export const CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-au
 export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
 
 export const CHATGPT_PLUGIN_FEATURES = {
-  'chatgpt.mcp': '1.0.0',
-  'chatgpt.oauth': '1.0.0',
+  'chatgpt.mcp': '1.0.1',
+  'chatgpt.oauth': '1.0.1',
   'chatgpt.connections': '1.0.0',
   'chatgpt.things.read': '1.0.0',
   'chatgpt.things.write': '1.0.0'
@@ -24,6 +24,11 @@ export const CHATGPT_PLUGIN_ROUTES = [
   { method: 'GET', path: CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH, feature: 'chatgpt.oauth' },
   { method: 'GET', path: CHATGPT_CAPABILITY_MANIFEST_PATH, feature: 'chatgpt.mcp' }
 ] as const;
+
+export const mcpResourceForOrigin = (origin: string) => `${origin}${CHATGPT_MCP_PATH}`;
+
+export const isMcpResourceForOrigin = (resource: unknown, origin: string): resource is string =>
+  typeof resource === 'string' && resource === mcpResourceForOrigin(origin);
 
 export type ChatGptOAuthRequest = {
   clientId: string;
@@ -98,8 +103,7 @@ const normalizeChatGptRedirectUri = (value: unknown): string | null => {
 
 const normalizeResource = (value: unknown, origin: string): string | null => {
   if (typeof value !== 'string' || value.length > 2048) return null;
-  const expected = `${origin}${CHATGPT_MCP_PATH}`;
-  return value === expected ? value : null;
+  return isMcpResourceForOrigin(value, origin) ? value : null;
 };
 
 export const parseChatGptAuthorizationRequest = (
@@ -178,7 +182,7 @@ export const renderConnectionPage = (requestToken: string, allowedEndpoints: str
 
 export const pluginDiscovery = (origin: string) => ({
   protectedResource: {
-    resource: `${origin}${CHATGPT_MCP_PATH}`,
+    resource: mcpResourceForOrigin(origin),
     authorization_servers: [origin],
     bearer_methods_supported: ['header'],
     scopes_supported: ['thingtime']

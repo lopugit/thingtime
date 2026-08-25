@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Security
 
+- **ChatGPT now discovers OAuth before invoking protected tools.** The MCP
+  catalog publishes standard per-tool OAuth metadata while returning no account
+  data, protected calls emit the model-readable OAuth challenge ChatGPT uses to
+  link an account, and bridge sessions are bound to the exact MCP origin that
+  issued them. — Codex (AI), 2026-08-26
 - **Passkey app links join the relationship-uniqueness family.** `passkey-app-link`
   shipped in #323 with its own kind-blind `crystal.linkKey` unique index —
   authored while #320/#325/#326 were retiring exactly that pattern. A

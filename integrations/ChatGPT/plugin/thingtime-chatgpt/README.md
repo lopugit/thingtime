@@ -46,5 +46,10 @@ identifier for the registered MCP server; the default already permits
 ChatGPT's stable Client ID Metadata Document and the legacy ChatGPT client
 identifier.
 
+The unauthenticated MCP `tools/list` response publishes only the tool catalog
+and the required OAuth scope. Invoking any Thingtime tool without a bridge
+token returns the protected-resource challenge that opens ChatGPT’s secure
+connection flow; it never returns account data or tokens.
+
 See the root README and `/api/v1/integrations/chatgpt/mcp-docs` for the full
 security and API contract.
