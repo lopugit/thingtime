@@ -243,11 +243,13 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     The browse grid must stay inert — one preview component renders the feed,
     grid, and columns views, so arming it arms an infinite scroller — and the
     confirmation, never the author-controlled button label, is the source of
-    truth about what executes. A bare action key is the sharpest case: the
-    executor resolves it against the viewer's own actions, so a foreign
-    component carrying one runs the viewer's own program of that name with
-    author-chosen inputs, and it is exactly the case the dialog cannot resolve
-    client-side.
+    truth about what executes. Since the 2026-08-25 security review the
+    delegated run path is owner-pinned, so foreign markup can only ever name
+    one of the viewer's *own* actions — with author-chosen inputs, and a bare
+    key is exactly the case the dialog cannot resolve client-side. Ownership
+    therefore sets confirmation strength rather than acting as an on/off
+    switch: a component the viewer did not author always confirms, with no
+    skip.
     Full spec: `claude-todo/20-tester-runs-actions.md`.
 
 20. **📁 Composed app surface for Data + Component + Action programs.**

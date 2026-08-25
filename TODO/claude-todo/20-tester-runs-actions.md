@@ -33,13 +33,14 @@ re-reading the cited files first.
   scroller in one edit. Nothing structural prevents that today — unlike
   `/things` tiles, the catalog previews carry no inert guard at all — which is
   why the prop-level default *is* the guard and has to be pinned by a test.
-- **A bare action key is a confused-deputy vector.** The executor resolves a
-  bare key against the invoking viewer's own actions by design, so a stranger
-  publishing your key cannot shadow it. The consequence runs the other way too:
-  a foreign component carrying `ttAction: "cleanup-drafts"` runs *your* program
-  of that name with author-chosen inputs. It is simultaneously the sharpest
-  reason the confirmation exists and the one case the dialog cannot resolve
-  client-side, so the honesty of the wording matters more than the lookup.
+- **A component control can only run the viewer's own actions.** The delegated
+  path — a `ttAction` click, as opposed to the deliberate `/actions` inspector
+  Run — is owner-pinned for both reference shapes since the 2026-08-25 security
+  review. Foreign markup naming a stranger's action id no longer resolves it,
+  and a bare key never did. What remains is narrower but real: foreign markup
+  can name one of *your own* actions with author-chosen inputs, and a bare key
+  is still the case the dialog cannot resolve client-side. That residue is what
+  the confirmation is for, and why its wording matters more than a lookup.
 
 ## Required experience
 
@@ -73,16 +74,17 @@ re-reading the cited files first.
 
 ## What the confirmation must say
 
-The executor resolves a `data-tt-action` string two different ways, and the
-dialog must be honest about which one it is looking at.
+Every action a component control can reach is one the viewer owns, because the
+delegated path is owner-pinned. The dialog's job is therefore not to warn about
+whose program runs, but to make *which* of the viewer's own programs — and on
+what inputs — impossible to mistake.
 
-- A reference that resolves to an action thing the viewer can see renders the
-  action's name, its numbered steps, its declared capabilities, its cannot-
-  access complement, and its limits envelope, reusing the same pure helpers the
-  inspector already renders from.
+- A reference that resolves to one of the viewer's own action things renders
+  the action's name, its numbered steps, its declared capabilities, its
+  cannot-access complement, and its limits envelope, reusing the same pure
+  helpers the inspector already renders from.
 - A bare action key cannot be resolved client-side, because no key-to-action
-  lookup endpoint exists and the executor resolves a bare key against the
-  viewer's **own** actions. The dialog must state plainly that confirming runs
+  lookup endpoint exists. The dialog must state plainly that confirming runs
   the viewer's own action of that name with the inputs shown. Do not invent an
   endpoint to dress this case up; the honest wording is the safety feature.
 - The resolved inputs are shown as JSON, truncated past a display cap.
@@ -123,15 +125,35 @@ dialog must be honest about which one it is looking at.
   vocabulary has no delete, no network, and no secrets, recursion is refused by
   construction, and every run is clamped to the server's budget ceilings and
   the per-user run rate limit. A foreign private action stays invisible.
-- What the framing does **not** prevent is why the gate exists. A public or
-  seeded component can bind a stranger's public action that writes to the
-  viewer's own data. A foreign component carrying a bare action key runs the
-  viewer's own program of that name with author-chosen inputs — the sharpest
-  case, and exactly the one the dialog cannot resolve, so it must warn. Button
-  labels can lie. A single stray click in an infinite grid is the failure mode.
+- What the framing does **not** prevent is why the gate exists. Foreign markup
+  can still name one of the viewer's *own* actions with author-chosen inputs,
+  and a bare key is exactly the case the dialog cannot resolve, so it must say
+  so. Button labels can lie: the control reading "Preview" is author-controlled
+  markup. A single stray click in an infinite grid is the failure mode.
 - Require a signed-in viewer before offering to run, client-side, in addition
   to the endpoint's own refusal.
 - Do not weaken any server-side check to make the client gate simpler.
+
+### Ownership is already a trust boundary elsewhere — decide it here explicitly
+
+The 2026-08-25 security review made ownership the trust boundary on the
+`/things` PreviewModal: a component the viewer does not author renders normally
+but inert, computed inside the modal so no call site can forget it. The catalog
+is mostly seeded and other people's components, which is precisely where "try
+this one" is most useful, so this surface cannot inherit that rule unexamined.
+
+The settled policy for this spec, to be implemented as written or explicitly
+overturned before work starts:
+
+- Fire on `/components/:key` regardless of who authored the component, because
+  the executor's owner-pinned delegated path already bounds a foreign
+  component's reach to the viewer's own actions.
+- Treat ownership as confirmation *strength*, not an on/off switch. A component
+  the viewer authored may use the per-action, per-session skip; a component
+  they did not author always confirms, with no skip.
+- Do not weaken the PreviewModal boundary to match. That surface renders
+  whatever a `?preview=<id>` deep link resolves, which is a different and
+  broader exposure than a page the viewer deliberately navigated to.
 
 ## Done when
 
@@ -143,6 +165,11 @@ dialog must be honest about which one it is looking at.
   action key and states the ownership consequence of the key case.
 - Browse cards in feed, grid, and columns views run nothing when clicked, and a
   unit test pins that default so it cannot be flipped by accident.
+- A component the viewer did not author always confirms and never offers the
+  skip, and a test pins that ownership drives confirmation strength rather than
+  silently becoming an on/off switch.
+- The `/things` PreviewModal keeps refusing to fire for a component the viewer
+  does not author; this change does not relax that boundary.
 - A signed-out click shows the sign-in toast and issues no request that relies
   on a 401 for its user-facing message.
 - Unit tests cover the extracted inputs parse against null, malformed JSON,
@@ -169,5 +196,10 @@ dialog must be honest about which one it is looking at.
 - `remix/app/components/Kinds/kindRenderers.tsx` — the component kind renderer
   holding the only mounted click wrapper today and the comment describing the
   surface policy.
+- `remix/app/api/utils/actions/execute.ts` — the two resolution modes, and the
+  owner-pinned delegated path a component control runs under.
+- `SECURITY-REPORTS/2026-08-25-action-thing-v1-security-review.md` — the review
+  that established ownership as the trust boundary and owner-pinned delegated
+  runs; read it before changing either.
 - `remix/app/components/Things/ThingsDialogs.tsx` — the `/things` PreviewModal,
   the existing trusted firing surface, and the confirm-dialog pattern to copy.
