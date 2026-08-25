@@ -462,6 +462,55 @@ const run = async () => {
 		`schema=${relabeledCrystal.schema} schemaId=${String(relabeledCrystal.schemaId).slice(0, 20)}`
 	);
 
+	// ---- data-ops are Data-Things-only (kind boundary) ----------------------
+	// An unscoped things.update/things.read declares no schema, so the schema
+	// check can't hold the line for a target that carries no schema. The run
+	// must still refuse a non-data kind (here a schema thing and an action
+	// thing the invoker owns), matching things.create/things.search which
+	// already pin `data`. Both actions SAVE (grammar can't resolve a dynamic
+	// id) and refuse at run time.
+	const updKind = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: {
+			name: 'Update non-data kind',
+			actionKey: `upd-kind-${suffix}`,
+			steps: [
+				{ op: 'things.update', id: CUSTOMER_ID, values: { hijacked: true } },
+				{ op: 'return', value: '$step.1' }
+			],
+			capabilities: [{ capability: 'things.update' }]
+		}
+	});
+	check('unscoped-update action saves (kind gap scenario)', updKind.status === 200);
+	const updKindRun = await runAction(alice.cookie, { action: `upd-kind-${suffix}` });
+	check(
+		'unscoped things.update refuses a non-data target kind (Data Things only)',
+		updKindRun.status === 200 && updKindRun.body?.status === 'error' && /not a data thing/.test(updKindRun.body?.error || ''),
+		JSON.stringify({ status: updKindRun.body?.status, error: updKindRun.body?.error }).slice(0, 200)
+	);
+	const schemaAfter = await api(`/api/v1/things?id=${encodeURIComponent(CUSTOMER_ID || 'missing')}`, { cookie: alice.cookie });
+	check('the non-data target was left unchanged', schemaAfter.body?.thing?.crystal?.hijacked === undefined);
+
+	const getKind = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		crystal: {
+			name: 'Read non-data kind',
+			actionKey: `get-kind-${suffix}`,
+			steps: [
+				{ op: 'things.get', id: createCustomerId },
+				{ op: 'return', value: '$step.1' }
+			],
+			capabilities: [{ capability: 'things.read' }]
+		}
+	});
+	check('unscoped-read action saves (kind gap scenario)', getKind.status === 200);
+	const getKindRun = await runAction(alice.cookie, { action: `get-kind-${suffix}` });
+	check(
+		'unscoped things.get refuses a non-data target kind (Data Things only)',
+		getKindRun.status === 200 && getKindRun.body?.status === 'error' && /not a data thing/.test(getKindRun.body?.error || ''),
+		JSON.stringify({ status: getKindRun.body?.status, error: getKindRun.body?.error }).slice(0, 200)
+	);
+
 	// ---- parameterless (PURE) actions — the Lopu round-3 crash class ---------
 	const pure = await createThing(alice.cookie, {
 		thingtime: ['action'],
