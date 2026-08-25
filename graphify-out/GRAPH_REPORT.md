@@ -1,15 +1,16 @@
-# Graph Report - .  (2026-08-26)
+# Graph Report - lopu-codeql-missing-merge-ref  (2026-08-26)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 23 files · ~138,296 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 584 nodes · 1253 edges · 51 communities (31 shown, 20 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 14 edges (avg confidence: 0.62)
+- 594 nodes · 1252 edges · 58 communities (31 shown, 27 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 13 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `fd7d5316`
+- Built from commit: `cd04db98`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -23,9 +24,9 @@
 - [[_COMMUNITY_failureDetail|failureDetail]]
 - [[_COMMUNITY_workflow-control-plane-contract.mjs|workflow-control-plane-contract.mjs]]
 - [[_COMMUNITY_refresh-promotion-graphify.sh|refresh-promotion-graphify.sh]]
-- [[_COMMUNITY_Lopu PR Manager Workflow|Lopu PR Manager Workflow]]
+- [[_COMMUNITY_Rebuild Job|Rebuild Job]]
+- [[_COMMUNITY_codeql-open-pr-backfill.mjs|codeql-open-pr-backfill.mjs]]
 - [[_COMMUNITY_promotion-worker-contract.sh|promotion-worker-contract.sh]]
-- [[_COMMUNITY_`github-actions` — the CI control plane|`github-actions` — the CI control plane]]
 - [[_COMMUNITY_promotion-worker.sh|promotion-worker.sh]]
 - [[_COMMUNITY_resolve-pr-conflicts-routing-contract.mjs|resolve-pr-conflicts-routing-contract.mjs]]
 - [[_COMMUNITY_prepare-round.sh|prepare-round.sh]]
@@ -33,6 +34,7 @@
 - [[_COMMUNITY_Lopu Internal Feature Promotion Workflow|Lopu Internal Feature Promotion Workflow]]
 - [[_COMMUNITY_Run Lopu with Primary Claude Credential|Run Lopu with Primary Claude Credential]]
 - [[_COMMUNITY_Publish or reconcile develop S3 preview job|Publish or reconcile develop S3 preview job]]
+- [[_COMMUNITY_`github-actions` — the CI control plane|`github-actions` — the CI control plane]]
 - [[_COMMUNITY_start.sh|start.sh]]
 - [[_COMMUNITY_classify-claude-credential-failure.mjs|classify-claude-credential-failure.mjs]]
 - [[_COMMUNITY_queueTrustedPromotionWorker|queueTrustedPromotionWorker]]
@@ -41,10 +43,9 @@
 - [[_COMMUNITY_vercel.json|vercel.json]]
 - [[_COMMUNITY_electron-pr-release-contract.mjs|electron-pr-release-contract.mjs]]
 - [[_COMMUNITY_rebase-ownership-routing-contract.sh|rebase-ownership-routing-contract.sh]]
-- [[_COMMUNITY_rebase-ownership-routing-contract.sh|rebase-ownership-routing-contract.sh]]
-- [[_COMMUNITY_Lopu Queues Unprivileged PR Scan Job|Lopu Queues Unprivileged PR Scan Job]]
 - [[_COMMUNITY_Lopu Queues Unprivileged PR Scan Job|Lopu Queues Unprivileged PR Scan Job]]
 - [[_COMMUNITY_STACK_MEMBER_JQ|STACK_MEMBER_JQ]]
+- [[_COMMUNITY_Lopu Build Doctor Round 1|Lopu Build Doctor Round 1]]
 - [[_COMMUNITY_Web CI Workflow|Web CI Workflow]]
 - [[_COMMUNITY_Safe Main into Develop Sync PR|Safe Main into Develop Sync PR]]
 - [[_COMMUNITY_Promotion PR Changelog Script|Promotion PR Changelog Script]]
@@ -64,7 +65,14 @@
 - [[_COMMUNITY_Electron PR Release Workflow|Electron PR Release Workflow]]
 - [[_COMMUNITY_Thin Product Branch Listeners|Thin Product Branch Listeners]]
 - [[_COMMUNITY_Vercel Git Deployment Kill Switch|Vercel Git Deployment Kill Switch]]
-- [[_COMMUNITY_Lopu Agent Action|Lopu Agent Action]]
+- [[_COMMUNITY_Thingtime AI instructions|Thingtime AI instructions]]
+- [[_COMMUNITY_ai-merge-paused Stop Label|ai-merge-paused Stop Label]]
+- [[_COMMUNITY_CodeQL Coverage and Triage|CodeQL Coverage and Triage]]
+- [[_COMMUNITY_LOPU_AGENT_BACKEND Selector|LOPU_AGENT_BACKEND Selector]]
+- [[_COMMUNITY_Partial Clone Hydration Recovery|Partial Clone Hydration Recovery]]
+- [[_COMMUNITY_Promotion Recovery|Promotion Recovery]]
+- [[_COMMUNITY_Rebase Stack Recovery|Rebase Stack Recovery]]
+- [[_COMMUNITY_github-actions CI Control Plane|github-actions CI Control Plane]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `selfTest()` - 48 edges
@@ -76,13 +84,13 @@
 7. `orphanedMergeHydrationIntegrationTest()` - 19 edges
 8. `main()` - 15 edges
 9. `repoFlag()` - 15 edges
-10. `githubRequest()` - 14 edges
+10. `buildMode()` - 14 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Web CI Workflow` --references--> `Testing Checklist`  [INFERRED]
-  .github/workflows/web-ci.yml → TESTING.md
 - `Lopu PR Manager Workflow` --conceptually_related_to--> `Lopu PR Manager`  [INFERRED]
   .github/workflows/resolve-pr-conflicts.yml → CHANGELOG.md
+- `Web CI Workflow` --references--> `Testing Checklist`  [INFERRED]
+  .github/workflows/web-ci.yml → TESTING.md
 - `Lopu Internal All-branch Integration Workflow` --conceptually_related_to--> `All-branch Doctor`  [INFERRED]
   .github/workflows/all-branch.yml → CHANGELOG.md
 - `Post-merge Graphify Refresh` --conceptually_related_to--> `Graphify Semantic Refresh`  [INFERRED]
@@ -105,7 +113,7 @@
 - **Provider Routed CI Workflows** — _github_workflows_ci_provider_router_route_ci_compute_provider, _github_workflows_promote_develop_to_main_promote_develop_to_main, _github_workflows_promote_features_to_main_promote_features_to_main, _github_workflows_rebase_pr_stacks_rebase_prs_and_stacks, _github_workflows_resolve_pr_conflicts_resolve_pr_conflicts, _github_workflows_sync_main_into_develop_sync_main_into_develop [EXTRACTED 0.90]
 - **Canonical AI Instruction Files** — agents_thingtime_ai_instructions, ai_all_thingtime_ai_instructions, claude_thingtime_ai_instructions [EXTRACTED 0.95]
 
-## Communities (51 total, 20 thin omitted)
+## Communities (58 total, 27 thin omitted)
 
 ### Community 0 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.06
@@ -143,15 +151,15 @@ Nodes (26): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, ALLOWED_MODELS, 
 Cohesion: 0.12
 Nodes (21): assert_control_metadata_unchanged(), assert_tool_boundary(), current_refs_hash(), emit(), fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_COUNT, GIT_CONFIG_GLOBAL (+13 more)
 
-### Community 9 - "Lopu PR Manager Workflow"
-Cohesion: 0.10
-Nodes (22): build-all-branch.mjs, Doctor Commit Command, Lopu Internal All-branch Integration Workflow, Build-doctor Model Waterfall Loader, Rebuild Job, Union Build Check, ai-merge-paused Stop Signal, AI-powered PR Conflict Resolution (+14 more)
+### Community 9 - "Rebuild Job"
+Cohesion: 0.13
+Nodes (15): build-all-branch.mjs, Doctor Commit Command, Lopu Internal All-branch Integration Workflow, Build-doctor Model Waterfall Loader, Rebuild Job, Union Build Check, ai-merge-paused Stop Signal, AI-powered PR Conflict Resolution (+7 more)
 
-### Community 10 - "promotion-worker-contract.sh"
+### Community 10 - "codeql-open-pr-backfill.mjs"
 Cohesion: 0.25
 Nodes (19): ACTIVE_RUN_STATUSES, activePrHeadKeys(), analysisKey(), commandFailureText(), completeAnalysisKeys(), dispatchAnalysisWithInput(), flattenSlurp(), flattenWorkflowRuns() (+11 more)
 
-### Community 11 - "`github-actions` — the CI control plane"
+### Community 11 - "promotion-worker-contract.sh"
 Cohesion: 0.12
 Nodes (16): BASE_REF, BASE_SHA, GITHUB_OUTPUT, PLAN_HASH, PROMOTION_BRANCH, reject_lineage_mismatch(), require_lineage_replay(), RESERVATION_SHA (+8 more)
 
@@ -183,43 +191,39 @@ Nodes (11): classify-claude-credential-failure.mjs, Run Lopu with Fallback Claud
 Cohesion: 0.20
 Nodes (10): actions/checkout v4.4.0, develop-pr-preview-controller event, Publish or reconcile develop S3 preview job, .github/scripts/deploy-develop-pr-preview.mjs, Dispatch trusted default-branch controller job, GitHub repository dispatch API, VERCEL_DEVELOP_DEPLOY_TOKEN, vercel-develop-pr-control environment (+2 more)
 
-### Community 19 - "start.sh"
-Cohesion: 0.20
-Nodes (9): Fork setup: Vercel develop previews, github-actions CI Control Plane, Known trade-off, Lopu principal repository manager, Signed desktop PR releases, Stable develop domain, The bare-tree invariant, Why it is bare (+1 more)
+### Community 19 - "`github-actions` — the CI control plane"
+Cohesion: 0.12
+Nodes (14): Added, Changed, Control-plane changelog, Fixed, [Unreleased], Fork setup: Vercel develop previews, `github-actions` — the CI control plane, Known trade-off (+6 more)
 
-### Community 20 - "classify-claude-credential-failure.mjs"
+### Community 20 - "start.sh"
 Cohesion: 0.46
 Nodes (7): emit(), emit_paths(), rebase_in_progress(), secure_git_environment(), start.sh script, usage(), write_conflicts()
 
-### Community 21 - "queueTrustedPromotionWorker"
-Cohesion: 0.29
-Nodes (8): actions/checkout, Analyze Job, github/codeql-action/analyze, github/codeql-action/init, gh api, jq, Select One Analysis Owner Job, Lopu CodeQL All Branches Workflow
-
-### Community 22 - "verify-promotion-source-authority.sh"
+### Community 22 - "classify-claude-credential-failure.mjs"
 Cohesion: 0.48
 Nodes (6): CAPACITY_PATTERNS, classifyClaudeCredentialFailure(), collectStrings(), CREDENTIAL_PATTERNS, main(), selfTest()
 
-### Community 23 - "detect job"
+### Community 23 - "queueTrustedPromotionWorker"
 Cohesion: 0.33
 Nodes (7): buildPromotionDispatchRequest(), dispatchPromotionResolution(), exactReservationDeleteArgs(), exactReservationPushArgs(), promotionDispatchArgs(), queueTrustedPromotionWorker(), redispatchPromotionReservation()
 
-### Community 24 - "vercel.json"
+### Community 24 - "verify-promotion-source-authority.sh"
 Cohesion: 0.33
 Nodes (6): fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM, GIT_CONFIG_SYSTEM, verify-promotion-source-authority.sh script
 
-### Community 25 - "electron-pr-release-contract.mjs"
+### Community 25 - "detect job"
 Cohesion: 0.40
 Nodes (6): ci-provider-router reusable workflow, detect job, GitHub API, Lopu rebase engine workflow, route job, Scan open same-repository PRs via the API
 
-### Community 26 - "rebase-ownership-routing-contract.sh"
+### Community 26 - "vercel.json"
 Cohesion: 0.33
 Nodes (5): framework, git, deploymentEnabled, ignoreCommand, $schema
 
-### Community 27 - "rebase-ownership-routing-contract.sh"
+### Community 27 - "electron-pr-release-contract.mjs"
 Cohesion: 0.50
 Nodes (4): assertPrReleaseContract(), count(), here, workflow
 
-### Community 28 - "Lopu Queues Unprivileged PR Scan Job"
+### Community 28 - "rebase-ownership-routing-contract.sh"
 Cohesion: 0.83
 Nodes (3): assert_owner(), assert_stack(), rebase-ownership-routing-contract.sh script
 
@@ -231,22 +235,26 @@ Nodes (3): gh workflow run codeql-analysis.yml, Lopu Queues Unprivileged PR Scan
 Cohesion: 0.67
 Nodes (3): no-ai-rebase label, REBASE_OWNER_JQ, STACK_MEMBER_JQ
 
+### Community 52 - "Thingtime AI instructions"
+Cohesion: 0.17
+Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
+
 ## Knowledge Gaps
-- **152 isolated node(s):** `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS`, `REQUIRED_CATEGORIES`, `ACTIVE_RUN_STATUSES`, `TRUSTED_ASSOCIATIONS` (+147 more)
+- **165 isolated node(s):** `BASE_BRANCHES`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS`, `REQUIRED_CATEGORIES` (+160 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **20 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **27 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `selfTest()` connect `selfTest` to `promote-features-to-main.mjs`, `runPromotion`, `failureDetail`, `detect job`?**
+- **Why does `selfTest()` connect `selfTest` to `promote-features-to-main.mjs`, `runPromotion`, `failureDetail`, `queueTrustedPromotionWorker`?**
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
 - **Why does `runPromotion()` connect `runPromotion` to `selfTest`, `promote-features-to-main.mjs`, `failureDetail`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **Why does `failureDetail()` connect `failureDetail` to `selfTest`, `promote-features-to-main.mjs`, `runPromotion`, `detect job`?**
+- **Why does `failureDetail()` connect `failureDetail` to `selfTest`, `promote-features-to-main.mjs`, `runPromotion`, `queueTrustedPromotionWorker`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **What connects `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS`, `REQUIRED_CATEGORIES` to the rest of the system?**
-  _152 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `BASE_BRANCHES`, `MERGE_CONFIG`, `CAPACITY_PATTERNS` to the rest of the system?**
+  _165 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.06332842415316642 - nodes in this community are weakly interconnected._
 - **Should `promotion-pr-changelog.mjs` be split into smaller, more focused modules?**
